@@ -11,7 +11,9 @@ from pathlib import Path
 import rivretrieve as rr
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
+from rivretrieve._internal.providers.ca_eccc.declaration import declaration as ca_eccc_declaration
 from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
+from rivretrieve._internal.providers.pl_imgw.declaration import declaration as pl_imgw_declaration
 from rivretrieve._internal.registry import _registry
 
 ROOT = Path(__file__).parents[1]
@@ -227,13 +229,17 @@ def test_registry_uses_engine_stages_or_catalogue_only_registration() -> None:
     for provider_id in PROOF_PROVIDERS:
         assert records[provider_id]._module is not None
         assert records[provider_id]._stages is records[provider_id]._module
-    bulk_modules = {"ca_eccc": ca_eccc_module, "pl_imgw": pl_imgw_module}
-    for provider_id, module in bulk_modules.items():
+    bulk_declarations = {
+        "ca_eccc": ca_eccc_declaration.observations,
+        "pl_imgw": pl_imgw_declaration.observations,
+    }
+    for provider_id, operations in bulk_declarations.items():
         handle = records[provider_id]
-        assert handle._module is module
+        assert handle._module is None
         assert handle._stages is None
-        assert handle._store_config is module.config
+        assert handle._store_config is operations.config
         assert handle._store_root is not None
+        assert handle._bulk_operations is operations
     for provider_id in CATALOGUE_ONLY_PROVIDERS:
         assert records[provider_id]._module is None
         assert records[provider_id]._stages is None
@@ -261,3 +267,25 @@ def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
     }
     assert config["tool"]["ty"]["src"]["exclude"] == [reference_path]
     assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
+
+
+def test_runtime_engine_has_no_provider_id_switch() -> None:
+    """Runtime engine modules must dispatch on declarations, never provider ids."""
+    provider_ids = set(BUILTIN_PROVIDER_IDS)
+    violations: list[str] = []
+    runtime_root = ROOT / "src" / "rivretrieve"
+    for path in sorted(runtime_root.rglob("*.py")):
+        if path.is_relative_to(PROVIDERS_ROOT):
+            continue
+        for node in ast.walk(_tree(path)):
+            if not isinstance(node, ast.Compare):
+                continue
+            literals = {
+                child.value
+                for child in ast.walk(node)
+                if isinstance(child, ast.Constant) and isinstance(child.value, str)
+            }
+            switched = sorted(literals & provider_ids)
+            if switched:
+                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}:{','.join(switched)}")
+    assert violations == []
