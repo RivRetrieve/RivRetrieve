@@ -17,6 +17,9 @@ dependencies = [
     "jsonschema>=4.25.1",
 ]
 
+[project.scripts]
+rivretrieve-rerecord = "rivretrieve._internal.recordings:main"
+
 [project.optional-dependencies]
 map = [
     "folium",
