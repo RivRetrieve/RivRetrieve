@@ -30,6 +30,9 @@ map = [
 requires = ["uv_build>=0.11.16,<0.12"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+wheel-exclude = ["/src/rivretrieve/_internal/providers/*/catalogue/native.parquet"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3", # tests
