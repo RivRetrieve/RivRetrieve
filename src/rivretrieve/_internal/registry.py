@@ -333,6 +333,12 @@ class _ProviderRecord:
 class ProviderRegistry:
     def __init__(self) -> None:
         self._providers: dict[str, _ProviderRecord] = {}
+        self._clear_generation = 0
+
+    @property
+    def clear_generation(self) -> int:
+        """Return a token that changes whenever all registrations are cleared."""
+        return self._clear_generation
 
     def register(
         self,
@@ -407,6 +413,7 @@ class ProviderRegistry:
 
     def clear(self) -> None:
         self._providers.clear()
+        self._clear_generation += 1
 
 
 _registry = ProviderRegistry()

@@ -188,7 +188,7 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     provider_directory = Path(module.__file__).parent
     assert set(ENROLLED_CATALOGUE_MODULE_FILES) == {row[0] for row in CATALOGUE_ONLY_PROVIDERS}
     expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES[provider_id]
-    assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
+    assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files | {"declaration.py"}
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in ("provider.json", "stations.parquet", "products.parquet", "station_products.parquet"):
         assert (module._CATALOGUE_PATH / artifact_name).exists()

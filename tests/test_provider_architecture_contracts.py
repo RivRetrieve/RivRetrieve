@@ -9,6 +9,7 @@ from importlib import import_module
 from pathlib import Path
 
 import rivretrieve as rr
+from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
 from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
 from rivretrieve._internal.registry import _registry
@@ -64,6 +65,7 @@ _METADATA_REMOVED_AFTER_SCHEMA_NARROWING = (
     "no_nve",
 )
 RUNTIME_FILE_COUNTS = _BASE_RUNTIME_FILE_COUNTS.copy()
+RUNTIME_FILE_COUNTS["declaration.py"] = len(BUILTIN_PROVIDER_IDS)
 RUNTIME_FILE_COUNTS["origins.py"] += len(_MIGRATED_SINCE_BASE)
 RUNTIME_FILE_COUNTS["metadata.py"] -= len(_MIGRATED_SINCE_BASE) + len(_METADATA_REMOVED_AFTER_SCHEMA_NARROWING)
 
