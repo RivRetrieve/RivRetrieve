@@ -1,4 +1,4 @@
-"""drive : ObservationRequest × ProviderStages × ObservationProvenance × RawMode → _AssemblyResult."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × RawMode × Transport → _AssemblyResult."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, RawMode, RawPayload, RawSourceCall
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.transport import HttpClient, Transport
 from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
@@ -103,6 +104,7 @@ class ProviderStages(Protocol):
         rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         fetch_window: FetchWindow,
         config: ProviderConfig,
+        transport: Transport,
     ) -> WithIssues[tuple[Payload, ...]]: ...
 
     @staticmethod
@@ -118,6 +120,7 @@ def drive(
     *,
     provenance: ObservationProvenance,
     raw: RawMode = RawMode.OMIT,
+    transport: Transport | None = None,
 ) -> _AssemblyResult:
     if raw not in (RawMode.OMIT, RawMode.INCLUDE) or not isinstance(raw, RawMode):
         raise TypeError("raw must be RawMode.OMIT or RawMode.INCLUDE")
@@ -162,7 +165,15 @@ def drive(
             ) from error
         planned[product_id] = plan_windows(fetch_window, declaration)
     rendered_windows = MappingProxyType(dict(planned))
-    fetched = provider.fetch(request.stations, request.products, rendered_windows, fetch_window, config)
+    resolved_transport = HttpClient() if transport is None else transport
+    fetched = provider.fetch(
+        request.stations,
+        request.products,
+        rendered_windows,
+        fetch_window,
+        config,
+        resolved_transport,
+    )
     parsed: list[WithIssues[Rows]] = []
     raw_entries: list[RawSourceCall] = []
     for payload in fetched.value:
