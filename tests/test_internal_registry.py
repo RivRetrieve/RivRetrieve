@@ -121,6 +121,7 @@ class _EngineModule:
         rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         window: FetchWindow,
         config: ProviderConfig,
+        transport: object,
     ) -> WithIssues[tuple[Payload, ...]]:
         _EngineModule.events.append("fetch")
         _EngineModule.fetched_window = window
@@ -187,8 +188,9 @@ class _InfoOnlyEngineModule(_EngineModule):
         rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         window: FetchWindow,
         config: ProviderConfig,
+        transport: object,
     ) -> WithIssues[tuple[Payload, ...]]:
-        fetched = _EngineModule.fetch(stations, products, rendered_windows, window, config)
+        fetched = _EngineModule.fetch(stations, products, rendered_windows, window, config, transport)
         return WithIssues(value=fetched.value)
 
 
@@ -518,6 +520,7 @@ def test_registry_observations_exclusive_stop_source_keeps_reading_at_closed_req
             rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             config: ProviderConfig,
+            transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             _ExclusiveStopModule.events.append("fetch")
             _ExclusiveStopModule.renderings = rendered_windows[ProductId("level")]
@@ -652,6 +655,7 @@ def test_registry_observations_parameterless_fixed_span_returns_rows_and_underco
             rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             config: ProviderConfig,
+            transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             _FixedSpanModule.events.append("fetch")
             _FixedSpanModule.renderings = rendered_windows[ProductId("level")]

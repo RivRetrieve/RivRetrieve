@@ -1,4 +1,4 @@
-"""usgs_nwis fetch : stations × products × rendered windows × FetchWindow × ProviderConfig → WithIssues[Payload[]]."""
+"""usgs_nwis fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]]."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
 from rivretrieve._internal.providers.usgs_nwis.issue_codes import UsgsNwisObservationIssueCodes
 from rivretrieve._internal.transport import (
-    HttpClient,
     HttpMethod,
+    Transport,
     TransportFailure,
     TransportFailureReason,
     TransportRequest,
@@ -37,6 +37,7 @@ def fetch(
     rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
     fetch_window: FetchWindow,
     config: ProviderConfig,
+    transport: Transport,
 ) -> WithIssues[tuple[Payload, ...]]:
     resolved_products: list[tuple[ProductId, SourceCoordinates, UsgsNwisSourceCoordinates, str, str]] = []
     for product_id in products:
@@ -49,7 +50,6 @@ def fetch(
         resolved_products.append(
             (product_id, source_coordinates, coordinates, rendered_window.start, rendered_window.stop)
         )
-    client = HttpClient()
     payloads: list[Payload] = []
     issues: list[Issue] = []
 
@@ -57,7 +57,7 @@ def fetch(
         for product_id, source_coordinates, coordinates, start, end in resolved_products:
             request = _request(station_id, coordinates, start, end)
             try:
-                response = client.send(request)
+                response = transport.send(request)
             except TransportFailure as error:
                 if error.reason is not TransportFailureReason.RETRY_EXHAUSTED:
                     raise

@@ -67,6 +67,12 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
         super().__init__(f"HTTP transport failed after {attempts} attempt(s): {reason}")
 
 
+class Transport(Protocol):
+    """Execute one fully rendered source request."""
+
+    def send(self, request: TransportRequest) -> TransportResponse: ...
+
+
 class Sender(Protocol):
     def __call__(
         self,

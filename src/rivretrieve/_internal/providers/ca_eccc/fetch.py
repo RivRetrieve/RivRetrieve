@@ -1,4 +1,4 @@
-"""ca_eccc fetch : stations × products × rendered windows × FetchWindow × ProviderConfig → WithIssues[Payload[]]."""
+"""ca_eccc fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]]."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.ca_eccc.config import HydatSourceCoordinates
 from rivretrieve._internal.providers.ca_eccc.issue_codes import CaEcccObservationIssueCodes
 from rivretrieve._internal.providers.ca_eccc.observation_client import _find_sqlite, default_cache_dir
+from rivretrieve._internal.transport import Transport
 
 PROVIDER_ID = ProviderId("ca_eccc")
 
@@ -32,7 +33,9 @@ def fetch(
     rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
     fetch_window: FetchWindow,
     config: ProviderConfig,
+    transport: Transport | None = None,
 ) -> WithIssues[tuple[Payload, ...]]:
+    del transport
     cache_dir = default_cache_dir()
     sqlite_path = _find_sqlite(cache_dir)
     if sqlite_path is None or not sqlite_path.is_file():

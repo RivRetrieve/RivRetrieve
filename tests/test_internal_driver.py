@@ -87,6 +87,7 @@ class _ThrowawayProvider:
         rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         window: FetchWindow,
         config: ProviderConfig,
+        transport: object,
     ) -> WithIssues[tuple[Payload, ...]]:
         self._events.append("fetch")
         assert stations == _STATIONS
@@ -199,6 +200,7 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
             rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             fetch_window: FetchWindow,
             supplied_config: ProviderConfig,
+            transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             assert stations == ("station-1",)
             assert supplied_products == products
@@ -411,6 +413,7 @@ def test_drive_widens_fetch_window_by_exactly_two_calendar_days_across_month_and
             rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
+            transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             assert stations == _STATIONS
             assert products == _PRODUCTS
@@ -829,6 +832,7 @@ class _BoundaryProvider:
         rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         window: FetchWindow,
         config: ProviderConfig,
+        transport: object,
     ) -> WithIssues[tuple[Payload, ...]]:
         self._events.append("fetch")
         assert stations == tuple(f"station-{index}" for index in range(1, len(self._payloads) + 1))
@@ -1099,6 +1103,7 @@ def test_drive_rejects_engine_created_fetch_window_that_does_not_contain_request
             rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
+            transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             events.append("fetch")
             raise AssertionError("fetch must not run for a narrowed engine window")
@@ -1210,6 +1215,7 @@ def test_drive_rejects_post_convert_row_outside_product_semantic_axis_before_ass
             rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
+            transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             events.append("fetch")
             return WithIssues(value=())
@@ -1292,6 +1298,7 @@ def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -
             rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
+            transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             events.append("fetch")
             return WithIssues(value=(_payload("station-1", coordinates, window),))
