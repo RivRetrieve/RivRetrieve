@@ -1,0 +1,81 @@
+[project]
+name = "rivretrieve"
+version = "0.1.1"
+description = "A Python package for downloading global river gauge data"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",       # tests
+    "pytest-cov>=6.2.1",
+    "ruff>=0.12",        # linter + formatter
+    "bump-my-version>=1.2.7",
+]
+
+# -----------------------
+# Ruff (lint + format)
+# -----------------------
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+# extend-exclude = ["notebooks/", "experiments/"]
+
+[tool.ruff.lint]
+# Errors, warnings, naming, imports, modern py, bugbear, comprehensions, simplify
+select = ["E", "F", "W", "N", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501", # let formatter handle wrapping
+    "N803", # allow X, Y for ML-style params
+    "N806", # allow X, Y for local vars
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# # -----------------------
+# # ty (fast static type checker)
+# # -----------------------
+# [tool.ty]
+# [tool.ty.rules]
+# possibly-unresolved-reference = "warn"
+
+# -----------------------
+# Pytest
+# -----------------------
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["--strict-markers", "--strict-config", "-ra"]
+
+# -----------------------
+# Bump My Version
+# -----------------------
+[tool.bumpversion]
+current_version = "0.1.1"
+commit = false
+tag = false
+allow_dirty = true
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "src/rivretrieve/__init__.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
+
+[tool.uv.sources]
+# ctrl-freak = { git = "https://github.com/hydrosolutions/ctrl-freak.git", rev = "main" } # example of how to add a git dependency
