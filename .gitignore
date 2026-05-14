@@ -1,0 +1,12 @@
+build/
+docs/_build/
+.venv/
+.vscode/
+*.egg-info/
+
+**/*.pyc
+**/*.env
+
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
