@@ -9,6 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
+# Environment files
+.env
+*.env
+
 # OS
 .DS_Store
 Thumbs.db
