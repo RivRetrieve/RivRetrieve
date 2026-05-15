@@ -1,12 +1,22 @@
-build/
-docs/_build/
-.venv/
-.vscode/
-*.egg-info/
-
-**/*.pyc
-**/*.env
-
-.ipynb_checkpoints/
+# Python-generated files
 __pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment files
+.env
+*.env
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Scratchpad (keep folder, ignore contents)
+scratchpad/*
+!scratchpad/.gitkeep
