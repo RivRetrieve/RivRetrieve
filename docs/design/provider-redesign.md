@@ -42,6 +42,7 @@ The main user workflow starts with provider discovery.
 
 ```python
 import rivretrieve as rr
+import pandas as pd
 
 rr.providers()
 rr.provider_info()
@@ -62,14 +63,16 @@ usgs.info()
 
 `usgs.products()` tells the user what products this provider exposes. `usgs.stations()` returns the station catalogue for this provider. `usgs.station_products()` describes which products are known to be available at which stations. `usgs.info()` returns provider-specific metadata for this one provider. If station-product availability is unknown, that uncertainty appears explicitly in the returned data rather than being hidden.
 
+The object returned by `rr.provider()` should be typed against a public `typing.Protocol`. This gives static analysis tools and IDEs a stable interface for autocomplete and type checking, while still allowing provider implementations to stay function-based internally.
+
 Observation retrieval accepts one or many stations and one or many products.
 
 ```python
 result = usgs.observations(
-    stations="usgs_nwis_07374000",
+    stations="07374000",
     products="discharge_daily_mean",
-    start="2020-01-01",
-    end="2020-12-31",
+    start=pd.Timestamp("2020-01-01"),
+    end=pd.Timestamp("2020-12-31"),
 )
 ```
 
@@ -77,64 +80,50 @@ The same method also supports bulk requests.
 
 ```python
 result = usgs.observations(
-    stations=["usgs_nwis_07374000", "usgs_nwis_02471078"],
+    stations=["07374000", "02471078"],
     products=["discharge_daily_mean", "stage_instantaneous"],
-    start="2020-01-01",
-    end="2020-12-31",
+    start=pd.Timestamp("2020-01-01"),
+    end=pd.Timestamp("2020-12-31"),
     on_missing="warn",
 )
 ```
 
 The parameter names are plural because the method accepts either a single string or a list. Internally, RivRetrieve normalises both forms to lists. This gives a simple single-station workflow without creating a separate bulk API.
 
-The `stations` argument uses RivRetrieve station IDs. Provider-native station IDs should also be supported, but through an explicit argument so there is no ambiguity:
+The `stations` argument uses the station IDs from the selected provider. The provider namespace is already established by `usgs.observations(...)`, or by the `provider` argument in the top-level wrapper, so users should not need to prepend RivRetrieve's provider ID to station IDs they already know from the source.
 
-```python
-result = usgs.observations(
-    native_stations="07374000",
-    products="discharge_daily_mean",
-    start="2020-01-01",
-    end="2020-12-31",
-)
-```
+The public `observations()` API should be keyword-only. It accepts timestamp-like inputs for `start` and `end`, including ISO date strings as a convenience, but it normalises them at the API boundary. The internal `ObservationRequest` passed to providers should contain typed temporal values such as `pd.Timestamp`, and duration or resolution fields should use typed objects such as `pd.Timedelta`.
 
 Observation requests require explicit `start` and `end` dates in v1. RivRetrieve should not silently fall back to provider defaults, because those defaults vary and can produce unexpectedly large requests.
 
-Products can also be selected by structured product fields. These fields are filters over the provider catalogue. They do not mean that RivRetrieve computes the statistic during the request.
+Products can also be discovered by structured product fields. These fields are filters over the provider catalogue. They do not mean that RivRetrieve computes the statistic during the request.
 
 ```python
-result = usgs.observations(
-    stations="usgs_nwis_07374000",
+products = usgs.products(
     observed_property="discharge",
     frequency="daily",
     statistic="mean",
-    start="2020-01-01",
-    end="2020-12-31",
 )
-```
 
-By default, product filters use `match="one"`. That means the filters must resolve to exactly one product. If they match no products, RivRetrieve raises a product-not-found error. If they match several products, RivRetrieve asks the user to be more specific. Users can opt into retrieving every matching product with `match="all"`:
-
-```python
 result = usgs.observations(
-    stations="usgs_nwis_07374000",
-    observed_property="discharge",
-    frequency="daily",
-    match="all",
-    start="2020-01-01",
-    end="2020-12-31",
+    stations="07374000",
+    products=products["id"],
+    start=pd.Timestamp("2020-01-01"),
+    end=pd.Timestamp("2020-12-31"),
 )
 ```
+
+Retrieval should have one request shape: station IDs, product IDs, time range, and policy options. Product IDs remain opaque labels. Users and code should inspect catalogue metadata for product semantics rather than parsing product ID strings.
 
 There is also a top-level convenience function.
 
 ```python
 result = rr.observations(
     provider="usgs_nwis",
-    stations="usgs_nwis_07374000",
+    stations="07374000",
     products="discharge_daily_mean",
-    start="2020-01-01",
-    end="2020-12-31",
+    start=pd.Timestamp("2020-01-01"),
+    end=pd.Timestamp("2020-12-31"),
 )
 ```
 
@@ -176,6 +165,8 @@ time | station_id | product_id | value
 Long-form means there is one row per observation. If a station has both discharge and stage at the same timestamp, those are two rows with different `product_id` values. This is different from wide-form data, where each product gets its own column, for example `time | discharge_daily_mean | stage_instantaneous`.
 
 I propose long-form internally because it handles multiple products and multiple stations cleanly. It also works when products have different timestamps, such as daily discharge and irregular instantaneous stage. Wide-form is often convenient for pandas users, so export methods can provide it, but the internal model should be long-form.
+
+Observation results from a provider handle are scoped to one provider, so `station_id` is unambiguous within that result. Any table that combines observations or annotations across providers should include `provider_id` and use `(provider_id, station_id)` as the station key.
 
 The core product metadata is:
 
@@ -233,7 +224,6 @@ The station catalogue also has two levels. The global station table contains onl
 ```text
 provider_id
 station_id
-native_id
 name
 latitude
 longitude
@@ -244,7 +234,7 @@ start_date
 end_date
 ```
 
-This is the common-core schema. It is intentionally small. `station_id` is assigned by RivRetrieve and must be globally unique. `native_id` stores the provider's original station identifier. RivRetrieve station IDs should be deterministic, usually based on `provider_id` and `native_id`, so users can save them in notebooks and scripts.
+This is the common-core schema. It is intentionally small. `station_id` is the station identifier used by the provider. It does not need to be globally unique by itself. The unique key for global tables is `(provider_id, station_id)`. If RivRetrieve later needs a deterministic single-column join key, it can derive one internally, but users should not need to type a RivRetrieve-prefixed station ID.
 
 Provider-specific fields, such as USGS HUC codes or source-specific station status fields, should remain out of the common schema by default. A provider-level call can expose those fields explicitly:
 
@@ -259,7 +249,6 @@ Station-product availability also needs an explicit schema:
 ```text
 provider_id
 station_id
-native_id
 product_id
 availability
 availability_reason
@@ -337,7 +326,12 @@ The runtime module implements a small function-based contract. There are no prov
 
 ```python
 def info() -> ProviderInfo: ...
-def products() -> ProductCatalog: ...
+def products(
+    *,
+    observed_property: str | None = None,
+    frequency: str | None = None,
+    statistic: str | None = None,
+) -> ProductCatalog: ...
 def stations() -> StationCatalog: ...
 def station_products(stations: Sequence[str] | None = None) -> list[StationProduct]: ...
 def row_annotation_schema() -> list[AnnotationSchema]: ...
@@ -410,10 +404,10 @@ For that reason, I propose `on_missing="warn"` as the default. A request should 
 ```python
 result = rr.observations(
     provider="usgs_nwis",
-    stations=["usgs_nwis_07374000", "missing_station"],
+    stations=["07374000", "missing_station"],
     products="discharge_daily_mean",
-    start="2020-01-01",
-    end="2020-12-31",
+    start=pd.Timestamp("2020-01-01"),
+    end=pd.Timestamp("2020-12-31"),
     on_missing="warn",
 )
 
@@ -423,12 +417,12 @@ result.issues
 The policy should still be configurable:
 
 ```text
-on_missing="warn"    return partial data, warn, populate result.issues
+on_missing="warn"    return partial data, warnings.warn(...), populate result.issues
 on_missing="raise"   fail if any requested station-product is missing
 on_missing="ignore"  return partial data, populate result.issues, do not warn
 ```
 
-Even `ignore` should not discard diagnostics. It should only suppress warnings.
+Warnings should use Python's standard `warnings.warn(...)` machinery, not `print()` or logging. Even `ignore` should not discard diagnostics. It should only suppress warnings.
 
 An issue is structured so users can filter or summarise it programmatically.
 
@@ -436,7 +430,8 @@ An issue is structured so users can filter or summarise it programmatically.
 Issue(
     severity="warning",
     code="missing_data",
-    station_id="usgs_nwis_07374000",
+    provider_id="usgs_nwis",
+    station_id="07374000",
     product_id="stage_instantaneous",
     message="No data returned for the requested interval.",
 )
@@ -466,7 +461,5 @@ First, should RivRetrieve provide derived products? A common example is daily me
 Second, which observed properties belong in RivRetrieve v1? Discharge, stage, and water temperature are clearly river-gauge products. Catchment precipitation is already implemented for UK NRFA, and rainfall appears in some provider metadata such as UK Environment Agency, but including precipitation may broaden RivRetrieve beyond river observations. The project needs a scope decision before committing to the v1 `observed_property` vocabulary.
 
 Third, the canonical product vocabulary needs to be written as an explicit table before providers adopt canonical IDs. That table should define each canonical ID in terms of observed property, frequency, statistic, period anchor, unit, and whether the product is provider-native or derived. Providers should only use a canonical ID when they match that definition closely enough.
-
-Fourth, the exact names of some public arguments still need a final pass. For example, the proposal uses `native_stations` for provider-native station IDs, but we should decide whether that is the clearest name before implementation.
 
 Finally, the pandas export shape needs more thought. Internally, `data`, `row_annotations`, and `series_annotations` should be long-form. For pandas users, the default may need to be wider, especially for simple single-product requests. I want the export to feel familiar without compromising the internal model.
