@@ -13,5 +13,17 @@ def test_init_public_surface_still_only_version() -> None:
 
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == set()
-    for name in ["providers", "provider", "provider_info", "CatalogResult", "Issue"]:
+    for name in [
+        "providers",
+        "provider",
+        "provider_info",
+        "StationCatalog",
+        "ProductCatalog",
+        "StationProductCatalog",
+        "ProviderInfoCatalog",
+        "PackagedCatalogArtifact",
+        "CorruptCatalogArtifactError",
+        "CatalogResult",
+        "Issue",
+    ]:
         assert not hasattr(rivretrieve, name)
