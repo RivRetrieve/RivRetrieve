@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.provider_info import ProviderInfo
 
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -20,6 +21,9 @@ class UnknownProviderError(FatalContractError):
 class _ProviderHandle:
     provider_id: ProviderId
     _artifact: PackagedCatalogArtifact
+
+    def info(self) -> ProviderInfo:
+        return ProviderInfo.from_row(self._artifact.provider_info)
 
 
 @dataclass(frozen=True)
