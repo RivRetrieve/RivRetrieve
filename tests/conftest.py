@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from datetime import date
 
 import polars as pl
@@ -11,7 +12,13 @@ from rivretrieve._internal.catalogues.artifact import (
     packaged_catalogue_artifact_from_components,
 )
 from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
-from rivretrieve._internal.registry import _registry
+from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
+
+
+@dataclass(frozen=True)
+class RegisteredStub:
+    registry: ProviderRegistry
+    handle: _ProviderHandle
 
 
 def _provider_info(provider_id: str, catalogue_version: str | None) -> dict[str, object]:
@@ -141,3 +148,20 @@ def clear_provider_registry() -> Generator[None]:
     _registry.clear()
     yield
     _registry.clear()
+
+
+@pytest.fixture
+def fresh_registry() -> ProviderRegistry:
+    return ProviderRegistry()
+
+
+@pytest.fixture
+def registered_stub(
+    fresh_registry: ProviderRegistry,
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> RegisteredStub:
+    from tests._stubs import stub_provider
+
+    artifact = stub_provider.build_artifact(stub_packaged_catalogue_artifact)
+    handle = fresh_registry.register("stub_provider", artifact)
+    return RegisteredStub(registry=fresh_registry, handle=handle)

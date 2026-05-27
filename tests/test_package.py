@@ -14,6 +14,8 @@ def test_init_public_surface_exports_m1_discovery_only() -> None:
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == {"providers", "provider", "provider_info"}
     deferred_names = [
+        "ProviderInfo",
+        "ProviderModule",
         "ProviderHandle",
         "observations",
         "stations",
