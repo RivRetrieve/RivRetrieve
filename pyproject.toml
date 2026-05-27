@@ -1,6 +1,6 @@
 [project]
 name = "rivretrieve"
-version = "0.1.6"
+version = "0.1.7"
 description = "A Python package for downloading global river gauge data"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -13,7 +13,7 @@ dependencies = [
 
 
 [build-system]
-requires = ["uv_build>=0.9.13,<0.10.0"]
+requires = ["uv_build>=0.11.16,<0.12"]
 build-backend = "uv_build"
 
 [dependency-groups]
@@ -68,7 +68,7 @@ addopts = ["--strict-markers", "--strict-config", "-ra"]
 # Bump My Version
 # -----------------------
 [tool.bumpversion]
-current_version = "0.1.6"
+current_version = "0.1.7"
 commit = false
 tag = false
 allow_dirty = true
