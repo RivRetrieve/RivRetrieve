@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import polars.testing as pl_testing
 import pytest
 
+import rivretrieve as rr
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.issues import FatalContractError, IssuePolicyError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle
+from rivretrieve._internal.results import CatalogProvenance
+from tests._stubs import stub_provider
+from tests.conftest import RegisteredStub
 
 
 def test_registry_initially_empty() -> None:
@@ -128,3 +133,56 @@ def test_provider_handle_info_malformed_artifact_row_raises_provider_info_valida
 
     with pytest.raises(ProviderInfoValidationError):
         handle.info()
+
+
+def test_provider_handle_products_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
+    with pytest.raises(NotImplementedError):
+        stub_provider.products()
+
+    result = registered_stub.handle.products()
+
+    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.products)
+    assert result.issues == ()
+
+
+def test_provider_handle_stations_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
+    with pytest.raises(NotImplementedError):
+        stub_provider.stations()
+
+    result = registered_stub.handle.stations()
+
+    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.stations)
+    assert result.issues == ()
+
+
+def test_provider_handle_station_products_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
+    with pytest.raises(NotImplementedError):
+        stub_provider.station_products()
+
+    result = registered_stub.handle.station_products()
+
+    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.station_products)
+    assert result.issues == ()
+
+
+def test_provider_handle_catalogue_methods_have_registered_provider_provenance(
+    registered_stub: RegisteredStub,
+) -> None:
+    expected = CatalogProvenance(
+        source="packaged",
+        provider_id=ProviderId("stub_provider"),
+        rivretrieve_version=rr.__version__,
+        catalogue_version="2026.01",
+        artifact_id=None,
+        artifact_path=None,
+        artifact_hash=None,
+        generated_at=None,
+        retrieved_at=None,
+        endpoints=(),
+        query=None,
+        response_version=None,
+    )
+
+    assert registered_stub.handle.products().provenance == expected
+    assert registered_stub.handle.stations().provenance == expected
+    assert registered_stub.handle.station_products().provenance == expected

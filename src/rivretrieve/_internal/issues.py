@@ -36,6 +36,12 @@ class FatalContractError(RivRetrieveError):
         super().__init__(message)
 
 
+class InvalidCatalogueSourceError(FatalContractError):
+    def __init__(self, source: object) -> None:
+        self.source = source
+        super().__init__(f"Unsupported catalogue source: {source!r}")
+
+
 def apply_on_issue(issues: Sequence[Issue], on_issue: OnIssue) -> None:
     actionable_issues = tuple(issue for issue in issues if issue.severity in {"warning", "error"})
 

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+import polars as pl
+
+from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
+from rivretrieve._internal.results import CatalogResult
 
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -24,6 +29,44 @@ class _ProviderHandle:
 
     def info(self) -> ProviderInfo:
         return ProviderInfo.from_row(self._artifact.provider_info)
+
+    def products(
+        self,
+        *,
+        source: CatalogSource = "packaged",
+        observed_property: str | None = None,
+        frequency: str | None = None,
+        statistic: str | None = None,
+        on_issue: OnIssue = "warn",
+    ) -> CatalogResult[pl.DataFrame]:
+        return CatalogueReader(self._artifact, self.provider_id).read_products(
+            source=source,
+            observed_property=observed_property,
+            frequency=frequency,
+            statistic=statistic,
+            on_issue=on_issue,
+        )
+
+    def stations(
+        self,
+        *,
+        source: CatalogSource = "packaged",
+        on_issue: OnIssue = "warn",
+    ) -> CatalogResult[pl.DataFrame]:
+        return CatalogueReader(self._artifact, self.provider_id).read_stations(source=source, on_issue=on_issue)
+
+    def station_products(
+        self,
+        stations: Sequence[str] | None = None,
+        *,
+        source: CatalogSource = "packaged",
+        on_issue: OnIssue = "warn",
+    ) -> CatalogResult[pl.DataFrame]:
+        return CatalogueReader(self._artifact, self.provider_id).read_station_products(
+            stations,
+            source=source,
+            on_issue=on_issue,
+        )
 
 
 @dataclass(frozen=True)

@@ -34,7 +34,7 @@ def test_stub_provider_does_not_register_at_import_time(fresh_registry: Provider
 
 
 @pytest.mark.parametrize("method_name", ["products", "stations", "station_products"])
-def test_stub_catalogue_functions_are_explicitly_unimplemented_in_step_01(method_name: str) -> None:
+def test_stub_catalogue_functions_remain_explicitly_unimplemented(method_name: str) -> None:
     method = getattr(stub_provider, method_name)
 
     with pytest.raises(NotImplementedError, match="deferred to M2 step 02"):
