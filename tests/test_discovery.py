@@ -7,8 +7,10 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
+from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-from rivretrieve._internal.catalogues.schemas import ProviderInfoCatalog
+from rivretrieve._internal.catalogues.schemas import ProductCatalog, ProviderInfoCatalog, StationCatalog
+from rivretrieve._internal.discovery import product_info, products, stations
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.registry import UnknownProviderError, _ProviderHandle, _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
@@ -131,3 +133,121 @@ def test_provider_info_aggregates_registered_provider_rows(
 def test_provider_lookup_malformed_id_is_membership_miss() -> None:
     with pytest.raises(UnknownProviderError):
         rr.provider("BAD-Provider")
+
+
+def test_global_stations_aggregates_registered_packaged_artifacts(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    _registry.register("z_provider", stub_packaged_catalogue_artifact("z_provider"))
+    _registry.register("a_provider", stub_packaged_catalogue_artifact("a_provider"))
+
+    result = stations()
+
+    assert result.data.select("provider_id", "station_id").rows() == [
+        ("a_provider", "station-1"),
+        ("z_provider", "station-1"),
+    ]
+    assert result.data.schema == StationCatalog.polars_schema
+    assert result.issues == ()
+
+
+def test_global_products_aggregates_registered_packaged_artifacts(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    _registry.register("z_provider", stub_packaged_catalogue_artifact("z_provider"))
+    _registry.register("a_provider", stub_packaged_catalogue_artifact("a_provider"))
+
+    result = products()
+
+    assert result.data.select("provider_id", "product_id").rows() == [
+        ("a_provider", "level"),
+        ("z_provider", "level"),
+    ]
+    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.issues == ()
+
+
+def test_global_product_info_matches_products_contract(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    _registry.register("stub_provider", stub_packaged_catalogue_artifact("stub_provider"))
+
+    products_result = products()
+    product_info_result = product_info()
+
+    pl_testing.assert_frame_equal(product_info_result.data, products_result.data)
+    assert product_info_result.provenance == products_result.provenance
+    assert product_info_result.issues == products_result.issues
+
+
+def test_global_discovery_empty_registry_returns_empty_catalog_result() -> None:
+    station_result = stations()
+    product_result = products()
+    product_info_result = product_info()
+
+    assert station_result.data.schema == StationCatalog.polars_schema
+    assert station_result.data.height == 0
+    assert product_result.data.schema == ProductCatalog.polars_schema
+    assert product_result.data.height == 0
+    assert product_info_result.data.schema == ProductCatalog.polars_schema
+    assert product_info_result.data.height == 0
+    assert station_result.provenance.source == "packaged"
+    assert product_result.provenance.source == "packaged"
+    assert product_info_result.provenance.source == "packaged"
+
+
+def test_global_discovery_provenance_is_global_packaged(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    _registry.register("stub_provider", stub_packaged_catalogue_artifact("stub_provider"))
+    expected = CatalogProvenance(
+        source="packaged",
+        provider_id=None,
+        rivretrieve_version=rr.__version__,
+        catalogue_version=None,
+        artifact_id=None,
+        artifact_path=None,
+        artifact_hash=None,
+        generated_at=None,
+        retrieved_at=None,
+        endpoints=(),
+        query=None,
+        response_version=None,
+    )
+
+    assert stations().provenance == expected
+    assert products().provenance == expected
+    assert product_info().provenance == expected
+
+
+def test_global_discovery_uses_reader_for_table_selection_and_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    _registry.register("stub_provider", stub_packaged_catalogue_artifact("stub_provider"))
+    calls = {"stations": 0, "products": 0}
+
+    def read_stations(self: CatalogueReader) -> CatalogResult[pl.DataFrame]:
+        calls["stations"] += 1
+        return CatalogResult(
+            data=self.artifact.stations,
+            provenance=CatalogProvenance(source="packaged", provider_id=self.provider_id),
+            issues=(),
+        )
+
+    def read_products(self: CatalogueReader) -> CatalogResult[pl.DataFrame]:
+        calls["products"] += 1
+        return CatalogResult(
+            data=self.artifact.products,
+            provenance=CatalogProvenance(source="packaged", provider_id=self.provider_id),
+            issues=(),
+        )
+
+    monkeypatch.setattr(CatalogueReader, "read_stations", read_stations)
+    monkeypatch.setattr(CatalogueReader, "read_products", read_products)
+
+    stations()
+    products()
+    product_info()
+
+    assert calls == {"stations": 1, "products": 2}

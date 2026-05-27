@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 
-def test_import_rivretrieve_does_not_import_providers_or_generators() -> None:
+def test_import_rivretrieve_does_not_import_providers_stubs_or_generators() -> None:
     script = """
 import sys
 import rivretrieve
