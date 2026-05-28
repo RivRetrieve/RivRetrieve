@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from rivretrieve._internal.observations import ObservationRequest
+from rivretrieve._internal.observations import AnnotationSchema, ObservationRequest
 from rivretrieve._internal.primitives import OnIssue, ProviderId
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
@@ -40,12 +40,62 @@ def test_ch_foen_station_products_returns_packaged_availability() -> None:
     assert set(result.data["availability"].cast(str).to_list()) == {"unknown"}
 
 
-def test_ch_foen_row_annotation_schema_is_empty() -> None:
-    assert ch_foen_module.row_annotation_schema() == []
+def test_ch_foen_row_annotation_schema_declares_m4_observation_names() -> None:
+    schemas = ch_foen_module.row_annotation_schema()
+
+    assert [schema.annotation_id for schema in schemas] == [
+        "native_field",
+        "native_unit",
+        "converted_unit",
+        "source_endpoint_or_query",
+        "raw_value",
+        "alternative_native_field",
+        "alternative_raw_value",
+        "alternative_native_unit",
+    ]
+    assert [schema.value_type for schema in schemas] == [
+        "string",
+        "string",
+        "string",
+        "string",
+        "float",
+        "string",
+        "float",
+        "string",
+    ]
+    for schema in schemas:
+        assert AnnotationSchema.from_row(schema.to_row()) == schema
 
 
-def test_ch_foen_series_annotation_schema_is_empty() -> None:
-    assert ch_foen_module.series_annotation_schema() == []
+def test_ch_foen_series_annotation_schema_declares_m4_observation_names() -> None:
+    schemas = ch_foen_module.series_annotation_schema()
+
+    assert [schema.annotation_id for schema in schemas] == [
+        "preferred_source",
+        "fallback_source_used",
+        "native_unit_returned",
+        "converted_unit",
+        "returned_time_range_start",
+        "returned_time_range_end",
+        "resolved_timezone",
+        "timezone_mismatch_flag",
+        "provider_endpoint",
+        "provider_query_fields",
+    ]
+    assert [schema.value_type for schema in schemas] == [
+        "string",
+        "boolean",
+        "string",
+        "string",
+        "datetime",
+        "datetime",
+        "string",
+        "boolean",
+        "string",
+        "json",
+    ]
+    for schema in schemas:
+        assert AnnotationSchema.from_row(schema.to_row()) == schema
 
 
 @pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
