@@ -12,10 +12,10 @@ import rivretrieve as rr
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
     AvailabilityDtype,
-    ProductCatalog,
-    StationCatalog,
-    StationProductCatalog,
 )
 from rivretrieve._internal.issues import (
     FatalContractError,
@@ -105,7 +105,7 @@ def test_catalogue_reader_products_returns_packaged_catalog_result(
 
     assert isinstance(result, CatalogResult)
     pl_testing.assert_frame_equal(result.data, artifact.products)
-    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.provenance == _expected_provenance()
     assert result.issues == ()
 
@@ -119,7 +119,7 @@ def test_catalogue_reader_stations_returns_packaged_catalog_result(
 
     assert isinstance(result, CatalogResult)
     pl_testing.assert_frame_equal(result.data, artifact.stations)
-    assert result.data.schema == StationCatalog.polars_schema
+    assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert result.provenance == _expected_provenance()
     assert result.issues == ()
 
@@ -133,7 +133,7 @@ def test_catalogue_reader_station_products_returns_packaged_catalog_result(
 
     assert isinstance(result, CatalogResult)
     pl_testing.assert_frame_equal(result.data, artifact.station_products)
-    assert result.data.schema == StationProductCatalog.polars_schema
+    assert result.data.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.provenance == _expected_provenance()
     assert result.issues == ()
 
@@ -162,7 +162,7 @@ def test_catalogue_reader_product_filter_no_match_returns_empty_result(
     result = _reader(stub_packaged_catalogue_artifact_rich()).read_products(observed_property="temperature")
 
     assert result.data.height == 0
-    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.issues == ()
 
 
@@ -257,8 +257,8 @@ def test_reader_preserves_polars_schema_after_empty_filter(
     products = reader.read_products(observed_property="temperature").data
     station_products = reader.read_station_products(stations=["missing"]).data
 
-    assert products.schema == ProductCatalog.polars_schema
-    assert station_products.schema == StationProductCatalog.polars_schema
+    assert products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert station_products.schema["availability"] == AvailabilityDtype
 
 
@@ -301,7 +301,7 @@ def test_catalogue_reader_live_products_warn_returns_empty_result_with_issue(
     with pytest.warns(RuntimeWarning, match="does not support live catalogue method read_products"):
         result = _reader(stub_packaged_catalogue_artifact()).read_products(source="live", on_issue="warn")
 
-    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.data.height == 0
     assert result.provenance == _expected_live_provenance()
     _assert_unsupported_issue(result, method="read_products", capability="live_products")
@@ -313,7 +313,7 @@ def test_catalogue_reader_live_stations_warn_returns_empty_result_with_issue(
     with pytest.warns(RuntimeWarning, match="does not support live catalogue method read_stations"):
         result = _reader(stub_packaged_catalogue_artifact()).read_stations(source="live", on_issue="warn")
 
-    assert result.data.schema == StationCatalog.polars_schema
+    assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert result.data.height == 0
     assert result.provenance == _expected_live_provenance()
     _assert_unsupported_issue(result, method="read_stations", capability="live_stations")
@@ -325,7 +325,7 @@ def test_catalogue_reader_live_station_products_warn_returns_empty_result_with_i
     with pytest.warns(RuntimeWarning, match="does not support live catalogue method read_station_products"):
         result = _reader(stub_packaged_catalogue_artifact()).read_station_products(source="live", on_issue="warn")
 
-    assert result.data.schema == StationProductCatalog.polars_schema
+    assert result.data.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.data.height == 0
     assert result.provenance == _expected_live_provenance()
     _assert_unsupported_issue(result, method="read_station_products", capability="live_station_products")
@@ -365,7 +365,7 @@ def test_catalogue_reader_live_products_ignore_returns_issue_without_warning(
         result = _reader(stub_packaged_catalogue_artifact()).read_products(source="live", on_issue="ignore")
 
     assert captured_warnings == []
-    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.data.height == 0
     _assert_unsupported_issue(result, method="read_products", capability="live_products")
 
@@ -377,7 +377,7 @@ def test_catalogue_reader_live_stations_ignore_returns_issue_without_warning(
         result = _reader(stub_packaged_catalogue_artifact()).read_stations(source="live", on_issue="ignore")
 
     assert captured_warnings == []
-    assert result.data.schema == StationCatalog.polars_schema
+    assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert result.data.height == 0
     _assert_unsupported_issue(result, method="read_stations", capability="live_stations")
 
@@ -389,7 +389,7 @@ def test_catalogue_reader_live_station_products_ignore_returns_issue_without_war
         result = _reader(stub_packaged_catalogue_artifact()).read_station_products(source="live", on_issue="ignore")
 
     assert captured_warnings == []
-    assert result.data.schema == StationProductCatalog.polars_schema
+    assert result.data.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.data.height == 0
     _assert_unsupported_issue(result, method="read_station_products", capability="live_station_products")
 

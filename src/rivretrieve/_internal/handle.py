@@ -3,8 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-import polars as pl
-
+from rivretrieve._internal.catalogues.schemas import ProductCatalog, StationCatalog, StationProductCatalog
 from rivretrieve._internal.observations import AnnotationSchema, ObservationResult
 from rivretrieve._internal.primitives import CatalogSource, OnIssue
 from rivretrieve._internal.provider_info import ProviderInfo
@@ -23,14 +22,14 @@ class ProviderHandle(Protocol):
         frequency: str | None = None,
         statistic: str | None = None,
         on_issue: OnIssue = "warn",
-    ) -> CatalogResult[pl.DataFrame]: ...
+    ) -> CatalogResult[ProductCatalog]: ...
 
     def stations(
         self,
         *,
         source: CatalogSource = "packaged",
         on_issue: OnIssue = "warn",
-    ) -> CatalogResult[pl.DataFrame]: ...
+    ) -> CatalogResult[StationCatalog]: ...
 
     def station_products(
         self,
@@ -38,7 +37,7 @@ class ProviderHandle(Protocol):
         *,
         source: CatalogSource = "packaged",
         on_issue: OnIssue = "warn",
-    ) -> CatalogResult[pl.DataFrame]: ...
+    ) -> CatalogResult[StationProductCatalog]: ...
 
     def row_annotation_schema(self) -> list[AnnotationSchema]: ...
 

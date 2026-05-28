@@ -77,6 +77,8 @@ The implementation since M1 step 03 (private `_ProviderHandle.products`/`station
 
 **How to apply going forward:**
 
+Resolved at M3 step 01: path (b) was chosen. `StationCatalog`, `ProductCatalog`, `StationProductCatalog`, and `ProviderInfoCatalog` are now PEP 695 type aliases for `pl.DataFrame`; the runtime `CatalogueSchema` instances were renamed to `STATION_CATALOG_SCHEMA`, `PRODUCT_CATALOG_SCHEMA`, `STATION_PRODUCT_CATALOG_SCHEMA`, and `PROVIDER_INFO_CATALOG_SCHEMA`. The aliases are not exported from the package root, and T119/T120 remain unchanged.
+
 1. **Coordinator decision needed before M3 step 01 dispatch.** Two paths reconcile this:
    - **(a) Tracker addendum.** Note that `StationCatalog` / `ProductCatalog` / `StationProductCatalog` / `ProviderInfoCatalog` are runtime schema instances. The public method annotations read `CatalogResult[pl.DataFrame]`. This is the cheapest path and matches existing behavior.
    - **(b) `TypeAlias` introduction.** Introduce `StationCatalog: TypeAlias = pl.DataFrame` (and siblings) so the tracker shorthand becomes meaningful at the type system level too. The runtime `CatalogueSchema` instances would need renaming (e.g., `STATION_CATALOG_SCHEMA`). Heavier touch; lands in M3 if chosen.

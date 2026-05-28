@@ -9,7 +9,11 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-from rivretrieve._internal.catalogues.schemas import ProductCatalog, ProviderInfoCatalog, StationCatalog
+from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    PROVIDER_INFO_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+)
 from rivretrieve._internal.discovery import product_info, products, stations
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.registry import UnknownProviderError, _ProviderHandle, _registry
@@ -88,7 +92,7 @@ def test_provider_info_empty_registry_returns_schema_conformant_catalog_result()
     assert isinstance(result, CatalogResult)
     assert result.issues == ()
     assert result.provenance == expected_provenance
-    assert result.data.schema == ProviderInfoCatalog.polars_schema
+    assert result.data.schema == PROVIDER_INFO_CATALOG_SCHEMA.polars_schema
     assert result.data.height == 0
 
 
@@ -120,7 +124,7 @@ def test_provider_info_aggregates_registered_provider_rows(
                 "metadata": '{"homepage":"https://z_provider.example.invalid"}',
             },
         ],
-        schema=ProviderInfoCatalog.polars_schema,
+        schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema,
     )
 
     result = rr.provider_info()
@@ -147,7 +151,7 @@ def test_global_stations_aggregates_registered_packaged_artifacts(
         ("a_provider", "station-1"),
         ("z_provider", "station-1"),
     ]
-    assert result.data.schema == StationCatalog.polars_schema
+    assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert result.issues == ()
 
 
@@ -163,7 +167,7 @@ def test_global_products_aggregates_registered_packaged_artifacts(
         ("a_provider", "level"),
         ("z_provider", "level"),
     ]
-    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.issues == ()
 
 
@@ -185,11 +189,11 @@ def test_global_discovery_empty_registry_returns_empty_catalog_result() -> None:
     product_result = products()
     product_info_result = product_info()
 
-    assert station_result.data.schema == StationCatalog.polars_schema
+    assert station_result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert station_result.data.height == 0
-    assert product_result.data.schema == ProductCatalog.polars_schema
+    assert product_result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert product_result.data.height == 0
-    assert product_info_result.data.schema == ProductCatalog.polars_schema
+    assert product_info_result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert product_info_result.data.height == 0
     assert station_result.provenance.source == "packaged"
     assert product_result.provenance.source == "packaged"
