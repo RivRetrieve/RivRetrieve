@@ -7,6 +7,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.schemas import (
@@ -38,13 +39,20 @@ def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
     return found
 
 
-def test_providers_empty_registry_returns_empty_list() -> None:
-    assert rr.providers() == []
+def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(discovery, "_DEFAULT_PROVIDER_REGISTRATION_ENABLED", False)
+    _registry.clear()
+
+
+def test_providers_empty_registry_returns_default_ch_foen() -> None:
+    assert rr.providers() == ["ch_foen"]
 
 
 def test_providers_sorted_independent_of_registration_order(
+    monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     _registry.register("z_provider", stub_packaged_catalogue_artifact("z_provider"))
     _registry.register("a_provider", stub_packaged_catalogue_artifact("a_provider"))
 
@@ -52,8 +60,10 @@ def test_providers_sorted_independent_of_registration_order(
 
 
 def test_provider_returns_registered_placeholder_object(
+    monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     expected = _registry.register("stub_provider", stub_packaged_catalogue_artifact("stub_provider"))
 
     handle = rr.provider("stub_provider")
@@ -71,7 +81,10 @@ def test_provider_unknown_raises_unknown_provider_error() -> None:
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-def test_provider_info_empty_registry_returns_schema_conformant_catalog_result() -> None:
+def test_provider_info_disabled_defaults_empty_registry_returns_schema_conformant_catalog_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_default_provider_registration(monkeypatch)
     expected_provenance = CatalogProvenance(
         source="packaged",
         provider_id=None,
@@ -97,8 +110,10 @@ def test_provider_info_empty_registry_returns_schema_conformant_catalog_result()
 
 
 def test_provider_info_aggregates_registered_provider_rows(
+    monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     _registry.register("z_provider", stub_packaged_catalogue_artifact("z_provider", catalogue_version=None))
     _registry.register("a_provider", stub_packaged_catalogue_artifact("a_provider", catalogue_version="2026.02"))
     expected = pl.DataFrame(
@@ -140,8 +155,10 @@ def test_provider_lookup_malformed_id_is_membership_miss() -> None:
 
 
 def test_global_stations_aggregates_registered_packaged_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     _registry.register("z_provider", stub_packaged_catalogue_artifact("z_provider"))
     _registry.register("a_provider", stub_packaged_catalogue_artifact("a_provider"))
 
@@ -156,8 +173,10 @@ def test_global_stations_aggregates_registered_packaged_artifacts(
 
 
 def test_global_products_aggregates_registered_packaged_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     _registry.register("z_provider", stub_packaged_catalogue_artifact("z_provider"))
     _registry.register("a_provider", stub_packaged_catalogue_artifact("a_provider"))
 
@@ -172,8 +191,10 @@ def test_global_products_aggregates_registered_packaged_artifacts(
 
 
 def test_global_product_info_matches_products_contract(
+    monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     _registry.register("stub_provider", stub_packaged_catalogue_artifact("stub_provider"))
 
     products_result = products()
@@ -184,7 +205,10 @@ def test_global_product_info_matches_products_contract(
     assert product_info_result.issues == products_result.issues
 
 
-def test_global_discovery_empty_registry_returns_empty_catalog_result() -> None:
+def test_global_discovery_disabled_defaults_empty_registry_returns_empty_catalog_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_default_provider_registration(monkeypatch)
     station_result = stations()
     product_result = products()
     product_info_result = product_info()
@@ -201,8 +225,10 @@ def test_global_discovery_empty_registry_returns_empty_catalog_result() -> None:
 
 
 def test_global_discovery_provenance_is_global_packaged(
+    monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     _registry.register("stub_provider", stub_packaged_catalogue_artifact("stub_provider"))
     expected = CatalogProvenance(
         source="packaged",
@@ -228,6 +254,7 @@ def test_global_discovery_uses_reader_for_table_selection_and_validation(
     monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    _disable_default_provider_registration(monkeypatch)
     _registry.register("stub_provider", stub_packaged_catalogue_artifact("stub_provider"))
     calls = {"stations": 0, "products": 0}
 

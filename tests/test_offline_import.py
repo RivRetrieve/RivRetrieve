@@ -13,10 +13,12 @@ assert "rivretrieve._internal.catalogues.artifact" in sys.modules, (
     "sentinel module not imported; subprocess didn't actually exercise the package"
 )
 assert "rivretrieve.providers" not in sys.modules
+assert "rivretrieve._internal.providers" not in sys.modules
 assert "tests._stubs" not in sys.modules
 assert "tests._stubs.stub_provider" not in sys.modules
 for module_name in sys.modules:
     assert not module_name.startswith(("rivretrieve.providers.",))
+    assert not module_name.startswith(("rivretrieve._internal.providers.",))
     assert module_name.rsplit(".", 1)[-1] != "generate_catalogue"
 """
 
