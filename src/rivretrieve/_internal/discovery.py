@@ -9,6 +9,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.handle import ProviderHandle
 from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 
@@ -17,7 +18,7 @@ def providers() -> list[str]:
     return _registry.list_provider_ids()
 
 
-def provider(provider_id: str) -> object:
+def provider(provider_id: str) -> ProviderHandle:
     return _registry.get(provider_id)
 
 
