@@ -169,6 +169,39 @@ This is a working contract: any new import statement that lands a name on the mo
 
 **Resolution:** Implemented in M3 step 02.
 
+## D10 — Legacy `origin/switzerland` ref lives on the upstream RivRetrieve-Python clone, not on the target repo.
+
+**Found during:** M4 step 01 execution.
+
+**What:** The M4 orchestrator-prompt section "CONTEXT" instructs planners and reviewers to consult the unmerged ch_foen port source via `git show origin/switzerland:<path>` "of the same repo." In practice:
+
+- `/Users/nicolaslazaro/Desktop/work/RivRetrieve` (target repo) has only `origin/HEAD -> origin/main`, `origin/main`, and `origin/docs/provider-redesign-proposal`. `git rev-parse origin/switzerland` fails with `unknown revision`.
+- `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` (the upstream Python project clone) DOES carry `origin/switzerland` at `cd9b0305e4b65dd23bb3cfb541e9a6ee53ff77fd` — the same `cd9b030 "Restore public Switzerland token"` cited in M3 REPORT §7.2.
+
+So every legacy `git show origin/switzerland HEAD:<path>` command needs to be issued from the legacy checkout's working directory, not the target repo's.
+
+**Which section it contradicts:** Not an architecture.md contradiction. A wording bug in the orchestrator-prompt "CONTEXT" section that misled the literal reading of "the same repo." The M4 step 01 reviewer worked around this by citing the legacy filesystem path explicitly in the critique; the executor confirmed `cd9b030` matched after running `git log origin/switzerland --oneline -1` inside the legacy clone.
+
+**Why it matters:** Every remaining M4 step's planner, reviewer, and executor inherits the "git show origin/switzerland HEAD:<path>" instruction. If a planner literally pastes that command into a target-repo shell, it fails silently in the sense that the planner then either fabricates a citation, falls back to the local source-of-truth-by-prose, or stalls. The fix is purely operational: pin the legacy checkout path in every M4 step brief from step 02 onward.
+
+The same pattern will affect any future provider port that consults a sibling legacy ref (e.g., `origin/<country>` branches on `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python`).
+
+**How to apply going forward:**
+
+1. **M4 step planners (step 02 onward):** When consulting legacy SwitzerlandFetcher, observation tests, or the three fixture CSVs, issue `git -C /Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python show origin/switzerland:<path>` or `cd` into that directory first. Cite the absolute path the read came from in plan §3 / §5 so the reviewer can re-run verbatim.
+
+2. **M4 step reviewers (step 02 onward):** When verifying `L_legacy_citation_fidelity`, run the citation from the legacy checkout directory. Treat a planner citation that does not name the legacy-checkout path as a citation-fidelity Minor finding (the planner is hiding which working directory they assumed); upgrade to Major only if the cited line is actually wrong.
+
+3. **M4 step executors:** Default to the legacy checkout for token probes and fixture extraction. Confirm `git log origin/switzerland --oneline -1` returns `cd9b030 Restore public Switzerland token` BEFORE any token-related verification. If the legacy checkout has drifted (e.g., a future `git fetch` advances `origin/switzerland`), pin to `cd9b030` explicitly with `git show cd9b030:<path>`.
+
+4. **Reviewer lens phrasing:** `L_legacy_citation_fidelity` should be reworded across remaining M4 briefs to read "run `git show` against `cd9b030` from the legacy checkout at `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python`" instead of "run git show against origin/switzerland HEAD (not just `origin/switzerland`, which may have drifted)." The drift concern remains valid — pinning to `cd9b030` addresses it directly.
+
+**Architecture status:** Not a contradiction. An operational correction to the M4 orchestrator-prompt working method.
+
+**Forward implication:** When the coordinator scopes M5 or any future provider port that consults a sibling legacy branch, the briefs should name the legacy-checkout absolute path inline rather than relying on the reader to figure out "the same repo" pragma. If a future provider's legacy lives elsewhere (e.g., the R lineage at `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve`), the same rule applies: cite the working directory.
+
+**Resolution:** Operationally resolved at M4 step 01 (executor used the legacy checkout per critique citation, confirmed `cd9b030`). Forward step briefs pinned in this entry.
+
 ## D8 — M1/M2 catalogue contracts use asymmetric encodings; generator-side serialization obligations weren't exercised before M3 step 02.
 
 **Found during:** M3 step 02 6B execution.
