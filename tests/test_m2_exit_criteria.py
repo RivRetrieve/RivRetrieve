@@ -9,6 +9,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.issues import (
     AnnotationSchemaViolationError,
@@ -26,6 +27,8 @@ def test_m2_exit_criteria_public_surface_sweep(
     monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact_rich: Callable[..., PackagedCatalogArtifact],
 ) -> None:
+    monkeypatch.setattr(discovery, "_DEFAULT_PROVIDER_REGISTRATION_ENABLED", False)
+    _registry.clear()
     artifact = stub_packaged_catalogue_artifact_rich("stub_provider")
     _registry.register("stub_provider", artifact, provider_module=stub_provider)
 

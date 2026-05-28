@@ -16,18 +16,23 @@ from rivretrieve._internal.handle import ProviderHandle
 from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 
+_DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
+
 
 def providers() -> list[str]:
+    _ensure_default_providers_registered()
     return _registry.list_provider_ids()
 
 
 def provider(provider_id: str) -> ProviderHandle:
+    _ensure_default_providers_registered()
     return _registry.get(provider_id)
 
 
 def provider_info() -> CatalogResult[ProviderInfoCatalog]:
     from rivretrieve import __version__
 
+    _ensure_default_providers_registered()
     rows = [record.artifact.provider_info for record in _registry.iter_records()]
     if rows:
         data = pl.DataFrame(rows, schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema).sort("provider_id")
@@ -53,6 +58,7 @@ def provider_info() -> CatalogResult[ProviderInfoCatalog]:
 
 
 def stations() -> CatalogResult[StationCatalog]:
+    _ensure_default_providers_registered()
     frames = [
         CatalogueReader(record.artifact, record.provider_id).read_stations().data for record in _registry.iter_records()
     ]
@@ -72,6 +78,7 @@ def product_info() -> CatalogResult[ProductCatalog]:
 
 
 def _global_products() -> CatalogResult[ProductCatalog]:
+    _ensure_default_providers_registered()
     frames = [
         CatalogueReader(record.artifact, record.provider_id).read_products().data for record in _registry.iter_records()
     ]
@@ -86,6 +93,23 @@ def _concat_or_empty(frames: list[pl.DataFrame], schema: pl.Schema) -> pl.DataFr
     if not frames:
         return pl.DataFrame(schema=schema)
     return pl.concat(frames)
+
+
+def _ensure_default_providers_registered() -> None:
+    if not _DEFAULT_PROVIDER_REGISTRATION_ENABLED:
+        return
+    if "ch_foen" in _registry.list_provider_ids():
+        return
+
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
+
+    packaged_artifact = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise")
+    _registry.register(
+        "ch_foen",
+        packaged_artifact,
+        provider_module=ch_foen_module,
+    )
 
 
 def _global_provenance() -> CatalogProvenance:

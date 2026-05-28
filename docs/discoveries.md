@@ -124,3 +124,61 @@ This is a working contract: any new import statement that lands a name on the mo
 2. **No M3 / M4 / M5 dispatch is blocked.** The current T22 / T23 negative-control pair remains meaningful; the gap is between "names attached to module" and "names that `import *` would export."
 
 **Architecture status:** Not a contradiction. Project hygiene item for V1 closeout.
+
+## D6 — Provider subpackage path shadowed public callable `rr.providers`.
+
+**Found during:** M3 step 02 6A execution.
+
+**What:** Original M3 step 02 plan placed ch_foen at `src/rivretrieve/providers/ch_foen/`. Python import mechanics bind `rivretrieve.providers` to the subpackage module on first import, overwriting the `rivretrieve._internal.discovery.providers` callable re-exported at `src/rivretrieve/__init__.py:5`. Subsequent `rr.providers()` calls raised `TypeError: 'module' object is not callable`. Executor blocked at 6A.
+
+**Which section it contradicts:** Not an architecture.md contradiction; a contradiction between the M3 orchestrator-prompt-suggested path and the M1/M2-established public callable surface.
+
+**Why it matters:** Any provider subpackage colliding with a public callable name will exhibit this. Future provider ports (M6+ if more providers come) face the same trap.
+
+**What we did:** Relocated to `src/rivretrieve/_internal/providers/ch_foen/`. The public surface (`rr.providers()`) is unaffected. Lazy registration via `from rivretrieve._internal.providers.ch_foen import module as ch_foen_module` preserves the offline-import invariant. Plan amended in place; executor resumes at 6A.
+
+**What the coordinator should review:** Whether to amend the orchestrator prompt's §"What M3 ships" path snippet for future milestones, and whether to add an "import-time-attribute-shadowing" probe to the reviewer's L_offline_invariant or L_inherited_patterns lens going forward.
+
+**Resolution:** Implemented in M3 step 02.
+
+## D7 — Pydantic extra='allow' constructor kwargs trip ty; use model_validate(dict) for extras assertions in tests.
+
+**Found during:** M3 step 02 6A execution.
+
+**What:** M3 step 02 metadata models declare `extra="allow"` so Existenz.ch source fields aren't discarded on ingest. Tests that exercised extras via constructor kwargs (`Model(source_specific=...)`) failed ty with `unknown-argument` because Pydantic's `__init__` signature only declares known fields; runtime `extra="allow"` is invisible to the type checker.
+
+**Why it matters:** Any future Pydantic model with `extra="allow"` will hit this if tested via constructor kwargs. Affects M4 if observation models also need `extra="allow"`.
+
+**What we did:** Split the metadata tests so declared-fields use constructor kwargs, which type-checks cleanly, and the extras-allow assertion uses `Model.model_validate({...})` with `model_extra` introspection. Plan §5.1 form adjustment within executor authority; intent unchanged.
+
+**What the coordinator should review:** Add an "extras-allow - ty interaction" probe to the reviewer's L_protocol_conformance or a new test-shape lens for M4 and any future provider port adding Pydantic models with extras.
+
+**Resolution:** Implemented in M3 step 02.
+
+## D9 — isinstance(x, Mapping) erases generics under ty; use dict for JSON-loaded data.
+
+**Found during:** M3 step 02 6B execution.
+
+**What:** `isinstance(x, Mapping)` narrows to a bare `Mapping` whose key/value types ty infers as `Never`. Subsequent `.get(...)` calls fail `invalid-argument-type`. The runtime check is correct; only the type narrowing is over-conservative.
+
+**Why it matters:** Any provider port that walks `json.loads`-produced data with `isinstance` checks against `Mapping` / `Sequence` will hit this. Affects future provider ports (M4 observation parsing, M6+ new providers).
+
+**What we did:** Use `isinstance(x, dict)` / `isinstance(x, list)` for JSON-loaded data, which is always concretely typed by Python's json module. The abstract ABCs are not needed at the parser boundary.
+
+**What the coordinator should review:** Optional lint rule (or convention note in docs/discoveries.md) that `isinstance` checks against bare ABCs are discouraged inside provider code unless the abstract polymorphism is actually needed. For ingest code that takes `json.loads` output, `dict` / `list` is the right check.
+
+**Resolution:** Implemented in M3 step 02.
+
+## D8 — M1/M2 catalogue contracts use asymmetric encodings; generator-side serialization obligations weren't exercised before M3 step 02.
+
+**Found during:** M3 step 02 6B execution.
+
+**What:** `PROVIDER_INFO_CATALOG_SCHEMA`'s `metadata` column is `pl.Utf8` per arch.md §7 (D2 addendum). The loader canonicalizes JSON-compatible metadata into a JSON string. The generator side of the round-trip (dict -> JSON-string before parquet/write validation) was not exercised in M1 (loader tested with hand-built parquet) or M2 (no provider generated artifacts). M3 step 02 is the first generator-side exercise; the obligation surfaced only at typed-frame construction time inside the generator's validation step.
+
+**Why it matters:** Any future provider port that generates packaged artifacts will hit the same trap if their generator forgets to serialize. The artifact loader's normalization is invisible from the generator side.
+
+**What we did:** Generator now uses `json.dumps(metadata, sort_keys=True)` before typed-frame construction.
+
+**What the coordinator should review:** Add an "M1/M2 contract round-trip" probe to the reviewer's lens inventory for M4 and future provider ports. The probe: for every catalogue/result column with an asymmetric encoding (anything where loader semantics differ from raw parquet type), verify the GENERATOR side serializes correctly, not just the LOADER side deserializes. Candidate columns to audit proactively in M4: anything in observation results with JSON-encoded annotations, timestamp columns with timezone normalization, etc.
+
+**Resolution:** Implemented in M3 step 02.
