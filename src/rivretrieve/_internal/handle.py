@@ -1,0 +1,55 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
+
+import polars as pl
+
+from rivretrieve._internal.observations import AnnotationSchema, ObservationResult
+from rivretrieve._internal.primitives import CatalogSource, OnIssue
+from rivretrieve._internal.provider_info import ProviderInfo
+from rivretrieve._internal.results import CatalogResult
+
+
+@runtime_checkable
+class ProviderHandle(Protocol):
+    def info(self) -> ProviderInfo: ...
+
+    def products(
+        self,
+        *,
+        source: CatalogSource = "packaged",
+        observed_property: str | None = None,
+        frequency: str | None = None,
+        statistic: str | None = None,
+        on_issue: OnIssue = "warn",
+    ) -> CatalogResult[pl.DataFrame]: ...
+
+    def stations(
+        self,
+        *,
+        source: CatalogSource = "packaged",
+        on_issue: OnIssue = "warn",
+    ) -> CatalogResult[pl.DataFrame]: ...
+
+    def station_products(
+        self,
+        stations: Sequence[str] | None = None,
+        *,
+        source: CatalogSource = "packaged",
+        on_issue: OnIssue = "warn",
+    ) -> CatalogResult[pl.DataFrame]: ...
+
+    def row_annotation_schema(self) -> list[AnnotationSchema]: ...
+
+    def series_annotation_schema(self) -> list[AnnotationSchema]: ...
+
+    def observations(
+        self,
+        *,
+        stations: str | Sequence[str],
+        products: str | Sequence[str],
+        start: object,
+        end: object,
+        on_issue: OnIssue = "warn",
+    ) -> ObservationResult: ...
