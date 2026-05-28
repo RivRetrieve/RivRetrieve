@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -9,7 +11,15 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.observations import ObservationResult
 from rivretrieve._internal.primitives import OnIssue
+from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
+from rivretrieve._internal.providers.ch_foen.observation_client import (
+    ChFoenObservationClient,
+    ChFoenTransportRequest,
+    ChFoenTransportResponse,
+)
 from rivretrieve._internal.results import CatalogResult
+
+TEST_DATA = Path(__file__).parent / "test_data"
 
 
 def test_providers_includes_ch_foen_after_discovery_call() -> None:
@@ -68,39 +78,41 @@ def test_ch_foen_catalogue_methods_return_catalog_results_with_provenance() -> N
 
 
 @pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_ch_foen_handle_observations_placeholder_returns_result_for_all_on_issue(on_issue: OnIssue) -> None:
+def test_ch_foen_handle_observations_returns_result_for_all_on_issue(monkeypatch, on_issue: OnIssue) -> None:
+    _install_discharge_transport(monkeypatch)
+
     result = rr.provider("ch_foen").observations(
-        stations="2016",
-        products="discharge_daily_mean",
-        start="2026-01-01",
-        end="2026-01-02",
+        stations="2206",
+        products="discharge_instantaneous",
+        start="2025-01-01",
+        end="2025-01-01",
         on_issue=on_issue,
     )
 
     assert isinstance(result, ObservationResult)
-    assert result.data.is_empty()
-    assert result.row_annotations.data.is_empty()
-    assert result.series_annotations.data.is_empty()
+    assert result.data.height == 144
+    assert result.row_annotations.data.height > 0
+    assert result.series_annotations.data.height > 0
     assert result.row_annotations.schema.name == "RowAnnotationTable"
     assert result.series_annotations.schema.name == "SeriesAnnotationTable"
-    assert result.provenance.source == "placeholder"
+    assert result.provenance.source == "live"
     assert result.provenance.provider_id == "ch_foen"
-    assert result.raw is None
-    assert len(result.issues) == 1
-    assert result.issues[0].code == "observations_not_yet_implemented"
+    assert result.raw is not None
 
 
-def test_ch_foen_handle_observations_placeholder_uses_default_on_issue() -> None:
+def test_ch_foen_handle_observations_uses_default_on_issue(monkeypatch) -> None:
+    _install_discharge_transport(monkeypatch)
+
     result = rr.provider("ch_foen").observations(
-        stations="2016",
-        products="discharge_daily_mean",
-        start="2026-01-01",
-        end="2026-01-02",
+        stations="2206",
+        products="discharge_instantaneous",
+        start="2025-01-01",
+        end="2025-01-01",
     )
 
     assert isinstance(result, ObservationResult)
-    assert result.data.is_empty()
-    assert result.issues[0].code == "observations_not_yet_implemented"
+    assert result.data.height == 144
+    assert result.issues == ()
 
 
 def test_ch_foen_internal_metadata_import_does_not_leak_public_names() -> None:
@@ -132,3 +144,18 @@ assert "rivretrieve._internal.providers.ch_foen.generate_catalogue" not in sys.m
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def _install_discharge_transport(monkeypatch) -> None:
+    def transport(_request: ChFoenTransportRequest) -> ChFoenTransportResponse:
+        return ChFoenTransportResponse(
+            content=(TEST_DATA / "switzerland_2206_discharge_20250101.csv").read_bytes(),
+            status_code=200,
+            retrieved_at=datetime(2026, 5, 28, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(
+        ch_foen_module,
+        "_observation_client_factory",
+        lambda: ChFoenObservationClient(token="fake-token", transport=transport),
+    )

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-import pytest
+from datetime import UTC, datetime
+from pathlib import Path
 
 from rivretrieve._internal.observations import AnnotationSchema, ObservationRequest
-from rivretrieve._internal.primitives import OnIssue, ProviderId
+from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
+from rivretrieve._internal.providers.ch_foen.observation_client import (
+    ChFoenObservationClient,
+    ChFoenTransportRequest,
+    ChFoenTransportResponse,
+)
+
+TEST_DATA = Path(__file__).parent / "test_data"
 
 
 def test_ch_foen_module_matches_provider_module_protocol() -> None:
@@ -98,25 +106,38 @@ def test_ch_foen_series_annotation_schema_declares_m4_observation_names() -> Non
         assert AnnotationSchema.from_row(schema.to_row()) == schema
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_ch_foen_observations_placeholder_returns_issue_result(on_issue: OnIssue) -> None:
+def test_ch_foen_observations_delegates_to_real_retrieval(monkeypatch) -> None:
+    def transport(_request: ChFoenTransportRequest) -> ChFoenTransportResponse:
+        return ChFoenTransportResponse(
+            content=(TEST_DATA / "switzerland_2206_discharge_20250101.csv").read_bytes(),
+            status_code=200,
+            retrieved_at=datetime(2026, 5, 28, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(
+        ch_foen_module,
+        "_observation_client_factory",
+        lambda: ChFoenObservationClient(token="fake-token", transport=transport),
+    )
     request = ObservationRequest.from_inputs(
         provider_id=ProviderId("ch_foen"),
-        stations="2016",
-        products="discharge_daily_mean",
-        start="2026-01-01",
-        end="2026-01-02",
+        stations="2206",
+        products="discharge_instantaneous",
+        start="2025-01-01",
+        end="2025-01-01",
     )
 
-    result = ch_foen_module.observations(request, on_issue=on_issue)
+    result = ch_foen_module.observations(request, on_issue="ignore")
 
-    assert result.data.is_empty()
-    assert result.row_annotations.data.is_empty()
-    assert result.series_annotations.data.is_empty()
-    assert result.provenance.source == "placeholder"
+    assert result.data.height == 144
+    assert set(result.data["station_id"].to_list()) == {"2206"}
+    assert set(result.data["product_id"].to_list()) == {"discharge_instantaneous"}
+    assert result.provenance.source == "live"
     assert result.provenance.provider_id == "ch_foen"
     assert result.provenance.catalogue_version == "2026-05-28"
-    assert result.raw is None
-    assert len(result.issues) == 1
-    assert result.issues[0].severity == "error"
-    assert result.issues[0].code == "observations_not_yet_implemented"
+
+
+def test_ch_foen_observations_not_yet_implemented_code_removed() -> None:
+    from rivretrieve._internal.providers.ch_foen.issue_codes import ChFoenObservationIssueCodes
+
+    assert "observations_not_yet_implemented" not in {code.value for code in ChFoenObservationIssueCodes}

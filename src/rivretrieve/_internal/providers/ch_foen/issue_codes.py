@@ -4,7 +4,6 @@ from enum import StrEnum
 
 
 class ChFoenObservationIssueCodes(StrEnum):
-    OBSERVATIONS_NOT_YET_IMPLEMENTED = "observations_not_yet_implemented"
     MISSING_DATA = "missing_data"
     PARTIAL_RESPONSE = "partial_response"
     SOURCE_REQUEST_FAILED = "source_request_failed"
