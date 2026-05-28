@@ -36,6 +36,40 @@ def test_registry_registers_stub_provider_and_returns_handle(
     assert registry.get("stub_provider") is handle
 
 
+def test_registry_register_with_module_round_trips_handle_dispatch(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    artifact = stub_packaged_catalogue_artifact("stub_provider")
+
+    handle = registry.register("stub_provider", artifact, provider_module=stub_provider)
+
+    assert handle._module is stub_provider
+    assert registry.get("stub_provider") is handle
+    assert handle.row_annotation_schema() == stub_provider.row_annotation_schema()
+    assert (
+        handle.observations(
+            stations="station-1",
+            products="level",
+            start="2026-01-01",
+            end="2026-01-02",
+        ).data.height
+        == 2
+    )
+
+
+def test_registry_register_artifact_only_remains_back_compatible(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    artifact = stub_packaged_catalogue_artifact("stub_provider")
+
+    handle = registry.register("stub_provider", artifact)
+
+    assert handle._module is None
+    assert handle.info() == ProviderInfo.from_row(artifact.provider_info)
+
+
 def test_registry_rejects_duplicate_provider_id(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:

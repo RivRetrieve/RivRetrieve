@@ -61,6 +61,10 @@ class InvalidObservationRequestError(FatalContractError):
     pass
 
 
+class ObservationsUnavailableError(FatalContractError):
+    pass
+
+
 class ObservationDataSchemaError(FatalContractError):
     pass
 

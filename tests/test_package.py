@@ -44,6 +44,7 @@ def test_deferred_public_names_remain_absent_after_catalogue_surface() -> None:
         "SeriesAnnotationTableSchema",
         "AnnotationSchemaDeclaration",
         "InvalidObservationRequestError",
+        "ObservationsUnavailableError",
         "ObservationDataSchemaError",
         "AnnotationSchemaViolationError",
     ]
