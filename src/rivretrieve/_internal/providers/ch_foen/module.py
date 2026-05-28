@@ -66,11 +66,121 @@ def station_products(
 
 
 def row_annotation_schema() -> list[AnnotationSchema]:
-    return []
+    return [
+        AnnotationSchema(
+            annotation_id="native_field",
+            description="Provider-native field that produced the canonical observation value.",
+            value_type="string",
+            source_field="_field",
+        ),
+        AnnotationSchema(
+            annotation_id="native_unit",
+            description="Provider-native unit before any conversion.",
+            value_type="string",
+            source_field="_field",
+        ),
+        AnnotationSchema(
+            annotation_id="converted_unit",
+            description="Canonical product unit used for the observation value.",
+            value_type="string",
+            source_field="unit",
+        ),
+        AnnotationSchema(
+            annotation_id="source_endpoint_or_query",
+            description="Endpoint or query identity that produced the row, without credentials.",
+            value_type="string",
+            source_field="Flux query / endpoint",
+        ),
+        AnnotationSchema(
+            annotation_id="raw_value",
+            description="Provider value before conversion or conflict handling.",
+            value_type="float",
+            source_field="_value",
+        ),
+        AnnotationSchema(
+            annotation_id="alternative_native_field",
+            description="Non-selected same-timestamp native field preserved for overlap handling.",
+            value_type="string",
+            source_field="_field",
+        ),
+        AnnotationSchema(
+            annotation_id="alternative_raw_value",
+            description="Non-selected same-timestamp raw value preserved for conflict handling.",
+            value_type="float",
+            source_field="_value",
+        ),
+        AnnotationSchema(
+            annotation_id="alternative_native_unit",
+            description="Provider-native unit for the non-selected same-timestamp value.",
+            value_type="string",
+            source_field="_field",
+        ),
+    ]
 
 
 def series_annotation_schema() -> list[AnnotationSchema]:
-    return []
+    return [
+        AnnotationSchema(
+            annotation_id="preferred_source",
+            description="Configured preferred native field for the station-product request.",
+            value_type="string",
+            source_field="preferred_parameter",
+        ),
+        AnnotationSchema(
+            annotation_id="fallback_source_used",
+            description="Whether fallback native fields contributed to the returned series.",
+            value_type="boolean",
+            source_field="parsed native fields",
+        ),
+        AnnotationSchema(
+            annotation_id="native_unit_returned",
+            description="Native units actually present in the provider response.",
+            value_type="string",
+            source_field="parsed native fields",
+        ),
+        AnnotationSchema(
+            annotation_id="converted_unit",
+            description="Canonical product unit returned in observation data.",
+            value_type="string",
+            source_field="unit",
+        ),
+        AnnotationSchema(
+            annotation_id="returned_time_range_start",
+            description="First parsed timestamp returned for the station-product series.",
+            value_type="datetime",
+            source_field="_time",
+        ),
+        AnnotationSchema(
+            annotation_id="returned_time_range_end",
+            description="Last parsed timestamp returned for the station-product series.",
+            value_type="datetime",
+            source_field="_time",
+        ),
+        AnnotationSchema(
+            annotation_id="resolved_timezone",
+            description="Timezone resolved from explicit provider timestamps.",
+            value_type="string",
+            source_field="_time",
+        ),
+        AnnotationSchema(
+            annotation_id="timezone_mismatch_flag",
+            description="Whether timestamps contradicted the expected explicit UTC shape.",
+            value_type="boolean",
+            source_field="_time",
+        ),
+        AnnotationSchema(
+            annotation_id="provider_endpoint",
+            description="Provider query endpoint without token or authorization metadata.",
+            value_type="string",
+            source_field="INFLUX_URL",
+        ),
+        AnnotationSchema(
+            annotation_id="provider_query_fields",
+            description="Requested provider-native fields without credential metadata.",
+            value_type="json",
+            source_field="Flux _field filter",
+        ),
+    ]
 
 
 def observations(
