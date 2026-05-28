@@ -16,6 +16,21 @@ def test_stub_provider_module_has_provider_module_attributes() -> None:
     assert isinstance(stub_provider, ProviderModule)
 
 
+def test_stub_provider_module_satisfies_expanded_provider_module_protocol() -> None:
+    expected_members = {
+        "info",
+        "products",
+        "stations",
+        "station_products",
+        "row_annotation_schema",
+        "series_annotation_schema",
+        "observations",
+    }
+
+    assert expected_members <= set(vars(stub_provider))
+    assert isinstance(stub_provider, ProviderModule)
+
+
 def test_stub_provider_info_matches_registered_handle_info(registered_stub: RegisteredStub) -> None:
     assert stub_provider.info() == registered_stub.handle.info()
 

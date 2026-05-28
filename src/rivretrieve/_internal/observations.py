@@ -78,10 +78,10 @@ class ObservationRequest:
         cls,
         *,
         provider_id: ProviderId | str,
-        stations: str | Sequence[str],
-        products: str | Sequence[str],
-        start: datetime | date | str,
-        end: datetime | date | str,
+        stations: object,
+        products: object,
+        start: object,
+        end: object,
     ) -> Self:
         return cls(
             provider_id=_coerce_provider_id(provider_id),

@@ -337,5 +337,5 @@ def registered_stub(
     from tests._stubs import stub_provider
 
     artifact = stub_provider.build_artifact(stub_packaged_catalogue_artifact)
-    handle = fresh_registry.register("stub_provider", artifact)
+    handle = fresh_registry.register("stub_provider", artifact, provider_module=stub_provider)
     return RegisteredStub(registry=fresh_registry, handle=handle)

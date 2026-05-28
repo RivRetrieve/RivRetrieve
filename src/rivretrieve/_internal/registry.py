@@ -8,9 +8,16 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.issues import FatalContractError, ObservationsUnavailableError
+from rivretrieve._internal.observations import (
+    AnnotationSchema,
+    ObservationRequest,
+    ObservationResult,
+    validate_annotation_names,
+)
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
+from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
 
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -26,6 +33,7 @@ class UnknownProviderError(FatalContractError):
 class _ProviderHandle:
     provider_id: ProviderId
     _artifact: PackagedCatalogArtifact
+    _module: ProviderModule | None = None
 
     def info(self) -> ProviderInfo:
         return ProviderInfo.from_row(self._artifact.provider_info)
@@ -68,6 +76,42 @@ class _ProviderHandle:
             on_issue=on_issue,
         )
 
+    def row_annotation_schema(self) -> list[AnnotationSchema]:
+        if self._module is None:
+            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
+        return self._module.row_annotation_schema()
+
+    def series_annotation_schema(self) -> list[AnnotationSchema]:
+        if self._module is None:
+            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
+        return self._module.series_annotation_schema()
+
+    def observations(
+        self,
+        *,
+        stations: str | Sequence[str],
+        products: str | Sequence[str],
+        start: object,
+        end: object,
+        on_issue: OnIssue = "warn",
+    ) -> ObservationResult:
+        if self._module is None:
+            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
+
+        request = ObservationRequest.from_inputs(
+            provider_id=self.provider_id,
+            stations=stations,
+            products=products,
+            start=start,
+            end=end,
+        )
+        result = self._module.observations(request, on_issue=on_issue)
+        row_schemas = self._module.row_annotation_schema()
+        validate_annotation_names(result.row_annotations, row_schemas)
+        series_schemas = self._module.series_annotation_schema()
+        validate_annotation_names(result.series_annotations, series_schemas)
+        return result
+
 
 @dataclass(frozen=True)
 class _ProviderRecord:
@@ -80,7 +124,12 @@ class ProviderRegistry:
     def __init__(self) -> None:
         self._providers: dict[str, _ProviderRecord] = {}
 
-    def register(self, provider_id: str, packaged_artifact: PackagedCatalogArtifact) -> _ProviderHandle:
+    def register(
+        self,
+        provider_id: str,
+        packaged_artifact: PackagedCatalogArtifact,
+        provider_module: ProviderModule | None = None,
+    ) -> _ProviderHandle:
         if not _PROVIDER_ID_PATTERN.fullmatch(provider_id):
             raise FatalContractError(f"Provider ID has invalid format: {provider_id}")
 
@@ -94,7 +143,7 @@ class ProviderRegistry:
             raise FatalContractError(f"Provider ID is already registered: {provider_id}")
 
         typed_provider_id = ProviderId(provider_id)
-        handle = _ProviderHandle(provider_id=typed_provider_id, _artifact=packaged_artifact)
+        handle = _ProviderHandle(provider_id=typed_provider_id, _artifact=packaged_artifact, _module=provider_module)
         self._providers[provider_id] = _ProviderRecord(
             provider_id=typed_provider_id,
             artifact=packaged_artifact,

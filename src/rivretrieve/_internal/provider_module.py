@@ -5,6 +5,7 @@ from typing import Protocol, runtime_checkable
 
 import polars as pl
 
+from rivretrieve._internal.observations import AnnotationSchema, ObservationRequest, ObservationResult
 from rivretrieve._internal.primitives import CatalogSource, OnIssue
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.results import CatalogResult
@@ -39,3 +40,16 @@ class ProviderModule(Protocol):
         source: CatalogSource = "packaged",
         on_issue: OnIssue = "warn",
     ) -> CatalogResult[pl.DataFrame]: ...
+
+    @staticmethod
+    def row_annotation_schema() -> list[AnnotationSchema]: ...
+
+    @staticmethod
+    def series_annotation_schema() -> list[AnnotationSchema]: ...
+
+    @staticmethod
+    def observations(
+        request: ObservationRequest,
+        *,
+        on_issue: OnIssue = "warn",
+    ) -> ObservationResult: ...
