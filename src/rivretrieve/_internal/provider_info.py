@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from rivretrieve._internal.catalogues.schemas import ProviderInfoCatalog, validate_catalogue
+from rivretrieve._internal.catalogues.schemas import PROVIDER_INFO_CATALOG_SCHEMA, validate_catalogue
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 
@@ -28,7 +28,7 @@ class ProviderInfo:
     @classmethod
     def from_row(cls, row: Mapping[str, object]) -> ProviderInfo:
         try:
-            selected = {column.name: row[column.name] for column in ProviderInfoCatalog.columns}
+            selected = {column.name: row[column.name] for column in PROVIDER_INFO_CATALOG_SCHEMA.columns}
             provider_info = pl.DataFrame(
                 [
                     pl.Series(
@@ -37,15 +37,15 @@ class ProviderInfo:
                         dtype=column.dtype,
                         strict=True,
                     )
-                    for column in ProviderInfoCatalog.columns
+                    for column in PROVIDER_INFO_CATALOG_SCHEMA.columns
                 ]
             )
-            validate_catalogue(provider_info, ProviderInfoCatalog, on_issue="raise")
+            validate_catalogue(provider_info, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
             validated_row = provider_info.row(0, named=True)
         except KeyError as exc:
             missing_name = exc.args[0]
             raise ProviderInfoValidationError(
-                f"{ProviderInfoCatalog.name} is missing required columns: {missing_name}"
+                f"{PROVIDER_INFO_CATALOG_SCHEMA.name} is missing required columns: {missing_name}"
             ) from exc
         except (FatalContractError, TypeError, pl.exceptions.PolarsError) as exc:
             raise ProviderInfoValidationError(str(exc)) from exc

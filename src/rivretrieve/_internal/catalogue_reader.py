@@ -7,9 +7,9 @@ import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.schemas import (
-    ProductCatalog,
-    StationCatalog,
-    StationProductCatalog,
+    PRODUCT_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
     validate_catalogue,
 )
 from rivretrieve._internal.issues import (
@@ -56,7 +56,7 @@ class CatalogueReader:
             )
             apply_on_issue((issue,), on_issue)
             return CatalogResult(
-                data=_empty_frame(ProductCatalog.polars_schema),
+                data=_empty_frame(PRODUCT_CATALOG_SCHEMA.polars_schema),
                 provenance=self._live_provenance(),
                 issues=(issue,),
             )
@@ -70,7 +70,7 @@ class CatalogueReader:
             if value is not None:
                 data = data.filter(pl.col(column_name) == value)
 
-        issues = validate_catalogue(data, ProductCatalog, on_issue=on_issue)
+        issues = validate_catalogue(data, PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
         return CatalogResult(data=data, provenance=self._provenance(), issues=tuple(issues))
 
     def read_stations(
@@ -93,13 +93,13 @@ class CatalogueReader:
             )
             apply_on_issue((issue,), on_issue)
             return CatalogResult(
-                data=_empty_frame(StationCatalog.polars_schema),
+                data=_empty_frame(STATION_CATALOG_SCHEMA.polars_schema),
                 provenance=self._live_provenance(),
                 issues=(issue,),
             )
 
         data = self.artifact.stations
-        issues = validate_catalogue(data, StationCatalog, on_issue=on_issue)
+        issues = validate_catalogue(data, STATION_CATALOG_SCHEMA, on_issue=on_issue)
         return CatalogResult(data=data, provenance=self._provenance(), issues=tuple(issues))
 
     def read_station_products(
@@ -125,7 +125,7 @@ class CatalogueReader:
             )
             apply_on_issue((issue,), on_issue)
             return CatalogResult(
-                data=_empty_frame(StationProductCatalog.polars_schema),
+                data=_empty_frame(STATION_PRODUCT_CATALOG_SCHEMA.polars_schema),
                 provenance=self._live_provenance(),
                 issues=(issue,),
             )
@@ -134,7 +134,7 @@ class CatalogueReader:
         if stations:
             data = data.filter(pl.col("station_id").is_in(list(stations)))
 
-        issues = validate_catalogue(data, StationProductCatalog, on_issue=on_issue)
+        issues = validate_catalogue(data, STATION_PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
         return CatalogResult(data=data, provenance=self._provenance(), issues=tuple(issues))
 
     def _provenance(self) -> CatalogProvenance:

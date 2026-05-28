@@ -9,11 +9,11 @@ from typing import cast
 import polars as pl
 
 from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    PROVIDER_INFO_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
     AvailabilityDtype,
-    ProductCatalog,
-    ProviderInfoCatalog,
-    StationCatalog,
-    StationProductCatalog,
     validate_catalogue,
 )
 from rivretrieve._internal.issues import FatalContractError
@@ -73,10 +73,10 @@ def packaged_catalogue_artifact_from_components(
         provider_info_df = _provider_info_to_df(provider_info)
         station_products = _normalize_availability(station_products)
 
-        validate_catalogue(provider_info_df, ProviderInfoCatalog, on_issue=on_issue)
-        validate_catalogue(products, ProductCatalog, on_issue=on_issue)
-        validate_catalogue(stations, StationCatalog, on_issue=on_issue)
-        validate_catalogue(station_products, StationProductCatalog, on_issue=on_issue)
+        validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue=on_issue)
+        validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
+        validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue=on_issue)
+        validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
         _validate_artifact_provider_ids(provider_info_df, products, stations, station_products)
         _validate_station_product_references(products, stations, station_products)
     except FatalContractError as exc:
@@ -136,8 +136,8 @@ def _provider_info_to_df(provider_info: Mapping[str, object]) -> pl.DataFrame:
 
     try:
         if any(_is_row_sequence(value) for value in normalized.values()):
-            return pl.DataFrame(normalized, schema=ProviderInfoCatalog.polars_schema)
-        return pl.DataFrame([normalized], schema=ProviderInfoCatalog.polars_schema)
+            return pl.DataFrame(normalized, schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
+        return pl.DataFrame([normalized], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     except pl.exceptions.PolarsError as exc:
         raise FatalContractError("Provider info cannot be converted to the catalogue schema") from exc
 

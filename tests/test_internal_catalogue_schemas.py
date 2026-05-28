@@ -7,11 +7,11 @@ import polars as pl
 import pytest
 
 from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    PROVIDER_INFO_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
     AvailabilityDtype,
-    ProductCatalog,
-    ProviderInfoCatalog,
-    StationCatalog,
-    StationProductCatalog,
     validate_catalogue,
 )
 from rivretrieve._internal.issues import FatalContractError
@@ -80,7 +80,7 @@ def station_product_catalog_df(**overrides: object) -> pl.DataFrame:
 
 
 def test_catalogue_schema_objects_define_expected_columns() -> None:
-    assert tuple(StationCatalog.polars_schema.keys()) == (
+    assert tuple(STATION_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
         "station_id",
         "name",
@@ -93,7 +93,7 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "end_date",
         "metadata",
     )
-    assert tuple(ProductCatalog.polars_schema.keys()) == (
+    assert tuple(PRODUCT_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
         "product_id",
         "observed_property",
@@ -107,7 +107,7 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "derivation_method",
         "metadata",
     )
-    assert tuple(StationProductCatalog.polars_schema.keys()) == (
+    assert tuple(STATION_PRODUCT_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
         "station_id",
         "product_id",
@@ -118,7 +118,7 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "last_catalogue_check",
         "metadata",
     )
-    assert tuple(ProviderInfoCatalog.polars_schema.keys()) == (
+    assert tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
         "name",
         "live_stations",
@@ -131,7 +131,7 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
 
 
 def test_catalogue_schema_objects_define_polars_dtypes() -> None:
-    assert StationCatalog.polars_schema == pl.Schema(
+    assert STATION_CATALOG_SCHEMA.polars_schema == pl.Schema(
         {
             "provider_id": pl.Utf8,
             "station_id": pl.Utf8,
@@ -146,18 +146,18 @@ def test_catalogue_schema_objects_define_polars_dtypes() -> None:
             "metadata": pl.Utf8,
         }
     )
-    assert ProductCatalog.polars_schema["metadata"] == pl.Utf8
-    assert ProductCatalog.polars_schema["derived"] == pl.Boolean
-    assert ProductCatalog.polars_schema["native_id"] == pl.Utf8
-    assert StationProductCatalog.polars_schema["availability"] == AvailabilityDtype
-    assert StationProductCatalog.polars_schema["start_date"] == pl.Date
-    assert StationProductCatalog.polars_schema["end_date"] == pl.Date
-    assert StationProductCatalog.polars_schema["last_catalogue_check"] == pl.Date
-    assert ProviderInfoCatalog.polars_schema["metadata"] == pl.Utf8
+    assert PRODUCT_CATALOG_SCHEMA.polars_schema["metadata"] == pl.Utf8
+    assert PRODUCT_CATALOG_SCHEMA.polars_schema["derived"] == pl.Boolean
+    assert PRODUCT_CATALOG_SCHEMA.polars_schema["native_id"] == pl.Utf8
+    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["availability"] == AvailabilityDtype
+    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["start_date"] == pl.Date
+    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["end_date"] == pl.Date
+    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["last_catalogue_check"] == pl.Date
+    assert PROVIDER_INFO_CATALOG_SCHEMA.polars_schema["metadata"] == pl.Utf8
 
 
 def test_station_catalog_nullable_fields_accept_non_null_values() -> None:
-    issues = validate_catalogue(station_catalog_df(), StationCatalog, on_issue="raise")
+    issues = validate_catalogue(station_catalog_df(), STATION_CATALOG_SCHEMA, on_issue="raise")
 
     assert not [issue for issue in issues if issue.severity == "error"]
 
@@ -177,10 +177,10 @@ def test_station_catalog_nullable_fields_accept_null_values() -> None:
             "end_date": [None, None],
             "metadata": ["{}", "{}"],
         },
-        schema=StationCatalog.polars_schema,
+        schema=STATION_CATALOG_SCHEMA.polars_schema,
     )
 
-    issues = validate_catalogue(df, StationCatalog, on_issue="raise")
+    issues = validate_catalogue(df, STATION_CATALOG_SCHEMA, on_issue="raise")
 
     assert df.schema["elevation_m"] == pl.Float64
     assert df.schema["drainage_area_km2"] == pl.Float64
@@ -189,26 +189,26 @@ def test_station_catalog_nullable_fields_accept_null_values() -> None:
 
 def test_non_nullable_station_column_rejects_null() -> None:
     with pytest.raises(FatalContractError):
-        validate_catalogue(station_catalog_df(name=[None]), StationCatalog)
+        validate_catalogue(station_catalog_df(name=[None]), STATION_CATALOG_SCHEMA)
 
 
 def test_missing_required_column_rejected() -> None:
     with pytest.raises(FatalContractError):
-        validate_catalogue(station_catalog_df().drop("station_id"), StationCatalog)
+        validate_catalogue(station_catalog_df().drop("station_id"), STATION_CATALOG_SCHEMA)
 
 
 def test_wrong_dtype_rejected() -> None:
     df = station_catalog_df().with_columns(pl.col("latitude").cast(pl.Utf8))
 
     with pytest.raises(FatalContractError):
-        validate_catalogue(df, StationCatalog)
+        validate_catalogue(df, STATION_CATALOG_SCHEMA)
 
 
 def test_extra_column_returns_warning_issue() -> None:
     df = station_catalog_df().with_columns(pl.lit("kept").alias("provider_extra"))
 
     with warnings.catch_warnings(record=True) as warning_records:
-        issues = validate_catalogue(df, StationCatalog, on_issue="ignore")
+        issues = validate_catalogue(df, STATION_CATALOG_SCHEMA, on_issue="ignore")
 
     assert warning_records == []
     assert len(issues) == 1
@@ -219,7 +219,7 @@ def test_extra_column_returns_warning_issue() -> None:
 def test_availability_accepts_allowed_enum_values() -> None:
     issues = validate_catalogue(
         station_product_catalog_df(),
-        StationProductCatalog,
+        STATION_PRODUCT_CATALOG_SCHEMA,
         on_issue="raise",
     )
 
@@ -254,20 +254,20 @@ def test_availability_rejects_invalid_value() -> None:
     )
 
     with pytest.raises(FatalContractError):
-        validate_catalogue(df, StationProductCatalog)
+        validate_catalogue(df, STATION_PRODUCT_CATALOG_SCHEMA)
 
 
 def test_metadata_column_is_opaque_json_object_string() -> None:
     df = station_catalog_df(metadata=['{"provider": {"deep": ["kept", 1]}}'])
 
-    issues = validate_catalogue(df, StationCatalog, on_issue="raise")
+    issues = validate_catalogue(df, STATION_CATALOG_SCHEMA, on_issue="raise")
 
     assert issues == []
 
 
 def test_metadata_column_rejects_non_object_json() -> None:
     with pytest.raises(FatalContractError):
-        validate_catalogue(station_catalog_df(metadata=["[]"]), StationCatalog)
+        validate_catalogue(station_catalog_df(metadata=["[]"]), STATION_CATALOG_SCHEMA)
 
 
 def test_provider_info_catalog_validates_row_shape() -> None:
@@ -282,9 +282,9 @@ def test_provider_info_catalog_validates_row_shape() -> None:
             "catalogue_version": ["2026.01"],
             "metadata": ['{"homepage": "https://example.invalid"}'],
         },
-        schema=ProviderInfoCatalog.polars_schema,
+        schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema,
     )
 
-    issues = validate_catalogue(df, ProviderInfoCatalog, on_issue="raise")
+    issues = validate_catalogue(df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
 
     assert issues == []

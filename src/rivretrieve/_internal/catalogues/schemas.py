@@ -32,7 +32,7 @@ class CatalogueSchema:
         return pl.Schema({column.name: column.dtype for column in self.columns})
 
 
-StationCatalog = CatalogueSchema(
+STATION_CATALOG_SCHEMA = CatalogueSchema(
     name="StationCatalog",
     columns=(
         CatalogueColumn("provider_id", pl.Utf8),
@@ -50,7 +50,7 @@ StationCatalog = CatalogueSchema(
     unique_keys=(("provider_id", "station_id"),),
 )
 
-ProductCatalog = CatalogueSchema(
+PRODUCT_CATALOG_SCHEMA = CatalogueSchema(
     name="ProductCatalog",
     columns=(
         CatalogueColumn("provider_id", pl.Utf8),
@@ -69,7 +69,7 @@ ProductCatalog = CatalogueSchema(
     unique_keys=(("provider_id", "product_id"),),
 )
 
-StationProductCatalog = CatalogueSchema(
+STATION_PRODUCT_CATALOG_SCHEMA = CatalogueSchema(
     name="StationProductCatalog",
     columns=(
         CatalogueColumn("provider_id", pl.Utf8),
@@ -86,7 +86,7 @@ StationProductCatalog = CatalogueSchema(
     enum_values={"availability": frozenset(AVAILABILITY_VALUES)},
 )
 
-ProviderInfoCatalog = CatalogueSchema(
+PROVIDER_INFO_CATALOG_SCHEMA = CatalogueSchema(
     name="ProviderInfoCatalog",
     columns=(
         CatalogueColumn("provider_id", pl.Utf8),
@@ -100,6 +100,11 @@ ProviderInfoCatalog = CatalogueSchema(
     ),
     unique_keys=(("provider_id",),),
 )
+
+type StationCatalog = pl.DataFrame
+type ProductCatalog = pl.DataFrame
+type StationProductCatalog = pl.DataFrame
+type ProviderInfoCatalog = pl.DataFrame
 
 
 def validate_catalogue(

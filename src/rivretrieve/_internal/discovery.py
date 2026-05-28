@@ -4,6 +4,9 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    PROVIDER_INFO_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
     ProductCatalog,
     ProviderInfoCatalog,
     StationCatalog,
@@ -22,16 +25,16 @@ def provider(provider_id: str) -> ProviderHandle:
     return _registry.get(provider_id)
 
 
-def provider_info() -> CatalogResult[pl.DataFrame]:
+def provider_info() -> CatalogResult[ProviderInfoCatalog]:
     from rivretrieve import __version__
 
     rows = [record.artifact.provider_info for record in _registry.iter_records()]
     if rows:
-        data = pl.DataFrame(rows, schema=ProviderInfoCatalog.polars_schema).sort("provider_id")
+        data = pl.DataFrame(rows, schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema).sort("provider_id")
     else:
-        data = pl.DataFrame(schema=ProviderInfoCatalog.polars_schema)
+        data = pl.DataFrame(schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
 
-    issues = validate_catalogue(data, ProviderInfoCatalog, on_issue="raise")
+    issues = validate_catalogue(data, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     provenance = CatalogProvenance(
         source="packaged",
         provider_id=None,
@@ -49,33 +52,33 @@ def provider_info() -> CatalogResult[pl.DataFrame]:
     return CatalogResult(data=data, provenance=provenance, issues=tuple(issues))
 
 
-def stations() -> CatalogResult[pl.DataFrame]:
+def stations() -> CatalogResult[StationCatalog]:
     frames = [
         CatalogueReader(record.artifact, record.provider_id).read_stations().data for record in _registry.iter_records()
     ]
-    data = _concat_or_empty(frames, StationCatalog.polars_schema)
+    data = _concat_or_empty(frames, STATION_CATALOG_SCHEMA.polars_schema)
     if data.height:
         data = data.sort("provider_id", "station_id")
-    issues = validate_catalogue(data, StationCatalog, on_issue="raise")
+    issues = validate_catalogue(data, STATION_CATALOG_SCHEMA, on_issue="raise")
     return CatalogResult(data=data, provenance=_global_provenance(), issues=tuple(issues))
 
 
-def products() -> CatalogResult[pl.DataFrame]:
+def products() -> CatalogResult[ProductCatalog]:
     return _global_products()
 
 
-def product_info() -> CatalogResult[pl.DataFrame]:
+def product_info() -> CatalogResult[ProductCatalog]:
     return _global_products()
 
 
-def _global_products() -> CatalogResult[pl.DataFrame]:
+def _global_products() -> CatalogResult[ProductCatalog]:
     frames = [
         CatalogueReader(record.artifact, record.provider_id).read_products().data for record in _registry.iter_records()
     ]
-    data = _concat_or_empty(frames, ProductCatalog.polars_schema)
+    data = _concat_or_empty(frames, PRODUCT_CATALOG_SCHEMA.polars_schema)
     if data.height:
         data = data.sort("provider_id", "product_id")
-    issues = validate_catalogue(data, ProductCatalog, on_issue="raise")
+    issues = validate_catalogue(data, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     return CatalogResult(data=data, provenance=_global_provenance(), issues=tuple(issues))
 
 

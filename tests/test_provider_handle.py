@@ -112,7 +112,7 @@ def test_provider_handle_protocol_method_signatures_match_tracker() -> None:
             "statistic": "str | None",
             "on_issue": "OnIssue",
         },
-        "CatalogResult[pl.DataFrame]",
+        "CatalogResult[ProductCatalog]",
     )
     _assert_signature(
         "stations",
@@ -121,7 +121,7 @@ def test_provider_handle_protocol_method_signatures_match_tracker() -> None:
             ("on_issue", inspect.Parameter.KEYWORD_ONLY, "warn"),
         ],
         {"source": "CatalogSource", "on_issue": "OnIssue"},
-        "CatalogResult[pl.DataFrame]",
+        "CatalogResult[StationCatalog]",
     )
     _assert_signature(
         "station_products",
@@ -131,7 +131,7 @@ def test_provider_handle_protocol_method_signatures_match_tracker() -> None:
             ("on_issue", inspect.Parameter.KEYWORD_ONLY, "warn"),
         ],
         {"stations": "Sequence[str] | None", "source": "CatalogSource", "on_issue": "OnIssue"},
-        "CatalogResult[pl.DataFrame]",
+        "CatalogResult[StationProductCatalog]",
     )
     _assert_signature(
         "row_annotation_schema",
