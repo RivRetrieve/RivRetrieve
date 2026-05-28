@@ -21,13 +21,20 @@ class RegisteredStub:
     handle: _ProviderHandle
 
 
-def _provider_info(provider_id: str, catalogue_version: str | None) -> dict[str, object]:
+def _provider_info(
+    provider_id: str,
+    catalogue_version: str | None,
+    *,
+    live_stations: bool = False,
+    live_products: bool = False,
+    live_station_products: bool = False,
+) -> dict[str, object]:
     return {
         "provider_id": provider_id,
         "name": f"{provider_id} Provider",
-        "live_stations": False,
-        "live_products": False,
-        "live_station_products": False,
+        "live_stations": live_stations,
+        "live_products": live_products,
+        "live_station_products": live_station_products,
         "bulk_observations": "none",
         "catalogue_version": catalogue_version,
         "metadata": {"homepage": f"https://{provider_id}.example.invalid"},
@@ -244,9 +251,18 @@ def stub_packaged_catalogue_artifact() -> Callable[..., PackagedCatalogArtifact]
         provider_id: str = "stub_provider",
         *,
         catalogue_version: str | None = "2026.01",
+        live_stations: bool = False,
+        live_products: bool = False,
+        live_station_products: bool = False,
     ) -> PackagedCatalogArtifact:
         return packaged_catalogue_artifact_from_components(
-            _provider_info(provider_id, catalogue_version),
+            _provider_info(
+                provider_id,
+                catalogue_version,
+                live_stations=live_stations,
+                live_products=live_products,
+                live_station_products=live_station_products,
+            ),
             _products(provider_id),
             _stations(provider_id),
             _station_products(provider_id),
@@ -262,13 +278,40 @@ def stub_packaged_catalogue_artifact_rich() -> Callable[..., PackagedCatalogArti
         provider_id: str = "stub_provider",
         *,
         catalogue_version: str | None = "2026.01",
+        live_stations: bool = False,
+        live_products: bool = False,
+        live_station_products: bool = False,
     ) -> PackagedCatalogArtifact:
         return packaged_catalogue_artifact_from_components(
-            _provider_info(provider_id, catalogue_version),
+            _provider_info(
+                provider_id,
+                catalogue_version,
+                live_stations=live_stations,
+                live_products=live_products,
+                live_station_products=live_station_products,
+            ),
             _products(provider_id, rich=True),
             _stations(provider_id, rich=True),
             _station_products(provider_id, rich=True),
             on_issue="raise",
+        )
+
+    return build
+
+
+@pytest.fixture
+def stub_packaged_catalogue_artifact_live_capable(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> Callable[..., PackagedCatalogArtifact]:
+    def build(
+        provider_id: str = "stub_provider", *, catalogue_version: str | None = "2026.01"
+    ) -> PackagedCatalogArtifact:
+        return stub_packaged_catalogue_artifact(
+            provider_id,
+            catalogue_version=catalogue_version,
+            live_stations=True,
+            live_products=True,
+            live_station_products=True,
         )
 
     return build

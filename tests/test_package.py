@@ -37,6 +37,8 @@ def test_deferred_public_names_remain_absent_after_catalogue_surface() -> None:
         "ProviderInfoCatalog",
         "PackagedCatalogArtifact",
         "CorruptCatalogArtifactError",
+        "LiveCatalogueUnsupportedIssue",
+        "LiveCatalogueRoutingNotImplementedError",
     ]
     for name in deferred_names:
         assert not hasattr(rivretrieve, name)

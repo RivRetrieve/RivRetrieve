@@ -36,10 +36,25 @@ class FatalContractError(RivRetrieveError):
         super().__init__(message)
 
 
+class LiveCatalogueUnsupportedIssue(Issue):
+    def __init__(self, *, provider_id: ProviderId | None, method: str, capability: str) -> None:
+        super().__init__(
+            severity="warning",
+            code="live_catalogue_unsupported",
+            message=f"Provider {provider_id or '<global>'} does not support live catalogue method {method}",
+            details={"method": method, "capability": capability, "source": "live"},
+            provider_id=provider_id,
+        )
+
+
 class InvalidCatalogueSourceError(FatalContractError):
     def __init__(self, source: object) -> None:
         self.source = source
         super().__init__(f"Unsupported catalogue source: {source!r}")
+
+
+class LiveCatalogueRoutingNotImplementedError(FatalContractError):
+    pass
 
 
 def apply_on_issue(issues: Sequence[Issue], on_issue: OnIssue) -> None:

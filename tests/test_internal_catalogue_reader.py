@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from typing import cast
 
+import polars as pl
 import polars.testing as pl_testing
 import pytest
 
@@ -15,7 +17,12 @@ from rivretrieve._internal.catalogues.schemas import (
     StationCatalog,
     StationProductCatalog,
 )
-from rivretrieve._internal.issues import FatalContractError, InvalidCatalogueSourceError, IssuePolicyError
+from rivretrieve._internal.issues import (
+    FatalContractError,
+    InvalidCatalogueSourceError,
+    IssuePolicyError,
+    LiveCatalogueRoutingNotImplementedError,
+)
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 
@@ -57,6 +64,36 @@ def _expected_provenance() -> CatalogProvenance:
         query=None,
         response_version=None,
     )
+
+
+def _expected_live_provenance() -> CatalogProvenance:
+    return CatalogProvenance(
+        source="live",
+        provider_id=ProviderId("stub_provider"),
+        rivretrieve_version=rr.__version__,
+        catalogue_version="2026.01",
+        artifact_id=None,
+        artifact_path=None,
+        artifact_hash=None,
+        generated_at=None,
+        retrieved_at=None,
+        endpoints=(),
+        query=None,
+        response_version=None,
+    )
+
+
+def _assert_unsupported_issue(
+    result: CatalogResult[pl.DataFrame],
+    *,
+    method: str,
+    capability: str,
+) -> None:
+    (issue,) = result.issues
+    assert issue.severity == "warning"
+    assert issue.code == "live_catalogue_unsupported"
+    assert issue.provider_id == ProviderId("stub_provider")
+    assert issue.details == {"method": method, "capability": capability, "source": "live"}
 
 
 def test_catalogue_reader_products_returns_packaged_catalog_result(
@@ -171,7 +208,7 @@ def test_catalogue_reader_station_products_unknown_ids_are_dropped(
     assert empty.issues == ()
 
 
-@pytest.mark.parametrize("source", ["live", "archive"])
+@pytest.mark.parametrize("source", ["archive", "", "garbage"])
 def test_catalogue_reader_invalid_source_raises_direct_fatal(
     source: str,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
@@ -196,7 +233,7 @@ def test_catalogue_reader_invalid_source_ignores_on_issue_policy(
     reader = _reader(stub_packaged_catalogue_artifact())
 
     with pytest.raises(InvalidCatalogueSourceError) as exc_info:
-        reader.read_stations(source="live", on_issue=on_issue)
+        reader.read_stations(source=cast(CatalogSource, "archive"), on_issue=on_issue)
 
     assert _issue_policy_error_chain(exc_info.value) == []
 
@@ -223,3 +260,216 @@ def test_reader_preserves_polars_schema_after_empty_filter(
     assert products.schema == ProductCatalog.polars_schema
     assert station_products.schema == StationProductCatalog.polars_schema
     assert station_products.schema["availability"] == AvailabilityDtype
+
+
+def test_catalogue_reader_packaged_products_unchanged_by_live_capability(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    stub_packaged_catalogue_artifact_live_capable: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    for artifact in (stub_packaged_catalogue_artifact(), stub_packaged_catalogue_artifact_live_capable()):
+        result = _reader(artifact).read_products(source="packaged")
+        pl_testing.assert_frame_equal(result.data, artifact.products)
+        assert result.provenance == _expected_provenance()
+        assert result.issues == ()
+
+
+def test_catalogue_reader_packaged_stations_unchanged_by_live_capability(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    stub_packaged_catalogue_artifact_live_capable: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    for artifact in (stub_packaged_catalogue_artifact(), stub_packaged_catalogue_artifact_live_capable()):
+        result = _reader(artifact).read_stations(source="packaged")
+        pl_testing.assert_frame_equal(result.data, artifact.stations)
+        assert result.provenance == _expected_provenance()
+        assert result.issues == ()
+
+
+def test_catalogue_reader_packaged_station_products_unchanged_by_live_capability(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    stub_packaged_catalogue_artifact_live_capable: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    for artifact in (stub_packaged_catalogue_artifact(), stub_packaged_catalogue_artifact_live_capable()):
+        result = _reader(artifact).read_station_products(source="packaged")
+        pl_testing.assert_frame_equal(result.data, artifact.station_products)
+        assert result.provenance == _expected_provenance()
+        assert result.issues == ()
+
+
+def test_catalogue_reader_live_products_warn_returns_empty_result_with_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.warns(RuntimeWarning, match="does not support live catalogue method read_products"):
+        result = _reader(stub_packaged_catalogue_artifact()).read_products(source="live", on_issue="warn")
+
+    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.data.height == 0
+    assert result.provenance == _expected_live_provenance()
+    _assert_unsupported_issue(result, method="read_products", capability="live_products")
+
+
+def test_catalogue_reader_live_stations_warn_returns_empty_result_with_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.warns(RuntimeWarning, match="does not support live catalogue method read_stations"):
+        result = _reader(stub_packaged_catalogue_artifact()).read_stations(source="live", on_issue="warn")
+
+    assert result.data.schema == StationCatalog.polars_schema
+    assert result.data.height == 0
+    assert result.provenance == _expected_live_provenance()
+    _assert_unsupported_issue(result, method="read_stations", capability="live_stations")
+
+
+def test_catalogue_reader_live_station_products_warn_returns_empty_result_with_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.warns(RuntimeWarning, match="does not support live catalogue method read_station_products"):
+        result = _reader(stub_packaged_catalogue_artifact()).read_station_products(source="live", on_issue="warn")
+
+    assert result.data.schema == StationProductCatalog.polars_schema
+    assert result.data.height == 0
+    assert result.provenance == _expected_live_provenance()
+    _assert_unsupported_issue(result, method="read_station_products", capability="live_station_products")
+
+
+def test_catalogue_reader_live_products_raise_wraps_unsupported_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.raises(IssuePolicyError) as exc_info:
+        _reader(stub_packaged_catalogue_artifact()).read_products(source="live", on_issue="raise")
+
+    assert exc_info.value.issues[0].code == "live_catalogue_unsupported"
+
+
+def test_catalogue_reader_live_stations_raise_wraps_unsupported_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.raises(IssuePolicyError) as exc_info:
+        _reader(stub_packaged_catalogue_artifact()).read_stations(source="live", on_issue="raise")
+
+    assert exc_info.value.issues[0].code == "live_catalogue_unsupported"
+
+
+def test_catalogue_reader_live_station_products_raise_wraps_unsupported_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.raises(IssuePolicyError) as exc_info:
+        _reader(stub_packaged_catalogue_artifact()).read_station_products(source="live", on_issue="raise")
+
+    assert exc_info.value.issues[0].code == "live_catalogue_unsupported"
+
+
+def test_catalogue_reader_live_products_ignore_returns_issue_without_warning(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with warnings.catch_warnings(record=True) as captured_warnings:
+        result = _reader(stub_packaged_catalogue_artifact()).read_products(source="live", on_issue="ignore")
+
+    assert captured_warnings == []
+    assert result.data.schema == ProductCatalog.polars_schema
+    assert result.data.height == 0
+    _assert_unsupported_issue(result, method="read_products", capability="live_products")
+
+
+def test_catalogue_reader_live_stations_ignore_returns_issue_without_warning(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with warnings.catch_warnings(record=True) as captured_warnings:
+        result = _reader(stub_packaged_catalogue_artifact()).read_stations(source="live", on_issue="ignore")
+
+    assert captured_warnings == []
+    assert result.data.schema == StationCatalog.polars_schema
+    assert result.data.height == 0
+    _assert_unsupported_issue(result, method="read_stations", capability="live_stations")
+
+
+def test_catalogue_reader_live_station_products_ignore_returns_issue_without_warning(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with warnings.catch_warnings(record=True) as captured_warnings:
+        result = _reader(stub_packaged_catalogue_artifact()).read_station_products(source="live", on_issue="ignore")
+
+    assert captured_warnings == []
+    assert result.data.schema == StationProductCatalog.polars_schema
+    assert result.data.height == 0
+    _assert_unsupported_issue(result, method="read_station_products", capability="live_station_products")
+
+
+@pytest.mark.parametrize(
+    "method_name",
+    ["read_products", "read_stations", "read_station_products"],
+)
+def test_catalogue_reader_invalid_source_remains_direct_fatal_for_all_methods(
+    method_name: str,
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    method = getattr(_reader(stub_packaged_catalogue_artifact()), method_name)
+
+    with pytest.raises(InvalidCatalogueSourceError) as exc_info:
+        method(source=cast(CatalogSource, "archive"), on_issue="ignore")
+
+    assert _issue_policy_error_chain(exc_info.value) == []
+
+
+@pytest.mark.parametrize("live_capable", [False, True])
+@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
+def test_catalogue_reader_invalid_source_ignores_capability_and_on_issue(
+    live_capable: bool,
+    on_issue: OnIssue,
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    artifact = stub_packaged_catalogue_artifact(
+        live_stations=live_capable,
+        live_products=live_capable,
+        live_station_products=live_capable,
+    )
+
+    with pytest.raises(InvalidCatalogueSourceError) as exc_info:
+        _reader(artifact).read_products(source=cast(CatalogSource, "archive"), on_issue=on_issue)
+
+    assert _issue_policy_error_chain(exc_info.value) == []
+
+
+@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
+def test_catalogue_reader_live_capable_products_raise_defensive_fatal_for_every_on_issue(
+    on_issue: OnIssue,
+    stub_packaged_catalogue_artifact_live_capable: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.raises(LiveCatalogueRoutingNotImplementedError) as exc_info:
+        _reader(stub_packaged_catalogue_artifact_live_capable()).read_products(source="live", on_issue=on_issue)
+
+    assert _issue_policy_error_chain(exc_info.value) == []
+
+
+@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
+def test_catalogue_reader_live_capable_stations_raise_defensive_fatal_for_every_on_issue(
+    on_issue: OnIssue,
+    stub_packaged_catalogue_artifact_live_capable: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.raises(LiveCatalogueRoutingNotImplementedError) as exc_info:
+        _reader(stub_packaged_catalogue_artifact_live_capable()).read_stations(source="live", on_issue=on_issue)
+
+    assert _issue_policy_error_chain(exc_info.value) == []
+
+
+@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
+def test_catalogue_reader_live_capable_station_products_raise_defensive_fatal_for_every_on_issue(
+    on_issue: OnIssue,
+    stub_packaged_catalogue_artifact_live_capable: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.raises(LiveCatalogueRoutingNotImplementedError) as exc_info:
+        _reader(stub_packaged_catalogue_artifact_live_capable()).read_station_products(source="live", on_issue=on_issue)
+
+    assert _issue_policy_error_chain(exc_info.value) == []
+
+
+def test_catalogue_reader_live_products_invalid_filter_remains_direct_fatal(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    with pytest.raises(FatalContractError) as exc_info:
+        _reader(stub_packaged_catalogue_artifact()).read_products(
+            source="live",
+            observed_property=cast(str, 123),
+            on_issue="ignore",
+        )
+
+    assert _issue_policy_error_chain(exc_info.value) == []
