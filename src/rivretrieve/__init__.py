@@ -5,4 +5,4 @@ from rivretrieve._internal.discovery import provider_info as provider_info
 from rivretrieve._internal.discovery import providers as providers
 from rivretrieve._internal.discovery import stations as stations
 
-__version__ = "0.1.11"
+__version__ = "0.1.12"

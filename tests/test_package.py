@@ -39,6 +39,13 @@ def test_deferred_public_names_remain_absent_after_catalogue_surface() -> None:
         "CorruptCatalogArtifactError",
         "LiveCatalogueUnsupportedIssue",
         "LiveCatalogueRoutingNotImplementedError",
+        "ObservationDataSchema",
+        "RowAnnotationTableSchema",
+        "SeriesAnnotationTableSchema",
+        "AnnotationSchemaDeclaration",
+        "InvalidObservationRequestError",
+        "ObservationDataSchemaError",
+        "AnnotationSchemaViolationError",
     ]
     for name in deferred_names:
         assert not hasattr(rivretrieve, name)
