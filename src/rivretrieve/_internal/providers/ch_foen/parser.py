@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from io import BytesIO
 
 import polars as pl
 
-from rivretrieve._internal.issues import Issue
+from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ch_foen.issue_codes import (
     ChFoenObservationIssueCodes,
@@ -14,6 +15,7 @@ from rivretrieve._internal.providers.ch_foen.issue_codes import (
 
 PROVIDER_ID = ProviderId("ch_foen")
 REQUIRED_COLUMNS = frozenset({"_time", "_value", "_field", "_measurement", "loc"})
+_EXPLICIT_OFFSET_PATTERN = re.compile(r"(Z|[+-]\d{2}:\d{2})$")
 
 _RECORDS_SCHEMA = pl.Schema(
     {
@@ -29,7 +31,7 @@ _RECORDS_SCHEMA = pl.Schema(
 )
 
 
-class ChFoenObservationParserError(ValueError):
+class ChFoenObservationParserError(FatalContractError):
     def __init__(self, code: ChFoenParserFatalCodes | str, message: str) -> None:
         self.code = str(code)
         super().__init__(message)
@@ -88,6 +90,11 @@ def parse_ch_foen_observation_csv(csv_bytes: bytes) -> ChFoenParsedObservationPa
     )
     invalid_timestamp_count = parsed.filter(pl.col("time").is_null()).height
     invalid_numeric_count = parsed.filter(pl.col("native_value").is_null()).height
+    timezone_ambiguous_count = parsed.filter(
+        pl.col("time").is_not_null()
+        & pl.col("_time").is_not_null()
+        & ~pl.col("_time").str.contains(_EXPLICIT_OFFSET_PATTERN.pattern)
+    ).height
 
     records = (
         parsed.filter(pl.col("time").is_not_null() & pl.col("native_value").is_not_null())
@@ -122,6 +129,14 @@ def parse_ch_foen_observation_csv(csv_bytes: bytes) -> ChFoenParsedObservationPa
                     ChFoenObservationIssueCodes.INVALID_NUMERIC_VALUE,
                     "Dropped rows with invalid numeric values",
                     {"dropped_rows": invalid_numeric_count},
+                )
+            )
+        if timezone_ambiguous_count:
+            issues.append(
+                _parser_issue(
+                    ChFoenObservationIssueCodes.TIMEZONE_AMBIGUITY,
+                    "Parsed rows with timestamps that lack an explicit UTC offset",
+                    {"rows": timezone_ambiguous_count},
                 )
             )
 

@@ -139,7 +139,6 @@ def test_ch_foen_raw_payload_preserves_bytes_and_redacts_auth() -> None:
 
 def test_ch_foen_observation_issue_codes_cover_m4_codes() -> None:
     assert {code.value for code in ChFoenObservationIssueCodes} == {
-        "observations_not_yet_implemented",
         "missing_data",
         "partial_response",
         "source_request_failed",

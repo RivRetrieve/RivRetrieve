@@ -8,23 +8,20 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
-from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.observations import (
     AnnotationSchema,
-    AnnotationTable,
-    ObservationDataSchema,
-    ObservationProvenance,
     ObservationRequest,
     ObservationResult,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
 )
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
+from rivretrieve._internal.providers.ch_foen.observation_client import ChFoenObservationClient
+from rivretrieve._internal.providers.ch_foen.retrieval import retrieve_observations
 from rivretrieve._internal.results import CatalogResult
 
 PROVIDER_ID = ProviderId("ch_foen")
 _CATALOGUE_PATH = Path(__file__).with_name("catalogue")
+_observation_client_factory = ChFoenObservationClient
 
 
 def info() -> ProviderInfo:
@@ -188,43 +185,12 @@ def observations(
     *,
     on_issue: OnIssue = "warn",
 ) -> ObservationResult:
-    issue = Issue(
-        severity="error",
-        code="observations_not_yet_implemented",
-        message="ch_foen observation retrieval is not yet implemented",
-        details={
-            "stations": list(request.stations),
-            "products": list(request.products),
-            "start": request.start.isoformat(),
-            "end": request.end.isoformat(),
-        },
-        provider_id=PROVIDER_ID,
-    )
-    provenance = ObservationProvenance(
-        source="placeholder",
-        provider_id=PROVIDER_ID,
+    return retrieve_observations(
+        request,
+        on_issue=on_issue,
+        client_factory=_observation_client_factory,
         rivretrieve_version=_rivretrieve_version(),
         catalogue_version=info().catalogue_version,
-        request={
-            "stations": list(request.stations),
-            "products": list(request.products),
-            "start": request.start.isoformat(),
-            "end": request.end.isoformat(),
-        },
-    )
-    return ObservationResult(
-        data=pl.DataFrame(schema=ObservationDataSchema.polars_schema),
-        row_annotations=AnnotationTable(
-            data=pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
-            schema=RowAnnotationTableSchema,
-        ),
-        series_annotations=AnnotationTable(
-            data=pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-            schema=SeriesAnnotationTableSchema,
-        ),
-        provenance=provenance,
-        issues=(issue,),
-        raw=None,
     )
 
 

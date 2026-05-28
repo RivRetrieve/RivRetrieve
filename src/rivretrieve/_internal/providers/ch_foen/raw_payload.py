@@ -15,6 +15,10 @@ class ChFoenRawCsvResponse:
     query: str
     status_code: int | None = None
     retrieved_at: datetime | None = None
+    station_id: str | None = None
+    product_id: str | None = None
+    window_start: datetime | None = None
+    window_end: datetime | None = None
 
 
 @dataclass(frozen=True)
