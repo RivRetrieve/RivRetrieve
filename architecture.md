@@ -265,6 +265,8 @@ class ChFoenStationProductMetadata(BaseModel): ...
 
 These models should allow extra fields so source metadata is not lost while stable fields can still be validated and documented. Generic harness code treats public `metadata` dictionary values as opaque.
 
+Packaged catalogue artifacts use Parquet as the on-disk format. Inside Parquet, the `metadata` column holds JSON-encoded strings in a `pl.Utf8` column, not nested struct types. This preserves round-trip fidelity through Parquet readers that do not support arbitrary Python objects and lets generic harness code remain schema-agnostic. Encoding and decoding happen at the catalogue I/O boundary; in-memory `metadata` values are still plain Python dictionaries as described above.
+
 ### Station Catalogue
 
 Common station fields:
@@ -429,7 +431,7 @@ The public provider handle adapts user-friendly keyword arguments into typed int
 
 The public provider handle is typed by a `typing.Protocol` that exposes the same public catalogue and observation behavior. `source` and `on_issue` are part of the public catalogue method contract.
 
-Provider info is offline in V1. `rr.provider_info()` and `provider.info()` report installed provider metadata and declared capabilities from packaged artifacts/code; they do not call provider APIs. Provider capabilities include catalogue live-support flags such as `live_stations`, `live_products`, and `live_station_products`, plus a descriptive `bulk_observations` capability. Capability flags help planning and UI behavior, but runtime calls still report failures or unsupported operations through structured issues.
+Provider info is offline in V1. `rr.provider_info()` and `provider.info()` report installed provider metadata and declared capabilities from packaged artifacts/code; they do not call provider APIs. The provider info record carries identifying fields (`provider_id`, a human-readable `name`, and `catalogue_version` for the packaged snapshot in use) and declared capabilities (the three catalogue live-support flags `live_stations`, `live_products`, `live_station_products`, plus a descriptive `bulk_observations` capability). Capability flags help planning and UI behavior, but runtime calls still report failures or unsupported operations through structured issues.
 
 ## 10. Maintainer Catalogue Generation
 
