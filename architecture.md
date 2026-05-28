@@ -379,10 +379,10 @@ The dictionary is intentionally separate from this architecture because it will 
 
 ## 9. Provider Module Contract
 
-Each provider lives in its own Python subpackage:
+Each provider lives in its own Python subpackage under the package's internal namespace:
 
 ```text
-src/rivretrieve/providers/usgs_nwis/
+src/rivretrieve/_internal/providers/usgs_nwis/
     __init__.py
     catalogue/
         provider.json
@@ -392,6 +392,8 @@ src/rivretrieve/providers/usgs_nwis/
     generate_catalogue.py
     metadata.py
 ```
+
+The `_internal/providers/` location keeps the public `rr.providers()` callable from being shadowed by Python's import machinery when a provider subpackage is imported lazily at registration time. Provider modules are not part of the public package surface; users discover and access providers through `rr.provider("...")` and `rr.providers()`, never via direct import of the subpackage.
 
 Provider runtime modules expose a flat function-based contract. There are no public provider classes and no inheritance hierarchy at the provider implementation boundary.
 
