@@ -14,6 +14,7 @@ def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == {
         "ProviderHandle",
+        "map_stations",
         "observations",
         "product_info",
         "products",
@@ -29,7 +30,6 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         "ProviderInfo",
         "ProviderModule",
         "_ProviderHandle",
-        "map_stations",
         "ObservationResult",
         "ObservationRequest",
         "ObservationProvenance",
@@ -54,6 +54,8 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         "ObservationsUnavailableError",
         "ObservationDataSchemaError",
         "AnnotationSchemaViolationError",
+        "MissingOptionalDependencyError",
+        "StationMap",
     ]
     for name in deferred_names:
         assert not hasattr(rivretrieve, name)

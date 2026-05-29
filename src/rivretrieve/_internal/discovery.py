@@ -17,6 +17,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.handle import ProviderHandle
 from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
+from rivretrieve._internal.station_map import StationMap, _filter_stations
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -97,6 +98,21 @@ def stations() -> CatalogResult[StationCatalog]:
         data = data.sort("provider_id", "station_id")
     issues = validate_catalogue(data, STATION_CATALOG_SCHEMA, on_issue="raise")
     return CatalogResult(data=data, provenance=_global_provenance(), issues=tuple(issues))
+
+
+def map_stations(
+    *,
+    providers: str | Sequence[str] | None = None,
+    country: str | Sequence[str] | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> object:
+    """Render packaged stations on a map.
+
+    ``bbox`` uses inclusive ``(min_lon, min_lat, max_lon, max_lat)`` order.
+    """
+    station_data = stations().data
+    filtered = _filter_stations(station_data, providers=providers, country=country, bbox=bbox)
+    return StationMap(filtered).render()
 
 
 def products() -> CatalogResult[ProductCatalog]:
