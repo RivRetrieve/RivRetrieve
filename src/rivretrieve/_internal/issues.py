@@ -36,6 +36,10 @@ class FatalContractError(RivRetrieveError):
         super().__init__(message)
 
 
+class MissingOptionalDependencyError(FatalContractError):
+    pass
+
+
 class LiveCatalogueUnsupportedIssue(Issue):
     def __init__(self, *, provider_id: ProviderId | None, method: str, capability: str) -> None:
         super().__init__(

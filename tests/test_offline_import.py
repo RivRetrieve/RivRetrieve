@@ -14,6 +14,9 @@ assert "rivretrieve._internal.catalogues.artifact" in sys.modules, (
 )
 assert "rivretrieve.providers" not in sys.modules
 assert "rivretrieve._internal.providers" not in sys.modules
+assert "folium" not in sys.modules
+assert "leafmap" not in sys.modules
+assert "ipyleaflet" not in sys.modules
 assert "tests._stubs" not in sys.modules
 assert "tests._stubs.stub_provider" not in sys.modules
 for module_name in sys.modules:
