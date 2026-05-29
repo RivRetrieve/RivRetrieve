@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
@@ -16,6 +18,12 @@ from rivretrieve._internal.handle import ProviderHandle
 from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from rivretrieve._internal.observations import ObservationResult
+    from rivretrieve._internal.primitives import OnIssue
+
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 
 
@@ -27,6 +35,28 @@ def providers() -> list[str]:
 def provider(provider_id: str) -> ProviderHandle:
     _ensure_default_providers_registered()
     return _registry.get(provider_id)
+
+
+_provider_lookup = provider
+
+
+def observations(
+    *,
+    provider: str,
+    stations: str | Sequence[str],
+    products: str | Sequence[str],
+    start: object,
+    end: object,
+    on_issue: OnIssue = "warn",
+) -> ObservationResult:
+    provider_handle = _provider_lookup(provider)
+    return provider_handle.observations(
+        stations=stations,
+        products=products,
+        start=start,
+        end=end,
+        on_issue=on_issue,
+    )
 
 
 def provider_info() -> CatalogResult[ProviderInfoCatalog]:

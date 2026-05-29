@@ -278,7 +278,10 @@ def test_provider_info_catalog_validates_row_shape() -> None:
             "live_stations": [False],
             "live_products": [False],
             "live_station_products": [False],
-            "bulk_observations": ["none"],
+            "bulk_observations": [
+                "true: 366-day window decomposition with stitched N x M station-product requests; partial failures "
+                "reported as recoverable issues"
+            ],
             "catalogue_version": ["2026.01"],
             "metadata": ['{"homepage": "https://example.invalid"}'],
         },

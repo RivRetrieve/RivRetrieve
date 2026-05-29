@@ -40,22 +40,62 @@ M3 introduced no `ch_foen`-specific product IDs and dropped no legacy Switzerlan
 
 Legacy evidence: thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:22-29 and thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:44-80.
 
-## Annotation
+## Observation Retrieval
 
-Row and series annotation schemas are empty in M3 by design: `ch_foen` is catalogue-only and its observation path is a non-raising placeholder. The empty schemas are explicit module behavior and are covered by `tests/test_ch_foen_module.py:43` and `tests/test_ch_foen_module.py:47`, with implementation at `src/rivretrieve/_internal/providers/ch_foen/module.py:68` and `src/rivretrieve/_internal/providers/ch_foen/module.py:72`.
+M4 replaced the placeholder observation path with real `ch_foen` retrieval behind the provider handle and the package-root convenience wrapper. The public paths are now:
 
-M4 owns real observation annotations. Any row or series annotation emitted by the M4 observation implementation must be declared because the M2 provider handle always validates annotation names after provider execution.
+- `rr.provider("ch_foen").observations(...)`, the primary provider-handle call path.
+- `rr.observations(provider="ch_foen", ...)`, a delegation-only wrapper added in M4 step 03.
+
+The implementation preserves the legacy SwitzerlandFetcher mechanics that matter for V1:
+
+| Behavior | M4 target behavior | Legacy evidence |
+| --- | --- | --- |
+| Product/native-field mapping | The six canonical products use `flow`, `flow_ls`, `height_abs`, `height`, and `temperature` according to the product dictionary above. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:22-29`, `:44-81` |
+| Windowing | Observation calls decompose request ranges into 366-day windows before querying. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:43`, `:97-110` |
+| Query shape | Flux queries target `existenzApi`, measurement `hydro`, one station, the configured native fields, and an exclusive stop date. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:175-188` |
+| Transport loop | The legacy fetcher posts each station/product/window query with CSV accept headers and token authorization. M4 keeps runtime calls transport-injectable for offline tests. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:190-218` |
+| CSV parse shape | CSV rows become station, native parameter, timestamp, and value records. M4 keeps canonical result timestamps timezone-aware UTC rather than returning legacy naive pandas indexes. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:220-241` |
+| Fallback and conversion | Preferred native fields win per timestamp; `flow_ls` is converted from L/s to m3/s when used as discharge fallback. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:251-269` |
+| Daily and instant products | Daily products aggregate by day; instant products keep the date range as an inclusive day selection with exclusive next-day stop. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:290-297`, `:348-352` |
+
+Fixture-backed M4 tests pin the translated behavior without live network: station `2016` daily temperature, station `2206` instantaneous discharge with `flow_ls` fallback and L/s -> m3/s conversion, and station `2282` instantaneous stage. The legacy example uses gauge `2016` with daily discharge and water temperature, while legacy docs only expose an automodule stub: `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:examples/test_switzerland_fetcher.py:9-20` and `cd9b030:docs/fetchers/switzerland.rst:1-5`.
+
+## Annotation Schema
+
+M4 declares and emits non-empty row and series annotation schemas for `ch_foen`. The old M3 note that annotation schemas were empty is no longer true.
+
+Row annotations describe per-observation facts such as native field, raw/native value, conversion, overlap, conflict, and provenance of the row-level source field. Series annotations describe per-station/product facts such as returned time range, resolved timezone, native unit returned, fallback use, timezone mismatch flags, provider query fields, and data-window summaries. The provider handle continues to validate emitted annotation names against the declared schemas after provider execution.
 
 ## Issues
 
+Observation retrieval uses the M2 two-channel contract: fatal contract/parser/schema problems raise fatal exceptions, while provider/data problems are recoverable `Issue` rows by default and honor `on_issue`. The wrapper does not catch, transform, or reroute either channel.
+
+Recoverable observation issues include missing data, partial responses, failed source requests, gaps, overlap, fallback conflicts, timezone ambiguity, and unit-conversion ambiguity. `on_issue="warn"` emits runtime warnings for recoverable issues, `on_issue="raise"` raises `IssuePolicyError`, and `on_issue="ignore"` returns the issues without warning.
+
+The old placeholder issue code `observations_not_yet_implemented` was removed in M4 because provider-handle observations now delegate to real retrieval.
+
+## Token Handling
+
+The Influx token is treated as a public service credential because upstream legacy commit `cd9b030` intentionally restored the literal. The target implementation keeps it isolated in the observation client path, sanitizes authorization data from provenance/raw metadata, and keeps package import plus catalogue reads offline.
+
+`rr.map_stations()` in M5 must not depend on this token path. Station catalogue data is already packaged, and observation token/client setup is only reachable through observation retrieval.
+
+## Schema Divergence from Legacy Wide-Form Output
+
+Legacy `SwitzerlandFetcher.get_data(...)` returns one pandas time-indexed, wide-form dataframe per gauge/variable call and names the value column after the legacy variable. M4 returns the shared long-form `ObservationResult.data` shape with canonical `station_id`, `product_id`, UTC `time`, and `value`, plus row/series annotation tables and structured provenance.
+
+This divergence is intentional. It keeps `ch_foen` inside the common RivRetrieve observation contract and leaves wide-form pandas export outside M4. M5 station mapping should consume station catalogues, not infer map semantics from legacy wide observation frames.
+
+## Pain Points
+
 | Issue | Status | M4 or maintenance action | Citation |
 | --- | --- | --- | --- |
-| Token handling | Upstream `cd9b030` classifies the legacy literal token as public by restoring it intentionally; M3 target carries no token because it is catalogue-only. | At M4 start, confirm upstream's public-token classification still holds, then choose embedding mechanics (`literal`, configuration override, or both). This is not framed as "decide secret vs public." | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/execution.md:81`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:40, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:200 |
 | Maintainer-only generator | `generate_catalogue.py` may read the live locations endpoint only when a maintainer invokes it; runtime package import and catalogue methods use packaged artifacts. | Keep generator out of package import and re-run it only when catalogue artifacts or provider-info capabilities change. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:23`, `tests/test_offline_import.py:7`, `tests/test_ch_foen_registration.py:55` |
 | Offline import invariant | `import rivretrieve` must not import provider runtime modules or generators. | Preserve lazy default registration and keep any M4 observation code behind provider lookup/call paths. | `tests/test_offline_import.py:7`, `tests/test_ch_foen_registration.py:55`, `docs/discoveries.md:128` |
-| Observation placeholder | `observations()` returns empty data/annotations plus an `observations_not_yet_implemented` issue. | Replace with real observation retrieval and remove placeholder-only expectations in M4. | `src/rivretrieve/_internal/providers/ch_foen/module.py:76`, `tests/test_ch_foen_module.py:51` |
+| Observation placeholder | Closed in M4. `observations_not_yet_implemented` is no longer an issue code and provider observations delegate to real retrieval. | Keep this closed; do not reintroduce placeholder behavior in wrapper or map work. | `tests/test_ch_foen_module.py:109`, `tests/test_ch_foen_module.py:140` |
 | D6 path shadowing | Provider packages under `rivretrieve.providers` can shadow public callables. | Keep provider code under `rivretrieve._internal.providers`. | `docs/discoveries.md:128` |
 | D7 Pydantic extras and `ty` | `extra="allow"` constructor kwargs are not visible to `ty`. | If M4 uses Pydantic extras, assert them through `model_validate({...})`, not constructor kwargs. | `docs/discoveries.md:144` |
 | D8 catalogue encoding round-trip | Generator code must serialize JSON metadata before typed-frame construction. | Apply the same generator-side serialization/provenance audit to observation artifacts or metadata-like result fields. | `docs/discoveries.md:172` |
 | D9 `Mapping` narrowing under `ty` | `isinstance(x, Mapping)` over JSON-loaded data erases useful types. | Use concrete `dict` / `list` checks in M4 parser code unless abstract polymorphism is required. | `docs/discoveries.md:158` |
-| Capability flags | M3 provider info honestly reports all live catalogue flags `False` and `bulk_observations="false"`. | M4 must revisit `bulk_observations` when observations land; if any provider-info capability changes, regenerate and commit packaged `provider.json`. The three `live_*` catalogue flags should stay `False` unless M4 adds live catalogue calls. | `src/rivretrieve/_internal/providers/ch_foen/catalogue/provider.json:1`, `tests/test_ch_foen_capabilities.py:9` |
+| Capability flags | M4 updates `bulk_observations` to `true: 366-day window decomposition with stitched N x M station-product requests; partial failures reported as recoverable issues`. The three `live_*` catalogue flags remain `False`. | M5 conformance closeout should treat this as the new baseline and should not infer live catalogue support from it. | `src/rivretrieve/_internal/providers/ch_foen/catalogue/provider.json:1`, `tests/test_ch_foen_capabilities.py:9` |

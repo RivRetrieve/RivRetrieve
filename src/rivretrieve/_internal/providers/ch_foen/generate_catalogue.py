@@ -309,7 +309,10 @@ def build_provider_info(
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": "false",
+        "bulk_observations": (
+            "true: 366-day window decomposition with stitched N x M station-product requests; partial failures reported "
+            "as recoverable issues"
+        ),
         "catalogue_version": catalogue_date.isoformat(),
         "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }

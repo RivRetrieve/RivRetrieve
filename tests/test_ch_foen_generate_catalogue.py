@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -20,6 +21,10 @@ from rivretrieve._internal.providers.ch_foen import generate_catalogue
 
 FIXTURE_PATH = Path("tests/test_data/switzerland_metadata_locations.json")
 CATALOGUE_DATE = date(2026, 5, 28)
+BULK_OBSERVATIONS_DESCRIPTION = (
+    "true: 366-day window decomposition with stitched N x M station-product requests; partial failures reported "
+    "as recoverable issues"
+)
 
 
 def test_ch_foen_generator_uses_committed_fixture_without_network(
@@ -92,6 +97,16 @@ def test_ch_foen_generator_artifacts_validate_against_all_catalogue_schemas() ->
     )
 
 
+def test_ch_foen_generator_declares_bulk_observations_description() -> None:
+    catalogue = generate_catalogue.generate_catalogue_from_fixture(
+        FIXTURE_PATH,
+        catalogue_date=CATALOGUE_DATE,
+    )
+
+    assert catalogue.provider_info["bulk_observations"] == BULK_OBSERVATIONS_DESCRIPTION
+    assert isinstance(catalogue.provider_info["bulk_observations"], str)
+
+
 def test_ch_foen_generator_rejects_unknown_variable_code() -> None:
     unknown = (
         generate_catalogue.ProductDefinition(
@@ -142,3 +157,37 @@ def test_ch_foen_generator_writes_artifacts(tmp_path: Path) -> None:
     assert (output_path / "products.parquet").is_file()
     assert (output_path / "stations.parquet").is_file()
     assert (output_path / "station_products.parquet").is_file()
+
+    provider_info = json.loads((output_path / "provider.json").read_text(encoding="utf-8"))
+    assert provider_info["bulk_observations"] == BULK_OBSERVATIONS_DESCRIPTION
+
+
+def test_ch_foen_generator_provider_json_drift_is_limited_to_bulk_observations(tmp_path: Path) -> None:
+    output_path = tmp_path / "catalogue"
+    original_json = subprocess.check_output(
+        [
+            "git",
+            "show",
+            "HEAD:src/rivretrieve/_internal/providers/ch_foen/catalogue/provider.json",
+        ],
+        text=True,
+    )
+    original_provider_info = json.loads(original_json)
+
+    result = generate_catalogue.main(
+        [
+            "--fixture",
+            str(FIXTURE_PATH),
+            "--out",
+            str(output_path),
+            "--catalogue-date",
+            CATALOGUE_DATE.isoformat(),
+        ]
+    )
+
+    assert result == 0
+    generated_provider_info = json.loads((output_path / "provider.json").read_text(encoding="utf-8"))
+    changed_keys = {
+        key for key in original_provider_info if original_provider_info[key] != generated_provider_info[key]
+    }
+    assert changed_keys <= {"bulk_observations"}

@@ -5,14 +5,19 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.issues import IssuePolicyError
 
+BULK_OBSERVATIONS_DESCRIPTION = (
+    "true: 366-day window decomposition with stitched N x M station-product requests; partial failures reported "
+    "as recoverable issues"
+)
 
-def test_ch_foen_provider_info_capabilities_are_declared_false() -> None:
+
+def test_ch_foen_provider_info_capabilities_are_declared() -> None:
     provider_info = rr.provider("ch_foen").info()
 
     assert provider_info.live_stations is False
     assert provider_info.live_products is False
     assert provider_info.live_station_products is False
-    assert provider_info.bulk_observations == "false"
+    assert provider_info.bulk_observations == BULK_OBSERVATIONS_DESCRIPTION
 
 
 def test_ch_foen_live_products_unsupported_uses_m2_routing() -> None:

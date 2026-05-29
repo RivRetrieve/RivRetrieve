@@ -46,6 +46,30 @@ def test_ch_foen_observations_2206_discharge_fallback_converts_to_m3s(monkeypatc
     assert _row_values(result, "converted_unit") == {"m3/s"}
 
 
+def test_ch_foen_observations_wrapper_2206_discharge_smoke(monkeypatch) -> None:
+    _install_transport(monkeypatch, _fixture_transport({"2206": "switzerland_2206_discharge_20250101.csv"}))
+
+    result = rr.observations(
+        provider="ch_foen",
+        stations=["2206"],
+        products=["discharge_instantaneous"],
+        start="2025-01-01",
+        end="2025-01-01",
+        on_issue="ignore",
+    )
+
+    assert isinstance(result, ObservationResult)
+    assert result.data.height == 144
+    assert result.data["value"].min() == 0.014
+    assert result.data["value"].max() == 0.015
+    mean_value = result.data["value"].mean()
+    assert isinstance(mean_value, float)
+    assert math.isclose(mean_value, 0.014944444444, rel_tol=0.0, abs_tol=1e-12)
+    assert _series_value(result, "2206", "discharge_instantaneous", "fallback_source_used") == "true"
+    assert _row_values(result, "native_unit") == {"L/s"}
+    assert _row_values(result, "converted_unit") == {"m3/s"}
+
+
 def test_ch_foen_observations_2282_stage_instant_returns_all_samples(monkeypatch) -> None:
     _install_transport(monkeypatch, _fixture_transport({"2282": "switzerland_2282_stage_20250101.csv"}))
 
