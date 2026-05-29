@@ -215,3 +215,13 @@ The same pattern will affect any future provider port that consults a sibling le
 **What the coordinator should review:** Add an "M1/M2 contract round-trip" probe to the reviewer's lens inventory for M4 and future provider ports. The probe: for every catalogue/result column with an asymmetric encoding (anything where loader semantics differ from raw parquet type), verify the GENERATOR side serializes correctly, not just the LOADER side deserializes. Candidate columns to audit proactively in M4: anything in observation results with JSON-encoded annotations, timestamp columns with timezone normalization, etc.
 
 **Resolution:** Implemented in M3 step 02.
+
+## V1 Closeout Note — M5 conformance sweep did not add discoveries
+
+M5 conformance closeout found no new architecture contradiction, so no D11+ entry is added.
+
+Closeout status for prior notes:
+
+- D5 remains a post-V1 public-surface hygiene candidate. `test_deferred_public_names_remain_absent_after_provider_handle_promotion` and `test_provider_handle_protocol_declares_exactly_seven_public_methods` still guard accidental public expansion.
+- D6 remains resolved by keeping provider implementation packages under `rivretrieve._internal.providers`.
+- D7 and D9 did not fire during M4/M5 map work. Keep them as provider-code review probes when future provider parsing or Pydantic extras work actually triggers them, not as permanent architecture lenses.

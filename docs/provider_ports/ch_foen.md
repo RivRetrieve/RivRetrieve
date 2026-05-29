@@ -81,6 +81,12 @@ The Influx token is treated as a public service credential because upstream lega
 
 `rr.map_stations()` in M5 must not depend on this token path. Station catalogue data is already packaged, and observation token/client setup is only reachable through observation retrieval.
 
+## M5/V1 Map Closeout
+
+`rr.map_stations(...)` shipped as a map view over packaged station catalogue rows. It consumes the existing station fields, including `provider_id`, `station_id`, `name`, `latitude`, `longitude`, and `country`, and applies optional provider, country, and bounding-box filters before rendering. It does not read product rows, station-product rows, observation results, live catalogue paths, or provider-native observation metadata.
+
+The old M5 token concern is closed for V1: token handling remains observation-only. Map rendering does not resolve or sanitize the Influx token because it never enters the observation transport/client path.
+
 ## Schema Divergence from Legacy Wide-Form Output
 
 Legacy `SwitzerlandFetcher.get_data(...)` returns one pandas time-indexed, wide-form dataframe per gauge/variable call and names the value column after the legacy variable. M4 returns the shared long-form `ObservationResult.data` shape with canonical `station_id`, `product_id`, UTC `time`, and `value`, plus row/series annotation tables and structured provenance.
