@@ -144,18 +144,31 @@ def _concat_or_empty(frames: list[pl.DataFrame], schema: pl.Schema) -> pl.DataFr
 def _ensure_default_providers_registered() -> None:
     if not _DEFAULT_PROVIDER_REGISTRATION_ENABLED:
         return
-    if "ch_foen" in _registry.list_provider_ids():
+    registered = _registry.list_provider_ids()
+    if "ch_foen" in registered and "lt_lhmt" in registered:
         return
 
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
-    from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
 
-    packaged_artifact = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise")
-    _registry.register(
-        "ch_foen",
-        packaged_artifact,
-        provider_module=ch_foen_module,
-    )
+    if "ch_foen" not in registered:
+        from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
+
+        packaged_artifact = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "ch_foen",
+            packaged_artifact,
+            provider_module=ch_foen_module,
+        )
+
+    if "lt_lhmt" not in registered:
+        from rivretrieve._internal.providers.lt_lhmt import module as lt_lhmt_module
+
+        lt_lhmt_artifact = load_packaged_catalogue_artifact(lt_lhmt_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "lt_lhmt",
+            lt_lhmt_artifact,
+            provider_module=lt_lhmt_module,
+        )
 
 
 def _global_provenance() -> CatalogProvenance:

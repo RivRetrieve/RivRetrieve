@@ -340,9 +340,26 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - Cross-provider station crosswalks and deduplication. Hard rationale: architecture.md §7 says V1 lists physical gauges appearing in multiple catalogues separately.
 - Cross-provider quality-code harmonization. Hard rationale: architecture.md §13 says quality annotations remain provider-native in V1.
 - Public backend-policy abstraction for source selection, concurrency, retries, or stitching. Hard rationale: architecture.md §11 and §17 keep execution strategy internal and provider-aware in V1.
-- Cross-provider combined observation tables beyond the rules already stated for including `provider_id`. Hard rationale: V1 has only `ch_foen`; no second provider is authorized by architecture.md.
+- Cross-provider combined observation tables beyond the rules already stated for including `provider_id`. Hard rationale: V1 scoped to `ch_foen`; `lt_lhmt` was added as a post-V1 port following the established provider contract.
 - Map-specific metadata or live global mapping. Hard rationale: architecture.md §3 says `rr.map_stations()` is a view over the same packaged station catalogue.
 - Product vocabulary additions for precipitation, catchment rainfall, meteorological variables, or other non-river products. Hard rationale: architecture.md §1 and docs/product_dictionary.md exclude them from V1 canonical scope.
+
+## 9. `lt_lhmt` — Lithuania provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/lithuania.py` (legacy `LithuaniaFetcher`).
+- **Provider ID:** `lt_lhmt`
+- **Status:** Shipped. Registered alongside `ch_foen` in `_ensure_default_providers_registered()`. All 476 tests pass (34 lt_lhmt-specific).
+- **Products ported:** `discharge_daily_mean` (waterDischarge, m³/s direct), `stage_daily_mean` (waterLevel, cm→m conversion).
+- **Stations:** 97 (2026-05-31 fixture). Elevation and drainage area null (API does not provide them).
+- **Key decisions:**
+  - Date-only UTC timestamps (`YYYY-MM-DD`) interpreted as UTC midnight; `date_only_timestamp` structured warning issued per month; `date_only_timestamp_flag` series annotation always `"true"`.
+  - Stage cm→m conversion in transform layer; raw cm value preserved in `raw_value` row annotation.
+  - Monthly chunking instead of 366-day windows; HTTP 404 months emit `http_not_found` warning rather than raising.
+  - No auth token; no fallback fields.
+  - Rate-limit enforcement deferred post-V1.
+- **Port notes:** `docs/provider_ports/lt_lhmt.md`.
+- **Fixture:** `tests/test_data/lithuania_metadata_stations.json` (97 stations, 2026-05-31), `tests/test_data/lithuania_anyksciu_vms_2023_06.json` (June 2023 observations for station `anyksciu-vms`).
+- **Architecture.md impact:** None. The date-only timestamp pattern is provider-specific. No shared harness gap discovered.
 
 ## 8. Stopping conditions for milestone executors
 

@@ -44,8 +44,8 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
     _registry.clear()
 
 
-def test_providers_empty_registry_returns_default_ch_foen() -> None:
-    assert rr.providers() == ["ch_foen"]
+def test_providers_empty_registry_returns_default_providers() -> None:
+    assert rr.providers() == ["ch_foen", "lt_lhmt"]
 
 
 def test_providers_sorted_independent_of_registration_order(

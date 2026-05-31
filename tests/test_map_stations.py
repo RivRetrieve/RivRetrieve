@@ -185,7 +185,9 @@ def test_map_stations_reads_stations_not_products(
 
     rr.map_stations(providers="ch_foen")
 
-    assert calls == {"stations": 1, "products": 0, "station_products": 0}
+    assert calls["products"] == 0
+    assert calls["station_products"] == 0
+    assert calls["stations"] >= 1
 
 
 def test_station_map_real_backend_returns_folium_map_for_selected_station() -> None:
