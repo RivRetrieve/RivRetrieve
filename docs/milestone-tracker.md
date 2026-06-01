@@ -361,6 +361,25 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixture:** `tests/test_data/lithuania_metadata_stations.json` (97 stations, 2026-05-31), `tests/test_data/lithuania_anyksciu_vms_2023_06.json` (June 2023 observations for station `anyksciu-vms`).
 - **Architecture.md impact:** None. The date-only timestamp pattern is provider-specific. No shared harness gap discovered.
 
+## 10. `usgs_nwis` — USA / USGS NWIS provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/usa.py` (legacy `USAFetcher` using `dataretrieval` package).
+- **Provider ID:** `usgs_nwis`
+- **Status:** Shipped. Registered alongside `ch_foen` and `lt_lhmt` in `_ensure_default_providers_registered()`. All 512 tests pass (36 usgs_nwis-specific).
+- **Products ported:** `discharge_daily_mean` (DV 00060/00003, cfs→m3/s), `discharge_instantaneous` (IV 00060, cfs→m3/s), `stage_daily_mean` (DV 00065/00003, ft→m), `stage_daily_max` (DV 00065/00001, ft→m), `stage_daily_min` (DV 00065/00002, ft→m), `stage_instantaneous` (IV 00065, ft→m).
+- **Stations:** 5 (2026-06-01 fixture; representative set). For production, regenerate from live USGS site service (8000+ stream gauges).
+- **Key decisions:**
+  - Direct USGS WaterServices REST API calls (no `dataretrieval` package). DV and IV endpoints selected per product.
+  - Annual 365-day windows for retrieval.
+  - Timestamps carry explicit ISO 8601 timezone offsets (e.g. `-06:00` for CST); parsed and converted to UTC. Series annotation `timezone_source = "provider_timestamp_offset"`.
+  - No auth token; public USGS API.
+  - Elevation converted ft→m; drainage area converted sq mi→km². Raw values preserved in station metadata.
+  - Station-product availability materialized as `unknown` (NWIS site catalogue does not expose per-variable availability).
+  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching lt_lhmt pattern.
+- **Port notes:** `docs/provider_ports/usgs_nwis.md`.
+- **Fixtures:** `tests/test_data/usgs_nwis_metadata_sites.json` (5 stations, 2026-06-01), `tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json` (DV discharge Jan 2023 for station 07374000).
+- **Architecture.md impact:** None. Timestamp offset conversion is provider-specific. Unit conversions (cfs, ft) are provider-specific. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.

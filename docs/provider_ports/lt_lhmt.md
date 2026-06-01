@@ -40,7 +40,7 @@ No V1 vocabulary expansion needed. The legacy Lithuania fetcher exposed exactly 
 
 **Key finding:** Meteo.lt `observationDateUtc` values are **date-only strings** (`YYYY-MM-DD`), not datetimes. There is no time-of-day component. The field name includes `Utc`, which is the only explicit timezone signal.
 
-**Decision:** Interpret date-only strings as UTC midnight (`T00:00:00Z`). The parser appends `T00:00:00Z` before calling `str.to_datetime(time_zone="UTC")`.
+**Decision:** Interpret date-only strings as UTC midnight (`T00:00:00Z`). The UTC claim is the provider's own declaration via the field name `observationDateUtc` — that is sufficient authority. The parser appends `T00:00:00Z` before calling `str.to_datetime(time_zone="UTC")`.
 
 **Structured issue emitted:** `date_only_timestamp` — warning-severity issue per parsed month whenever date-only strings are encountered. Also recorded as a `date_only_timestamp_flag=true` series annotation.
 

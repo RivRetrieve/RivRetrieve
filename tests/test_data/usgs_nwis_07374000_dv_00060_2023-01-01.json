@@ -1,0 +1,87 @@
+{
+  "name": "ns1:timeSeriesResponseType",
+  "value": {
+    "queryInfo": {
+      "queryURL": "https://waterservices.usgs.gov/nwis/dv/?format=json&sites=07374000&startDT=2023-01-01&endDT=2023-01-31&parameterCd=00060&statCd=00003",
+      "criteria": {
+        "locationParam": "ALL:07374000",
+        "variableParam": "00060",
+        "timeParam": {"beginDateTime": "2023-01-01T00:00:00.000", "endDateTime": "2023-01-31T00:00:00.000"},
+        "parameter": []
+      },
+      "note": [
+        {"value": "[mode=USGS_WaterML2; requested:2026-01-01]", "title": "filter:methodParam"},
+        {"value": "NWIS", "title": "site"}
+      ]
+    },
+    "timeSeries": [
+      {
+        "sourceInfo": {
+          "siteName": "Mississippi River at Baton Rouge, LA",
+          "siteCode": [
+            {"value": "07374000", "network": "NWIS", "agencyCode": "USGS"}
+          ],
+          "timeZoneInfo": {
+            "defaultTimeZone": {"zoneOffset": "-06:00", "zoneAbbreviation": "CST"},
+            "daylightSavingsTimeZone": {"zoneOffset": "-05:00", "zoneAbbreviation": "CDT"},
+            "siteUsesDaylightSavingsTime": true
+          },
+          "geoLocation": {
+            "geogLocation": {"srs": "EPSG:4326", "latitude": 30.44437222, "longitude": -91.19428611},
+            "note": []
+          },
+          "note": [],
+          "siteType": [],
+          "siteProperty": [
+            {"name": "siteTypeCd", "value": "ST"},
+            {"name": "hucCd", "value": "08070201"},
+            {"name": "stateCd", "value": "22"},
+            {"name": "countyCd", "value": "22033"}
+          ]
+        },
+        "variable": {
+          "variableCode": [
+            {"value": "00060", "network": "NWIS", "vocabulary": "NWIS:UnitValues", "variableID": 45807197, "default": true}
+          ],
+          "variableName": "Streamflow, ft3/s",
+          "variableDescription": "Discharge, cubic feet per second",
+          "valueType": "Derived Value",
+          "unit": {"unitCode": "ft3/s"},
+          "options": {"option": [{"name": "Statistic", "optionCode": "00003"}]},
+          "note": [],
+          "noDataValue": -999999.0,
+          "variableProperty": [],
+          "oid": "45807197"
+        },
+        "values": [
+          {
+            "value": [
+              {"value": "373000", "qualifiers": ["A"], "dateTime": "2023-01-01T00:00:00.000-06:00"},
+              {"value": "373000", "qualifiers": ["A"], "dateTime": "2023-01-02T00:00:00.000-06:00"},
+              {"value": "373000", "qualifiers": ["A"], "dateTime": "2023-01-03T00:00:00.000-06:00"},
+              {"value": "377000", "qualifiers": ["P"], "dateTime": "2023-01-04T00:00:00.000-06:00"},
+              {"value": "382000", "qualifiers": ["P", "e"], "dateTime": "2023-01-05T00:00:00.000-06:00"},
+              {"value": "386000", "qualifiers": ["P"], "dateTime": "2023-01-06T00:00:00.000-06:00"},
+              {"value": "390000", "qualifiers": ["P"], "dateTime": "2023-01-07T00:00:00.000-06:00"},
+              {"value": "393000", "qualifiers": ["P"], "dateTime": "2023-01-08T00:00:00.000-06:00"},
+              {"value": "395000", "qualifiers": ["P"], "dateTime": "2023-01-09T00:00:00.000-06:00"},
+              {"value": "397000", "qualifiers": ["P"], "dateTime": "2023-01-10T00:00:00.000-06:00"}
+            ],
+            "qualifier": [
+              {"qualifierCode": "A", "qualifierDescription": "Approved for publication -- Processing and review completed.", "qualifierID": 0, "network": "NWIS", "vocabulary": "uv_rmk_cd"},
+              {"qualifierCode": "P", "qualifierDescription": "Provisional data subject to revision.", "qualifierID": 1, "network": "NWIS", "vocabulary": "uv_rmk_cd"},
+              {"qualifierCode": "e", "qualifierDescription": "Value has been estimated.", "qualifierID": 2, "network": "NWIS", "vocabulary": "uv_rmk_cd"}
+            ],
+            "qualityControlLevel": [],
+            "method": [{"methodDescription": "", "methodID": 112}],
+            "source": [],
+            "offset": [],
+            "sample": [],
+            "censorCode": []
+          }
+        ],
+        "name": "USGS:07374000:00060:00003"
+      }
+    ]
+  }
+}
