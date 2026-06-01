@@ -99,4 +99,4 @@ When porting a new provider, the packaged catalogue artifacts (`catalogue/*.parq
 - After writing all provider code and tests, run `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to produce the real packaged artifacts.
 - Commit the resulting parquet files alongside the code.
 
-Generators for providers with large station catalogues (e.g. USGS with 26 000+ gauges) include a minimum-station guard that raises `FatalContractError` when run with `--live` and the result is suspiciously small. This guard exists precisely to catch silent fetch failures or accidental fixture-backed invocations.
+Some generators include a provider-specific minimum-station guard that raises `FatalContractError` when `--live` returns an implausibly small count — catching silent fetch failures or accidental fixture-backed invocations. The threshold is calibrated per provider (e.g. 10 000 for USGS which has 26 000+ gauges; Lithuania has only 97 stations so no such guard is needed there). Do not copy a numeric threshold from one provider to another.
