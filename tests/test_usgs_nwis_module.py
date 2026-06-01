@@ -10,7 +10,7 @@ def test_usgs_nwis_in_providers_list() -> None:
 
 def test_usgs_nwis_stations_offline() -> None:
     result = rr.provider("usgs_nwis").stations()
-    assert result.data.height == 5
+    assert result.data.height > 1000
     assert result.data["country"].unique().to_list() == ["United States"]
 
 
@@ -30,7 +30,8 @@ def test_usgs_nwis_products_offline() -> None:
 
 def test_usgs_nwis_station_products_offline() -> None:
     result = rr.provider("usgs_nwis").station_products()
-    assert result.data.height == 5 * 6
+    n_stations = rr.provider("usgs_nwis").stations().data.height
+    assert result.data.height == n_stations * 6
 
 
 def test_usgs_nwis_info() -> None:

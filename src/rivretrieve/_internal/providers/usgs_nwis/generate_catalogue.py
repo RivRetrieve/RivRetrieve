@@ -33,11 +33,66 @@ from rivretrieve._internal.providers.usgs_nwis.metadata import (
 PROVIDER_ID = "usgs_nwis"
 PROVIDER_NAME = "U.S. Geological Survey National Water Information System (USGS NWIS)"
 COUNTRY = "United States"
+METADATA_BASE_URL = "https://waterservices.usgs.gov/nwis/site/"
 METADATA_URL = (
-    "https://waterservices.usgs.gov/nwis/site/"
-    "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065"
-    "&siteOutput=expanded&seriesCatalogOutput=true"
+    METADATA_BASE_URL
+    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&siteOutput=expanded&stateCd={state_cd}"
 )
+# USGS site service requires a geographic filter; nationwide queries return HTTP 400.
+# We iterate over all US state FIPS codes.
+_US_STATE_CODES = [
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+    "DC",
+]
 AVAILABILITY_REASON = (
     "USGS NWIS site catalogue does not expose per-variable station availability at catalogue-generation time"
 )
@@ -441,17 +496,28 @@ def _read_fixture_json(path: Path) -> list[object]:
 
 
 def _read_live_sites() -> list[object]:
-    try:
-        with urllib.request.urlopen(METADATA_URL, timeout=60) as response:
-            if response.status < 200 or response.status >= 300:
-                raise FatalContractError(f"USGS site service request failed with HTTP {response.status}")
-            content = response.read().decode("utf-8")
-    except OSError as exc:
-        raise FatalContractError("USGS site service request failed") from exc
-    return _parse_rdb(content)
+    all_sites: list[object] = []
+    seen: set[str] = set()
+    for state_cd in _US_STATE_CODES:
+        url = METADATA_URL.format(state_cd=state_cd)
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                if response.status < 200 or response.status >= 300:
+                    raise FatalContractError(
+                        f"USGS site service request failed with HTTP {response.status} for state {state_cd}"
+                    )
+                content = response.read().decode("utf-8")
+        except OSError as exc:
+            raise FatalContractError(f"USGS site service request failed for state {state_cd}") from exc
+        for site in _parse_rdb(content):
+            site_no = site.get("site_no")
+            if isinstance(site_no, str) and site_no and site_no not in seen:
+                    seen.add(site_no)
+                    all_sites.append(site)
+    return all_sites
 
 
-def _parse_rdb(content: str) -> list[object]:
+def _parse_rdb(content: str) -> list[dict[str, str]]:
     lines = content.splitlines()
     header_line: list[str] | None = None
     data_lines: list[str] = []
@@ -469,7 +535,7 @@ def _parse_rdb(content: str) -> list[object]:
         data_lines.append(line)
     if header_line is None:
         return []
-    result: list[object] = []
+    result: list[dict[str, str]] = []
     for data_line in data_lines:
         if not data_line.strip():
             continue

@@ -13,7 +13,7 @@ FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_sites.json")
 
 def test_generate_catalogue_from_fixture_station_count() -> None:
     catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    assert catalogue.stations.height == 5
+    assert catalogue.stations.height == 5  # fixture has 5 representative stations
 
 
 def test_generate_catalogue_station_07374000() -> None:
@@ -60,7 +60,7 @@ def test_generate_catalogue_canonical_product_ids() -> None:
 
 def test_generate_catalogue_station_products_count() -> None:
     catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    assert catalogue.station_products.height == 5 * len(PRODUCT_DEFINITIONS)
+    assert catalogue.station_products.height == catalogue.stations.height * len(PRODUCT_DEFINITIONS)
 
 
 def test_generate_catalogue_station_products_availability_unknown() -> None:
