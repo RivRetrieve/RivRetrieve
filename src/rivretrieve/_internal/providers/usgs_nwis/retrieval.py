@@ -284,15 +284,24 @@ def _iter_windows(start: datetime, end: datetime) -> list[tuple[str, str]]:
 
 
 def _filter_date_range(records: pl.DataFrame, start: datetime, end: datetime) -> pl.DataFrame:
+    """Keep rows whose UTC timestamp falls on a calendar date within [start_date, end_date].
+
+    USGS DV timestamps are midnight local time expressed with an explicit UTC offset,
+    e.g. 2021-12-31T00:00:00-06:00 → 2021-12-31T06:00:00Z.  Comparing against
+    midnight UTC of the end date would drop the entire last day for any non-UTC station.
+    We therefore use an exclusive upper bound of midnight UTC of end_date + 1 day, which
+    correctly includes all timestamps that fall on end_date in any US timezone.
+    """
     if records.is_empty():
         return records
     start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
     end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
-    end_day = datetime(end_utc.year, end_utc.month, end_utc.day, tzinfo=UTC)
-    if end_utc.hour > 0 or end_utc.minute > 0 or end_utc.second > 0:
-        end_day = end_day + timedelta(days=1)
+    # Inclusive lower bound: midnight UTC of start date
     start_day = datetime(start_utc.year, start_utc.month, start_utc.day, tzinfo=UTC)
-    return records.filter((pl.col("time") >= start_day) & (pl.col("time") <= end_day))
+    # Exclusive upper bound: midnight UTC of (end date + 1)
+    # This captures any UTC timestamp that falls on end_date regardless of the station's timezone offset.
+    end_next_day = datetime(end_utc.year, end_utc.month, end_utc.day, tzinfo=UTC) + timedelta(days=1)
+    return records.filter((pl.col("time") >= start_day) & (pl.col("time") < end_next_day))
 
 
 def _raw_payload(responses: list[dict[str, object]]) -> RawPayload:

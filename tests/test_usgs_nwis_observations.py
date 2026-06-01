@@ -231,3 +231,52 @@ def test_usgs_nwis_raw_value_annotation_correct() -> None:
     assert raw_rows.height >= 1
     first_raw = float(raw_rows["value"][0])
     assert abs(first_raw - 373000.0) < 1e-3
+
+
+def test_last_day_not_dropped_for_non_utc_station() -> None:
+    """Regression: USGS DV timestamps for CST stations land at T06:00Z, not T00:00Z.
+    A filter of '<= end_date midnight UTC' drops the entire last day.  The correct
+    filter is '< midnight UTC of (end_date + 1 day)'."""
+    import json
+
+    # Craft a fixture whose only value is on the last requested day (2023-01-05),
+    # timestamp 2023-01-05T00:00:00.000-06:00 → 2023-01-05T06:00:00Z
+    single_day = {
+        "value": {
+            "timeSeries": [
+                {
+                    "variable": {"noDataValue": -999999.0},
+                    "values": [
+                        {
+                            "value": [
+                                {
+                                    "value": "100000",
+                                    "qualifiers": ["A"],
+                                    "dateTime": "2023-01-05T00:00:00.000-06:00",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    content = json.dumps(single_day).encode()
+    url = _dv_url(STATION_ID, "2023-01-01", "2023-01-05", "00060", "00003")
+    client = _make_client({url: content})
+
+    request = ObservationRequest.from_inputs(
+        provider_id="usgs_nwis",
+        stations=STATION_ID,
+        products="discharge_daily_mean",
+        start=pd.Timestamp("2023-01-01"),
+        end=pd.Timestamp("2023-01-05"),
+    )
+    result = retrieve_observations(request, on_issue="ignore", client_factory=lambda: client)
+
+    assert not result.data.is_empty(), (
+        "Last day dropped: CST midnight (T06:00Z) was excluded by '<= end_date T00:00Z' filter"
+    )
+    assert result.data.height == 1
+    t = result.data["time"][0]
+    assert t.hour == 6, f"Expected 06:00Z (CST midnight converted to UTC), got {t}"

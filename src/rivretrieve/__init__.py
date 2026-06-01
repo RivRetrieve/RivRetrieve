@@ -8,4 +8,4 @@ from rivretrieve._internal.discovery import providers as providers
 from rivretrieve._internal.discovery import stations as stations
 from rivretrieve._internal.handle import ProviderHandle as ProviderHandle
 
-__version__ = "0.1.30"
+__version__ = "0.1.31"
