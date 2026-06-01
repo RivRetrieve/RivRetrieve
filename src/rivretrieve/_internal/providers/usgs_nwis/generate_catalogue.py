@@ -265,6 +265,9 @@ def generate_catalogue_from_live(
     )
 
 
+_LIVE_MIN_STATIONS = 10_000  # USGS has 8 000+ active stream gauges; far fewer means the live fetch failed silently
+
+
 def generate_catalogue(
     raw_sites: list[object],
     *,
@@ -274,6 +277,12 @@ def generate_catalogue(
     effective_date = catalogue_date or date.today()
     products = build_products()
     stations = build_stations(raw_sites)
+    if generator_input == "live" and stations.height < _LIVE_MIN_STATIONS:
+        raise FatalContractError(
+            f"usgs_nwis live catalogue has only {stations.height} stations — expected ≥{_LIVE_MIN_STATIONS}. "
+            "The USGS site service fetch likely failed silently or returned a geographic subset. "
+            "Do not commit this as the packaged catalogue."
+        )
     station_products = build_station_products(stations, effective_date)
     provider_info = build_provider_info(effective_date, generator_input=generator_input)
     validate_generated_catalogue(provider_info, products, stations, station_products)
@@ -512,8 +521,8 @@ def _read_live_sites() -> list[object]:
         for site in _parse_rdb(content):
             site_no = site.get("site_no")
             if isinstance(site_no, str) and site_no and site_no not in seen:
-                    seen.add(site_no)
-                    all_sites.append(site)
+                seen.add(site_no)
+                all_sites.append(site)
     return all_sites
 
 

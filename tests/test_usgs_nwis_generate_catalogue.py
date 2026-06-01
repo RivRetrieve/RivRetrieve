@@ -3,8 +3,12 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
+
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import (
     PRODUCT_DEFINITIONS,
+    generate_catalogue,
     generate_catalogue_from_fixture,
 )
 
@@ -77,3 +81,13 @@ def test_generate_catalogue_provider_info_fields() -> None:
     assert pi["live_stations"] is False
     assert pi["live_products"] is False
     assert pi["live_station_products"] is False
+
+
+def test_live_mode_rejects_too_few_stations() -> None:
+    """Guard: --live must produce ≥10 000 stations or raise, preventing a test fixture from being committed as the packaged catalogue."""
+
+    tiny_fixture = [
+        {"site_no": "07374000", "station_nm": "Mississippi R.", "dec_lat_va": "30.4", "dec_long_va": "-91.2"}
+    ]
+    with pytest.raises(FatalContractError, match="live catalogue has only"):
+        generate_catalogue(tiny_fixture, generator_input="live")

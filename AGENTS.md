@@ -90,3 +90,13 @@ import polars.testing as pl_testing
 pl_testing.assert_frame_equal(result_df, expected_df)
 pl_testing.assert_series_equal(result_series, expected_series)
 ```
+
+## 5. Packaged Catalogue Rule
+
+When porting a new provider, the packaged catalogue artifacts (`catalogue/*.parquet`, `catalogue/provider.json`) **must be generated from the live provider API** before the provider is committed.
+
+- `tests/test_data/<provider>_metadata_*.json` is a **test fixture** — a minimal offline snapshot used only for unit tests. It must never be used to generate the packaged catalogue.
+- After writing all provider code and tests, run `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to produce the real packaged artifacts.
+- Commit the resulting parquet files alongside the code.
+
+Generators for providers with large station catalogues (e.g. USGS with 26 000+ gauges) include a minimum-station guard that raises `FatalContractError` when run with `--live` and the result is suspiciously small. This guard exists precisely to catch silent fetch failures or accidental fixture-backed invocations.
