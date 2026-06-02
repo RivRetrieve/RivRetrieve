@@ -1,0 +1,15 @@
+{
+  "data": {
+    "graph_data": [
+      {"datetime": "2023-06-01 01:00:00", "value": 1.52, "discharge": 120.5},
+      {"datetime": "2023-06-01 07:00:00", "value": 1.61, "discharge": 135.0},
+      {"datetime": "2023-06-01 13:00:00", "value": 1.58, "discharge": 130.2},
+      {"datetime": "2023-06-02 01:00:00", "value": 1.45, "discharge": 110.0},
+      {"datetime": "2023-06-02 07:00:00", "value": 1.50, "discharge": 118.0},
+      {"datetime": "2023-06-02 13:00:00", "value": 1.55, "discharge": 125.0},
+      {"datetime": "2023-06-03 01:00:00", "value": 1.70, "discharge": 145.0},
+      {"datetime": "2023-06-03 07:00:00", "value": 1.75, "discharge": 152.0},
+      {"datetime": "2023-06-03 13:00:00", "value": 1.68, "discharge": 143.0}
+    ]
+  }
+}
