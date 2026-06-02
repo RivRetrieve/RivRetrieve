@@ -380,6 +380,26 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixtures:** `tests/test_data/usgs_nwis_metadata_sites.json` (5 stations, 2026-06-01), `tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json` (DV discharge Jan 2023 for station 07374000).
 - **Architecture.md impact:** None. Timestamp offset conversion is provider-specific. Unit conversions (cfs, ft) are provider-specific. No shared harness gap discovered.
 
+## 11. `cz_chmi` — Czech Republic / CHMI provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/czech.py` (legacy `CzechFetcher`).
+- **Provider ID:** `cz_chmi`
+- **Status:** Shipped. Registered alongside `ch_foen`, `lt_lhmt`, and `usgs_nwis` in `_ensure_default_providers_registered()`. All 544 tests pass (30 cz_chmi-specific).
+- **Products ported:** `discharge_daily_mean` (QD, m³/s direct), `stage_daily_mean` (HD, cm→m), `water_temperature_daily_mean` (TD, °C direct), `discharge_instantaneous` (QH, m³/s direct), `stage_instantaneous` (HH, cm→m).
+- **Stations:** 831 (2026-06-02 live catalogue from CHMI metadata endpoint).
+- **Key decisions:**
+  - Direct CHMI Open Data REST calls. Annual year-by-year windowing per the legacy fetcher pattern.
+  - Timestamps carry a Z suffix (e.g., `2020-01-01T00:00:00Z`); parsed as UTC directly. Series annotation `timezone_source = "provider_timestamp_utc"`. No structured issue emitted (no inference).
+  - Stage cm→m conversion in transform layer; raw cm value preserved in `raw_value` row annotation.
+  - Three daily products (QD, HD, TD) all fetched from the daily DQ file per year. Two hourly products (QH, HH) from the hourly HQ file per year. One HTTP call per product per year (no file-level deduplication in V1).
+  - Elevation always `None` (not in CHMI metadata).
+  - Drainage area (`PLO_STA`) preserved in km² from the metadata; nullable when absent.
+  - No auth token; public CHMI Open Data.
+  - HTTP 404 per year emits `http_not_found` warning issue (not fatal), matching lt_lhmt/usgs_nwis pattern.
+- **Port notes:** `docs/provider_ports/cz_chmi.md`.
+- **Fixtures:** `tests/test_data/cz_chmi_metadata.json` (3 stations, fixture), `tests/test_data/cz_chmi_0-203-1-016000_daily_2020.json` (daily observations for station `0-203-1-016000`, year 2020, with QD/HD/TD entries).
+- **Architecture.md impact:** None. UTC-explicit timestamps are provider-specific. Stage cm→m conversion is provider-specific. Annual windowing is provider-specific. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.

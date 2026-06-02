@@ -145,7 +145,7 @@ def _ensure_default_providers_registered() -> None:
     if not _DEFAULT_PROVIDER_REGISTRATION_ENABLED:
         return
     registered = _registry.list_provider_ids()
-    if "ch_foen" in registered and "lt_lhmt" in registered and "usgs_nwis" in registered:
+    if "ch_foen" in registered and "lt_lhmt" in registered and "usgs_nwis" in registered and "cz_chmi" in registered:
         return
 
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
@@ -178,6 +178,16 @@ def _ensure_default_providers_registered() -> None:
             "usgs_nwis",
             usgs_nwis_artifact,
             provider_module=usgs_nwis_module,
+        )
+
+    if "cz_chmi" not in registered:
+        from rivretrieve._internal.providers.cz_chmi import module as cz_chmi_module
+
+        cz_chmi_artifact = load_packaged_catalogue_artifact(cz_chmi_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "cz_chmi",
+            cz_chmi_artifact,
+            provider_module=cz_chmi_module,
         )
 
 
