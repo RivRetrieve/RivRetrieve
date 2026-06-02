@@ -74,17 +74,23 @@ def parse_th_thaiwater_observation_json(
         raw_value = entry.get("value")
         raw_discharge = entry.get("discharge")
 
-        # Parse timestamp as Bangkok local and convert to UTC
+        # Parse timestamp as Bangkok local and convert to UTC.
+        # API returns either "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD HH:MM" (no seconds).
         from datetime import datetime
 
-        try:
-            local_dt = datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M:%S")
-            aware_dt = local_dt.replace(tzinfo=BANGKOK_TZ)
-            # Store as UTC microsecond datetime string for Polars
-            utc_dt_str = aware_dt.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S+00:00")
-        except ValueError:
+        raw_str = date_str.strip()
+        local_dt: datetime | None = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                local_dt = datetime.strptime(raw_str, fmt)
+                break
+            except ValueError:
+                continue
+        if local_dt is None:
             invalid_count += 1
             continue
+        aware_dt = local_dt.replace(tzinfo=BANGKOK_TZ)
+        utc_dt_str = aware_dt.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
         value_float = _to_float(raw_value)
         discharge_float = _to_float(raw_discharge)
