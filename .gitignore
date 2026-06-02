@@ -17,6 +17,9 @@ wheels/
 .DS_Store
 Thumbs.db
 
+# Jupyter notebooks
+*.ipynb
+
 # Scratchpad (keep folder, ignore contents)
 scratchpad/*
 !scratchpad/.gitkeep
