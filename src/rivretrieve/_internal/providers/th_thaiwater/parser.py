@@ -120,7 +120,7 @@ def parse_th_thaiwater_observation_json(
             issues=tuple(issues) + (_missing_data_issue(station_id),),
         )
 
-    parsed = pl.DataFrame(rows)
+    parsed = pl.DataFrame(rows, schema_overrides={"value_field": pl.Float64, "discharge_field": pl.Float64})
     records = parsed.with_columns(
         pl.col("time").str.to_datetime(time_zone="UTC", strict=False).alias("time"),
     ).select(
