@@ -152,6 +152,7 @@ def _ensure_default_providers_registered() -> None:
         and "cz_chmi" in registered
         and "th_thaiwater" in registered
         and "fr_hubeau" in registered
+        and "jp_mlit" in registered
     ):
         return
 
@@ -217,6 +218,16 @@ def _ensure_default_providers_registered() -> None:
             "fr_hubeau",
             fr_hubeau_artifact,
             provider_module=fr_hubeau_module,
+        )
+
+    if "jp_mlit" not in registered:
+        from rivretrieve._internal.providers.jp_mlit import module as jp_mlit_module
+
+        jp_mlit_artifact = load_packaged_catalogue_artifact(jp_mlit_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "jp_mlit",
+            jp_mlit_artifact,
+            provider_module=jp_mlit_module,
         )
 
 

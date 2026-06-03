@@ -443,6 +443,31 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixtures:** `tests/test_data/fr_hubeau_metadata.json` (2 stations with coordinates + 1 without, fixture), `tests/test_data/fr_hubeau_O0050010_QmnJ_2020.json` (3 daily discharge observations for station `O0050010`).
 - **Architecture.md impact:** None. Date-only timestamp/UTC-midnight pattern is provider-specific (same as lt_lhmt). Pagination is provider-specific. Unit conversions (l/s, mm) are provider-specific. No shared harness gap discovered.
 
+## 14. `jp_mlit` — Japan / MLIT Water Information System provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/japan.py` (legacy `JapanFetcher`).
+- **Provider ID:** `jp_mlit`
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. All 673 tests pass (55 jp_mlit-specific).
+- **Products ported:** `stage_hourly_mean` (KIND 2, JST→UTC, m direct), `stage_daily_mean` (KIND 3, date-only UTC midnight, m direct), `discharge_hourly_mean` (KIND 6, JST→UTC, m³/s direct), `discharge_daily_mean` (KIND 7, date-only UTC midnight, m³/s direct).
+- **Stations:** 1029 (2026-06-03 fixture from cached `japan_sites.csv`; only `gauge_id`, `latitude`, `longitude` available).
+- **Key decisions:**
+  - HTML scrape + Shift-JIS `.dat` file download via regex link extraction (no BeautifulSoup). EUC-JP HTML decode to find `.dat` link; Shift-JIS `.dat` decode for data.
+  - **Windowing**: Monthly chunks for hourly KINDs (2,6); yearly chunks for daily KINDs (3,7). MLIT date params use `YYYYMMDD` format (no separators).
+  - **Hourly timezone**: `.dat` hour columns are JST (UTC+9). Parser constructs `datetime(..., tzinfo=ZoneInfo("Asia/Tokyo"))` and converts to UTC. `info`-severity `timezone_local_to_utc` issue always emitted. Series annotation `timezone_source = "local_to_utc_conversion"`, `local_timezone = "Asia/Tokyo"`.
+  - **Daily timezone**: Date-only timestamps representing JST calendar days; interpreted as UTC midnight (`T00:00:00Z`). Same pattern as `lt_lhmt`/`fr_hubeau`. `warning`-severity `date_only_timestamp` issue emitted. Series annotation `timezone_source = "date_only_utc_midnight"`.
+  - **No unit conversions**: MLIT values are already in m and m³/s.
+  - **Provider-specific hourly products**: `stage_hourly_mean` and `discharge_hourly_mean` use provider-specific IDs (no canonical hourly stage/discharge in the V1 product dictionary).
+  - **MLIT KIND mislabelling**: KINDs 2 and 6 are labelled "Daily" on the MLIT website but actually return hourly data. KINDs 3 and 7 return true daily data.
+  - **No live catalogue**: `JapanFetcher.get_metadata()` raises `NotImplementedError` in the legacy source. `generate_catalogue_from_live()` raises `FatalContractError`.
+  - **Leading-space values**: Real `.dat` files have values like `"    4.47"` with leading spaces. `.str.strip_chars()` required before `.cast(pl.Float64)`.
+  - **Year-marker line in daily files**: Real daily `.dat` files contain a standalone `"2023年"` line after the CSV header and before the month data rows. Filtered by `_YEAR_PATTERN` before CSV parsing.
+  - **Extra monthly-average columns**: Daily `.dat` files have trailing `月平均データ, 月平均フラグ` columns beyond the 31 day pairs. `truncate_ragged_lines=True` required.
+  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
+  - No auth token; public MLIT portal.
+- **Port notes:** `docs/provider_ports/jp_mlit.md`.
+- **Fixtures:** `tests/test_data/jp_mlit_metadata.json` (3 stations, JSON array fixture), `tests/test_data/jp_mlit_301011281104010_kind2_202301.dat` (2-day hourly stage fixture), `tests/test_data/jp_mlit_301011281104010_kind7_2023.dat` (1-month daily discharge fixture).
+- **Architecture.md impact:** None. JST→UTC hourly conversion is provider-specific. Date-only daily UTC-midnight pattern follows established provider convention. HTML-scrape + binary-format retrieval is provider-specific. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.
