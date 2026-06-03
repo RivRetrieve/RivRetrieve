@@ -1,0 +1,29 @@
+[
+  {
+    "codigoestacao": "12345000",
+    "Estacao_Nome": "RIO XINGU EM ALTAMIRA",
+    "Latitude": -3.2116,
+    "Longitude": -52.2058,
+    "Altitude": 50.0,
+    "Area_Drenagem": 146080.0,
+    "Bacia_Nome": "BACIA AMAZONICA"
+  },
+  {
+    "codigoestacao": "60435000",
+    "Estacao_Nome": "RIO SAO FRANCISCO EM TRES MARIAS",
+    "Latitude": -18.2167,
+    "Longitude": -45.2500,
+    "Altitude": 560.0,
+    "Area_Drenagem": 50200.0,
+    "Bacia_Nome": "BACIA DO SAO FRANCISCO"
+  },
+  {
+    "codigoestacao": "99999999",
+    "Estacao_Nome": "ESTACAO SEM COORDENADAS",
+    "Latitude": null,
+    "Longitude": null,
+    "Altitude": null,
+    "Area_Drenagem": null,
+    "Bacia_Nome": null
+  }
+]

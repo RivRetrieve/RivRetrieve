@@ -468,6 +468,26 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixtures:** `tests/test_data/jp_mlit_metadata.json` (3 stations, JSON array fixture), `tests/test_data/jp_mlit_301011281104010_kind2_202301.dat` (2-day hourly stage fixture), `tests/test_data/jp_mlit_301011281104010_kind7_2023.dat` (1-month daily discharge fixture).
 - **Architecture.md impact:** None. JST→UTC hourly conversion is provider-specific. Date-only daily UTC-midnight pattern follows established provider convention. HTML-scrape + binary-format retrieval is provider-specific. No shared harness gap discovered.
 
+## 15. `br_ana` — Brazil / ANA Hidroweb provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/brazil.py` (legacy `BrazilFetcher`).
+- **Provider ID:** `br_ana`
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. All 706 tests pass (31 br_ana-specific).
+- **Products ported:** `discharge_daily_mean` (HidroSerieVazao/v1, m³/s direct), `stage_daily_mean` (HidroSerieCotas/v1, cm÷100→m).
+- **Stations:** 2 (2026-06-03 fixture; live catalogue requires ANA credentials and fetches all 27 states + DF sequentially via `HidroInventarioEstacoes/v1`).
+- **Key decisions:**
+  - **First authenticated provider**: Bearer token via GET to `OAUth/v1` with `Identificador`/`Senha` headers. Token cached for 14 min. Missing credentials → `auth_missing` warning issue, empty result. Token failure → `auth_failed` issue per window.
+  - **URL encoding**: ANA API uses Portuguese parameter names with special characters (`Código da Estação`, etc.). Must build URL string with pre-encoded names; cannot use `requests.get(params=dict)` (would double-encode).
+  - **Monthly columnar response format**: Each API response object represents one calendar month. Per-day values in columns `Vazao_01`..`Vazao_31` (discharge) or `Cota_01`..`Cota_31` (stage). Parser reconstructs daily `datetime(year, month, day)` from column index; invalid dates (e.g. Feb 30) silently skipped.
+  - **Timezone**: Date-only UTC midnight (`T00:00:00Z`). ANA provides no explicit timezone. `warning`-severity `date_only_timestamp` issue emitted per fetch. Series annotations: `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. True timezone undocumented (likely Brasília UTC-3).
+  - **Stage cm→m conversion**: Raw cm preserved in `raw_value` row annotation.
+  - **Annual windowing**: Year-by-year chunks aligned to calendar years, matching legacy fetcher pattern.
+  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
+  - Live catalogue guard: 1000 stations minimum for `--live` mode.
+- **Port notes:** `docs/provider_ports/br_ana.md`.
+- **Fixtures:** `tests/test_data/br_ana_metadata.json` (2 stations with coords + 1 without, fixture), `tests/test_data/br_ana_12345000_vazao_2020.json` (Jan 2020 discharge for station `12345000`, 3 non-null days), `tests/test_data/br_ana_60435000_cotas_2020.json` (Mar 2020 stage for station `60435000`, 3 non-null days in cm).
+- **Architecture.md impact:** None. Authentication pattern (token caching, credentials via env vars, `auth_missing` issue) is provider-specific. Portuguese URL encoding is provider-specific. Monthly columnar response format is provider-specific. Date-only UTC midnight follows established provider convention. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.
