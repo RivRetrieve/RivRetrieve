@@ -151,6 +151,7 @@ def _ensure_default_providers_registered() -> None:
         and "usgs_nwis" in registered
         and "cz_chmi" in registered
         and "th_thaiwater" in registered
+        and "fr_hubeau" in registered
     ):
         return
 
@@ -206,6 +207,16 @@ def _ensure_default_providers_registered() -> None:
             "th_thaiwater",
             th_thaiwater_artifact,
             provider_module=th_thaiwater_module,
+        )
+
+    if "fr_hubeau" not in registered:
+        from rivretrieve._internal.providers.fr_hubeau import module as fr_hubeau_module
+
+        fr_hubeau_artifact = load_packaged_catalogue_artifact(fr_hubeau_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "fr_hubeau",
+            fr_hubeau_artifact,
+            provider_module=fr_hubeau_module,
         )
 
 

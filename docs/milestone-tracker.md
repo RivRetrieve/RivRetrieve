@@ -421,6 +421,28 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixtures:** `tests/test_data/th_thaiwater_metadata.json` (3 `tele_waterlevel` + 1 `tele_rainfall` station, fixture), `tests/test_data/th_thaiwater_S13A_waterlevel_graph.json` (9 sub-hourly observations across 3 Bangkok days for station `S13A`).
 - **Architecture.md impact:** None. Bangkok→UTC conversion is provider-specific. Daily Bangkok-day aggregation is provider-specific. 365-day windowing is provider-specific. No shared harness gap discovered.
 
+## 13. `fr_hubeau` — France / Hubeau provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/france.py` (legacy `FranceFetcher`).
+- **Provider ID:** `fr_hubeau`
+- **Status:** Shipped. Registered alongside `ch_foen`, `lt_lhmt`, `usgs_nwis`, `cz_chmi`, and `th_thaiwater` in `_ensure_default_providers_registered()`. All 601 tests pass (30 fr_hubeau-specific).
+- **Products ported:** `discharge_daily_mean` (grandeur `QmnJ`, l/s ÷ 1000 → m³/s), `stage_daily_max` (grandeur `HIXnJ`, mm ÷ 1000 → m).
+- **Stations:** 6420 (2026-06-03 live catalogue from Hubeau `referentiel/stations?in_use=true`, with valid coordinates).
+- **Key decisions:**
+  - Direct Hubeau public REST API. 365-day window decomposition per `MAX_WINDOW_DAYS = 365`.
+  - **Pagination**: Both the station catalogue endpoint and the obs_elab observation endpoint use cursor-based pagination via a `"next"` field in the response body. HTTP 206 (Partial Content) is returned for paginated results — this is not an error. The retrieval layer follows `next_url` until `None`.
+  - **Timestamps**: `date_obs_elab` is date-only (`YYYY-MM-DD`). Interpreted as UTC midnight. Series annotation `date_only_timestamp_flag = "true"`, `timezone_source = "date_only_utc_midnight"`. Warning issue `date_only_timestamp` emitted per parser call. Follows the same pattern as `lt_lhmt`.
+  - **Unit conversions**: `QmnJ` in l/s divided by 1000 → m³/s; `HIXnJ` in mm divided by 1000 → m. Raw values preserved in `raw_value` row annotation.
+  - Elevation in m and drainage area in km² available directly from station catalogue (nullable).
+  - Overseas DOM-TOM stations (Guadeloupe, Martinique, etc.) included under `country="France"`.
+  - No auth token; public Hubeau Open API.
+  - Stations without valid coordinates filtered out at catalogue-generation time.
+  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
+  - Live station minimum guard: 500 stations (conservative; live catalogue returned 6420).
+- **Port notes:** `docs/provider_ports/fr_hubeau.md`.
+- **Fixtures:** `tests/test_data/fr_hubeau_metadata.json` (2 stations with coordinates + 1 without, fixture), `tests/test_data/fr_hubeau_O0050010_QmnJ_2020.json` (3 daily discharge observations for station `O0050010`).
+- **Architecture.md impact:** None. Date-only timestamp/UTC-midnight pattern is provider-specific (same as lt_lhmt). Pagination is provider-specific. Unit conversions (l/s, mm) are provider-specific. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.
