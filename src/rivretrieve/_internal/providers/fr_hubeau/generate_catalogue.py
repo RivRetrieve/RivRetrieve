@@ -37,6 +37,8 @@ COUNTRY = "France"
 
 HYDRO_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations"
 HYDRO_STATIONS_PARAMS = "format=json&size=5000&in_use=true"
+HYDRO_SITES_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/sites"
+HYDRO_SITES_PARAMS = "format=json&size=5000"
 TEMP_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/station"
 TEMP_STATIONS_PARAMS = "size=5000"
 
@@ -197,9 +199,13 @@ def generate_catalogue_from_live(
     *,
     catalogue_date: date | None = None,
 ) -> GeneratedFrHubeauCatalogue:
+    hydro_payload = _read_live_stations(HYDRO_STATIONS_URL, HYDRO_STATIONS_PARAMS, "hydrometric")
+    temp_payload = _read_live_stations(TEMP_STATIONS_URL, TEMP_STATIONS_PARAMS, "temperature")
+    site_lookup = build_site_lookup(_read_live_stations(HYDRO_SITES_URL, HYDRO_SITES_PARAMS, "sites"))
     return generate_catalogue(
-        _read_live_stations(HYDRO_STATIONS_URL, HYDRO_STATIONS_PARAMS, "hydrometric"),
-        _read_live_stations(TEMP_STATIONS_URL, TEMP_STATIONS_PARAMS, "temperature"),
+        hydro_payload,
+        temp_payload,
+        site_lookup=site_lookup,
         catalogue_date=catalogue_date,
         generator_input="live",
     )
@@ -209,12 +215,13 @@ def generate_catalogue(
     hydro_payload: dict[str, object],
     temp_payload: dict[str, object],
     *,
+    site_lookup: dict[str, dict[str, float | None]] | None = None,
     catalogue_date: date | None = None,
     generator_input: str = "fixture",
 ) -> GeneratedFrHubeauCatalogue:
     effective_date = catalogue_date or date.today()
     products = build_products()
-    hydro_stations = build_hydro_stations(hydro_payload, generator_input=generator_input)
+    hydro_stations = build_hydro_stations(hydro_payload, site_lookup=site_lookup, generator_input=generator_input)
     temp_stations = build_temp_stations(temp_payload, generator_input=generator_input)
 
     # Merge: hydro first, then temp; both sorted by station_id afterwards.
@@ -259,12 +266,36 @@ def build_products() -> ProductCatalog:
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
+def build_site_lookup(sites_payload: dict[str, object]) -> dict[str, dict[str, float | None]]:
+    """Build a code_site → {surface_bv, altitude_site} lookup from referentiel/sites response.
+
+    surface_bv: drainage area in km² (~50% coverage across French hydrometric sites).
+    altitude_site: site elevation in m (~37% coverage).
+    """
+    lookup: dict[str, dict[str, float | None]] = {}
+    data_list = sites_payload.get("data", [])
+    if not isinstance(data_list, list):
+        return lookup
+    for row in data_list:
+        if not isinstance(row, dict):
+            continue
+        code_site = _clean_text(row.get("code_site"))
+        if code_site is None:
+            continue
+        lookup[code_site] = {
+            "surface_bv": _to_float(row.get("surface_bv")),
+            "altitude_site": _to_float(row.get("altitude_site")),
+        }
+    return lookup
+
+
 def build_hydro_stations(
     raw_payload: dict[str, object],
     *,
+    site_lookup: dict[str, dict[str, float | None]] | None = None,
     generator_input: str = "fixture",
 ) -> StationCatalog:
-    rows = list(_iter_hydro_station_rows(raw_payload))
+    rows = list(_iter_hydro_station_rows(raw_payload, site_lookup=site_lookup))
     if not rows:
         raise FatalContractError("fr_hubeau: hydrometric station build returned no rows with valid coordinates")
     if generator_input == "live" and len(rows) < MIN_LIVE_HYDRO_STATIONS:
@@ -368,6 +399,7 @@ def build_provider_info(
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "hydro_stations_url": HYDRO_STATIONS_URL,
+        "hydro_sites_url": HYDRO_SITES_URL,
         "temp_stations_url": TEMP_STATIONS_URL,
         "obs_elab_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
         "obs_tr_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
@@ -426,7 +458,11 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
 # ---------------------------------------------------------------------------
 
 
-def _iter_hydro_station_rows(raw_payload: dict[str, object]):  # type: ignore[return]
+def _iter_hydro_station_rows(  # type: ignore[return]
+    raw_payload: dict[str, object],
+    *,
+    site_lookup: dict[str, dict[str, float | None]] | None = None,
+) -> None:
     data_list = raw_payload.get("data", [])
     if not isinstance(data_list, list):
         return
@@ -451,8 +487,23 @@ def _iter_hydro_station_rows(raw_payload: dict[str, object]):  # type: ignore[re
 
         name = _clean_text(row.get("libelle_station")) or station_id
         river_name = _clean_text(row.get("libelle_cours_eau"))
+
+        # Station-level altitude (gauge reference elevation, sometimes null).
         elevation_m = _to_float(row.get("altitude_ref_alti_station"))
+
+        # Drainage area: surface_bv_reel_station is never populated in the Hubeau API.
+        # Fall back to surface_bv from referentiel/sites via code_site.
         drainage_area_km2 = _to_float(row.get("surface_bv_reel_station"))
+
+        # Enrich from site lookup when station-level fields are missing.
+        code_site = _clean_text(row.get("code_site"))
+        if site_lookup is not None and code_site is not None and code_site in site_lookup:
+            site = site_lookup[code_site]
+            if elevation_m is None:
+                elevation_m = site.get("altitude_site")
+            if drainage_area_km2 is None:
+                drainage_area_km2 = site.get("surface_bv")
+
         commune = _clean_text(row.get("libelle_commune"))
         departement = _clean_text(row.get("libelle_departement"))
         in_service = row.get("en_service")
