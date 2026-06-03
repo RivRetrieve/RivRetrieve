@@ -13,6 +13,7 @@ class FrHubeauStationMetadata(BaseModel):
     longitude: float
     country: str
     source: str
+    station_type: str  # "hydrometric" | "temperature"
     elevation_m: float | None
     drainage_area_km2: float | None
     commune: str | None
@@ -24,7 +25,8 @@ class FrHubeauStationMetadata(BaseModel):
 class FrHubeauProductMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    grandeur_hydro: str
+    grandeur_code: str | None
+    api_type: str  # "obs_elab" | "obs_tr" | "temperature"
     native_unit: str
     canonical_unit: str
     conversion_factor: float
@@ -36,6 +38,6 @@ class FrHubeauStationProductMetadata(BaseModel):
 
     station_id: str
     product_id: str
-    grandeur_hydro: str
+    grandeur_code: str | None
     availability_source: str
     availability_note: str

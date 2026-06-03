@@ -37,7 +37,8 @@ _SERIES_ANNOTATION_SCHEMA = {
 @dataclass(frozen=True)
 class FrHubeauProductPolicy:
     product_id: str
-    grandeur_code: str
+    api_type: str  # "obs_elab" | "obs_tr" | "temperature"
+    grandeur_code: str | None  # None for temperature
     native_unit: str
     canonical_unit: str
     conversion_factor: float
@@ -52,23 +53,54 @@ class FrHubeauTransformedSeries:
 
 
 PRODUCT_POLICIES: dict[str, FrHubeauProductPolicy] = {
+    "discharge_instantaneous": FrHubeauProductPolicy(
+        product_id="discharge_instantaneous",
+        api_type="obs_tr",
+        grandeur_code="Q",
+        native_unit="l/s",
+        canonical_unit="m3/s",
+        conversion_factor=1000.0,
+    ),
     "discharge_daily_mean": FrHubeauProductPolicy(
         product_id="discharge_daily_mean",
+        api_type="obs_elab",
         grandeur_code="QmnJ",
         native_unit="l/s",
         canonical_unit="m3/s",
         conversion_factor=1000.0,
     ),
-    "stage_daily_max": FrHubeauProductPolicy(
-        product_id="stage_daily_max",
-        grandeur_code="HIXnJ",
+    "stage_instantaneous": FrHubeauProductPolicy(
+        product_id="stage_instantaneous",
+        api_type="obs_tr",
+        grandeur_code="H",
         native_unit="mm",
         canonical_unit="m",
         conversion_factor=1000.0,
     ),
+    "stage_daily_mean": FrHubeauProductPolicy(
+        product_id="stage_daily_mean",
+        api_type="obs_elab",
+        grandeur_code="HmnJ",
+        native_unit="mm",
+        canonical_unit="m",
+        conversion_factor=1000.0,
+    ),
+    "water_temperature_instantaneous": FrHubeauProductPolicy(
+        product_id="water_temperature_instantaneous",
+        api_type="temperature",
+        grandeur_code=None,
+        native_unit="degC",
+        canonical_unit="degC",
+        conversion_factor=1.0,
+    ),
 }
 
-GRANDEUR_TO_PRODUCT: dict[str, str] = {p.grandeur_code: p.product_id for p in PRODUCT_POLICIES.values()}
+GRANDEUR_TO_PRODUCT: dict[str, str] = {
+    p.grandeur_code: p.product_id for p in PRODUCT_POLICIES.values() if p.grandeur_code is not None
+}
+
+HYDRO_PRODUCT_IDS = frozenset(pid for pid, p in PRODUCT_POLICIES.items() if p.api_type in ("obs_elab", "obs_tr"))
+TEMP_PRODUCT_IDS = frozenset(pid for pid, p in PRODUCT_POLICIES.items() if p.api_type == "temperature")
 
 
 def resolve_product_policy(product_id: str) -> FrHubeauProductPolicy:
@@ -88,50 +120,15 @@ def transform_series(
     endpoints: tuple[str, ...],
 ) -> FrHubeauTransformedSeries:
     if records.is_empty():
-        return FrHubeauTransformedSeries(
-            data=empty_data(),
-            row_annotations=empty_row_annotations(),
-            series_annotations=_series_annotations(
-                station_id=station_id,
-                policy=policy,
-                windows=windows,
-                endpoints=endpoints,
-                returned_start=None,
-                returned_end=None,
-            ),
-            issues=(
-                _issue(
-                    FrHubeauObservationIssueCodes.MISSING_DATA,
-                    "No rows after transformation",
-                    {"station_id": station_id, "product_id": policy.product_id},
-                ),
-            ),
-        )
+        return _empty_series(station_id, policy, windows, endpoints, "No rows after transformation")
 
+    # Records may have 'raw_value' or be the temperature schema (also 'raw_value').
     valid = records.filter(pl.col("raw_value").is_not_null())
 
     if valid.is_empty():
-        return FrHubeauTransformedSeries(
-            data=empty_data(),
-            row_annotations=empty_row_annotations(),
-            series_annotations=_series_annotations(
-                station_id=station_id,
-                policy=policy,
-                windows=windows,
-                endpoints=endpoints,
-                returned_start=None,
-                returned_end=None,
-            ),
-            issues=(
-                _issue(
-                    FrHubeauObservationIssueCodes.MISSING_DATA,
-                    "No rows with non-null raw_value",
-                    {"station_id": station_id, "product_id": policy.product_id},
-                ),
-            ),
-        )
+        return _empty_series(station_id, policy, windows, endpoints, "No rows with non-null raw_value")
 
-    # Deduplicate by time (keep last), preserving the native Hubeau daily timestamp.
+    # Deduplicate by time (keep last occurrence).
     deduped = valid.sort("time").unique(subset=["time"], keep="last", maintain_order=True)
 
     rows_data: list[dict[str, object]] = []
@@ -155,12 +152,14 @@ def transform_series(
             }
         )
         ann_time = t.replace(tzinfo=None) if t.tzinfo is not None else t
-        for annotation, ann_value in {
-            "grandeur_code": policy.grandeur_code,
+        ann_pairs: dict[str, str] = {
             "native_unit": policy.native_unit,
             "converted_unit": policy.canonical_unit,
             "raw_value": _float_string(raw),
-        }.items():
+        }
+        if policy.grandeur_code is not None:
+            ann_pairs["grandeur_code"] = policy.grandeur_code
+        for annotation, ann_value in ann_pairs.items():
             rows_ann.append(
                 {
                     "time": ann_time,
@@ -172,24 +171,8 @@ def transform_series(
             )
 
     if not rows_data:
-        return FrHubeauTransformedSeries(
-            data=empty_data(),
-            row_annotations=empty_row_annotations(),
-            series_annotations=_series_annotations(
-                station_id=station_id,
-                policy=policy,
-                windows=windows,
-                endpoints=endpoints,
-                returned_start=None,
-                returned_end=None,
-            ),
-            issues=(
-                _issue(
-                    FrHubeauObservationIssueCodes.MISSING_DATA,
-                    "No observation rows remained after transformation",
-                    {"station_id": station_id, "product_id": policy.product_id},
-                ),
-            ),
+        return _empty_series(
+            station_id, policy, windows, endpoints, "No observation rows remained after transformation"
         )
 
     data_df = pl.DataFrame(rows_data, schema=_DATA_SCHEMA).sort(["station_id", "product_id", "time"])
@@ -226,6 +209,34 @@ def empty_series_annotations() -> pl.DataFrame:
     return pl.DataFrame(schema=_SERIES_ANNOTATION_SCHEMA)
 
 
+def _empty_series(
+    station_id: str,
+    policy: FrHubeauProductPolicy,
+    windows: tuple[tuple[str, str], ...],
+    endpoints: tuple[str, ...],
+    reason: str,
+) -> FrHubeauTransformedSeries:
+    return FrHubeauTransformedSeries(
+        data=empty_data(),
+        row_annotations=empty_row_annotations(),
+        series_annotations=_series_annotations(
+            station_id=station_id,
+            policy=policy,
+            windows=windows,
+            endpoints=endpoints,
+            returned_start=None,
+            returned_end=None,
+        ),
+        issues=(
+            _issue(
+                FrHubeauObservationIssueCodes.MISSING_DATA,
+                reason,
+                {"station_id": station_id, "product_id": policy.product_id},
+            ),
+        ),
+    )
+
+
 def _series_annotations(
     *,
     station_id: str,
@@ -235,18 +246,31 @@ def _series_annotations(
     returned_start: object,
     returned_end: object,
 ) -> pl.DataFrame:
+    # Timezone source differs by API type.
+    if policy.api_type == "obs_elab":
+        timezone_source = "date_only_utc_midnight"
+    else:
+        # obs_tr and temperature both supply full UTC timestamps.
+        timezone_source = "provider_timestamp_utc"
+
     values: dict[str, str | None] = {
-        "grandeur_code": policy.grandeur_code,
         "native_unit_returned": policy.native_unit,
         "converted_unit": policy.canonical_unit,
         "returned_time_range_start": None if returned_start is None else _iso_z(returned_start),
         "returned_time_range_end": None if returned_end is None else _iso_z(returned_end),
         "resolved_timezone": "UTC",
-        "date_only_timestamp_flag": "true",
-        "timezone_source": "date_only_utc_midnight",
+        "timezone_source": timezone_source,
         "provider_endpoints": json.dumps(list(endpoints), sort_keys=True, separators=(",", ":")),
         "requested_windows": json.dumps([list(w) for w in windows], sort_keys=True, separators=(",", ":")),
     }
+
+    if policy.grandeur_code is not None:
+        values["grandeur_code"] = policy.grandeur_code
+
+    # Only obs_elab products carry date-only timestamps.
+    if policy.api_type == "obs_elab":
+        values["date_only_timestamp_flag"] = "true"
+
     return pl.DataFrame(
         [
             {

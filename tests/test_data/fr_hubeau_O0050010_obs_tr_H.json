@@ -1,0 +1,27 @@
+{
+  "count": 3,
+  "data": [
+    {
+      "code_entite": "O0050010",
+      "grandeur_hydro": "H",
+      "date_obs": "2020-01-01T12:00:00Z",
+      "resultat_obs": 1200.0,
+      "libelle_qualification_obs": "Non qualifiée"
+    },
+    {
+      "code_entite": "O0050010",
+      "grandeur_hydro": "H",
+      "date_obs": "2020-01-01T18:00:00Z",
+      "resultat_obs": 1250.0,
+      "libelle_qualification_obs": "Non qualifiée"
+    },
+    {
+      "code_entite": "O0050010",
+      "grandeur_hydro": "H",
+      "date_obs": "2020-01-02T06:00:00Z",
+      "resultat_obs": 1100.0,
+      "libelle_qualification_obs": "Bonne"
+    }
+  ],
+  "next": null
+}

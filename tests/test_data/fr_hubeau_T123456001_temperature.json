@@ -1,0 +1,30 @@
+{
+  "count": 3,
+  "data": [
+    {
+      "code_station": "T123456001",
+      "libelle_station": "LA DORDOGNE A ARGENTAT",
+      "date_mesure_temp": "2020-01-01",
+      "heure_mesure_temp": "08:00:00",
+      "resultat": 5.2,
+      "libelle_qualification": "Validée"
+    },
+    {
+      "code_station": "T123456001",
+      "libelle_station": "LA DORDOGNE A ARGENTAT",
+      "date_mesure_temp": "2020-01-01",
+      "heure_mesure_temp": "14:00:00",
+      "resultat": 6.1,
+      "libelle_qualification": "Validée"
+    },
+    {
+      "code_station": "T123456001",
+      "libelle_station": "LA DORDOGNE A ARGENTAT",
+      "date_mesure_temp": "2020-01-02",
+      "heure_mesure_temp": "08:00:00",
+      "resultat": 4.8,
+      "libelle_qualification": "Validée"
+    }
+  ],
+  "next": null
+}

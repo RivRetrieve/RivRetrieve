@@ -21,10 +21,16 @@ from rivretrieve._internal.observations import (
 from rivretrieve._internal.primitives import OnIssue, ProviderId
 from rivretrieve._internal.providers.fr_hubeau.issue_codes import FrHubeauObservationIssueCodes
 from rivretrieve._internal.providers.fr_hubeau.observation_client import (
-    BASE_URL,
+    OBS_ELAB_URL,
+    OBS_TR_URL,
+    TEMPERATURE_URL,
     FrHubeauObservationClient,
 )
-from rivretrieve._internal.providers.fr_hubeau.parser import parse_fr_hubeau_observation_json
+from rivretrieve._internal.providers.fr_hubeau.parser import (
+    parse_fr_hubeau_obs_elab_json,
+    parse_fr_hubeau_obs_tr_json,
+    parse_fr_hubeau_temperature_json,
+)
 from rivretrieve._internal.providers.fr_hubeau.transform import (
     FrHubeauTransformedSeries,
     empty_data,
@@ -64,11 +70,9 @@ def retrieve_observations(
             used_windows: list[tuple[str, str]] = []
 
             for start_date, end_date in windows:
-                endpoint = client.endpoint_for(station_id, policy.grandeur_code, start_date, end_date)
-                params: dict[str, object] | None = client.initial_params(
-                    station_id, policy.grandeur_code, start_date, end_date
-                )
-                current_url: str | None = BASE_URL
+                endpoint, initial_params = _build_endpoint_and_params(client, station_id, policy, start_date, end_date)
+                current_url: str | None = _base_url_for(policy)
+                params: dict[str, object] | None = initial_params
                 page_records: list[pl.DataFrame] = []
 
                 while current_url is not None:
@@ -150,18 +154,13 @@ def retrieve_observations(
                         }
                     )
 
-                    parsed = parse_fr_hubeau_observation_json(
-                        response.content,
-                        station_id=station_id,
-                        grandeur_code=policy.grandeur_code,
-                    )
+                    parsed = _parse_response(response.content, policy, station_id)
                     issues.extend(parsed.issues)
                     if not parsed.records.is_empty():
                         page_records.append(parsed.records)
 
-                    # Follow pagination
                     current_url = parsed.next_url
-                    params = None  # subsequent pages use full next_url, no params needed
+                    params = None  # subsequent pages: full next_url, no extra params
 
                 if page_records:
                     window_records = pl.concat(page_records)
@@ -169,11 +168,8 @@ def retrieve_observations(
                     used_endpoints.append(endpoint)
                     used_windows.append((start_date, end_date))
 
-            filtered_records = _filter_date_range(
-                pl.concat(parsed_records) if parsed_records else empty_data(),
-                request.start,
-                request.end,
-            )
+            all_records = pl.concat(parsed_records) if parsed_records else empty_data()
+            filtered_records = _filter_date_range(all_records, request.start, request.end, policy)
 
             if not filtered_records.is_empty():
                 transformed = transform_series(
@@ -236,13 +232,77 @@ def retrieve_observations(
             calls_made=tuple(calls_made),
             time_windows=(),
             decomposition=("station_product_cross_product", "365_day_windows"),
-            endpoints=("https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",),
+            endpoints=(OBS_ELAB_URL, OBS_TR_URL, TEMPERATURE_URL),
         ),
         issues=tuple(issues),
         raw=_raw_payload(raw_responses) if raw_responses else None,
     )
     apply_on_issue(result.issues, on_issue)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Routing helpers
+# ---------------------------------------------------------------------------
+
+
+def _base_url_for(policy: FrHubeauProductPolicy) -> str:  # type: ignore[name-defined]
+    from rivretrieve._internal.providers.fr_hubeau.transform import FrHubeauProductPolicy  # noqa: F401
+
+    if policy.api_type == "obs_elab":
+        return OBS_ELAB_URL
+    if policy.api_type == "obs_tr":
+        return OBS_TR_URL
+    return TEMPERATURE_URL
+
+
+def _build_endpoint_and_params(
+    client: FrHubeauObservationClient,
+    station_id: str,
+    policy: FrHubeauProductPolicy,  # type: ignore[name-defined]
+    start_date: str,
+    end_date: str,
+) -> tuple[str, dict[str, object]]:
+    from rivretrieve._internal.providers.fr_hubeau.transform import FrHubeauProductPolicy  # noqa: F401
+
+    if policy.api_type == "obs_elab":
+        assert policy.grandeur_code is not None
+        return (
+            client.endpoint_for_obs_elab(station_id, policy.grandeur_code, start_date, end_date),
+            client.initial_params_obs_elab(station_id, policy.grandeur_code, start_date, end_date),
+        )
+    if policy.api_type == "obs_tr":
+        assert policy.grandeur_code is not None
+        return (
+            client.endpoint_for_obs_tr(station_id, policy.grandeur_code, start_date, end_date),
+            client.initial_params_obs_tr(station_id, policy.grandeur_code, start_date, end_date),
+        )
+    # temperature
+    return (
+        client.endpoint_for_temperature(station_id, start_date, end_date),
+        client.initial_params_temperature(station_id, start_date, end_date),
+    )
+
+
+def _parse_response(
+    content: bytes,
+    policy: FrHubeauProductPolicy,  # type: ignore[name-defined]
+    station_id: str,
+) -> FrHubeauParsedPayload:  # type: ignore[name-defined]
+    from rivretrieve._internal.providers.fr_hubeau.parser import FrHubeauParsedPayload  # noqa: F401
+
+    if policy.api_type == "obs_elab":
+        assert policy.grandeur_code is not None
+        return parse_fr_hubeau_obs_elab_json(content, station_id=station_id, grandeur_code=policy.grandeur_code)
+    if policy.api_type == "obs_tr":
+        assert policy.grandeur_code is not None
+        return parse_fr_hubeau_obs_tr_json(content, station_id=station_id, grandeur_code=policy.grandeur_code)
+    return parse_fr_hubeau_temperature_json(content, station_id=station_id)
+
+
+# ---------------------------------------------------------------------------
+# Windowing and date filtering
+# ---------------------------------------------------------------------------
 
 
 def _split_windows(start: datetime, end: datetime) -> list[tuple[str, str]]:
@@ -255,15 +315,30 @@ def _split_windows(start: datetime, end: datetime) -> list[tuple[str, str]]:
     return windows
 
 
-def _filter_date_range(records: pl.DataFrame, start: datetime, end: datetime) -> pl.DataFrame:
+def _filter_date_range(
+    records: pl.DataFrame,
+    start: datetime,
+    end: datetime,
+    policy: FrHubeauProductPolicy,  # type: ignore[name-defined]
+) -> pl.DataFrame:
     if records.is_empty():
         return records
     start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
     end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
-    # Hubeau daily timestamps are date-only UTC midnight. Include [start_day, end_day] inclusive.
-    start_day = datetime(start_utc.year, start_utc.month, start_utc.day, tzinfo=UTC)
-    end_next_day = datetime(end_utc.year, end_utc.month, end_utc.day, tzinfo=UTC) + timedelta(days=1)
-    return records.filter((pl.col("time") >= start_day) & (pl.col("time") < end_next_day))
+
+    if policy.api_type == "obs_elab":
+        # Date-only UTC midnight: align to day boundaries.
+        start_day = datetime(start_utc.year, start_utc.month, start_utc.day, tzinfo=UTC)
+        end_next_day = datetime(end_utc.year, end_utc.month, end_utc.day, tzinfo=UTC) + timedelta(days=1)
+        return records.filter((pl.col("time") >= start_day) & (pl.col("time") < end_next_day))
+    else:
+        # Full timestamps: keep [start, end] inclusive.
+        return records.filter((pl.col("time") >= start_utc) & (pl.col("time") <= end_utc))
+
+
+# ---------------------------------------------------------------------------
+# Utility helpers
+# ---------------------------------------------------------------------------
 
 
 def _raw_payload(responses: list[dict[str, object]]) -> RawPayload:
@@ -296,3 +371,8 @@ def _issue(
     details: dict[str, object] | None,
 ) -> Issue:
     return Issue(severity="warning", code=str(code), message=message, details=details, provider_id=PROVIDER_ID)
+
+
+# Avoid circular import — import after definition.
+from rivretrieve._internal.providers.fr_hubeau.parser import FrHubeauParsedPayload  # noqa: E402
+from rivretrieve._internal.providers.fr_hubeau.transform import FrHubeauProductPolicy  # noqa: E402

@@ -66,13 +66,13 @@ def row_annotation_schema() -> list[AnnotationSchema]:
     return [
         AnnotationSchema(
             annotation_id="grandeur_code",
-            description="Hubeau grandeur_hydro_elab code (QmnJ, HIXnJ) for this observation.",
+            description="Hubeau grandeur code (Q, QmnJ, H, HmnJ) for this observation. Absent for temperature.",
             value_type="string",
-            source_field="grandeur_hydro_elab",
+            source_field="grandeur_hydro / grandeur_hydro_elab",
         ),
         AnnotationSchema(
             annotation_id="native_unit",
-            description="Provider-native unit before any conversion (l/s or mm).",
+            description="Provider-native unit before any conversion (l/s, mm, or degC).",
             value_type="string",
             source_field="product policy",
         ),
@@ -86,7 +86,7 @@ def row_annotation_schema() -> list[AnnotationSchema]:
             annotation_id="raw_value",
             description="Provider value before unit conversion (in native unit).",
             value_type="float",
-            source_field="resultat_obs_elab",
+            source_field="resultat_obs / resultat_obs_elab / resultat",
         ),
     ]
 
@@ -95,7 +95,7 @@ def series_annotation_schema() -> list[AnnotationSchema]:
     return [
         AnnotationSchema(
             annotation_id="grandeur_code",
-            description="Hubeau grandeur_hydro_elab code used for this station-product series.",
+            description="Hubeau grandeur code used for this station-product series. Absent for temperature.",
             value_type="string",
             source_field="product policy",
         ),
@@ -130,22 +130,28 @@ def series_annotation_schema() -> list[AnnotationSchema]:
             source_field="time column",
         ),
         AnnotationSchema(
-            annotation_id="date_only_timestamp_flag",
-            description="Always 'true': Hubeau date_obs_elab is date-only, interpreted as UTC midnight.",
-            value_type="boolean",
-            source_field="date_obs_elab",
+            annotation_id="timezone_source",
+            description=(
+                "How timezone was resolved: 'date_only_utc_midnight' for obs_elab products; "
+                "'provider_timestamp_utc' for obs_tr and temperature products."
+            ),
+            value_type="string",
+            source_field="timestamp field",
         ),
         AnnotationSchema(
-            annotation_id="timezone_source",
-            description="How timezone was resolved: 'date_only_utc_midnight' for fr_hubeau.",
-            value_type="string",
+            annotation_id="date_only_timestamp_flag",
+            description=(
+                "'true' for obs_elab products (date_obs_elab is date-only, interpreted as UTC midnight). "
+                "Absent for obs_tr and temperature products which carry full UTC timestamps."
+            ),
+            value_type="boolean",
             source_field="date_obs_elab",
         ),
         AnnotationSchema(
             annotation_id="provider_endpoints",
             description="Provider query endpoints used for this station-product series.",
             value_type="json",
-            source_field="obs_elab URL",
+            source_field="URL",
         ),
         AnnotationSchema(
             annotation_id="requested_windows",

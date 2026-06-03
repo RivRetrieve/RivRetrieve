@@ -10,20 +10,28 @@ def test_fr_hubeau_in_providers_list() -> None:
 
 def test_fr_hubeau_stations_offline() -> None:
     result = rr.provider("fr_hubeau").stations()
-    assert result.data.height == 6420
+    # 6420 hydrometric + 869 temperature stations (2026-06-03 live catalogue).
+    assert result.data.height == 7289
     assert result.data["country"].unique().to_list() == ["France"]
 
 
 def test_fr_hubeau_products_offline() -> None:
     result = rr.provider("fr_hubeau").products()
-    assert result.data.height == 2
+    assert result.data.height == 5
     product_ids = set(result.data["product_id"].to_list())
-    assert product_ids == {"discharge_daily_mean", "stage_daily_max"}
+    assert product_ids == {
+        "discharge_instantaneous",
+        "discharge_daily_mean",
+        "stage_instantaneous",
+        "stage_daily_mean",
+        "water_temperature_instantaneous",
+    }
 
 
 def test_fr_hubeau_station_products_offline() -> None:
     result = rr.provider("fr_hubeau").station_products()
-    assert result.data.height == 6420 * 2
+    # 6420 hydro × 4 products + 869 temp × 1 product = 26549
+    assert result.data.height == 26549
 
 
 def test_fr_hubeau_info() -> None:
@@ -57,3 +65,11 @@ def test_fr_hubeau_module_catalogue_path_exists() -> None:
     assert (fr_hubeau_module._CATALOGUE_PATH / "stations.parquet").exists()
     assert (fr_hubeau_module._CATALOGUE_PATH / "products.parquet").exists()
     assert (fr_hubeau_module._CATALOGUE_PATH / "station_products.parquet").exists()
+
+
+def test_fr_hubeau_station_types_in_metadata() -> None:
+    import json
+
+    result = rr.provider("fr_hubeau").stations()
+    types = {json.loads(m).get("station_type") for m in result.data["metadata"].to_list()}
+    assert types == {"hydrometric", "temperature"}
