@@ -53,18 +53,11 @@ class FrHubeauTransformedSeries:
 
 
 PRODUCT_POLICIES: dict[str, FrHubeauProductPolicy] = {
+    # --- obs_tr (real-time, ~1 month lookback) --------------------------------
     "discharge_instantaneous": FrHubeauProductPolicy(
         product_id="discharge_instantaneous",
         api_type="obs_tr",
         grandeur_code="Q",
-        native_unit="l/s",
-        canonical_unit="m3/s",
-        conversion_factor=1000.0,
-    ),
-    "discharge_daily_mean": FrHubeauProductPolicy(
-        product_id="discharge_daily_mean",
-        api_type="obs_elab",
-        grandeur_code="QmnJ",
         native_unit="l/s",
         canonical_unit="m3/s",
         conversion_factor=1000.0,
@@ -77,14 +70,34 @@ PRODUCT_POLICIES: dict[str, FrHubeauProductPolicy] = {
         canonical_unit="m",
         conversion_factor=1000.0,
     ),
-    "stage_daily_mean": FrHubeauProductPolicy(
-        product_id="stage_daily_mean",
+    # --- obs_elab (historical archive) ----------------------------------------
+    # NOTE: HmnJ (daily mean height) does NOT exist in Hubeau obs_elab.
+    # Stage is only available as daily maximum (HIXnJ) in the historical archive.
+    "discharge_daily_mean": FrHubeauProductPolicy(
+        product_id="discharge_daily_mean",
         api_type="obs_elab",
-        grandeur_code="HmnJ",
+        grandeur_code="QmnJ",
+        native_unit="l/s",
+        canonical_unit="m3/s",
+        conversion_factor=1000.0,
+    ),
+    "discharge_daily_max": FrHubeauProductPolicy(
+        product_id="discharge_daily_max",
+        api_type="obs_elab",
+        grandeur_code="QIXnJ",
+        native_unit="l/s",
+        canonical_unit="m3/s",
+        conversion_factor=1000.0,
+    ),
+    "stage_daily_max": FrHubeauProductPolicy(
+        product_id="stage_daily_max",
+        api_type="obs_elab",
+        grandeur_code="HIXnJ",
         native_unit="mm",
         canonical_unit="m",
         conversion_factor=1000.0,
     ),
+    # --- temperature/chronique (historical archive) ---------------------------
     "water_temperature_instantaneous": FrHubeauProductPolicy(
         product_id="water_temperature_instantaneous",
         api_type="temperature",

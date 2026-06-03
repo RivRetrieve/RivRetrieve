@@ -17,21 +17,22 @@ def test_fr_hubeau_stations_offline() -> None:
 
 def test_fr_hubeau_products_offline() -> None:
     result = rr.provider("fr_hubeau").products()
-    assert result.data.height == 5
+    assert result.data.height == 6
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
         "discharge_instantaneous",
         "discharge_daily_mean",
+        "discharge_daily_max",
         "stage_instantaneous",
-        "stage_daily_mean",
+        "stage_daily_max",
         "water_temperature_instantaneous",
     }
 
 
 def test_fr_hubeau_station_products_offline() -> None:
     result = rr.provider("fr_hubeau").station_products()
-    # 6420 hydro × 4 products + 869 temp × 1 product = 26549
-    assert result.data.height == 26549
+    # 6420 hydro × 5 products + 869 temp × 1 product = 32969
+    assert result.data.height == 32969
 
 
 def test_fr_hubeau_info() -> None:

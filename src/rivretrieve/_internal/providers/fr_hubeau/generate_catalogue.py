@@ -84,6 +84,7 @@ class ProductDefinition:
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
+    # --- obs_tr (real-time, ~1 month lookback) --------------------------------
     ProductDefinition(
         product_id="discharge_instantaneous",
         observed_property="discharge",
@@ -99,9 +100,33 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         notes=(
             "Hubeau observations_tr grandeur Q (débit). "
             "Native unit l/s divided by 1000 to convert to m³/s. "
-            "Timestamps are full UTC ISO 8601 (date_obs)."
+            "Timestamps are full UTC ISO 8601 (date_obs). "
+            "Real-time only: Hubeau rejects requests older than ~1 month."
         ),
     ),
+    ProductDefinition(
+        product_id="stage_instantaneous",
+        observed_property="stage",
+        frequency="irregular",
+        statistic="instantaneous",
+        period_type="instant",
+        period_anchor="instant",
+        canonical_unit="m",
+        api_type="obs_tr",
+        grandeur_code="H",
+        native_unit="mm",
+        conversion_factor=1000.0,
+        notes=(
+            "Hubeau observations_tr grandeur H (hauteur). "
+            "Native unit mm divided by 1000 to convert to m. "
+            "Timestamps are full UTC ISO 8601 (date_obs). "
+            "Real-time only: Hubeau rejects requests older than ~1 month."
+        ),
+    ),
+    # --- obs_elab (historical archive) ----------------------------------------
+    # NOTE: HmnJ (daily mean height) does NOT exist in Hubeau obs_elab.
+    # The grandeur_hydro request parameter is ignored by the API; filtering is
+    # done by the parser on the grandeur_hydro_elab field in each response row.
     ProductDefinition(
         product_id="discharge_daily_mean",
         observed_property="discharge",
@@ -121,41 +146,43 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         ),
     ),
     ProductDefinition(
-        product_id="stage_instantaneous",
-        observed_property="stage",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
-        canonical_unit="m",
-        api_type="obs_tr",
-        grandeur_code="H",
-        native_unit="mm",
+        product_id="discharge_daily_max",
+        observed_property="discharge",
+        frequency="daily",
+        statistic="max",
+        period_type="interval",
+        period_anchor="provider_defined",
+        canonical_unit="m3/s",
+        api_type="obs_elab",
+        grandeur_code="QIXnJ",
+        native_unit="l/s",
         conversion_factor=1000.0,
         notes=(
-            "Hubeau observations_tr grandeur H (hauteur). "
-            "Native unit mm divided by 1000 to convert to m. "
-            "Timestamps are full UTC ISO 8601 (date_obs)."
+            "Hubeau obs_elab grandeur QIXnJ (débit instantané maximal journalier). "
+            "Native unit l/s divided by 1000 to convert to m³/s. "
+            "Timestamps are date-only YYYY-MM-DD interpreted as UTC midnight."
         ),
     ),
     ProductDefinition(
-        product_id="stage_daily_mean",
+        product_id="stage_daily_max",
         observed_property="stage",
         frequency="daily",
-        statistic="mean",
+        statistic="max",
         period_type="interval",
         period_anchor="provider_defined",
         canonical_unit="m",
         api_type="obs_elab",
-        grandeur_code="HmnJ",
+        grandeur_code="HIXnJ",
         native_unit="mm",
         conversion_factor=1000.0,
         notes=(
-            "Hubeau obs_elab grandeur HmnJ (hauteur moyenne journalière). "
+            "Hubeau obs_elab grandeur HIXnJ (hauteur instantanée maximale journalière). "
             "Native unit mm divided by 1000 to convert to m. "
-            "Timestamps are date-only YYYY-MM-DD interpreted as UTC midnight."
+            "Timestamps are date-only YYYY-MM-DD interpreted as UTC midnight. "
+            "Note: daily mean height (HmnJ) does not exist in Hubeau obs_elab."
         ),
     ),
+    # --- temperature/chronique (historical archive) ---------------------------
     ProductDefinition(
         product_id="water_temperature_instantaneous",
         observed_property="water_temperature",

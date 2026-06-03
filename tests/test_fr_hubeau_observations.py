@@ -43,13 +43,13 @@ def test_generate_catalogue_station_count() -> None:
 
 def test_generate_catalogue_product_count() -> None:
     cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    assert cat.products.height == 5
+    assert cat.products.height == 6
 
 
 def test_generate_catalogue_station_products_cross() -> None:
     cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    # 2 hydro × 4 products + 1 temp × 1 product = 9
-    assert cat.station_products.height == 9
+    # 2 hydro × 5 products + 1 temp × 1 product = 11
+    assert cat.station_products.height == 11
 
 
 def test_generate_catalogue_hydro_station_fields() -> None:
@@ -89,8 +89,9 @@ def test_generate_catalogue_hydro_station_products() -> None:
     assert hydro_products == {
         "discharge_instantaneous",
         "discharge_daily_mean",
+        "discharge_daily_max",
         "stage_instantaneous",
-        "stage_daily_mean",
+        "stage_daily_max",
     }
 
 
@@ -251,11 +252,22 @@ def test_product_policy_stage_instantaneous() -> None:
     assert p.conversion_factor == pytest.approx(1000.0)
 
 
-def test_product_policy_stage_daily_mean() -> None:
-    p = PRODUCT_POLICIES["stage_daily_mean"]
+def test_product_policy_discharge_daily_max() -> None:
+    p = PRODUCT_POLICIES["discharge_daily_max"]
     assert p.api_type == "obs_elab"
-    assert p.grandeur_code == "HmnJ"
+    assert p.grandeur_code == "QIXnJ"
+    assert p.native_unit == "l/s"
+    assert p.canonical_unit == "m3/s"
+    assert p.conversion_factor == pytest.approx(1000.0)
+
+
+def test_product_policy_stage_daily_max() -> None:
+    p = PRODUCT_POLICIES["stage_daily_max"]
+    assert p.api_type == "obs_elab"
+    assert p.grandeur_code == "HIXnJ"
+    assert p.native_unit == "mm"
     assert p.canonical_unit == "m"
+    assert p.conversion_factor == pytest.approx(1000.0)
 
 
 def test_product_policy_water_temperature_instantaneous() -> None:
@@ -267,8 +279,9 @@ def test_product_policy_water_temperature_instantaneous() -> None:
     assert p.conversion_factor == pytest.approx(1.0)
 
 
-def test_no_stage_daily_max_product() -> None:
-    assert "stage_daily_max" not in PRODUCT_POLICIES
+def test_no_stage_daily_mean_product() -> None:
+    # HmnJ (daily mean height) does not exist in Hubeau obs_elab.
+    assert "stage_daily_mean" not in PRODUCT_POLICIES
 
 
 # ---------------------------------------------------------------------------
