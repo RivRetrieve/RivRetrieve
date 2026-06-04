@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import requests
 
@@ -134,7 +135,7 @@ class FrHubeauObservationClient:
 def _default_transport(request: FrHubeauTransportRequest) -> FrHubeauTransportResponse:
     response = requests.get(
         request.url,
-        params=request.params,
+        params=cast(Any, request.params),
         timeout=request.timeout_seconds,
         headers={"User-Agent": "Mozilla/5.0"},
     )

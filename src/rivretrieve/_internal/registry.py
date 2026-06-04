@@ -112,6 +112,22 @@ class _ProviderHandle:
         validate_annotation_names(result.series_annotations, series_schemas)
         return result
 
+    def __getattr__(self, name: str) -> object:
+        """Forward provider-specific extras to the module.
+
+        Protocol methods are resolved normally (defined above).
+        Any other attribute is delegated to the provider module when it exists,
+        allowing provider-specific methods such as ``cache_status()`` or
+        ``refresh_cache()`` to be called through the handle without adding them
+        to the shared Protocol.
+        """
+        module = object.__getattribute__(self, "_module")
+        if module is not None and hasattr(module, name):
+            return getattr(module, name)
+        raise AttributeError(
+            f"Provider '{object.__getattribute__(self, 'provider_id')}' has no attribute '{name}'"
+        )
+
 
 @dataclass(frozen=True)
 class _ProviderRecord:

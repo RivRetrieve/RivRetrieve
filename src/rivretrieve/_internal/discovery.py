@@ -155,6 +155,7 @@ def _ensure_default_providers_registered() -> None:
         and "jp_mlit" in registered
         and "br_ana" in registered
         and "no_nve" in registered
+        and "ca_eccc" in registered
     ):
         return
 
@@ -248,6 +249,16 @@ def _ensure_default_providers_registered() -> None:
             "no_nve",
             no_nve_artifact,
             provider_module=no_nve_module,
+        )
+
+    if "ca_eccc" not in registered:
+        from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
+
+        ca_eccc_artifact = load_packaged_catalogue_artifact(ca_eccc_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "ca_eccc",
+            ca_eccc_artifact,
+            provider_module=ca_eccc_module,
         )
 
 

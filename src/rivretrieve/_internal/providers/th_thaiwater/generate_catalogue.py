@@ -319,18 +319,20 @@ def _iter_station_rows(raw_payload: dict[str, object]):  # type: ignore[return]
     waterlevel_data = raw_payload.get("waterlevel_data", {})
     if not isinstance(waterlevel_data, dict):
         return
-    data_list = waterlevel_data.get("data", [])
+    waterlevel_data_d = cast(dict[str, object], waterlevel_data)
+    data_list = waterlevel_data_d.get("data", [])
     if not isinstance(data_list, list):
         return
 
     seen: set[str] = set()
-    for row in data_list:
+    for row in cast(list[dict[str, object]], data_list):
         if not isinstance(row, dict):
             continue
 
-        station = row.get("station", {})
-        if not isinstance(station, dict):
+        station_raw = row.get("station", {})
+        if not isinstance(station_raw, dict):
             continue
+        station = cast(dict[str, object], station_raw)
 
         station_type = _clean_text(row.get("station_type") or station.get("tele_station_type"))
         if station_type != STATION_TYPE_FILTER:
@@ -350,12 +352,12 @@ def _iter_station_rows(raw_payload: dict[str, object]):  # type: ignore[return]
         if lat is None or lon is None:
             continue
 
-        geocode = row.get("geocode", {})
-        geocode = geocode if isinstance(geocode, dict) else {}
-        basin = row.get("basin", {})
-        basin = basin if isinstance(basin, dict) else {}
-        agency = row.get("agency", {})
-        agency = agency if isinstance(agency, dict) else {}
+        geocode_raw = row.get("geocode", {})
+        geocode = cast(dict[str, object], geocode_raw) if isinstance(geocode_raw, dict) else {}
+        basin_raw = row.get("basin", {})
+        basin = cast(dict[str, object], basin_raw) if isinstance(basin_raw, dict) else {}
+        agency_raw = row.get("agency", {})
+        agency = cast(dict[str, object], agency_raw) if isinstance(agency_raw, dict) else {}
 
         metadata = ThThaiWaterStationMetadata(
             native_id=gauge_id,

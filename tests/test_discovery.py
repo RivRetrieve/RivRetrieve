@@ -47,6 +47,7 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
 def test_providers_empty_registry_returns_default_providers() -> None:
     assert rr.providers() == [
         "br_ana",
+        "ca_eccc",
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",

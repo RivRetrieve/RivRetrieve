@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -303,7 +303,7 @@ def build_site_lookup(sites_payload: dict[str, object]) -> dict[str, dict[str, f
     data_list = sites_payload.get("data", [])
     if not isinstance(data_list, list):
         return lookup
-    for row in data_list:
+    for row in cast(list[dict[str, object]], data_list):
         if not isinstance(row, dict):
             continue
         code_site = _clean_text(row.get("code_site"))
@@ -485,17 +485,17 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
 # ---------------------------------------------------------------------------
 
 
-def _iter_hydro_station_rows(  # type: ignore[return]
+def _iter_hydro_station_rows(
     raw_payload: dict[str, object],
     *,
     site_lookup: dict[str, dict[str, float | None]] | None = None,
-) -> None:
+) -> Iterator[dict[str, object]]:
     data_list = raw_payload.get("data", [])
     if not isinstance(data_list, list):
         return
 
     seen: set[str] = set()
-    for row in data_list:
+    for row in cast(list[dict[str, object]], data_list):
         if not isinstance(row, dict):
             continue
 
@@ -570,13 +570,13 @@ def _iter_hydro_station_rows(  # type: ignore[return]
         }
 
 
-def _iter_temp_station_rows(raw_payload: dict[str, object]):  # type: ignore[return]
+def _iter_temp_station_rows(raw_payload: dict[str, object]) -> Iterator[dict[str, object]]:
     data_list = raw_payload.get("data", [])
     if not isinstance(data_list, list):
         return
 
     seen: set[str] = set()
-    for row in data_list:
+    for row in cast(list[dict[str, object]], data_list):
         if not isinstance(row, dict):
             continue
 

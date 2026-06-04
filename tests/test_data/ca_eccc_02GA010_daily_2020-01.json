@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "numberMatched": 3,
+  "numberReturned": 3,
+  "features": [
+    {
+      "type": "Feature",
+      "id": "02GA010.2020-01-01",
+      "geometry": null,
+      "properties": {
+        "STATION_NUMBER": "02GA010",
+        "IDENTIFIER": "02GA010.2020-01-01",
+        "DATE": "2020-01-01",
+        "DISCHARGE": 35.4,
+        "DISCHARGE_SYMBOL": "",
+        "LEVEL": 1.23,
+        "LEVEL_SYMBOL": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "02GA010.2020-01-02",
+      "geometry": null,
+      "properties": {
+        "STATION_NUMBER": "02GA010",
+        "IDENTIFIER": "02GA010.2020-01-02",
+        "DATE": "2020-01-02",
+        "DISCHARGE": 34.1,
+        "DISCHARGE_SYMBOL": "B",
+        "LEVEL": 1.21,
+        "LEVEL_SYMBOL": "B"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "02GA010.2020-01-03",
+      "geometry": null,
+      "properties": {
+        "STATION_NUMBER": "02GA010",
+        "IDENTIFIER": "02GA010.2020-01-03",
+        "DATE": "2020-01-03",
+        "DISCHARGE": null,
+        "DISCHARGE_SYMBOL": "D",
+        "LEVEL": null,
+        "LEVEL_SYMBOL": "D"
+      }
+    }
+  ]
+}

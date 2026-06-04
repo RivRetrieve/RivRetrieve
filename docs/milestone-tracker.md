@@ -508,6 +508,31 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixtures:** `tests/test_data/no_nve_metadata.json` (3 stations with varied `seriesList`, 2026-06-03), `tests/test_data/no_nve_12.210.0_discharge_daily_2023.json` (5 daily rows, 1 sentinel), `tests/test_data/no_nve_12.210.0_discharge_hourly_202301.json` (3 hourly rows with CET offset).
 - **Architecture.md impact:** None. `StrEnum` vs `str, Enum` is a code pattern note. `seriesList` availability inference is provider-specific. Daily date extraction fix is provider-specific. Auth pattern follows `br_ana`. No shared harness gap discovered.
 
+## 17. `ca_eccc` — Canada / ECCC Hydrometric provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/canada.py` (legacy `CanadaFetcher` using HYDAT SQLite). R reference: `https://github.com/bafg-bund/hydrodownloadR/blob/main/R/adapter_CA_ECCC.R`.
+- **Provider ID:** `ca_eccc`
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. All 822 tests pass (60 ca_eccc-specific).
+- **Products ported:** `discharge_daily_mean` (OGC `DISCHARGE` field, m³/s direct), `stage_daily_mean` (OGC `LEVEL` field, m direct).
+- **Stations:** 8055 (2026-06-04 live catalogue from ECCC OGC `hydrometric-stations/items`).
+- **Key decisions:**
+  - **OGC API instead of HYDAT SQLite**: Both legacy Python and R use a ~1 GB HYDAT SQLite download. This port uses the ECCC OGC Features API (`api.weather.gc.ca`) instead — same data, REST/JSON, no auth, no giant download, consistent with all other RivRetrieve providers.
+  - **Timestamps**: `DATE` field is date-only (`YYYY-MM-DD`). Interpreted as UTC midnight. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` emitted per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily.
+  - **Response cache**: Both `discharge_daily_mean` and `stage_daily_mean` live in the same OGC response. The retrieval layer caches raw page bytes keyed by `(station_id, begin_date, end_date)` — one HTTP call serves both products when requested together.
+  - **Coordinates in geometry**: Live OGC API returns lat/lon in `feature["geometry"]["coordinates"]` (GeoJSON, lon-first), not in `properties`. Generator handles both GeoJSON format (live) and flat dict with `LATITUDE`/`LONGITUDE` (fixture).
+  - **Status field**: Live API uses `STATUS_EN` (`"Active"/"Discontinued"`); generator falls back to `HYD_STATUS` for fixture compatibility.
+  - **No unit conversions**: Both DISCHARGE (m³/s) and LEVEL (m) already in canonical units.
+  - **Elevation always null**: ECCC OGC stations endpoint does not provide elevation.
+  - **Station-product availability**: All rows `unknown` — OGC does not expose per-variable availability per station.
+  - **Annual windowing**: `YYYY-01-01/YYYY-12-31` per OGC `datetime` interval parameter.
+  - No auth token; public Government of Canada open data (Open Government Licence).
+  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
+  - Live station minimum guard: 1000 stations.
+- **Port notes:** `docs/provider_ports/ca_eccc.md`.
+- **Fixtures:** `tests/test_data/ca_eccc_metadata.json` (3 stations with coords + 1 without, flat-dict format), `tests/test_data/ca_eccc_02GA010_daily_2020-01.json` (3 features: 2 with both DISCHARGE/LEVEL, 1 with both null — tests null-row filtering, quality symbols).
+- **Known limitation:** The OGC `hydrometric-daily-mean` collection does **not** contain the full HYDAT archive. Many stations have multi-decade gaps. Example: `08GA031` has OGC data for 1929–1956 and 2023–present, but the 1957–2022 period (which exists in HYDAT) is absent from the OGC endpoint. The legacy Python `test_canada.py` tests pass because they query HYDAT directly. `ca_eccc` is suitable for current/recent data and catalogue discovery, not as a full HYDAT archive replacement.
+- **Architecture.md impact:** None. OGC API coordinates-in-geometry pattern is provider-specific. Response cache deduplication is provider-internal. Date-only timestamp/UTC-midnight pattern follows established provider convention. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.

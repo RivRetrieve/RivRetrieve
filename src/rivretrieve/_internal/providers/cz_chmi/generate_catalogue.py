@@ -430,7 +430,7 @@ def _optional_float(value: object, name: str) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)  # type: ignore[arg-type]
+        return float(str(value))
     except (TypeError, ValueError):
         return None
 
