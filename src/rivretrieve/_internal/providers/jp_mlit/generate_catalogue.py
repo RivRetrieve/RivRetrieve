@@ -200,6 +200,7 @@ def generate_catalogue_from_live(
 
     try:
         from tqdm import tqdm  # type: ignore[import-untyped]
+
         iterator = tqdm(station_ids, desc="jp_mlit SiteInfoDetail", unit="station")
     except ImportError:
         print(f"jp_mlit live enrichment: fetching {len(station_ids)} stations (install tqdm for a progress bar)")

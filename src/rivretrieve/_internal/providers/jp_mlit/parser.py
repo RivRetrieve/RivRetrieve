@@ -110,9 +110,9 @@ def parse_jp_mlit_hourly_dat(
     df_long = df_long.with_columns(pl.col("hour_col").str.slice(1).cast(pl.Int32).alias("_hour_offset"))
 
     # Strip whitespace then cast to float; filter missing sentinels.
-    df_long = df_long.with_columns(
-        pl.col("raw_value").str.strip_chars().cast(pl.Float64, strict=False)
-    ).filter(pl.col("raw_value").is_not_null() & (pl.col("raw_value") > _MISSING_SENTINEL))
+    df_long = df_long.with_columns(pl.col("raw_value").str.strip_chars().cast(pl.Float64, strict=False)).filter(
+        pl.col("raw_value").is_not_null() & (pl.col("raw_value") > _MISSING_SENTINEL)
+    )
 
     if df_long.is_empty():
         return JpMlitParsedPayload(

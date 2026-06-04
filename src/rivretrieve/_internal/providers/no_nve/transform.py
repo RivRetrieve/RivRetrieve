@@ -8,9 +8,9 @@ import polars as pl
 
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.fr_hubeau.issue_codes import FrHubeauObservationIssueCodes
+from rivretrieve._internal.providers.no_nve.issue_codes import NoNveObservationIssueCodes
 
-PROVIDER_ID = ProviderId("fr_hubeau")
+PROVIDER_ID = ProviderId("no_nve")
 UTC_DTYPE = pl.Datetime(time_unit="us", time_zone="UTC")
 
 _DATA_SCHEMA = {
@@ -35,92 +35,114 @@ _SERIES_ANNOTATION_SCHEMA = {
 
 
 @dataclass(frozen=True)
-class FrHubeauProductPolicy:
+class NoNveProductPolicy:
     product_id: str
-    api_type: str  # "obs_elab" | "obs_tr" | "temperature"
-    grandeur_code: str | None  # None for temperature
+    parameter_id: int
+    resolution_time: int
+    frequency: str  # "daily" | "hourly" | "irregular"
     native_unit: str
     canonical_unit: str
-    conversion_factor: float
+    timezone_handling: str  # "date_only_utc_midnight" | "provider_timestamp_offset"
 
 
 @dataclass(frozen=True)
-class FrHubeauTransformedSeries:
+class NoNveTransformedSeries:
     data: pl.DataFrame
     row_annotations: pl.DataFrame
     series_annotations: pl.DataFrame
     issues: tuple[Issue, ...]
 
 
-PRODUCT_POLICIES: dict[str, FrHubeauProductPolicy] = {
-    # --- obs_tr (real-time, ~1 month lookback) --------------------------------
-    "discharge_instantaneous": FrHubeauProductPolicy(
-        product_id="discharge_instantaneous",
-        api_type="obs_tr",
-        grandeur_code="Q",
-        native_unit="l/s",
-        canonical_unit="m3/s",
-        conversion_factor=1000.0,
+PRODUCT_POLICIES: dict[str, NoNveProductPolicy] = {
+    "stage_daily_mean": NoNveProductPolicy(
+        product_id="stage_daily_mean",
+        parameter_id=1000,
+        resolution_time=1440,
+        frequency="daily",
+        native_unit="m",
+        canonical_unit="m",
+        timezone_handling="date_only_utc_midnight",
     ),
-    "stage_instantaneous": FrHubeauProductPolicy(
+    "stage_hourly_mean": NoNveProductPolicy(
+        product_id="stage_hourly_mean",
+        parameter_id=1000,
+        resolution_time=60,
+        frequency="hourly",
+        native_unit="m",
+        canonical_unit="m",
+        timezone_handling="provider_timestamp_offset",
+    ),
+    "stage_instantaneous": NoNveProductPolicy(
         product_id="stage_instantaneous",
-        api_type="obs_tr",
-        grandeur_code="H",
-        native_unit="mm",
+        parameter_id=1000,
+        resolution_time=0,
+        frequency="irregular",
+        native_unit="m",
         canonical_unit="m",
-        conversion_factor=1000.0,
+        timezone_handling="provider_timestamp_offset",
     ),
-    # --- obs_elab (historical archive) ----------------------------------------
-    # NOTE: HmnJ (daily mean height) does NOT exist in Hubeau obs_elab.
-    # Stage is only available as daily maximum (HIXnJ) in the historical archive.
-    "discharge_daily_mean": FrHubeauProductPolicy(
+    "discharge_daily_mean": NoNveProductPolicy(
         product_id="discharge_daily_mean",
-        api_type="obs_elab",
-        grandeur_code="QmnJ",
-        native_unit="l/s",
+        parameter_id=1001,
+        resolution_time=1440,
+        frequency="daily",
+        native_unit="m3/s",
         canonical_unit="m3/s",
-        conversion_factor=1000.0,
+        timezone_handling="date_only_utc_midnight",
     ),
-    "discharge_daily_max": FrHubeauProductPolicy(
-        product_id="discharge_daily_max",
-        api_type="obs_elab",
-        grandeur_code="QIXnJ",
-        native_unit="l/s",
+    "discharge_hourly_mean": NoNveProductPolicy(
+        product_id="discharge_hourly_mean",
+        parameter_id=1001,
+        resolution_time=60,
+        frequency="hourly",
+        native_unit="m3/s",
         canonical_unit="m3/s",
-        conversion_factor=1000.0,
+        timezone_handling="provider_timestamp_offset",
     ),
-    "stage_daily_max": FrHubeauProductPolicy(
-        product_id="stage_daily_max",
-        api_type="obs_elab",
-        grandeur_code="HIXnJ",
-        native_unit="mm",
-        canonical_unit="m",
-        conversion_factor=1000.0,
+    "discharge_instantaneous": NoNveProductPolicy(
+        product_id="discharge_instantaneous",
+        parameter_id=1001,
+        resolution_time=0,
+        frequency="irregular",
+        native_unit="m3/s",
+        canonical_unit="m3/s",
+        timezone_handling="provider_timestamp_offset",
     ),
-    # --- temperature/chronique (historical archive) ---------------------------
-    "water_temperature_instantaneous": FrHubeauProductPolicy(
-        product_id="water_temperature_instantaneous",
-        api_type="temperature",
-        grandeur_code=None,
+    "water_temperature_daily_mean": NoNveProductPolicy(
+        product_id="water_temperature_daily_mean",
+        parameter_id=1003,
+        resolution_time=1440,
+        frequency="daily",
         native_unit="degC",
         canonical_unit="degC",
-        conversion_factor=1.0,
+        timezone_handling="date_only_utc_midnight",
+    ),
+    "water_temperature_hourly_mean": NoNveProductPolicy(
+        product_id="water_temperature_hourly_mean",
+        parameter_id=1003,
+        resolution_time=60,
+        frequency="hourly",
+        native_unit="degC",
+        canonical_unit="degC",
+        timezone_handling="provider_timestamp_offset",
+    ),
+    "water_temperature_instantaneous": NoNveProductPolicy(
+        product_id="water_temperature_instantaneous",
+        parameter_id=1003,
+        resolution_time=0,
+        frequency="irregular",
+        native_unit="degC",
+        canonical_unit="degC",
+        timezone_handling="provider_timestamp_offset",
     ),
 }
 
-GRANDEUR_TO_PRODUCT: dict[str, str] = {
-    p.grandeur_code: p.product_id for p in PRODUCT_POLICIES.values() if p.grandeur_code is not None
-}
 
-HYDRO_PRODUCT_IDS = frozenset(pid for pid, p in PRODUCT_POLICIES.items() if p.api_type in ("obs_elab", "obs_tr"))
-TEMP_PRODUCT_IDS = frozenset(pid for pid, p in PRODUCT_POLICIES.items() if p.api_type == "temperature")
-
-
-def resolve_product_policy(product_id: str) -> FrHubeauProductPolicy:
+def resolve_product_policy(product_id: str) -> NoNveProductPolicy:
     from rivretrieve._internal.issues import InvalidObservationRequestError
 
     if product_id not in PRODUCT_POLICIES:
-        raise InvalidObservationRequestError(f"Unsupported fr_hubeau observation product: {product_id}")
+        raise InvalidObservationRequestError(f"Unsupported no_nve observation product: {product_id}")
     return PRODUCT_POLICIES[product_id]
 
 
@@ -128,20 +150,17 @@ def transform_series(
     records: pl.DataFrame,
     *,
     station_id: str,
-    policy: FrHubeauProductPolicy,
+    policy: NoNveProductPolicy,
     windows: tuple[tuple[str, str], ...],
     endpoints: tuple[str, ...],
-) -> FrHubeauTransformedSeries:
+) -> NoNveTransformedSeries:
     if records.is_empty():
-        return _empty_series(station_id, policy, windows, endpoints, "No rows after transformation")
+        return _empty_series(station_id, policy, windows, endpoints, "No records from parser")
 
-    # Records may have 'raw_value' or be the temperature schema (also 'raw_value').
     valid = records.filter(pl.col("raw_value").is_not_null())
-
     if valid.is_empty():
         return _empty_series(station_id, policy, windows, endpoints, "No rows with non-null raw_value")
 
-    # Deduplicate by time (keep last occurrence).
     deduped = valid.sort("time").unique(subset=["time"], keep="last", maintain_order=True)
 
     rows_data: list[dict[str, object]] = []
@@ -154,25 +173,20 @@ def transform_series(
         raw = row["raw_value"]
         if not isinstance(raw, float):
             raw = float(raw)
-        value = raw / policy.conversion_factor
 
         rows_data.append(
             {
                 "time": t,
                 "station_id": station_id,
                 "product_id": policy.product_id,
-                "value": value,
+                "value": raw,
             }
         )
         ann_time = t.replace(tzinfo=None) if t.tzinfo is not None else t
-        ann_pairs: dict[str, str] = {
+        for annotation, ann_value in {
             "native_unit": policy.native_unit,
-            "converted_unit": policy.canonical_unit,
             "raw_value": _float_string(raw),
-        }
-        if policy.grandeur_code is not None:
-            ann_pairs["grandeur_code"] = policy.grandeur_code
-        for annotation, ann_value in ann_pairs.items():
+        }.items():
             rows_ann.append(
                 {
                     "time": ann_time,
@@ -184,9 +198,7 @@ def transform_series(
             )
 
     if not rows_data:
-        return _empty_series(
-            station_id, policy, windows, endpoints, "No observation rows remained after transformation"
-        )
+        return _empty_series(station_id, policy, windows, endpoints, "No rows remained after transformation")
 
     data_df = pl.DataFrame(rows_data, schema=_DATA_SCHEMA).sort(["station_id", "product_id", "time"])
     ann_df = pl.DataFrame(rows_ann, schema=_ROW_ANNOTATION_SCHEMA)
@@ -195,7 +207,7 @@ def transform_series(
     returned_start = times_list[0] if times_list else None
     returned_end = times_list[-1] if times_list else None
 
-    return FrHubeauTransformedSeries(
+    return NoNveTransformedSeries(
         data=data_df,
         row_annotations=ann_df,
         series_annotations=_series_annotations(
@@ -224,12 +236,12 @@ def empty_series_annotations() -> pl.DataFrame:
 
 def _empty_series(
     station_id: str,
-    policy: FrHubeauProductPolicy,
+    policy: NoNveProductPolicy,
     windows: tuple[tuple[str, str], ...],
     endpoints: tuple[str, ...],
     reason: str,
-) -> FrHubeauTransformedSeries:
-    return FrHubeauTransformedSeries(
+) -> NoNveTransformedSeries:
+    return NoNveTransformedSeries(
         data=empty_data(),
         row_annotations=empty_row_annotations(),
         series_annotations=_series_annotations(
@@ -242,7 +254,7 @@ def _empty_series(
         ),
         issues=(
             _issue(
-                FrHubeauObservationIssueCodes.MISSING_DATA,
+                NoNveObservationIssueCodes.MISSING_DATA,
                 reason,
                 {"station_id": station_id, "product_id": policy.product_id},
             ),
@@ -253,18 +265,25 @@ def _empty_series(
 def _series_annotations(
     *,
     station_id: str,
-    policy: FrHubeauProductPolicy,
+    policy: NoNveProductPolicy,
     windows: tuple[tuple[str, str], ...],
     endpoints: tuple[str, ...],
     returned_start: object,
     returned_end: object,
 ) -> pl.DataFrame:
-    # Timezone source differs by API type.
-    timezone_source = "date_only_utc_midnight" if policy.api_type == "obs_elab" else "provider_timestamp_utc"
+    if policy.timezone_handling == "date_only_utc_midnight":
+        timezone_source = "date_only_utc_midnight"
+        date_only_flag = "true"
+        local_tz = None
+    else:
+        timezone_source = "provider_timestamp_offset"
+        date_only_flag = None
+        local_tz = None  # NVE provides explicit offset, no inference needed
 
     values: dict[str, str | None] = {
+        "parameter_id": str(policy.parameter_id),
+        "resolution_time": str(policy.resolution_time),
         "native_unit_returned": policy.native_unit,
-        "converted_unit": policy.canonical_unit,
         "returned_time_range_start": None if returned_start is None else _iso_z(returned_start),
         "returned_time_range_end": None if returned_end is None else _iso_z(returned_end),
         "resolved_timezone": "UTC",
@@ -272,13 +291,10 @@ def _series_annotations(
         "provider_endpoints": json.dumps(list(endpoints), sort_keys=True, separators=(",", ":")),
         "requested_windows": json.dumps([list(w) for w in windows], sort_keys=True, separators=(",", ":")),
     }
-
-    if policy.grandeur_code is not None:
-        values["grandeur_code"] = policy.grandeur_code
-
-    # Only obs_elab products carry date-only timestamps.
-    if policy.api_type == "obs_elab":
-        values["date_only_timestamp_flag"] = "true"
+    if date_only_flag is not None:
+        values["date_only_timestamp_flag"] = date_only_flag
+    if local_tz is not None:
+        values["local_timezone"] = local_tz
 
     return pl.DataFrame(
         [
@@ -306,7 +322,7 @@ def _iso_z(value: object) -> str:
 
 
 def _issue(
-    code: FrHubeauObservationIssueCodes,
+    code: NoNveObservationIssueCodes,
     message: str,
     details: dict[str, object] | None,
 ) -> Issue:

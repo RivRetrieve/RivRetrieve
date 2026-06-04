@@ -154,6 +154,7 @@ def _ensure_default_providers_registered() -> None:
         and "fr_hubeau" in registered
         and "jp_mlit" in registered
         and "br_ana" in registered
+        and "no_nve" in registered
     ):
         return
 
@@ -202,9 +203,7 @@ def _ensure_default_providers_registered() -> None:
     if "th_thaiwater" not in registered:
         from rivretrieve._internal.providers.th_thaiwater import module as th_thaiwater_module
 
-        th_thaiwater_artifact = load_packaged_catalogue_artifact(
-            th_thaiwater_module._CATALOGUE_PATH, on_issue="raise"
-        )
+        th_thaiwater_artifact = load_packaged_catalogue_artifact(th_thaiwater_module._CATALOGUE_PATH, on_issue="raise")
         _registry.register(
             "th_thaiwater",
             th_thaiwater_artifact,
@@ -239,6 +238,16 @@ def _ensure_default_providers_registered() -> None:
             "br_ana",
             br_ana_artifact,
             provider_module=br_ana_module,
+        )
+
+    if "no_nve" not in registered:
+        from rivretrieve._internal.providers.no_nve import module as no_nve_module
+
+        no_nve_artifact = load_packaged_catalogue_artifact(no_nve_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "no_nve",
+            no_nve_artifact,
+            provider_module=no_nve_module,
         )
 
 

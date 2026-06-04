@@ -190,7 +190,6 @@ def _make_client(dat_content: str):
 
 def test_retrieval_daily_returns_observation_result() -> None:
 
-
     dat_content = _DAILY_DAT.read_text(encoding="utf-8")
     client_factory = _make_client(dat_content)
 

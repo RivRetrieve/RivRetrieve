@@ -488,6 +488,26 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixtures:** `tests/test_data/br_ana_metadata.json` (2 stations with coords + 1 without, fixture), `tests/test_data/br_ana_12345000_vazao_2020.json` (Jan 2020 discharge for station `12345000`, 3 non-null days), `tests/test_data/br_ana_60435000_cotas_2020.json` (Mar 2020 stage for station `60435000`, 3 non-null days in cm).
 - **Architecture.md impact:** None. Authentication pattern (token caching, credentials via env vars, `auth_missing` issue) is provider-specific. Portuguese URL encoding is provider-specific. Monthly columnar response format is provider-specific. Date-only UTC midnight follows established provider convention. No shared harness gap discovered.
 
+## 16. `no_nve` — Norway / NVE HydAPI provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/norway.py` (legacy `NorwayFetcher`).
+- **Provider ID:** `no_nve`
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. All 762 tests pass (55 no_nve-specific).
+- **Products ported:** `stage_daily_mean` (parameter 1000, resTime 1440, m), `stage_hourly_mean` (param 1000, resTime 60, m; provider-specific), `stage_instantaneous` (param 1000, resTime 0, m), `discharge_daily_mean` (param 1001, resTime 1440, m³/s), `discharge_hourly_mean` (param 1001, resTime 60, m³/s; provider-specific), `discharge_instantaneous` (param 1001, resTime 0, m³/s), `water_temperature_daily_mean` (param 1003, resTime 1440, °C), `water_temperature_hourly_mean` (param 1003, resTime 60, °C; provider-specific), `water_temperature_instantaneous` (param 1003, resTime 0, °C).
+- **Stations:** 3 (2026-06-03 fixture; live catalogue requires `NVE_API_KEY` and calls `/Stations?Active=1` and `/Stations?Active=0`).
+- **Key decisions:**
+  - **Authentication**: Static API key in `X-API-Key` HTTP header, read from `NVE_API_KEY` env var. Missing key → `auth_missing` warning issue, empty result. Same pattern as `br_ana` but no token caching needed.
+  - **Station-product availability from `seriesList`**: NVE `/Stations` response includes a `seriesList` per station with available `(parameter, resTime)` pairs. Catalogue generator materialises `available` / `unavailable` rows rather than `unknown`. This is unique among ported providers.
+  - **Daily timestamps**: NVE timestamps include explicit ISO 8601 offset (e.g. `+01:00` CET). For daily (resTime=1440), the **date portion** is extracted from the string before UTC conversion (e.g. `2023-01-01T00:00:00+01:00` → `2023-01-01T00:00:00Z`, not `2022-12-31T00:00:00Z`). The legacy `NorwayFetcher` incorrectly shifted the date by converting to UTC first; the port fixes this. Series annotation `timezone_source = "date_only_utc_midnight"`. Warning issue `date_only_timestamp` emitted per fetch.
+  - **Hourly/instantaneous timestamps**: Full ISO 8601 string with offset parsed and converted to UTC. Series annotation `timezone_source = "provider_timestamp_offset"`. Info issue `timezone_local_to_utc` emitted per fetch.
+  - **No unit conversions**: NVE provides m, m³/s, °C directly.
+  - **Windowing**: Yearly windows for daily (resTime=1440); monthly windows for hourly (resTime=60) and instantaneous (resTime=0). NVE `ReferenceTime` uses ISO 8601 interval format `YYYY-MM-DD/YYYY-MM-DD`.
+  - **`live_stations=False`**: `generate_catalogue_from_live()` is a maintainer tool calling `/Stations` but is not a runtime catalogue path. The harness raises `LiveCatalogueRoutingNotImplementedError` when `live_stations=True` but no routing exists; flag set to `False` to follow the established pattern.
+  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
+- **Port notes:** `docs/provider_ports/no_nve.md`.
+- **Fixtures:** `tests/test_data/no_nve_metadata.json` (3 stations with varied `seriesList`, 2026-06-03), `tests/test_data/no_nve_12.210.0_discharge_daily_2023.json` (5 daily rows, 1 sentinel), `tests/test_data/no_nve_12.210.0_discharge_hourly_202301.json` (3 hourly rows with CET offset).
+- **Architecture.md impact:** None. `StrEnum` vs `str, Enum` is a code pattern note. `seriesList` availability inference is provider-specific. Daily date extraction fix is provider-specific. Auth pattern follows `br_ana`. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.

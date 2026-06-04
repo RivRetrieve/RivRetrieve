@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import calendar
 import contextlib
 import json
 from collections.abc import Callable
@@ -20,11 +19,11 @@ from rivretrieve._internal.observations import (
     SeriesAnnotationTableSchema,
 )
 from rivretrieve._internal.primitives import OnIssue, ProviderId
-from rivretrieve._internal.providers.jp_mlit.issue_codes import JpMlitObservationIssueCodes
-from rivretrieve._internal.providers.jp_mlit.observation_client import DSP_URL, JpMlitObservationClient
-from rivretrieve._internal.providers.jp_mlit.parser import parse_jp_mlit_daily_dat, parse_jp_mlit_hourly_dat
-from rivretrieve._internal.providers.jp_mlit.transform import (
-    JpMlitTransformedSeries,
+from rivretrieve._internal.providers.no_nve.issue_codes import NoNveObservationIssueCodes
+from rivretrieve._internal.providers.no_nve.observation_client import OBSERVATIONS_URL, NoNveObservationClient
+from rivretrieve._internal.providers.no_nve.parser import parse_nve_response
+from rivretrieve._internal.providers.no_nve.transform import (
+    NoNveTransformedSeries,
     empty_data,
     empty_row_annotations,
     empty_series_annotations,
@@ -32,43 +31,83 @@ from rivretrieve._internal.providers.jp_mlit.transform import (
     transform_series,
 )
 
-PROVIDER_ID = ProviderId("jp_mlit")
+PROVIDER_ID = ProviderId("no_nve")
 
 
 def retrieve_observations(
     request: ObservationRequest,
     *,
     on_issue: OnIssue = "warn",
-    client_factory: Callable[[], JpMlitObservationClient] = JpMlitObservationClient,
+    client_factory: Callable[[], NoNveObservationClient] = NoNveObservationClient,
     rivretrieve_version: str | None = None,
     catalogue_version: str | None = None,
 ) -> ObservationResult:
     requested_at = datetime.now(UTC)
     client = client_factory()
-    series_results: list[JpMlitTransformedSeries] = []
+    issues: list[Issue] = []
+
+    if not client.has_credentials():
+        issues.append(
+            _issue(
+                NoNveObservationIssueCodes.AUTH_MISSING,
+                "NVE API key not available. Set NVE_API_KEY environment variable.",
+                None,
+            )
+        )
+        result = ObservationResult(
+            data=empty_data(),
+            row_annotations=AnnotationTable(data=empty_row_annotations(), schema=RowAnnotationTableSchema),
+            series_annotations=AnnotationTable(data=empty_series_annotations(), schema=SeriesAnnotationTableSchema),
+            provenance=ObservationProvenance(
+                source="live",
+                provider_id=PROVIDER_ID,
+                rivretrieve_version=rivretrieve_version,
+                catalogue_version=catalogue_version,
+                requested_at=requested_at,
+                retrieved_at=None,
+                request={
+                    "stations": list(request.stations),
+                    "products": list(request.products),
+                    "start": request.start.isoformat(),
+                    "end": request.end.isoformat(),
+                },
+                calls_made=(),
+                time_windows=(),
+                decomposition=("station_product_cross_product", "yearly_or_monthly_windows"),
+                endpoints=(OBSERVATIONS_URL,),
+            ),
+            issues=tuple(issues),
+            raw=None,
+        )
+        apply_on_issue(result.issues, on_issue)
+        return result
+
+    series_results: list[NoNveTransformedSeries] = []
     calls_made: list[dict[str, object]] = []
     raw_responses: list[dict[str, object]] = []
-    issues: list[Issue] = []
     successes = 0
     failures = 0
 
     for station_id in request.stations:
         for product_id in request.products:
             policy = resolve_product_policy(product_id)
-            windows = _split_windows(request.start, request.end, policy.kind)
+            windows = _split_windows(request.start, request.end, policy.resolution_time)
             parsed_records: list[pl.DataFrame] = []
             used_endpoints: list[str] = []
             used_windows: list[tuple[str, str]] = []
 
             for begin_date, end_date in windows:
-                endpoint = _html_url(station_id, policy.kind, begin_date, end_date)
+                reference_time = f"{begin_date}/{end_date}"
+                endpoint = client.endpoint_for(station_id, policy.parameter_id, policy.resolution_time, reference_time)
                 try:
-                    dat_response = client.fetch_observation_window(station_id, policy.kind, begin_date, end_date)
+                    resp = client.fetch_observations(
+                        station_id, policy.parameter_id, policy.resolution_time, reference_time
+                    )
                 except requests.HTTPError as exc:
                     if exc.response is not None and exc.response.status_code == 404:
                         issues.append(
                             _issue(
-                                JpMlitObservationIssueCodes.HTTP_NOT_FOUND,
+                                NoNveObservationIssueCodes.HTTP_NOT_FOUND,
                                 "No data available for station/window (HTTP 404)",
                                 {
                                     "station_id": station_id,
@@ -83,8 +122,8 @@ def retrieve_observations(
                     failures += 1
                     issues.append(
                         _issue(
-                            JpMlitObservationIssueCodes.SOURCE_REQUEST_FAILED,
-                            "jp_mlit provider request failed",
+                            NoNveObservationIssueCodes.SOURCE_REQUEST_FAILED,
+                            "NVE HydAPI request failed",
                             {
                                 "station_id": station_id,
                                 "product_id": product_id,
@@ -100,8 +139,8 @@ def retrieve_observations(
                     failures += 1
                     issues.append(
                         _issue(
-                            JpMlitObservationIssueCodes.SOURCE_REQUEST_FAILED,
-                            "jp_mlit provider request failed",
+                            NoNveObservationIssueCodes.SOURCE_REQUEST_FAILED,
+                            "NVE HydAPI request failed",
                             {
                                 "station_id": station_id,
                                 "product_id": product_id,
@@ -114,32 +153,15 @@ def retrieve_observations(
                     )
                     continue
 
-                # No .dat link found in the HTML page.
-                if dat_response.dat_url is None:
-                    issues.append(
-                        _issue(
-                            JpMlitObservationIssueCodes.NO_DAT_LINK,
-                            "No .dat link found in MLIT HTML response",
-                            {
-                                "station_id": station_id,
-                                "product_id": product_id,
-                                "begin_date": begin_date,
-                                "end_date": end_date,
-                                "html_url": dat_response.html_url,
-                            },
-                        )
-                    )
-                    continue
-
                 successes += 1
-                retrieved_at = dat_response.retrieved_at
+                retrieved_at = resp.retrieved_at
                 raw_responses.append(
                     {
-                        "html_url": dat_response.html_url,
-                        "dat_url": dat_response.dat_url,
+                        "endpoint": endpoint,
                         "station_id": station_id,
                         "product_id": product_id,
-                        "kind": policy.kind,
+                        "parameter_id": policy.parameter_id,
+                        "resolution_time": policy.resolution_time,
                         "begin_date": begin_date,
                         "end_date": end_date,
                         "retrieved_at": _iso_z(retrieved_at),
@@ -147,22 +169,22 @@ def retrieve_observations(
                 )
                 calls_made.append(
                     {
-                        "html_url": dat_response.html_url,
-                        "dat_url": dat_response.dat_url,
+                        "endpoint": endpoint,
                         "station_id": station_id,
                         "product_id": product_id,
-                        "kind": policy.kind,
+                        "parameter_id": policy.parameter_id,
+                        "resolution_time": policy.resolution_time,
                         "begin_date": begin_date,
                         "end_date": end_date,
                         "retrieved_at": _iso_z(retrieved_at),
                     }
                 )
 
-                if policy.frequency == "hourly":
-                    parsed = parse_jp_mlit_hourly_dat(dat_response.dat_content, station_id=station_id)
-                else:
-                    parsed = parse_jp_mlit_daily_dat(dat_response.dat_content, station_id=station_id)
-
+                parsed = parse_nve_response(
+                    resp.content,
+                    station_id=station_id,
+                    resolution_time=policy.resolution_time,
+                )
                 issues.extend(parsed.issues)
                 if not parsed.records.is_empty():
                     parsed_records.append(parsed.records)
@@ -184,7 +206,7 @@ def retrieve_observations(
             elif successes == 0 and failures == 0:
                 issues.append(
                     _issue(
-                        JpMlitObservationIssueCodes.MISSING_DATA,
+                        NoNveObservationIssueCodes.MISSING_DATA,
                         "No provider calls returned data for station-product request",
                         {"station_id": station_id, "product_id": product_id},
                     )
@@ -193,8 +215,8 @@ def retrieve_observations(
     if failures > 0 and successes > 0:
         issues.append(
             _issue(
-                JpMlitObservationIssueCodes.PARTIAL_RESPONSE,
-                "One or more jp_mlit provider calls failed while other calls succeeded",
+                NoNveObservationIssueCodes.PARTIAL_RESPONSE,
+                "One or more NVE HydAPI calls failed while others succeeded",
                 {"failed_calls": failures, "successful_calls": successes},
             )
         )
@@ -234,10 +256,10 @@ def retrieve_observations(
             time_windows=(),
             decomposition=(
                 "station_product_cross_product",
-                "monthly_windows_for_hourly_kinds_2_6",
-                "yearly_windows_for_daily_kinds_3_7",
+                "yearly_windows_for_daily_restime_1440",
+                "monthly_windows_for_hourly_restime_60_and_instant_restime_0",
             ),
-            endpoints=(DSP_URL,),
+            endpoints=(OBSERVATIONS_URL,),
         ),
         issues=tuple(issues),
         raw=_raw_payload(raw_responses) if raw_responses else None,
@@ -251,32 +273,32 @@ def retrieve_observations(
 # ---------------------------------------------------------------------------
 
 
-def _split_windows(start: datetime, end: datetime, kind: int) -> list[tuple[str, str]]:
+def _split_windows(start: datetime, end: datetime, resolution_time: int) -> list[tuple[str, str]]:
     """Generate request windows.
 
-    Hourly kinds (2, 6): monthly windows in YYYYMMDD format.
-    Daily kinds (3, 7): yearly windows with year-start → year-end.
+    Daily (resTime=1440): yearly windows in YYYY-MM-DD format.
+    Hourly/instantaneous (resTime=60 or 0): monthly windows.
 
-    The MLIT system uses YYYYMMDD (no separator) for its date params.
+    NVE ReferenceTime uses ISO 8601 interval: 'YYYY-MM-DD/YYYY-MM-DD'.
     """
     windows: list[tuple[str, str]] = []
-    if kind in (2, 6):
-        # Monthly windows.
+    if resolution_time == 1440:
+        for year in range(start.year, end.year + 1):
+            begin_str = f"{year}-01-01"
+            end_str = f"{year}-12-31"
+            windows.append((begin_str, end_str))
+    else:
+        # Use first-of-next-month as exclusive end so NVE returns the full last day.
+        # e.g. January window: 2020-01-01/2020-02-01 (NVE end is exclusive midnight).
         current = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         while current <= end:
             year = current.year
             month = current.month
-            last_day = calendar.monthrange(year, month)[1]
-            begin_str = f"{year}{month:02d}01"
-            end_str = f"{year}{month:02d}{last_day:02d}"
+            begin_str = f"{year}-{month:02d}-01"
+            next_month = current.replace(year=year + 1, month=1) if month == 12 else current.replace(month=month + 1)
+            end_str = f"{next_month.year}-{next_month.month:02d}-01"
             windows.append((begin_str, end_str))
-            current = current.replace(year=year + 1, month=1) if month == 12 else current.replace(month=month + 1)
-    else:
-        # Yearly windows.
-        for year in range(start.year, end.year + 1):
-            begin_str = f"{year}0101"
-            end_str = f"{year}1231"
-            windows.append((begin_str, end_str))
+            current = next_month
     return windows
 
 
@@ -285,7 +307,6 @@ def _filter_date_range(records: pl.DataFrame, start: datetime, end: datetime) ->
         return records
     start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
     end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
-    # For both daily and hourly, use inclusive [start_day, end_day+1) to cover full days.
     start_day = datetime(start_utc.year, start_utc.month, start_utc.day, tzinfo=UTC)
     end_next_day = datetime(end_utc.year, end_utc.month, end_utc.day, tzinfo=UTC) + timedelta(days=1)
     return records.filter((pl.col("time") >= start_day) & (pl.col("time") < end_next_day))
@@ -296,14 +317,10 @@ def _filter_date_range(records: pl.DataFrame, start: datetime, end: datetime) ->
 # ---------------------------------------------------------------------------
 
 
-def _html_url(station_id: str, kind: int, begin_date: str, end_date: str) -> str:
-    return f"{DSP_URL}?KIND={kind}&ID={station_id}&BGNDATE={begin_date}&ENDDATE={end_date}&KAWABOU=NO"
-
-
 def _raw_payload(responses: list[dict[str, object]]) -> RawPayload:
     return RawPayload(
         provider_id=PROVIDER_ID,
-        content_type="application/vnd.rivretrieve.jp_mlit.raw-metadata+json",
+        content_type="application/vnd.rivretrieve.no_nve.raw-metadata+json",
         content=None,
         metadata=json.dumps(responses, sort_keys=True, separators=(",", ":")),
     )
@@ -325,7 +342,7 @@ def _iso_z(value: datetime) -> str:
 
 
 def _issue(
-    code: JpMlitObservationIssueCodes,
+    code: NoNveObservationIssueCodes,
     message: str,
     details: dict[str, object] | None,
 ) -> Issue:

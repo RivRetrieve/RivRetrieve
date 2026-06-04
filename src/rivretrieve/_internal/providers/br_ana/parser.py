@@ -97,9 +97,7 @@ def parse_br_ana_json(
                 continue
             rows.append({"time": ts, "raw_value": fval})
 
-    records_df = (
-        pl.DataFrame(rows, schema=_PARSED_SCHEMA).sort("time") if rows else pl.DataFrame(schema=_PARSED_SCHEMA)
-    )
+    records_df = pl.DataFrame(rows, schema=_PARSED_SCHEMA).sort("time") if rows else pl.DataFrame(schema=_PARSED_SCHEMA)
 
     issue = _date_only_issue(station_id, product_id)
     return BrAnaParsedPayload(records=records_df, issues=(issue,))

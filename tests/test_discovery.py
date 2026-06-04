@@ -45,7 +45,17 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_providers_empty_registry_returns_default_providers() -> None:
-    assert rr.providers() == ["br_ana", "ch_foen", "cz_chmi", "fr_hubeau", "jp_mlit", "lt_lhmt", "th_thaiwater", "usgs_nwis"]
+    assert rr.providers() == [
+        "br_ana",
+        "ch_foen",
+        "cz_chmi",
+        "fr_hubeau",
+        "jp_mlit",
+        "lt_lhmt",
+        "no_nve",
+        "th_thaiwater",
+        "usgs_nwis",
+    ]
 
 
 def test_providers_sorted_independent_of_registration_order(

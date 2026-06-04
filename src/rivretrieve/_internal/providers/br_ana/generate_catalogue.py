@@ -182,9 +182,7 @@ def generate_catalogue_from_live(
     username = username or os.environ.get("ANA_IDENTIFICADOR")
     password = password or os.environ.get("ANA_SENHA")
     if not username or not password:
-        raise FatalContractError(
-            "br_ana live catalogue generation requires ANA_IDENTIFICADOR and ANA_SENHA env vars"
-        )
+        raise FatalContractError("br_ana live catalogue generation requires ANA_IDENTIFICADOR and ANA_SENHA env vars")
     token = _fetch_token(username, password)
     raw_payload = _fetch_all_stations(token)
     return generate_catalogue(

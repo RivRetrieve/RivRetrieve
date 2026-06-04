@@ -770,7 +770,7 @@ wheels = [
 
 [[package]]
 name = "rivretrieve"
-version = "0.1.25"
+version = "0.1.44"
 source = { editable = "." }
 dependencies = [
     { name = "pandas" },
