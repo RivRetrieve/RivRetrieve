@@ -54,6 +54,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
+        "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",
     ]

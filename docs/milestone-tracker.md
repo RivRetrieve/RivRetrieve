@@ -533,6 +533,33 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Known limitation:** The OGC `hydrometric-daily-mean` collection does **not** contain the full HYDAT archive. Many stations have multi-decade gaps. Example: `08GA031` has OGC data for 1929–1956 and 2023–present, but the 1957–2022 period (which exists in HYDAT) is absent from the OGC endpoint. The legacy Python `test_canada.py` tests pass because they query HYDAT directly. `ca_eccc` is suitable for current/recent data and catalogue discovery, not as a full HYDAT archive replacement.
 - **Architecture.md impact:** None. OGC API coordinates-in-geometry pattern is provider-specific. Response cache deduplication is provider-internal. Date-only timestamp/UTC-midnight pattern follows established provider convention. No shared harness gap discovered.
 
+## 18. `pl_imgw` — Poland / IMGW provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/poland.py` (legacy `PolandFetcher` building Zarr cache). R reference: `https://github.com/bafg-bund/hydrodownloadR/blob/main/R/adapter_PL_IMGW.R`.
+- **Provider ID:** `pl_imgw`
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. All 865 tests pass (38 pl_imgw-specific).
+- **Products ported:** `discharge_daily_mean` (CSV col 8 `Flow [m^3/s]`, m³/s direct), `stage_daily_mean` (CSV col 7 `Water level [cm]`, cm÷100→m), `water_temperature_daily_mean` (CSV col 9 `Water temperature [deg. C]`, °C direct).
+- **Stations:** 1301 (2026-06-04, from `poland_sites.csv` in legacy Python RivRetrieve repo; includes lat/lon, elevation, and drainage area for all stations). The live `/api/data/hydro` JSON endpoint has only 913 active stations, 314 of which lack coordinates — the CSV is the richer source.
+- **Key decisions:**
+  - **Local Parquet cache (mirrors ca_eccc HYDAT)**: Both legacy Python (`PolandFetcher` + Zarr) and R (WIDE master RDS) download all data from 1951 and cache it locally. This port does the same: `ImgwCacheClient` downloads all IMGW yearly ZIPs once, parses them, writes a single `pl_imgw_daily.parquet` in `user_cache_dir("rivretrieve")/pl_imgw/`. `cache_path_override` is the test escape hatch (mirrors ca_eccc's `db_path_override`). Provider handle exposes `cache_status()` and `refresh_cache()`.
+  - **Two ZIP eras**: 2023+ has one annual ZIP (`codz_{YYYY}.zip`, ~1.5 MB). Pre-2023 has 12 monthly ZIPs (`codz_{YYYY}_{MM}.zip`, ~2 MB each). Cut-off encoded as `ANNUAL_ZIP_FROM_YEAR = 2023`.
+  - **Two CSV format eras**: 2023+ is UTF-8 with BOM, semicolon-separated, unquoted. Pre-2023 is CP1250, comma-separated, quoted (station codes have leading spaces). Parser detects BOM for format dispatch.
+  - **All-station ZIPs**: Each ZIP contains data for all ~900+ stations. Filtered to requested stations at parse time; memory usage peaks at ~20 MB per ZIP before filtering.
+  - **Hydrological year calendar**: IMGW organises data by hydrological year (Nov–Oct). Calendar month comes from CSV column 10 directly. Calendar year = hydrological year − 1 for Nov/Dec, else hydrological year.
+  - **Timestamps**: Date-only UTC midnight pattern. IMGW provides year/month/day integers only. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily, `ca_eccc`.
+  - **Stage cm→m**: Raw cm value preserved in `raw_value` row annotation.
+  - **Sentinel masking**: Water level 9999 → null; discharge 99999.999 or 999 → null; temperature 99.9 → null. Rounded to 3 decimal places before comparison.
+  - **Elevation always null**: IMGW `/api/data/hydro` does not provide elevation.
+  - **Drainage area always null**: Not in any IMGW endpoint used.
+  - **Station-product availability**: All rows `unknown`. IMGW does not expose per-variable availability.
+  - No auth token; public IMGW Open Data.
+  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
+  - Live station minimum guard: 500 stations.
+- **Port notes:** `docs/provider_ports/pl_imgw.md`.
+- **Fixtures:** `tests/test_data/pl_imgw_metadata.json` (3 active stations from `/api/data/hydro`, 2026-06-04), `tests/test_data/pl_imgw_151140030_annual_2023.zip` (4 CSV rows: 3 for station 151140030 with sentinel tests, 1 for another station to verify filtering).
+- **Known limitation:** For pre-2023 data, a 10-year request fetches up to 120 monthly ZIPs (~240 MB compressed). Long historical requests are network-heavier than providers with per-station REST APIs. Documented in provider metadata.
+- **Architecture.md impact:** None. Two-era CSV format is provider-specific. Hydrological year calendar is provider-specific. All-station ZIP + parse-time filter is provider-specific. Date-only UTC-midnight pattern follows established provider convention. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.

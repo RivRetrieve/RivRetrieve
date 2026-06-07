@@ -156,6 +156,7 @@ def _ensure_default_providers_registered() -> None:
         and "br_ana" in registered
         and "no_nve" in registered
         and "ca_eccc" in registered
+        and "pl_imgw" in registered
     ):
         return
 
@@ -259,6 +260,16 @@ def _ensure_default_providers_registered() -> None:
             "ca_eccc",
             ca_eccc_artifact,
             provider_module=ca_eccc_module,
+        )
+
+    if "pl_imgw" not in registered:
+        from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
+
+        pl_imgw_artifact = load_packaged_catalogue_artifact(pl_imgw_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "pl_imgw",
+            pl_imgw_artifact,
+            provider_module=pl_imgw_module,
         )
 
 
