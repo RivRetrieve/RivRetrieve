@@ -560,6 +560,32 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Known limitation:** For pre-2023 data, a 10-year request fetches up to 120 monthly ZIPs (~240 MB compressed). Long historical requests are network-heavier than providers with per-station REST APIs. Documented in provider metadata.
 - **Architecture.md impact:** None. Two-era CSV format is provider-specific. Hydrological year calendar is provider-specific. All-station ZIP + parse-time filter is provider-specific. Date-only UTC-midnight pattern follows established provider convention. No shared harness gap discovered.
 
+## 19. `ba_fhmzbih` — Bosnia and Herzegovina / FHMZBiH provider port (post-V1)
+
+- **Source:** `https://github.com/kratzert/RivRetrieve-Python/tree/codex-bosnia-and-herzegovina` (legacy `BosniaHerzegovinaFetcher`). R reference: `https://github.com/bafg-bund/hydrodownloadR/blob/main/R/adapter_BA_AVPS.R`.
+- **Provider ID:** `ba_fhmzbih`
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. Full suite passes (897 tests; 47 ba_fhmzbih-specific).
+- **Products ported:** All six V1 canonical products — `discharge_instantaneous`/`discharge_daily_mean` (parameter `Q`, m³/s direct), `stage_instantaneous`/`stage_daily_mean` (parameter `H`, cm÷100→m), `water_temperature_instantaneous`/`water_temperature_daily_mean` (parameter `WT`, °C direct). Each instantaneous/daily-mean pair shares one workbook download.
+- **Stations:** 60 (2026-06-08 live catalogue from `layers/20/index.json`).
+- **Key decisions:**
+  - **Live-verified downloads**: Both the metadata endpoint and the per-station-parameter xlsx workbook endpoint were exercised against the live `vodostaji.voda.ba` portal during the port (not just fixtures), per the explicit instruction to confirm downloads "really work" after the `th_thaiwater` near-miss. Live run produced 60 stations, a real 124 KB workbook for station 4510 (8631 hourly rows), and a full `retrieve_observations()` call returning 1666 rows with correct UTC-converted/aggregated values.
+  - **No date-range queries — rolling 1-year window only**: The portal does not accept a date-range parameter. Each `<code>_1Y.xlsx` workbook always returns a fixed ~1-year rolling window of hourly data ending at the most recent reading. `retrieve_observations()` fetches once per `(station, parameter)`, filters/aggregates to the requested window, and emits a recoverable `requested_range_beyond_window` issue when the requested period doesn't overlap. This is a harder constraint than the historical gaps seen in `pl_imgw`/`ca_eccc` — it applies to every request, not just old ones.
+  - **Undocumented station→group sharding**: Workbooks are sharded across ten numbered "station groups" (`/stations/{1..10}/{station_id}/...`) not exposed in the metadata. `BaFhmzbihObservationClient.fetch_workbook()` probes groups in order, caches the discovered group per station-id, and records it in a `station_group` series annotation. `station_group_not_found` is the recoverable issue when every probe 404s.
+  - **Inferred timezone (Europe/Sarajevo)**: Workbook timestamps are naive local time with no UTC offset and the portal documents no timezone. `Europe/Sarajevo` (CET/CEST, EU DST) was inferred from the sibling `L1_timestamp` field in the live metadata feed, which *does* carry an explicit `+02:00`/`+01:00` offset for the same stations. Per the explicit instruction to surface inferred timezone facts, every successful series emits an `info`-severity `timezone_local_to_utc` issue and carries `resolved_timezone="UTC"`, `timezone_source="local_to_utc_conversion"`, `source_timezone="Europe/Sarajevo"` series annotations. DST gap times localize to `null` and are dropped (`non_existent="null"`); `ambiguous="earliest"` resolves autumn fall-back.
+  - **Daily-mean aggregated by local calendar day**: `*_daily_mean` products group hourly rows by *local* (Sarajevo) calendar day, average, and anchor the result at local midnight before UTC conversion — avoiding the UTC-day date-shift bug the `no_nve` port found and fixed in the legacy `NorwayFetcher`.
+  - **Stage cm→m**: Raw cm value preserved in `raw_value` row annotation (e.g. 82.2 cm → 0.822 m, live-verified).
+  - **Empty per-parameter workbooks**: A station can have a reachable, well-formed workbook for a parameter it doesn't actually report (zero data rows past the header) — e.g. station 4510's water-temperature workbook is empty both in the upstream fixture and live. Treated as `missing_data`, distinct from `station_group_not_found`.
+  - **New dependency**: `openpyxl` (+ `et-xmlfile`) added via `uv add openpyxl` — no prior project dependency could read `.xlsx`.
+  - **Drainage area from formatted string**: `metadata_CATCHMENT_SIZE` is a string like `"123.4 km²"`; parsed by stripping the unit suffix.
+  - **Elevation often blank**: `metadata_station_elevation` is frequently `""` in the live snapshot; parsed to `None`.
+  - **Station-product availability**: All rows `unknown`. The metadata snapshot does not expose per-variable station availability.
+  - No auth token; public FHMZBiH open data.
+  - Live station minimum guard: 30 stations.
+- **Port notes:** `docs/provider_ports/ba_fhmzbih.md`.
+- **Fixtures:** `tests/test_data/ba_fhmzbih_metadata.json` (2 stations, reused from upstream legacy test data), `tests/test_data/ba_fhmzbih_4510_{Q,H,Tvode}_1Y.xlsx` (real workbook samples for station 4510 — discharge, stage, and an empty water-temperature workbook — reused from the upstream legacy test fixtures).
+- **Known limitation:** No historical date-range queries are possible — see "rolling 1-year window" above. `ba_fhmzbih` is suitable for recent/current data and catalogue discovery, not historical archive retrieval.
+- **Architecture.md impact:** None. Station-group URL probing, xlsx workbook parsing, and the rolling-window constraint are provider-specific. The local-to-UTC timezone-inference pattern (info issue + `source_timezone`/`timezone_source` series annotations) follows the established `th_thaiwater` convention rather than introducing a new shared mechanism. No shared harness gap discovered.
+
 ## 8. Stopping conditions for milestone executors
 
 - Do not silently re-open architecture.md §19 deferrals.

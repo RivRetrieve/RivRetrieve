@@ -1,6 +1,6 @@
 [project]
 name = "rivretrieve"
-version = "0.1.46"
+version = "0.1.47"
 description = "A Python package for downloading global river gauge data"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -11,6 +11,7 @@ dependencies = [
     "requests",
     "pyarrow>=24.0.0",
     "platformdirs>=4.10.0",
+    "openpyxl>=3.1.5",
 ]
 
 [project.optional-dependencies]
@@ -75,7 +76,7 @@ addopts = ["--strict-markers", "--strict-config", "-ra"]
 # Bump My Version
 # -----------------------
 [tool.bumpversion]
-current_version = "0.1.46"
+current_version = "0.1.47"
 commit = false
 tag = false
 allow_dirty = true
