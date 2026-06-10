@@ -12,6 +12,18 @@ AUTH_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/OAUth/v1
 DISCHARGE_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1"
 STAGE_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1"
 
+# Telemetric ("adopted"/QC'd) series — sub-daily, with quality-flag (*_Status) fields.
+# Confirmed live via https://www.ana.gov.br/hidrowebservice/api-docs (OpenAPI spec):
+# requires Código da Estação, Tipo Filtro Data, Range Intervalo de busca (≤30-day window),
+# and an optional Data de Busca (yyyy-MM-dd) anchor date.
+TELEMETRIC_ADOTADA_URL = (
+    "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
+)
+# "Detalhada" additionally returns raw sensor fields incl. Temperatura_Agua / Temperatura_Interna.
+TELEMETRIC_DETALHADA_URL = (
+    "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaDetalhada/v1"
+)
+
 # Pre-encoded Portuguese parameter names used by the ANA Hidroweb API.
 # The API requires these exact percent-encoded forms; passing them via
 # requests.get(params=dict) would double-encode them.
@@ -19,6 +31,22 @@ _ENCODED_STATION_PARAM = "C%C3%B3digo%20da%20Esta%C3%A7%C3%A3o"
 _ENCODED_FILTER_TYPE_PARAM = "Tipo%20Filtro%20Data"
 _ENCODED_START_PARAM = "Data%20Inicial%20(yyyy-MM-dd)"
 _ENCODED_END_PARAM = "Data%20Final%20(yyyy-MM-dd)"
+
+# Telemetric-endpoint-specific encoded parameter names (different from the legacy
+# daily series — these use a single anchor date + a "range" enum, not start/end).
+_ENCODED_SEARCH_DATE_PARAM = "Data%20de%20Busca%20(yyyy-MM-dd)"
+_ENCODED_RANGE_PARAM = "Range%20Intervalo%20de%20busca"
+
+# Telemetric requests are capped at 30 days per the live OpenAPI spec
+# ("limitado a 30 dias por requisição"); we always request the maximum span.
+TELEMETRIC_RANGE = "DIAS_30"
+TELEMETRIC_MAX_WINDOW_DAYS = 30
+
+_TELEMETRIC_PRODUCT_IDS = frozenset(
+    {"discharge_instantaneous", "stage_instantaneous", "water_temperature_instantaneous"}
+)
+# Detalhada is required for water temperature (Temperatura_Agua is not in the Adotada payload).
+_DETALHADA_PRODUCT_IDS = frozenset({"water_temperature_instantaneous"})
 
 # Token is valid for 60 minutes per ANA documentation; we cache for 55 min to be safe.
 _TOKEN_TTL_SECONDS = 3300.0
@@ -158,3 +186,42 @@ class BrAnaObservationClient:
             f"&{_ENCODED_START_PARAM}={start_date}"
             f"&{_ENCODED_END_PARAM}={end_date}"
         )
+
+    # -- Telemetric ("instantaneous", quality-flagged) series -----------------
+
+    def telemetric_endpoint_for(self, station_id: str, product_id: str, anchor_date: str) -> str:
+        """Build the URL for a ≤30-day telemetric window anchored at ``anchor_date``.
+
+        ``anchor_date`` is passed as ``Data de Busca`` together with the maximum
+        ``Range Intervalo de busca`` (DIAS_30); the ANA API resolves the actual
+        returned span from those two parameters (≤30 days per request).
+        """
+        base_url = TELEMETRIC_DETALHADA_URL if product_id in _DETALHADA_PRODUCT_IDS else TELEMETRIC_ADOTADA_URL
+        return (
+            f"{base_url}"
+            f"?{_ENCODED_STATION_PARAM}={station_id}"
+            f"&{_ENCODED_FILTER_TYPE_PARAM}=DATA_LEITURA"
+            f"&{_ENCODED_RANGE_PARAM}={TELEMETRIC_RANGE}"
+            f"&{_ENCODED_SEARCH_DATE_PARAM}={anchor_date}"
+        )
+
+    def fetch_telemetric_data(
+        self,
+        station_id: str,
+        product_id: str,
+        anchor_date: str,
+        token: str,
+    ) -> BrAnaTransportResponse:
+        url = self.telemetric_endpoint_for(station_id, product_id, anchor_date)
+        request = BrAnaTransportRequest(
+            url=url,
+            headers={"accept": "*/*", "Authorization": f"Bearer {token}"},
+            timeout_seconds=self.timeout_seconds,
+        )
+        transport = self.transport or _default_transport
+        return transport(request)
+
+
+def is_telemetric_product(product_id: str) -> bool:
+    """True if ``product_id`` is served by the telemetric (Adotada/Detalhada) endpoints."""
+    return product_id in _TELEMETRIC_PRODUCT_IDS

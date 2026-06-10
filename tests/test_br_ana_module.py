@@ -16,15 +16,21 @@ def test_br_ana_stations_offline() -> None:
 
 def test_br_ana_products_offline() -> None:
     result = rr.provider("br_ana").products()
-    assert result.data.height == 2
+    assert result.data.height == 5
     product_ids = set(result.data["product_id"].to_list())
-    assert product_ids == {"discharge_daily_mean", "stage_daily_mean"}
+    assert product_ids == {
+        "discharge_daily_mean",
+        "stage_daily_mean",
+        "discharge_instantaneous",
+        "stage_instantaneous",
+        "water_temperature_instantaneous",
+    }
 
 
 def test_br_ana_station_products_offline() -> None:
     result = rr.provider("br_ana").station_products()
-    # 2 stations × 2 products = 4
-    assert result.data.height == 4
+    # 2 stations × 5 products = 10
+    assert result.data.height == 10
 
 
 def test_br_ana_info() -> None:

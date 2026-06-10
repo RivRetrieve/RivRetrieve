@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -40,6 +41,12 @@ AUTH_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/OAUth/v1
 METADATA_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1"
 DISCHARGE_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1"
 STAGE_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1"
+TELEMETRIC_ADOTADA_URL = (
+    "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
+)
+TELEMETRIC_DETALHADA_URL = (
+    "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaDetalhada/v1"
+)
 
 AVAILABILITY_REASON = "ANA catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
@@ -95,22 +102,30 @@ class ProductDefinition:
     period_type: str
     period_anchor: str
     canonical_unit: str
-    day_column_prefix: str
     api_endpoint: str
     native_unit: str
     conversion_factor: float
     notes: str | None
+    day_column_prefix: str | None = None  # "Vazao_" / "Cota_" — daily columnar series
+    native_field: str | None = None  # "Vazao_Adotada" etc. — telemetric/instantaneous series
 
     @property
     def metadata(self) -> BrAnaProductMetadata:
         return BrAnaProductMetadata(
             day_column_prefix=self.day_column_prefix,
+            native_field=self.native_field,
             api_endpoint=self.api_endpoint,
             native_unit=self.native_unit,
             canonical_unit=self.canonical_unit,
             conversion_factor=self.conversion_factor,
             notes=self.notes,
         )
+
+    @property
+    def native_id(self) -> str:
+        if self.day_column_prefix is not None:
+            return self.day_column_prefix.rstrip("_")
+        return self.native_field or self.product_id
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -153,6 +168,82 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
             "Timestamps are date-only, reconstructed from year/month/day columns "
             "and interpreted as UTC midnight (T00:00:00Z). "
             "True local timezone is undocumented (likely Brasília Standard Time, UTC-3)."
+        ),
+    ),
+    ProductDefinition(
+        product_id="discharge_instantaneous",
+        observed_property="discharge",
+        frequency="irregular",
+        statistic="instantaneous",
+        period_type="instant",
+        period_anchor="provider_defined",
+        canonical_unit="m3/s",
+        native_field="Vazao_Adotada",
+        api_endpoint=TELEMETRIC_ADOTADA_URL,
+        native_unit="m3/s",
+        conversion_factor=1.0,
+        notes=(
+            "ANA Hidroweb HidroinfoanaSerieTelemetricaAdotada/v1 — telemetric "
+            "(QC-adopted) discharge series at the station's native telemetry cadence "
+            "(commonly ~15 minutes). Includes a per-reading quality flag "
+            "(Vazao_Adotada_Status: 0=ok/1=suspeito/2=ruim) captured as the "
+            "'quality_flag' row annotation ('ok'/'suspect'/'poor'). Timestamps carry "
+            "genuine time-of-day (Data_Hora_Medicao); interpreted as Brasília Standard "
+            "Time (UTC-3) and converted to UTC. Requests are limited to 30-day windows "
+            "(Range Intervalo de busca = DIAS_30, anchored via Data de Busca)."
+        ),
+    ),
+    ProductDefinition(
+        product_id="stage_instantaneous",
+        observed_property="stage",
+        frequency="irregular",
+        statistic="instantaneous",
+        period_type="instant",
+        period_anchor="provider_defined",
+        canonical_unit="m",
+        native_field="Cota_Adotada",
+        api_endpoint=TELEMETRIC_ADOTADA_URL,
+        native_unit="cm",
+        conversion_factor=100.0,
+        notes=(
+            "ANA Hidroweb HidroinfoanaSerieTelemetricaAdotada/v1 — telemetric "
+            "(QC-adopted) stage series at the station's native telemetry cadence "
+            "(commonly ~15 minutes), in cm, divided by 100 to convert to m. Raw cm "
+            "value preserved in the raw_value row annotation. Includes a per-reading "
+            "quality flag (Cota_Adotada_Status: 0=ok/1=suspeito/2=ruim) captured as the "
+            "'quality_flag' row annotation ('ok'/'suspect'/'poor'). Timestamps carry "
+            "genuine time-of-day (Data_Hora_Medicao); interpreted as Brasília Standard "
+            "Time (UTC-3) and converted to UTC. Requests are limited to 30-day windows "
+            "(Range Intervalo de busca = DIAS_30, anchored via Data de Busca)."
+        ),
+    ),
+    ProductDefinition(
+        product_id="water_temperature_instantaneous",
+        observed_property="water_temperature",
+        frequency="irregular",
+        statistic="instantaneous",
+        period_type="instant",
+        period_anchor="provider_defined",
+        canonical_unit="degC",
+        native_field="Temperatura_Agua",
+        api_endpoint=TELEMETRIC_DETALHADA_URL,
+        native_unit="degC",
+        conversion_factor=1.0,
+        notes=(
+            "ANA Hidroweb HidroinfoanaSerieTelemetricaDetalhada/v1 — raw sensor water "
+            "temperature (Temperatura_Agua) at the station's native telemetry cadence "
+            "(commonly ~15 minutes); only available via the 'Detalhada' (not 'Adotada') "
+            "endpoint, which also returns Temperatura_Interna (logger/internal "
+            "temperature, no QC flag — not currently mapped to a canonical product). "
+            "Includes a per-reading quality flag (Temperatura_Agua_Status: "
+            "0=ok/1=suspeito/2=ruim) captured as the 'quality_flag' row annotation "
+            "('ok'/'suspect'/'poor'). Timestamps carry genuine time-of-day "
+            "(Data_Hora_Medicao); interpreted as Brasília Standard Time (UTC-3) and "
+            "converted to UTC. Requests are limited to 30-day windows (Range Intervalo "
+            "de busca = DIAS_30, anchored via Data de Busca). Availability is likely far "
+            "sparser than discharge/stage — only stations with water-temperature sensors "
+            "report this field; materialised as availability=unknown for all stations "
+            "pending per-variable availability data from ANA."
         ),
     ),
 )
@@ -224,7 +315,7 @@ def build_products() -> ProductCatalog:
             "period_type": d.period_type,
             "period_anchor": d.period_anchor,
             "unit": d.canonical_unit,
-            "native_id": d.day_column_prefix.rstrip("_"),
+            "native_id": d.native_id,
             "derived": False,
             "derivation_method": None,
             "metadata": _metadata_json(d.metadata),
@@ -369,22 +460,67 @@ def _iter_station_rows(raw_payload: list[dict[str, object]]):  # type: ignore[re
         if lat is None or lon is None:
             continue
 
+        # Keep only stations relevant to our supported products: discharge
+        # (Tipo_Estacao_Desc_Liquida), stage/level (Tipo_Estacao_Escala), or
+        # water quality (Tipo_Estacao_Qual_Agua). Stations with none of these
+        # flags set are e.g. pure rain-gauge (pluviométrica) stations and are
+        # out of scope for the discharge_daily_mean / stage_daily_mean
+        # products this provider port supports.
+        # NOTE: field names confirmed against the live HidroInventarioEstacoes
+        # response schema (underscore-separated, matching Estacao_Nome /
+        # Bacia_Nome convention) — NOT the camelCase names from the R
+        # hydrodownloadR adapter (TipoEstacaoDescLiquida etc.), which do not
+        # match the live JSON payload.
+        has_discharge = _to_bool(row.get("Tipo_Estacao_Desc_Liquida"))
+        has_level = _to_bool(row.get("Tipo_Estacao_Escala"))
+        has_quality = _to_bool(row.get("Tipo_Estacao_Qual_Agua"))
+        if not (has_discharge or has_level or has_quality):
+            continue
+
         seen.add(station_id)
 
         name = _clean_text(row.get("Estacao_Nome")) or station_id
         basin_name = _clean_text(row.get("Bacia_Nome"))
+        river_name = _clean_text(row.get("Rio_Nome"))
         elevation_m = _to_float(row.get("Altitude"))
         drainage_area_km2 = _to_float(row.get("Area_Drenagem"))
+
+        # station-level start/end: min(all sub-period starts) / max(all sub-period ends)
+        # so that long manual ("convencional") records (often back to the 1930s–70s)
+        # are not masked by the much-newer telemetric operating period (2005+).
+        # Sub-periods covered: discharge (Desc_Liquida), stage (Escala),
+        # water quality (Qual_Agua), and telemetric umbrella.
+        # end_date is None if ANY active sub-period is still open (Fim == null),
+        # meaning the station is currently operating for at least one variable.
+        _period_fields = [
+            ("Data_Periodo_Telemetrica_Inicio", "Data_Periodo_Telemetrica_Fim"),
+            ("Data_Periodo_Desc_Liquida_Inicio", "Data_Periodo_Desc_Liquida_Fim"),
+            ("Data_Periodo_Escala_Inicio", "Data_Periodo_Escala_Fim"),
+            ("Data_Periodo_Qual_Agua_Inicio", "Data_Periodo_Qual_Agua_Fim"),
+        ]
+        _starts = [_to_date(row.get(s)) for s, _ in _period_fields]
+        _ends_raw = [row.get(e) for _, e in _period_fields]
+        start_date = min((d for d in _starts if d is not None), default=None)
+        # Any null end means that sub-period is still open → station still active.
+        end_date = (
+            None
+            if any(raw is None and _to_date(row.get(s)) is not None for (s, _), raw in zip(_period_fields, _ends_raw))
+            else max((_to_date(r) for r in _ends_raw if _to_date(r) is not None), default=None)
+        )
 
         metadata = BrAnaStationMetadata(
             native_id=station_id,
             name=name,
             basin_name=basin_name,
+            river_name=river_name,
             latitude=lat,
             longitude=lon,
             country=COUNTRY,
             elevation_m=elevation_m,
             drainage_area_km2=drainage_area_km2,
+            has_discharge=has_discharge,
+            has_stage=has_level,
+            has_water_temperature=has_quality,
         )
 
         yield {
@@ -396,8 +532,8 @@ def _iter_station_rows(raw_payload: list[dict[str, object]]):  # type: ignore[re
             "country": COUNTRY,
             "elevation_m": elevation_m,
             "drainage_area_km2": drainage_area_km2,
-            "start_date": None,
-            "end_date": None,
+            "start_date": start_date,
+            "end_date": end_date,
             "metadata": _metadata_json(metadata),
         }
 
@@ -434,20 +570,50 @@ def _fetch_token(username: str, password: str) -> str:
     return token
 
 
+# ANA's gateway intermittently returns transient 5xx errors (observed: HTTP 504
+# Gateway Time-out) under load — confirmed via direct curl testing, unrelated to
+# our request shape. Retrying with backoff lets a ~10+ minute, 27-state sequential
+# fetch survive a single flaky state instead of failing the whole run.
+_METADATA_FETCH_MAX_ATTEMPTS = 4
+_METADATA_FETCH_RETRY_BASE_SECONDS = 5.0
+
+
+def _fetch_state_stations(state: str, headers: dict[str, str]) -> object:
+    url = f"{METADATA_URL}?Unidade%20Federativa={state}"
+    last_exc: Exception | None = None
+    for attempt in range(1, _METADATA_FETCH_MAX_ATTEMPTS + 1):
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            last_exc = exc
+            if exc.code < 500 or attempt == _METADATA_FETCH_MAX_ATTEMPTS:
+                raise FatalContractError(f"br_ana metadata request failed for state {state}: {exc}") from exc
+        except OSError as exc:
+            last_exc = exc
+            if attempt == _METADATA_FETCH_MAX_ATTEMPTS:
+                raise FatalContractError(f"br_ana metadata request failed for state {state}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise FatalContractError(f"br_ana metadata response is not valid JSON for state {state}: {exc}") from exc
+
+        backoff = _METADATA_FETCH_RETRY_BASE_SECONDS * (2 ** (attempt - 1))
+        print(
+            f"  [br_ana catalogue] state {state}: transient error ({last_exc}); "
+            f"retrying in {backoff:.0f}s (attempt {attempt}/{_METADATA_FETCH_MAX_ATTEMPTS})"
+        )
+        time.sleep(backoff)
+
+    # Unreachable — loop always returns or raises — but keeps type-checkers happy.
+    raise FatalContractError(f"br_ana metadata request failed for state {state}: {last_exc}")
+
+
 def _fetch_all_stations(token: str) -> list[dict[str, object]]:
     all_stations: list[dict[str, object]] = []
     headers = {"accept": "*/*", "Authorization": f"Bearer {token}"}
 
     for state in BRAZIL_STATES:
-        url = f"{METADATA_URL}?Unidade%20Federativa={state}"
-        req = urllib.request.Request(url, headers=headers, method="GET")
-        try:
-            with urllib.request.urlopen(req, timeout=60) as response:
-                data = json.load(response)
-        except OSError as exc:
-            raise FatalContractError(f"br_ana metadata request failed for state {state}: {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise FatalContractError(f"br_ana metadata response is not valid JSON for state {state}: {exc}") from exc
+        data = _fetch_state_stations(state, headers)
 
         if isinstance(data, list):
             for item in data:
@@ -504,6 +670,39 @@ def _to_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _to_date(value: Any) -> date | None:
+    """Parse ANA's period-boundary date strings (e.g. "2005-03-15", "2005-03-15T00:00:00")."""
+    text = _clean_text(value)
+    if text is None:
+        return None
+    # Some ANA date fields include a time component; keep only the date part.
+    date_part = text[:10]
+    try:
+        return date.fromisoformat(date_part)
+    except ValueError:
+        return None
+
+
+_TRUTHY_TEXT = {"sim", "true", "1", "s", "y", "yes"}
+
+
+def _to_bool(value: Any) -> bool:
+    """Tolerantly parse ANA's station-type flags.
+
+    ANA's inventory encodes these as booleans, integers (0/1), or Portuguese
+    yes/no strings ("Sim"/"Não") depending on the endpoint/response variant.
+    Anything that cannot be confidently read as truthy is treated as False.
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return value != 0
+    text = str(value).strip().lower()
+    return text in _TRUTHY_TEXT
 
 
 def _metadata_json(

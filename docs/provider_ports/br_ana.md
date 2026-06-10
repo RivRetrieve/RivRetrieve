@@ -8,8 +8,10 @@ These notes capture endpoint facts, catalogue mapping decisions, and pain points
 | --- | --- | --- |
 | `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/OAUth/v1` | Bearer token authentication. Credentials via `Identificador` and `Senha` request headers. Returns `{"status":"OK","items":{"tokenautenticacao":"<token>","sucesso":true}}` on success, `{"status":"UNAUTHORIZED","items":null}` on failure. Token TTL 60 min per ANA documentation; conservatively cached for 55 min (3300 s). | `ANA_IDENTIFICADOR` + `ANA_SENHA` env vars required. |
 | `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1` | Station metadata per-state. Called with `?Unidade%20Federativa=<STATE>` for each of the 27 Brazilian states + DF. Response is either a bare JSON array or `{"status":"OK","items":[...]}`. | Bearer token required. |
-| `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1` | Daily discharge time series (`discharge_daily_mean`). | Bearer token required. |
-| `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1` | Daily stage time series (`stage_daily_mean`). | Bearer token required. |
+| `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1` | Daily discharge time series (`discharge_daily_mean`). Legacy/"convencional" (manual-collection) columnar series — no quality flags, no temperature. | Bearer token required. |
+| `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1` | Daily stage time series (`stage_daily_mean`). Same legacy/"convencional" family as above. | Bearer token required. |
+| `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1` | Telemetric (QC-"adopted") sub-daily series — `discharge_instantaneous` (`Vazao_Adotada`) and `stage_instantaneous` (`Cota_Adotada`), each with a companion `*_Status` quality flag. Native cadence is the station's own telemetry interval (commonly ~15 min); requests are capped at 30 days (`Range Intervalo de busca`, max `DIAS_30`, anchored by `Data de Busca`). | Bearer token required. |
+| `https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaDetalhada/v1` | Telemetric "detailed" series — superset of `Adotada` that also returns raw sensor fields. Used exclusively for `water_temperature_instantaneous` (`Temperatura_Agua` + `Temperatura_Agua_Status`; `Adotada` does not carry temperature). Same 30-day windowing constraint. | Bearer token required. |
 
 ## URL Encoding Pain Point
 
@@ -44,9 +46,12 @@ These pre-encoded names are embedded in the URL string directly. Using `requests
 | `codigoestacao` | `station_id` | String coercion. |
 | `Estacao_Nome` | `name` | Direct. |
 | `Latitude`, `Longitude` | `latitude`, `longitude` | Direct. Stations without both are filtered out. |
+| `Tipo_Estacao_Desc_Liquida`, `Tipo_Estacao_Escala`, `Tipo_Estacao_Qual_Agua` | (filter only — not preserved as a column) | Stations are kept only if **at least one** of these three flags is truthy (discharge / stage-level / water-quality measurement capability). Stations with none set are typically pure rain-gauge ("pluviométrica") stations, which are out of scope for `discharge_daily_mean`/`stage_daily_mean`. Flags are parsed tolerantly (`_to_bool`): booleans, 0/1, or Portuguese "Sim"/"Não" strings. Cross-checked against the R `hydrodownloadR` adapter, which surfaces these same three fields as `has_discharge`/`has_level`/`has_quality` (but does not filter on them — RivRetrieve filters at catalogue-build time instead, since our station catalogue is scoped to river discharge/stage products only). |
 | `Altitude` | `elevation_m` | Direct (meters). Present for most stations. |
 | `Area_Drenagem` | `drainage_area_km2` | Direct (km²). Present for most stations. |
 | `Bacia_Nome` | `metadata.basin_name` | No common schema column for basin/river name; preserved in metadata. |
+| `Rio_Nome` | `metadata.river_name` | Same rationale as `basin_name` — no common schema column; preserved in metadata. |
+| `Data_Periodo_Telemetrica_Inicio`, `Data_Periodo_Telemetrica_Fim` | `start_date`, `end_date` | Parsed via `_to_date` (handles both bare `yyyy-MM-dd` and `yyyy-MM-ddTHH:MM:SS` forms; takes the first 10 chars). The telemetric operating period is the broadest "this station has reported data" signal available in the inventory; other `Tipo_Estacao_*`-specific sub-periods exist (e.g. `Data_Periodo_Desc_Liquida_*`, `Data_Periodo_Escala_*`) but telemetric is used as the umbrella record-range proxy. `Fim` is commonly `null` for currently-operating stations — mapped to `end_date = None`. |
 | Country | `country = "Brazil"` | Constant. |
 
 Station-product availability: materialized as `availability="unknown"` for all station × product pairs because the inventory endpoint does not expose per-variable data availability.
@@ -57,8 +62,46 @@ Station-product availability: materialized as `availability="unknown"` for all s
 | --- | --- | --- | --- | --- |
 | `discharge_daily_mean` | `HidroSerieVazao/v1` | m³/s | m³/s | None (factor 1.0) |
 | `stage_daily_mean` | `HidroSerieCotas/v1` | cm | m | ÷100 |
+| `discharge_instantaneous` | `HidroinfoanaSerieTelemetricaAdotada/v1` (`Vazao_Adotada`) | m³/s | m³/s | None (factor 1.0) |
+| `stage_instantaneous` | `HidroinfoanaSerieTelemetricaAdotada/v1` (`Cota_Adotada`) | cm | m | ÷100 |
+| `water_temperature_instantaneous` | `HidroinfoanaSerieTelemetricaDetalhada/v1` (`Temperatura_Agua`) | °C | °C | None (factor 1.0) |
 
-Stage raw value (cm) is always preserved in the `raw_value` row annotation.
+Stage raw value (cm) is always preserved in the `raw_value` row annotation (both daily and instantaneous variants).
+
+`Temperatura_Interna` (logger/internal temperature, also present in the `Detalhada` payload) has no canonical home and no QC flag — it is intentionally **not** mapped to any product.
+
+## Quality Flags (Telemetric Products Only)
+
+The official manual (`manual-hidrowebservice_publica.pdf`) documents a `<Field>_Status` companion field for every telemetric measurement, with semantics **"0 = ok, 1 = suspeito, 2 = ruim"**. This pattern exists **only on the telemetric (`Adotada`/`Detalhada`) endpoints** — the legacy daily columnar series (`HidroSerieVazao`/`HidroSerieCotas`, i.e. `discharge_daily_mean`/`stage_daily_mean`) carry no status fields in either the manual's sample responses or our fixtures, so no quality-flag annotation is emitted for those two products.
+
+For the three telemetric products, the raw numeric code is mapped to a canonical string and captured as a `quality_flag` **row annotation**, following the same pattern as `usgs_nwis`'s `qualifier` and `ca_eccc`'s `quality_flag`:
+
+| Native code (`*_Status`) | Canonical `quality_flag` value |
+| --- | --- |
+| `"0"` | `ok` |
+| `"1"` | `suspect` |
+| `"2"` | `poor` |
+| anything else / present-but-unrecognised | `unknown` |
+| absent (`null`/missing) | *(no annotation emitted)* |
+
+See `TELEMETRIC_QUALITY_FLAG_MAP` in `parser.py`.
+
+## Telemetric Endpoint Facts (Live OpenAPI Spec)
+
+Confirmed live via `https://www.ana.gov.br/hidrowebservice/api-docs`:
+
+- Both `Adotada` and `Detalhada` v1 endpoints require `Código da Estação`, `Tipo Filtro Data` (`DATA_LEITURA`/`DATA_ULTIMA_ATUALIZACAO`), and `Range Intervalo de busca`; `Data de Busca (yyyy-MM-dd)` is optional.
+- `Range Intervalo de busca` is an enum of **query-window sizes** — `MINUTO_5`...`HORA_24`, `DIAS_2`, `DIAS_7`, `DIAS_14`, `DIAS_21`, `DIAS_30` — **not** an output-resampling instruction. The endpoint summary states results are **"limitado a 30 dias por requisição"**; the actual reported cadence is whatever the station's telemetry logger reports natively (commonly ~15 minutes per the manual's sample payloads).
+- `v2` variants of both endpoints exist, accepting up to 10 comma-separated station codes via `Codigos_Estacoes` — not used here (the v1 single-station form matches the established per-station retrieval loop and keeps the implementation symmetric with the daily-series clients).
+
+**Open question requiring live verification** (see `/tmp/ana_telemetric_diag.py`): the exact relationship between `Data de Busca` and `Range Intervalo de busca` — i.e. whether the resolved window extends backward from, forward from, or is centered on the anchor date. `_split_30day_windows` currently anchors each ≤30-day chunk at its **end** date (the most common "give me the last N days" convention for such APIs); `_filter_local_date_range` then clips the merged result to the originally requested range regardless, so an incorrect anchor assumption would manifest as **gaps** (missing days at chunk boundaries) rather than wrong values — recoverable once the true semantics are confirmed and the anchor strategy adjusted.
+
+## Timezone (Telemetric Products)
+
+Unlike the daily columnar series (date-only, UTC-midnight), telemetric `Data_Hora_Medicao` timestamps carry genuine time-of-day information (e.g. `"2024-06-01 00:15:00.0"`) but the API documents no explicit timezone. They are interpreted as **Brasília Standard Time (UTC-3, no DST since 2019)** — ANA's documented operating timezone — and converted to UTC.
+
+Per-fetch: a `naive_local_timestamp` `info`-severity issue is emitted (distinct from `date_only_timestamp`, since real time-of-day is present).
+Per-series: `timezone_source = "naive_local_brt_minus_3"`, `date_only_timestamp_flag = "false"`.
 
 ## Response Format: Monthly Columnar Structure
 
@@ -83,11 +126,18 @@ Per-series: `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_f
 
 ## Windowing
 
-Annual chunks (year-by-year), matching the legacy `BrazilFetcher._download_data` pattern. `_split_annual_windows` decomposes `[start, end]` into `[(YYYY-01-01, YYYY-12-31), ...]` aligned to calendar years, clipped to the request range.
+Two distinct windowing strategies, selected per-product by `is_telemetric_product`:
+
+- **Daily columnar products** (`discharge_daily_mean`, `stage_daily_mean`): annual chunks (year-by-year), matching the legacy `BrazilFetcher._download_data` pattern. `_split_annual_windows` decomposes `[start, end]` into `[(YYYY-01-01, YYYY-12-31), ...]` aligned to calendar years, clipped to the request range.
+- **Telemetric/instantaneous products** (`discharge_instantaneous`, `stage_instantaneous`, `water_temperature_instantaneous`): ≤30-day chunks, matching the ANA API's documented per-request limit (`Range Intervalo de busca`, max `DIAS_30`). `_split_30day_windows` decomposes `[start, end]` into 30-day pieces; each is requested with `Range Intervalo de busca = DIAS_30` and `Data de Busca` anchored at the chunk's end date. `_filter_local_date_range` then clips the merged, parsed result back to the originally-requested range (on local calendar dates, prior to UTC conversion) — see "Open question" above regarding anchor-date semantics.
 
 HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching the established pattern from `lt_lhmt`, `usgs_nwis`, `cz_chmi`, `th_thaiwater`, `fr_hubeau`, `jp_mlit`.
 
 ## Live Catalogue Generation
+
+> **Manual step — not automated in CI.**
+>
+> The `br_ana` catalogue (`stations.parquet`, `products.parquet`, `station_products.parquet`, `provider.json`) must be regenerated **manually** by anyone with valid ANA credentials (`ANA_IDENTIFICADOR` / `ANA_SENHA`). These credentials are personal, cannot be shared, and must never be committed or stored anywhere in the repository. The packaged catalogue artifacts are committed to the repo after each manual regeneration so that end users can install and use `br_ana` without supplying credentials themselves.
 
 The generator fetches station metadata for all 27 states + DF sequentially with 0.1 s sleep between state requests to be polite to the API. A minimum live station guard of 1000 stations is set (Brazil reportedly has ~4000+ telemetry gauges; conservative floor catches silent fetch failures).
 
@@ -98,8 +148,10 @@ ANA_IDENTIFICADOR=<user> ANA_SENHA=<pass> \
   --live --out src/rivretrieve/_internal/providers/br_ana/catalogue/
 ```
 
+Then commit the updated catalogue artifacts (`catalogue/*.parquet`, `catalogue/provider.json`) without the credentials.
+
 ## Architecture.md Impact
 
-None. Authentication, date-only UTC midnight timestamps, annual windowing, and manual URL encoding are all provider-specific. No shared harness gap discovered.
+None. Authentication, date-only UTC midnight timestamps, naive-local-to-UTC conversion, dual windowing strategies (annual vs. ≤30-day), and manual URL encoding are all provider-specific. The `quality_flag` row-annotation pattern reuses the established convention from `usgs_nwis` (`qualifier`) and `ca_eccc` (`quality_flag`) — no new shared harness concept introduced. No shared harness gap discovered.
 
 The authentication pattern (credentials via env vars, token cached in client, missing credentials → structured issue) is `br_ana`-specific for now. If future authenticated providers are added, the token management pattern here could serve as a reference, but it should not be promoted to shared harness until there is concrete evidence of reuse need.

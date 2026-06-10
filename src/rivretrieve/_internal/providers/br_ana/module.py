@@ -80,7 +80,21 @@ def row_annotation_schema() -> list[AnnotationSchema]:
             annotation_id="raw_value",
             description="Provider value before unit conversion (in native unit).",
             value_type="float",
-            source_field="Vazao_DD / Cota_DD",
+            source_field="Vazao_DD / Cota_DD / Vazao_Adotada / Cota_Adotada / Temperatura_Agua",
+        ),
+        AnnotationSchema(
+            annotation_id="quality_flag",
+            description=(
+                "ANA telemetric quality flag, mapped from the provider's numeric "
+                "<Field>_Status code (0=ok, 1=suspeito, 2=ruim) to canonical strings "
+                "'ok'/'suspect'/'poor' ('unknown' for unrecognised codes). Only present "
+                "for instantaneous/telemetric products (discharge_instantaneous, "
+                "stage_instantaneous, water_temperature_instantaneous); the legacy daily "
+                "columnar series (discharge_daily_mean, stage_daily_mean) carry no "
+                "quality flags in the provider response."
+            ),
+            value_type="string",
+            source_field="Vazao_Adotada_Status / Cota_Adotada_Status / Temperatura_Agua_Status",
         ),
     ]
 
@@ -120,20 +134,27 @@ def series_annotation_schema() -> list[AnnotationSchema]:
         AnnotationSchema(
             annotation_id="timezone_source",
             description=(
-                "How timezone was resolved: 'date_only_utc_midnight' — ANA provides "
-                "no explicit timezone; daily values interpreted as UTC midnight."
+                "How timezone was resolved. 'date_only_utc_midnight' — daily columnar "
+                "products (discharge_daily_mean, stage_daily_mean): ANA provides no "
+                "explicit timezone; date-only values interpreted as UTC midnight. "
+                "'naive_local_brt_minus_3' — telemetric/instantaneous products: "
+                "Data_Hora_Medicao carries genuine time-of-day but no explicit timezone; "
+                "interpreted as Brasília Standard Time (UTC-3) and converted to UTC."
             ),
             value_type="string",
-            source_field="Data_Hora_Dado + day column",
+            source_field="Data_Hora_Dado + day column / Data_Hora_Medicao",
         ),
         AnnotationSchema(
             annotation_id="date_only_timestamp_flag",
             description=(
-                "'true' for all br_ana products: timestamps are reconstructed from "
-                "year/month/day and interpreted as UTC midnight (T00:00:00Z)."
+                "'true' for the daily columnar products (discharge_daily_mean, "
+                "stage_daily_mean): timestamps are reconstructed from year/month/day "
+                "and interpreted as UTC midnight (T00:00:00Z). 'false' for telemetric/"
+                "instantaneous products, whose timestamps carry genuine time-of-day "
+                "information (see naive_local_timestamp issue and timezone_source)."
             ),
             value_type="boolean",
-            source_field="Data_Hora_Dado + day column",
+            source_field="Data_Hora_Dado + day column / Data_Hora_Medicao",
         ),
         AnnotationSchema(
             annotation_id="provider_endpoints",
