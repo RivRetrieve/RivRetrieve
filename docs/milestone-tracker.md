@@ -600,3 +600,27 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - Do not replace `on_issue` with `on_missing` or add a second public issue policy knob.
 - Do not import `generate_catalogue.py` during normal runtime package use.
 - Do not leave a milestone with failing tests, broken imports, empty public Protocols, or public API signatures that contradict architecture.md.
+
+## 20. `za_dws` — South Africa / Department of Water and Sanitation provider port (post-V1)
+
+- **Provider ID:** `za_dws`
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. Full suite passes (950 tests; 37 za_dws-specific).
+- **Source:** Port of the legacy Python `SouthAfricaFetcher` (`thirdparty/RivRetrieve-Python` @ `rivretrieve/southafrica.py`), cross-referenced with the R adapter `adapter_ZA_DWS.R` (hydrodownloadR).
+- **Catalogue:** 2863 stations (from 8 WMA PDF files), 3 products, 8589 station-product rows; packaged in `src/rivretrieve/_internal/providers/za_dws/catalogue/`. Generated 2026-06-10.
+- **Products:** `discharge_daily_mean` (Daily endpoint, D_AVG_FR), `discharge_instantaneous` (Point endpoint, COR_FLOW), `stage_instantaneous` (Point endpoint, COR_LEVEL).
+- **New dependency:** `pypdf` added via `uv add pypdf` — required to extract station metadata from WMA PDF files linked from `HyCatalogue.aspx`.
+- **Discovery notes:**
+  - **PDF-only catalogue**: No JSON or CSV station catalogue is available; all 2863 stations must be scraped from 8 WMA PDF files using `pypdf`. DMS coordinates require parsing from `DD:MM:SS` format.
+  - **Daily endpoint (20-year windows)**: `DataType=Daily` returns `D_AVG_FR` (daily average flow rate, m³/s). Rows with `d_avg_fr >= 99999.0` are sentinel values and are dropped by the parser. Timestamps are date-only and interpreted as UTC midnight (`date_only_utc_midnight`); a `date_only_timestamp` warning issue is emitted per series.
+  - **Point endpoint (1-year windows)**: `DataType=Point` returns `COR_LEVEL` (m) and `COR_FLOW` (m³/s) in the same row with `YYYYMMDD HHMMSS` timestamps in SAST (Africa/Johannesburg, UTC+2, no DST). Converted to UTC via `replace(tzinfo=SAST).astimezone(UTC)`; a `timezone_local_to_utc` info issue is emitted per series with `source_timezone="Africa/Johannesburg"` series annotation.
+  - **Point response cache**: `discharge_instantaneous` and `stage_instantaneous` share one HTTP request per `(station_id, window)` via an in-call `point_cache` dict, avoiding a redundant fetch when both products are requested together.
+  - **Station ID URL suffix**: The `Station=` query parameter requires `{id}100.00` appended (e.g. `X3H001100.00`) — a quirk of the web form, documented in the R adapter.
+  - **"No data" detection**: Absent `<pre>` tag in the HTML response signals no data for the requested window; returns an empty DataFrame with a `missing_data` warning issue.
+  - **Elevation absent**: WMA PDFs do not include elevation; `elevation_m` is always `None`.
+  - **All station-products `availability = "unknown"`**: PDFs list stations but not which products each station reports.
+  - No auth token; public DWS open data.
+  - Live station minimum guard: 500 stations.
+- **Port notes:** `docs/provider_ports/za_dws.md`.
+- **Fixtures:** `tests/test_data/za_dws_metadata.json` (3-station fixture: X3H001, A1H001, A2H001), `tests/test_data/za_dws_X3H001_daily_2020-01.txt` (30 daily rows, Jan 2020), `tests/test_data/za_dws_X3H001_point_2020-01.txt` (sub-daily rows, Jan 1–3 2020).
+- **Live verification:** Catalogue endpoint fetched live 2026-06-10: 8 WMA PDFs parsed, 2863 stations. Observation endpoint fetched live for X3H001 Daily Jan 2020 (30 rows, first value 1.257 m³/s) and Point Jan 2020 (first row COR_LEVEL=0.146 m, COR_FLOW=1.230 m³/s). SAST→UTC conversion confirmed: `20200101 000000` SAST → `2019-12-31T22:00:00Z`.
+- **Architecture.md impact:** None. PDF scraping for catalogue generation and the SAST→UTC conversion are provider-specific. The date-only UTC-midnight pattern is consistent with `br_ana` daily data handling. No shared harness gap discovered.

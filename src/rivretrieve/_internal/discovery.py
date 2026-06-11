@@ -158,6 +158,7 @@ def _ensure_default_providers_registered() -> None:
         and "ca_eccc" in registered
         and "pl_imgw" in registered
         and "ba_fhmzbih" in registered
+        and "za_dws" in registered
     ):
         return
 
@@ -281,6 +282,16 @@ def _ensure_default_providers_registered() -> None:
             "ba_fhmzbih",
             ba_fhmzbih_artifact,
             provider_module=ba_fhmzbih_module,
+        )
+
+    if "za_dws" not in registered:
+        from rivretrieve._internal.providers.za_dws import module as za_dws_module
+
+        za_dws_artifact = load_packaged_catalogue_artifact(za_dws_module._CATALOGUE_PATH, on_issue="raise")
+        _registry.register(
+            "za_dws",
+            za_dws_artifact,
+            provider_module=za_dws_module,
         )
 
 

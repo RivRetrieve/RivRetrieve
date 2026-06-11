@@ -694,6 +694,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pypdf"
+version = "6.13.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/d9/9d12fa0d9660d03320725ff686c961b645a4218940a82296e1272d9e1ff0/pypdf-6.13.1.tar.gz", hash = "sha256:4841d8a4c1589e5833915dc0c7ddfacff80a2e0bcbeb5d1e681fecaa1674b03a", size = 6477811, upload-time = "2026-06-08T11:01:49.344Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/dd/8f03e0a5788a5d1feb4550617c3e6db5e9099eaee248a3e482ddaeacbbb0/pypdf-6.13.1-py3-none-any.whl", hash = "sha256:e555e4ce3f561ef069307622f1374136ba964ca6ca24f24158701decaf83ed9b", size = 346259, upload-time = "2026-06-08T11:01:47.741Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -800,7 +809,7 @@ wheels = [
 
 [[package]]
 name = "rivretrieve"
-version = "0.1.47"
+version = "0.1.48"
 source = { editable = "." }
 dependencies = [
     { name = "openpyxl" },
@@ -809,6 +818,7 @@ dependencies = [
     { name = "polars" },
     { name = "pyarrow" },
     { name = "pydantic" },
+    { name = "pypdf" },
     { name = "requests" },
 ]
 
@@ -835,6 +845,7 @@ requires-dist = [
     { name = "polars" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pydantic" },
+    { name = "pypdf", specifier = ">=6.13.1" },
     { name = "requests" },
 ]
 provides-extras = ["map"]
