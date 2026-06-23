@@ -278,6 +278,21 @@ A reader who asks "where is the core logic" has one answer: the engine. A reader
 who asks "what does Norway do" opens three files whose names already say what each
 one holds.
 
+**Meeting note: one file or three? (unresolved).** Thiago would prefer a single
+file per provider instead of three. His argument is not a software-engineering one:
+he concedes the split is clean, and his point is about contributor *ownership* — a
+single file with one author's name on it gives a contributor a clearer sense of
+owning "their" provider, where three files can feel like filling slots in someone
+else's framework. My preference is the three files above: `fetch` and `parse` are
+genuinely separate concerns, `convert` is config not code, and the predictable
+names make any provider inspectable at a glance (and three is already a large cut
+from today's seven-plus). I will say plainly that the ownership dimension had not
+crossed my mind, and it is a fair one. The framing I would put to the team is who
+actually reads or contributes to this source: if it is a handful of maintainers,
+one contributor's sense of ownership may matter more than navigability; if it is
+wider, the cleaner split likely wins. We did not converge, so this is genuinely
+open.
+
 ## 4. What we should remove
 
 These are the places where, with the evidence in front of us, I think we built
@@ -306,7 +321,7 @@ structure already provides:
 - **provenance**: the receipt for the request: which provider, which
   endpoint(s), retrieval time, the native unit, and the conversion applied. One
   fixed shape for all providers.
-- **issues**: structured warnings and anomalies (see Section 9). A shared
+- **issues**: structured warnings and anomalies (see Section 10). A shared
   vocabulary, not thirteen private ones.
 - **raw**: the untouched provider payload, kept when practical.
 
@@ -382,7 +397,17 @@ p.observations(..., start="2024-12-12", end="2024-12-16", time_zone="local") # t
   which we look up. For a provider spanning several zones, "local" is each
   station's own zone.
 
-The output stays UTC in both cases; the flag only changes how the input is read.
+The default is UTC-in and UTC-out, and nobody disputes that. What `time_zone="local"`
+does to the **output** is an open question for the team (see Section 14). Two
+readings are possible: it could reinterpret only the input window and still return
+UTC, or it could also convert the returned `time` column into local time. The
+argument that local output is acceptable: timezone conversion changes no values and
+is fully reversible, so unlike aggregation it does not violate faithfulness — it
+names the same instant in another zone. The real cost is consistency, not fidelity:
+for a provider spanning several zones, local output means the `time` column mixes
+zones. A natural middle is to allow local output but require the timestamps to be
+timezone-aware, so the zone is always explicit and never ambiguous. I am flagging
+this rather than deciding it.
 
 **Recommendation on boundaries.** The window is closed, `[start, end]`, both ends
 included. This matches the plain reading of "12 to 16".
@@ -397,8 +422,8 @@ for the local South African day that starts at `2024-01-10 00:00` local time, wh
 is `2024-01-09 22:00 UTC`. So the stored `time` is `2024-01-09 22:00:00Z`. The UTC
 date can therefore look like the previous calendar day. That is not an error: it is
 the real UTC instant at which the local day begins. A user who wants the local date
-back asks with `time_zone="local"`, or converts the UTC timestamp to the station's
-zone.
+back converts the UTC timestamp to the station's zone (whether `time_zone="local"`
+should also do this on output is the open question above).
 
 ### 5.3 Correct boundaries, in one place
 
@@ -446,7 +471,9 @@ tiers.
 - **Guaranteed**: never null, for every station of every provider, enforced as a
   check when the catalogue is built: `provider_id`, `station_id`, `name`,
   `latitude`, `longitude`, `country`. The promise: every gauge we list, you can
-  find and locate. Following the convention used by datasets like EStreams,
+  find and locate. `station_id` is always text: stored and returned as a string
+  (`"10"`, never `10`), preserving leading zeros, and a numeric input is coerced to
+  a string. Following the convention used by datasets like EStreams,
   `country` is an ISO country code; sub-national region, where it exists, is a
   best-effort or native field, not a second guaranteed column.
 - **Best-effort**: nullable, filled when the source provides it, *never*
@@ -481,6 +508,17 @@ a live claim. A user who needs the true current end uses the live path (6.4). Th
 the meeting also asked for: a closed station's `end_date` is a fixed truth; an
 active station's is a snapshot.
 
+**Open question for the team.** When a source does not publish a `start_date` or
+`end_date`, do we compute one ourselves (for example by reading the earliest and
+latest observation), or do we leave it null? My recommendation is to leave it null.
+A computed date is a value the source never stated, which is the same act as the
+aggregation we banned in 4.3 — the clean test there was *who did the maths?*, and a
+date we derived is a date we did the maths for. It is also expensive and fragile to
+establish a true earliest observation across thousands of stations at build time. So
+my recommendation is keep both dates best-effort, populated when the source provides
+them and null otherwise. Thiago and I agreed to leave this open for the rest of the
+team rather than settle it between us.
+
 ### 6.3 License, citation, and source links
 
 The meeting was emphatic that license is one of the most important things we
@@ -495,26 +533,33 @@ information. They describe a data source as a whole, which is why I propose them
 the provider level rather than copied onto every station row.
 
 - `license`: a short, structured status (for example `open`, `attribution`,
-  `restricted`), **guaranteed**. This is the filterable fact: it lets a user ask
-  "which providers may I redistribute?" before building on the data.
-- `license_url`: the link to the actual terms, **guaranteed**. We should not ask
-  scientists to use data whose license we cannot show.
+  `restricted`), **best-effort**. This is the filterable fact, when we have it: it
+  lets a user ask "which providers may I redistribute?" before building on the data.
+  Some sources do not document a license anywhere, so it is filled when the source
+  states it and null otherwise; an unknown license surfaces as null, never silently
+  assumed open.
+- `license_url`: the link to the actual terms, **best-effort**. License compliance
+  is ultimately the user's responsibility; we are a tool, not a party asking anyone
+  to use anything. We surface what the source documents as a convenience, to the
+  best of our knowledge, and leave this null when the source documents nothing.
 - `citation`: how to credit the source (a citation string or DOI), **best-effort
   but high-effort**; not every agency offers one.
 - `notes`: a short free-text field for provider caveats (for example "real-time
   values lag by a few days", "file format changed in 2024", "redistribution
   restricted"). This is the natural home for the per-provider caveats the generated
-  docs page (Section 10) will surface, and it costs almost nothing. It is the one
+  docs page (Section 11) will surface, and it costs almost nothing. It is the one
   piece of free-text we keep, deliberately at the provider level and not per
   observation, unlike the open annotation tables we removed in Section 4.1.
 - source links, `website`, and where they differ, a data URL and a metadata URL,
   **best-effort**. Useful provenance back to the source at low cost.
 
-**Open question for the team.** Thiago's note leans towards surfacing license (and
-citation) in the stored station columns as well. My recommendation is to keep them
-at the provider level, stamping the same license onto ten thousand identical
-station rows is redundant, and it is one call away on the provider. But this is a
-genuine preference question, so I am flagging it rather than deciding it.
+**Open question for the team.** Where do `license` and `citation` live: provider-
+level only (my recommendation), or also stamped onto the stored station columns? My
+recommendation is provider-level. A license describes the whole source, so copying
+the identical value onto every one of a provider's station rows adds nothing — it is
+already present once in the provider's data and is one call away on the handle.
+Thiago indicated agreement with provider-level in review; I am keeping it open here
+because it is a catalogue-schema choice worth the full team's confirmation.
 
 ### 6.4 Native and canonical, packaged and live
 
@@ -582,7 +627,7 @@ no local cache, an observation request fails with a clear, actionable message
 telling the user the size and what to run. The expensive step only happens when
 the user explicitly asks for it (by calling the download/refresh method, or
 passing an explicit consent flag for non-interactive scripts). This follows the
-general rule from Section 9: never do something expensive silently.
+general rule from Section 10: never do something expensive silently.
 
 ### 7.2 A uniform cache interface
 
@@ -594,10 +639,13 @@ since a cache status on a live-API provider is meaningless, but they should be
 ca = rr.provider("ca_eccc")
 ca.cache_status()    # exists, path, age, size, stale
 ca.refresh_cache()   # force re-download, returns any issues
+ca.clear_cache()     # delete the cache, report the path and size freed
 ```
 
 The provider's information already tells a user whether it is a bulk provider, so
-the methods appear where they apply and nowhere else.
+the methods appear where they apply and nowhere else. `clear_cache()` deletes the
+file and reports what it freed, leaving the provider in the no-cache state so the
+next request hits the usual consent message.
 
 ### 7.3 One cache format
 
@@ -605,24 +653,31 @@ Today the two bulk providers store their cache differently (one as a database, o
 as a single columnar file), so they have two separate query paths. This is the
 last piece of unshared bulk machinery.
 
-**Recommendation (mine; open for the team).** Standardise the cache as one format
-for all bulk providers: a hive-partitioned columnar store (Parquet), partitioned
-by product and year, with rows sorted by station so that per-station reads prune
-cheaply, plus a small manifest that records the format version, when it was built,
-and the source vintage. Each bulk provider then contributes only a download step
-and a small "compile this source into the standard cache" function; everything
-after that, reading, querying, reporting cache status, is one shared
-implementation.
+**Recommendation (Nicolas + Thiago aligned; flagged for team confirmation).**
+Standardise the cache as one format for all bulk providers: a hive-partitioned
+columnar store (Parquet), partitioned by product and year, with rows sorted by
+station so that per-station reads prune cheaply, plus a small manifest that records
+the format version, when it was built, and the source vintage. Each bulk provider
+then contributes only a download step and a small "compile this source into the
+standard cache" function; everything after that, reading, querying, reporting cache
+status, is one shared implementation.
 
-I want to address the principled objection directly, because Thiago raised it and
-I agree with the principle: *we are an interface to data and make no claim to treat
-it perfectly.* Standardising the cache **format** does not violate this. It
-re-encodes the same values into a better container, the way we already re-encode
-the transport, and it changes no numbers. We already harmonise units,
-names, and time; harmonising the storage layout is the same kind of act. The payoff
-is that "bulk" stops being several different backends and becomes one engine. The
-cache stores the *native* values; conversion happens on read, through the same
-`convert` stage every other provider uses.
+The reason this is worth the effort: a defined cache format means a contributor only
+ports the provider and matches the format. They never build a query engine on top of
+it, because reading, querying, and cache status all live once in the core engine.
+That is the whole payoff — bulk stops being several backends and becomes one.
+(Hive-partitioned Parquet is a proven choice here; I have used it in production for
+two years.)
+
+On the faithfulness objection Thiago raised — *we are an interface to data and make
+no claim to treat it perfectly* — standardising the **format** does not violate it.
+The cache stores the *native* values, unchanged; conversion happens on read through
+the same `convert` stage every other provider uses. We already harmonise units,
+names, and time; harmonising the storage layout is the same kind of act — changing
+the box, not the numbers.
+
+*Where this stands:* Thiago and I are aligned on this after discussing it. We are
+surfacing the reasoning here so the rest of the team can decide whether they agree.
 
 ## 8. The public API surface
 
@@ -669,7 +724,31 @@ appears.
 With the annotation tables removed (4.1), the two annotation-schema methods on the
 handle disappear as well.
 
-## 9. Failure and validation
+## 9. Authentication and API keys
+
+Several providers require a personal API key or token before they will return data
+(Norway/NVE and Brazil/ANA are the current examples). This is distinct from the
+bulk-download consent in Section 7: consent gates a large *download* for bulk
+providers, whereas a key gates *access* to an API provider — Norway is an API
+provider, not a bulk one — so the two are different mechanisms and should not be
+conflated.
+
+**Recommendation (Nicolas + Thiago aligned).** The engine loads keys from a `.env`
+file, and we ship a committed template the user only has to paste into:
+
+```text
+# .env.template — copy to .env and paste your tokens
+NO_NVE_TOKEN="paste your token here"   # https://hydapi.nve.no — register for a key
+BR_ANA_TOKEN="paste your token here"   # some agencies require an email request
+```
+
+For now we do not write spelled-out documentation for this. Acquisition guidance
+(where to register, which agencies need an email) lives as comments in the `.env`
+template, and the docstrings cover the rest. A missing key follows the general rule
+of Section 10: fail clearly and actionably, never silently. Per-provider tutorials
+can come later if the trickier sources warrant them.
+
+## 10. Failure and validation
 
 A promise worth stating in one line: **RivRetrieve never fails silently, and never
 does something expensive silently.** Concretely:
@@ -688,7 +767,7 @@ does something expensive silently.** Concretely:
   succeeded, with error-level issues describing what did not. We never return a
   half-result that looks complete.
 
-## 10. Documentation
+## 11. Documentation
 
 The meeting asked for documentation that is professional in the manner of
 NeuralHydrology, and raised the idea of human-optimised and LLM-optimised docs. The
@@ -717,7 +796,7 @@ The LLM optimisation comes from disciplined docstrings and generated structured
 artefacts, which serve humans and machines equally; the tool itself matters far
 less.
 
-## 11. Testing
+## 12. Testing
 
 The current tests were written by the agents that wrote the code, with no
 direction on what or how to test. That, more than any single test, is the problem:
@@ -754,7 +833,14 @@ cause here is that no one told the test-writers what testing means for this
 library. And, as table stakes for a canonical tool: stand up CI and re-enable the
 type checker. There is currently neither, and that is the real gap.
 
-## 12. Summary: what is necessary, and what we are cutting
+The same logic applies to docstrings. Make NumPy-style docstrings a hard constraint
+in `AGENTS.md`, so every provider and engine public function is documented to one
+standard as it is written. That discipline is what lets the API reference (Section
+11) generate from the docstrings, with no separate, drift-prone doc set to maintain.
+Nicolas and Thiago are aligned on docstrings-as-constraint; the NumPy style
+specifically is my recommendation.
+
+## 13. Summary: what is necessary, and what we are cutting
 
 The promise (Section 1) forces a specific and short list of necessary complexity:
 
@@ -778,8 +864,8 @@ And it lets us cut, without breaking anything:
   fixed receipt),
 - a harmonised **quality-flag column** (kept native, in `raw`),
 - **aggregation** and the `derived`/`derivation_method` fields (we never derive),
-- the **horizontal seven-file-per-provider** layout (replaced by one provider file
-  plus the engine),
+- the **horizontal seven-file-per-provider** layout (replaced by three small
+  provider files plus the engine; one-versus-three is itself open, see Section 3),
 - the duplicated **HTTP, windowing, timezone, and unit code** across providers
   (moved into the engine),
 - the redundant **top-level `observations` wrapper** and aliases.
@@ -789,15 +875,37 @@ complexity we remove is the complexity that served no promise, and the complexit
 we keep is the complexity the promise requires. Compactness is bought by being
 clear about what we are for.
 
-## 13. Open questions for the team
+## 14. Open questions for the team
+
+Status after the Nicolas/Thiago review is noted on each. Items the two of us settled
+between ourselves are still listed, so the rest of the team can confirm or reopen
+them rather than inherit them silently.
 
 1. **The promise (Section 1).** Is "faithful, traceable access through one
    consistent shape" the promise we cannot break? Everything else depends on this.
+   *Nicolas and Thiago are aligned on it; open for the full team.*
 2. **License and citation placement (6.3).** Provider-level only (my
-   recommendation), or also surfaced in the stored station columns?
-3. **The bulk cache format (7.3).** Do we adopt one standardised hive-partitioned
-   Parquet cache across bulk providers? (My recommendation is yes.)
-4. **The guaranteed tier (6.1).** Is the guaranteed, never-null set exactly
-   `station_id, name, latitude, longitude, country` plus provider-level
-   `license_url`? Should `start_date` be promoted into it, accepting that some
-   providers cannot supply it?
+   recommendation), or also surfaced in the stored station columns? *Still open.
+   Thiago indicated agreement with provider-level in review; surfaced here for the
+   full team because it is a catalogue-schema choice.*
+3. **The bulk cache format (7.3).** Adopt one standardised hive-partitioned Parquet
+   cache across bulk providers. *Nicolas and Thiago are aligned (recommendation:
+   yes); flagged for the team to confirm.*
+4. **Computing dates we were not given (6.2).** When a source does not publish a
+   `start_date`/`end_date`, do we compute one ourselves or leave it null? *My
+   recommendation is null: a computed date is a value the source never stated, the
+   same act as the aggregation banned in 4.3 ("who did the maths?"). Open for the
+   team. This also settles the guaranteed tier (6.1): `license_url` is best-effort,
+   not guaranteed, and `start_date` stays best-effort unless the team votes to
+   promote it.*
+5. **Local-time output (5.2).** Default is UTC-in/UTC-out, undisputed. The open part:
+   should `time_zone="local"` also convert the **output** to local, not just
+   reinterpret the input window? *Timezone conversion changes no values and is
+   reversible, so unlike aggregation it does not break faithfulness; the real cost is
+   consistency — a provider spanning several zones would return a `time` column
+   mixing zones. A natural middle is local output with timezone-aware timestamps so
+   the zone is never ambiguous. Open for the team.*
+
+6. **One file or three per provider (Section 3).** Unresolved between Nicolas
+   (three: separation of concerns, predictable names) and Thiago (one: stronger
+   contributor ownership). Put to the team.
