@@ -1,24 +1,28 @@
 # Project Instructions
 
+A rule appears in this file only if (a) it encodes a project choice that cannot be inferred from the code, or (b) default model output violates it. Practices a model already follows unprompted, and anything ruff or ty enforces mechanically, are deliberately absent.
+
 ## 0. Project Overview
 
-A Python package for downloading global river gauge data.
+RivRetrieve downloads river gauge data from national hydrology agencies and returns it in one shape.
+
+The promise it cannot break: **faithful, traceable access through one consistent shape across every provider.** A user can trust a number and follow it back to its source.
+
+The boundary that keeps that promise finite: **harmonise identity and physics, never harmonise judgement.** Units, column shape, time representation and product identity are objective, so we convert them. Quality codes, station identity across borders, and river naming are interpretation, so we surface them exactly as the source gave them and adjudicate nothing.
+
+Domain terms are defined in `CONTEXT.md`. Decisions that are hard to reverse are recorded in `docs/adr/`.
 
 ## 1. Python Environment
 
 Use `uv` exclusively.
 
-- Add dependencies: `uv add <package>`
-- Remove dependencies: `uv remove <package>`
+- Add dependencies: `uv add <package>` (dev: `uv add --dev <package>`)
 - Sync environment: `uv sync`
-- Run commands: `uv run <command>`
-- Run tests: `uv run pytest`
+- Run anything: `uv run <command>`, tests: `uv run pytest`
 
 Do not use `pip`, `poetry`, `conda`, or `pip-tools` directly.
 
-## 2. Code Style
-
-Use `ruff` for formatting and linting, and `ty` for type checking.
+Format, lint, and type-check with:
 
 ```bash
 uv run ruff format
@@ -26,72 +30,53 @@ uv run ruff check --fix
 uv run ty check
 ```
 
-Use modern Python typing syntax:
+## 2. Design Doctrine
 
-- Prefer built-in generics: `list[str]`, `dict[str, int]`, `tuple[str, ...]`.
-- Prefer `|` unions: `str | None`.
-- Avoid importing legacy aliases from `typing` such as `List`, `Dict`, `Tuple`, or `Optional`.
-- Import from `typing` only when needed for features with no built-in equivalent, such as `Protocol`, `Literal`, or `NewType`.
+Four rules. They are one design stance seen four ways: a module means one thing, receives exactly what it needs, in types that cannot lie, and dies rather than guess.
 
-## 3. Versioning and Tags
+### 2.1 Denotation line
 
-Every commit must include a patch version bump.
+Before implementing a module, state in one line what it computes as a mathematical object, and record that line in the module docstring. Carriers must be named domain types, not placeholders.
 
-Before committing:
-
-```bash
-uv run bump-my-version bump patch
+```
+preprocess : RawForcing × Attributes → Dataset   (pure)
+training run = fold(update, θ₀, batches)
+evaluation = map(metric) over (basin × model) pairs
 ```
 
-Stage the version files with the code changes, commit normally, then tag:
+If the line cannot be written, the design is not ready; say so instead of coding around it. In review, when the denotation line and the diff disagree, one of them is wrong.
 
-```bash
-git tag v$(uv run bump-my-version show current_version)
-```
+### 2.2 Authority narrows
 
-Only bump minor or major versions when explicitly requested.
+All wiring happens at the composition root: only the entry point (CLI command or `main()`) reads config files, reads environment variables, resolves paths, and opens stores. Every other module receives what it needs as arguments.
 
-## 4. Testing Complex Data Objects
+At every call, pass the narrowest argument that suffices: the two columns, not the DataFrame; the file path, not the directory; the three fields, not the config object. A function outside the entry module whose signature accepts the full config, or which constructs a `Path` from a literal, is a violation.
 
-Prefer third-party testing utilities over manual element-wise assertions when comparing complex data objects.
+### 2.3 Parse, don't validate
 
-Avoid manually checking lengths, schemas, coordinates, dimensions, shapes, dtypes, or element-wise equality when a library-specific assertion exists.
+Convert raw input (CLI args, YAML, NetCDF attributes) into domain types once, at the composition root. Downstream functions accept and return only domain types for concepts that carry an invariant or unit ambiguity: identifiers, physical quantities, config. A `float` that might be mm/day or m³/s must not exist past the boundary.
 
-### NumPy
+Enums over booleans: never `bool` for a domain state with two named possibilities. Use an `Enum` or `Literal["upstream", "downstream"]`, not `upstream: bool` — applies to parameters, fields, and return values.
 
-Use `numpy.testing`.
+Limits: domain types (`NewType`, frozen dataclass, enum) are for concepts with invariants, not for every value. Bulk numerical data stays in `xarray`/`polars` carriers; do not wrap arrays in classes.
+
+### 2.4 Fail loud
+
+Crash early on broken assumptions. No fallback values for required inputs (`.get(key, default)` on a required config key is a bug). No exception handler that logs and continues.
+
+The one exception: a batch loop over independent items (e.g. per-basin processing) may have exactly one named isolation point that catches per-item failure, records which item failed and why, and continues. That point exists once per pipeline, not once per function.
+
+## 3. Testing Complex Data Objects
+
+Prefer library-specific assertions over manual element-wise checks of lengths, schemas, coordinates, shapes, or dtypes.
 
 ```python
-import numpy as np
-
-np.testing.assert_array_equal(result, expected)
 np.testing.assert_allclose(result, expected)
-```
-
-### Xarray
-
-Use `xarray.testing`.
-
-```python
-import xarray as xr
-
-xr.testing.assert_equal(result, expected)
 xr.testing.assert_identical(result, expected)
-xr.testing.assert_allclose(result, expected)
-```
-
-### Polars
-
-Use `polars.testing`.
-
-```python
-import polars.testing as pl_testing
-
 pl_testing.assert_frame_equal(result_df, expected_df)
-pl_testing.assert_series_equal(result_series, expected_series)
 ```
 
-## 5. Packaged Catalogue Rule
+## 4. Packaged Catalogue Rule
 
 When porting a new provider, the packaged catalogue artifacts (`catalogue/*.parquet`, `catalogue/provider.json`) **must be generated from the live provider API** before the provider is committed.
 
