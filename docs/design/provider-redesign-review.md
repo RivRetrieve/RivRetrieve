@@ -18,20 +18,25 @@ The question worth asking is therefore:
 So the structure of this document is deliberate. It first states the promise,
 because every later judgement depends on it. Then, for each part of the system,
 it asks the same two questions: what does the promise force us to keep, and what
-can we remove without breaking it. Opinions are mine and are marked as
-recommendations. Questions I do not think I should decide alone are marked as
-open for the team.
+can we remove without breaking it.
+
+**Status.** This opened as a proposal with open questions. It has since been
+updated to record what the team settled in review, and what deliberately remains
+open. Where the meeting moved a position, the reasoning that produced the move is
+kept here rather than deleted, because the reasoning is the part that is expensive
+to reconstruct. Decisions that are hard to reverse also exist as short standalone
+records in `docs/adr/`, and the vocabulary this document uses is defined in
+`CONTEXT.md`.
 
 This is a companion to `provider-redesign.md`. That document proposed the shape
 of the package. This one revisits it with thirteen providers in hand.
 
 ## 1. The promise
 
-Everything below depends on one decision, so I want it stated plainly and put to
-the team before anything else.
+Everything below depends on one decision, so it is stated plainly before anything
+else.
 
-**Open question for the team.** *What is the single promise RivRetrieve cannot
-break?* My answer, and the assumption the rest of this document is built on:
+**Confirmed by the team.** *What is the single promise RivRetrieve cannot break?*
 
 > RivRetrieve gives you **faithful, traceable access** to river data, presented
 > through **one consistent shape** across every provider.
@@ -50,8 +55,10 @@ mostly about drawing that line carefully: harmonise enough to keep the second
 promise, preserve enough to keep the first, and treat everything else as
 removable.
 
-If the team prefers a different promise, much of what follows should change. That
-is why this is the first question.
+The review confirmed this promise unchanged. What the review did change is where
+its boundary sits, which is Section 2 and specifically 2.1: the "same time
+representation" clause above turned out to be a claim we cannot always keep, and
+that is what 5.2 rewrites.
 
 ## 2. Where harmonisation stops
 
@@ -69,7 +76,6 @@ harmonise:
 
 - the column shape of the data,
 - units (discharge to m³/s, stage to m),
-- time (everything to UTC),
 - product identity, through a shared vocabulary, so that `discharge_daily_mean`
   means the same kind of thing in Brazil and in Norway.
 
@@ -88,6 +94,29 @@ the current implementation exists because this boundary was never written down,
 so each port invented its own partial harmonisation. With the rule stated, that
 work has a clear home or no home at all.
 
+### 2.1 The third category the review found
+
+The original rule had two boxes: objective things we convert, and judgements we do
+not touch. The meeting found a third, and it is where most of the argument went.
+
+> **Some things are objective and still not harmonisable, because we cannot
+> establish them.**
+
+Timezone is the clearest case. Converting a timestamp between zones is pure
+physics, exactly the kind of thing the rule says we should do. But performing that
+conversion requires knowing the source's zone, and we cannot always establish it:
+some sources do not document it, and for a country spanning several zones the zone
+a provider stamps is not necessarily the zone of the gauge. Converting on an
+assumed zone yields timestamps that are wrong by a fixed offset and look entirely
+plausible. The same shape recurs with which 24 hours a daily value covers, and with
+the datum a stage measurement is counted from.
+
+So the boundary has a second clause: **we harmonise what is objective and that we
+can establish. Where we cannot establish it, we say so rather than assume it.**
+That principle is recorded as `docs/adr/0005-unknown-is-first-class.md`, and it is
+what resolved the time, day-definition and datum arguments, all three of which had
+looked like separate disputes.
+
 **Note on v2.** Whether a future version should offer a harmonised quality flag
 (for example a simple good/suspect/missing tri-state) is a real question, but it
 is out of scope here. We have not planned it, and v1 should not pretend to.
@@ -105,7 +134,7 @@ is unclear.
 
 So I suggest we rethink this. The workflow every provider goes through has four
 stages: `fetch`, `parse`, `convert`, `assemble`. A provider writes a small file for
-each of the first three (`fetch.py`, `parse.py`, `convert.py`) and the engine owns
+each of the first three (`fetch.py`, `parse.py`, `config.py`) and the engine owns
 the fourth, so there is no per-provider assemble file. All of it is backed by a
 shared engine. The stage names are the workflow, so they are also the map: a reader
 knows what each file is for and where to start.
@@ -129,8 +158,8 @@ the same order:
 
 1. **fetch**: get the raw bytes from the source.
 2. **parse**: turn those bytes into rows (a timestamp and a number).
-3. **convert**: turn the rows into the canonical form (UTC, canonical units),
-   and clip to the requested window.
+3. **convert**: turn the rows into the canonical form (canonical units, timestamps
+   carrying whatever zone we can establish), and clip to the requested window.
 4. **assemble**: package the result handed to the user.
 
 Today's code is hard to inspect because the files are organised by processing
@@ -164,20 +193,20 @@ handful:
 user's request   →  a normalised request (validated, dates normalised)
 fetch returns    →  raw payloads, tagged with which (station, product, window) they are
 parse returns    →  rows: station_id | product_id | time_raw | value_raw   (still native units, still naive time)
-convert returns  →  canonical rows: time | station_id | product_id | value   (UTC, canonical units, clipped)
+convert returns  →  canonical rows: time | station_id | product_id | value   (canonical units, clipped, zone declared)
 assemble returns →  the result object (data + provenance + issues + raw)
 ```
 
 **The convert and assemble logic is shared across every provider.** This follows
 from what the first two steps do. By the time parse finishes, every provider, no
 matter how different its source, has produced the same thing: rows of a timestamp
-and a number. The only differences left are which timezone that timestamp is in and
-which units that number is in. From there, convert and assemble are pure mechanics:
-shift to UTC, multiply by a unit factor, clip to the window, package the result. The
-only thing that varies is data (a timezone, a unit), not behaviour, so the provider
-declares those facts and the engine does the work.
+and a number. The only differences left are which timezone that timestamp is in, where
+we can establish it, and which units that number is in. From there, convert and
+assemble are pure mechanics: multiply by a unit factor, align and clip to the window,
+package the result. The only thing that varies is data (a timezone, a unit), not
+behaviour, so the provider declares those facts and the engine does the work.
 
-That is what makes units, UTC, clipping, and provenance impossible to get subtly
+That is what makes units, time handling, clipping, and provenance impossible to get subtly
 different from one provider to the next: there is only one place each of them
 happens. To add a provider, you satisfy the contracts; you do not touch the engine.
 
@@ -191,14 +220,15 @@ strongest at the end of the pipeline and weakest at the start.
   remainder was nothing a provider needs to vary. So there is no per-provider
   assemble file at all; the engine assembles.
 - **convert** is the engine plus a small typed declaration. The engine ships a
-  `ConvertConfig` dataclass and a provider's `convert.py` does nothing but fill it
-  in. It declares three things: the source timezone (a default zone, which the
-  catalogue overrides per station for providers like USGS and Canada that span
-  several zones), the source units per product (chosen from a `Unit` enum the engine
-  owns, so the engine knows the conversion factor and the canonical target), and the
-  time semantics per product (whether a value is an instant or a daily-anchored
-  value). The engine performs the conversion; `convert.py` is that declaration, not
-  logic.
+  `ConvertConfig` dataclass and a provider's `config.py` does nothing but fill it
+  in. It declares three things: the source timezone *where the source documents
+  one* (a default zone, which the catalogue overrides per station for providers
+  like USGS and Canada that span several zones, and which is legitimately unknown
+  for sources that do not state it), the source units per product (chosen from a
+  `Unit` enum the engine owns, so the engine knows the conversion factor and the
+  canonical target), and the time semantics per product, including the day
+  definition for daily products. The engine performs the conversion; `config.py`
+  is that declaration, not logic.
 - **parse** is where the genuine, irreducible mess lives, and that is expected:
   the raw bytes arrive in wildly different shapes (nested JSON, Excel, an HTML
   page, a CSV with foreign-language marker lines, an encoding that changed in
@@ -215,7 +245,7 @@ strongest at the end of the pipeline and weakest at the start.
 
 So a provider's real code lives in two files: `fetch.py` (its endpoints, auth,
 windowing, or bulk download) and `parse.py` (decoding its format). A third file,
-`convert.py`, is a short typed declaration rather than code. The fourth stage,
+`config.py`, is a short typed declaration rather than code. The fourth stage,
 assemble, has no provider file at all, because the engine does it. So the workflow
 is four stages but a provider authors three files: two of code and one of
 configuration. They are uniform across every provider, which is what makes them
@@ -252,23 +282,42 @@ src/rivretrieve/_engine/
 src/rivretrieve/providers/no_nve/
     fetch.py            # how Norway gets its bytes: endpoint, auth, windowing
     parse.py            # how Norway decodes its format into rows
-    convert.py          # Norway's ConvertConfig: timezone, units, time semantics
+    config.py           # Norway's ConvertConfig: timezone, units, time semantics
     catalogue/          # packaged catalogue artefacts (see Section 6)
     generate_catalogue.py   # maintainer-only, runs live, not imported at runtime
 ```
 
+The naming rule this follows, which the review surfaced as a real source of
+confusion: **a provider file is named for a stage only when the provider writes
+code for that stage.** Fetch and parse are provider code, so they carry stage
+names. Convert and assemble are the engine's, so no provider file carries those
+names, and the declaration the engine reads is called `config.py` rather than
+`convert.py`. The earlier naming had two filenames naming stages the provider
+implements and a third naming a stage the engine owns, which reads as an
+inconsistency because it is one.
+
 The config types are the contract made concrete. The engine ships them; a provider
-fills them in. `convert.py` is the whole of one provider's conversion declaration:
+fills them in. `config.py` is the whole of one provider's conversion declaration:
 
 ```python
-from rivretrieve._engine import ConvertConfig, Unit
+from rivretrieve._engine import ConvertConfig, Daily, Instant, Unit
 
 CONFIG = ConvertConfig(
     timezone="Europe/Oslo",                       # default; catalogue overrides per station
     units={"discharge": Unit.M3_S, "stage": Unit.M},
-    time_semantics={"discharge_daily_mean": "daily"},
+    time_semantics={
+        "discharge_daily_mean": Daily(starts_at="09:00"),   # declared, never assumed
+        "stage_instantaneous":  Instant(),
+    },
 )
 ```
+
+The day definition sits inside `time_semantics` rather than in a parallel mapping,
+so there is no second dict keyed by the same product ids that could fall out of
+step with the first. A daily product needs no explicit end: it runs one local day
+from its declared start, which also handles the 23- and 25-hour days at a
+daylight-saving change correctly, where a stored end timestamp would contradict
+the start.
 
 A top-level `ProviderConfig` holds the per-stage configs (the `ConvertConfig` above,
 and a `CacheConfig` only for bulk providers), so each stage's contract is its own
@@ -278,20 +327,28 @@ A reader who asks "where is the core logic" has one answer: the engine. A reader
 who asks "what does Norway do" opens three files whose names already say what each
 one holds.
 
-**Meeting note: one file or three? (unresolved).** Thiago would prefer a single
-file per provider instead of three. His argument is not a software-engineering one:
-he concedes the split is clean, and his point is about contributor *ownership* — a
-single file with one author's name on it gives a contributor a clearer sense of
-owning "their" provider, where three files can feel like filling slots in someone
-else's framework. My preference is the three files above: `fetch` and `parse` are
-genuinely separate concerns, `convert` is config not code, and the predictable
-names make any provider inspectable at a glance (and three is already a large cut
-from today's seven-plus). I will say plainly that the ownership dimension had not
-crossed my mind, and it is a fair one. The framing I would put to the team is who
-actually reads or contributes to this source: if it is a handful of maintainers,
-one contributor's sense of ownership may matter more than navigability; if it is
-wider, the cleaner split likely wins. We did not converge, so this is genuinely
-open.
+**Resolved: three files.** Thiago argued for a single file per provider. His
+argument was not a software-engineering one: he conceded the split is clean, and
+his point was contributor *ownership* — a single file with one author's name on it
+gives a contributor a clearer sense of owning "their" provider, where three files
+can feel like filling slots in someone else's framework. That is a fair dimension
+and it had not crossed my mind when I wrote the first draft.
+
+The counter that carried, from Freddy: contributors do not hold file ownership in
+a shared package, this is not Caravan where a contribution is a self-contained
+dataset, and here nothing is self-contained because every provider runs on the
+engine regardless. Deciding the layout for maintenance rather than for attribution
+costs the contributor nothing if attribution is handled directly, so a
+`Contributed by:` field in the module docstring renders the contributor's name in
+the published documentation. The unit of ownership also remains the provider
+directory, not a single file.
+
+Two alternatives were rejected alongside it. A class per provider subclassing a
+base, which was the original RivRetrieve design: an object earns its keep only
+when it holds state that is expensive to compute and reused across tasks, and
+fetching gauge A produces nothing costly that fetching gauge B then needs. And
+pure configuration with no code at all, for the reason in 3.4. Recorded as
+`docs/adr/0003-three-provider-files.md`.
 
 ## 4. What we should remove
 
@@ -368,62 +425,68 @@ already carried by `statistic` and `frequency`.
 time | station_id | product_id | value
 ```
 
-`value` is always canonical (m³/s, m) and `time` is always UTC. Native values,
-quality codes, and original field names live in `raw`; the conversion is recorded
-in `provenance`. This keeps the table that most users touch clean, while keeping
-everything faithful and recoverable.
+`value` is always canonical (m³/s, m). `time` is the source's own timestamp,
+carrying whatever zone information we can establish (see 5.2, which the review
+changed). Native values, quality codes, and original field names live in `raw`; the
+conversion is recorded in `provenance`. This keeps the table that most users touch
+clean, while keeping everything faithful and recoverable.
 
 ### 5.2 Asking for a time window
 
-A user asks for a date range. We have to decide what the dates *mean*.
+A user asks for a date range. We have to decide what the dates *mean*, and what
+the timestamps we hand back mean. **This section was rewritten after the review.
+The original proposal guaranteed UTC output; the team rejected that.**
 
-**Recommendation.** `start` and `end` are interpreted in UTC by default, and the
-output `time` is always UTC. So a request for "12 December to 16 December" is the
-UTC window, and the returned timestamps are UTC. This is the only globally
-well-defined choice: "provider-local" is undefined for a country spanning several
-timezones (the United States spans six), and UTC-in/UTC-out is reproducible across
-providers.
+**Decision. We return native time, and offer UTC as best-effort.** Timestamps come
+back as the provider published them, carrying whatever zone information we can
+establish. Conversion to UTC is offered where the source zone is documented and
+withheld where it is not. Recorded as
+`docs/adr/0001-native-time-by-default.md`.
 
-Because thinking in UTC is not always what a hydrologist wants, we expose a simple
-flag rather than asking users to construct timezone-aware objects:
+*What the original proposal said, and why it fell.* The first draft argued UTC-in
+and UTC-out was the only globally well-defined choice, since "provider-local" is
+undefined for a country spanning several timezones. That reasoning is still sound
+about *definition*, and it is not what defeated the proposal. The objection was
+about *knowledge*. Guaranteeing UTC obliges us to have the correct source zone for
+every provider, and we cannot: some sources do not document it, and for a
+multi-timezone country the zone a provider stamps is not necessarily the zone of
+the gauge. A conversion performed on an assumed zone produces timestamps wrong by
+a fixed offset, with plausible values, a plausible row count, and no error. That
+is precisely the failure mode this library exists to avoid, and it is worse than
+declining to convert. Simon arrived at the same place from the opposite side,
+doubting we can reliably establish per-station zones at all.
 
-```python
-p.observations(..., start="2024-12-12", end="2024-12-16")                    # default: UTC
-p.observations(..., start="2024-12-12", end="2024-12-16", time_zone="local") # the station's own local days
-```
+So the guarantee shrank to one we can actually keep, and it is stronger than it
+looks: **no timestamp leaves the library without its zone stated, or stated as
+unknown.** Naive timestamps do not escape.
 
-- `time_zone="utc"` (default): the dates mean UTC.
-- `time_zone="local"`: the dates mean the station's own local calendar days,
-  which we look up. For a provider spanning several zones, "local" is each
-  station's own zone.
+`time_zone="local"` does not survive this. It was an option built on top of a UTC
+default that no longer exists, and its purpose is served by returning native time
+in the first place. A helper that converts a multi-station frame into each
+station's own zone is only worth shipping if we can put a reliable zone on each
+station, which is the same open question; it is therefore deferred rather than
+designed here.
 
-The default is UTC-in and UTC-out, and nobody disputes that. What `time_zone="local"`
-does to the **output** is an open question for the team (see Section 14). Two
-readings are possible: it could reinterpret only the input window and still return
-UTC, or it could also convert the returned `time` column into local time. The
-argument that local output is acceptable: timezone conversion changes no values and
-is fully reversible, so unlike aggregation it does not violate faithfulness — it
-names the same instant in another zone. The real cost is consistency, not fidelity:
-for a provider spanning several zones, local output means the `time` column mixes
-zones. A natural middle is to allow local output but require the timestamps to be
-timezone-aware, so the zone is always explicit and never ambiguous. I am flagging
-this rather than deciding it.
+**Decision on boundaries.** The window is closed, `[start, end]`, both ends
+included. This matches the plain reading of "12 to 16". Unchanged by the review.
 
-**Recommendation on boundaries.** The window is closed, `[start, end]`, both ends
-included. This matches the plain reading of "12 to 16".
+**Decision on daily values.** A daily value describes a whole day, not a single
+measurement moment, so the timestamp on it is a convention rather than an
+observation time. The original proposal anchored it at the UTC instant the local
+day began, and assumed that day began at midnight.
 
-**Recommendation on daily values.** A daily value describes a whole calendar day in
-the station's local time, so it does not correspond to a single measurement moment.
-To keep the `time` column a column of real UTC instants (never a mix of plain dates
-and datetimes), we store a daily value at the UTC instant when that local day began.
+Simon showed that assumption is false: the UK's NRFA publishes a "daily mean" that
+runs from 09:00 to 09:00 the next day. Under the original rule every NRFA daily
+value would be anchored nine hours wrong, silently. He also raised a case we
+cannot detect from outside, that some providers may convert instantaneous readings
+before aggregating them to daily, which would make our stored time misleading no
+matter what we anchor to.
 
-For example, South Africa is UTC+2. The daily value for `2024-01-10` is the value
-for the local South African day that starts at `2024-01-10 00:00` local time, which
-is `2024-01-09 22:00 UTC`. So the stored `time` is `2024-01-09 22:00:00Z`. The UTC
-date can therefore look like the previous calendar day. That is not an error: it is
-the real UTC instant at which the local day begins. A user who wants the local date
-back converts the UTC timestamp to the station's zone (whether `time_zone="local"`
-should also do this on output is the open question above).
+So the day definition is **declared per provider-product, never assumed**, as part
+of `time_semantics` (see 3.5). Where a source does not state which 24 hours its
+daily value covers, the day definition is unknown, and unknown is a value rather
+than a silent fallback to midnight. Which providers document this, and what they
+document, is one of the three surveys listed in Section 14.
 
 ### 5.3 Correct boundaries, in one place
 
@@ -433,17 +496,34 @@ boundary comes out wrong, with strange values or gaps (this was seen with Norway
 and South Africa). The cause is comparing timestamps in two different
 representations.
 
+Stated plainly, the bug is comparing two numbers written on different clocks
+because both look like dates. It is the same error as comparing 5 kilometres to 5
+miles because both say "5". The rule that fixes it is equally plain: put both sides
+on the same clock before comparing them.
+
 This bug class disappears structurally under the pipeline contract, because there
-is exactly one place that does timezone work and clipping:
+is exactly one place that aligns timestamps and clips:
 
 - **parse never does timezone or unit maths.** It only decodes the format.
-- **convert owns all of it**, and clipping is its *last* step, performed on UTC
-  timestamps.
+- **convert owns all of it**, and clipping is its *last* step, performed after the
+  requested window and the source's timestamps have been brought into one
+  representation.
 - **fetch over-fetches.** When it translates the requested window into the
   source's own terms, it pads outward (a full day each side is a safe margin), so
   no boundary row is missing before the precise clip trims the excess. Where fetch
   splits a request into chunks, the chunks overlap slightly and the engine
   de-duplicates the seams, so chunk boundaries never create a gap or a duplicate.
+
+**This survives the change in 5.2, and it is worth being explicit about why.**
+Returning native time changes the *output representation*. It does not remove the
+need to align a requested window against a source's timestamps, because those are
+still written on different clocks. Output format and window arithmetic are two
+decisions, and the original draft conflated them. So convert remains a distinct
+stage that clips last, and the reason is not tidiness: the four stages are an
+enforced *order*, not four chunks of code. A provider cannot clip before aligning
+because a provider never clips at all. Fold this into parse and correct ordering
+becomes a convention thirteen authors must each remember, which is exactly what
+this redesign is trying to stop relying on.
 
 The checks the meeting asked for then become concrete: a cheap runtime invariant
 (after clipping, every timestamp lies within the window, or it is an engine bug),
@@ -508,40 +588,56 @@ a live claim. A user who needs the true current end uses the live path (6.4). Th
 the meeting also asked for: a closed station's `end_date` is a fixed truth; an
 active station's is a snapshot.
 
-**Open question for the team.** When a source does not publish a `start_date` or
-`end_date`, do we compute one ourselves (for example by reading the earliest and
-latest observation), or do we leave it null? My recommendation is to leave it null.
-A computed date is a value the source never stated, which is the same act as the
-aggregation we banned in 4.3 — the clean test there was *who did the maths?*, and a
-date we derived is a date we did the maths for. It is also expensive and fragile to
-establish a true earliest observation across thousands of stations at build time. So
-my recommendation is keep both dates best-effort, populated when the source provides
-them and null otherwise. Thiago and I agreed to leave this open for the rest of the
-team rather than settle it between us.
+**Decision: leave it null.** When a source does not publish a `start_date` or
+`end_date`, we do not compute one ourselves. A computed date is a value the source
+never stated, which is the same act as the aggregation banned in 4.3 — the clean
+test there was *who did the maths?*, and a date we derived is a date we did the
+maths for. Establishing a true earliest observation across thousands of stations at
+build time is also expensive and fragile. Both dates stay best-effort, populated
+when the source provides them and null otherwise. Simon agreed independently
+("I would leave null"), and Thiago's observation supports it from the data side:
+providers generally publish an end date only once a station is closed, so a null
+end date is itself informative rather than a gap.
+
+This also settles the tier question in 6.1. `start_date` stays best-effort; it is
+not promoted to guaranteed.
 
 ### 6.3 License, citation, and source links
 
 The meeting was emphatic that license is one of the most important things we
 surface, and it asked for citation as well. Today there is no structured license
-field; only one provider records it, inside its opaque metadata. What a user most
-often needs to know about a license is **whether the data may be redistributed**,
-and that is something they will want to filter providers on. A bare URL cannot be
-filtered, so I propose recording a license *status* alongside the link.
+field; only one provider records it, inside its opaque metadata.
 
-**Recommendation.** Add the following provider-level fields to the provider
-information. They describe a data source as a whole, which is why I propose them at
-the provider level rather than copied onto every station row.
+**This subsection was rewritten after the review. The original proposal included a
+license status we assign; the team rejected it.** The first draft reasoned that
+what a user most needs to know is whether the data may be redistributed, that a
+bare URL cannot be filtered, and therefore we should record a short structured
+status (`open`, `attribution`, `restricted`) alongside the link.
 
-- `license`: a short, structured status (for example `open`, `attribution`,
-  `restricted`), **best-effort**. This is the filterable fact, when we have it: it
-  lets a user ask "which providers may I redistribute?" before building on the data.
-  Some sources do not document a license anywhere, so it is filled when the source
-  states it and null otherwise; an unknown license surfaces as null, never silently
-  assumed open.
+Simon and Freddy both argued against it, and Thiago's review pointed the same way.
+Two reasons, and the second is the durable one. We are not lawyers, and while some
+sources use recognisable licences, others write custom terms specific to the
+agency, so any status we record is our reading rather than the source's statement.
+More lasting: a licence we classify once is a licence we must keep re-reading,
+because when a source revises its terms our stale interpretation is still sitting
+in the catalogue with our name on it. Publishing only what the source published
+carries no such standing obligation. Recorded as
+`docs/adr/0004-never-interpret-licenses.md`.
+
+The accepted cost is that a user cannot filter providers by redistribution status.
+They follow the link and read the terms, which is the correct place for that
+judgement anyway.
+
+**Decision.** Add the following provider-level fields to the provider information.
+They describe a data source as a whole, which is why they sit at the provider level
+rather than copied onto every station row.
+
 - `license_url`: the link to the actual terms, **best-effort**. License compliance
   is ultimately the user's responsibility; we are a tool, not a party asking anyone
   to use anything. We surface what the source documents as a convenience, to the
   best of our knowledge, and leave this null when the source documents nothing.
+- `license_text`: the source's own wording, verbatim, where the source publishes
+  it, **best-effort**. Never summarised, never normalised.
 - `citation`: how to credit the source (a citation string or DOI), **best-effort
   but high-effort**; not every agency offers one.
 - `notes`: a short free-text field for provider caveats (for example "real-time
@@ -553,13 +649,15 @@ the provider level rather than copied onto every station row.
 - source links, `website`, and where they differ, a data URL and a metadata URL,
   **best-effort**. Useful provenance back to the source at low cost.
 
-**Open question for the team.** Where do `license` and `citation` live: provider-
-level only (my recommendation), or also stamped onto the stored station columns? My
-recommendation is provider-level. A license describes the whole source, so copying
-the identical value onto every one of a provider's station rows adds nothing — it is
+**Decision: provider level.** A license describes the whole source, so copying the
+identical value onto every one of a provider's station rows adds nothing; it is
 already present once in the provider's data and is one call away on the handle.
-Thiago indicated agreement with provider-level in review; I am keeping it open here
-because it is a catalogue-schema choice worth the full team's confirmation.
+Thiago and Simon both agreed.
+
+Simon added one request, accepted: since a result already carries `provenance`,
+stamp the licence and citation into it. The receipt that comes back with the data
+then tells a user how to credit it, which strengthens the traceability half of the
+promise at no cost.
 
 ### 6.4 Native and canonical, packaged and live
 
@@ -653,7 +751,7 @@ Today the two bulk providers store their cache differently (one as a database, o
 as a single columnar file), so they have two separate query paths. This is the
 last piece of unshared bulk machinery.
 
-**Recommendation (Nicolas + Thiago aligned; flagged for team confirmation).**
+**Decision.**
 Standardise the cache as one format for all bulk providers: a hive-partitioned
 columnar store (Parquet), partitioned by product and year, with rows sorted by
 station so that per-station reads prune cheaply, plus a small manifest that records
@@ -676,8 +774,43 @@ the same `convert` stage every other provider uses. We already harmonise units,
 names, and time; harmonising the storage layout is the same kind of act — changing
 the box, not the numbers.
 
-*Where this stands:* Thiago and I are aligned on this after discussing it. We are
-surfacing the reasoning here so the rest of the team can decide whether they agree.
+*Where this stands.* This was the one item genuinely unresolved going into the
+meeting. Thiago's position was to keep each source's native format ("I would
+prefer to keep it simple at this moment"); the earlier draft of Section 14
+recorded us as aligned, which was wrong. The team left the call to us and the
+standardised format is what we are proceeding with, on the read-path argument
+above rather than on storage efficiency.
+
+**Generalised after the meeting.** The decision is not really about bulk providers,
+it is about anything we store on disk, so it is recorded at that level:
+`docs/adr/0002-one-local-storage-layout.md`. The trigger was a second idea raised
+in the meeting, in 7.4.
+
+### 7.4 A user-built archive (raised in the meeting, deferred)
+
+We cannot ship an archive of river data ourselves, because we do not hold
+redistribution rights to the sources. Nothing stops a *user* from building their
+own, accumulating what they retrieve over time, and the meeting agreed this is
+worth supporting. It is not a bulk-provider feature: it applies to every provider,
+including the API ones.
+
+Two things follow. First, vocabulary, because conflating these would make
+`clear_cache()` a data-loss bug: a **cache** is ours, tied to a source vintage,
+disposable, and refreshing it means downloading the source again; an **archive** is
+the user's, accumulates across requests and across providers, and we never delete
+it. Both terms are defined in `CONTEXT.md`.
+
+Second, they share a storage layout and therefore a query engine. A bulk cache is
+already an archive of one provider's entire dataset, so if the archive uses the
+same layout, the single query engine argued for in 7.3 serves both and the archive
+costs almost no new machinery. The lifecycles and the API surfaces stay strictly
+separate; only the format underneath is shared.
+
+**Deferred out of v0.1.0.** The archive is a second product surface with its own
+lifecycle, failure modes, and questions about what the user owns. Shipping the
+redesigned engine across thirteen providers is the whole of the work before the
+release. Deferring costs little precisely because ADR 0002 already fixes the
+layout it would build on.
 
 ## 8. The public API surface
 
@@ -733,7 +866,7 @@ providers, whereas a key gates *access* to an API provider — Norway is an API
 provider, not a bulk one — so the two are different mechanisms and should not be
 conflated.
 
-**Recommendation (Nicolas + Thiago aligned).** The engine loads keys from a `.env`
+**Decision (team agreed).** The engine loads keys from a `.env`
 file, and we ship a committed template the user only has to paste into:
 
 ```text
@@ -742,11 +875,19 @@ NO_NVE_TOKEN="paste your token here"   # https://hydapi.nve.no — register for 
 BR_ANA_TOKEN="paste your token here"   # some agencies require an email request
 ```
 
-For now we do not write spelled-out documentation for this. Acquisition guidance
-(where to register, which agencies need an email) lives as comments in the `.env`
-template, and the docstrings cover the rest. A missing key follows the general rule
-of Section 10: fail clearly and actionably, never silently. Per-provider tutorials
-can come later if the trickier sources warrant them.
+**Updated by the review: we do write the tutorials.** The earlier draft left
+acquisition guidance to comments in the template. The team asked for per-provider
+tutorials in the documentation showing, for each source that needs a token, how to
+obtain one. The boundary is that we *document* acquisition and never *automate*
+it: no code that registers an account, requests a key, or emails an agency on the
+user's behalf. That is the same boundary as not interpreting a licence and not
+computing a date the source never published.
+
+A missing key follows the general rule of Section 10: fail clearly and actionably,
+never silently. It is also not an import-time error. The provider still exists, is
+still listed, and still appears in discovery; the failure arrives only when
+observations are actually requested, naming which token is missing and where to get
+it. A user without a Norwegian token still has a working library.
 
 ## 10. Failure and validation
 
@@ -844,17 +985,19 @@ specifically is my recommendation.
 
 The promise (Section 1) forces a specific and short list of necessary complexity:
 
-- **Unit, time, and product-identity harmonisation**, plus the shared product
+- **Unit and product-identity harmonisation**, plus the shared product
   vocabulary, without it, "one consistent shape" is not true.
-- **One shared `convert` and `assemble`**, including window clipping done after
-  conversion in UTC, with over-fetching, this is what makes correctness and
-  consistency hold identically across providers, and it is where the boundary bug
-  is paid for once.
+- **One shared `convert` and `assemble`**, including window clipping done last,
+  after the window and the source's timestamps are on one clock, with
+  over-fetching. This is what makes correctness and consistency hold identically
+  across providers, and it is where the boundary bug is paid for once.
 - **A small, fixed receipt**: provenance, issues, raw, the minimum that makes a
   value traceable.
-- **The two-tier catalogue** with explicit guaranteed/best-effort tiers, a
-  structured license (including redistribution status) plus citation, and an honest
-  snapshot `end_date`.
+- **The two-tier catalogue** with explicit guaranteed/best-effort tiers, the
+  source's own licence link and wording plus citation, and an honest snapshot
+  `end_date`.
+- **Unknown as a representable state**, wherever a source may not tell us
+  something. This is what lets us decline to convert rather than guess.
 - **The bulk-download machinery** with consent and a uniform cache interface.
 - **Faithful surfacing of the native data** alongside the canonical view.
 
@@ -865,7 +1008,10 @@ And it lets us cut, without breaking anything:
 - a harmonised **quality-flag column** (kept native, in `raw`),
 - **aggregation** and the `derived`/`derivation_method` fields (we never derive),
 - the **horizontal seven-file-per-provider** layout (replaced by three small
-  provider files plus the engine; one-versus-three is itself open, see Section 3),
+  provider files plus the engine, settled in 3.5),
+- the **guaranteed UTC output** and the `time_zone="local"` option built on it
+  (replaced by native time with best-effort conversion, 5.2),
+- the **harmonised licence status** we would have assigned ourselves (6.3),
 - the duplicated **HTTP, windowing, timezone, and unit code** across providers
   (moved into the engine),
 - the redundant **top-level `observations` wrapper** and aliases.
@@ -875,37 +1021,65 @@ complexity we remove is the complexity that served no promise, and the complexit
 we keep is the complexity the promise requires. Compactness is bought by being
 clear about what we are for.
 
-## 14. Open questions for the team
+## 14. Where the team landed
 
-Status after the Nicolas/Thiago review is noted on each. Items the two of us settled
-between ourselves are still listed, so the rest of the team can confirm or reopen
-them rather than inherit them silently.
+The six questions this document opened with are settled. What replaces them is a
+shorter list, and it is a different kind of list: not positions to argue, but facts
+about the thirteen sources that nobody in the room could supply from memory.
 
-1. **The promise (Section 1).** Is "faithful, traceable access through one
-   consistent shape" the promise we cannot break? Everything else depends on this.
-   *Nicolas and Thiago are aligned on it; open for the full team.*
-2. **License and citation placement (6.3).** Provider-level only (my
-   recommendation), or also surfaced in the stored station columns? *Still open.
-   Thiago indicated agreement with provider-level in review; surfaced here for the
-   full team because it is a catalogue-schema choice.*
-3. **The bulk cache format (7.3).** Adopt one standardised hive-partitioned Parquet
-   cache across bulk providers. *Nicolas and Thiago are aligned (recommendation:
-   yes); flagged for the team to confirm.*
-4. **Computing dates we were not given (6.2).** When a source does not publish a
-   `start_date`/`end_date`, do we compute one ourselves or leave it null? *My
-   recommendation is null: a computed date is a value the source never stated, the
-   same act as the aggregation banned in 4.3 ("who did the maths?"). Open for the
-   team. This also settles the guaranteed tier (6.1): `license_url` is best-effort,
-   not guaranteed, and `start_date` stays best-effort unless the team votes to
-   promote it.*
-5. **Local-time output (5.2).** Default is UTC-in/UTC-out, undisputed. The open part:
-   should `time_zone="local"` also convert the **output** to local, not just
-   reinterpret the input window? *Timezone conversion changes no values and is
-   reversible, so unlike aggregation it does not break faithfulness; the real cost is
-   consistency — a provider spanning several zones would return a `time` column
-   mixing zones. A natural middle is local output with timezone-aware timestamps so
-   the zone is never ambiguous. Open for the team.*
+### Settled
 
-6. **One file or three per provider (Section 3).** Unresolved between Nicolas
-   (three: separation of concerns, predictable names) and Thiago (one: stronger
-   contributor ownership). Put to the team.
+1. **The promise (Section 1).** Confirmed. "Faithful, traceable access through one
+   consistent shape" stands, with the boundary refined in 2.1: we harmonise what is
+   objective *and that we can establish*.
+2. **Time output (5.2).** Reversed from the original proposal. Native time is
+   returned; UTC is offered where the source zone is documented. `time_zone="local"`
+   is dropped. `docs/adr/0001`.
+3. **Day definition (5.2).** Declared per provider-product, never assumed to be
+   midnight. NRFA's 09:00 day is the case that broke the original rule.
+4. **Provider layout (3.5).** Three files, `fetch.py`, `parse.py`, `config.py`, with
+   a `Contributed by:` docstring field for attribution. `docs/adr/0003`.
+5. **Local storage (7.3, 7.4).** One layout for anything stored on disk, queried by
+   one engine. `docs/adr/0002`.
+6. **Licence (6.3).** Link and the source's own wording. We never classify.
+   `docs/adr/0004`.
+7. **Dates we were not given (6.2).** Null. Never computed.
+8. **Licence and citation placement (6.3).** Provider level, and stamped into
+   `provenance` on every result.
+9. **API keys (Section 9).** `.env`, with per-provider tutorials on obtaining a
+   token, and no code that obtains one.
+10. **Unknown is first-class (2.1).** The principle underneath 2, 3 and the datum
+    question. `docs/adr/0005`.
+
+### Open, and blocked on the same missing evidence
+
+Three questions have no answer because none of us knows what the sources actually
+publish. They share one survey.
+
+- **Timezone.** For how many of the thirteen is the source zone documented, and is
+  it the gauge's zone or a national one?
+- **Day definition.** Which providers state the 24 hours their daily values cover,
+  and what do they state?
+- **Datum.** Do sources publish the reference a stage measurement is counted from,
+  and does that reference change over time? The meeting specifically raised that a
+  gauge's datum can be revised, which would make it a per-station, time-varying
+  property rather than a per-provider constant.
+
+ADR 0005 is what stops these blocking the design: because unknown is representable
+everywhere, the survey changes what gets *populated*, not what gets *built*. The
+work can start before the answers exist.
+
+### Open, deliberately deferred
+
+- **A user-built archive (7.4).** Agreed as worth doing, out of scope for v0.1.0.
+- **A zone-conversion helper (5.2).** Only earns its place if we can put a reliable
+  zone on each station, which is the timezone survey above.
+- **Whether `assemble` stays distinct from `convert` (3.1).** Freddy's question. Now
+  that UTC conversion is optional, convert is thinner than when the pipeline was
+  drawn, and the stage count is worth revisiting once we see how thin. The argument
+  for keeping them separate is in 5.3 and is about enforced ordering, not tidiness.
+
+### Scope
+
+v0.1.0 is the thirteen providers on the new engine, targeted at 10 August, published
+to PyPI. Everything in "deferred" above is after that.
