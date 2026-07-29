@@ -15,6 +15,7 @@ from rivretrieve._internal.observations import (
 )
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
+from rivretrieve._internal.providers.ca_eccc.config import config as config
 from rivretrieve._internal.providers.ca_eccc.observation_client import CacheStatus, HydatClient
 from rivretrieve._internal.providers.ca_eccc.retrieval import retrieve_observations
 from rivretrieve._internal.results import CatalogResult
