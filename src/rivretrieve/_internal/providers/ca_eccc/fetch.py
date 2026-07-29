@@ -1,0 +1,173 @@
+"""fetch : tuple[str, ...] × tuple[ProductId, ...] × FetchWindow × ProviderConfig → WithIssues[tuple[Payload, ...]]."""
+
+from __future__ import annotations
+
+import sqlite3
+from datetime import date, datetime
+from pathlib import Path
+
+from rivretrieve._internal.engine import FetchWindow, Payload, ProviderConfig, WithIssues
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.ca_eccc.config import HydatSourceCoordinates
+from rivretrieve._internal.providers.ca_eccc.issue_codes import CaEcccObservationIssueCodes
+from rivretrieve._internal.providers.ca_eccc.observation_client import _find_sqlite, default_cache_dir
+
+PROVIDER_ID = ProviderId("ca_eccc")
+
+
+def fetch(
+    stations: tuple[str, ...],
+    products: tuple[ProductId, ...],
+    fetch_window: FetchWindow,
+    config: ProviderConfig,
+) -> WithIssues[tuple[Payload, ...]]:
+    start_year, end_year = _query_years(fetch_window)
+    cache_dir = default_cache_dir()
+    sqlite_path = _find_sqlite(cache_dir)
+    if sqlite_path is None or not sqlite_path.is_file():
+        return WithIssues(
+            value=(),
+            issues=(
+                Issue(
+                    severity="error",
+                    code=CaEcccObservationIssueCodes.HYDAT_NOT_AVAILABLE,
+                    message="The cached HYDAT SQLite database does not exist.",
+                    details={"cache_dir": str(cache_dir)},
+                    provider_id=PROVIDER_ID,
+                ),
+            ),
+        )
+
+    try:
+        connection = _open_read_only(sqlite_path)
+    except (OSError, sqlite3.DatabaseError) as error:
+        return WithIssues(
+            value=(),
+            issues=(
+                Issue(
+                    severity="error",
+                    code=CaEcccObservationIssueCodes.SOURCE_REQUEST_FAILED,
+                    message="The cached HYDAT SQLite database could not be read.",
+                    details={
+                        "path": str(sqlite_path),
+                        "exception_type": type(error).__name__,
+                    },
+                    provider_id=PROVIDER_ID,
+                ),
+            ),
+        )
+
+    payloads: list[Payload] = []
+    issues: list[Issue] = []
+    try:
+        for product_id in products:
+            product = config.products[product_id]
+            coordinates = product.coordinates.value
+            if not isinstance(coordinates, HydatSourceCoordinates):
+                raise FatalContractError(f"CA ECCC product {product_id!r} has non-HYDAT source coordinates")
+            _require_hydat_schema(connection, coordinates)
+
+            for station_id in stations:
+                rows = _query_station_product(
+                    connection,
+                    coordinates,
+                    station_id,
+                    start_year,
+                    end_year,
+                )
+                if not rows:
+                    issues.append(
+                        Issue(
+                            severity="warning",
+                            code=CaEcccObservationIssueCodes.MISSING_DATA,
+                            message="HYDAT has no rows for the station-product and endpoint years.",
+                            details={
+                                "station_id": station_id,
+                                "product_id": str(product_id),
+                                "table_name": coordinates.table_name,
+                                "start_year": start_year,
+                                "end_year": end_year,
+                            },
+                            provider_id=PROVIDER_ID,
+                        )
+                    )
+                    continue
+
+                payloads.append(
+                    Payload(
+                        source_coordinates=product.coordinates,
+                        station_products=((station_id, product_id),),
+                        fetch_window=fetch_window,
+                        content=rows,
+                    )
+                )
+    finally:
+        connection.close()
+
+    return WithIssues(value=tuple(payloads), issues=tuple(issues))
+
+
+def _query_years(fetch_window: FetchWindow) -> tuple[int, int]:
+    start_year = _endpoint_year(fetch_window.start)
+    end_year = _endpoint_year(fetch_window.end)
+    if start_year > end_year:
+        raise ValueError("fetch window start year must not follow its end year")
+    return start_year, end_year
+
+
+def _endpoint_year(endpoint: object) -> int:
+    if not isinstance(endpoint, (date, datetime)):
+        raise TypeError("HYDAT fetch window endpoints must be date or datetime values")
+    return endpoint.year
+
+
+def _open_read_only(sqlite_path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(
+        f"{sqlite_path.resolve().as_uri()}?mode=ro",
+        uri=True,
+    )
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA schema_version").fetchone()
+    except BaseException:
+        connection.close()
+        raise
+    return connection
+
+
+def _require_hydat_schema(
+    connection: sqlite3.Connection,
+    coordinates: HydatSourceCoordinates,
+) -> None:
+    table_identifier = _quote_identifier(coordinates.table_name)
+    columns = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table_identifier})").fetchall()}
+    if not columns:
+        raise FatalContractError(f"HYDAT table {coordinates.table_name!r} does not exist")
+
+    required = {"STATION_NUMBER", "YEAR", "MONTH", "NO_DAYS"}
+    for day in range(1, 32):
+        required.add(f"{coordinates.value_prefix}{day}")
+        required.add(f"{coordinates.symbol_prefix}{day}")
+    missing = sorted(required - columns)
+    if missing:
+        raise FatalContractError(f"HYDAT table {coordinates.table_name!r} lacks required columns: {missing!r}")
+
+
+def _query_station_product(
+    connection: sqlite3.Connection,
+    coordinates: HydatSourceCoordinates,
+    station_id: str,
+    start_year: int,
+    end_year: int,
+) -> list[dict[str, object]]:
+    table_identifier = _quote_identifier(coordinates.table_name)
+    cursor = connection.execute(
+        (f"SELECT * FROM {table_identifier} WHERE STATION_NUMBER = ? AND YEAR BETWEEN ? AND ? ORDER BY YEAR, MONTH"),
+        (station_id, start_year, end_year),
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def _quote_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
