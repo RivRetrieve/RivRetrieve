@@ -1,11 +1,23 @@
 from __future__ import annotations
 
 import rivretrieve as rr
+from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis_module
+from rivretrieve._internal.providers.usgs_nwis.config import config
+from rivretrieve._internal.providers.usgs_nwis.fetch import fetch
+from rivretrieve._internal.providers.usgs_nwis.parse import parse
 
 
 def test_usgs_nwis_in_providers_list() -> None:
     assert "usgs_nwis" in rr.providers()
+
+
+def test_usgs_nwis_exposes_real_stage_contract_and_retains_legacy_protocol() -> None:
+    assert usgs_nwis_module.config is config
+    assert usgs_nwis_module.fetch is fetch
+    assert usgs_nwis_module.parse is parse
+    assert callable(usgs_nwis_module.observations)
+    assert isinstance(usgs_nwis_module, ProviderModule)
 
 
 def test_usgs_nwis_stations_offline() -> None:
