@@ -1,0 +1,243 @@
+from __future__ import annotations
+
+import subprocess
+from dataclasses import FrozenInstanceError
+from datetime import datetime
+from pathlib import Path
+
+import polars as pl
+import polars.testing as pl_testing
+import pytest
+
+from rivretrieve._internal.catalogues.schemas import CatalogueSchema, validate_catalogue
+from rivretrieve._internal.engine import (
+    CanonicalRowsSchema,
+    FetchWindow,
+    ObservationRequest,
+    Payload,
+    RequestedWindow,
+    Rows,
+    RowsSchema,
+    SourceCoordinates,
+    WindowEndpoint,
+    WithIssues,
+)
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProductId, ProviderId
+
+
+def test_requested_and_fetch_windows_are_closed_immutable_nominal_carriers() -> None:
+    start = WindowEndpoint(object())
+    end = WindowEndpoint(object())
+    requested = RequestedWindow(start=start, end=end)
+    fetch = FetchWindow(start=start, end=end)
+
+    assert requested.start is start
+    assert requested.end is end
+    assert fetch.start is start
+    assert fetch.end is end
+    assert type(requested) is not type(fetch)
+    assert not isinstance(requested, FetchWindow)
+    assert not isinstance(fetch, RequestedWindow)
+    start_attribute = "start"
+    with pytest.raises(FrozenInstanceError):
+        setattr(requested, start_attribute, start)
+    with pytest.raises(FrozenInstanceError):
+        setattr(fetch, start_attribute, start)
+
+
+def test_engine_observation_request_preserves_requested_window_and_ids() -> None:
+    provider_id = ProviderId("provider")
+    stations = ("station-1", "station-2")
+    products = (ProductId("flow"), ProductId("level"))
+    window = RequestedWindow(WindowEndpoint(object()), WindowEndpoint(object()))
+    request = ObservationRequest(
+        provider_id=provider_id,
+        stations=stations,
+        products=products,
+        window=window,
+    )
+
+    assert request.provider_id == provider_id
+    assert request.stations == stations
+    assert request.products == products
+    assert request.window is window
+    window_attribute = "window"
+    with pytest.raises(FrozenInstanceError):
+        setattr(request, window_attribute, window)
+
+
+def test_source_coordinates_are_opaque_and_immutable() -> None:
+    sentinel = object()
+    coordinates = SourceCoordinates(sentinel)
+
+    assert coordinates.value is sentinel
+    value_attribute = "value"
+    with pytest.raises(FrozenInstanceError):
+        setattr(coordinates, value_attribute, sentinel)
+
+
+@pytest.mark.parametrize("content", [b"payload", "payload", object()])
+def test_payload_accepts_opaque_content_and_preserves_complete_tag(content: object) -> None:
+    coordinates = SourceCoordinates(object())
+    station_products = (
+        ("station-1", ProductId("flow")),
+        ("station-2", ProductId("level")),
+    )
+    window = FetchWindow(WindowEndpoint(object()), WindowEndpoint(object()))
+    payload = Payload(
+        source_coordinates=coordinates,
+        station_products=station_products,
+        fetch_window=window,
+        content=content,
+    )
+
+    assert payload.source_coordinates is coordinates
+    assert payload.station_products == station_products
+    assert payload.fetch_window is window
+    assert payload.content is content
+    content_attribute = "content"
+    with pytest.raises(FrozenInstanceError):
+        setattr(payload, content_attribute, content)
+
+
+def test_with_issues_preserves_value_and_concatenates_existing_issues() -> None:
+    sentinel = object()
+    first = Issue(severity="warning", code="first", message="First issue")
+    second = Issue(severity="info", code="second", message="Second issue")
+    earlier = WithIssues(value=sentinel, issues=(first,))
+    accumulated = WithIssues(value=earlier.value, issues=earlier.issues + (second,))
+
+    assert accumulated.value is sentinel
+    assert accumulated.issues == (first, second)
+    assert earlier.value is sentinel
+    assert earlier.issues == (first,)
+    assert WithIssues(value=sentinel).issues == ()
+    value_attribute = "value"
+    issues_attribute = "issues"
+    with pytest.raises(FrozenInstanceError):
+        setattr(accumulated, value_attribute, sentinel)
+    with pytest.raises(FrozenInstanceError):
+        setattr(accumulated, issues_attribute, ())
+
+
+def test_with_issues_does_not_short_circuit_for_empty_rows_or_error_severity() -> None:
+    rows: Rows = pl.DataFrame(schema=RowsSchema.polars_schema)
+    first = Issue(severity="error", code="empty", message="No rows")
+    second = Issue(severity="info", code="checked", message="Rows checked")
+    initial = WithIssues(value=rows, issues=(first,))
+    accumulated = WithIssues(value=initial.value, issues=initial.issues + (second,))
+
+    pl_testing.assert_frame_equal(initial.value, rows)
+    assert initial.issues == (first,)
+    pl_testing.assert_frame_equal(accumulated.value, rows)
+    assert accumulated.issues == (first, second)
+
+
+def test_rows_schema_declares_exact_native_row_shape() -> None:
+    assert RowsSchema.name == "Rows"
+    assert tuple(column.name for column in RowsSchema.columns) == (
+        "station_id",
+        "product_id",
+        "time",
+        "value",
+        "time_zone",
+    )
+    assert RowsSchema.polars_schema == pl.Schema(
+        {
+            "station_id": pl.Utf8,
+            "product_id": pl.Utf8,
+            "time": pl.Datetime(),
+            "value": pl.Float64,
+            "time_zone": pl.Utf8,
+        }
+    )
+    assert tuple(column.name for column in RowsSchema.columns if column.nullable) == ("value",)
+    frame = pl.DataFrame(
+        {
+            "station_id": ["station"],
+            "product_id": ["flow"],
+            "time": [datetime(2026, 1, 1)],
+            "value": [1.0],
+            "time_zone": ["unknown"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+
+    assert validate_catalogue(frame, RowsSchema, on_issue="raise") == []
+
+
+def test_canonical_rows_schema_declares_exact_canonical_shape() -> None:
+    assert CanonicalRowsSchema.name == "CanonicalRows"
+    assert tuple(column.name for column in CanonicalRowsSchema.columns) == (
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "value",
+    )
+    assert CanonicalRowsSchema.polars_schema == pl.Schema(
+        {
+            "time": pl.Datetime(),
+            "time_zone": pl.Utf8,
+            "station_id": pl.Utf8,
+            "product_id": pl.Utf8,
+            "value": pl.Float64,
+        }
+    )
+    assert tuple(column.name for column in CanonicalRowsSchema.columns if column.nullable) == ("value",)
+    frame = pl.DataFrame(
+        {
+            "time": [datetime(2026, 1, 1)],
+            "time_zone": ["Europe/Oslo"],
+            "station_id": ["station"],
+            "product_id": ["flow"],
+            "value": [1.0],
+        },
+        schema=CanonicalRowsSchema.polars_schema,
+    )
+
+    assert validate_catalogue(frame, CanonicalRowsSchema, on_issue="raise") == []
+
+
+@pytest.mark.parametrize("schema", [RowsSchema, CanonicalRowsSchema], ids=lambda schema: schema.name)
+def test_row_schemas_reject_zoned_time_wrong_zone_dtype_and_null_zone(schema: CatalogueSchema) -> None:
+    valid = _valid_frame(schema)
+    zoned_time = valid.with_columns(pl.col("time").dt.replace_time_zone("UTC"))
+    wrong_zone_dtype = valid.with_columns(pl.lit(1, dtype=pl.Int64).alias("time_zone"))
+    null_zone = valid.with_columns(pl.lit(None, dtype=pl.Utf8).alias("time_zone"))
+
+    with pytest.raises(FatalContractError):
+        validate_catalogue(zoned_time, schema, on_issue="raise")
+    with pytest.raises(FatalContractError):
+        validate_catalogue(wrong_zone_dtype, schema, on_issue="raise")
+    with pytest.raises(FatalContractError):
+        validate_catalogue(null_zone, schema, on_issue="raise")
+
+
+def test_fetch_window_is_rejected_where_requested_window_is_required() -> None:
+    fixture = Path(__file__).parent / "typecheck" / "nominal_window_misuse.py"
+    result = subprocess.run(
+        ["uv", "run", "ty", "check", str(fixture)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "invalid-argument-type" in result.stdout
+    assert "Expected `RequestedWindow`, found `FetchWindow`" in result.stdout
+
+
+def _valid_frame(schema: CatalogueSchema) -> pl.DataFrame:
+    values = {
+        "station_id": ["station"],
+        "product_id": ["flow"],
+        "time": [datetime(2026, 1, 1)],
+        "value": [1.0],
+        "time_zone": ["unknown"],
+    }
+    return pl.DataFrame(
+        {column.name: values[column.name] for column in schema.columns},
+        schema=schema.polars_schema,
+    )
