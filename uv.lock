@@ -820,6 +820,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pypdf" },
     { name = "requests" },
+    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
 ]
 
 [package.optional-dependencies]
@@ -847,6 +848,7 @@ requires-dist = [
     { name = "pydantic" },
     { name = "pypdf", specifier = ">=6.13.1" },
     { name = "requests" },
+    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'", specifier = ">=2026.2" },
 ]
 provides-extras = ["map"]
 
