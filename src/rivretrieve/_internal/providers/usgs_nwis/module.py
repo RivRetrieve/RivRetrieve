@@ -15,7 +15,10 @@ from rivretrieve._internal.observations import (
 )
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
+from rivretrieve._internal.providers.usgs_nwis.config import config as config
+from rivretrieve._internal.providers.usgs_nwis.fetch import fetch as fetch
 from rivretrieve._internal.providers.usgs_nwis.observation_client import UsgsNwisObservationClient
+from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse
 from rivretrieve._internal.providers.usgs_nwis.retrieval import retrieve_observations
 from rivretrieve._internal.results import CatalogResult
 
