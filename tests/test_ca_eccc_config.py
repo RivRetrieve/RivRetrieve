@@ -17,6 +17,7 @@ from rivretrieve._internal.providers.ca_eccc.config import (
     HydatSourceCoordinates,
     config,
 )
+from rivretrieve._internal.providers.ca_eccc.parse import parse
 
 
 def test_ca_eccc_config_declares_both_hydat_products() -> None:
@@ -42,7 +43,7 @@ def test_ca_eccc_config_declares_both_hydat_products() -> None:
 
     assert ca_eccc_module.config is config
     assert not hasattr(ca_eccc_module, "fetch")
-    assert not hasattr(ca_eccc_module, "parse")
+    assert ca_eccc_module.parse is parse
 
 
 def test_ca_eccc_source_coordinates_are_named_and_immutable() -> None:
