@@ -7,6 +7,8 @@ import pytest
 import rivretrieve._internal.driver as driver_module
 from rivretrieve._internal.assembly import _AssemblyResult
 from rivretrieve._internal.assembly import assemble as real_assemble
+from rivretrieve._internal.catalogues.schemas import CatalogueSchema
+from rivretrieve._internal.catalogues.schemas import validate_catalogue as real_validate_catalogue
 from rivretrieve._internal.conversion import convert as real_convert
 from rivretrieve._internal.engine import (
     CanonicalRows,
@@ -26,9 +28,9 @@ from rivretrieve._internal.engine import (
     WithIssues,
     ZoneValue,
 )
-from rivretrieve._internal.issues import Issue
+from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.observations import ObservationProvenance, RawPayload
-from rivretrieve._internal.primitives import IssueSeverity, ProductId, ProviderId
+from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProductId, ProviderId
 
 _STATIONS = (
     "station-1",
@@ -472,3 +474,281 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
         "fetch",
         "parse",
     }
+
+
+class _BoundaryProvider:
+    def __init__(
+        self,
+        config: ProviderConfig,
+        payloads: tuple[Payload, ...],
+        rows_by_payload: tuple[Rows, ...],
+        events: list[str],
+    ) -> None:
+        self.config = config
+        self._payloads = payloads
+        self._rows_by_payload = rows_by_payload
+        self._events = events
+
+    def fetch(
+        self,
+        stations: tuple[str, ...],
+        products: tuple[ProductId, ...],
+        window: FetchWindow,
+        config: ProviderConfig,
+    ) -> WithIssues[tuple[Payload, ...]]:
+        self._events.append("fetch")
+        assert stations == tuple(f"station-{index}" for index in range(1, len(self._payloads) + 1))
+        assert products == (ProductId("level"),)
+        assert window is self._payloads[0].fetch_window
+        assert config is self.config
+        return WithIssues(value=self._payloads)
+
+    def parse(
+        self,
+        payload: Payload,
+        config: ProviderConfig,
+    ) -> WithIssues[Rows]:
+        index = next(index for index, candidate in enumerate(self._payloads) if candidate is payload)
+        self._events.append(f"parse-{index + 1}")
+        assert config is self.config
+        return WithIssues(value=self._rows_by_payload[index])
+
+
+def _drive_boundary_rows(
+    rows_by_payload: tuple[Rows, ...],
+    events: list[str],
+) -> _AssemblyResult:
+    requested_window = RequestedWindow(
+        start=WindowEndpoint(datetime(2026, 1, 2, 0, tzinfo=UTC)),
+        end=WindowEndpoint(datetime(2026, 1, 2, 23, tzinfo=UTC)),
+    )
+    request = ObservationRequest(
+        provider_id=ProviderId("throwaway"),
+        stations=tuple(f"station-{index}" for index in range(1, len(rows_by_payload) + 1)),
+        products=(ProductId("level"),),
+        window=requested_window,
+    )
+    fetch_window = FetchWindow(
+        start=WindowEndpoint(object()),
+        end=WindowEndpoint(object()),
+    )
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            ProductId("level"): ProductConfig(
+                coordinates=coordinates,
+                unit=Unit.CM,
+                semantics=Instant(),
+            )
+        },
+    )
+    payloads = tuple(
+        Payload(
+            source_coordinates=coordinates,
+            station_products=((station_id, ProductId("level")),),
+            fetch_window=fetch_window,
+            content={"payload_index": index},
+        )
+        for index, station_id in enumerate(request.stations, start=1)
+    )
+    provider = _BoundaryProvider(config, payloads, rows_by_payload, events)
+    provenance = ObservationProvenance(
+        source="test",
+        provider_id=request.provider_id,
+        request={"stations": list(request.stations), "products": ["level"]},
+    )
+    raw = RawPayload(
+        provider_id=request.provider_id,
+        content_type="application/json",
+        content=b"{}",
+        metadata="boundary payloads",
+    )
+
+    def pad_window(window: RequestedWindow) -> FetchWindow:
+        events.append("pad")
+        assert window is requested_window
+        return fetch_window
+
+    return driver_module.drive(
+        request,
+        provider,
+        pad_window,
+        provenance=provenance,
+        raw=raw,
+    )
+
+
+def test_drive_rejects_each_malformed_parse_result_before_later_parse_or_convert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    malformed_rows = pl.DataFrame(
+        {
+            "station_id": ["station-1"],
+            "product_id": ["level"],
+            "time": [datetime(2026, 1, 2, 12)],
+            "value": [250.0],
+        },
+        schema={
+            "station_id": pl.Utf8,
+            "product_id": pl.Utf8,
+            "time": pl.Datetime(),
+            "value": pl.Float64,
+        },
+    )
+    later_rows = pl.DataFrame(
+        {
+            "station_id": ["station-2"],
+            "product_id": ["level"],
+            "time": [datetime(2026, 1, 2, 13)],
+            "value": [300.0],
+            "time_zone": ["+00:00"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+
+    def forbidden_convert(
+        rows: Rows,
+        config: ProviderConfig,
+        window: RequestedWindow,
+    ) -> WithIssues[CanonicalRows]:
+        events.append("convert")
+        raise AssertionError("convert must not run after a malformed parse result")
+
+    monkeypatch.setattr(driver_module, "convert", forbidden_convert)
+
+    with pytest.raises(FatalContractError, match="Rows is missing required columns: time_zone"):
+        _drive_boundary_rows((malformed_rows, later_rows), events)
+
+    assert events == ["pad", "fetch", "parse-1"]
+
+
+def test_drive_rejects_malformed_second_parse_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    first_rows = pl.DataFrame(
+        {
+            "station_id": ["station-1"],
+            "product_id": ["level"],
+            "time": [datetime(2026, 1, 2, 12)],
+            "value": [250.0],
+            "time_zone": ["+00:00"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    malformed_rows = pl.DataFrame(
+        {
+            "station_id": ["station-2"],
+            "product_id": ["level"],
+            "time": [datetime(2026, 1, 2, 13)],
+            "value": [300.0],
+        },
+        schema={
+            "station_id": pl.Utf8,
+            "product_id": pl.Utf8,
+            "time": pl.Datetime(),
+            "value": pl.Float64,
+        },
+    )
+
+    def forbidden_convert(
+        rows: Rows,
+        config: ProviderConfig,
+        window: RequestedWindow,
+    ) -> WithIssues[CanonicalRows]:
+        events.append("convert")
+        raise AssertionError("convert must not run after a malformed parse result")
+
+    monkeypatch.setattr(driver_module, "convert", forbidden_convert)
+
+    with pytest.raises(FatalContractError, match="Rows is missing required columns: time_zone"):
+        _drive_boundary_rows((first_rows, malformed_rows), events)
+
+    assert events == ["pad", "fetch", "parse-1", "parse-2"]
+
+
+def test_drive_rejects_malformed_canonical_rows_before_assemble(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    parsed_rows = pl.DataFrame(
+        {
+            "station_id": ["station-1"],
+            "product_id": ["level"],
+            "time": [datetime(2026, 1, 2, 12)],
+            "value": [250.0],
+            "time_zone": ["+00:00"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    malformed_canonical_rows = pl.DataFrame(
+        {
+            "time": [datetime(2026, 1, 2, 12)],
+            "station_id": ["station-1"],
+            "product_id": ["level"],
+            "value": [2.5],
+        },
+        schema={
+            "time": pl.Datetime(),
+            "station_id": pl.Utf8,
+            "product_id": pl.Utf8,
+            "value": pl.Float64,
+        },
+    )
+
+    def malformed_convert(
+        rows: Rows,
+        config: ProviderConfig,
+        window: RequestedWindow,
+    ) -> WithIssues[CanonicalRows]:
+        events.append("convert")
+        return WithIssues(value=malformed_canonical_rows)
+
+    def forbidden_assemble(
+        canonical_rows: CanonicalRows,
+        provenance: ObservationProvenance,
+        issues: tuple[Issue, ...],
+        raw: RawPayload,
+    ) -> _AssemblyResult:
+        events.append("assemble")
+        raise AssertionError("assemble must not run after malformed canonical rows")
+
+    monkeypatch.setattr(driver_module, "convert", malformed_convert)
+    monkeypatch.setattr(driver_module, "assemble", forbidden_assemble)
+
+    with pytest.raises(FatalContractError, match="CanonicalRows is missing required columns: time_zone"):
+        _drive_boundary_rows((parsed_rows,), events)
+
+    assert events == ["pad", "fetch", "parse-1", "convert"]
+
+
+def test_drive_accepts_well_formed_empty_rows_at_both_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    validation_calls: list[tuple[str, int, OnIssue]] = []
+    empty_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
+
+    def recording_validator(
+        frame: pl.DataFrame,
+        schema: CatalogueSchema,
+        *,
+        on_issue: OnIssue,
+    ) -> list[Issue]:
+        validation_calls.append((schema.name, frame.height, on_issue))
+        return real_validate_catalogue(frame, schema, on_issue=on_issue)
+
+    monkeypatch.setattr(driver_module, "validate_catalogue", recording_validator)
+
+    result = _drive_boundary_rows((empty_rows,), events)
+
+    expected = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
+    pl_testing.assert_frame_equal(result.canonical_rows, expected)
+    assert result.issues == ()
+    assert validation_calls == [
+        ("Rows", 0, "raise"),
+        ("CanonicalRows", 0, "raise"),
+    ]
+    assert events == ["pad", "fetch", "parse-1"]

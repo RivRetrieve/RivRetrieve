@@ -8,8 +8,10 @@ from typing import Protocol
 import polars as pl
 
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
+from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.conversion import convert
 from rivretrieve._internal.engine import (
+    CanonicalRowsSchema,
     FetchWindow,
     ObservationRequest,
     Payload,
@@ -54,8 +56,13 @@ def drive(
     config = provider.config
     fetch_window = pad_window(request.window)
     fetched = provider.fetch(request.stations, request.products, fetch_window, config)
-    parsed = [provider.parse(payload, config) for payload in fetched.value]
+    parsed: list[WithIssues[Rows]] = []
+    for payload in fetched.value:
+        result = provider.parse(payload, config)
+        validate_catalogue(result.value, RowsSchema, on_issue="raise")
+        parsed.append(result)
     rows = pl.concat([result.value for result in parsed] + [pl.DataFrame(schema=RowsSchema.polars_schema)])
     converted = convert(rows, config, request.window)
+    validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
     issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
     return assemble(converted.value, provenance, issues, raw)
