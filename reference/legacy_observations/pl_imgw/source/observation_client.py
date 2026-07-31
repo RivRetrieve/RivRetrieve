@@ -1,4 +1,4 @@
-"""IMGW all-daily Parquet cache acquisition and lifecycle.
+"""IMGW all-daily Parquet cache client for pl_imgw observations.
 
 On first use, all IMGW daily ZIP files from 1951 to the current year are
 downloaded, parsed, and written to a single Parquet file in the user's
@@ -10,7 +10,7 @@ Authentication: none — public IMGW open data.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -124,7 +124,8 @@ class ImgwCacheClient:
                         code="imgw_cache_stale",
                         message=(
                             f"Cached IMGW Parquet is {age_days} days old "
-                            f"(>{_STALE_DAYS} days). The retained private cache can only be maintained from internal code."
+                            f"(>{_STALE_DAYS} days). Consider refreshing via "
+                            "rr.provider('pl_imgw').refresh_cache()."
                         ),
                         details={"path": str(existing), "age_days": age_days},
                         provider_id=pid,
@@ -175,7 +176,9 @@ class ImgwCacheClient:
         stat = p.stat()
         age_days = (datetime.now(UTC) - datetime.fromtimestamp(stat.st_mtime, UTC)).days
         size_mb = round(stat.st_size / 1_048_576, 1)
-        return ImgwCacheStatus(exists=True, path=p, age_days=age_days, size_mb=size_mb, stale=age_days > _STALE_DAYS)
+        return ImgwCacheStatus(
+            exists=True, path=p, age_days=age_days, size_mb=size_mb, stale=age_days > _STALE_DAYS
+        )
 
     def refresh_cache(self) -> list[_Issue]:
         """Force rebuild of the IMGW Parquet cache.
@@ -209,7 +212,10 @@ class ImgwCacheClient:
             Issue(
                 severity="info",
                 code="imgw_cache_build_started",
-                message=(f"Rebuilding IMGW Parquet cache from source. Cache directory: {self.cache_dir}"),
+                message=(
+                    "Rebuilding IMGW Parquet cache from source. "
+                    f"Cache directory: {self.cache_dir}"
+                ),
                 details={"cache_dir": str(self.cache_dir)},
                 provider_id=pid,
             )
@@ -228,6 +234,30 @@ class ImgwCacheClient:
                 )
             )
         return issues
+
+    def query(
+        self,
+        cache_path: Path,
+        station_ids: frozenset[str],
+        start: datetime,
+        end: datetime,
+    ) -> pl.DataFrame:
+        """Read rows from the Parquet cache for the requested stations and window.
+
+        Returns a DataFrame with the same schema as the cache:
+        station_id, time (UTC), level_cm, flow_m3s, temp_c.
+        """
+        start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
+        end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
+        start_day = datetime(start_utc.year, start_utc.month, start_utc.day, tzinfo=UTC)
+        end_next_day = datetime(end_utc.year, end_utc.month, end_utc.day, tzinfo=UTC) + timedelta(days=1)
+
+        df = pl.read_parquet(cache_path).filter(
+            pl.col("station_id").is_in(list(station_ids))
+            & (pl.col("time") >= start_day)
+            & (pl.col("time") < end_next_day)
+        )
+        return df
 
     # ------------------------------------------------------------------ #
     # Cache build                                                          #
@@ -264,6 +294,7 @@ class ImgwCacheClient:
             )
             return None, issues
 
+
         all_data = (
             pl.concat(parts, how="vertical")
             .sort(["station_id", "time"])
@@ -279,7 +310,8 @@ class ImgwCacheClient:
                     severity="info",
                     code="imgw_cache_partial",
                     message=(
-                        f"Cache built with {len(failed_years)} years that had no data (ZIP not found or HTTP error)."
+                        f"Cache built with {len(failed_years)} years that had no data "
+                        "(ZIP not found or HTTP error)."
                     ),
                     details={"failed_year_count": len(failed_years)},
                     provider_id=pid,

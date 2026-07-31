@@ -271,7 +271,6 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "pl_imgw",
             pl_imgw_artifact,
-            provider_module=pl_imgw_module,
         )
 
     if "ba_fhmzbih" not in registered:
@@ -281,7 +280,6 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ba_fhmzbih",
             ba_fhmzbih_artifact,
-            provider_module=ba_fhmzbih_module,
         )
 
     if "za_dws" not in registered:
@@ -291,7 +289,6 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "za_dws",
             za_dws_artifact,
-            provider_module=za_dws_module,
         )
 
 
