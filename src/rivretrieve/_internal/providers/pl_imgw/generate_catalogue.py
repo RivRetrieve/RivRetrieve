@@ -56,8 +56,7 @@ COUNTRY = "Poland"
 # Primary station source (packaged CSV from legacy Python repo).
 # Columns: gauge_id, gauge_name, river, area (km²), gauge_altitude (m), latitude, longitude
 STATION_CSV_URL = (
-    "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne"
-    "/dane_hydrologiczne/lista_stacji_hydro.csv"
+    "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_stacji_hydro.csv"
 )
 # The live JSON endpoint — usable as fallback but lacks elevation/area and has 314 stations without coords.
 HYDRO_JSON_URL = "https://danepubliczne.imgw.pl/api/data/hydro"
@@ -258,8 +257,7 @@ def build_provider_info(catalogue_date: date, *, generator_input: str) -> dict[s
     metadata = {
         "station_source": "poland_sites.csv from legacy RivRetrieve-Python repo (1301 stations)",
         "data_base_url": (
-            "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne"
-            "/dane_hydrologiczne/dobowe/{year}/"
+            "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/"
         ),
         "annual_zip_from_year": 2023,
         "annual_zip_template": "codz_{year}.zip",
@@ -277,8 +275,8 @@ def build_provider_info(catalogue_date: date, *, generator_input: str) -> dict[s
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: all-station yearly ZIPs downloaded once and cached as Parquet; "
-            "observations queried from local cache; cache_status() and refresh_cache() available"
+            "true: the source publishes all-station yearly ZIP files; RivRetrieve's "
+            "catalogue-only provider exposes neither observation retrieval nor cache controls"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
@@ -417,9 +415,7 @@ def _validate(
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(
-        provider_info, products, stations, station_products, on_issue="raise"
-    )
+    packaged_catalogue_artifact_from_components(provider_info, products, stations, station_products, on_issue="raise")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
