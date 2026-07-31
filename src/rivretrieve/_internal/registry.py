@@ -4,7 +4,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 import polars as pl
 
@@ -39,16 +39,6 @@ _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 class EngineProviderModule(ProviderModule, ProviderStages, Protocol):
     observation_source: str
-
-
-@runtime_checkable
-class _LegacyObservationModule(Protocol):
-    def observations(
-        self,
-        request: LegacyObservationRequest,
-        *,
-        on_issue: OnIssue = "warn",
-    ) -> ObservationResult: ...
 
 
 class UnknownProviderError(FatalContractError):
@@ -135,15 +125,12 @@ class _ProviderHandle:
             start=start,
             end=end,
         )
-        if self._stages is not None:
-            if self._observation_source is None:
-                raise FatalContractError(f"Provider {self.provider_id} has engine stages without an observation source")
-            result = self._drive_engine(request, self._stages, self._observation_source)
-            apply_on_issue(result.issues, on_issue)
-        elif isinstance(self._module, _LegacyObservationModule):
-            result = self._module.observations(request, on_issue=on_issue)
-        else:
+        if self._stages is None:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
+        if self._observation_source is None:
+            raise FatalContractError(f"Provider {self.provider_id} has engine stages without an observation source")
+        result = self._drive_engine(request, self._stages, self._observation_source)
+        apply_on_issue(result.issues, on_issue)
 
         row_schemas = self._module.row_annotation_schema()
         validate_annotation_names(result.row_annotations, row_schemas)

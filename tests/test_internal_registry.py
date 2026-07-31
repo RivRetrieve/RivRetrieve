@@ -22,7 +22,7 @@ from rivretrieve._internal.engine import (
     WithIssues,
     ZoneValue,
 )
-from rivretrieve._internal.issues import FatalContractError, Issue, IssuePolicyError
+from rivretrieve._internal.issues import FatalContractError, Issue, IssuePolicyError, ObservationsUnavailableError
 from rivretrieve._internal.observations import (
     AnnotationSchema,
     RawPayload,
@@ -144,26 +144,36 @@ def test_registry_registers_stub_provider_and_returns_handle(
     assert registry.get("stub_provider") is handle
 
 
-def test_registry_register_with_module_round_trips_handle_dispatch(
+def test_registry_module_without_engine_stages_rejects_observation_dispatch(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registry = ProviderRegistry()
     artifact = stub_packaged_catalogue_artifact("stub_provider")
+    called = False
+
+    def legacy_observations(*args: object, **kwargs: object) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(stub_provider, "observations", legacy_observations)
 
     handle = registry.register("stub_provider", artifact, provider_module=stub_provider)
 
     assert handle._module is stub_provider
     assert registry.get("stub_provider") is handle
     assert handle.row_annotation_schema() == stub_provider.row_annotation_schema()
-    assert (
+    with pytest.raises(
+        ObservationsUnavailableError,
+        match="Provider stub_provider has no observation stages registered",
+    ):
         handle.observations(
             stations="station-1",
             products="level",
             start="2026-01-01",
             end="2026-01-02",
-        ).data.height
-        == 2
-    )
+        )
+    assert called is False
 
 
 def test_registry_engine_module_drives_and_packages_public_result(
