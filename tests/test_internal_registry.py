@@ -1,19 +1,127 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 
+import polars as pl
 import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-from rivretrieve._internal.issues import FatalContractError, IssuePolicyError
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.engine import (
+    FetchWindow,
+    Instant,
+    Payload,
+    ProductConfig,
+    ProviderConfig,
+    Rows,
+    RowsSchema,
+    SourceCoordinates,
+    Unit,
+    WithIssues,
+    ZoneValue,
+)
+from rivretrieve._internal.issues import FatalContractError, Issue, IssuePolicyError
+from rivretrieve._internal.observations import (
+    AnnotationSchema,
+    RawPayload,
+    RowAnnotationTableSchema,
+    SeriesAnnotationTableSchema,
+)
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle
 from rivretrieve._internal.results import CatalogProvenance
 from tests._stubs import stub_provider
 from tests.conftest import RegisteredStub
+
+
+class _EngineModule:
+    observation_source = "test-engine"
+    coordinates = SourceCoordinates({"field": "value"})
+    config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            ProductId("level"): ProductConfig(
+                coordinates=coordinates,
+                unit=Unit.M,
+                semantics=Instant(),
+            )
+        },
+    )
+    events: list[str] = []
+    emitted_payload: Payload | None = None
+    fetched_window: FetchWindow | None = None
+
+    @staticmethod
+    def fetch(
+        stations: tuple[str, ...],
+        products: tuple[ProductId, ...],
+        window: FetchWindow,
+        config: ProviderConfig,
+    ) -> WithIssues[tuple[Payload, ...]]:
+        _EngineModule.events.append("fetch")
+        _EngineModule.fetched_window = window
+        payload = Payload(
+            source_coordinates=_EngineModule.coordinates,
+            station_products=((stations[0], products[0]),),
+            fetch_window=window,
+            content=b"test payload",
+        )
+        _EngineModule.emitted_payload = payload
+        return WithIssues(
+            value=(payload,),
+            issues=(
+                Issue(
+                    severity="warning",
+                    code="test.engine.warning",
+                    message="engine warning",
+                    provider_id=ProviderId("test_provider"),
+                ),
+            ),
+        )
+
+    @staticmethod
+    def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+        _EngineModule.events.append("parse")
+        assert payload is _EngineModule.emitted_payload
+        return WithIssues(
+            value=pl.DataFrame(
+                {
+                    "station_id": ["station-1"],
+                    "product_id": ["level"],
+                    "time": [datetime(2026, 1, 1)],
+                    "value": [1.5],
+                    "time_zone": ["+00:00"],
+                },
+                schema=RowsSchema.polars_schema,
+            )
+        )
+
+    @staticmethod
+    def info():
+        raise NotImplementedError
+
+    @staticmethod
+    def products():
+        raise NotImplementedError
+
+    @staticmethod
+    def stations():
+        raise NotImplementedError
+
+    @staticmethod
+    def station_products():
+        raise NotImplementedError
+
+    @staticmethod
+    def row_annotation_schema() -> list[AnnotationSchema]:
+        return [AnnotationSchema("declared_row", "declared row", "string")]
+
+    @staticmethod
+    def series_annotation_schema() -> list[AnnotationSchema]:
+        return [AnnotationSchema("declared_series", "declared series", "string")]
 
 
 def test_registry_initially_empty() -> None:
@@ -56,6 +164,108 @@ def test_registry_register_with_module_round_trips_handle_dispatch(
         ).data.height
         == 2
     )
+
+
+def test_registry_engine_module_drives_and_packages_public_result(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    artifact = stub_packaged_catalogue_artifact("test_provider")
+    _EngineModule.events = []
+    handle = registry.register(
+        "test_provider",
+        artifact,
+        engine_provider_module=_EngineModule,
+    )
+
+    result = handle.observations(
+        stations="station-1",
+        products="level",
+        start="2026-01-01",
+        end="2026-01-02",
+        on_issue="ignore",
+    )
+
+    assert _EngineModule.events == ["fetch", "parse"]
+    assert isinstance(_EngineModule.fetched_window, FetchWindow)
+    assert set(result.data.columns) == {"time", "station_id", "product_id", "value"}
+    pl_testing.assert_frame_equal(
+        result.row_annotations.data,
+        pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
+    )
+    pl_testing.assert_frame_equal(
+        result.series_annotations.data,
+        pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
+    )
+    assert result.provenance.source == "test-engine"
+    assert result.raw == RawPayload(provider_id=ProviderId("test_provider"))
+    assert [issue.code for issue in result.issues] == ["test.engine.warning"]
+
+
+def test_registry_engine_module_warns_for_accumulated_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    handle = registry.register(
+        "test_provider",
+        stub_packaged_catalogue_artifact("test_provider"),
+        engine_provider_module=_EngineModule,
+    )
+
+    with pytest.warns(RuntimeWarning, match="engine warning"):
+        handle.observations(
+            stations="station-1",
+            products="level",
+            start="2026-01-01",
+            end="2026-01-02",
+            on_issue="warn",
+        )
+
+
+def test_registry_engine_module_raises_for_accumulated_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    handle = registry.register(
+        "test_provider",
+        stub_packaged_catalogue_artifact("test_provider"),
+        engine_provider_module=_EngineModule,
+    )
+
+    with pytest.raises(IssuePolicyError):
+        handle.observations(
+            stations="station-1",
+            products="level",
+            start="2026-01-01",
+            end="2026-01-02",
+            on_issue="raise",
+        )
+
+
+def test_minimal_engine_module_declares_nonempty_row_schema() -> None:
+    assert [schema.annotation_id for schema in _EngineModule.row_annotation_schema()] == ["declared_row"]
+
+
+def test_minimal_engine_module_declares_nonempty_series_schema() -> None:
+    assert [schema.annotation_id for schema in _EngineModule.series_annotation_schema()] == ["declared_series"]
+
+
+def test_registry_rejects_both_module_registration_modes(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    artifact = stub_packaged_catalogue_artifact("test_provider")
+
+    with pytest.raises(
+        FatalContractError,
+        match="Register either provider_module or engine_provider_module, not both",
+    ):
+        registry.register(
+            "test_provider",
+            artifact,
+            provider_module=_EngineModule,
+            engine_provider_module=_EngineModule,
+        )
 
 
 def test_registry_register_artifact_only_remains_back_compatible(

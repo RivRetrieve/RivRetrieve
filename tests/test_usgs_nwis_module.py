@@ -12,11 +12,12 @@ def test_usgs_nwis_in_providers_list() -> None:
     assert "usgs_nwis" in rr.providers()
 
 
-def test_usgs_nwis_exposes_real_stage_contract_and_retains_legacy_protocol() -> None:
-    assert usgs_nwis_module.config is config
+def test_usgs_nwis_exposes_only_the_engine_stage_contract() -> None:
+    assert usgs_nwis_module.config is config()
     assert usgs_nwis_module.fetch is fetch
     assert usgs_nwis_module.parse is parse
-    assert callable(usgs_nwis_module.observations)
+    assert usgs_nwis_module.observation_source == "live"
+    assert not hasattr(usgs_nwis_module, "observations")
     assert isinstance(usgs_nwis_module, ProviderModule)
 
 

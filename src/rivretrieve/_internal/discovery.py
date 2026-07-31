@@ -191,7 +191,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "usgs_nwis",
             usgs_nwis_artifact,
-            provider_module=usgs_nwis_module,
+            engine_provider_module=usgs_nwis_module,
         )
 
     if "cz_chmi" not in registered:
@@ -261,7 +261,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ca_eccc",
             ca_eccc_artifact,
-            provider_module=ca_eccc_module,
+            engine_provider_module=ca_eccc_module,
         )
 
     if "pl_imgw" not in registered:

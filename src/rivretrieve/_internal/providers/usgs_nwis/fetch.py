@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from rivretrieve._internal.engine import (
     FetchWindow,
     Payload,
@@ -108,6 +110,8 @@ def _resolve_coordinates(
 
 
 def _window_parameter(value: object, name: str) -> str | int | float:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
     if isinstance(value, bool) or not isinstance(value, str | int | float):
         raise FatalContractError(f"usgs_nwis fetch window {name} is not an already-representable HTTP parameter")
     return value
