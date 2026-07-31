@@ -16,6 +16,7 @@ from rivretrieve._internal.engine import (
     ProviderConfig,
     RequestedWindow,
     Rows,
+    RowsSchema,
     WithIssues,
 )
 from rivretrieve._internal.observations import ObservationProvenance, RawPayload
@@ -54,6 +55,7 @@ def drive(
     fetch_window = pad_window(request.window)
     fetched = provider.fetch(request.stations, request.products, fetch_window, config)
     parsed = [provider.parse(payload, config) for payload in fetched.value]
-    rows = pl.concat([result.value for result in parsed])
+    rows = pl.concat([result.value for result in parsed] + [pl.DataFrame(schema=RowsSchema.polars_schema)])
     converted = convert(rows, config, request.window)
-    return assemble(converted.value, provenance, converted.issues, raw)
+    issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
+    return assemble(converted.value, provenance, issues, raw)
