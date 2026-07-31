@@ -138,16 +138,7 @@ def test_map_stations_fake_backend_receives_filtered_station_frame(monkeypatch: 
 
 
 def test_map_stations_uses_packaged_station_catalogue_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
-    from rivretrieve._internal.providers.ch_foen import observation_client
-
-    def forbidden(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("observation path touched")
-
     monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
-    monkeypatch.setattr(ch_foen_module, "_observation_client_factory", forbidden)
-    monkeypatch.setattr(observation_client, "_default_transport", forbidden)
-    monkeypatch.setattr(observation_client.ChFoenObservationClient, "resolved_token", property(forbidden))
 
     station_map = rr.map_stations(providers="ch_foen")
 

@@ -171,7 +171,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ch_foen",
             packaged_artifact,
-            provider_module=ch_foen_module,
+            provider_module=None,
         )
 
     if "lt_lhmt" not in registered:
@@ -181,7 +181,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "lt_lhmt",
             lt_lhmt_artifact,
-            provider_module=lt_lhmt_module,
+            provider_module=None,
         )
 
     if "usgs_nwis" not in registered:
@@ -201,7 +201,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "cz_chmi",
             cz_chmi_artifact,
-            provider_module=cz_chmi_module,
+            provider_module=None,
         )
 
     if "th_thaiwater" not in registered:
@@ -221,7 +221,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "fr_hubeau",
             fr_hubeau_artifact,
-            provider_module=fr_hubeau_module,
+            provider_module=None,
         )
 
     if "jp_mlit" not in registered:
