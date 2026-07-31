@@ -30,19 +30,24 @@ type WindowPadder = Callable[[RequestedWindow], FetchWindow]
 class ProviderStages(Protocol):
     config: ProviderConfig
 
+    @staticmethod
     def fetch(
-        self,
         stations: tuple[str, ...],
         products: tuple[ProductId, ...],
         window: FetchWindow,
         config: ProviderConfig,
     ) -> WithIssues[tuple[Payload, ...]]: ...
 
+    @staticmethod
     def parse(
-        self,
         payload: Payload,
         config: ProviderConfig,
     ) -> WithIssues[Rows]: ...
+
+
+def identity_window(window: RequestedWindow) -> FetchWindow:
+    """Change only the nominal window type; perform no padding arithmetic."""
+    return FetchWindow(start=window.start, end=window.end)
 
 
 def drive(

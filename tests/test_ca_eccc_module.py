@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import rivretrieve as rr
+from rivretrieve._internal.provider_module import ProviderModule
+from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
+from rivretrieve._internal.providers.ca_eccc.config import config
+from rivretrieve._internal.providers.ca_eccc.fetch import fetch
+from rivretrieve._internal.providers.ca_eccc.parse import parse
 
 
 def test_ca_eccc_in_providers_list() -> None:
@@ -74,15 +79,11 @@ def test_ca_eccc_global_stations_includes_provider() -> None:
 
 
 def test_ca_eccc_annotation_schemas_non_empty() -> None:
-    from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
-
     assert len(ca_eccc_module.row_annotation_schema()) > 0
     assert len(ca_eccc_module.series_annotation_schema()) > 0
 
 
 def test_ca_eccc_annotation_schema_ids_are_strings() -> None:
-    from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
-
     for schema in ca_eccc_module.row_annotation_schema() + ca_eccc_module.series_annotation_schema():
         assert isinstance(schema.annotation_id, str)
         assert schema.annotation_id
@@ -109,3 +110,26 @@ def test_ca_eccc_station_no_elevation() -> None:
     """ECCC OGC stations endpoint does not provide elevation — always null."""
     result = rr.provider("ca_eccc").stations()
     assert result.data["elevation_m"].is_null().all()
+
+
+def test_ca_eccc_exposes_only_the_engine_stage_contract() -> None:
+    assert ca_eccc_module.config is config
+    assert ca_eccc_module.fetch is fetch
+    assert ca_eccc_module.parse is parse
+    assert ca_eccc_module.observation_source == "local"
+    assert not hasattr(ca_eccc_module, "observations")
+    assert isinstance(ca_eccc_module, ProviderModule)
+
+
+def test_ca_eccc_cache_lifecycle_remains_reachable(monkeypatch) -> None:
+    class FakeHydatClient:
+        def cache_status(self) -> str:
+            return "cache-status"
+
+        def refresh_cache(self) -> list[str]:
+            return ["cache-refresh"]
+
+    monkeypatch.setattr(ca_eccc_module, "HydatClient", FakeHydatClient)
+
+    assert rr.provider("ca_eccc").cache_status() == "cache-status"
+    assert rr.provider("ca_eccc").refresh_cache() == ["cache-refresh"]

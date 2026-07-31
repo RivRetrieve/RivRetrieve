@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from types import ModuleType
+from typing import get_protocol_members
 
 import pytest
 
@@ -29,6 +30,20 @@ def test_stub_provider_module_satisfies_expanded_provider_module_protocol() -> N
 
     assert expected_members <= set(vars(stub_provider))
     assert isinstance(stub_provider, ProviderModule)
+
+
+def test_provider_module_protocol_does_not_own_observation_dispatch() -> None:
+    assert "observations" not in get_protocol_members(ProviderModule)
+    assert get_protocol_members(ProviderModule) == frozenset(
+        {
+            "info",
+            "products",
+            "stations",
+            "station_products",
+            "row_annotation_schema",
+            "series_annotation_schema",
+        }
+    )
 
 
 def test_stub_provider_info_matches_registered_handle_info(registered_stub: RegisteredStub) -> None:

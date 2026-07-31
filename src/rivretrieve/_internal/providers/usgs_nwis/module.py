@@ -8,23 +8,18 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
-from rivretrieve._internal.observations import (
-    AnnotationSchema,
-    ObservationRequest,
-    ObservationResult,
-)
+from rivretrieve._internal.observations import AnnotationSchema
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
-from rivretrieve._internal.providers.usgs_nwis.config import config as config
+from rivretrieve._internal.providers.usgs_nwis.config import config as _config
 from rivretrieve._internal.providers.usgs_nwis.fetch import fetch as fetch
-from rivretrieve._internal.providers.usgs_nwis.observation_client import UsgsNwisObservationClient
 from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse
-from rivretrieve._internal.providers.usgs_nwis.retrieval import retrieve_observations
 from rivretrieve._internal.results import CatalogResult
 
 PROVIDER_ID = ProviderId("usgs_nwis")
 _CATALOGUE_PATH = Path(__file__).with_name("catalogue")
-_observation_client_factory = UsgsNwisObservationClient
+config = _config()
+observation_source: str = "live"
 
 
 def info() -> ProviderInfo:
@@ -180,20 +175,6 @@ def series_annotation_schema() -> list[AnnotationSchema]:
     ]
 
 
-def observations(
-    request: ObservationRequest,
-    *,
-    on_issue: OnIssue = "warn",
-) -> ObservationResult:
-    return retrieve_observations(
-        request,
-        on_issue=on_issue,
-        client_factory=_observation_client_factory,
-        rivretrieve_version=_rivretrieve_version(),
-        catalogue_version=info().catalogue_version,
-    )
-
-
 @lru_cache
 def _artifact() -> PackagedCatalogArtifact:
     return load_packaged_catalogue_artifact(_CATALOGUE_PATH, on_issue="raise")
@@ -201,9 +182,3 @@ def _artifact() -> PackagedCatalogArtifact:
 
 def _reader() -> CatalogueReader:
     return CatalogueReader(_artifact(), PROVIDER_ID)
-
-
-def _rivretrieve_version() -> str:
-    from rivretrieve import __version__
-
-    return __version__
