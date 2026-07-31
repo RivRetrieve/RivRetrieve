@@ -1,0 +1,292 @@
+"""Catalogue-only contracts and archived-reference inventory for milestone 7 step 3."""
+
+from __future__ import annotations
+
+from importlib import import_module
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+import rivretrieve as rr
+from rivretrieve._internal.issues import ObservationsUnavailableError
+
+CATALOGUE_ONLY_PROVIDERS = (
+    (
+        "br_ana",
+        10429,
+        5,
+        52145,
+        "Brazil",
+        {
+            "discharge_daily_mean",
+            "discharge_instantaneous",
+            "stage_daily_mean",
+            "stage_instantaneous",
+            "water_temperature_instantaneous",
+        },
+        "ANA Hidroweb — Brazilian National Water and Sanitation Agency",
+        "2026-06-11",
+        {"unknown"},
+    ),
+    (
+        "jp_mlit",
+        1024,
+        4,
+        4096,
+        "Japan",
+        {"discharge_daily_mean", "discharge_hourly_mean", "stage_daily_mean", "stage_hourly_mean"},
+        "MLIT Water Information System — Japan national hydrometric network",
+        "2026-06-03",
+        {"unknown"},
+    ),
+    (
+        "no_nve",
+        4889,
+        9,
+        44001,
+        "Norway",
+        {
+            "discharge_daily_mean",
+            "discharge_hourly_mean",
+            "discharge_instantaneous",
+            "stage_daily_mean",
+            "stage_hourly_mean",
+            "stage_instantaneous",
+            "water_temperature_daily_mean",
+            "water_temperature_hourly_mean",
+            "water_temperature_instantaneous",
+        },
+        "NVE HydAPI — Norwegian Water Resources and Energy Directorate",
+        "2026-06-03",
+        {"available", "unavailable"},
+    ),
+    (
+        "th_thaiwater",
+        754,
+        4,
+        3016,
+        "Thailand",
+        {
+            "discharge_daily_mean",
+            "discharge_instantaneous",
+            "stage_daily_mean",
+            "stage_instantaneous",
+        },
+        "ThaiWater public API / Hydro-Informatics Institute (HII)",
+        "2026-06-02",
+        {"unknown"},
+    ),
+)
+CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "metadata.py", "module.py"}
+REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
+
+
+@pytest.mark.parametrize(
+    (
+        "provider_id",
+        "station_count",
+        "product_count",
+        "station_product_count",
+        "country",
+        "product_ids",
+        "provider_name",
+        "catalogue_version",
+        "availability",
+    ),
+    CATALOGUE_ONLY_PROVIDERS,
+)
+def test_catalogue_only_provider_remains_discoverable_and_readable(
+    provider_id: str,
+    station_count: int,
+    product_count: int,
+    station_product_count: int,
+    country: str,
+    product_ids: set[str],
+    provider_name: str,
+    catalogue_version: str,
+    availability: set[str],
+) -> None:
+    assert provider_id in rr.providers()
+    handle = rr.provider(provider_id)
+    info = handle.info()
+    stations_result = handle.stations()
+    products_result = handle.products()
+    station_products_result = handle.station_products()
+    for result in (stations_result, products_result, station_products_result):
+        assert hasattr(result, "data")
+        assert hasattr(result, "provenance")
+        assert hasattr(result, "issues")
+    stations = stations_result.data
+    products = products_result.data
+    station_products = station_products_result.data
+    assert info.provider_id == provider_id
+    assert info.name == provider_name
+    assert str(info.catalogue_version) == catalogue_version
+    assert stations.height == station_count
+    assert stations["country"].unique().to_list() == [country]
+    assert products.height == product_count
+    assert set(products["product_id"].to_list()) == product_ids
+    assert set(products["provider_id"].to_list()) == {provider_id}
+    assert station_products.height == station_product_count
+    assert set(station_products["availability"].cast(str).to_list()) == availability
+
+    global_stations = rr.stations().data.filter(pl.col("provider_id") == provider_id)
+    global_products = rr.products().data.filter(pl.col("provider_id") == provider_id)
+    global_provider_info = rr.provider_info().data.filter(pl.col("provider_id") == provider_id)
+    assert global_stations.height == station_count
+    assert global_stations["country"].unique().to_list() == [country]
+    assert global_products.height == product_count
+    assert set(global_products["product_id"].to_list()) == product_ids
+    assert global_provider_info.height == 1
+    assert global_provider_info.select("name").item() == provider_name
+
+
+@pytest.mark.parametrize(
+    (
+        "provider_id",
+        "station_count",
+        "product_count",
+        "station_product_count",
+        "country",
+        "product_ids",
+        "provider_name",
+        "catalogue_version",
+        "availability",
+    ),
+    CATALOGUE_ONLY_PROVIDERS,
+)
+def test_catalogue_only_module_retains_only_catalogue_surface(
+    provider_id: str,
+    station_count: int,
+    product_count: int,
+    station_product_count: int,
+    country: str,
+    product_ids: set[str],
+    provider_name: str,
+    catalogue_version: str,
+    availability: set[str],
+) -> None:
+    module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
+    info = module.info()
+    stations = module.stations().data
+    products = module.products().data
+    station_products = module.station_products().data
+    assert info.provider_id == provider_id
+    assert info.name == provider_name
+    assert str(info.catalogue_version) == catalogue_version
+    assert stations.height == station_count
+    assert stations["country"].unique().to_list() == [country]
+    assert products.height == product_count
+    assert set(products["product_id"].to_list()) == product_ids
+    assert set(products["provider_id"].to_list()) == {provider_id}
+    assert station_products.height == station_product_count
+    assert set(station_products["availability"].cast(str).to_list()) == availability
+    assert not hasattr(module, "observations")
+    assert not hasattr(module, "row_annotation_schema")
+    assert not hasattr(module, "series_annotation_schema")
+    provider_directory = Path(module.__file__).parent
+    assert {path.name for path in provider_directory.glob("*.py")} == CATALOGUE_MODULE_FILES
+    assert module._CATALOGUE_PATH.exists()
+    for artifact_name in ("provider.json", "stations.parquet", "products.parquet", "station_products.parquet"):
+        assert (module._CATALOGUE_PATH / artifact_name).exists()
+
+
+@pytest.mark.parametrize("provider_id", [row[0] for row in CATALOGUE_ONLY_PROVIDERS])
+def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str) -> None:
+    with pytest.raises(
+        ObservationsUnavailableError, match=f"Provider {provider_id} has no observation module registered"
+    ):
+        rr.provider(provider_id).observations(stations="unused", products="unused", start=None, end=None)
+
+
+@pytest.mark.parametrize("provider_id", [row[0] for row in CATALOGUE_ONLY_PROVIDERS])
+@pytest.mark.parametrize("method_name", ("row_annotation_schema", "series_annotation_schema"))
+def test_catalogue_only_provider_rejects_annotation_schema_requests(provider_id: str, method_name: str) -> None:
+    with pytest.raises(
+        ObservationsUnavailableError, match=f"Provider {provider_id} has no observation module registered"
+    ):
+        getattr(rr.provider(provider_id), method_name)()
+
+
+def test_catalogue_only_live_catalogue_behaviour_is_retained() -> None:
+    assert rr.provider("no_nve").info().live_stations is False
+    assert rr.provider("no_nve").stations(source="live", on_issue="ignore").issues
+    assert rr.provider("jp_mlit").stations(source="live", on_issue="ignore").issues
+
+
+def test_no_nve_packaged_availability_examples_are_retained() -> None:
+    station_products = rr.provider("no_nve").station_products().data
+    for product_id in ("discharge_daily_mean", "discharge_instantaneous"):
+        row = station_products.filter((pl.col("station_id") == "12.210.0") & (pl.col("product_id") == product_id))
+        assert row.height == 1
+        assert row.select(pl.col("availability").cast(str)).item() == "available"
+
+
+def test_reference_tree_preserves_complete_porting_evidence() -> None:
+    expected_fixtures = {
+        "br_ana": {
+            "br_ana_12345000_telemetrica_adotada.json",
+            "br_ana_12345000_telemetrica_detalhada.json",
+            "br_ana_12345000_vazao_2020.json",
+            "br_ana_60435000_cotas_2020.json",
+            "br_ana_metadata.json",
+        },
+        "jp_mlit": {
+            "jp_mlit_301011281104010_kind2_202301.dat",
+            "jp_mlit_301011281104010_kind7_2023.dat",
+            "jp_mlit_metadata.json",
+        },
+        "no_nve": {
+            "no_nve_12.210.0_discharge_daily_2023.json",
+            "no_nve_12.210.0_discharge_hourly_202301.json",
+            "no_nve_metadata.json",
+        },
+        "th_thaiwater": {"th_thaiwater_S13A_waterlevel_graph.json", "th_thaiwater_metadata.json"},
+    }
+    endpoints = {
+        "br_ana": (
+            "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
+        ),
+        "jp_mlit": "http://www1.river.go.jp",
+        "no_nve": "https://hydapi.nve.no/api/v1/",
+        "th_thaiwater": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public",
+    }
+    source_names = {
+        "issue_codes.py",
+        "module.py",
+        "observation_client.py",
+        "parser.py",
+        "retrieval.py",
+        "transform.py",
+    }
+    for provider_id, fixture_names in expected_fixtures.items():
+        provider_root = REFERENCE_ROOT / provider_id
+        assert {path.name for path in (provider_root / "source").iterdir()} == source_names
+        assert {path.name for path in (provider_root / "tests").glob("test_*.py")} == {
+            f"test_{provider_id}_module.py",
+            f"test_{provider_id}_observations.py",
+        }
+        assert {path.name for path in (provider_root / "tests" / "test_data").iterdir()} == fixture_names
+        client_text = (provider_root / "source" / "observation_client.py").read_text()
+        assert endpoints[provider_id] in client_text
+        readme = (provider_root / "README.md").read_text()
+        assert "51ce7d87da140568ee4145cd41fef0ac9f39fc45" in readme
+        for source_name in source_names:
+            original = f"src/rivretrieve/_internal/providers/{provider_id}/{source_name}"
+            assert f"- `{original}` -> `source/{source_name}`" in readme
+        for test_name in (f"test_{provider_id}_module.py", f"test_{provider_id}_observations.py"):
+            assert f"- `tests/{test_name}` -> `tests/{test_name}`" in readme
+        for fixture_name in fixture_names:
+            assert f"- `tests/test_data/{fixture_name}` -> `tests/test_data/{fixture_name}`" in readme
+
+
+def test_active_catalogue_fixtures_remain_available() -> None:
+    fixture_dir = Path(__file__).parent / "test_data"
+    for fixture_name in (
+        "br_ana_metadata.json",
+        "jp_mlit_metadata.json",
+        "no_nve_metadata.json",
+        "th_thaiwater_metadata.json",
+    ):
+        assert (fixture_dir / fixture_name).is_file()
