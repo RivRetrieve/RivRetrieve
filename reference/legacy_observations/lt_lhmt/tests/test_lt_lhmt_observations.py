@@ -15,7 +15,7 @@ from rivretrieve._internal.providers.lt_lhmt.observation_client import (
 )
 from rivretrieve._internal.providers.lt_lhmt.retrieval import retrieve_observations
 
-FIXTURE_PATH = Path("tests/test_data/lithuania_anyksciu_vms_2023_06.json")
+FIXTURE_PATH = Path(__file__).parent / "test_data" / "lithuania_anyksciu_vms_2023_06.json"
 STATION_ID = "anyksciu-vms"
 
 

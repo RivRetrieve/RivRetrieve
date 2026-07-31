@@ -29,7 +29,6 @@ from rivretrieve._internal.providers.fr_hubeau.metadata import (
     FrHubeauStationMetadata,
     FrHubeauStationProductMetadata,
 )
-from rivretrieve._internal.providers.fr_hubeau.transform import HYDRO_PRODUCT_IDS, TEMP_PRODUCT_IDS
 
 PROVIDER_ID = "fr_hubeau"
 PROVIDER_NAME = "Hubeau / SCHAPI — French national hydrometric network"
@@ -203,8 +202,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ),
 )
 
-HYDRO_PRODUCT_DEFS = tuple(d for d in PRODUCT_DEFINITIONS if d.product_id in HYDRO_PRODUCT_IDS)
-TEMP_PRODUCT_DEFS = tuple(d for d in PRODUCT_DEFINITIONS if d.product_id in TEMP_PRODUCT_IDS)
+HYDRO_PRODUCT_DEFS = tuple(d for d in PRODUCT_DEFINITIONS if d.api_type in {"obs_elab", "obs_tr"})
+TEMP_PRODUCT_DEFS = tuple(d for d in PRODUCT_DEFINITIONS if d.api_type == "temperature")
 EXPECTED_PRODUCT_IDS = frozenset(d.product_id for d in PRODUCT_DEFINITIONS)
 
 

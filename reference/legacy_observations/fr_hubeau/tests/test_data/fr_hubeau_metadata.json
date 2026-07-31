@@ -1,0 +1,48 @@
+{
+  "count": 3,
+  "data": [
+    {
+      "code_station": "O0050010",
+      "libelle_station": "LA BIDOUZE A SAINT-PALAIS",
+      "longitude_station": -1.003,
+      "latitude_station": 43.321,
+      "altitude_ref_alti_station": 42.5,
+      "surface_bv_reel_station": 830.0,
+      "libelle_cours_eau": "LA BIDOUZE",
+      "libelle_commune": "SAINT-PALAIS",
+      "libelle_departement": "PYRENEES-ATLANTIQUES",
+      "en_service": true,
+      "date_ouverture_station": "1970-01-01",
+      "date_fermeture_station": null
+    },
+    {
+      "code_station": "J031401001",
+      "libelle_station": "L'ISERE A GRENOBLE",
+      "longitude_station": 5.712,
+      "latitude_station": 45.183,
+      "altitude_ref_alti_station": 204.0,
+      "surface_bv_reel_station": 5200.0,
+      "libelle_cours_eau": "L'ISERE",
+      "libelle_commune": "GRENOBLE",
+      "libelle_departement": "ISERE",
+      "en_service": true,
+      "date_ouverture_station": "1996-01-01",
+      "date_fermeture_station": null
+    },
+    {
+      "code_station": "K123456001",
+      "libelle_station": "STATION SANS COORDONNEES",
+      "longitude_station": null,
+      "latitude_station": null,
+      "altitude_ref_alti_station": null,
+      "surface_bv_reel_station": null,
+      "libelle_cours_eau": null,
+      "libelle_commune": "TEST",
+      "libelle_departement": "TEST",
+      "en_service": true,
+      "date_ouverture_station": null,
+      "date_fermeture_station": null
+    }
+  ],
+  "next": null
+}
