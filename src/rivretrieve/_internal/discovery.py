@@ -211,7 +211,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "th_thaiwater",
             th_thaiwater_artifact,
-            provider_module=th_thaiwater_module,
+            provider_module=None,
         )
 
     if "fr_hubeau" not in registered:
@@ -231,7 +231,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "jp_mlit",
             jp_mlit_artifact,
-            provider_module=jp_mlit_module,
+            provider_module=None,
         )
 
     if "br_ana" not in registered:
@@ -241,7 +241,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "br_ana",
             br_ana_artifact,
-            provider_module=br_ana_module,
+            provider_module=None,
         )
 
     if "no_nve" not in registered:
@@ -251,7 +251,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "no_nve",
             no_nve_artifact,
-            provider_module=no_nve_module,
+            provider_module=None,
         )
 
     if "ca_eccc" not in registered:

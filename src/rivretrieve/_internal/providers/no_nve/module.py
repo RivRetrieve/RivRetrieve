@@ -1,3 +1,5 @@
+"""catalogue access : PackagedCatalogArtifact × CatalogSource → CatalogResult."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -8,20 +10,12 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
-from rivretrieve._internal.observations import (
-    AnnotationSchema,
-    ObservationRequest,
-    ObservationResult,
-)
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
-from rivretrieve._internal.providers.no_nve.observation_client import NoNveObservationClient
-from rivretrieve._internal.providers.no_nve.retrieval import retrieve_observations
 from rivretrieve._internal.results import CatalogResult
 
 PROVIDER_ID = ProviderId("no_nve")
 _CATALOGUE_PATH = Path(__file__).with_name("catalogue")
-_observation_client_factory = NoNveObservationClient
 
 
 def info() -> ProviderInfo:
@@ -62,109 +56,6 @@ def station_products(
     return _reader().read_station_products(stations, source=source, on_issue=on_issue)
 
 
-def row_annotation_schema() -> list[AnnotationSchema]:
-    return [
-        AnnotationSchema(
-            annotation_id="native_unit",
-            description="Provider-native unit for this observation (m, m3/s, or degC; no conversion applied).",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="raw_value",
-            description="Provider value as returned by NVE HydAPI (identical to value; no conversion needed).",
-            value_type="float",
-            source_field="NVE API observations field",
-        ),
-    ]
-
-
-def series_annotation_schema() -> list[AnnotationSchema]:
-    return [
-        AnnotationSchema(
-            annotation_id="parameter_id",
-            description="NVE parameter code (1000=stage, 1001=discharge, 1003=water_temperature).",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="resolution_time",
-            description="NVE resTime in minutes (0=instantaneous, 60=hourly, 1440=daily).",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="native_unit_returned",
-            description="Native unit present in the NVE API response.",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="returned_time_range_start",
-            description="First UTC timestamp returned for the station-product series.",
-            value_type="datetime",
-            source_field="time column",
-        ),
-        AnnotationSchema(
-            annotation_id="returned_time_range_end",
-            description="Last UTC timestamp returned for the station-product series.",
-            value_type="datetime",
-            source_field="time column",
-        ),
-        AnnotationSchema(
-            annotation_id="resolved_timezone",
-            description="Output timezone (always UTC for no_nve).",
-            value_type="string",
-            source_field="time column",
-        ),
-        AnnotationSchema(
-            annotation_id="timezone_source",
-            description=(
-                "How timezone was resolved: 'date_only_utc_midnight' for daily products (resTime=1440); "
-                "'provider_timestamp_offset' for hourly/instantaneous (resTime=60 or 0, "
-                "NVE timestamps carry explicit ISO 8601 offset converted to UTC)."
-            ),
-            value_type="string",
-            source_field="timestamp field",
-        ),
-        AnnotationSchema(
-            annotation_id="date_only_timestamp_flag",
-            description=(
-                "'true' for daily products (date-only, interpreted as UTC midnight). "
-                "Absent for hourly/instantaneous products which carry full timestamps."
-            ),
-            value_type="boolean",
-            source_field="date column",
-        ),
-        AnnotationSchema(
-            annotation_id="provider_endpoints",
-            description="NVE HydAPI Observations endpoint URLs used for this series.",
-            value_type="json",
-            source_field="URL",
-        ),
-        AnnotationSchema(
-            annotation_id="requested_windows",
-            description="Date windows (begin_date, end_date pairs) used in provider requests.",
-            value_type="json",
-            source_field="request decomposition",
-        ),
-    ]
-
-
-def observations(
-    request: ObservationRequest,
-    *,
-    on_issue: OnIssue = "warn",
-) -> ObservationResult:
-    return retrieve_observations(
-        request,
-        on_issue=on_issue,
-        client_factory=_observation_client_factory,
-        rivretrieve_version=_rivretrieve_version(),
-        catalogue_version=info().catalogue_version,
-    )
-
-
 @lru_cache
 def _artifact() -> PackagedCatalogArtifact:
     return load_packaged_catalogue_artifact(_CATALOGUE_PATH, on_issue="raise")
@@ -172,9 +63,3 @@ def _artifact() -> PackagedCatalogArtifact:
 
 def _reader() -> CatalogueReader:
     return CatalogueReader(_artifact(), PROVIDER_ID)
-
-
-def _rivretrieve_version() -> str:
-    from rivretrieve import __version__
-
-    return __version__
