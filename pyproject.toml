@@ -41,7 +41,7 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py313"
-# extend-exclude = ["notebooks/", "experiments/"]
+extend-exclude = ["reference/legacy_observations/"]
 
 [tool.ruff.lint]
 # Errors, warnings, naming, imports, modern py, bugbear, comprehensions, simplify
@@ -56,10 +56,11 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 
-# # -----------------------
-# # ty (fast static type checker)
-# # -----------------------
-# [tool.ty]
+# -----------------------
+# ty (fast static type checker)
+# -----------------------
+[tool.ty.src]
+exclude = ["reference/legacy_observations/"]
 # [tool.ty.rules]
 # possibly-unresolved-reference = "warn"
 

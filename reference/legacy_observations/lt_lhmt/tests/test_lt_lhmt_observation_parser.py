@@ -11,7 +11,7 @@ from rivretrieve._internal.providers.lt_lhmt.parser import (
     parse_lt_lhmt_observation_json,
 )
 
-FIXTURE_PATH = Path("tests/test_data/lithuania_anyksciu_vms_2023_06.json")
+FIXTURE_PATH = Path(__file__).parent / "test_data" / "lithuania_anyksciu_vms_2023_06.json"
 
 
 def test_parser_fixture_discharge(tmp_path: Path) -> None:
