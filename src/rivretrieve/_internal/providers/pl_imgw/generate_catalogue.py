@@ -4,7 +4,7 @@ NOT imported during normal package use. Run manually to regenerate packaged
 catalogue artifacts when the IMGW station list changes.
 
 Station source: the packaged ``poland_sites.csv`` from the legacy Python
-RivRetrieve repo (1301 stations with lat/lon, elevation, and drainage area).
+RivRetrieve repo (1301 stations with identifiers and coordinates).
 The live IMGW ``/api/data/hydro`` JSON endpoint has only 913 current stations,
 314 of which lack coordinates, so the CSV is the richer source.
 
@@ -45,20 +45,18 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.pl_imgw.metadata import (
     PlImgwProductMetadata,
-    PlImgwStationMetadata,
     PlImgwStationProductMetadata,
 )
 
 PROVIDER_ID = "pl_imgw"
 PROVIDER_NAME = "Poland Institute of Meteorology and Water Management (IMGW)"
-COUNTRY = "Poland"
 
 # Primary station source (packaged CSV from legacy Python repo).
 # Columns: gauge_id, gauge_name, river, area (km²), gauge_altitude (m), latitude, longitude
 STATION_CSV_URL = (
     "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_stacji_hydro.csv"
 )
-# The live JSON endpoint — usable as fallback but lacks elevation/area and has 314 stations without coords.
+# The live JSON endpoint is usable as fallback but has 314 stations without coordinates.
 HYDRO_JSON_URL = "https://danepubliczne.imgw.pl/api/data/hydro"
 
 AVAILABILITY_REASON = "IMGW does not expose per-variable station availability"
@@ -300,46 +298,23 @@ def write_catalogue(catalogue: GeneratedPlImgwCatalogue, out_dir: Path | str) ->
 
 
 def _station_row(item: dict[str, object]) -> dict[str, object] | None:
-    """Parse one station row from the poland_sites.csv columns."""
+    """Parse one station identity and geometry row from poland_sites.csv."""
     station_id = str(item.get("gauge_id", "")).strip()
     if not station_id:
         return None
 
-    name = str(item.get("gauge_name", "")).strip() or station_id
-
-    river_raw = item.get("river")
-    river = str(river_raw).strip() if isinstance(river_raw, str) and str(river_raw).strip() else None
-
     lat = _optional_float(item.get("latitude"))
     lon = _optional_float(item.get("longitude"))
-    elevation_m = _optional_float(item.get("gauge_altitude"))
-    drainage_area_km2 = _optional_float(item.get("area"))
 
     if lat is None or lon is None:
         return None
 
-    meta = PlImgwStationMetadata(
-        native_id=station_id,
-        name=name,
-        river=river,
-        province=None,
-        latitude=lat,
-        longitude=lon,
-        country=COUNTRY,
-        source=PROVIDER_NAME,
-    )
     return {
         "provider_id": PROVIDER_ID,
         "station_id": station_id,
-        "name": name,
         "latitude": lat,
         "longitude": lon,
-        "country": COUNTRY,
-        "elevation_m": elevation_m,
-        "drainage_area_km2": drainage_area_km2,
-        "start_date": None,
-        "end_date": None,
-        "metadata": _meta_json(meta),
+        "crs": "unknown",
     }
 
 
@@ -353,7 +328,7 @@ def _optional_float(value: object) -> float | None:
 
 
 def _meta_json(
-    model: PlImgwStationMetadata | PlImgwProductMetadata | PlImgwStationProductMetadata,
+    model: PlImgwProductMetadata | PlImgwStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

@@ -130,15 +130,9 @@ def _stations(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
         {
             "provider_id": provider_id,
             "station_id": "station-1",
-            "name": "Station 1",
             "latitude": 46.2,
             "longitude": 7.1,
-            "country": "CH",
-            "elevation_m": None,
-            "drainage_area_km2": 56.7,
-            "start_date": date(2020, 1, 1),
-            "end_date": None,
-            "metadata": "{}",
+            "crs": "unknown",
         }
     ]
     if rich:
@@ -146,15 +140,9 @@ def _stations(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             {
                 "provider_id": provider_id,
                 "station_id": "station-2",
-                "name": "Station 2",
                 "latitude": 47.1,
                 "longitude": 8.3,
-                "country": "CH",
-                "elevation_m": 412.0,
-                "drainage_area_km2": 88.0,
-                "start_date": date(2021, 1, 1),
-                "end_date": None,
-                "metadata": "{}",
+                "crs": "unknown",
             }
         )
 
@@ -163,15 +151,9 @@ def _stations(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
         schema={
             "provider_id": pl.Utf8,
             "station_id": pl.Utf8,
-            "name": pl.Utf8,
             "latitude": pl.Float64,
             "longitude": pl.Float64,
-            "country": pl.Utf8,
-            "elevation_m": pl.Float64,
-            "drainage_area_km2": pl.Float64,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
-            "metadata": pl.Utf8,
+            "crs": pl.Utf8,
         },
     )
 

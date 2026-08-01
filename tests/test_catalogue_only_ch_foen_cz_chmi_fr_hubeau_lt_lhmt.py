@@ -14,7 +14,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         246,
         6,
         1476,
-        "Switzerland",
         {
             "discharge_daily_mean",
             "discharge_instantaneous",
@@ -25,14 +24,12 @@ CATALOGUE_ONLY_PROVIDERS = (
         },
         "Swiss Federal Office for the Environment FOEN / BAFU",
         {"unknown"},
-        ("2016", "Brugg"),
     ),
     (
         "cz_chmi",
         831,
         5,
         4155,
-        "Czech Republic",
         {
             "discharge_daily_mean",
             "discharge_instantaneous",
@@ -42,14 +39,12 @@ CATALOGUE_ONLY_PROVIDERS = (
         },
         "Czech Hydrometeorological Institute (CHMI) Open Data",
         {"unknown"},
-        None,
     ),
     (
         "fr_hubeau",
         7289,
         6,
         32969,
-        "France",
         {
             "discharge_daily_max",
             "discharge_daily_mean",
@@ -60,18 +55,15 @@ CATALOGUE_ONLY_PROVIDERS = (
         },
         "Hubeau / SCHAPI — French national hydrometric network",
         {"unknown"},
-        None,
     ),
     (
         "lt_lhmt",
         97,
         2,
         194,
-        "Lithuania",
         {"discharge_daily_mean", "stage_daily_mean"},
         "Lithuanian Hydrometeorological Service LHMT (Meteo.lt)",
         {"unknown"},
-        None,
     ),
 )
 CATALOGUE_MODULE_FILES = {
@@ -91,11 +83,9 @@ REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
         "station_count",
         "product_count",
         "station_product_count",
-        "country",
         "product_ids",
         "provider_name",
         "availability",
-        "named_station",
     ),
     CATALOGUE_ONLY_PROVIDERS,
 )
@@ -104,11 +94,9 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     station_count: int,
     product_count: int,
     station_product_count: int,
-    country: str,
     product_ids: set[str],
     provider_name: str,
     availability: set[str],
-    named_station: tuple[str, str] | None,
 ) -> None:
     assert provider_id in rr.providers()
 
@@ -120,16 +108,12 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert stations.height == station_count
-    assert stations["country"].unique().to_list() == [country]
+    assert stations["crs"].unique().to_list() == ["unknown"]
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
     assert set(products["provider_id"].to_list()) == {provider_id}
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
-    if named_station is not None:
-        station_id, station_name = named_station
-        assert stations.filter(stations["station_id"] == station_id).select("name").item() == station_name
-
     global_stations = rr.stations().data
     global_products = rr.products().data
     global_provider_info = rr.provider_info().data
@@ -137,14 +121,11 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     product_rows = global_products.filter(global_products["provider_id"] == provider_id)
     provider_rows = global_provider_info.filter(global_provider_info["provider_id"] == provider_id)
     assert station_rows.height == station_count
-    assert station_rows["country"].unique().to_list() == [country]
+    assert station_rows["crs"].unique().to_list() == ["unknown"]
     assert product_rows.height == product_count
     assert set(product_rows["product_id"].to_list()) == product_ids
     assert provider_rows.height == 1
     assert provider_rows.select("name").item() == provider_name
-    if named_station is not None:
-        station_id, station_name = named_station
-        assert station_rows.filter(station_rows["station_id"] == station_id).select("name").item() == station_name
 
 
 @pytest.mark.parametrize(
@@ -153,11 +134,9 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
         "station_count",
         "product_count",
         "station_product_count",
-        "country",
         "product_ids",
         "provider_name",
         "availability",
-        "named_station",
     ),
     CATALOGUE_ONLY_PROVIDERS,
 )
@@ -166,11 +145,9 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     station_count: int,
     product_count: int,
     station_product_count: int,
-    country: str,
     product_ids: set[str],
     provider_name: str,
     availability: set[str],
-    named_station: tuple[str, str] | None,
 ) -> None:
     module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
 
@@ -181,15 +158,12 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert stations.height == station_count
-    assert stations["country"].unique().to_list() == [country]
+    assert stations["crs"].unique().to_list() == ["unknown"]
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
     assert set(products["provider_id"].to_list()) == {provider_id}
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
-    if named_station is not None:
-        station_id, station_name = named_station
-        assert stations.filter(stations["station_id"] == station_id).select("name").item() == station_name
     assert not hasattr(module, "observations")
     assert not hasattr(module, "row_annotation_schema")
     assert not hasattr(module, "series_annotation_schema")

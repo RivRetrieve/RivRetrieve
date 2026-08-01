@@ -26,13 +26,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.no_nve.metadata import (
     NoNveProductMetadata,
-    NoNveStationMetadata,
     NoNveStationProductMetadata,
 )
 
 PROVIDER_ID = "no_nve"
 PROVIDER_NAME = "NVE HydAPI — Norwegian Water Resources and Energy Directorate"
-COUNTRY = "Norway"
 
 BASE_URL = "https://hydapi.nve.no/api/v1/"
 STATIONS_URL = f"{BASE_URL}Stations"
@@ -515,37 +513,12 @@ def _iter_station_rows(station_rows: list[dict[str, object]]):  # type: ignore[r
             continue
         seen.add(station_id)
 
-        name = _clean_text(row.get("stationName")) or station_id
-        elevation_m = _to_float(row.get("masl"))
-        drainage_area_km2 = _to_float(row.get("drainageBasinArea"))
-        river_name = _clean_text(row.get("riverName"))
-        active = row.get("active")
-
-        metadata = NoNveStationMetadata(
-            native_id=station_id,
-            name=name,
-            latitude=lat,
-            longitude=lon,
-            country=COUNTRY,
-            source=PROVIDER_NAME,
-            elevation_m=elevation_m,
-            drainage_area_km2=drainage_area_km2,
-            river_name=river_name,
-            active=bool(active) if active is not None else None,
-        )
-
         yield {
             "provider_id": PROVIDER_ID,
             "station_id": station_id,
-            "name": name,
             "latitude": lat,
             "longitude": lon,
-            "country": COUNTRY,
-            "elevation_m": elevation_m,
-            "drainage_area_km2": drainage_area_km2,
-            "start_date": None,
-            "end_date": None,
-            "metadata": _metadata_json(metadata),
+            "crs": "unknown",
         }
 
 
@@ -591,7 +564,7 @@ def _to_float(value: Any) -> float | None:
 
 
 def _metadata_json(
-    model: NoNveStationMetadata | NoNveProductMetadata | NoNveStationProductMetadata,
+    model: NoNveProductMetadata | NoNveStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

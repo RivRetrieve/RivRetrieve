@@ -26,13 +26,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.lt_lhmt.metadata import (
     LtLhmtProductMetadata,
-    LtLhmtStationMetadata,
     LtLhmtStationProductMetadata,
 )
 
 PROVIDER_ID = "lt_lhmt"
 PROVIDER_NAME = "Lithuanian Hydrometeorological Service LHMT (Meteo.lt)"
-COUNTRY = "Lithuania"
 METADATA_URL = "https://api.meteo.lt/v1/hydro-stations"
 AVAILABILITY_REASON = "Meteo.lt hydro-stations catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
@@ -273,14 +271,6 @@ def _station_row(item: object) -> dict[str, object]:
         raise FatalContractError(f"Station entry missing required string field 'code': {station}")
     station_id = code.strip()
 
-    name = station.get("name")
-    if not isinstance(name, str) or not name.strip():
-        raise FatalContractError(f"Station {station_id} missing required string field 'name'")
-    station_name = name.strip()
-
-    water_body_raw = station.get("waterBody")
-    water_body = water_body_raw.strip() if isinstance(water_body_raw, str) and water_body_raw.strip() else None
-
     coords = station.get("coordinates")
     if not isinstance(coords, dict):
         raise FatalContractError(f"Station {station_id} missing coordinates object")
@@ -288,29 +278,12 @@ def _station_row(item: object) -> dict[str, object]:
     latitude = _required_float(coords_data.get("latitude"), f"Station {station_id} latitude")
     longitude = _required_float(coords_data.get("longitude"), f"Station {station_id} longitude")
 
-    meta = LtLhmtStationMetadata(
-        native_code=station_id,
-        name=station_name,
-        water_body=water_body,
-        latitude=latitude,
-        longitude=longitude,
-        country=COUNTRY,
-        source=PROVIDER_NAME,
-        elevation_m=None,
-        drainage_area_km2=None,
-    )
     return {
         "provider_id": PROVIDER_ID,
         "station_id": station_id,
-        "name": station_name,
         "latitude": latitude,
         "longitude": longitude,
-        "country": COUNTRY,
-        "elevation_m": None,
-        "drainage_area_km2": None,
-        "start_date": None,
-        "end_date": None,
-        "metadata": _metadata_json(meta),
+        "crs": "unknown",
     }
 
 
@@ -342,7 +315,7 @@ def _read_live_json(url: str) -> list[object]:
     return cast("list[object]", value)
 
 
-def _metadata_json(model: LtLhmtStationMetadata | LtLhmtProductMetadata | LtLhmtStationProductMetadata) -> str:
+def _metadata_json(model: LtLhmtProductMetadata | LtLhmtStationProductMetadata) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 

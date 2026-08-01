@@ -14,7 +14,7 @@ def test_za_dws_in_providers_list() -> None:
 def test_za_dws_stations_offline() -> None:
     result = rr.provider("za_dws").stations()
     assert result.data.height > 0
-    assert result.data["country"].unique().to_list() == ["South Africa"]
+    assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
 def test_za_dws_station_count_reasonable() -> None:

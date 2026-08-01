@@ -26,13 +26,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis.metadata import (
     UsgsNwisProductMetadata,
-    UsgsNwisStationMetadata,
     UsgsNwisStationProductMetadata,
 )
 
 PROVIDER_ID = "usgs_nwis"
 PROVIDER_NAME = "U.S. Geological Survey National Water Information System (USGS NWIS)"
-COUNTRY = "United States"
 METADATA_BASE_URL = "https://waterservices.usgs.gov/nwis/site/"
 METADATA_URL = (
     METADATA_BASE_URL
@@ -100,7 +98,6 @@ AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 
 _CFS_TO_M3S = 0.0283168466
 _FT_TO_M = 0.3048
-_SQ_MI_TO_KM2 = 2.58999
 
 
 @dataclass(frozen=True)
@@ -429,65 +426,17 @@ def _station_row(item: object) -> dict[str, object]:
         raise FatalContractError(f"Site entry missing required string field 'site_no': {site}")
     station_id = site_no.strip()
 
-    name = site.get("station_nm")
-    if not isinstance(name, str) or not name.strip():
-        raise FatalContractError(f"Site {station_id} missing required string field 'station_nm'")
-    station_name = name.strip()
-
     lat = _optional_float(site.get("dec_lat_va"), f"Site {station_id} latitude")
     lon = _optional_float(site.get("dec_long_va"), f"Site {station_id} longitude")
     if lat is None or lon is None:
         raise FatalContractError(f"Site {station_id} missing required lat/lon")
 
-    alt_va = _optional_float(site.get("alt_va"), f"Site {station_id} alt_va")
-    elevation_m = alt_va * _FT_TO_M if alt_va is not None else None
-
-    drain_area_sq_mi = _optional_float(site.get("drain_area_va"), f"Site {station_id} drain_area_va")
-    drainage_area_km2 = drain_area_sq_mi * _SQ_MI_TO_KM2 if drain_area_sq_mi is not None else None
-
-    state_cd_raw = site.get("state_cd")
-    state_cd = state_cd_raw.strip() if isinstance(state_cd_raw, str) and state_cd_raw.strip() else None
-
-    huc_cd_raw = site.get("huc_cd")
-    huc_cd = huc_cd_raw.strip() if isinstance(huc_cd_raw, str) and huc_cd_raw.strip() else None
-
-    tz_cd_raw = site.get("tz_cd")
-    tz_cd = tz_cd_raw.strip() if isinstance(tz_cd_raw, str) and tz_cd_raw.strip() else None
-
-    begin_date_raw = site.get("begin_date")
-    begin_date = begin_date_raw.strip() if isinstance(begin_date_raw, str) and begin_date_raw.strip() else None
-
-    end_date_raw = site.get("end_date")
-    end_date_val = end_date_raw.strip() if isinstance(end_date_raw, str) and end_date_raw.strip() else None
-
-    meta = UsgsNwisStationMetadata(
-        native_site_no=station_id,
-        name=station_name,
-        state_cd=state_cd,
-        huc_cd=huc_cd,
-        tz_cd=tz_cd,
-        drain_area_sq_mi=drain_area_sq_mi,
-        alt_va_ft=alt_va,
-        begin_date=begin_date,
-        end_date=end_date_val,
-        country=COUNTRY,
-    )
-
-    start_date_parsed = _parse_date(begin_date)
-    end_date_parsed = _parse_date(end_date_val)
-
     return {
         "provider_id": PROVIDER_ID,
         "station_id": station_id,
-        "name": station_name,
         "latitude": lat,
         "longitude": lon,
-        "country": COUNTRY,
-        "elevation_m": elevation_m,
-        "drainage_area_km2": drainage_area_km2,
-        "start_date": start_date_parsed,
-        "end_date": end_date_parsed,
-        "metadata": _metadata_json(meta),
+        "crs": "unknown",
     }
 
 
@@ -557,7 +506,7 @@ def _parse_rdb(content: str) -> list[dict[str, str]]:
 
 
 def _metadata_json(
-    model: UsgsNwisStationMetadata | UsgsNwisProductMetadata | UsgsNwisStationProductMetadata,
+    model: UsgsNwisProductMetadata | UsgsNwisStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
@@ -573,15 +522,6 @@ def _optional_float(value: object, name: str) -> float | None:
         except ValueError:
             return None
     return None
-
-
-def _parse_date(value: str | None) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value[:10])
-    except (ValueError, TypeError):
-        return None
 
 
 def main(argv: Sequence[str] | None = None) -> int:

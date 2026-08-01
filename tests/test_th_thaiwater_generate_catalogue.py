@@ -31,10 +31,7 @@ def test_generate_catalogue_station_fields() -> None:
     cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
     station = cat.stations.filter(pl.col("station_id") == "S13A")
     assert station.height == 1
-    assert station["name"][0] == "Wang Noi"
-    assert station["country"][0] == "Thailand"
-    assert station["elevation_m"][0] is None
-    assert station["drainage_area_km2"][0] is None
+    assert station["crs"][0] == "unknown"
 
 
 def test_generate_catalogue_filters_non_waterlevel_stations() -> None:
