@@ -78,10 +78,31 @@ pl_testing.assert_frame_equal(result_df, expected_df)
 
 ## 4. Packaged Catalogue Rule
 
-When porting a new provider, the packaged catalogue artifacts (`catalogue/*.parquet`, `catalogue/provider.json`) **must be generated from the live provider API** before the provider is committed.
+When porting a new provider, the four canonical packaged catalogue artifacts
+(`catalogue/provider.json`, `catalogue/products.parquet`, `catalogue/stations.parquet`, and
+`catalogue/station_products.parquet`) **must be generated from the live provider API** before the
+provider is committed.
 
-- `tests/test_data/<provider>_metadata_*.json` is a **test fixture** — a minimal offline snapshot used only for unit tests. It must never be used to generate the packaged catalogue.
-- After writing all provider code and tests, run `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to produce the real packaged artifacts.
-- Commit the resulting parquet files alongside the code.
+- `tests/test_data/<provider>_metadata_*.json` is a **test fixture** used for offline tests. It must
+  never be used to generate the four canonical packaged catalogue artifacts.
+- A packaged native table may be materialized from a `tests/test_data/` fixture only when that
+  fixture has been verified content-identical to a live payload. The repository record for each such
+  materialization must state the source URL, retrieval instant, canonicalization method, and digest;
+  this exception does not apply to the four canonical artifacts.
+- Lithuania native-table attestation: the orchestrator performed
+  `GET https://api.meteo.lt/v1/hydro-stations` outside the executor sandbox at
+  `2026-08-01T18:31:08Z`, received 97 stations, and verified the live payload content-identical to
+  `tests/test_data/lithuania_metadata_stations.json`. Canonicalization sorts stations by `code`,
+  serializes JSON with sorted object keys and compact separators `(",", ":")` using Python's
+  default `ensure_ascii=True`, UTF-8 encodes the result, and takes SHA-256; both inputs produced
+  `02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8`.
+- After writing all provider code and tests, run
+  `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to
+  produce the four canonical packaged artifacts.
+- Commit the resulting canonical Parquet files alongside the code.
 
-Some generators include a provider-specific minimum-station guard that raises `FatalContractError` when `--live` returns an implausibly small count — catching silent fetch failures or accidental fixture-backed invocations. The threshold is calibrated per provider (e.g. 10 000 for USGS which has 26 000+ gauges; Lithuania has only 97 stations so no such guard is needed there). Do not copy a numeric threshold from one provider to another.
+Some generators include a provider-specific minimum-station guard that raises `FatalContractError`
+when `--live` returns an implausibly small count, catching silent fetch failures or accidental
+fixture-backed invocations. The threshold is calibrated per provider (e.g. 10 000 for USGS which has
+26 000+ gauges; Lithuania has only 97 stations so no such guard is needed there). Do not copy a
+numeric threshold from one provider to another.
