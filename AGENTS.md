@@ -81,6 +81,12 @@ pl_testing.assert_frame_equal(result_df, expected_df)
 Packaged catalogue generation has two regimes, keyed on whether the provider has both a committed
 native table and origin declarations.
 
+The committed native table carries provenance. Produce it with the provider's `refresh` operation
+against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
+when that fixture has been verified content-identical to a live payload and the repository record
+states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
+may enter the repository from a fixture.
+
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
@@ -89,12 +95,6 @@ alone), the four canonical packaged catalogue artifacts (`catalogue/provider.jso
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
 would reintroduce the nondeterminism the pure build removes.
-
-The committed native table carries provenance. Produce it with the provider's `refresh` operation
-against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
-when that fixture has been verified content-identical to a live payload and the repository record
-states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
-may enter the repository from a fixture.
 
 - Lithuania native-table attestation: the orchestrator performed
   `GET https://api.meteo.lt/v1/hydro-stations` outside the executor sandbox at

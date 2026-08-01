@@ -8,6 +8,8 @@ import pytest
 from rivretrieve._internal.catalogue_origins import (
     ORIGIN_GATE_ENROLLED_PROVIDERS,
     CatalogueOrigin,
+    Documented,
+    DocumentedValue,
     Evidence,
     Field,
     NativeColumn,
@@ -95,8 +97,35 @@ def test_not_published_requires_the_named_evidence_carrier() -> None:
         NotPublished()  # type: ignore[call-arg]
 
 
+def test_documented_carries_a_named_value_and_evidence_and_is_immutable() -> None:
+    origin = Documented(
+        DocumentedValue("EPSG:4326"),
+        Evidence("https://provider.example/documentation"),
+    )
+
+    assert origin.value == "EPSG:4326"
+    assert isinstance(origin.value, DocumentedValue)
+    assert isinstance(origin.evidence, Evidence)
+    with pytest.raises(FrozenInstanceError):
+        origin.value = DocumentedValue("EPSG:9999")
+
+
+@pytest.mark.parametrize("value", ["", " ", "\t\n"])
+def test_documented_value_rejects_empty_values(value: str) -> None:
+    with pytest.raises(ValueError, match="documented value must not be empty"):
+        DocumentedValue(value)
+
+
+def test_documented_requires_named_carriers() -> None:
+    evidence = Evidence("https://provider.example/documentation")
+    with pytest.raises(TypeError, match="Documented.value must be a DocumentedValue"):
+        Documented("EPSG:4326", evidence)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="Documented.evidence must be Evidence"):
+        Documented(DocumentedValue("EPSG:4326"), str(evidence))  # type: ignore[arg-type]
+
+
 def test_catalogue_origin_union_contains_exactly_the_implemented_forms() -> None:
-    assert typing.get_args(CatalogueOrigin.__value__) == (Field, NotPublished)
+    assert typing.get_args(CatalogueOrigin.__value__) == (Field, NotPublished, Documented)
 
 
 def test_field_has_value_equality_and_hashing() -> None:
@@ -121,10 +150,23 @@ def test_not_published_has_value_equality_and_hashing() -> None:
     assert {first, equal, different} == {first, different}
 
 
+def test_documented_has_value_equality_and_hashing() -> None:
+    evidence = Evidence("https://provider.example/documentation")
+    first = Documented(DocumentedValue("EPSG:4326"), evidence)
+    equal = Documented(DocumentedValue("EPSG:4326"), evidence)
+    different = Documented(DocumentedValue("EPSG:9999"), evidence)
+
+    assert first == equal
+    assert first != different
+    assert hash(first) == hash(equal)
+    assert {first, equal, different} == {first, different}
+
+
 def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     value = "https://provider.example/documentation"
 
     assert Field(NativeColumn(value)) != NotPublished(Evidence(value))
+    assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
 def test_origin_gate_enrols_only_lithuania() -> None:
@@ -146,7 +188,7 @@ def test_lithuania_declarations_match_canonical_schema_order_and_values() -> Non
         "station_id": Field(NativeColumn("code")),
         "latitude": Field(NativeColumn("coordinates")),
         "longitude": Field(NativeColumn("coordinates")),
-        "crs": Field(NativeColumn("coordinates")),
+        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://api.meteo.lt/")),
     } == STATION_CATALOGUE_ORIGINS
 
 
@@ -209,6 +251,24 @@ def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
     _assert_single_issue(exc_info, "catalogue_origin.unpropagated_value", "latitude")
 
 
+def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable() -> None:
+    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations["station_id"] = NotPublished(Evidence("https://api.meteo.lt/"))
+    native_table, stations = _native_and_stations()
+    broken_stations = stations.with_columns(pl.lit(None).cast(pl.Float64).alias("latitude"))
+
+    with pytest.raises(
+        FatalContractError,
+        match=(
+            r"lt_lhmt\.station_id: rule \(c\) could not be evaluated because the station_id "
+            r"alignment key is unresolvable"
+        ),
+    ) as exc_info:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, broken_stations)
+
+    _assert_single_issue(exc_info, "catalogue_origin.unresolvable_alignment_key", "station_id")
+
+
 def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
     declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
     declarations["crs"] = {"not_published": True}
@@ -221,6 +281,39 @@ def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
         enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, stations)
 
     _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
+
+
+def test_origin_gate_rejects_documented_declaration_with_absent_evidence() -> None:
+    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    malformed = object.__new__(Documented)
+    object.__setattr__(malformed, "value", DocumentedValue("EPSG:4326"))
+    declarations["crs"] = malformed
+    native_table, stations = _native_and_stations()
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.crs: Documented origin must carry Evidence",
+    ) as exc_info:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, stations)
+
+    _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
+
+
+def test_origin_gate_rejects_documented_value_drift_from_builder_output() -> None:
+    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations["crs"] = Documented(
+        DocumentedValue("EPSG:9999"),
+        Evidence("https://api.meteo.lt/"),
+    )
+    native_table, stations = _native_and_stations()
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.crs: emitted value does not match documented value 'EPSG:9999'",
+    ) as exc_info:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, stations)
+
+    _assert_single_issue(exc_info, "catalogue_origin.documented_value_mismatch", "crs")
 
 
 def test_committed_lithuania_origins_pass_validation() -> None:

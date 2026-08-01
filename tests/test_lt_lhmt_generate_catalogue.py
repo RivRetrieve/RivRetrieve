@@ -125,6 +125,17 @@ def test_lt_lhmt_generator_station_has_required_common_fields() -> None:
     assert catalogue.stations["crs"].unique().to_list() == ["EPSG:4326"]
 
 
+def test_build_catalogue_is_gated_on_origins() -> None:
+    broken = dict(STATION_CATALOGUE_ORIGINS)
+    del broken["longitude"]
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.longitude: canonical column has no origin declaration",
+    ):
+        generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), broken)
+
+
 def test_lt_lhmt_generator_provider_info_fields() -> None:
     catalogue = _build_committed_catalogue()
     info = catalogue.provider_info

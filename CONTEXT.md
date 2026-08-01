@@ -28,13 +28,14 @@ _Avoid_: metadata (the opaque per-row JSON string it replaces), raw table (colli
 **Origin**:
 How one [[provider]] fills one catalogue column. Declared per provider rather than per
 column, so the same canonical column is filled one way by one source and left empty by
-another. It takes one of three forms: a column of that provider's [[native table]]; the
-statement that this source publishes nothing for that column, carrying [[evidence]]; or
-[[native-only]]. Every column carries one for every provider, so an empty cell is a claim
-rather than an absence that could equally mean we never asked. The four ways to breach it
-are an undeclared column, an origin naming a native column that was never fetched, a null
-where the native column held a value, and a not-published claim carrying no evidence.
-Each fails the build rather than shipping.
+another. It takes one of four forms: a column of that provider's [[native table]]; a
+[[documented]] constant; the statement that this source publishes nothing for that
+column, carrying [[evidence]]; or [[native-only]]. Every column carries one for every
+provider, so an empty cell is a claim rather than an absence that could equally mean we
+never asked. The ways to breach it are an undeclared column, an origin naming a native
+column that was never fetched, a null where the native column held a value, a documented
+constant differing from the emitted value, and a documented or not-published claim
+carrying no evidence. Each fails the build rather than shipping.
 _Avoid_: mapping, provenance (which names the receipt travelling with a result, not the
 per-column declaration), nullable
 
@@ -47,6 +48,13 @@ withheld it rather than restating the argument, so reversing that decision is on
 _Avoid_: rejected, excluded (both read as a verdict on the source's data), unrepresentable
 (which implies a technical limit rather than a choice), withheld
 
+**Documented**:
+The [[origin]] for a constant the source states in its documentation rather than carrying
+in every row of its [[native table]]. It pairs the exact value with [[evidence]], so the
+generator cannot silently emit a different constant and the declaration does not pretend
+that a native column contains it or that the source is silent.
+_Avoid_: hard-coded, assumed, field
+
 **Canonical column**:
 A catalogue column carried in RivRetrieve's own vocabulary, filled through an [[origin]]
 by every [[provider]] that can. A column earns canonical status only where it harmonises
@@ -58,12 +66,13 @@ vocabulary, not what a row is about.
 _Avoid_: harmonised column, standard column, core column
 
 **Evidence**:
-What a not-published [[origin]] must carry: a reference to the source's own documentation
-stating that it publishes nothing for that column. It exists because absence from a
-payload proves only how we asked. USGS returns no period of record from the site service
-called with default output, and publishes one from the same service asked differently, so
-a payload-only check would have certified the false claim. Evidence is read by a person
-once, and is the one part of an origin no machine can settle.
+What a not-published or [[documented]] [[origin]] must carry: a reference to the source's
+own documentation stating that it publishes nothing for that column or stating the
+documented constant. It exists because absence from a payload proves only how we asked.
+USGS returns no period of record from the site service called with default output, and
+publishes one from the same service asked differently, so a payload-only check would have
+certified the false claim. Evidence is read by a person once, and is the one part of an
+origin no machine can settle.
 _Avoid_: citation (which credits a source for its data, not its documentation), proof,
 justification
 

@@ -7,5 +7,8 @@ STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code")),
     "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("coordinates")),
     "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("coordinates")),
-    "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("coordinates")),
+    "crs": catalogue_origins.Documented(
+        catalogue_origins.DocumentedValue("EPSG:4326"),
+        catalogue_origins.Evidence("https://api.meteo.lt/"),
+    ),
 }
