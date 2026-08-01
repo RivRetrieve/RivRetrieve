@@ -26,14 +26,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ba_fhmzbih.metadata import (
     BaFhmzbihProductMetadata,
-    BaFhmzbihStationMetadata,
     BaFhmzbihStationProductMetadata,
 )
 
 PROVIDER_ID = "ba_fhmzbih"
 PROVIDER_NAME = "FHMZBiH — Federal Hydrometeorological Institute of Bosnia and Herzegovina (vodostaji.voda.ba)"
-COUNTRY = "Bosnia and Herzegovina"
-SOURCE = "vodostaji.voda.ba"
 
 METADATA_URL = "https://vodostaji.voda.ba/data/internet/layers/20/index.json"
 WORKBOOK_URL_TEMPLATE = "https://vodostaji.voda.ba/data/internet/stations/{group}/{station_id}/{code}/{file}"
@@ -398,37 +395,12 @@ def _iter_station_rows(raw_payload: list[dict[str, object]]):  # type: ignore[re
 
         seen.add(station_id)
 
-        name = _clean_text(row.get("metadata_station_name")) or station_id
-        river_name = _clean_text(row.get("metadata_river_name"))
-        catchment_name = _clean_text(row.get("metadata_catchment_name"))
-        elevation_m = _to_float(row.get("metadata_station_elevation"))
-        drainage_area_km2 = _parse_area(row.get("metadata_CATCHMENT_SIZE"))
-
-        metadata = BaFhmzbihStationMetadata(
-            native_id=station_id,
-            name=name,
-            river_name=river_name,
-            catchment_name=catchment_name,
-            latitude=lat,
-            longitude=lon,
-            country=COUNTRY,
-            elevation_m=elevation_m,
-            drainage_area_km2=drainage_area_km2,
-            source=SOURCE,
-        )
-
         yield {
             "provider_id": PROVIDER_ID,
             "station_id": station_id,
-            "name": name,
             "latitude": lat,
             "longitude": lon,
-            "country": COUNTRY,
-            "elevation_m": elevation_m,
-            "drainage_area_km2": drainage_area_km2,
-            "start_date": None,
-            "end_date": None,
-            "metadata": _metadata_json(metadata),
+            "crs": "unknown",
         }
 
 
@@ -488,18 +460,8 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
-def _parse_area(value: Any) -> float | None:
-    """Parse FHMZBiH catchment-size strings like ``'123.4 km²'`` into km2 floats."""
-    if value is None:
-        return None
-    text = str(value).replace("km²", "").replace("km2", "").strip()
-    if not text:
-        return None
-    return _to_float(text)
-
-
 def _metadata_json(
-    model: BaFhmzbihStationMetadata | BaFhmzbihProductMetadata | BaFhmzbihStationProductMetadata,
+    model: BaFhmzbihProductMetadata | BaFhmzbihStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

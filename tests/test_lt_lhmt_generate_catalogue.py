@@ -76,18 +76,8 @@ def test_lt_lhmt_generator_station_has_required_common_fields() -> None:
         FIXTURE_PATH,
         catalogue_date=CATALOGUE_DATE,
     )
-    cols = set(catalogue.stations.columns)
-    for col in {"provider_id", "station_id", "name", "latitude", "longitude", "country"}:
-        assert col in cols
-
-
-def test_lt_lhmt_generator_elevation_and_area_are_null() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
-    assert catalogue.stations["elevation_m"].is_null().all()
-    assert catalogue.stations["drainage_area_km2"].is_null().all()
+    assert catalogue.stations.columns == ["provider_id", "station_id", "latitude", "longitude", "crs"]
+    assert catalogue.stations["crs"].unique().to_list() == ["unknown"]
 
 
 def test_lt_lhmt_generator_provider_info_fields() -> None:

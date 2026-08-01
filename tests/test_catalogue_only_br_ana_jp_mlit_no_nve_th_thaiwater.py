@@ -17,7 +17,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         10429,
         5,
         52145,
-        "Brazil",
         {
             "discharge_daily_mean",
             "discharge_instantaneous",
@@ -34,7 +33,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         1024,
         4,
         4096,
-        "Japan",
         {"discharge_daily_mean", "discharge_hourly_mean", "stage_daily_mean", "stage_hourly_mean"},
         "MLIT Water Information System — Japan national hydrometric network",
         "2026-06-03",
@@ -45,7 +43,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         4889,
         9,
         44001,
-        "Norway",
         {
             "discharge_daily_mean",
             "discharge_hourly_mean",
@@ -66,7 +63,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         754,
         4,
         3016,
-        "Thailand",
         {
             "discharge_daily_mean",
             "discharge_instantaneous",
@@ -88,7 +84,6 @@ REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
         "station_count",
         "product_count",
         "station_product_count",
-        "country",
         "product_ids",
         "provider_name",
         "catalogue_version",
@@ -101,7 +96,6 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     station_count: int,
     product_count: int,
     station_product_count: int,
-    country: str,
     product_ids: set[str],
     provider_name: str,
     catalogue_version: str,
@@ -124,7 +118,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     assert info.name == provider_name
     assert str(info.catalogue_version) == catalogue_version
     assert stations.height == station_count
-    assert stations["country"].unique().to_list() == [country]
+    assert stations["crs"].unique().to_list() == ["unknown"]
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
     assert set(products["provider_id"].to_list()) == {provider_id}
@@ -135,7 +129,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     global_products = rr.products().data.filter(pl.col("provider_id") == provider_id)
     global_provider_info = rr.provider_info().data.filter(pl.col("provider_id") == provider_id)
     assert global_stations.height == station_count
-    assert global_stations["country"].unique().to_list() == [country]
+    assert global_stations["crs"].unique().to_list() == ["unknown"]
     assert global_products.height == product_count
     assert set(global_products["product_id"].to_list()) == product_ids
     assert global_provider_info.height == 1
@@ -148,7 +142,6 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
         "station_count",
         "product_count",
         "station_product_count",
-        "country",
         "product_ids",
         "provider_name",
         "catalogue_version",
@@ -161,7 +154,6 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     station_count: int,
     product_count: int,
     station_product_count: int,
-    country: str,
     product_ids: set[str],
     provider_name: str,
     catalogue_version: str,
@@ -176,7 +168,7 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert info.name == provider_name
     assert str(info.catalogue_version) == catalogue_version
     assert stations.height == station_count
-    assert stations["country"].unique().to_list() == [country]
+    assert stations["crs"].unique().to_list() == ["unknown"]
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
     assert set(products["provider_id"].to_list()) == {provider_id}

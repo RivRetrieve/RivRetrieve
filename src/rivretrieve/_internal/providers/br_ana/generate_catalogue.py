@@ -29,13 +29,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.br_ana.metadata import (
     BrAnaProductMetadata,
-    BrAnaStationMetadata,
     BrAnaStationProductMetadata,
 )
 
 PROVIDER_ID = "br_ana"
 PROVIDER_NAME = "ANA Hidroweb — Brazilian National Water and Sanitation Agency"
-COUNTRY = "Brazil"
 
 AUTH_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/OAUth/v1"
 METADATA_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1"
@@ -479,65 +477,12 @@ def _iter_station_rows(raw_payload: list[dict[str, object]]):  # type: ignore[re
 
         seen.add(station_id)
 
-        name = _clean_text(row.get("Estacao_Nome")) or station_id
-        basin_name = _clean_text(row.get("Bacia_Nome"))
-        river_name = _clean_text(row.get("Rio_Nome"))
-        elevation_m = _to_float(row.get("Altitude"))
-        drainage_area_km2 = _to_float(row.get("Area_Drenagem"))
-
-        # station-level start/end: min(all sub-period starts) / max(all sub-period ends)
-        # so that long manual ("convencional") records (often back to the 1930s–70s)
-        # are not masked by the much-newer telemetric operating period (2005+).
-        # Sub-periods covered: discharge (Desc_Liquida), stage (Escala),
-        # water quality (Qual_Agua), and telemetric umbrella.
-        # end_date is None if ANY active sub-period is still open (Fim == null),
-        # meaning the station is currently operating for at least one variable.
-        _period_fields = [
-            ("Data_Periodo_Telemetrica_Inicio", "Data_Periodo_Telemetrica_Fim"),
-            ("Data_Periodo_Desc_Liquida_Inicio", "Data_Periodo_Desc_Liquida_Fim"),
-            ("Data_Periodo_Escala_Inicio", "Data_Periodo_Escala_Fim"),
-            ("Data_Periodo_Qual_Agua_Inicio", "Data_Periodo_Qual_Agua_Fim"),
-        ]
-        _starts = [_to_date(row.get(s)) for s, _ in _period_fields]
-        _ends_raw = [row.get(e) for _, e in _period_fields]
-        start_date = min((d for d in _starts if d is not None), default=None)
-        # Any null end means that sub-period is still open → station still active.
-        end_date = (
-            None
-            if any(
-                raw is None and _to_date(row.get(s)) is not None
-                for (s, _), raw in zip(_period_fields, _ends_raw, strict=True)
-            )
-            else max((_to_date(r) for r in _ends_raw if _to_date(r) is not None), default=None)
-        )
-
-        metadata = BrAnaStationMetadata(
-            native_id=station_id,
-            name=name,
-            basin_name=basin_name,
-            river_name=river_name,
-            latitude=lat,
-            longitude=lon,
-            country=COUNTRY,
-            elevation_m=elevation_m,
-            drainage_area_km2=drainage_area_km2,
-            has_discharge=has_discharge,
-            has_stage=has_level,
-            has_water_temperature=has_quality,
-        )
-
         yield {
             "provider_id": PROVIDER_ID,
             "station_id": station_id,
-            "name": name,
             "latitude": lat,
             "longitude": lon,
-            "country": COUNTRY,
-            "elevation_m": elevation_m,
-            "drainage_area_km2": drainage_area_km2,
-            "start_date": start_date,
-            "end_date": end_date,
-            "metadata": _metadata_json(metadata),
+            "crs": "unknown",
         }
 
 
@@ -675,19 +620,6 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
-def _to_date(value: Any) -> date | None:
-    """Parse ANA's period-boundary date strings (e.g. "2005-03-15", "2005-03-15T00:00:00")."""
-    text = _clean_text(value)
-    if text is None:
-        return None
-    # Some ANA date fields include a time component; keep only the date part.
-    date_part = text[:10]
-    try:
-        return date.fromisoformat(date_part)
-    except ValueError:
-        return None
-
-
 _TRUTHY_TEXT = {"sim", "true", "1", "s", "y", "yes"}
 
 
@@ -709,7 +641,7 @@ def _to_bool(value: Any) -> bool:
 
 
 def _metadata_json(
-    model: BrAnaStationMetadata | BrAnaProductMetadata | BrAnaStationProductMetadata,
+    model: BrAnaProductMetadata | BrAnaStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

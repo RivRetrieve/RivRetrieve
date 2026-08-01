@@ -29,14 +29,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.za_dws.metadata import (
     ZaDwsProductMetadata,
-    ZaDwsStationMetadata,
     ZaDwsStationProductMetadata,
 )
 
 PROVIDER_ID = "za_dws"
 PROVIDER_NAME = "Department of Water and Sanitation — Verified Hydrology (DWS, South Africa)"
-COUNTRY = "South Africa"
-SOURCE = "dws.gov.za"
 
 CATALOGUE_URL = "https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx"
 DATA_URL = "https://www.dws.gov.za/Hydrology/Verified/HyData.aspx"
@@ -332,40 +329,12 @@ def _iter_station_rows(raw_stations: list[dict[str, object]]):  # type: ignore[r
 
         seen.add(station_id)
 
-        desc_original = _clean_text(raw.get("description_original")) or station_id
-        name, river = _split_description(desc_original)
-        drainage_region = _clean_text(raw.get("drainage_region")) or ""
-        wma = _clean_text(raw.get("wma")) or ""
-        drainage_area_km2 = _to_float(raw.get("drainage_area_km2"))
-        if drainage_area_km2 is not None and drainage_area_km2 <= 0:
-            drainage_area_km2 = None
-
-        metadata = ZaDwsStationMetadata(
-            native_id=station_id,
-            name=name,
-            river=river,
-            description_original=desc_original,
-            latitude=lat,
-            longitude=lon,
-            country=COUNTRY,
-            elevation_m=None,
-            drainage_area_km2=drainage_area_km2,
-            drainage_region=drainage_region,
-            wma=wma,
-        )
-
         yield {
             "provider_id": PROVIDER_ID,
             "station_id": station_id,
-            "name": name,
             "latitude": lat,
             "longitude": lon,
-            "country": COUNTRY,
-            "elevation_m": None,
-            "drainage_area_km2": drainage_area_km2,
-            "start_date": None,
-            "end_date": None,
-            "metadata": _metadata_json(metadata),
+            "crs": "unknown",
         }
 
 
@@ -382,9 +351,8 @@ def _fetch_live_stations() -> list[dict[str, object]]:
 
     all_stations: list[dict[str, object]] = []
     for url in pdf_urls:
-        wma = re.sub(r"\.pdf$", "", url.split("/")[-1], flags=re.IGNORECASE)
         try:
-            stations = _parse_pdf_stations(url, wma=wma)
+            stations = _parse_pdf_stations(url)
             all_stations.extend(stations)
         except FatalContractError:
             raise
@@ -410,7 +378,7 @@ def _fetch_pdf_urls() -> list[str]:
     return [h if h.startswith("http") else CATALOGUE_BASE + h.lstrip("/") for h in hrefs]
 
 
-def _parse_pdf_stations(pdf_url: str, *, wma: str) -> list[dict[str, object]]:
+def _parse_pdf_stations(pdf_url: str) -> list[dict[str, object]]:
     """Download and parse one WMA River PDF into station dicts."""
     req = urllib.request.Request(pdf_url, headers={"User-Agent": "Mozilla/5.0"})
     try:
@@ -430,7 +398,7 @@ def _parse_pdf_stations(pdf_url: str, *, wma: str) -> list[dict[str, object]]:
         m = _STATION_PATTERN.match(line.strip())
         if not m:
             continue
-        station_id, desc_raw, lat_dms, lon_dms, drainage_region, area_str = m.groups()
+        station_id, _, lat_dms, lon_dms, _, _ = m.groups()
         lat = _dms_to_dd(lat_dms, positive=False)
         lon = _dms_to_dd(lon_dms, positive=True)
         if lat is None or lon is None:
@@ -438,12 +406,8 @@ def _parse_pdf_stations(pdf_url: str, *, wma: str) -> list[dict[str, object]]:
         stations.append(
             {
                 "station_id": station_id,
-                "description_original": desc_raw.strip(),
                 "latitude": lat,
                 "longitude": lon,
-                "drainage_region": drainage_region,
-                "drainage_area_km2": _to_float(area_str),
-                "wma": wma,
             }
         )
     return stations
@@ -507,14 +471,6 @@ def _dms_to_dd(dms: str, *, positive: bool) -> float | None:
     return dd if positive else -dd
 
 
-def _split_description(desc: str) -> tuple[str, str | None]:
-    """Split 'River @ Place' into (place_name, river_name) following the R adapter convention."""
-    if "@" in desc:
-        parts = desc.split("@", 1)
-        return parts[1].strip(), parts[0].strip()
-    return desc.strip(), None
-
-
 def _clean_text(value: Any) -> str | None:
     if value is None:
         return None
@@ -534,7 +490,7 @@ def _to_float(value: Any) -> float | None:
 
 
 def _metadata_json(
-    model: ZaDwsStationMetadata | ZaDwsProductMetadata | ZaDwsStationProductMetadata,
+    model: ZaDwsProductMetadata | ZaDwsStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

@@ -24,26 +24,9 @@ def test_generate_catalogue_station_07374000() -> None:
     catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
     row = catalogue.stations.filter(catalogue.stations["station_id"] == "07374000")
     assert row.height == 1
-    assert "Mississippi" in row["name"][0]
-    assert row["country"][0] == "United States"
     assert abs(row["latitude"][0] - 30.44) < 0.1
     assert abs(row["longitude"][0] - (-91.19)) < 0.1
-
-
-def test_generate_catalogue_elevation_converted() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    row = catalogue.stations.filter(catalogue.stations["station_id"] == "07374000")
-    elev = row["elevation_m"][0]
-    assert elev is not None
-    assert abs(elev - 10.20 * 0.3048) < 0.01
-
-
-def test_generate_catalogue_drainage_area_converted() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    row = catalogue.stations.filter(catalogue.stations["station_id"] == "07374000")
-    area = row["drainage_area_km2"][0]
-    assert area is not None
-    assert area > 1_000_000
+    assert row["crs"][0] == "unknown"
 
 
 def test_generate_catalogue_product_count() -> None:

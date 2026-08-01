@@ -36,17 +36,9 @@ def test_generate_catalogue_station_fields() -> None:
     cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
     row = cat.stations.filter(pl.col("station_id") == _STATION_ID)
     assert row.height == 1
-    assert row["name"][0] == "PRZEWOŹNIKI"
-    assert row["country"][0] == "Poland"
+    assert row["crs"][0] == "unknown"
     assert row["latitude"][0] == pytest.approx(51.5252, abs=1e-3)
     assert row["longitude"][0] == pytest.approx(14.8218, abs=1e-3)
-
-
-def test_generate_catalogue_elevation_set() -> None:
-    """CSV source provides gauge_altitude in metres."""
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    row = cat.stations.filter(pl.col("station_id") == _STATION_ID)
-    assert row["elevation_m"][0] == pytest.approx(114.049)
 
 
 def test_generate_catalogue_product_ids() -> None:
