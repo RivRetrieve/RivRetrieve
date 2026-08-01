@@ -186,13 +186,16 @@ def test_global_stations_aggregates_registered_packaged_artifacts(
     assert result.issues == ()
 
 
-def test_default_provider_stations_share_canonical_schema_and_unknown_crs() -> None:
+def test_default_provider_stations_share_canonical_schema_and_non_null_crs() -> None:
     result = rr.stations()
 
     assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert set(result.data["provider_id"].unique()) == set(rr.providers())
     assert result.data["crs"].null_count() == 0
-    assert result.data["crs"].unique().to_list() == ["unknown"]
+    lithuania = result.data.filter(pl.col("provider_id") == "lt_lhmt")
+    other_providers = result.data.filter(pl.col("provider_id") != "lt_lhmt")
+    assert set(lithuania["crs"].to_list()) == {"EPSG:4326"}
+    assert set(other_providers["crs"].to_list()) == {"unknown"}
 
 
 def test_global_products_aggregates_registered_packaged_artifacts(

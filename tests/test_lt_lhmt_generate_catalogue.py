@@ -10,12 +10,14 @@ import polars as pl
 import polars.testing as pl_testing
 import pytest
 
-from rivretrieve._internal.catalogues.native import RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.lt_lhmt import generate_catalogue
+from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
 
 FIXTURE_PATH = Path("tests/test_data/lithuania_metadata_stations.json")
-CATALOGUE_DATE = date(2026, 5, 31)
+NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
+CATALOGUE_PATH = NATIVE_PATH.parent
 ATTESTED_DATETIME = datetime(2026, 8, 1, 18, 31, 8, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 ATTESTED_DIGEST = "02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8"
@@ -53,6 +55,10 @@ def _expected_native_frame(payload: list[dict[str, object]] | None = None) -> pl
     )
 
 
+def _build_committed_catalogue() -> generate_catalogue.GeneratedLtLhmtCatalogue:
+    return generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+
+
 class _FixtureResponse(io.BytesIO):
     status = 200
 
@@ -71,7 +77,7 @@ def _fake_urlopen_calls(
     return calls
 
 
-def test_lt_lhmt_generator_uses_committed_fixture_without_network(
+def test_lt_lhmt_generator_uses_committed_native_table_without_network(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail_live_json(url: str) -> object:
@@ -79,75 +85,63 @@ def test_lt_lhmt_generator_uses_committed_fixture_without_network(
 
     monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_live_json)
 
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
 
     assert catalogue.stations.height == 97
 
 
 def test_lt_lhmt_generator_station_count_matches_fixture() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
     assert catalogue.stations.height == 97
 
 
 def test_lt_lhmt_generator_products_are_two() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
     assert catalogue.products.height == 2
     product_ids = set(catalogue.products["product_id"].to_list())
     assert product_ids == {"discharge_daily_mean", "stage_daily_mean"}
 
 
 def test_lt_lhmt_generator_station_products_count() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
     assert catalogue.station_products.height == 97 * 2
 
 
 def test_lt_lhmt_generator_station_products_availability_unknown() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
     availability_values = set(catalogue.station_products["availability"].cast(str).to_list())
     assert availability_values == {"unknown"}
 
 
 def test_lt_lhmt_generator_first_station_sorted() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
     station_ids = catalogue.stations["station_id"].to_list()
     assert station_ids == sorted(station_ids)
 
 
 def test_lt_lhmt_generator_station_has_required_common_fields() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
     assert catalogue.stations.columns == ["provider_id", "station_id", "latitude", "longitude", "crs"]
-    assert catalogue.stations["crs"].unique().to_list() == ["unknown"]
+    assert catalogue.stations["crs"].unique().to_list() == ["EPSG:4326"]
+
+
+def test_build_catalogue_is_gated_on_origins() -> None:
+    broken = dict(STATION_CATALOGUE_ORIGINS)
+    del broken["longitude"]
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.longitude: canonical column has no origin declaration",
+    ):
+        generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), broken)
 
 
 def test_lt_lhmt_generator_provider_info_fields() -> None:
-    catalogue = generate_catalogue.generate_catalogue_from_fixture(
-        FIXTURE_PATH,
-        catalogue_date=CATALOGUE_DATE,
-    )
+    catalogue = _build_committed_catalogue()
     info = catalogue.provider_info
     assert info["provider_id"] == "lt_lhmt"
-    assert info["catalogue_version"] == "2026-05-31"
+    assert info["catalogue_version"] == "2026-08-01"
+    assert catalogue.station_products["last_catalogue_check"].unique().to_list() == [date(2026, 8, 1)]
     assert info["live_stations"] is False
     assert info["live_products"] is False
     assert info["live_station_products"] is False
@@ -249,24 +243,47 @@ def test_absent_station_is_not_carried_forward(tmp_path: Path) -> None:
 
 
 def test_committed_native_table_matches_attested_fixture() -> None:
-    path = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-    table = read_native_table(path)
+    table = read_native_table(NATIVE_PATH)
 
     pl_testing.assert_frame_equal(table.data, _expected_native_frame())
+    pl_testing.assert_frame_equal(
+        table.data.select("name", "waterBody", "coordinates"),
+        _expected_native_frame().select("name", "waterBody", "coordinates"),
+    )
     assert table.data.height == 97
     assert table.data["retrieved_at"].n_unique() == 1
     assert table.data["retrieved_at"].item(0) == ATTESTED_DATETIME
 
 
-def test_canonical_cli_still_writes_only_four_canonical_artifacts(tmp_path: Path) -> None:
+def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version() -> None:
+    source = read_native_table(NATIVE_PATH).data.head(2)
+    station_ids = source["code"].to_list()
+    mixed = source.with_columns(
+        pl.when(pl.col("code") == station_ids[0])
+        .then(datetime(2026, 7, 31, 12, tzinfo=UTC))
+        .otherwise(datetime(2026, 8, 2, 12, tzinfo=UTC))
+        .cast(pl.Datetime(time_unit="us", time_zone="UTC"))
+        .alias("retrieved_at")
+    )
+
+    catalogue = generate_catalogue.build_catalogue(NativeTable(mixed), STATION_CATALOGUE_ORIGINS)
+
+    first_dates = set(catalogue.station_products.filter(pl.col("station_id") == station_ids[0])["last_catalogue_check"])
+    second_dates = set(
+        catalogue.station_products.filter(pl.col("station_id") == station_ids[1])["last_catalogue_check"]
+    )
+    assert first_dates == {date(2026, 7, 31)}
+    assert second_dates == {date(2026, 8, 2)}
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
+
+
+def test_canonical_cli_writes_only_four_canonical_artifacts(tmp_path: Path) -> None:
     result = generate_catalogue.main(
         [
-            "--fixture",
-            str(FIXTURE_PATH),
+            "--native",
+            str(NATIVE_PATH),
             "--out",
             str(tmp_path),
-            "--catalogue-date",
-            "2026-05-31",
         ]
     )
 
@@ -279,16 +296,23 @@ def test_canonical_cli_still_writes_only_four_canonical_artifacts(tmp_path: Path
     }
     assert pl.read_parquet(tmp_path / "stations.parquet").height == 97
     assert pl.read_parquet(tmp_path / "products.parquet").height == 2
-    assert pl.read_parquet(tmp_path / "station_products.parquet").height == 194
+    stations = pl.read_parquet(tmp_path / "stations.parquet")
+    station_products = pl.read_parquet(tmp_path / "station_products.parquet")
+    assert station_products.height == 194
+    assert set(stations["crs"]) == {"EPSG:4326"}
+    assert set(station_products["last_catalogue_check"]) == {date(2026, 8, 1)}
 
 
 @pytest.mark.parametrize(
     "argv",
     [
         ["--fixture", str(FIXTURE_PATH), "--native-out", "native.parquet"],
+        ["--fixture", str(FIXTURE_PATH), "--out", "catalogue"],
+        ["--live", "--out", "catalogue"],
+        ["--native", str(NATIVE_PATH), "--native-out", "native.parquet", "--retrieved-at", "2026-08-01T18:31:08Z"],
         [
-            "--fixture",
-            str(FIXTURE_PATH),
+            "--native",
+            str(NATIVE_PATH),
             "--out",
             "catalogue",
             "--retrieved-at",
@@ -296,8 +320,34 @@ def test_canonical_cli_still_writes_only_four_canonical_artifacts(tmp_path: Path
         ],
     ],
 )
-def test_retrieved_at_is_required_only_for_native_mode(argv: list[str]) -> None:
+def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc_info:
         generate_catalogue.main(argv)
 
     assert exc_info.value.code != 0
+
+
+def test_native_build_is_network_free_and_byte_deterministic(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def fail_network(*args: object, **kwargs: object) -> object:
+        calls.append("network")
+        raise AssertionError("network must not be accessed during build")
+
+    monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_network)
+    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fail_network)
+
+    result = generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+
+    assert result == 0
+    assert calls == []
+    for artifact_name in (
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+    ):
+        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

@@ -78,17 +78,24 @@ pl_testing.assert_frame_equal(result_df, expected_df)
 
 ## 4. Packaged Catalogue Rule
 
-When porting a new provider, the four canonical packaged catalogue artifacts
-(`catalogue/provider.json`, `catalogue/products.parquet`, `catalogue/stations.parquet`, and
-`catalogue/station_products.parquet`) **must be generated from the live provider API** before the
-provider is committed.
+Packaged catalogue generation has two regimes, keyed on whether the provider has both a committed
+native table and origin declarations.
 
-- `tests/test_data/<provider>_metadata_*.json` is a **test fixture** used for offline tests. It must
-  never be used to generate the four canonical packaged catalogue artifacts.
-- A packaged native table may be materialized from a `tests/test_data/` fixture only when that
-  fixture has been verified content-identical to a live payload. The repository record for each such
-  materialization must state the source URL, retrieval instant, canonicalization method, and digest;
-  this exception does not apply to the four canonical artifacts.
+The committed native table carries provenance. Produce it with the provider's `refresh` operation
+against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
+when that fixture has been verified content-identical to a live payload and the repository record
+states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
+may enter the repository from a fixture.
+
+### 4.1 Providers with a committed native table and origins
+
+For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
+alone), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+`catalogue/products.parquet`, `catalogue/stations.parquet`, and
+`catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
+the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
+would reintroduce the nondeterminism the pure build removes.
+
 - Lithuania native-table attestation: the orchestrator performed
   `GET https://api.meteo.lt/v1/hydro-stations` outside the executor sandbox at
   `2026-08-01T18:31:08Z`, received 97 stations, and verified the live payload content-identical to
@@ -96,10 +103,24 @@ provider is committed.
   serializes JSON with sorted object keys and compact separators `(",", ":")` using Python's
   default `ensure_ascii=True`, UTF-8 encodes the result, and takes SHA-256; both inputs produced
   `02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8`.
+
+After writing provider code and tests, run that provider's network-free build from its committed
+native table and origins, and commit the resulting canonical artifacts alongside the code.
+
+### 4.2 Providers not yet migrated
+
+For a provider without both a committed native table and origin declarations (currently the other
+twelve), the four canonical packaged catalogue artifacts must be generated from the live provider
+API before the provider is committed.
+
+- `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
+  never be used to generate the four canonical packaged catalogue artifacts.
 - After writing all provider code and tests, run
   `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to
   produce the four canonical packaged artifacts.
-- Commit the resulting canonical Parquet files alongside the code.
+
+Commit the resulting artifacts alongside the code in both regimes. Regime 4.1 expands as each
+provider milestone migrates; this distinction disappears once all thirteen providers have migrated.
 
 Some generators include a provider-specific minimum-station guard that raises `FatalContractError`
 when `--live` returns an implausibly small count, catching silent fetch failures or accidental
