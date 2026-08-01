@@ -1,3 +1,4 @@
+import typing
 from dataclasses import FrozenInstanceError
 
 import pytest
@@ -82,9 +83,32 @@ def test_not_published_requires_the_named_evidence_carrier() -> None:
 
 
 def test_catalogue_origin_union_contains_exactly_the_implemented_forms() -> None:
-    origins: tuple[CatalogueOrigin, ...] = (
-        Field(NativeColumn("station_code")),
-        NotPublished(Evidence("https://provider.example/documentation")),
-    )
+    assert typing.get_args(CatalogueOrigin.__value__) == (Field, NotPublished)
 
-    assert [type(origin) for origin in origins] == [Field, NotPublished]
+
+def test_field_has_value_equality_and_hashing() -> None:
+    first = Field(NativeColumn("station_code"))
+    equal = Field(NativeColumn("station_code"))
+    different = Field(NativeColumn("station_name"))
+
+    assert first == equal
+    assert first != different
+    assert hash(first) == hash(equal)
+    assert {first, equal, different} == {first, different}
+
+
+def test_not_published_has_value_equality_and_hashing() -> None:
+    first = NotPublished(Evidence("https://provider.example/documentation"))
+    equal = NotPublished(Evidence("https://provider.example/documentation"))
+    different = NotPublished(Evidence("https://provider.example/catalogue"))
+
+    assert first == equal
+    assert first != different
+    assert hash(first) == hash(equal)
+    assert {first, equal, different} == {first, different}
+
+
+def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
+    value = "https://provider.example/documentation"
+
+    assert Field(NativeColumn(value)) != NotPublished(Evidence(value))
