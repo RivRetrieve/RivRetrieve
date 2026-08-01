@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 import rivretrieve as rr
+from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.providers.za_dws import module as za_dws_module
 
 
@@ -42,22 +45,30 @@ def test_za_dws_info() -> None:
     assert "South Africa" in info.name or "DWS" in info.name or "Water" in info.name
 
 
-def test_za_dws_row_annotation_schema_declared() -> None:
-    schemas = rr.provider("za_dws").row_annotation_schema()
-    ids = {s.annotation_id for s in schemas}
-    assert "native_unit" in ids
-    assert "converted_unit" in ids
+@pytest.mark.parametrize("method", ["row_annotation_schema", "series_annotation_schema"])
+def test_za_dws_observation_schemas_unavailable(method: str) -> None:
+    with pytest.raises(
+        ObservationsUnavailableError,
+        match="Provider za_dws has no observation module registered",
+    ):
+        getattr(rr.provider("za_dws"), method)()
 
 
-def test_za_dws_series_annotation_schema_declared() -> None:
-    schemas = rr.provider("za_dws").series_annotation_schema()
-    ids = {s.annotation_id for s in schemas}
-    assert "resolved_timezone" in ids
-    assert "timezone_source" in ids
-    assert "source_timezone" in ids
-    assert "returned_time_range_start" in ids
-    assert "returned_time_range_end" in ids
-    assert "provider_endpoint" in ids
+def test_za_dws_observations_unavailable() -> None:
+    with pytest.raises(
+        ObservationsUnavailableError,
+        match="Provider za_dws has no observation module registered",
+    ):
+        rr.provider("za_dws").observations(
+            stations=["X3H001"],
+            products=["discharge_daily_mean"],
+            start="2020-01-01",
+            end="2020-01-02",
+        )
+
+
+def test_za_dws_module_has_no_observations() -> None:
+    assert not hasattr(za_dws_module, "observations")
 
 
 def test_za_dws_module_catalogue_path_exists() -> None:

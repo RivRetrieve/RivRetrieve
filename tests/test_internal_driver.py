@@ -192,6 +192,18 @@ def _windows() -> tuple[RequestedWindow, FetchWindow]:
     )
 
 
+def test_identity_window_changes_only_the_nominal_type() -> None:
+    start = WindowEndpoint(object())
+    end = WindowEndpoint(object())
+    requested = RequestedWindow(start=start, end=end)
+
+    fetched = driver_module.identity_window(requested)
+
+    assert isinstance(fetched, FetchWindow)
+    assert fetched.start is start
+    assert fetched.end is end
+
+
 def test_drive_accumulates_every_stage_issue_in_encounter_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

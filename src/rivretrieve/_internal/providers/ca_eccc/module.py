@@ -8,23 +8,18 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
-from rivretrieve._internal.observations import (
-    AnnotationSchema,
-    ObservationRequest,
-    ObservationResult,
-)
+from rivretrieve._internal.observations import AnnotationSchema
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.providers.ca_eccc.config import config as config
 from rivretrieve._internal.providers.ca_eccc.fetch import fetch as fetch
 from rivretrieve._internal.providers.ca_eccc.observation_client import CacheStatus, HydatClient
 from rivretrieve._internal.providers.ca_eccc.parse import parse as parse
-from rivretrieve._internal.providers.ca_eccc.retrieval import retrieve_observations
 from rivretrieve._internal.results import CatalogResult
 
 PROVIDER_ID = ProviderId("ca_eccc")
 _CATALOGUE_PATH = Path(__file__).with_name("catalogue")
-_observation_client_factory = HydatClient
+observation_source: str = "local"
 
 
 def info() -> ProviderInfo:
@@ -166,20 +161,6 @@ def series_annotation_schema() -> list[AnnotationSchema]:
     ]
 
 
-def observations(
-    request: ObservationRequest,
-    *,
-    on_issue: OnIssue = "warn",
-) -> ObservationResult:
-    return retrieve_observations(
-        request,
-        on_issue=on_issue,
-        client_factory=_observation_client_factory,
-        rivretrieve_version=_rivretrieve_version(),
-        catalogue_version=info().catalogue_version,
-    )
-
-
 def cache_status() -> CacheStatus:
     """Return the status of the local HYDAT SQLite cache.
 
@@ -192,7 +173,7 @@ def cache_status() -> CacheStatus:
     >>> status = rr.provider("ca_eccc").cache_status()
     >>> print(status.exists, status.age_days, status.size_mb, status.stale)
     """
-    return _observation_client_factory().cache_status()
+    return HydatClient().cache_status()
 
 
 def refresh_cache() -> list:
@@ -211,7 +192,7 @@ def refresh_cache() -> list:
     >>> for i in issues:
     ...     print(f"[{i.severity}] {i.code}: {i.message}")
     """
-    return _observation_client_factory().refresh_cache()
+    return HydatClient().refresh_cache()
 
 
 @lru_cache
@@ -221,9 +202,3 @@ def _artifact() -> PackagedCatalogArtifact:
 
 def _reader() -> CatalogueReader:
     return CatalogueReader(_artifact(), PROVIDER_ID)
-
-
-def _rivretrieve_version() -> str:
-    from rivretrieve import __version__
-
-    return __version__

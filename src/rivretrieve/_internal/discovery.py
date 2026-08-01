@@ -171,7 +171,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ch_foen",
             packaged_artifact,
-            provider_module=ch_foen_module,
+            provider_module=None,
         )
 
     if "lt_lhmt" not in registered:
@@ -181,7 +181,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "lt_lhmt",
             lt_lhmt_artifact,
-            provider_module=lt_lhmt_module,
+            provider_module=None,
         )
 
     if "usgs_nwis" not in registered:
@@ -191,7 +191,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "usgs_nwis",
             usgs_nwis_artifact,
-            provider_module=usgs_nwis_module,
+            engine_provider_module=usgs_nwis_module,
         )
 
     if "cz_chmi" not in registered:
@@ -201,7 +201,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "cz_chmi",
             cz_chmi_artifact,
-            provider_module=cz_chmi_module,
+            provider_module=None,
         )
 
     if "th_thaiwater" not in registered:
@@ -211,7 +211,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "th_thaiwater",
             th_thaiwater_artifact,
-            provider_module=th_thaiwater_module,
+            provider_module=None,
         )
 
     if "fr_hubeau" not in registered:
@@ -221,7 +221,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "fr_hubeau",
             fr_hubeau_artifact,
-            provider_module=fr_hubeau_module,
+            provider_module=None,
         )
 
     if "jp_mlit" not in registered:
@@ -231,7 +231,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "jp_mlit",
             jp_mlit_artifact,
-            provider_module=jp_mlit_module,
+            provider_module=None,
         )
 
     if "br_ana" not in registered:
@@ -241,7 +241,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "br_ana",
             br_ana_artifact,
-            provider_module=br_ana_module,
+            provider_module=None,
         )
 
     if "no_nve" not in registered:
@@ -251,7 +251,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "no_nve",
             no_nve_artifact,
-            provider_module=no_nve_module,
+            provider_module=None,
         )
 
     if "ca_eccc" not in registered:
@@ -261,7 +261,7 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ca_eccc",
             ca_eccc_artifact,
-            provider_module=ca_eccc_module,
+            engine_provider_module=ca_eccc_module,
         )
 
     if "pl_imgw" not in registered:
@@ -271,7 +271,6 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "pl_imgw",
             pl_imgw_artifact,
-            provider_module=pl_imgw_module,
         )
 
     if "ba_fhmzbih" not in registered:
@@ -281,7 +280,6 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ba_fhmzbih",
             ba_fhmzbih_artifact,
-            provider_module=ba_fhmzbih_module,
         )
 
     if "za_dws" not in registered:
@@ -291,7 +289,6 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "za_dws",
             za_dws_artifact,
-            provider_module=za_dws_module,
         )
 
 

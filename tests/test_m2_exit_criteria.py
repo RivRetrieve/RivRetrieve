@@ -3,21 +3,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
-import pandas.testing as pd_testing
 import polars as pl
-import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-from rivretrieve._internal.issues import (
-    AnnotationSchemaViolationError,
-    InvalidCatalogueSourceError,
-    InvalidObservationRequestError,
-    IssuePolicyError,
-)
-from rivretrieve._internal.observations import AnnotationTable, ObservationRequest, ObservationResult
+from rivretrieve._internal.issues import InvalidCatalogueSourceError, IssuePolicyError
 from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.results import CatalogResult
 from tests._stubs import stub_provider
@@ -80,64 +72,6 @@ def test_m2_exit_criteria_public_surface_sweep(
         handle.products(source="live", on_issue="raise")
     live_ignore = handle.products(source="live", on_issue="ignore")
     assert len(live_ignore.issues) == 1
-
-    calls = {"observations": 0}
-    original_observations = stub_provider.observations
-
-    def observation_spy(request: ObservationRequest, *, on_issue: Any = "warn") -> ObservationResult:
-        calls["observations"] += 1
-        return original_observations(request, on_issue=on_issue)
-
-    monkeypatch.setattr(stub_provider, "observations", observation_spy)
-
-    with pytest.raises(InvalidObservationRequestError, match="start is required"):
-        handle.observations(stations="station-1", products="level", start=None, end="2026-01-02")
-    with pytest.raises(InvalidObservationRequestError, match="end is required"):
-        handle.observations(stations="station-1", products="level", start="2026-01-01", end=None)
-    assert calls == {"observations": 0}
-
-    single = handle.observations(
-        stations="station-1",
-        products="level",
-        start="2026-01-01",
-        end="2026-01-02",
-    )
-    many = handle.observations(
-        stations=["station-1", "station-2"],
-        products=["level", "flow"],
-        start="2026-01-01",
-        end="2026-01-02",
-    )
-    assert isinstance(single, ObservationResult)
-    assert isinstance(many, ObservationResult)
-    assert single.data.height == 2
-    assert many.data.height == 8
-    assert calls == {"observations": 2}
-
-    pl_testing.assert_frame_equal(single.data, single.to_polars())
-    assert single.data is single.to_polars()
-    pd_testing.assert_frame_equal(single.to_pandas(), single.data.to_pandas())
-
-    def bad_annotation_observations(request: ObservationRequest, *, on_issue: Any = "warn") -> ObservationResult:
-        result = original_observations(request, on_issue=on_issue)
-        bad_rows = result.row_annotations.data.with_columns(pl.lit("row.bad").alias("annotation"))
-        return result.model_copy(
-            update={
-                "row_annotations": AnnotationTable(
-                    bad_rows,
-                    result.row_annotations.schema,
-                )
-            }
-        )
-
-    monkeypatch.setattr(stub_provider, "observations", bad_annotation_observations)
-    with pytest.raises(AnnotationSchemaViolationError, match="row.bad"):
-        handle.observations(
-            stations="station-1",
-            products="level",
-            start="2026-01-01",
-            end="2026-01-02",
-        )
 
 
 def _public_protocol_methods(protocol: type[object]) -> set[str]:

@@ -9,19 +9,13 @@
 | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/codz_{year}.zip` | Observation retrieval — annual ZIP (2023+) | None | One file per year; ~1.5 MB compressed, ~20 MB uncompressed. Contains all stations for the year. |
 | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/codz_{year}_{month:02d}.zip` | Observation retrieval — monthly ZIP (pre-2023) | None | 12 files per year; ~2 MB each. Same schema as annual ZIP. Annual ZIPs do not exist for 2022 and earlier. |
 
-## Decision: Local Parquet cache (mirrors ca_eccc HYDAT approach)
+## Historical decision: Local Parquet cache
 
-The legacy Python `PolandFetcher` (Zarr) and R `adapter_PL_IMGW.R` (WIDE master RDS) both build a local all-time cache. This port follows the same pattern as `ca_eccc` (which downloads HYDAT SQLite once and caches it): on first `observations()` call, all IMGW yearly ZIPs are downloaded (1951–current year), parsed, deduplicated, and written as a single Parquet file in the user's cache directory. Subsequent calls read from the Parquet file — no network required.
+The legacy Python `PolandFetcher` (Zarr), R `adapter_PL_IMGW.R` (WIDE master RDS), and the retired RivRetrieve observation pipeline built a local all-time cache. The cache implementation remains under `_internal` as the second runtime HTTP carve-out for the future provider port owned by ticket #17.
 
-Parquet was chosen over Zarr (Python) or RDS (R) because it is RivRetrieve's native format (Polars) and requires no extra dependency.
+The current `pl_imgw` provider is catalogue-only. `rr.provider("pl_imgw").observations(...)`, `row_annotation_schema()`, and `series_annotation_schema()` raise `ObservationsUnavailableError`. Its provider handle does not expose `cache_status()` or `refresh_cache()`. This is deliberate: without the retired retrieval reader, rebuilding every IMGW ZIP from 1951 would produce a Parquet cache that no supported call can query.
 
-`ImgwCacheClient` mirrors `HydatClient` exactly:
-- `cache_path_override`: injectable test path (like `db_path_override` in ca_eccc)
-- `ensure_cache()`: returns `(path, issues)`; builds on first use
-- `cache_status()`: reports existence, age, size — no download triggered
-- `refresh_cache()`: deletes and rebuilds the cache
-
-The provider handle exposes `cache_status()` and `refresh_cache()` at the same level as ca_eccc.
+The retained private `ImgwCacheClient` implementation still contains `cache_path_override`, `ensure_cache()`, `cache_status()`, and `refresh_cache()` so ticket #17 can use or replace the implementation when PL IMGW is ported to the engine stage contract. These are internal implementation details, not supported provider-handle methods.
 
 ## Catalogue Mapping
 
