@@ -26,13 +26,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ch_foen.metadata import (
     ChFoenProductMetadata,
-    ChFoenStationMetadata,
     ChFoenStationProductMetadata,
 )
 
 PROVIDER_ID = "ch_foen"
 PROVIDER_NAME = "Swiss Federal Office for the Environment FOEN / BAFU"
-COUNTRY = "Switzerland"
 SOURCE_URL = "https://api.existenz.ch/apiv1/hydro/locations"
 LEGACY_SOURCE = "thirdparty/RivRetrieve-Python @ origin/switzerland"
 AVAILABILITY_REASON = "Existenz.ch locations catalogue does not expose per-variable station availability"
@@ -210,7 +208,7 @@ def generate_catalogue(
     effective_date = catalogue_date or date.today()
     payload = _station_payload(raw_payload)
     products = build_products(product_definitions)
-    stations = build_stations(raw_payload, payload)
+    stations = build_stations(payload)
     station_products = build_station_products(stations, product_definitions, effective_date)
     provider_info = build_provider_info(raw_payload, effective_date, generator_input=generator_input)
 
@@ -245,8 +243,8 @@ def build_products(product_definitions: Sequence[ProductDefinition] = PRODUCT_DE
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(raw_payload: Mapping[str, object], payload: Mapping[str, object]) -> StationCatalog:
-    rows = [_station_row(raw_payload, station_key, station) for station_key, station in payload.items()]
+def build_stations(payload: Mapping[str, object]) -> StationCatalog:
+    rows = [_station_row(station_key, station) for station_key, station in payload.items()]
     return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
 
@@ -349,7 +347,7 @@ def write_catalogue(catalogue: GeneratedChFoenCatalogue, out_dir: Path | str) ->
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
 
 
-def _station_row(raw_payload: Mapping[str, object], station_key: str, station: object) -> dict[str, object]:
+def _station_row(station_key: str, station: object) -> dict[str, object]:
     if not isinstance(station, dict):
         raise FatalContractError(f"Station {station_key} must be an object")
     station_data = cast("dict[str, object]", station)
@@ -360,40 +358,14 @@ def _station_row(raw_payload: Mapping[str, object], station_key: str, station: o
 
     station_id_raw = details_data.get("id") or station_key
     native_id = _required_string(str(station_id_raw).strip(), f"Station {station_key} id")
-    name = _required_string(details_data.get("name"), f"Station {station_key} name")
     latitude = _required_float(details_data.get("lat"), f"Station {station_key} latitude")
     longitude = _required_float(details_data.get("lon"), f"Station {station_key} longitude")
-    metadata = ChFoenStationMetadata(
-        station_key=station_key,
-        native_id=native_id,
-        name=name,
-        water_body_name=_optional_string(details_data.get("water-body-name") or details_data.get("water_body_name")),
-        water_body_type=_optional_string(details_data.get("water-body-type")),
-        chx=_optional_float(details_data.get("chx"), f"Station {station_key} chx"),
-        chy=_optional_float(details_data.get("chy"), f"Station {station_key} chy"),
-        latitude=latitude,
-        longitude=longitude,
-        country=COUNTRY,
-        source=PROVIDER_NAME,
-        api_source=_optional_string(raw_payload.get("source")),
-        api_url=_optional_string(raw_payload.get("apiurl")),
-        open_data_url=_optional_string(raw_payload.get("opendata")),
-        license_url=_optional_string(raw_payload.get("license")),
-        elevation_m=None,
-        drainage_area_km2=None,
-    )
     return {
         "provider_id": PROVIDER_ID,
         "station_id": native_id,
-        "name": name,
         "latitude": latitude,
         "longitude": longitude,
-        "country": COUNTRY,
-        "elevation_m": None,
-        "drainage_area_km2": None,
-        "start_date": None,
-        "end_date": None,
-        "metadata": _metadata_json(metadata),
+        "crs": "unknown",
     }
 
 
@@ -448,7 +420,7 @@ def _validate_product_definitions(product_definitions: Sequence[ProductDefinitio
             raise FatalContractError(f"{definition.legacy_variable} preferred parameter is absent from parameters")
 
 
-def _metadata_json(model: ChFoenStationMetadata | ChFoenProductMetadata | ChFoenStationProductMetadata) -> str:
+def _metadata_json(model: ChFoenProductMetadata | ChFoenStationProductMetadata) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
@@ -469,14 +441,6 @@ def _required_float(value: object, name: str) -> float:
     if isinstance(value, int | float):
         return float(value)
     raise FatalContractError(f"{name} is required")
-
-
-def _optional_float(value: object, name: str) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    raise FatalContractError(f"{name} must be numeric when present")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

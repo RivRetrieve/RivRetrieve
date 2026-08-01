@@ -96,8 +96,7 @@ def test_ca_eccc_live_catalogue_returns_warning_issue() -> None:
 
 def test_ca_eccc_stations_schema_has_expected_columns() -> None:
     result = rr.provider("ca_eccc").stations()
-    expected = {"provider_id", "station_id", "name", "latitude", "longitude", "country"}
-    assert expected.issubset(set(result.data.columns))
+    assert result.data.columns == ["provider_id", "station_id", "latitude", "longitude", "crs"]
 
 
 def test_ca_eccc_station_grand_river_present() -> None:
@@ -106,10 +105,10 @@ def test_ca_eccc_station_grand_river_present() -> None:
     assert "02GA010" in ids
 
 
-def test_ca_eccc_station_no_elevation() -> None:
-    """ECCC OGC stations endpoint does not provide elevation — always null."""
+def test_ca_eccc_station_crs_unknown() -> None:
     result = rr.provider("ca_eccc").stations()
-    assert result.data["elevation_m"].is_null().all()
+    assert result.data["crs"].null_count() == 0
+    assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
 def test_ca_eccc_exposes_only_the_engine_stage_contract() -> None:

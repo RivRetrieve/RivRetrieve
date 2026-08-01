@@ -15,9 +15,63 @@ _Avoid_: missing, N/A, not available, default
 **Raw**:
 The untouched provider payload, kept alongside the returned data.
 
+**Native table**:
+One [[provider]]'s station metadata in the source's own vocabulary: its column names,
+its spellings, its units, its values unaltered. Every provider produces one, whatever
+shape its source arrives in, and it is the single point where thirteen unlike transports
+become one thing. The canonical station catalogue is built from it rather than beside
+it, which is why the source's own columns are a table to be read rather than a blob to
+be parsed.
+_Avoid_: metadata (the opaque per-row JSON string it replaces), raw table (collides with
+[[raw]], the untouched observation payload), source table
+
+**Origin**:
+How one [[provider]] fills one catalogue column. Declared per provider rather than per
+column, so the same canonical column is filled one way by one source and left empty by
+another. It takes one of three forms: a column of that provider's [[native table]]; the
+statement that this source publishes nothing for that column, carrying [[evidence]]; or
+[[native-only]]. Every column carries one for every provider, so an empty cell is a claim
+rather than an absence that could equally mean we never asked. The four ways to breach it
+are an undeclared column, an origin naming a native column that was never fetched, a null
+where the native column held a value, and a not-published claim carrying no evidence.
+Each fails the build rather than shipping.
+_Avoid_: mapping, provenance (which names the receipt travelling with a result, not the
+per-column declaration), nullable
+
+**Native-only**:
+The [[origin]] for a column this source does publish and we decline to promote, because
+the value cannot be admitted to the column's domain. It is distinct from publishing
+nothing: the cell is empty for a reason that is ours rather than the source's, and the
+source's value remains readable in the [[native table]]. It names the decision that
+withheld it rather than restating the argument, so reversing that decision is one edit.
+_Avoid_: rejected, excluded (both read as a verdict on the source's data), unrepresentable
+(which implies a technical limit rather than a choice), withheld
+
+**Canonical column**:
+A catalogue column carried in RivRetrieve's own vocabulary, filled through an [[origin]]
+by every [[provider]] that can. A column earns canonical status only where it harmonises
+identity or physics; anything resting on judgement stays in the [[native table]] in the
+source's own words. This is why the station catalogue holds identity and geometry and
+nothing else, and why a gauge's name, its river, its elevation and its country are native
+facts rather than canonical ones. Grain is a separate question: canonical says whose
+vocabulary, not what a row is about.
+_Avoid_: harmonised column, standard column, core column
+
+**Evidence**:
+What a not-published [[origin]] must carry: a reference to the source's own documentation
+stating that it publishes nothing for that column. It exists because absence from a
+payload proves only how we asked. USGS returns no period of record from the site service
+called with default output, and publishes one from the same service asked differently, so
+a payload-only check would have certified the false claim. Evidence is read by a person
+once, and is the one part of an origin no machine can settle.
+_Avoid_: citation (which credits a source for its data, not its documentation), proof,
+justification
+
 **Best-effort**:
 A field or behaviour that is filled when the source provides what it needs, and
-[[unknown]] otherwise. Never fabricated.
+[[unknown]] otherwise. Never fabricated. In the catalogue this is enforced rather than
+intended: a best-effort column still carries an [[origin]] for every [[provider]], so
+being empty is a declared claim and not permission to leave it unfilled.
 
 **Issue**:
 A fact about the data, returned rather than raised. A station answering 404, a window

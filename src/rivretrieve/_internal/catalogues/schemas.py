@@ -37,15 +37,9 @@ STATION_CATALOG_SCHEMA = CatalogueSchema(
     columns=(
         CatalogueColumn("provider_id", pl.Utf8),
         CatalogueColumn("station_id", pl.Utf8),
-        CatalogueColumn("name", pl.Utf8),
         CatalogueColumn("latitude", pl.Float64),
         CatalogueColumn("longitude", pl.Float64),
-        CatalogueColumn("country", pl.Utf8),
-        CatalogueColumn("elevation_m", pl.Float64, nullable=True),
-        CatalogueColumn("drainage_area_km2", pl.Float64, nullable=True),
-        CatalogueColumn("start_date", pl.Date, nullable=True),
-        CatalogueColumn("end_date", pl.Date, nullable=True),
-        CatalogueColumn("metadata", pl.Utf8),
+        CatalogueColumn("crs", pl.Utf8),
     ),
     unique_keys=(("provider_id", "station_id"),),
 )

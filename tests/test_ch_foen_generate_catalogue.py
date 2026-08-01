@@ -59,21 +59,19 @@ def test_ch_foen_generator_station_2016_brugg_matches_legacy_fixture() -> None:
     )
 
     row = catalogue.stations.filter(pl.col("station_id") == "2016").row(0, named=True)
-    metadata = json.loads(row["metadata"])
-    assert row["name"] == "Brugg"
-    assert metadata["water_body_name"] == "Aare"
     assert row["latitude"] == 47.4825
     assert row["longitude"] == 8.1949
+    assert row["crs"] == "unknown"
 
 
-def test_ch_foen_generator_handles_nullable_elevation_and_drainage_area() -> None:
+def test_ch_foen_generator_station_schema_and_crs() -> None:
     catalogue = generate_catalogue.generate_catalogue_from_fixture(
         FIXTURE_PATH,
         catalogue_date=CATALOGUE_DATE,
     )
 
-    assert catalogue.stations["elevation_m"].null_count() == 246
-    assert catalogue.stations["drainage_area_km2"].null_count() == 246
+    assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
+    assert catalogue.stations["crs"].unique().to_list() == ["unknown"]
     validate_catalogue(catalogue.stations, STATION_CATALOG_SCHEMA, on_issue="raise")
 
 

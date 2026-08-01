@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
-from collections import Counter
 from dataclasses import FrozenInstanceError
 from typing import Any, cast
 
-import polars as pl
 import pytest
 
 from rivretrieve._internal.engine import (
@@ -23,7 +20,6 @@ from rivretrieve._internal.providers.usgs_nwis.config import (
     UsgsNwisSourceCoordinates,
     config,
 )
-from rivretrieve._internal.providers.usgs_nwis.module import _CATALOGUE_PATH
 
 
 def test_config_declares_all_six_usgs_products() -> None:
@@ -133,30 +129,6 @@ def test_product_and_provider_declarations_reject_incomplete_or_invalid_values()
             ZoneValue("unknown"),
             {"discharge_instantaneous": object()},
         )
-
-
-def test_packaged_catalogue_timezone_abbreviations_are_exact() -> None:
-    frame = pl.read_parquet(_CATALOGUE_PATH / "stations.parquet")
-    tz_values: list[str] = []
-
-    assert frame.height == 26_231
-    for raw_metadata in frame["metadata"]:
-        parsed = json.loads(raw_metadata)
-        assert isinstance(parsed, dict)
-        metadata = cast(dict[str, object], parsed)
-        tz_cd = metadata.get("tz_cd")
-        assert isinstance(tz_cd, str)
-        tz_values.append(tz_cd)
-
-    assert len(tz_values) == 26_231
-    assert Counter(tz_values) == {
-        "EST": 8_172,
-        "CST": 6_588,
-        "MST": 5_686,
-        "PST": 4_845,
-        "AKST": 519,
-        "HST": 421,
-    }
 
 
 @pytest.mark.parametrize("abbrev", ("EST", "CST", "MST", "PST", "AKST", "HST"))

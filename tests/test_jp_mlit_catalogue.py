@@ -81,15 +81,12 @@ def test_stations_count(catalogue: GeneratedJpMlitCatalogue) -> None:
     assert len(catalogue.stations) == 3
 
 
-def test_stations_have_country_japan(catalogue: GeneratedJpMlitCatalogue) -> None:
-    countries = catalogue.stations["country"].unique().to_list()
-    assert countries == ["Japan"]
+def test_stations_have_unknown_crs(catalogue: GeneratedJpMlitCatalogue) -> None:
+    assert catalogue.stations["crs"].unique().to_list() == ["unknown"]
 
 
-def test_stations_elevation_and_drainage_area_are_null(catalogue: GeneratedJpMlitCatalogue) -> None:
-    # The cached CSV has no elevation or drainage area.
-    assert catalogue.stations["elevation_m"].null_count() == len(catalogue.stations)
-    assert catalogue.stations["drainage_area_km2"].null_count() == len(catalogue.stations)
+def test_stations_have_exact_schema(catalogue: GeneratedJpMlitCatalogue) -> None:
+    assert catalogue.stations.columns == ["provider_id", "station_id", "latitude", "longitude", "crs"]
 
 
 def test_known_station_present(catalogue: GeneratedJpMlitCatalogue) -> None:

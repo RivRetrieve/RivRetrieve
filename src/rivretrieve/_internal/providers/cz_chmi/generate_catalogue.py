@@ -26,13 +26,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.cz_chmi.metadata import (
     CzChmiProductMetadata,
-    CzChmiStationMetadata,
     CzChmiStationProductMetadata,
 )
 
 PROVIDER_ID = "cz_chmi"
 PROVIDER_NAME = "Czech Hydrometeorological Institute (CHMI) Open Data"
-COUNTRY = "Czech Republic"
 METADATA_URL = "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json"
 AVAILABILITY_REASON = "CHMI metadata catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
@@ -349,46 +347,17 @@ def _station_row(item: dict[str, object]) -> dict[str, object]:
         raise FatalContractError(f"cz_chmi station entry missing required string field 'objID': {item}")
     station_id = str(station_id_raw).strip()
 
-    name_raw = item.get("STATION_NAME")
-    if not isinstance(name_raw, str) or not str(name_raw).strip():
-        raise FatalContractError(f"cz_chmi station {station_id} missing required 'STATION_NAME'")
-    station_name = str(name_raw).strip()
-
-    water_body_raw = item.get("STREAM_NAME")
-    water_body = (
-        str(water_body_raw).strip() if isinstance(water_body_raw, str) and str(water_body_raw).strip() else None
-    )
-
     latitude = _optional_float(item.get("GEOGR1"), f"station {station_id} latitude")
     longitude = _optional_float(item.get("GEOGR2"), f"station {station_id} longitude")
     if latitude is None or longitude is None:
         raise FatalContractError(f"cz_chmi station {station_id} missing required latitude/longitude")
 
-    drainage_area_km2 = _optional_float(item.get("PLO_STA"), f"station {station_id} drainage_area")
-
-    meta = CzChmiStationMetadata(
-        native_id=station_id,
-        name=station_name,
-        water_body=water_body,
-        latitude=latitude,
-        longitude=longitude,
-        country=COUNTRY,
-        source=PROVIDER_NAME,
-        elevation_m=None,
-        drainage_area_km2=drainage_area_km2,
-    )
     return {
         "provider_id": PROVIDER_ID,
         "station_id": station_id,
-        "name": station_name,
         "latitude": latitude,
         "longitude": longitude,
-        "country": COUNTRY,
-        "elevation_m": None,
-        "drainage_area_km2": drainage_area_km2,
-        "start_date": None,
-        "end_date": None,
-        "metadata": _metadata_json(meta),
+        "crs": "unknown",
     }
 
 
@@ -421,7 +390,7 @@ def _read_live_json(url: str) -> dict[str, object]:
 
 
 def _metadata_json(
-    model: CzChmiStationMetadata | CzChmiProductMetadata | CzChmiStationProductMetadata,
+    model: CzChmiProductMetadata | CzChmiStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

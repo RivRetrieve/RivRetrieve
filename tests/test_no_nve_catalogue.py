@@ -6,7 +6,6 @@ from datetime import date
 from pathlib import Path
 
 import polars as pl
-import pytest
 
 from rivretrieve._internal.providers.no_nve.generate_catalogue import (
     generate_catalogue_from_fixture,
@@ -30,25 +29,11 @@ def test_catalogue_from_fixture_station_product_count() -> None:
     assert len(cat.station_products) == 27  # 3 × 9
 
 
-def test_catalogue_station_elverum_present() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    names = cat.stations["name"].to_list()
-    assert "Elverum" in names
-
-
-def test_catalogue_station_elevation() -> None:
+def test_catalogue_station_identity_present() -> None:
     cat = generate_catalogue_from_fixture(_FIXTURE)
     row = cat.stations.filter(pl.col("station_id") == "12.210.0")
     assert not row.is_empty()
-    assert row["elevation_m"][0] == pytest.approx(183.0)
-
-
-def test_catalogue_station_drainage_area_nullable() -> None:
-    """Station 151.10.0 has null drainage area."""
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    row = cat.stations.filter(pl.col("station_id") == "151.10.0")
-    assert not row.is_empty()
-    assert row["drainage_area_km2"][0] is None
+    assert row["crs"][0] == "unknown"
 
 
 def test_catalogue_products_include_all_nine() -> None:

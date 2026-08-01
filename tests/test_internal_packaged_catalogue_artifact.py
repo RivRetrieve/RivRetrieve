@@ -71,15 +71,9 @@ def stations_df(**overrides: object) -> pl.DataFrame:
     data: dict[str, object] = {
         "provider_id": ["synthetic"],
         "station_id": ["station-1"],
-        "name": ["Station 1"],
         "latitude": [46.2],
         "longitude": [7.1],
-        "country": ["CH"],
-        "elevation_m": [123.4],
-        "drainage_area_km2": [56.7],
-        "start_date": [date(2020, 1, 1)],
-        "end_date": [None],
-        "metadata": ["{}"],
+        "crs": ["unknown"],
     }
     data.update(overrides)
     return pl.DataFrame(
@@ -87,15 +81,9 @@ def stations_df(**overrides: object) -> pl.DataFrame:
         schema={
             "provider_id": pl.Utf8,
             "station_id": pl.Utf8,
-            "name": pl.Utf8,
             "latitude": pl.Float64,
             "longitude": pl.Float64,
-            "country": pl.Utf8,
-            "elevation_m": pl.Float64,
-            "drainage_area_km2": pl.Float64,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
-            "metadata": pl.Utf8,
+            "crs": pl.Utf8,
         },
     )
 
@@ -253,7 +241,7 @@ def test_packaged_artifact_non_nullable_null_raises_corrupt() -> None:
         packaged_catalogue_artifact_from_components(
             provider_info_dict(),
             products_df(),
-            stations_df(name=[None]),
+            stations_df(crs=[None]),
             station_products_df(),
         )
 
@@ -262,8 +250,8 @@ def test_packaged_artifact_metadata_non_object_json_raises_corrupt() -> None:
     with pytest.raises(CorruptCatalogArtifactError):
         packaged_catalogue_artifact_from_components(
             provider_info_dict(),
-            products_df(),
-            stations_df(metadata=["[]"]),
+            products_df(metadata=["[]"]),
+            stations_df(),
             station_products_df(),
         )
 
@@ -286,15 +274,9 @@ def test_packaged_artifact_duplicate_station_key_raises_corrupt() -> None:
             stations_df(
                 provider_id=["synthetic", "synthetic"],
                 station_id=["station-1", "station-1"],
-                name=["Station 1", "Station 1 duplicate"],
                 latitude=[46.2, 46.2],
                 longitude=[7.1, 7.1],
-                country=["CH", "CH"],
-                elevation_m=[123.4, 123.4],
-                drainage_area_km2=[56.7, 56.7],
-                start_date=[date(2020, 1, 1), date(2020, 1, 1)],
-                end_date=[None, None],
-                metadata=["{}", "{}"],
+                crs=["unknown", "unknown"],
             ),
             station_products_df(),
         )

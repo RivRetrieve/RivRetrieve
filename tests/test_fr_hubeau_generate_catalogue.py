@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import polars as pl
-import pytest
 
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import generate_catalogue_from_fixture
 
@@ -34,21 +32,14 @@ def test_generate_catalogue_hydro_station_fields() -> None:
     cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
     station = cat.stations.filter(pl.col("station_id") == "O0050010")
     assert station.height == 1
-    assert station["name"][0] == "LA BIDOUZE A SAINT-PALAIS"
-    assert station["country"][0] == "France"
-    assert station["elevation_m"][0] == pytest.approx(42.5)
-    assert station["drainage_area_km2"][0] == pytest.approx(830.0)
+    assert station["crs"][0] == "unknown"
 
 
 def test_generate_catalogue_temp_station_fields() -> None:
     cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
     station = cat.stations.filter(pl.col("station_id") == "T123456001")
     assert station.height == 1
-    assert station["name"][0] == "LA DORDOGNE A ARGENTAT"
-    assert station["elevation_m"][0] == pytest.approx(148.0)
-    assert station["drainage_area_km2"][0] == pytest.approx(6940.0)
-    meta = json.loads(station["metadata"][0])
-    assert meta["station_type"] == "temperature"
+    assert station["crs"][0] == "unknown"
 
 
 def test_generate_catalogue_filters_no_coord_stations() -> None:

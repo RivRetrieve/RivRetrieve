@@ -33,6 +33,7 @@ dev = [
     "ruff>=0.12", # linter + formatter
     "bump-my-version>=1.2.7",
     "ty>=0.0.35",
+    "tqdm>=4.70.0",
 ]
 
 # -----------------------

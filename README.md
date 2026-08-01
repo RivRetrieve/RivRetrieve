@@ -23,7 +23,7 @@ provider.stations()
 provider.products()
 provider.station_products()
 
-station_map = rr.map_stations(providers="ch_foen", country="Switzerland")
+station_map = rr.map_stations(providers="ch_foen")
 ```
 
 `ch_foen` currently provides catalogue data only. Observation retrieval is unavailable until its

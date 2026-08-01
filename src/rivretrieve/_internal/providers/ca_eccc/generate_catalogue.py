@@ -37,13 +37,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ca_eccc.metadata import (
     CaEcccProductMetadata,
-    CaEcccStationMetadata,
     CaEcccStationProductMetadata,
 )
 
 PROVIDER_ID = "ca_eccc"
 PROVIDER_NAME = "ECCC Hydrometric — Environment and Climate Change Canada"
-COUNTRY = "Canada"
 
 BASE_URL = "https://api.weather.gc.ca/"
 STATIONS_URL = f"{BASE_URL}collections/hydrometric-stations/items"
@@ -287,8 +285,7 @@ def build_provider_info(catalogue_date: date, *, generator_input: str) -> dict[s
         "generator_input": generator_input,
         "auth": "none — public Government of Canada open data",
         "timestamp_convention": (
-            "date_only_utc_midnight — HYDAT stores YEAR/MONTH/DAY integers; "
-            "interpreted as T00:00:00Z"
+            "date_only_utc_midnight — HYDAT stores YEAR/MONTH/DAY integers; interpreted as T00:00:00Z"
         ),
         "unit_convention": "m for stage, m3/s for discharge — no conversions needed",
         "quality_flags": (
@@ -370,41 +367,12 @@ def _iter_station_rows(station_rows: list[dict[str, object]]):  # type: ignore[r
 
         seen.add(station_id)
 
-        name = _clean_text(row.get("STATION_NAME")) or station_id
-        drainage_area_km2 = _to_float(row.get("DRAINAGE_AREA_GROSS"))
-        province = _clean_text(row.get("PROV_TERR_STATE_LOC"))
-        # Live API uses STATUS_EN ("Active"/"Discontinued"); fixture may use HYD_STATUS ("A"/"D").
-        hyd_status = _clean_text(row.get("STATUS_EN") or row.get("HYD_STATUS"))
-        # Live API returns REAL_TIME as int (0/1); fixture uses "Y"/"N".
-        real_time_raw = row.get("REAL_TIME")
-        real_time = _clean_text(str(real_time_raw)) if real_time_raw is not None else None
-
-        metadata = CaEcccStationMetadata(
-            native_id=station_id,
-            name=name,
-            latitude=lat,
-            longitude=lon,
-            country=COUNTRY,
-            source=PROVIDER_NAME,
-            elevation_m=None,  # ECCC OGC stations endpoint does not provide elevation
-            drainage_area_km2=drainage_area_km2,
-            province=province,
-            hyd_status=hyd_status,
-            real_time=real_time,
-        )
-
         yield {
             "provider_id": PROVIDER_ID,
             "station_id": station_id,
-            "name": name,
             "latitude": lat,
             "longitude": lon,
-            "country": COUNTRY,
-            "elevation_m": None,
-            "drainage_area_km2": drainage_area_km2,
-            "start_date": None,
-            "end_date": None,
-            "metadata": _metadata_json(metadata),
+            "crs": "unknown",
         }
 
 
@@ -460,7 +428,7 @@ def _to_float(value: Any) -> float | None:
 
 
 def _metadata_json(
-    model: CaEcccStationMetadata | CaEcccProductMetadata | CaEcccStationProductMetadata,
+    model: CaEcccProductMetadata | CaEcccStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

@@ -26,13 +26,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.th_thaiwater.metadata import (
     ThThaiWaterProductMetadata,
-    ThThaiWaterStationMetadata,
     ThThaiWaterStationProductMetadata,
 )
 
 PROVIDER_ID = "th_thaiwater"
 PROVIDER_NAME = "ThaiWater public API / Hydro-Informatics Institute (HII)"
-COUNTRY = "Thailand"
 METADATA_URL = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
 AVAILABILITY_REASON = "ThaiWater metadata catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
@@ -345,53 +343,17 @@ def _iter_station_rows(raw_payload: dict[str, object]):  # type: ignore[return]
             continue
         seen.add(gauge_id)
 
-        name_en = _pick_localized_text(station.get("tele_station_name"), preferred=("en", "th"))
-        name_th = _pick_localized_text(station.get("tele_station_name"), preferred=("th", "en"))
         lat = _to_float(station.get("tele_station_lat"))
         lon = _to_float(station.get("tele_station_long"))
         if lat is None or lon is None:
             continue
 
-        geocode_raw = row.get("geocode", {})
-        geocode = cast(dict[str, object], geocode_raw) if isinstance(geocode_raw, dict) else {}
-        basin_raw = row.get("basin", {})
-        basin = cast(dict[str, object], basin_raw) if isinstance(basin_raw, dict) else {}
-        agency_raw = row.get("agency", {})
-        agency = cast(dict[str, object], agency_raw) if isinstance(agency_raw, dict) else {}
-
-        metadata = ThThaiWaterStationMetadata(
-            native_id=gauge_id,
-            name=name_en or name_th or gauge_id,
-            name_local=name_th,
-            river_name=_clean_text(row.get("river_name")),
-            latitude=lat,
-            longitude=lon,
-            country=COUNTRY,
-            source=PROVIDER_NAME,
-            station_code=_clean_text(station.get("tele_station_oldcode")),
-            station_type=station_type,
-            agency=_pick_localized_text(agency.get("agency_name"), preferred=("en", "th")),
-            basin=_pick_localized_text(basin.get("basin_name"), preferred=("en", "th")),
-            province=_pick_localized_text(geocode.get("province_name"), preferred=("en", "th")),
-            district=_pick_localized_text(geocode.get("amphoe_name"), preferred=("en", "th")),
-            subdistrict=_pick_localized_text(geocode.get("tumbon_name"), preferred=("en", "th")),
-            vertical_datum=VERTICAL_DATUM,
-            elevation_m=None,
-            drainage_area_km2=None,
-        )
-
         yield {
             "provider_id": PROVIDER_ID,
             "station_id": gauge_id,
-            "name": name_en or name_th or gauge_id,
             "latitude": lat,
             "longitude": lon,
-            "country": COUNTRY,
-            "elevation_m": None,
-            "drainage_area_km2": None,
-            "start_date": None,
-            "end_date": None,
-            "metadata": _metadata_json(metadata),
+            "crs": "unknown",
         }
 
 
@@ -404,20 +366,6 @@ def _clean_text(value: Any) -> str | None:
     return text
 
 
-def _pick_localized_text(value: Any, preferred: tuple[str, ...] = ("en", "th")) -> str | None:
-    if isinstance(value, dict):
-        for lang in preferred:
-            text = _clean_text(value.get(lang))
-            if text:
-                return text
-        for v in value.values():
-            text = _clean_text(v)
-            if text:
-                return text
-        return None
-    return _clean_text(value)
-
-
 def _to_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -428,7 +376,7 @@ def _to_float(value: Any) -> float | None:
 
 
 def _metadata_json(
-    model: ThThaiWaterStationMetadata | ThThaiWaterProductMetadata | ThThaiWaterStationProductMetadata,
+    model: ThThaiWaterProductMetadata | ThThaiWaterStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

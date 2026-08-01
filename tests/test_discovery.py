@@ -186,6 +186,15 @@ def test_global_stations_aggregates_registered_packaged_artifacts(
     assert result.issues == ()
 
 
+def test_default_provider_stations_share_canonical_schema_and_unknown_crs() -> None:
+    result = rr.stations()
+
+    assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
+    assert set(result.data["provider_id"].unique()) == set(rr.providers())
+    assert result.data["crs"].null_count() == 0
+    assert result.data["crs"].unique().to_list() == ["unknown"]
+
+
 def test_global_products_aggregates_registered_packaged_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],

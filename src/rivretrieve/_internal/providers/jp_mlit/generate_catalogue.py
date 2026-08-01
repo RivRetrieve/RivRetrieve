@@ -28,13 +28,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.jp_mlit.metadata import (
     JpMlitProductMetadata,
-    JpMlitStationMetadata,
     JpMlitStationProductMetadata,
 )
 
 PROVIDER_ID = "jp_mlit"
 PROVIDER_NAME = "MLIT Water Information System — Japan national hydrometric network"
-COUNTRY = "Japan"
 
 SITE_INFO_URL = "http://www1.river.go.jp/cgi-bin/SiteInfo.exe"
 SITE_INFO_DETAIL_URL = "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe"
@@ -396,10 +394,7 @@ def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) ->
 def _iter_station_rows(station_rows: list[dict[str, object]]):  # type: ignore[return]
     """Yield one station catalogue row per input dict.
 
-    Fixture rows supply only gauge_id / latitude / longitude.
-    Live-enriched rows additionally supply name, drainage_area_km2, elevation_m,
-    start_date, water_system_name, river_name, manager, address, etc.
-    Both paths go through this single iterator.
+    Fixture and live-enriched rows both produce canonical identity and geometry.
     """
     seen: set[str] = set()
     for row in station_rows:
@@ -416,44 +411,12 @@ def _iter_station_rows(station_rows: list[dict[str, object]]):  # type: ignore[r
             continue
         seen.add(station_id)
 
-        # Name: enriched path provides a real Japanese name; fixture path uses gauge_id.
-        name = _clean_text(row.get("name")) or station_id
-
-        drainage_area_km2 = _to_float(row.get("drainage_area_km2"))
-        elevation_m = _to_float(row.get("elevation_m"))
-        start_date_str = _clean_text(row.get("start_date"))
-
-        metadata = JpMlitStationMetadata(
-            native_id=station_id,
-            name=name,
-            latitude=lat,
-            longitude=lon,
-            country=COUNTRY,
-            source=PROVIDER_NAME,
-            elevation_m=elevation_m,
-            drainage_area_km2=drainage_area_km2,
-            water_system_name=_clean_text(row.get("water_system_name")),
-            river_name=_clean_text(row.get("river_name")),
-            observation_type=_clean_text(row.get("observation_type")),
-            manager=_clean_text(row.get("manager")),
-            station_type_code=_clean_text(row.get("station_type_code")),
-            address=_clean_text(row.get("address")),
-            distance_from_mouth_km=_to_float(row.get("distance_from_mouth_km")),
-            start_date_source=start_date_str,
-        )
-
         yield {
             "provider_id": PROVIDER_ID,
             "station_id": station_id,
-            "name": name,
             "latitude": lat,
             "longitude": lon,
-            "country": COUNTRY,
-            "elevation_m": elevation_m,
-            "drainage_area_km2": drainage_area_km2,
-            "start_date": _parse_jp_date(start_date_str),
-            "end_date": None,
-            "metadata": _metadata_json(metadata),
+            "crs": "unknown",
         }
 
 
@@ -565,16 +528,6 @@ def _jp_date_to_iso(text: str) -> str | None:
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
 
 
-def _parse_jp_date(iso_str: str | None) -> date | None:
-    """Convert ISO date string '1970-11-01' → date object for Polars."""
-    if not iso_str:
-        return None
-    try:
-        return date.fromisoformat(iso_str)
-    except ValueError:
-        return None
-
-
 def _extract_float(pattern: re.Pattern[str], text: str | None) -> float | None:
     if not text:
         return None
@@ -638,7 +591,7 @@ def _to_float(value: Any) -> float | None:
 
 
 def _metadata_json(
-    model: JpMlitStationMetadata | JpMlitProductMetadata | JpMlitStationProductMetadata,
+    model: JpMlitProductMetadata | JpMlitStationProductMetadata,
 ) -> str:
     return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 

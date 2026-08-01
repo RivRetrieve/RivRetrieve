@@ -24,7 +24,7 @@ def test_usgs_nwis_exposes_only_the_engine_stage_contract() -> None:
 def test_usgs_nwis_stations_offline() -> None:
     result = rr.provider("usgs_nwis").stations()
     assert result.data.height > 1000
-    assert result.data["country"].unique().to_list() == ["United States"]
+    assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
 def test_usgs_nwis_products_offline() -> None:
@@ -87,7 +87,8 @@ def test_usgs_nwis_station_fields() -> None:
     assert "station_id" in df.columns
     assert "latitude" in df.columns
     assert "longitude" in df.columns
-    assert "country" in df.columns
+    assert "crs" in df.columns
     row = df.filter(df["station_id"] == "07374000")
     assert row.height == 1
+    assert row["crs"][0] == "unknown"
     assert abs(row["latitude"][0] - 30.44) < 0.1

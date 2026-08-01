@@ -32,12 +32,12 @@ def test_catalogue_station_ids(catalogue: GeneratedCaEcccCatalogue) -> None:
     assert "NOLONLAT" not in ids
 
 
-def test_catalogue_station_grand_river_name(catalogue: GeneratedCaEcccCatalogue) -> None:
+def test_catalogue_station_crs_unknown(catalogue: GeneratedCaEcccCatalogue) -> None:
     import polars as pl
 
     row = catalogue.stations.filter(pl.col("station_id") == "02GA010")
     assert not row.is_empty()
-    assert "GRAND RIVER" in row["name"][0]
+    assert row["crs"][0] == "unknown"
 
 
 def test_catalogue_station_grand_river_coordinates(catalogue: GeneratedCaEcccCatalogue) -> None:
@@ -46,22 +46,6 @@ def test_catalogue_station_grand_river_coordinates(catalogue: GeneratedCaEcccCat
     row = catalogue.stations.filter(pl.col("station_id") == "02GA010")
     assert abs(row["latitude"][0] - 43.35) < 0.01
     assert abs(row["longitude"][0] - (-80.32)) < 0.01
-
-
-def test_catalogue_drainage_area_present(catalogue: GeneratedCaEcccCatalogue) -> None:
-    import polars as pl
-
-    row = catalogue.stations.filter(pl.col("station_id") == "02GA010")
-    assert row["drainage_area_km2"][0] == pytest.approx(4920.0)
-
-
-def test_catalogue_elevation_always_null(catalogue: GeneratedCaEcccCatalogue) -> None:
-    """ECCC OGC does not provide elevation."""
-    assert catalogue.stations["elevation_m"].is_null().all()
-
-
-def test_catalogue_country_canada(catalogue: GeneratedCaEcccCatalogue) -> None:
-    assert all(c == "Canada" for c in catalogue.stations["country"].to_list())
 
 
 def test_catalogue_products_count(catalogue: GeneratedCaEcccCatalogue) -> None:

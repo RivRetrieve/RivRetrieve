@@ -21,15 +21,9 @@ def station_catalog_df(**overrides: object) -> pl.DataFrame:
     data: dict[str, object] = {
         "provider_id": ["synthetic"],
         "station_id": ["station-1"],
-        "name": ["Station 1"],
         "latitude": [46.2],
         "longitude": [7.1],
-        "country": ["CH"],
-        "elevation_m": [123.4],
-        "drainage_area_km2": [56.7],
-        "start_date": [date(2020, 1, 1)],
-        "end_date": [None],
-        "metadata": ['{"nested": {"provider": true}}'],
+        "crs": ["unknown"],
     }
     data.update(overrides)
     return pl.DataFrame(
@@ -37,15 +31,9 @@ def station_catalog_df(**overrides: object) -> pl.DataFrame:
         schema={
             "provider_id": pl.Utf8,
             "station_id": pl.Utf8,
-            "name": pl.Utf8,
             "latitude": pl.Float64,
             "longitude": pl.Float64,
-            "country": pl.Utf8,
-            "elevation_m": pl.Float64,
-            "drainage_area_km2": pl.Float64,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
-            "metadata": pl.Utf8,
+            "crs": pl.Utf8,
         },
     )
 
@@ -83,15 +71,9 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
     assert tuple(STATION_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
         "station_id",
-        "name",
         "latitude",
         "longitude",
-        "country",
-        "elevation_m",
-        "drainage_area_km2",
-        "start_date",
-        "end_date",
-        "metadata",
+        "crs",
     )
     assert tuple(PRODUCT_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
@@ -135,15 +117,9 @@ def test_catalogue_schema_objects_define_polars_dtypes() -> None:
         {
             "provider_id": pl.Utf8,
             "station_id": pl.Utf8,
-            "name": pl.Utf8,
             "latitude": pl.Float64,
             "longitude": pl.Float64,
-            "country": pl.Utf8,
-            "elevation_m": pl.Float64,
-            "drainage_area_km2": pl.Float64,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
-            "metadata": pl.Utf8,
+            "crs": pl.Utf8,
         }
     )
     assert PRODUCT_CATALOG_SCHEMA.polars_schema["metadata"] == pl.Utf8
@@ -156,40 +132,19 @@ def test_catalogue_schema_objects_define_polars_dtypes() -> None:
     assert PROVIDER_INFO_CATALOG_SCHEMA.polars_schema["metadata"] == pl.Utf8
 
 
-def test_station_catalog_nullable_fields_accept_non_null_values() -> None:
+def test_station_catalog_validates_five_column_row() -> None:
     issues = validate_catalogue(station_catalog_df(), STATION_CATALOG_SCHEMA, on_issue="raise")
 
     assert not [issue for issue in issues if issue.severity == "error"]
 
 
-def test_station_catalog_nullable_fields_accept_null_values() -> None:
-    df = pl.DataFrame(
-        {
-            "provider_id": ["synthetic", "synthetic"],
-            "station_id": ["station-1", "station-2"],
-            "name": ["Station 1", "Station 2"],
-            "latitude": [46.2, 46.3],
-            "longitude": [7.1, 7.2],
-            "country": ["CH", "CH"],
-            "elevation_m": [None, 12.3],
-            "drainage_area_km2": [45.6, None],
-            "start_date": [date(2020, 1, 1), None],
-            "end_date": [None, None],
-            "metadata": ["{}", "{}"],
-        },
-        schema=STATION_CATALOG_SCHEMA.polars_schema,
-    )
-
-    issues = validate_catalogue(df, STATION_CATALOG_SCHEMA, on_issue="raise")
-
-    assert df.schema["elevation_m"] == pl.Float64
-    assert df.schema["drainage_area_km2"] == pl.Float64
-    assert not [issue for issue in issues if issue.severity == "error"]
+def test_station_catalog_crs_is_non_null() -> None:
+    assert next(column for column in STATION_CATALOG_SCHEMA.columns if column.name == "crs").nullable is False
 
 
 def test_non_nullable_station_column_rejects_null() -> None:
     with pytest.raises(FatalContractError):
-        validate_catalogue(station_catalog_df(name=[None]), STATION_CATALOG_SCHEMA)
+        validate_catalogue(station_catalog_df(crs=[None]), STATION_CATALOG_SCHEMA)
 
 
 def test_missing_required_column_rejected() -> None:
@@ -258,16 +213,19 @@ def test_availability_rejects_invalid_value() -> None:
 
 
 def test_metadata_column_is_opaque_json_object_string() -> None:
-    df = station_catalog_df(metadata=['{"provider": {"deep": ["kept", 1]}}'])
+    df = station_product_catalog_df(metadata=['{"provider": {"deep": ["kept", 1]}}'] * 3)
 
-    issues = validate_catalogue(df, STATION_CATALOG_SCHEMA, on_issue="raise")
+    issues = validate_catalogue(df, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
 
     assert issues == []
 
 
 def test_metadata_column_rejects_non_object_json() -> None:
     with pytest.raises(FatalContractError):
-        validate_catalogue(station_catalog_df(metadata=["[]"]), STATION_CATALOG_SCHEMA)
+        validate_catalogue(
+            station_product_catalog_df(metadata=["[]"] * 3),
+            STATION_PRODUCT_CATALOG_SCHEMA,
+        )
 
 
 def test_provider_info_catalog_validates_row_shape() -> None:

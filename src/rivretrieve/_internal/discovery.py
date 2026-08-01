@@ -103,7 +103,6 @@ def stations() -> CatalogResult[StationCatalog]:
 def map_stations(
     *,
     providers: str | Sequence[str] | None = None,
-    country: str | Sequence[str] | None = None,
     bbox: tuple[float, float, float, float] | None = None,
 ) -> object:
     """Render packaged stations on a map.
@@ -111,7 +110,7 @@ def map_stations(
     ``bbox`` uses inclusive ``(min_lon, min_lat, max_lon, max_lat)`` order.
     """
     station_data = stations().data
-    filtered = _filter_stations(station_data, providers=providers, country=country, bbox=bbox)
+    filtered = _filter_stations(station_data, providers=providers, bbox=bbox)
     return StationMap(filtered).render()
 
 
