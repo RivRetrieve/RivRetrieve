@@ -3,20 +3,6 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 
-class LtLhmtStationMetadata(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    native_code: str
-    name: str
-    water_body: str | None
-    latitude: float
-    longitude: float
-    country: str
-    source: str
-    elevation_m: float | None
-    drainage_area_km2: float | None
-
-
 class LtLhmtProductMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 

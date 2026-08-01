@@ -1,15 +1,28 @@
 import typing
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
+import polars as pl
 import pytest
 
 from rivretrieve._internal.catalogue_origins import (
+    ORIGIN_GATE_ENROLLED_PROVIDERS,
     CatalogueOrigin,
     Evidence,
     Field,
     NativeColumn,
     NotPublished,
+    enforce_catalogue_origins,
+    validate_catalogue_origins,
 )
+from rivretrieve._internal.catalogues.native import read_native_table
+from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.lt_lhmt.generate_catalogue import build_stations
+from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
+
+NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 
 
 def test_field_carries_an_exact_native_column_and_is_immutable() -> None:
@@ -112,3 +125,105 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     value = "https://provider.example/documentation"
 
     assert Field(NativeColumn(value)) != NotPublished(Evidence(value))
+
+
+def test_origin_gate_enrols_only_lithuania() -> None:
+    assert frozenset({ProviderId("lt_lhmt")}) == ORIGIN_GATE_ENROLLED_PROVIDERS
+
+
+def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation() -> None:
+    with pytest.raises(
+        FatalContractError,
+        match=r"other_provider: provider is not enrolled in catalogue origin gate",
+    ):
+        enforce_catalogue_origins(ProviderId("other_provider"), {}, None, None)  # type: ignore[arg-type]
+
+
+def test_lithuania_declarations_match_canonical_schema_order_and_values() -> None:
+    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("code")),
+        "station_id": Field(NativeColumn("code")),
+        "latitude": Field(NativeColumn("coordinates")),
+        "longitude": Field(NativeColumn("coordinates")),
+        "crs": Field(NativeColumn("coordinates")),
+    } == STATION_CATALOGUE_ORIGINS
+
+
+def _native_and_stations():
+    native_table = read_native_table(NATIVE_PATH)
+    return native_table, build_stations(native_table)
+
+
+def _assert_single_issue(exc_info: pytest.ExceptionInfo[FatalContractError], code: str, column: str) -> None:
+    assert len(exc_info.value.issues) == 1
+    issue = exc_info.value.issues[0]
+    assert issue.code == code
+    assert issue.provider_id == ProviderId("lt_lhmt")
+    assert issue.details == {"canonical_column": column}
+
+
+def test_origin_gate_rejects_undeclared_canonical_column() -> None:
+    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    del declarations["longitude"]
+    native_table, stations = _native_and_stations()
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.longitude: canonical column has no origin declaration",
+    ) as exc_info:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, stations)
+
+    _assert_single_issue(exc_info, "catalogue_origin.undeclared_column", "longitude")
+
+
+def test_origin_gate_rejects_absent_native_column() -> None:
+    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations["latitude"] = Field(NativeColumn("absent_column"))
+    native_table, stations = _native_and_stations()
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.latitude: native column 'absent_column' does not exist",
+    ) as exc_info:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, stations)
+
+    _assert_single_issue(exc_info, "catalogue_origin.absent_native_column", "latitude")
+
+
+def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
+    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations["latitude"] = Field(NativeColumn("name"))
+    native_table, stations = _native_and_stations()
+    first_station_id = stations["station_id"].item(0)
+    broken_stations = stations.with_columns(
+        pl.when(pl.col("station_id") == first_station_id).then(None).otherwise(pl.col("latitude")).alias("latitude")
+    )
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.latitude: canonical value is null where native column 'name' has a value",
+    ) as exc_info:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, broken_stations)
+
+    _assert_single_issue(exc_info, "catalogue_origin.unpropagated_value", "latitude")
+
+
+def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
+    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations["crs"] = {"not_published": True}
+    native_table, stations = _native_and_stations()
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"lt_lhmt\.crs: NotPublished origin must carry Evidence",
+    ) as exc_info:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, stations)
+
+    _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
+
+
+def test_committed_lithuania_origins_pass_validation() -> None:
+    native_table, stations = _native_and_stations()
+
+    assert validate_catalogue_origins(ProviderId("lt_lhmt"), STATION_CATALOGUE_ORIGINS, native_table, stations) == []

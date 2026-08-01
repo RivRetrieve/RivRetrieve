@@ -1,4 +1,4 @@
-"""Lithuania catalogue maintenance : MeteoLtStations × (CatalogueDate + RetrievedAt) → GeneratedLtLhmtCatalogue + WithIssues[NativeTable]."""
+"""Lithuania catalogue maintenance : refresh(MeteoLtStations, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedLtLhmtCatalogue."""
 
 from __future__ import annotations
 
@@ -13,10 +13,12 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
     NativeTable,
     RetrievedAt,
+    read_native_table,
     stamp_native_table,
     write_native_table,
 )
@@ -33,12 +35,13 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.lt_lhmt.metadata import (
     LtLhmtProductMetadata,
     LtLhmtStationProductMetadata,
 )
 
-PROVIDER_ID = "lt_lhmt"
+PROVIDER_ID = ProviderId("lt_lhmt")
 PROVIDER_NAME = "Lithuanian Hydrometeorological Service LHMT (Meteo.lt)"
 METADATA_URL = "https://api.meteo.lt/v1/hydro-stations"
 AVAILABILITY_REASON = "Meteo.lt hydro-stations catalogue does not expose per-variable station availability"
@@ -109,29 +112,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 )
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedLtLhmtCatalogue:
-    return generate_catalogue(
-        _read_fixture_json(Path(fixture_path)),
-        catalogue_date=catalogue_date,
-        generator_input="fixture",
-    )
-
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedLtLhmtCatalogue:
-    return generate_catalogue(
-        _read_live_json(METADATA_URL),
-        catalogue_date=catalogue_date,
-        generator_input="live",
-    )
-
-
 def refresh_native_table(
     raw_stations: list[object],
     *,
@@ -139,7 +119,7 @@ def refresh_native_table(
 ) -> WithIssues[NativeTable]:
     rows: list[dict[str, object]] = []
     for item in raw_stations:
-        _station_row(item)
+        _validate_native_station_entry(item)
         if not isinstance(item, dict):
             raise FatalContractError("Station entry must be a JSON object")
         rows.append(dict(cast("dict[str, object]", item)))
@@ -162,17 +142,24 @@ def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[N
     return refresh_native_table(_read_live_json(METADATA_URL), retrieved_at=retrieved_at)
 
 
-def generate_catalogue(
-    raw_stations: list[object],
-    *,
-    catalogue_date: date | None = None,
-    generator_input: str = "fixture",
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
 ) -> GeneratedLtLhmtCatalogue:
-    effective_date = catalogue_date or date.today()
+    if native_table.data.is_empty():
+        raise FatalContractError("Lithuania native table must not be empty")
     products = build_products()
-    stations = build_stations(raw_stations)
-    station_products = build_station_products(stations, effective_date)
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    station_dates = native_table.data.select(
+        pl.col("code").alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
+    )
+    station_products = build_station_products(station_dates)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("Lithuania native table has no valid retrieved_at values")
+    provider_info = build_provider_info(maximum_retrieved_at.date())
 
     validate_generated_catalogue(provider_info, products, stations, station_products)
     return GeneratedLtLhmtCatalogue(
@@ -204,16 +191,30 @@ def build_products() -> ProductCatalog:
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(raw_stations: list[object]) -> StationCatalog:
-    rows = [_station_row(item) for item in raw_stations]
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    rows = []
+    for station in native_table.data.iter_rows(named=True):
+        code = station["code"]
+        coordinates = station["coordinates"]
+        if not isinstance(code, str) or not isinstance(coordinates, dict):
+            raise FatalContractError("Lithuania native table contains an invalid station row")
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": code,
+                "latitude": coordinates["latitude"],
+                "longitude": coordinates["longitude"],
+                "crs": "EPSG:4326",
+            }
+        )
     return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
 
-def build_station_products(stations: StationCatalog, catalogue_date: date) -> StationProductCatalog:
+def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog:
     rows = []
-    for station_id in stations["station_id"].to_list():
-        if not isinstance(station_id, str):
-            raise FatalContractError("station_id must be a string")
+    for station_id, retrieved_date in station_dates.iter_rows():
+        if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
+            raise FatalContractError("station retrieval date must pair a string identifier with a date")
         for defn in PRODUCT_DEFINITIONS:
             meta = LtLhmtStationProductMetadata(
                 station_id=station_id,
@@ -234,7 +235,7 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
                     "availability_reason": AVAILABILITY_REASON,
                     "start_date": None,
                     "end_date": None,
-                    "last_catalogue_check": catalogue_date,
+                    "last_catalogue_check": retrieved_date,
                     "metadata": _metadata_json(meta),
                 }
             )
@@ -245,12 +246,10 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata = {
         "source_url": METADATA_URL,
-        "generator_input": generator_input,
+        "generator_input": "native",
         "terms_of_use": "https://api.meteo.lt/",
         "rate_limit": "180 requests per minute",
     }
@@ -300,7 +299,7 @@ def write_catalogue(catalogue: GeneratedLtLhmtCatalogue, out_dir: Path | str) ->
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
 
 
-def _station_row(item: object) -> dict[str, object]:
+def _validate_native_station_entry(item: object) -> None:
     if not isinstance(item, dict):
         raise FatalContractError("Station entry must be a JSON object")
     station = cast("dict[str, object]", item)
@@ -314,16 +313,8 @@ def _station_row(item: object) -> dict[str, object]:
     if not isinstance(coords, dict):
         raise FatalContractError(f"Station {station_id} missing coordinates object")
     coords_data = cast("dict[str, object]", coords)
-    latitude = _required_float(coords_data.get("latitude"), f"Station {station_id} latitude")
-    longitude = _required_float(coords_data.get("longitude"), f"Station {station_id} longitude")
-
-    return {
-        "provider_id": PROVIDER_ID,
-        "station_id": station_id,
-        "latitude": latitude,
-        "longitude": longitude,
-        "crs": "unknown",
-    }
+    _required_float(coords_data.get("latitude"), f"Station {station_id} latitude")
+    _required_float(coords_data.get("longitude"), f"Station {station_id} longitude")
 
 
 def _read_fixture_json(path: Path) -> list[object]:
@@ -369,14 +360,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to a Meteo.lt hydro-stations JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live Meteo.lt hydro-stations endpoint.")
+    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     args = parser.parse_args(argv)
 
     if args.native_out is not None:
+        if args.native is not None:
+            parser.error("--native cannot be used with --native-out")
         if args.retrieved_at is None:
             parser.error("--retrieved-at is required with --native-out")
         if args.live:
@@ -386,12 +379,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_native_table(native_outcome.value, args.native_out)
         return 0
 
+    if args.native is None:
+        parser.error("--out requires --native")
     if args.retrieved_at is not None:
-        parser.error("--retrieved-at is only valid with --native-out")
-    if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
-    else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
+        parser.error("--retrieved-at is only valid with refresh mode")
+    from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
+
+    catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
     write_catalogue(catalogue, args.out)
     return 0
 
