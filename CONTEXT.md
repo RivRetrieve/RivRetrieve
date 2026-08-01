@@ -19,6 +19,16 @@ The untouched provider payload, kept alongside the returned data.
 A field or behaviour that is filled when the source provides what it needs, and
 [[unknown]] otherwise. Never fabricated.
 
+**Issue**:
+A fact about the data, returned rather than raised. A station answering 404, a window
+holding no observations, a zone that could not be established are all issues: non-fatal,
+carried alongside the value, and never a reason to discard the rows that did arrive. An
+exception is the other thing entirely — a violation of the contract between [[stage]]s,
+such as a parse handing back a frame with the wrong columns, where there is no result
+worth assembling. Severity is `info | warning | error`, so an issue also records what
+merely deserves saying, like a unit having been converted.
+_Avoid_: error, warning, failure (each names one severity, not the category)
+
 ### Structure
 
 **Engine**:
@@ -46,6 +56,25 @@ this is a fact about the source rather than behaviour, which is why it is declar
 rather than coded.
 _Avoid_: product policy (the pre-redesign name, one private variant per provider),
 parameter code, native field (both name only one coordinate of several)
+
+**Catalogue-only**:
+A [[provider]] registered with no observation [[stage]]s. Its packaged catalogue is read
+normally, while asking it for observations raises rather than returning an empty result,
+because the source is reachable and the question is answerable — the port simply has not
+been written. Eleven of the thirteen are catalogue-only, so this is the ordinary state of
+a provider rather than an exceptional one.
+_Avoid_: unported, disabled, stub, broken
+
+**Legacy reference**:
+The pre-engine implementation of a [[catalogue-only]] provider, kept readable under
+`reference/legacy_observations/<provider>/` with the tests and payload fixtures it was
+written against. It exists so that porting a provider can start from how that source
+actually behaves — its endpoints, request construction, headers and response shapes —
+rather than from reconstruction. It is excluded from lint, typecheck, test collection and
+both distributions, and is deleted per provider as that provider is ported. It is
+evidence, not runtime code and not a live test suite.
+_Avoid_: dead code, backup, vendored, archive (which is a collection prepared for
+publication)
 
 ### Time
 
