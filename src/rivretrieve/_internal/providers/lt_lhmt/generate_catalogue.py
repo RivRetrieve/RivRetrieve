@@ -1,3 +1,5 @@
+"""Lithuania catalogue maintenance : MeteoLtStations × (CatalogueDate + RetrievedAt) → GeneratedLtLhmtCatalogue + WithIssues[NativeTable]."""
+
 from __future__ import annotations
 
 import argparse
@@ -5,13 +7,19 @@ import json
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import cast
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.native import (
+    NativeTable,
+    RetrievedAt,
+    stamp_native_table,
+    write_native_table,
+)
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -23,6 +31,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.lt_lhmt.metadata import (
     LtLhmtProductMetadata,
@@ -121,6 +130,36 @@ def generate_catalogue_from_live(
         catalogue_date=catalogue_date,
         generator_input="live",
     )
+
+
+def refresh_native_table(
+    raw_stations: list[object],
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    rows: list[dict[str, object]] = []
+    for item in raw_stations:
+        _station_row(item)
+        if not isinstance(item, dict):
+            raise FatalContractError("Station entry must be a JSON object")
+        rows.append(dict(cast("dict[str, object]", item)))
+    source_rows = pl.DataFrame(rows, infer_schema_length=None).sort("code")
+    return WithIssues(value=stamp_native_table(source_rows, retrieved_at), issues=())
+
+
+def refresh_native_table_from_fixture(
+    fixture_path: Path | str,
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    return refresh_native_table(
+        _read_fixture_json(Path(fixture_path)),
+        retrieved_at=retrieved_at,
+    )
+
+
+def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[NativeTable]:
+    return refresh_native_table(_read_live_json(METADATA_URL), retrieved_at=retrieved_at)
 
 
 def generate_catalogue(
@@ -330,10 +369,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to a Meteo.lt hydro-stations JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live Meteo.lt hydro-stations endpoint.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for provider.json and parquet files.")
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
+    destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
+    parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     args = parser.parse_args(argv)
 
+    if args.native_out is not None:
+        if args.retrieved_at is None:
+            parser.error("--retrieved-at is required with --native-out")
+        if args.live:
+            native_outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
+        else:
+            native_outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=args.retrieved_at)
+        write_native_table(native_outcome.value, args.native_out)
+        return 0
+
+    if args.retrieved_at is not None:
+        parser.error("--retrieved-at is only valid with --native-out")
     if args.live:
         catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
     else:
