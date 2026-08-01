@@ -1,3 +1,5 @@
+"""station map = render(filter(StationCatalog, provider IDs × bounding box), station identity × coordinates)."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -37,7 +39,6 @@ def _filter_stations(
     stations: pl.DataFrame,
     *,
     providers: str | Sequence[str] | None = None,
-    country: str | Sequence[str] | None = None,
     bbox: tuple[float, float, float, float] | None = None,
 ) -> pl.DataFrame:
     expressions: list[pl.Expr] = []
@@ -45,10 +46,6 @@ def _filter_stations(
     provider_values = _normalize_string_filter(providers, label="providers")
     if provider_values is not None:
         expressions.append(pl.col("provider_id").is_in(provider_values))
-
-    country_values = _normalize_string_filter(country, label="country")
-    if country_values is not None:
-        expressions.append(pl.col("country").is_in(country_values))
 
     if bbox is not None:
         min_lon, min_lat, max_lon, max_lat = _validate_bbox(bbox)
@@ -121,20 +118,14 @@ def _map_center(stations: pl.DataFrame) -> list[float]:
 
 
 def _station_label(station: dict[str, object]) -> str:
-    return f"{station['name']} ({station['station_id']})"
+    return f"{station['provider_id']} ({station['station_id']})"
 
 
 def _station_popup(station: dict[str, object]) -> str:
     lines = [
-        f"<strong>{station['name']}</strong>",
+        f"<strong>{station['provider_id']}</strong>",
         f"Station: {station['station_id']}",
-        f"Provider: {station['provider_id']}",
-        f"Country: {station['country']}",
         f"Latitude: {station['latitude']}",
         f"Longitude: {station['longitude']}",
     ]
-    if station.get("start_date") is not None:
-        lines.append(f"Start: {station['start_date']}")
-    if station.get("end_date") is not None:
-        lines.append(f"End: {station['end_date']}")
     return "<br>".join(lines)
