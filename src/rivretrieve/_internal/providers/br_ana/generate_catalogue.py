@@ -504,7 +504,10 @@ def _iter_station_rows(raw_payload: list[dict[str, object]]):  # type: ignore[re
         # Any null end means that sub-period is still open → station still active.
         end_date = (
             None
-            if any(raw is None and _to_date(row.get(s)) is not None for (s, _), raw in zip(_period_fields, _ends_raw))
+            if any(
+                raw is None and _to_date(row.get(s)) is not None
+                for (s, _), raw in zip(_period_fields, _ends_raw, strict=True)
+            )
             else max((_to_date(r) for r in _ends_raw if _to_date(r) is not None), default=None)
         )
 
@@ -620,7 +623,7 @@ def _fetch_all_stations(token: str) -> list[dict[str, object]]:
                 if isinstance(item, dict):
                     all_stations.append(cast("dict[str, object]", item))
         elif isinstance(data, dict):
-            items = data.get("items")
+            items = cast("dict[str, object]", data).get("items")
             if isinstance(items, list):
                 for item in items:
                     if isinstance(item, dict):

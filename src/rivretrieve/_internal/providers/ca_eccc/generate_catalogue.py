@@ -287,8 +287,7 @@ def build_provider_info(catalogue_date: date, *, generator_input: str) -> dict[s
         "generator_input": generator_input,
         "auth": "none — public Government of Canada open data",
         "timestamp_convention": (
-            "date_only_utc_midnight — HYDAT stores YEAR/MONTH/DAY integers; "
-            "interpreted as T00:00:00Z"
+            "date_only_utc_midnight — HYDAT stores YEAR/MONTH/DAY integers; interpreted as T00:00:00Z"
         ),
         "unit_convention": "m for stage, m3/s for discharge — no conversions needed",
         "quality_flags": (
