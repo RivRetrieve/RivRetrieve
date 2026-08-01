@@ -1,10 +1,16 @@
 # A catalogue column declares its origin
 
 Every catalogue column declares, per provider, where its values come from: a column of
-that provider's native table, the statement that this source publishes nothing for it, or
-native-only. A column with no declaration fails the build, as does an origin naming a
-native column that was never fetched, a null where the native column held a value, and a
-not-published claim carrying no evidence.
+that provider's native table, a constant stated in the provider's documentation, the
+statement that this source publishes nothing for it, or native-only. A column with no
+declaration fails the build, as does an origin naming a native column that was never
+fetched, a null where the native column held a value, a documented constant that differs
+from the emitted value, and a documented or not-published claim carrying no evidence.
+
+The documented-constant form exists because a source may state a value in its
+documentation rather than repeat it for every station. `Field` would falsely claim that
+a native column carries that value, while `NotPublished` would falsely claim that the
+source is silent; the constant and its evidence therefore travel together in the origin.
 
 The decision exists because a null in the shipped catalogue means two incompatible things
 and nothing can tell them apart. `usgs_nwis` ships `begin_date` as a key on all 26,231

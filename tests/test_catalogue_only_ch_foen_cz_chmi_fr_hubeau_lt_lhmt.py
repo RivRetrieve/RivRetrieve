@@ -24,6 +24,7 @@ CATALOGUE_ONLY_PROVIDERS = (
         },
         "Swiss Federal Office for the Environment FOEN / BAFU",
         {"unknown"},
+        {"unknown"},
     ),
     (
         "cz_chmi",
@@ -38,6 +39,7 @@ CATALOGUE_ONLY_PROVIDERS = (
             "water_temperature_daily_mean",
         },
         "Czech Hydrometeorological Institute (CHMI) Open Data",
+        {"unknown"},
         {"unknown"},
     ),
     (
@@ -55,6 +57,7 @@ CATALOGUE_ONLY_PROVIDERS = (
         },
         "Hubeau / SCHAPI — French national hydrometric network",
         {"unknown"},
+        {"unknown"},
     ),
     (
         "lt_lhmt",
@@ -64,6 +67,7 @@ CATALOGUE_ONLY_PROVIDERS = (
         {"discharge_daily_mean", "stage_daily_mean"},
         "Lithuanian Hydrometeorological Service LHMT (Meteo.lt)",
         {"unknown"},
+        {"EPSG:4326"},
     ),
 )
 CATALOGUE_MODULE_FILES = {
@@ -86,6 +90,7 @@ REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
         "product_ids",
         "provider_name",
         "availability",
+        "expected_crs",
     ),
     CATALOGUE_ONLY_PROVIDERS,
 )
@@ -97,6 +102,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     product_ids: set[str],
     provider_name: str,
     availability: set[str],
+    expected_crs: set[str],
 ) -> None:
     assert provider_id in rr.providers()
 
@@ -108,7 +114,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert stations.height == station_count
-    assert stations["crs"].unique().to_list() == ["unknown"]
+    assert set(stations["crs"].to_list()) == expected_crs
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
     assert set(products["provider_id"].to_list()) == {provider_id}
@@ -121,7 +127,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     product_rows = global_products.filter(global_products["provider_id"] == provider_id)
     provider_rows = global_provider_info.filter(global_provider_info["provider_id"] == provider_id)
     assert station_rows.height == station_count
-    assert station_rows["crs"].unique().to_list() == ["unknown"]
+    assert set(station_rows["crs"].to_list()) == expected_crs
     assert product_rows.height == product_count
     assert set(product_rows["product_id"].to_list()) == product_ids
     assert provider_rows.height == 1
@@ -137,6 +143,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
         "product_ids",
         "provider_name",
         "availability",
+        "expected_crs",
     ),
     CATALOGUE_ONLY_PROVIDERS,
 )
@@ -148,6 +155,7 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     product_ids: set[str],
     provider_name: str,
     availability: set[str],
+    expected_crs: set[str],
 ) -> None:
     module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
 
@@ -158,7 +166,7 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert stations.height == station_count
-    assert stations["crs"].unique().to_list() == ["unknown"]
+    assert set(stations["crs"].to_list()) == expected_crs
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
     assert set(products["provider_id"].to_list()) == {provider_id}
@@ -169,7 +177,8 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert not hasattr(module, "series_annotation_schema")
 
     provider_directory = Path(module.__file__).parent
-    assert {path.name for path in provider_directory.glob("*.py")} == CATALOGUE_MODULE_FILES
+    expected_module_files = CATALOGUE_MODULE_FILES | ({"origins.py"} if provider_id == "lt_lhmt" else set())
+    assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in (
         "provider.json",
