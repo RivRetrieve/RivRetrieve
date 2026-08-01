@@ -1,0 +1,41 @@
+# A catalogue column declares its origin
+
+Every catalogue column declares, per provider, where its values come from: a column of
+that provider's native table, the statement that this source publishes nothing for it, or
+native-only. A column with no declaration fails the build, as does an origin naming a
+native column that was never fetched, a null where the native column held a value, and a
+not-published claim carrying no evidence.
+
+The decision exists because a null in the shipped catalogue means two incompatible things
+and nothing can tell them apart. `usgs_nwis` ships `begin_date` as a key on all 26,231
+station metadata blobs and every one is `None`, so `start_date` is null for the whole
+provider. USGS publishes period of record; the site service returns it under
+`seriesCatalogOutput=true` and our generator calls the default output. The catalogue
+therefore states, indistinguishably from fact, that USGS has no start dates. `br_ana` is
+worse: its 52,145 `station_products` rows carry `availability = unknown` with the reason
+*"ANA catalogue does not expose per-variable station availability"*, while every one of
+its station blobs in the same file carries populated `has_discharge`, `has_stage` and
+`has_water_temperature` flags. The reason is contradicted by a column we ship ourselves.
+`no_nve` carries an `active` key on all 4,889 stations, all null. `jp_mlit` keeps a
+station whose scrape failed with `None` fields and prints a warning, freezing a network
+failure into the artefact as though it were a fact about MLIT.
+
+The rejected alternative is the guaranteed and best-effort tier proposed in
+`docs/design/provider-redesign-review.md` §6.1. It is already implemented:
+`validate_catalogue` raises on any null in a `nullable=False` column and the six
+guaranteed columns are already non-nullable and fully populated. It would have caught none
+of the four defects above, because each is a best-effort column that is legally empty
+under it. Fabrication cannot be detected by inspecting a value, only by requiring the
+value to name its origin.
+
+Evidence is required on a not-published claim because a mechanical check reproduces the
+bug it exists to catch. Absence from a payload proves only how we asked, and the USGS
+payload genuinely contains no period of record, so a payload-only check would certify the
+false claim cleanly. A person reads the source's documentation once and links it.
+
+## Consequence: the build stays red until all thirteen are declared
+
+There is no half-landed state in which the rules exist and some providers are undeclared.
+Brazil's availability is fixed because no honest evidence link can be written for it, and
+USGS's request is corrected for the same reason. Those two providers are 64% of the
+284,399 `unknown` rows in `station_products`.
