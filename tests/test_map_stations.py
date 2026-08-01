@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-from datetime import date
 from typing import Any, cast
 
 import polars as pl
@@ -38,8 +37,11 @@ class FakeFolium:
     Marker = FakeMarker
 
 
-def test_map_stations_signature_has_no_on_issue_parameter() -> None:
-    assert "on_issue" not in inspect.signature(rr.map_stations).parameters
+def test_map_stations_signature_has_no_retired_parameters() -> None:
+    parameters = inspect.signature(rr.map_stations).parameters
+
+    assert "country" not in parameters
+    assert "on_issue" not in parameters
 
 
 def test_map_stations_missing_backend_raises_fatal_contract(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -74,17 +76,6 @@ def test_filter_stations_providers_uses_exact_provider_id(packaged_stations: pl.
     assert empty.is_empty()
 
 
-def test_filter_stations_country_uses_exact_catalogue_value(packaged_stations: pl.DataFrame) -> None:
-    selected = _filter_stations(packaged_stations, country="Switzerland")
-    case_mismatch = _filter_stations(packaged_stations, country="switzerland")
-    absent_alias = _filter_stations(packaged_stations, country="CH")
-
-    assert selected.height == 246
-    assert set(selected["country"].unique().to_list()) == {"Switzerland"}
-    assert case_mismatch.is_empty()
-    assert absent_alias.is_empty()
-
-
 def test_filter_stations_bbox_uses_lon_lat_order_and_inclusive_bounds(packaged_stations: pl.DataFrame) -> None:
     brugg_bbox = (8.1948, 47.4824, 8.1950, 47.4826)
     outside_bbox = (0.0, 0.0, 1.0, 1.0)
@@ -99,14 +90,14 @@ def test_filter_stations_bbox_uses_lon_lat_order_and_inclusive_bounds(packaged_s
     assert boundary["station_id"].to_list() == ["2016"]
 
 
-def test_filter_stations_combines_filters_with_and(packaged_stations: pl.DataFrame) -> None:
+def test_filter_stations_combines_provider_and_bbox_filters(packaged_stations: pl.DataFrame) -> None:
     bbox = (8.1948, 47.4824, 8.1950, 47.4826)
 
-    selected = _filter_stations(packaged_stations, providers="ch_foen", country="Switzerland", bbox=bbox)
-    wrong_country = _filter_stations(packaged_stations, providers="ch_foen", country="CH", bbox=bbox)
+    selected = _filter_stations(packaged_stations, providers="ch_foen", bbox=bbox)
+    wrong_provider = _filter_stations(packaged_stations, providers="unknown_provider", bbox=bbox)
 
     assert selected["station_id"].to_list() == ["2016"]
-    assert wrong_country.is_empty()
+    assert wrong_provider.is_empty()
 
 
 def test_filter_stations_rejects_invalid_inputs(packaged_stations: pl.DataFrame) -> None:
@@ -133,7 +124,10 @@ def test_map_stations_fake_backend_receives_filtered_station_frame(monkeypatch: 
 
     assert isinstance(station_map, FakeMap)
     assert len(station_map.markers) == 1
-    assert station_map.markers[0].tooltip == "Brugg (2016)"
+    assert station_map.markers[0].tooltip == "ch_foen (2016)"
+    assert station_map.markers[0].popup == (
+        "<strong>ch_foen</strong><br>Station: 2016<br>Latitude: 47.4825<br>Longitude: 8.1949"
+    )
     assert station_map.markers[0].location == [47.4825, 8.1949]
 
 
@@ -188,18 +182,19 @@ def test_station_map_real_backend_returns_folium_map_for_selected_station() -> N
 
     assert isinstance(station_map, folium.Map)
     html = station_map.get_root().render()
-    assert "Brugg" in html
+    assert "ch_foen" in html
     assert "2016" in html
 
 
-def test_station_map_real_backend_renders_all_null_nullable_columns() -> None:
+def test_station_map_real_backend_renders_five_column_station_frame() -> None:
     folium = pytest.importorskip("folium")
 
-    station_map = StationMap(_nullable_station_frame()).render()
+    station_map = StationMap(_five_column_station_frame()).render()
 
     assert isinstance(station_map, folium.Map)
     html = station_map.get_root().render()
-    assert "Null Station" in html
+    assert "stub_provider" in html
+    assert "nullable-1" in html
 
 
 @pytest.fixture
@@ -207,34 +202,22 @@ def packaged_stations() -> pl.DataFrame:
     return rr.stations().data
 
 
-def _nullable_station_frame() -> pl.DataFrame:
+def _five_column_station_frame() -> pl.DataFrame:
     return pl.DataFrame(
         [
             {
                 "provider_id": "stub_provider",
                 "station_id": "nullable-1",
-                "name": "Null Station",
                 "latitude": 47.0,
                 "longitude": 8.0,
-                "country": "Switzerland",
-                "elevation_m": None,
-                "drainage_area_km2": None,
-                "start_date": date(2026, 1, 1),
-                "end_date": None,
-                "metadata": "{}",
+                "crs": "unknown",
             }
         ],
         schema={
             "provider_id": pl.Utf8,
             "station_id": pl.Utf8,
-            "name": pl.Utf8,
             "latitude": pl.Float64,
             "longitude": pl.Float64,
-            "country": pl.Utf8,
-            "elevation_m": pl.Float64,
-            "drainage_area_km2": pl.Float64,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
-            "metadata": pl.Utf8,
+            "crs": pl.Utf8,
         },
     )
