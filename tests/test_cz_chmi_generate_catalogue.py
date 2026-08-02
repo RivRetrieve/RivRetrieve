@@ -494,6 +494,26 @@ def test_native_and_canonical_identity_and_coordinates_are_exactly_aligned() -> 
     assert {"STATION_NAME", "STREAM_NAME", "PLO_STA", "HLGP4"} <= set(native.columns)
 
 
+def test_committed_stations_artifact_equals_native_exactly_and_is_inside_czechia() -> None:
+    native = read_native_table(NATIVE_PATH).data
+    committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
+    expected = (
+        native.select(
+            pl.lit("cz_chmi").alias("provider_id"),
+            pl.col("objID").alias("station_id"),
+            pl.col("GEOGR1").alias("latitude"),
+            pl.col("GEOGR2").alias("longitude"),
+            pl.lit("unknown").alias("crs"),
+        )
+        .cast(STATION_CATALOG_SCHEMA.polars_schema)
+        .sort("station_id")
+    )
+
+    pl_testing.assert_frame_equal(committed, expected, check_exact=True)
+    assert committed["latitude"].is_between(48.55, 51.06, closed="both").all()
+    assert committed["longitude"].is_between(12.09, 18.90, closed="both").all()
+
+
 def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version() -> None:
     source = read_native_table(NATIVE_PATH).data.head(2)
     station_ids = source["objID"].to_list()
@@ -602,6 +622,21 @@ def test_build_rejects_invalid_per_row_retrieval_date_pairing_by_message() -> No
     with pytest.raises(
         FatalContractError,
         match=rf"cz_chmi station {station_id} retrieval date is invalid",
+    ):
+        generate_catalogue.build_station_products(station_dates)
+
+
+def test_build_rejects_invalid_station_identifier_in_multi_row_dates_by_message() -> None:
+    station_dates = pl.DataFrame(
+        {
+            "station_id": [_two_row_native()["objID"].item(0), None],
+            "retrieved_date": [date(2026, 8, 2), date(2026, 8, 2)],
+        }
+    )
+
+    with pytest.raises(
+        FatalContractError,
+        match="cz_chmi station retrieval date has an invalid identifier",
     ):
         generate_catalogue.build_station_products(station_dates)
 
