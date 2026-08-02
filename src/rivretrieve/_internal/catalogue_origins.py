@@ -82,7 +82,13 @@ class Documented:
 type CatalogueOrigin = Field | NotPublished | Documented
 type OriginDeclarations = Mapping[str, object]
 
-ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset({ProviderId("lt_lhmt"), ProviderId("cz_chmi")})
+ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
+    {
+        ProviderId("ca_eccc"),
+        ProviderId("cz_chmi"),
+        ProviderId("lt_lhmt"),
+    }
+)
 
 
 def validate_catalogue_origins(
