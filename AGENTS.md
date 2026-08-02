@@ -87,6 +87,145 @@ when that fixture has been verified content-identical to a live payload and the 
 states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
 may enter the repository from a fixture.
 
++An orchestrator may also perform a live fetch outside a network-disabled executor and supply the
+complete response as a step input. This route is sanctioned only when the same repository record
+contains every exact request URL, one UTC retrieval instant, the accepted row and station counts,
+the deterministic canonicalization and ordering rules, SHA-256 evidence, and a semantic frame
+comparison between the committed native content and a fresh materialization of the complete supplied
+response.
+
+- USGS native-table attestation: the orchestrator made the following 102 requests for the ordered
+  51-code (50 states plus DC) `_US_STATE_CODES` scope at `2026-08-02T01:14:11Z`:
+
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AL&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AL&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AK&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AK&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AZ&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AZ&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AR&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AR&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CO&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CO&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DE&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DE&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=FL&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=FL&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=GA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=GA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=HI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=HI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ID&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ID&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IL&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IL&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IN&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IN&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KS&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KS&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KY&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KY&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=LA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=LA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ME&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ME&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MD&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MD&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MN&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MN&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MS&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MS&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MO&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MO&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NE&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NE&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NV&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NV&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NH&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NH&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NJ&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NJ&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NM&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NM&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NY&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NY&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NC&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NC&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ND&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ND&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OH&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OH&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OK&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OK&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OR&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OR&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=PA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=PA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=RI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=RI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SC&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SC&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SD&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SD&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TN&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TN&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TX&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TX&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=UT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=UT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WV&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WV&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WY&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WY&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DC&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DC&siteOutput=expanded`
+
+  The [USGS Site Service documentation](https://waterservices.usgs.gov/docs/site-service/site-service-details/)
+  states that `hasDataTypeCd` selects sites, `seriesCatalogOutput=true` returns period-of-record
+  rows, and `siteOutput=expanded` cannot be combined with `seriesCatalogOutput=true`. The complete
+  supplied response contained 55 codes and 110 files. Every entry passed `MANIFEST.sha256`; the
+  manifest's SHA-256 is `d29ee34feaef0dda458c369ed5448e96b7e8b7064176a5f94360881b6cbdf34a`.
+  The exact 102 consumed manifest lines have SHA-256
+  `e197d3d5eb6f971e631693d7d6e2b26d1c7b7031850d62ed11f5891011dbc6bc`.
+
+  The accepted 51-code scope has 26,258 stations in each pass, 2,036,546 series rows, zero
+  cross-pass orphans, only `NAD83` in `dec_coord_datum_cd`, and both `dv` and `uv` source
+  rows. The excluded `GU`, `MP`, `PR`, and `VI` files account for 275 stations. The complete
+  supplied 55-code census has 26,533 stations in each pass, 2,055,307 series rows, and zero
+  cross-pass orphans.
+
+  Canonicalization keeps all 42 expanded fields as exact scalar strings; checks the twelve repeated
+  series-pass station fields byte-for-byte against them; retains the twelve series-only fields as
+  aligned `List(String)` columns; preserves duplicate complete series rows; sorts complete
+  24-field series rows lexicographically in source header order within each station; sorts stations
+  by exact `site_no`; and appends the single UTC-microsecond `retrieved_at`. No field is trimmed,
+  renamed, parsed, converted, or harmonized. The compact UTF-8 JSON list of sorted `site_no`
+  values, serialized with separators `(",", ":")` and `ensure_ascii=False`, has SHA-256
+  `8ad79dac66b25a9dc46ebd30b650c1e647b44d9b31c9bc4fdd17c5e46f4ee241`. A fresh reconstruction
+  from the attested response was compared with the committed native table using exact semantic frame
+  equality; Parquet byte equality is not the provenance criterion.
+
+
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
