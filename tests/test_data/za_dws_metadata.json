@@ -1,29 +1,29 @@
 [
   {
-    "station_id": "X3H001",
-    "description_original": "Vaal River @ Vaal Dam",
-    "latitude": -26.875,
-    "longitude": 28.1111,
-    "drainage_region": "X3H",
-    "drainage_area_km2": 38560.0,
-    "wma": "WMA4_Vaal-Orange_River"
+    "Station": "A1H001",
+    "Description": "Upper Eye Dinokana @ Dinokana",
+    "Latitude (dd:mm:ss)": "25:26:44",
+    "Longitude (dd:mm:ss)": "25:51:14",
+    "Drainage Region": "A10A",
+    "Catchment Area km**2": "0",
+    "WMA source-file identity": "WMA1_Limpopo-Olifants_River.pdf"
   },
   {
-    "station_id": "A1H001",
-    "description_original": "Upper Eye Dinokana @ Dinokana",
-    "latitude": -25.445555555555554,
-    "longitude": 25.85388888888889,
-    "drainage_region": "A10A",
-    "drainage_area_km2": null,
-    "wma": "WMA1_Limpopo-Olifants_River"
+    "Station": "A2H090Q",
+    "Description": "Hennops River @ Van Riebeeck Nat Res",
+    "Latitude (dd:mm:ss)": "25:53:08",
+    "Longitude (dd:mm:ss)": "28:18:10",
+    "Drainage Region": "A21A",
+    "Catchment Area km**2": "451",
+    "WMA source-file identity": "WMA1_Limpopo-Olifants_River.pdf"
   },
   {
-    "station_id": "A2H001",
-    "description_original": "Krokodil River @ Hartbeespoort",
-    "latitude": -25.73388888888889,
-    "longitude": 27.859722222222222,
-    "drainage_region": "A21H",
-    "drainage_area_km2": 2909.0,
-    "wma": "WMA1_Limpopo-Olifants_River"
+    "Station": "A8H017",
+    "Description": "Canal @ Scuidtsdrift",
+    "Latitude (dd:mm:ss)": "22:42:08",
+    "Longitude (dd:mm:ss)": "30:06:19",
+    "Drainage Region": null,
+    "Catchment Area km**2": "0",
+    "WMA source-file identity": "WMA1_Limpopo-Olifants_River.pdf"
   }
 ]
