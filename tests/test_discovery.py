@@ -193,8 +193,10 @@ def test_default_provider_stations_share_canonical_schema_and_non_null_crs() -> 
     assert set(result.data["provider_id"].unique()) == set(rr.providers())
     assert result.data["crs"].null_count() == 0
     lithuania = result.data.filter(pl.col("provider_id") == "lt_lhmt")
-    other_providers = result.data.filter(pl.col("provider_id") != "lt_lhmt")
+    usgs = result.data.filter(pl.col("provider_id") == "usgs_nwis")
+    other_providers = result.data.filter(~pl.col("provider_id").is_in(["lt_lhmt", "usgs_nwis"]))
     assert set(lithuania["crs"].to_list()) == {"EPSG:4326"}
+    assert set(usgs["crs"].to_list()) == {"EPSG:4269"}
     assert set(other_providers["crs"].to_list()) == {"unknown"}
 
 

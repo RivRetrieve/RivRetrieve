@@ -10,19 +10,21 @@ import polars as pl
 import polars.testing as pl_testing
 import pytest
 
-from rivretrieve._internal.catalogues.native import RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
+)
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
-from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import (
-    PRODUCT_DEFINITIONS,
-    generate_catalogue,
-    generate_catalogue_from_fixture,
-)
+from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import PRODUCT_DEFINITIONS
+from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
 
-FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_sites.json")
 SERIES_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_series.json")
 EXPANDED_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_expanded.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+CATALOGUE_PATH = NATIVE_PATH.parent
 ATTESTED_DATETIME = datetime(2026, 8, 2, 1, 14, 11, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 
@@ -206,65 +208,61 @@ def _fixture_refresh() -> object:
     )
 
 
-def test_generate_catalogue_from_fixture_station_count() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    assert catalogue.stations.height == 5  # fixture has 5 representative stations
+def _series_row(
+    data_type_cd: str,
+    parm_cd: str,
+    stat_cd: str,
+    begin_date: str = "2001-01-02",
+    end_date: str = "2025-03-04",
+) -> dict[str, str]:
+    row = dict.fromkeys(SERIES_ONLY_FIELDS, "")
+    row.update(
+        data_type_cd=data_type_cd,
+        parm_cd=parm_cd,
+        stat_cd=stat_cd,
+        begin_date=begin_date,
+        end_date=end_date,
+    )
+    return row
 
 
-def test_generate_catalogue_station_07374000() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    row = catalogue.stations.filter(catalogue.stations["station_id"] == "07374000")
-    assert row.height == 1
-    assert abs(row["latitude"][0] - 30.44) < 0.1
-    assert abs(row["longitude"][0] - (-91.19)) < 0.1
-    assert row["crs"][0] == "unknown"
+def _complete_product_series() -> list[dict[str, str]]:
+    return [_series_row(*definition.series_key) for definition in PRODUCT_DEFINITIONS]
 
 
-def test_generate_catalogue_product_count() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    assert catalogue.products.height == len(PRODUCT_DEFINITIONS)
+def _native_table(station_specs: list[dict[str, object]] | None = None) -> NativeTable:
+    specs = station_specs or [{"site_no": "station-a", "series": _complete_product_series()}]
+    rows: list[dict[str, object]] = []
+    for index, spec in enumerate(specs):
+        source_series = spec.get("series", _complete_product_series())
+        assert isinstance(source_series, list)
+        row: dict[str, object] = dict.fromkeys(EXPANDED_HEADER, "")
+        row.update(
+            agency_cd="USGS",
+            site_no=spec.get("site_no", f"station-{index}"),
+            station_nm=f"Station {index}",
+            dec_lat_va=spec.get("dec_lat_va", "40.125"),
+            dec_long_va=spec.get("dec_long_va", "-72.875"),
+            dec_coord_datum_cd=spec.get("datum", "NAD83"),
+        )
+        row.update({name: [series[name] for series in source_series] for name in SERIES_ONLY_FIELDS})
+        row["retrieved_at"] = spec.get("retrieved_at", ATTESTED_DATETIME)
+        rows.append(row)
+    return NativeTable(pl.DataFrame(rows, schema=NATIVE_SCHEMA))
 
 
-def test_generate_catalogue_canonical_product_ids() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    product_ids = set(catalogue.products["product_id"].to_list())
-    assert "discharge_daily_mean" in product_ids
-    assert "discharge_instantaneous" in product_ids
-    assert "stage_daily_mean" in product_ids
-    assert "stage_daily_max" in product_ids
-    assert "stage_daily_min" in product_ids
-    assert "stage_instantaneous" in product_ids
-
-
-def test_generate_catalogue_station_products_count() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    assert catalogue.station_products.height == catalogue.stations.height * len(PRODUCT_DEFINITIONS)
-
-
-def test_generate_catalogue_station_products_availability_unknown() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    avail_vals = catalogue.station_products["availability"].unique().to_list()
-    assert avail_vals == ["unknown"]
-
-
-def test_generate_catalogue_provider_info_fields() -> None:
-    catalogue = generate_catalogue_from_fixture(FIXTURE_PATH, catalogue_date=date(2026, 6, 1))
-    pi = catalogue.provider_info
-    assert pi["provider_id"] == "usgs_nwis"
-    assert pi["catalogue_version"] == "2026-06-01"
-    assert pi["live_stations"] is False
-    assert pi["live_products"] is False
-    assert pi["live_station_products"] is False
-
-
-def test_live_mode_rejects_too_few_stations() -> None:
-    """Guard: --live must produce ≥10 000 stations or raise, preventing a test fixture from being committed as the packaged catalogue."""
-
-    tiny_fixture = [
-        {"site_no": "07374000", "station_nm": "Mississippi R.", "dec_lat_va": "30.4", "dec_long_va": "-91.2"}
+def _frame_content_sha256(frame: pl.DataFrame) -> str:
+    rows = [
+        [value.isoformat() if isinstance(value, date | datetime) else value for value in row]
+        for row in frame.iter_rows()
     ]
-    with pytest.raises(FatalContractError, match="live catalogue has only"):
-        generate_catalogue(tiny_fixture, generator_input="live")
+    return hashlib.sha256(json.dumps(rows, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
+def test_existing_generation_path_does_not_fabricate_all_unknown_station_products() -> None:
+    catalogue = generator.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+
+    assert "unknown" not in set(catalogue.station_products["availability"].cast(str))
 
 
 def test_strict_rdb_parser_preserves_source_strings_and_empty_fields() -> None:
@@ -432,10 +430,32 @@ def test_fixture_refresh_is_exempt_from_live_minimum() -> None:
 
 
 def test_supplied_national_refresh_enforces_live_minimum() -> None:
-    with pytest.raises(FatalContractError, match="10,000"):
+    expanded_template = _fixture_rows(EXPANDED_FIXTURE_PATH)[0]
+    series_template = _fixture_rows(SERIES_FIXTURE_PATH)[0]
+    expanded_rows: list[dict[str, str]] = []
+    series_rows: list[dict[str, str]] = []
+    for index in range(9_999):
+        site_no = f"{index:08d}"
+        expanded_rows.append({**expanded_template, "site_no": site_no})
+        for definition in PRODUCT_DEFINITIONS:
+            data_type_cd, parm_cd, stat_cd = definition.series_key
+            series_rows.append(
+                {
+                    **series_template,
+                    "site_no": site_no,
+                    "data_type_cd": data_type_cd,
+                    "parm_cd": parm_cd,
+                    "stat_cd": stat_cd,
+                }
+            )
+
+    with pytest.raises(
+        FatalContractError,
+        match="USGS supplied-national native input has only 9,999 stations; expected at least 10,000",
+    ):
         generator.refresh_native_table(
-            _fixture_rows(SERIES_FIXTURE_PATH),
-            _fixture_rows(EXPANDED_FIXTURE_PATH),
+            series_rows,
+            expanded_rows,
             retrieved_at=ATTESTED_RETRIEVED_AT,
             input_kind=generator.NativeInputKind.SUPPLIED_NATIONAL,
         )
@@ -466,6 +486,209 @@ def test_national_product_validation_rejects_a_product_with_zero_matching_rows()
 
 def test_national_product_validation_accepts_the_complete_product_key_set() -> None:
     generator._validate_national_products(_national_product_records())
+
+
+def test_station_product_matching_covers_absent_unique_duplicate_agreeing_blank_and_conflicting_series() -> None:
+    definitions = {definition.product_id: definition for definition in PRODUCT_DEFINITIONS}
+    first_series = [
+        _series_row(*definitions["discharge_daily_mean"].series_key),
+        _series_row(*definitions["discharge_instantaneous"].series_key),
+        _series_row(*definitions["discharge_instantaneous"].series_key),
+        _series_row(*definitions["stage_daily_mean"].series_key, begin_date="", end_date=""),
+        _series_row(*definitions["stage_daily_max"].series_key, begin_date="2000-01-01", end_date="2010-01-01"),
+        _series_row(*definitions["stage_daily_max"].series_key, begin_date="2001-01-01", end_date="2010-01-01"),
+        _series_row(*definitions["stage_instantaneous"].series_key),
+    ]
+    native = _native_table(
+        [
+            {"site_no": "outcomes", "series": first_series},
+            {"site_no": "national-coverage", "series": _complete_product_series()},
+        ]
+    )
+
+    result = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS).station_products.filter(
+        pl.col("station_id") == "outcomes"
+    )
+    rows = {row["product_id"]: row for row in result.iter_rows(named=True)}
+    assert (
+        rows["discharge_daily_mean"]
+        | {
+            "availability": "available",
+            "availability_reason": None,
+            "start_date": date(2001, 1, 2),
+            "end_date": date(2025, 3, 4),
+        }
+        == rows["discharge_daily_mean"]
+    )
+    assert json.loads(rows["discharge_instantaneous"]["metadata"])["exact_match_count"] == 2
+    assert rows["stage_daily_mean"]["availability_reason"] == "Matching USGS source series states blank coverage dates"
+    assert (
+        rows["stage_daily_max"]["availability_reason"]
+        == "Several matching USGS source series state conflicting coverage boundaries"
+    )
+    assert rows["stage_daily_min"]["availability"] == "unavailable"
+    assert (
+        rows["stage_daily_min"]["availability_reason"]
+        == "No matching USGS source series was published for this station-product"
+    )
+    assert rows["stage_daily_min"]["start_date"] is None
+    assert rows["stage_daily_min"]["end_date"] is None
+
+
+@pytest.mark.parametrize("omitted", PRODUCT_DEFINITIONS, ids=lambda definition: definition.product_id)
+def test_native_build_rejects_product_with_zero_national_matches(omitted: object) -> None:
+    assert isinstance(omitted, generator.ProductDefinition)
+    series = [row for row in _complete_product_series() if _series_key_from_row(row) != omitted.series_key]
+    native = _native_table(
+        [
+            {"site_no": "first", "series": series},
+            {"site_no": "second", "series": list(series)},
+        ]
+    )
+
+    with pytest.raises(FatalContractError, match=omitted.product_id):
+        generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
+
+
+def _series_key_from_row(row: dict[str, str]) -> tuple[str, str, str]:
+    return (row["data_type_cd"], row["parm_cd"], row["stat_cd"])
+
+
+def test_native_build_allows_a_product_absent_locally_when_present_nationally() -> None:
+    rhode_island_series = [
+        row
+        for row in _complete_product_series()
+        if _series_key_from_row(row) not in {("dv", "00065", "00001"), ("dv", "00065", "00002")}
+    ]
+    native = _native_table(
+        [
+            {"site_no": "rhode-island", "series": rhode_island_series},
+            {"site_no": "elsewhere", "series": _complete_product_series()},
+        ]
+    )
+
+    station_products = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS).station_products
+    local = station_products.filter(pl.col("station_id") == "rhode-island")
+    assert set(
+        local.filter(pl.col("product_id").is_in(["stage_daily_max", "stage_daily_min"]))["availability"].cast(str)
+    ) == {"unavailable"}
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("NAD27", "EPSG:4267"),
+        ("NAD83", "EPSG:4269"),
+        ("OLDHI", "EPSG:4135"),
+        ("WGS72", "EPSG:4322"),
+        ("WGS84", "EPSG:4326"),
+        ("OLDAK", "unknown"),
+        ("OLDGUAM", "unknown"),
+        ("OLDPR", "unknown"),
+        ("OLDSAMOA", "unknown"),
+        ("PUERTORICO", "unknown"),
+        ("", "unknown"),
+        ("UNRECOGNISED", "unknown"),
+    ],
+)
+def test_datum_token_maps_only_when_licensed(token: str, expected: str) -> None:
+    catalogue = generator.build_catalogue(_native_table([{"datum": token}]), STATION_CATALOGUE_ORIGINS)
+
+    assert catalogue.stations["crs"].item() == expected
+
+
+def test_station_frame_preserves_native_identity_and_coordinates_exactly() -> None:
+    native = _native_table([{"site_no": "  exact-id  ", "dec_lat_va": "41.125", "dec_long_va": "-73.875"}])
+
+    stations = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS).stations
+    expected = pl.DataFrame(
+        [
+            {
+                "provider_id": "usgs_nwis",
+                "station_id": "  exact-id  ",
+                "latitude": 41.125,
+                "longitude": -73.875,
+                "crs": "EPSG:4269",
+            }
+        ],
+        schema=STATION_CATALOG_SCHEMA.polars_schema,
+    )
+    pl_testing.assert_frame_equal(stations, expected, check_exact=True)
+
+
+def test_catalogue_dates_derive_only_from_native_retrieved_at() -> None:
+    native = _native_table(
+        [
+            {"site_no": "older", "retrieved_at": datetime(2026, 7, 31, 23, tzinfo=UTC)},
+            {"site_no": "newer", "retrieved_at": datetime(2026, 8, 3, 1, tzinfo=UTC)},
+        ]
+    )
+
+    catalogue = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
+    dates = {
+        station_id: set(rows["last_catalogue_check"])
+        for station_id, rows in catalogue.station_products.partition_by("station_id", as_dict=True).items()
+    }
+    assert dates[("older",)] == {date(2026, 7, 31)}
+    assert dates[("newer",)] == {date(2026, 8, 3)}
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
+
+
+def test_usgs_build_is_gated_on_origins() -> None:
+    broken = dict(STATION_CATALOGUE_ORIGINS)
+    del broken["longitude"]
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"usgs_nwis\.longitude: canonical column has no origin declaration",
+    ):
+        generator.build_catalogue(_native_table(), broken)
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("site_no", " ", "blank required site_no"),
+        ("dec_lat_va", "", "blank required dec_lat_va"),
+        ("dec_long_va", " ", "blank required dec_long_va"),
+        ("dec_lat_va", "north", "nonnumeric required dec_lat_va"),
+        ("dec_long_va", "west", "nonnumeric required dec_long_va"),
+    ],
+)
+def test_native_build_rejects_invalid_required_native_value(column: str, value: str, message: str) -> None:
+    spec: dict[str, object] = {column: value}
+
+    with pytest.raises(FatalContractError, match=message):
+        generator.build_catalogue(_native_table([spec]), STATION_CATALOGUE_ORIGINS)
+
+
+def test_native_build_rejects_malformed_series_alignment() -> None:
+    native = _native_table()
+    malformed = native.data.with_columns(pl.col("end_date").list.slice(1).alias("end_date"))
+
+    with pytest.raises(FatalContractError, match="station-a.*misaligned source-series"):
+        generator.build_catalogue(NativeTable(malformed), STATION_CATALOGUE_ORIGINS)
+
+
+def test_native_build_rejects_non_exact_schema() -> None:
+    native = _native_table()
+    reordered = native.data.select("site_no", *[column for column in native.data.columns if column != "site_no"])
+
+    with pytest.raises(FatalContractError, match="USGS native table does not have the exact required schema"):
+        generator.build_catalogue(NativeTable(reordered), STATION_CATALOGUE_ORIGINS)
+
+
+def test_native_build_rejects_invalid_nonblank_coverage_date() -> None:
+    series = _complete_product_series()
+    series[0]["begin_date"] = "not-a-date"
+
+    with pytest.raises(FatalContractError, match="invalid nonblank coverage date"):
+        generator.build_catalogue(_native_table([{"series": series}]), STATION_CATALOGUE_ORIGINS)
+
+
+def test_native_build_rejects_impossible_retrieval_timestamp() -> None:
+    with pytest.raises(FatalContractError, match="native table retrieved_at must not contain nulls"):
+        _native_table([{"retrieved_at": None}])
 
 
 def test_fixture_refresh_preserves_exact_source_data_and_alignment() -> None:
@@ -563,26 +786,114 @@ def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
 
 
 @pytest.mark.parametrize(
-    "argv",
+    "case",
     [
-        ["--fixture", str(FIXTURE_PATH), "--native-out", "native.parquet", "--retrieved-at", "2026-08-02T01:14:11Z"],
-        ["--live", "--native-out", "native.parquet", "--retrieved-at", "2026-08-02T01:14:11Z"],
-        ["--rdb-dir", ".", "--out", "catalogue", "--retrieved-at", "2026-08-02T01:14:11Z"],
-        [
-            "--rdb-dir",
-            ".",
+        "removed-fixture",
+        "live-with-out",
+        "rdb-with-out",
+    ],
+)
+def test_cli_rejects_cross_mode_combinations(
+    case: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fail(*args: object, **kwargs: object) -> None:
+        pytest.fail("invalid CLI reached file or network seam")
+
+    monkeypatch.setattr(generator, "read_native_table", fail)
+    monkeypatch.setattr(generator, "refresh_native_table_from_live", fail)
+    monkeypatch.setattr(generator, "refresh_native_table_from_rdb_directory", fail)
+    argv_by_case = {
+        "removed-fixture": ["--fixture", "removed.json"],
+        "live-with-out": [
+            "--live",
+            "--out",
+            "catalogue",
             "--native-out",
             "native.parquet",
-            "--catalogue-date",
-            "2026-08-02",
             "--retrieved-at",
             "2026-08-02T01:14:11Z",
         ],
+        "rdb-with-out": [
+            "--rdb-dir",
+            str(tmp_path.resolve()),
+            "--out",
+            "catalogue",
+            "--native-out",
+            "native.parquet",
+            "--retrieved-at",
+            "2026-08-02T01:14:11Z",
+        ],
+    }
+
+    with pytest.raises(SystemExit):
+        generator.main(argv_by_case[case])
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--native", "native.parquet"], "--native requires --out"),
+        (
+            ["--native", "native.parquet", "--out", "catalogue", "--native-out", "other.parquet"],
+            "--native cannot be combined with --native-out or --retrieved-at",
+        ),
+        (
+            [
+                "--native",
+                "native.parquet",
+                "--out",
+                "catalogue",
+                "--retrieved-at",
+                "2026-08-02T01:14:11Z",
+            ],
+            "--native cannot be combined with --native-out or --retrieved-at",
+        ),
     ],
+    ids=["requires-out", "rejects-native-out", "rejects-retrieved-at"],
 )
-def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
+def test_cli_rejects_invalid_native_mode_options(
+    argv: list[str],
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        generator,
+        "read_native_table",
+        lambda path: pytest.fail(f"invalid CLI reached native reader: {path}"),
+    )
+
     with pytest.raises(SystemExit):
         generator.main(argv)
+
+    assert message in capsys.readouterr().err
+
+
+def test_cli_rejects_relative_rdb_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        generator,
+        "refresh_native_table_from_rdb_directory",
+        lambda *args, **kwargs: pytest.fail("invalid CLI reached RDB reader"),
+    )
+
+    with pytest.raises(SystemExit):
+        generator.main(
+            [
+                "--rdb-dir",
+                "relative-rdb",
+                "--native-out",
+                "native.parquet",
+                "--retrieved-at",
+                "2026-08-02T01:14:11Z",
+            ]
+        )
+
+    assert "--rdb-dir must be an absolute path" in capsys.readouterr().err
 
 
 def test_committed_native_table_exact_schema_counts_and_provenance() -> None:
@@ -654,3 +965,45 @@ def test_fixture_refresh_frame_equals_matching_committed_subset() -> None:
     committed_subset = pl.DataFrame([subset_row], schema=NATIVE_SCHEMA)
 
     pl_testing.assert_frame_equal(_fixture_refresh().value.data, committed_subset, check_exact=True)
+
+
+def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
+    provider_bytes = (CATALOGUE_PATH / "provider.json").read_bytes()
+    products = pl.read_parquet(CATALOGUE_PATH / "products.parquet")
+    stations = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
+    station_products = pl.read_parquet(CATALOGUE_PATH / "station_products.parquet")
+
+    assert products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
+    assert station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert (
+        hashlib.sha256(provider_bytes).hexdigest() == "ce8e47ed05eff1ac46fa7bfbd5575c5a18013c721fd7b27215fb3980db2d0e44"
+    )
+    assert _frame_content_sha256(products) == "1f2f10f7570daf3c397175f89c7f924bea571fc79bec80b5523d9b3fb7049af8"
+    assert _frame_content_sha256(stations) == "27b3dfc6d71445798eda982d6f9d11de4839be1f6adbb30faed8052cefdc26c7"
+    assert _frame_content_sha256(station_products) == (
+        "3b4f6c822be370bf042f9ee91f2ff73c360aa0cec492f1acc02fe38642833791"
+    )
+
+
+def test_native_build_is_network_free_and_byte_deterministic(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def fail_network(*args: object, **kwargs: object) -> object:
+        calls.append("network")
+        raise AssertionError("network must not be accessed during build")
+
+    monkeypatch.setattr(generator, "read_live_native_rows", fail_network)
+    monkeypatch.setattr(generator.urllib.request, "urlopen", fail_network)
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+
+    assert generator.main(["--native", str(NATIVE_PATH), "--out", str(first)]) == 0
+    assert generator.main(["--native", str(NATIVE_PATH), "--out", str(second)]) == 0
+    assert calls == []
+    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+        assert (first / artifact_name).read_bytes() == (second / artifact_name).read_bytes()
+        assert (first / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

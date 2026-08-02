@@ -8,37 +8,34 @@ These notes capture evidence and decisions from porting the USGS National Water 
 | --- | --- | --- |
 | `https://waterservices.usgs.gov/nwis/dv/?format=json&sites={site}&startDT={start}&endDT={end}&parameterCd={param}&statCd={stat}` | Daily values retrieval (DV) for discharge_daily_mean, stage_daily_mean, stage_daily_max, stage_daily_min | No token. Public endpoint. |
 | `https://waterservices.usgs.gov/nwis/iv/?format=json&sites={site}&startDT={start}&endDT={end}&parameterCd={param}` | Instantaneous values retrieval (IV) for discharge_instantaneous, stage_instantaneous | No token. Public endpoint. |
-| `https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&siteOutput=expanded&seriesCatalogOutput=true` | Maintainer-side catalogue generation: fetch stream gauge site metadata in RDB format | No token. |
+| `https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={code}&seriesCatalogOutput=true` | Native-table refresh pass for source series and period-of-record rows | No token. |
+| `https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={code}&siteOutput=expanded` | Native-table refresh pass for expanded station fields | No token. |
 
 Legacy source consulted: `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/usa.py` (uses `dataretrieval` package, which wraps the same NWIS endpoints).
 
 ## Catalogue Mapping
 
-| Legacy/source field | Canonical target | Provider metadata | Decision |
-| --- | --- | --- | --- |
-| `site_no` | `StationCatalog.station_id` | `native_site_no` | USGS site number, left-padded with zeros as returned. |
-| `station_nm` | `StationCatalog.name` | `name` | Preserve provider station name. |
-| `dec_lat_va`, `dec_long_va` | `StationCatalog.latitude`, `longitude` | same | Direct numeric fields from RDB response. |
-| `alt_va` (feet) | `StationCatalog.elevation_m` | `alt_va_ft` | Converted ft → m (× 0.3048). Raw ft value preserved in metadata. |
-| `drain_area_va` (sq mi) | `StationCatalog.drainage_area_km2` | `drain_area_sq_mi` | Converted sq mi → km² (× 2.58999). Raw sq mi preserved in metadata. |
-| `state_cd` | No common column | `state_cd` | Kept as 2-digit FIPS code in metadata. |
-| `huc_cd` | No common column | `huc_cd` | HUC watershed code preserved as metadata. |
-| `tz_cd` | No common column | `tz_cd` | Station timezone code (e.g. "CST6CDT") preserved as metadata. Used for documentation only; UTC conversion happens via timestamp offset. |
-| `begin_date`, `end_date` | `StationCatalog.start_date`, `end_date` | same | Parsed from ISO date strings when present. |
-| Station × product universe | `StationProductCatalog` rows | `availability_source`, `availability_note` | All `5 × 6 = 30` rows materialized as `availability=unknown`; NWIS site catalogue does not expose per-variable availability. |
+| Native field | Canonical target | Decision |
+| --- | --- | --- |
+| `site_no` | `provider_id`, `station_id` origins | USGS site number is retained exactly and aligns every canonical row to the native table. |
+| `dec_lat_va`, `dec_long_va` | `latitude`, `longitude` | Direct string-to-`Float64` coercion only; no spatial transformation or rounding. |
+| `dec_coord_datum_cd` | `crs` | Closed mapping: NAD27→EPSG:4267, NAD83→EPSG:4269, OLDHI→EPSG:4135, WGS72→EPSG:4322, WGS84→EPSG:4326; all other tokens emit `unknown`. |
+| `data_type_cd`, `parm_cd`, `stat_cd` lists | station-product availability | Exact returned-series keys use `dv` for daily products and `uv` with empty `stat_cd` for instantaneous products. |
+| `begin_date`, `end_date` lists | station-product coverage | A unique or agreeing pair is propagated. Blank or conflicting pairs stay null with an explicit source-based reason. |
+| Other expanded and series fields | Native table only | All 55 native columns remain in source vocabulary; no judgement-bearing station facts are promoted. |
 
 ## Product Dictionary
 
 All six products map to canonical V1 product IDs. No USGS-specific product IDs were needed.
 
-| Product ID | USGS endpoint | Param code | Stat code | Native unit | Canonical unit | Conversion |
-| --- | --- | --- | --- | --- | --- | --- |
-| `discharge_daily_mean` | DV | 00060 | 00003 | ft3/s | m3/s | × 0.0283168466 |
-| `discharge_instantaneous` | IV | 00060 | (none) | ft3/s | m3/s | × 0.0283168466 |
-| `stage_daily_mean` | DV | 00065 | 00003 | ft | m | × 0.3048 |
-| `stage_daily_max` | DV | 00065 | 00001 | ft | m | × 0.3048 |
-| `stage_daily_min` | DV | 00065 | 00002 | ft | m | × 0.3048 |
-| `stage_instantaneous` | IV | 00065 | (none) | ft | m | × 0.3048 |
+| Product ID | Request endpoint | Returned series key | Native unit | Canonical unit | Conversion |
+| --- | --- | --- | --- | --- | --- |
+| `discharge_daily_mean` | DV | `dv:00060:00003` | ft3/s | m3/s | × 0.0283168466 |
+| `discharge_instantaneous` | IV | `uv:00060:` | ft3/s | m3/s | × 0.0283168466 |
+| `stage_daily_mean` | DV | `dv:00065:00003` | ft | m | × 0.3048 |
+| `stage_daily_max` | DV | `dv:00065:00001` | ft | m | × 0.3048 |
+| `stage_daily_min` | DV | `dv:00065:00002` | ft | m | × 0.3048 |
+| `stage_instantaneous` | IV | `uv:00065:` | ft | m | × 0.3048 |
 
 Legacy source used `constants.STAGE_DAILY_MAX` and `constants.STAGE_DAILY_MIN` via `dataretrieval`, which maps to statistic codes 00001 and 00002 respectively.
 
@@ -85,7 +82,8 @@ Series annotations capture `resolved_timezone`, `timezone_source`, time range, `
 | --- | --- | --- |
 | No `dataretrieval` dependency | Resolved | New implementation calls USGS WaterServices REST API directly with `requests`, matching the pattern of other providers. `dataretrieval` is not a project dependency and was not added. |
 | Legacy strips timezone | Documented | Legacy `_parse_data()` used `.dt.date` which discards timezone and time-of-day. New implementation preserves full UTC-converted timestamps. Test `test_parser_timestamps_converted_from_cst` pins this behavior. |
-| Large station catalogue | Post-V1 concern | The fixture shipped with the package contains 5 representative stations. For production use, the maintainer should run `generate_catalogue.py --live --out ...` to regenerate from the full NWIS site catalogue (8000+ stream gauges). |
-| RDB parse for live catalogue | Resolved in generator | The USGS site service returns RDB (tab-delimited with comment lines). The generator parses RDB internally; the fixture format is pre-parsed JSON (list of dicts), consistent with other providers. |
-| No per-variable availability | Documented | NWIS site catalogue does not expose which parameters are available per site. All station-product pairs are materialized as `availability=unknown`. |
+| National catalogue | Resolved | The committed native table contains 26,258 stations and 2,036,546 aligned source-series rows from the attested 51-code scope. |
+| Two mutually exclusive site-service views | Resolved | Refresh performs separate strict RDB series and expanded passes, checks cross-pass equality, and joins on exact `site_no`. |
+| Reproducible canonical build | Resolved | Canonical artifacts are built offline only with `--native catalogue/native.parquet --out catalogue/`; live and supplied-RDB modes refresh the native table only. |
+| Per-variable availability | Resolved | Exact source-series matching emits `available` or `unavailable`; zero national matches fail the build and no station-product remains `unknown`. |
 | USGS API rate limits | Not enforced | USGS WaterServices has no documented hard rate limit for individual queries. Rate limit enforcement deferred post-V1. |

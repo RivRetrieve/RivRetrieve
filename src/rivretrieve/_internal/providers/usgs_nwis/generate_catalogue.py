@@ -1,4 +1,4 @@
-"""USGS catalogue maintenance : refresh(SeriesRdbRows × ExpandedRdbRows, RetrievedAt) → WithIssues[NativeTable]; digest : NativeTable → SHA256; legacy catalogue generation remains operational."""
+"""USGS catalogue maintenance : refresh(SeriesRdbRows × ExpandedRdbRows, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedUsgsNwisCatalogue."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 import hashlib
 import json
 import urllib.request
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
@@ -15,8 +15,15 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
-from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
+from rivretrieve._internal.catalogues.native import (
+    NativeTable,
+    RetrievedAt,
+    read_native_table,
+    stamp_native_table,
+    write_native_table,
+)
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -30,18 +37,11 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.usgs_nwis.metadata import (
-    UsgsNwisProductMetadata,
-    UsgsNwisStationProductMetadata,
-)
+from rivretrieve._internal.primitives import ProviderId
 
-PROVIDER_ID = "usgs_nwis"
+PROVIDER_ID = ProviderId("usgs_nwis")
 PROVIDER_NAME = "U.S. Geological Survey National Water Information System (USGS NWIS)"
 METADATA_BASE_URL = "https://waterservices.usgs.gov/nwis/site/"
-METADATA_URL = (
-    METADATA_BASE_URL
-    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&siteOutput=expanded&stateCd={state_cd}"
-)
 SERIES_CATALOGUE_URL = (
     METADATA_BASE_URL
     + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&seriesCatalogOutput=true"
@@ -51,7 +51,7 @@ EXPANDED_SITE_URL = (
     + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
 )
 # USGS site service requires a geographic filter; nationwide queries return HTTP 400.
-# We iterate over all US state FIPS codes.
+# We iterate over the 50 state USPS codes plus DC.
 _US_STATE_CODES = [
     "AL",
     "AK",
@@ -281,10 +281,17 @@ class NativeInputKind(Enum):
     SUPPLIED_NATIONAL = "supplied-national"
 
 
-AVAILABILITY_REASON = (
-    "USGS NWIS site catalogue does not expose per-variable station availability at catalogue-generation time"
-)
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
+NO_MATCH_REASON = "No matching USGS source series was published for this station-product"
+BLANK_COVERAGE_REASON = "Matching USGS source series states blank coverage dates"
+CONFLICTING_COVERAGE_REASON = "Several matching USGS source series state conflicting coverage boundaries"
+
+_DATUM_TO_CRS = {
+    "NAD27": "EPSG:4267",
+    "NAD83": "EPSG:4269",
+    "OLDHI": "EPSG:4135",
+    "WGS72": "EPSG:4322",
+    "WGS84": "EPSG:4326",
+}
 
 _CFS_TO_M3S = 0.0283168466
 _FT_TO_M = 0.3048
@@ -311,20 +318,28 @@ class ProductDefinition:
     param_code: str
     stat_code: str | None
     endpoint: str
+    returned_data_type_cd: str
+    returned_stat_cd: str
     unit_conversion: str
     notes: str | None
 
     @property
-    def metadata(self) -> UsgsNwisProductMetadata:
-        return UsgsNwisProductMetadata(
-            param_code=self.param_code,
-            stat_code=self.stat_code,
-            endpoint=self.endpoint,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            unit_conversion=self.unit_conversion,
-            notes=self.notes,
-        )
+    def series_key(self) -> tuple[str, str, str]:
+        return (self.returned_data_type_cd, self.param_code, self.returned_stat_cd)
+
+    @property
+    def metadata(self) -> dict[str, object]:
+        return {
+            "param_code": self.param_code,
+            "stat_code": self.stat_code,
+            "endpoint": self.endpoint,
+            "returned_data_type_cd": self.returned_data_type_cd,
+            "returned_stat_cd": self.returned_stat_cd,
+            "native_unit": self.native_unit,
+            "canonical_unit": self.canonical_unit,
+            "unit_conversion": self.unit_conversion,
+            "notes": self.notes,
+        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -340,6 +355,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         param_code="00060",
         stat_code="00003",
         endpoint="dv",
+        returned_data_type_cd="dv",
+        returned_stat_cd="00003",
         unit_conversion="cfs_to_m3s",
         notes=(
             "Daily mean discharge. Native unit is cubic feet per second (cfs); "
@@ -359,6 +376,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         param_code="00060",
         stat_code=None,
         endpoint="iv",
+        returned_data_type_cd="uv",
+        returned_stat_cd="",
         unit_conversion="cfs_to_m3s",
         notes=(
             "Instantaneous discharge (15-minute or sub-hourly). "
@@ -378,6 +397,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         param_code="00065",
         stat_code="00003",
         endpoint="dv",
+        returned_data_type_cd="dv",
+        returned_stat_cd="00003",
         unit_conversion="ft_to_m",
         notes=("Daily mean gage height (stage). Native unit is feet; converted to metres by multiplying by 0.3048."),
     ),
@@ -393,6 +414,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         param_code="00065",
         stat_code="00001",
         endpoint="dv",
+        returned_data_type_cd="dv",
+        returned_stat_cd="00001",
         unit_conversion="ft_to_m",
         notes="Daily maximum gage height. Native unit is feet; converted to metres.",
     ),
@@ -408,6 +431,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         param_code="00065",
         stat_code="00002",
         endpoint="dv",
+        returned_data_type_cd="dv",
+        returned_stat_cd="00002",
         unit_conversion="ft_to_m",
         notes="Daily minimum gage height. Native unit is feet; converted to metres.",
     ),
@@ -423,6 +448,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         param_code="00065",
         stat_code=None,
         endpoint="iv",
+        returned_data_type_cd="uv",
+        returned_stat_cd="",
         unit_conversion="ft_to_m",
         notes=("Instantaneous gage height (15-minute or sub-hourly). Native unit is feet; converted to metres."),
     ),
@@ -501,10 +528,7 @@ def _required_site_no(row: dict[str, str], *, row_kind: str) -> str:
 
 
 def _validate_national_products(series_records: dict[str, list[tuple[str, ...]]]) -> None:
-    matches = {
-        ("dv" if definition.endpoint == "dv" else "uv", definition.param_code, definition.stat_code or ""): 0
-        for definition in PRODUCT_DEFINITIONS
-    }
+    matches = {definition.series_key: 0 for definition in PRODUCT_DEFINITIONS}
     data_type_index = SERIES_ONLY_FIELDS.index("data_type_cd")
     parm_index = SERIES_ONLY_FIELDS.index("parm_cd")
     stat_index = SERIES_ONLY_FIELDS.index("stat_cd")
@@ -513,11 +537,10 @@ def _validate_national_products(series_records: dict[str, list[tuple[str, ...]]]
             key = (record[data_type_index], record[parm_index], record[stat_index])
             if key in matches:
                 matches[key] += 1
-    zero_matches = [key for key, count in matches.items() if count == 0]
+    zero_matches = [definition for definition in PRODUCT_DEFINITIONS if matches[definition.series_key] == 0]
     if zero_matches:
-        raise FatalContractError(
-            f"USGS supplied-national input has products with zero matching series rows: {zero_matches}"
-        )
+        missing = ", ".join(f"{definition.product_id}={definition.series_key!r}" for definition in zero_matches)
+        raise FatalContractError(f"USGS native input has products with zero matching series rows: {missing}")
 
 
 def refresh_native_table(
@@ -701,49 +724,28 @@ def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[N
     )
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
+_LIVE_MIN_STATIONS = 10_000
+
+
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
 ) -> GeneratedUsgsNwisCatalogue:
-    return generate_catalogue(
-        _read_fixture_json(Path(fixture_path)),
-        catalogue_date=catalogue_date,
-        generator_input="fixture",
-    )
+    if native_table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS native table does not have the exact required schema")
+    if native_table.data.is_empty():
+        raise FatalContractError("USGS native table must not be empty")
 
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedUsgsNwisCatalogue:
-    return generate_catalogue(
-        _read_live_sites(),
-        catalogue_date=catalogue_date,
-        generator_input="live",
-    )
-
-
-_LIVE_MIN_STATIONS = 10_000  # USGS has 8 000+ active stream gauges; far fewer means the live fetch failed silently
-
-
-def generate_catalogue(
-    raw_sites: list[object],
-    *,
-    catalogue_date: date | None = None,
-    generator_input: str = "fixture",
-) -> GeneratedUsgsNwisCatalogue:
-    effective_date = catalogue_date or date.today()
+    series_records = _series_records_by_station(native_table)
+    _validate_national_products(series_records)
     products = build_products()
-    stations = build_stations(raw_sites)
-    if generator_input == "live" and stations.height < _LIVE_MIN_STATIONS:
-        raise FatalContractError(
-            f"usgs_nwis live catalogue has only {stations.height} stations — expected ≥{_LIVE_MIN_STATIONS}. "
-            "The USGS site service fetch likely failed silently or returned a geographic subset. "
-            "Do not commit this as the packaged catalogue."
-        )
-    station_products = build_station_products(stations, effective_date)
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    station_products = build_station_products(native_table, series_records)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("USGS native table has no valid retrieved_at values")
+    provider_info = build_provider_info(maximum_retrieved_at.date())
     validate_generated_catalogue(provider_info, products, stations, station_products)
     return GeneratedUsgsNwisCatalogue(
         provider_info=provider_info,
@@ -774,57 +776,131 @@ def build_products() -> ProductCatalog:
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(raw_sites: list[object]) -> StationCatalog:
-    rows = [_station_row(item) for item in raw_sites]
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    rows = []
+    for native_row in native_table.data.iter_rows(named=True):
+        station_id = _required_native_string(native_row["site_no"], "site_no")
+        latitude = _required_native_float(native_row["dec_lat_va"], station_id, "dec_lat_va")
+        longitude = _required_native_float(native_row["dec_long_va"], station_id, "dec_long_va")
+        datum = native_row["dec_coord_datum_cd"]
+        if not isinstance(datum, str):
+            raise FatalContractError(f"USGS station {station_id!r} has invalid dec_coord_datum_cd")
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": station_id,
+                "latitude": latitude,
+                "longitude": longitude,
+                "crs": _DATUM_TO_CRS.get(datum, "unknown"),
+            }
+        )
     return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
 
-def build_station_products(stations: StationCatalog, catalogue_date: date) -> StationProductCatalog:
+def build_station_products(
+    native_table: NativeTable,
+    series_records: dict[str, list[tuple[str, ...]]] | None = None,
+) -> StationProductCatalog:
+    records_by_station = series_records or _series_records_by_station(native_table)
     rows = []
-    for station_id in stations["station_id"].to_list():
-        if not isinstance(station_id, str):
-            raise FatalContractError("station_id must be a string")
+    for native_row in native_table.data.iter_rows(named=True):
+        station_id = _required_native_string(native_row["site_no"], "site_no")
+        retrieved_at = native_row["retrieved_at"]
+        if not isinstance(retrieved_at, datetime):
+            raise FatalContractError(f"USGS station {station_id!r} has invalid retrieved_at")
+        station_records = records_by_station[station_id]
         for defn in PRODUCT_DEFINITIONS:
-            meta = UsgsNwisStationProductMetadata(
-                station_id=station_id,
-                product_id=defn.product_id,
-                param_code=defn.param_code,
-                stat_code=defn.stat_code,
-                endpoint=defn.endpoint,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
-                    "USGS NWIS site catalogue does not expose per-variable station availability; "
-                    "all station-product pairs are materialized as availability=unknown."
-                ),
+            matches = [record for record in station_records if _series_key(record) == defn.series_key]
+            availability, reason, start_date, end_date = _matching_coverage(
+                station_id,
+                defn.product_id,
+                matches,
             )
+            metadata = {
+                "station_id": station_id,
+                "product_id": defn.product_id,
+                "returned_series_key": {
+                    "data_type_cd": defn.returned_data_type_cd,
+                    "parm_cd": defn.param_code,
+                    "stat_cd": defn.returned_stat_cd,
+                },
+                "exact_match_count": len(matches),
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
                     "product_id": defn.product_id,
-                    "availability": "unknown",
-                    "availability_reason": AVAILABILITY_REASON,
-                    "start_date": None,
-                    "end_date": None,
-                    "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(meta),
+                    "availability": availability,
+                    "availability_reason": reason,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "last_catalogue_check": retrieved_at.date(),
+                    "metadata": _metadata_json(metadata),
                 }
             )
-    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
-        pl.col("availability").cast(AvailabilityDtype)
+    return (
+        pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+        .with_columns(pl.col("availability").cast(AvailabilityDtype))
+        .sort("station_id", "product_id")
     )
+
+
+def _series_records_by_station(native_table: NativeTable) -> dict[str, list[tuple[str, ...]]]:
+    records_by_station: dict[str, list[tuple[str, ...]]] = {}
+    for native_row in native_table.data.iter_rows(named=True):
+        station_id = _required_native_string(native_row["site_no"], "site_no")
+        columns = [native_row[name] for name in SERIES_ONLY_FIELDS]
+        if any(not isinstance(values, list) for values in columns):
+            raise FatalContractError(f"USGS station {station_id!r} has malformed source-series list columns")
+        lengths = {len(values) for values in columns}
+        if len(lengths) != 1:
+            raise FatalContractError(f"USGS station {station_id!r} has misaligned source-series list columns")
+        records_by_station[station_id] = list(zip(*columns, strict=True))
+    return records_by_station
+
+
+def _series_key(record: tuple[str, ...]) -> tuple[str, str, str]:
+    return (
+        record[SERIES_ONLY_FIELDS.index("data_type_cd")],
+        record[SERIES_ONLY_FIELDS.index("parm_cd")],
+        record[SERIES_ONLY_FIELDS.index("stat_cd")],
+    )
+
+
+def _matching_coverage(
+    station_id: str,
+    product_id: str,
+    matches: list[tuple[str, ...]],
+) -> tuple[str, str | None, date | None, date | None]:
+    if not matches:
+        return "unavailable", NO_MATCH_REASON, None, None
+
+    begin_index = SERIES_ONLY_FIELDS.index("begin_date")
+    end_index = SERIES_ONLY_FIELDS.index("end_date")
+    boundaries = {(record[begin_index], record[end_index]) for record in matches}
+    if len(boundaries) > 1:
+        return "available", CONFLICTING_COVERAGE_REASON, None, None
+
+    begin_value, end_value = next(iter(boundaries))
+    if not begin_value or not end_value:
+        return "available", BLANK_COVERAGE_REASON, None, None
+    try:
+        return "available", None, date.fromisoformat(begin_value), date.fromisoformat(end_value)
+    except ValueError as exc:
+        raise FatalContractError(
+            f"USGS station {station_id!r} product {product_id!r} has invalid nonblank coverage date"
+        ) from exc
 
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata = {
         "dv_endpoint": "https://waterservices.usgs.gov/nwis/dv/",
         "iv_endpoint": "https://waterservices.usgs.gov/nwis/iv/",
         "site_service_url": "https://waterservices.usgs.gov/nwis/site/",
-        "generator_input": generator_input,
+        "generator_input": "native",
         "terms_of_use": "https://waterservices.usgs.gov/",
         "unit_conversions": {
             "cfs_to_m3s": _CFS_TO_M3S,
@@ -878,30 +954,6 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
 
 
-def _station_row(item: object) -> dict[str, object]:
-    if not isinstance(item, dict):
-        raise FatalContractError("Site entry must be a JSON object")
-    site = cast("dict[str, object]", item)
-
-    site_no = site.get("site_no")
-    if not isinstance(site_no, str) or not site_no.strip():
-        raise FatalContractError(f"Site entry missing required string field 'site_no': {site}")
-    station_id = site_no.strip()
-
-    lat = _optional_float(site.get("dec_lat_va"), f"Site {station_id} latitude")
-    lon = _optional_float(site.get("dec_long_va"), f"Site {station_id} longitude")
-    if lat is None or lon is None:
-        raise FatalContractError(f"Site {station_id} missing required lat/lon")
-
-    return {
-        "provider_id": PROVIDER_ID,
-        "station_id": station_id,
-        "latitude": lat,
-        "longitude": lon,
-        "crs": "unknown",
-    }
-
-
 def _read_fixture_json(path: Path) -> list[object]:
     try:
         with path.open(encoding="utf-8") as file:
@@ -915,75 +967,23 @@ def _read_fixture_json(path: Path) -> list[object]:
     return cast("list[object]", value)
 
 
-def _read_live_sites() -> list[object]:
-    all_sites: list[object] = []
-    seen: set[str] = set()
-    for state_cd in _US_STATE_CODES:
-        url = METADATA_URL.format(state_cd=state_cd)
-        try:
-            with urllib.request.urlopen(url, timeout=60) as response:
-                if response.status < 200 or response.status >= 300:
-                    raise FatalContractError(
-                        f"USGS site service request failed with HTTP {response.status} for state {state_cd}"
-                    )
-                content = response.read().decode("utf-8")
-        except OSError as exc:
-            raise FatalContractError(f"USGS site service request failed for state {state_cd}") from exc
-        for site in _parse_rdb(content):
-            site_no = site.get("site_no")
-            if isinstance(site_no, str) and site_no and site_no not in seen:
-                seen.add(site_no)
-                all_sites.append(site)
-    return all_sites
+def _metadata_json(value: Mapping[str, object]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-def _parse_rdb(content: str) -> list[dict[str, str]]:
-    lines = content.splitlines()
-    header_line: list[str] | None = None
-    data_lines: list[str] = []
-    skip_next = False
-    for line in lines:
-        if line.startswith("#"):
-            continue
-        if header_line is None:
-            header_line = line.split("\t")
-            skip_next = True
-            continue
-        if skip_next:
-            skip_next = False
-            continue
-        data_lines.append(line)
-    if header_line is None:
-        return []
-    result: list[dict[str, str]] = []
-    for data_line in data_lines:
-        if not data_line.strip():
-            continue
-        fields = data_line.split("\t")
-        row: dict[str, str] = {}
-        for i, col in enumerate(header_line):
-            row[col.strip()] = fields[i].strip() if i < len(fields) else ""
-        result.append(row)
-    return result
+def _required_native_string(value: object, column: str) -> str:
+    if not isinstance(value, str) or not value or value.isspace():
+        raise FatalContractError(f"USGS native row has blank required {column}")
+    return value
 
 
-def _metadata_json(
-    model: UsgsNwisProductMetadata | UsgsNwisStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-
-
-def _optional_float(value: object, name: str) -> float | None:
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return None
-    if isinstance(value, int | float):
+def _required_native_float(value: object, station_id: str, column: str) -> float:
+    if not isinstance(value, str) or not value or value.isspace():
+        raise FatalContractError(f"USGS station {station_id!r} has blank required {column}")
+    try:
         return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
+    except ValueError as exc:
+        raise FatalContractError(f"USGS station {station_id!r} has nonnumeric required {column}") from exc
 
 
 def _parse_retrieved_at(value: str) -> RetrievedAt:
@@ -1002,37 +1002,38 @@ def _parse_retrieved_at(value: str) -> RetrievedAt:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the packaged usgs_nwis catalogue artifacts.")
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--fixture", type=Path, help="Path to a USGS sites JSON fixture.")
-    source.add_argument("--live", action="store_true", help="Fetch the live USGS NWIS site service.")
+    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     source.add_argument("--rdb-dir", type=Path, help="Absolute directory containing the two attested RDB passes.")
+    source.add_argument("--live", action="store_true", help="Refresh from the live USGS NWIS site service.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for an attested native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat)
     args = parser.parse_args(argv)
+
+    if args.native is not None:
+        if args.out is None:
+            parser.error("--native requires --out")
+        if args.native_out is not None or args.retrieved_at is not None:
+            parser.error("--native cannot be combined with --native-out or --retrieved-at")
+        from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
+
+        catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
+        write_catalogue(catalogue, args.out)
+        return 0
+
+    if args.out is not None:
+        parser.error("native refresh mode cannot be combined with --out")
+    if args.native_out is None or args.retrieved_at is None:
+        parser.error("native refresh mode requires --native-out and --retrieved-at")
 
     if args.rdb_dir is not None:
         if not args.rdb_dir.is_absolute():
             parser.error("--rdb-dir must be an absolute path")
-        if args.native_out is None or args.retrieved_at is None:
-            parser.error("native RDB mode requires --native-out and --retrieved-at")
-        if args.out is not None or args.catalogue_date is not None:
-            parser.error("native RDB mode cannot be combined with --out or --catalogue-date")
         outcome = refresh_native_table_from_rdb_directory(args.rdb_dir, retrieved_at=args.retrieved_at)
-        write_native_table(outcome.value, args.native_out)
-        print(f"USGS native table canonical SHA-256: {native_table_content_sha256(outcome.value)}")
-        return 0
-
-    if args.out is None:
-        parser.error("legacy fixture/live mode requires --out")
-    if args.native_out is not None or args.retrieved_at is not None:
-        parser.error("legacy fixture/live mode cannot be combined with --native-out or --retrieved-at")
-    catalogue_date = args.catalogue_date or date.today()
-    if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=catalogue_date)
     else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=catalogue_date)
-    write_catalogue(catalogue, args.out)
+        outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
+    write_native_table(outcome.value, args.native_out)
+    print(f"USGS native table canonical SHA-256: {native_table_content_sha256(outcome.value)}")
     return 0
 
 
