@@ -29,7 +29,7 @@ from rivretrieve._internal.providers.ca_eccc.origins import (
     STATION_CATALOGUE_ORIGINS as CANADA_ORIGINS,
 )
 from rivretrieve._internal.providers.lt_lhmt.generate_catalogue import build_stations
-from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
+from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS as LT_STATION_ORIGINS
 from rivretrieve._internal.providers.usgs_nwis.origins import (
     STATION_CATALOGUE_ORIGINS as USGS_STATION_CATALOGUE_ORIGINS,
 )
@@ -180,11 +180,12 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_canada_czechia_lithuania_and_usgs() -> None:
+def test_origin_gate_enrols_exactly_canada_czechia_lithuania_switzerland_and_usgs() -> None:
     assert (
         frozenset(
             {
                 ProviderId("ca_eccc"),
+                ProviderId("ch_foen"),
                 ProviderId("cz_chmi"),
                 ProviderId("lt_lhmt"),
                 ProviderId("usgs_nwis"),
@@ -203,14 +204,14 @@ def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation() -> None:
 
 
 def test_lithuania_declarations_match_canonical_schema_order_and_values() -> None:
-    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert tuple(LT_STATION_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
         "provider_id": Field(NativeColumn("code")),
         "station_id": Field(NativeColumn("code")),
         "latitude": Field(NativeColumn("coordinates")),
         "longitude": Field(NativeColumn("coordinates")),
         "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://api.meteo.lt/")),
-    } == STATION_CATALOGUE_ORIGINS
+    } == LT_STATION_ORIGINS
 
 
 def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
@@ -290,7 +291,7 @@ def _assert_single_issue(exc_info: pytest.ExceptionInfo[FatalContractError], cod
 
 
 def test_origin_gate_rejects_undeclared_canonical_column() -> None:
-    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     del declarations["longitude"]
     native_table, stations = _native_and_stations()
 
@@ -304,7 +305,7 @@ def test_origin_gate_rejects_undeclared_canonical_column() -> None:
 
 
 def test_origin_gate_rejects_absent_native_column() -> None:
-    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["latitude"] = Field(NativeColumn("absent_column"))
     native_table, stations = _native_and_stations()
 
@@ -318,7 +319,7 @@ def test_origin_gate_rejects_absent_native_column() -> None:
 
 
 def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
-    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["latitude"] = Field(NativeColumn("name"))
     native_table, stations = _native_and_stations()
     first_station_id = stations["station_id"].item(0)
@@ -336,7 +337,7 @@ def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
 
 
 def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable() -> None:
-    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["station_id"] = NotPublished(Evidence("https://api.meteo.lt/"))
     native_table, stations = _native_and_stations()
     broken_stations = stations.with_columns(pl.lit(None).cast(pl.Float64).alias("latitude"))
@@ -354,7 +355,7 @@ def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable() -> 
 
 
 def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
-    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["crs"] = {"not_published": True}
     native_table, stations = _native_and_stations()
 
@@ -368,7 +369,7 @@ def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
 
 
 def test_origin_gate_rejects_documented_declaration_with_absent_evidence() -> None:
-    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     malformed = object.__new__(Documented)
     object.__setattr__(malformed, "value", DocumentedValue("EPSG:4326"))
     declarations["crs"] = malformed
@@ -384,7 +385,7 @@ def test_origin_gate_rejects_documented_declaration_with_absent_evidence() -> No
 
 
 def test_origin_gate_rejects_documented_value_drift_from_builder_output() -> None:
-    declarations: dict[str, object] = dict(STATION_CATALOGUE_ORIGINS)
+    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["crs"] = Documented(
         DocumentedValue("EPSG:9999"),
         Evidence("https://api.meteo.lt/"),
@@ -403,4 +404,18 @@ def test_origin_gate_rejects_documented_value_drift_from_builder_output() -> Non
 def test_committed_lithuania_origins_pass_validation() -> None:
     native_table, stations = _native_and_stations()
 
-    assert validate_catalogue_origins(ProviderId("lt_lhmt"), STATION_CATALOGUE_ORIGINS, native_table, stations) == []
+    assert validate_catalogue_origins(ProviderId("lt_lhmt"), LT_STATION_ORIGINS, native_table, stations) == []
+
+
+def test_committed_swiss_origins_pass_validation() -> None:
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import build_stations
+    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
+
+    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet"))
+
+    assert (
+        validate_catalogue_origins(
+            ProviderId("ch_foen"), STATION_CATALOGUE_ORIGINS, native_table, build_stations(native_table)
+        )
+        == []
+    )

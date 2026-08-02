@@ -118,7 +118,7 @@ response.
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
-`cz_chmi`, `lt_lhmt`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+`ch_foen`, `cz_chmi`, `lt_lhmt`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
 `catalogue/products.parquet`, `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
@@ -296,15 +296,31 @@ generation must use its committed `native.parquet`, never `--live` or supplied R
   this digest from the written Parquet in the same run. The canonical artifacts contain 8,057 stations,
   two products, and 16,114 station-products.
 
+- Switzerland native-table attestation: the orchestrator performed
+  `GET https://api.existenz.ch/apiv1/hydro/locations` outside the executor sandbox at
+  `2026-08-02T00:14:31Z`, observed 246 stations under `payload`, and verified the supplied complete
+  response byte-identical to the replacement `tests/test_data/switzerland_metadata_locations.json`.
+  Canonicalization sorts all JSON object keys, serializes the complete response with compact
+  separators `(',', ':')` and `ensure_ascii=False`, UTF-8 encodes it, and takes SHA-256, producing
+  `7471e85de4f4a6d1e0968a9fe35a962c98729a4bb3b244e0991818f3038ce24a`. The sole integer
+  `details.id`, at station `2071`, is intentionally normalized to string so the native Parquet
+  column has one scalar dtype. Future Swiss canonical artifacts must be built network-free from
+  the committed native table and origin declarations.
+
+
 After writing provider code and tests, run that provider's network-free build from its committed
 native table and origins, and commit the resulting canonical artifacts alongside the code.
 
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
-nine: `ba_fhmzbih`, `br_ana`, `ch_foen`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`,
-and `za_dws`), the four canonical packaged catalogue artifacts must be generated from
-the live provider API before the provider is committed.
+eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`, and
+`za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
+API before the provider is committed.
+
+eleven), the four canonical packaged catalogue artifacts must be generated from the live provider
+API before the provider is committed.
+
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
