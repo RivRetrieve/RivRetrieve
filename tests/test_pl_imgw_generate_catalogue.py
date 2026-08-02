@@ -51,7 +51,7 @@ def _write_roster(path: Path, ids: list[str], *, columns: int = 4) -> None:
     with path.open("w", encoding="cp1250", newline="") as file:
         writer = csv.writer(file, delimiter=",", quoting=csv.QUOTE_ALL)
         for station_id in ids:
-            row = [f" {station_id}", "STATION", "RIVER", "00010"]
+            row = [f" {station_id}", "CHAŁUPKI", "RIVER", "00010"]
             writer.writerow(row[:columns])
 
 
