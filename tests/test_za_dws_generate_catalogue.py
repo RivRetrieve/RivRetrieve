@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import polars as pl
@@ -19,6 +19,8 @@ _METADATA_FIXTURE = _TEST_DATA_DIR / "za_dws_metadata.json"
 _NATIVE_TABLE = Path(generator.__file__).parent / "catalogue" / "native.parquet"
 ATTESTED_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 18, 47, 1, tzinfo=UTC))
 NATIVE_CONTENT_SHA256 = "7949369cf573d675cf8cb2374fa172038e10e492299572df442834d6a08e40fc"
+CATALOGUE_PATH = _NATIVE_TABLE.parent
+PRODUCT_IDS = ("discharge_daily_mean", "discharge_instantaneous", "stage_instantaneous")
 
 
 def _pdf_bytes(lines: list[str]) -> bytes:
@@ -252,6 +254,106 @@ def test_committed_native_preserves_dms_sixty_tokens() -> None:
     assert data.filter(pl.col("Station") == "B7H000")["Longitude (dd:mm:ss)"][0] == "31:49:60"
 
 
+def test_all_committed_native_dms_values_are_exact_unsigned_source_tokens() -> None:
+    before = read_native_table(_NATIVE_TABLE).data
+    pattern = r"^\d{2}:\d{2}:\d{2}$"
+    for column in ("Latitude (dd:mm:ss)", "Longitude (dd:mm:ss)"):
+        assert before.select(pl.col(column).str.contains(pattern).all()).item()
+        assert before.select(~pl.col(column).str.starts_with("+").any()).item()
+        assert before.select(~pl.col(column).str.starts_with("-").any()).item()
+        assert before.select(~pl.col(column).str.contains("[SE]").any()).item()
+
+    after = read_native_table(_NATIVE_TABLE).data
+    pl_testing.assert_frame_equal(after, before, check_exact=True)
+
+
+def test_unsigned_dms_conversion_applies_build_signs_after_exact_magnitude_association() -> None:
+    latitude, longitude = generator.convert_unsigned_dms_coordinates("25:26:44", "25:51:14", station_id="A1H001")
+
+    assert latitude == pytest.approx(-25.4455555556)
+    assert longitude == pytest.approx(25.8538888889)
+    assert latitude == -(25 + 26 / 60.0 + 44 / 3600.0)
+    assert longitude == 25 + 51 / 60.0 + 14 / 3600.0
+
+
+def test_unsigned_dms_rollover_is_arithmetic_and_signs_are_not_source_published() -> None:
+    _latitude, longitude = generator.convert_unsigned_dms_coordinates("24:00:00", "31:49:60", station_id="B7H000")
+
+    assert longitude == 31.833333333333332
+    assert "source does not carry" in generator.DMS_SIGN_CONVENTION
+    assert "publishes unsigned" in generator.DMS_SIGN_CONVENTION
+
+
+def test_unsigned_dms_conversion_failure_names_station() -> None:
+    with pytest.raises(FatalContractError, match=r"za_dws station BROKEN has invalid DMS coordinates"):
+        generator.convert_unsigned_dms_coordinates("not-dms", "25:00:00", station_id="BROKEN")
+
+
+def test_native_build_rejects_empty_or_non_exact_native_table() -> None:
+    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+
+    with pytest.raises(FatalContractError, match="must not be empty"):
+        generator.build_catalogue(NativeTable(pl.DataFrame(schema=generator.NATIVE_SCHEMA)), STATION_CATALOGUE_ORIGINS)
+    malformed = read_native_table(_NATIVE_TABLE).data.drop("Description")
+    with pytest.raises(FatalContractError, match="exact required schema"):
+        generator.build_catalogue(NativeTable(malformed), STATION_CATALOGUE_ORIGINS)
+
+
+def test_native_build_counts_ids_crs_dates_and_retained_metadata() -> None:
+    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+
+    catalogue = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
+
+    assert catalogue.stations.height == 2905
+    assert catalogue.products.height == 3
+    assert catalogue.station_products.height == 8715
+    assert set(catalogue.products["product_id"]) == set(PRODUCT_IDS)
+    assert {"A2H090Q", "B6H018M01"} <= set(catalogue.stations["station_id"])
+    assert catalogue.stations["latitude"].null_count() == 0
+    assert catalogue.stations["longitude"].null_count() == 0
+    assert set(catalogue.stations["crs"]) == {"unknown"}
+    assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
+    product_metadata = [json.loads(value) for value in catalogue.products["metadata"]]
+    assert all(
+        set(value) == {"canonical_unit", "chunk_years", "data_type", "native_unit", "notes", "value_column"}
+        for value in product_metadata
+    )
+    station_product_metadata = json.loads(catalogue.station_products["metadata"][0])
+    assert set(station_product_metadata) == {
+        "availability_note",
+        "availability_source",
+        "product_id",
+        "station_id",
+    }
+    provider_metadata = json.loads(str(catalogue.provider_info["metadata"]))
+    assert provider_metadata["data_url"] == generator.DATA_URL
+    assert provider_metadata["catalogue_url"] == generator.CATALOGUE_URL
+    assert provider_metadata["generator_input"] == "native"
+    assert "link index" in provider_metadata["station_catalogue_source"]
+    assert "River PDFs" in provider_metadata["station_catalogue_source"]
+    assert "date-only" in provider_metadata["timezone_note"]
+    assert "station" in str(catalogue.provider_info["bulk_observations"])
+
+
+def test_catalogue_date_is_only_the_maximum_native_retrieval_date() -> None:
+    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+
+    source = read_native_table(_NATIVE_TABLE).data.head(2)
+    mixed = source.with_columns(
+        pl.when(pl.col("Station") == source["Station"].item(0))
+        .then(datetime(2025, 1, 2, 12, tzinfo=UTC))
+        .otherwise(datetime(2026, 8, 2, 12, tzinfo=UTC))
+        .cast(pl.Datetime(time_unit="us", time_zone="UTC"))
+        .alias("retrieved_at")
+    )
+
+    catalogue = generator.build_catalogue(NativeTable(mixed), STATION_CATALOGUE_ORIGINS)
+
+    assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
+
+
 def test_live_index_request_failure_has_exact_issue(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(_url: str) -> tuple[bytes, int]:
         raise OSError("offline")
@@ -336,7 +438,7 @@ def test_cli_success_writes_native_table(tmp_path: Path) -> None:
 
 def test_cli_cross_mode_conflict_does_not_write(tmp_path: Path) -> None:
     output = tmp_path / "native.parquet"
-    with pytest.raises(FatalContractError, match="native-source-mode-conflict"):
+    with pytest.raises(SystemExit) as exc_info:
         generator.main(
             [
                 "--fixture",
@@ -348,6 +450,7 @@ def test_cli_cross_mode_conflict_does_not_write(tmp_path: Path) -> None:
                 str(output),
             ]
         )
+    assert exc_info.value.code != 0
     assert not output.exists()
 
 
@@ -447,3 +550,317 @@ def test_manifest_payload_predicate_halves(
     manifest.write_text(json.dumps(entries), encoding="utf-8")
     with pytest.raises(FatalContractError, match=token):
         generator.refresh_native_table_from_supplied_archive(archive, manifest)
+
+
+def _test_dms_magnitude(value: str) -> float:
+    degrees, minutes, seconds = (float(token) for token in value.split(":"))
+    return degrees + minutes / 60.0 + seconds / 3600.0
+
+
+def _expected_stations(native: NativeTable) -> pl.DataFrame:
+    rows = []
+    for row in native.data.iter_rows(named=True):
+        latitude = row["Latitude (dd:mm:ss)"]
+        longitude = row["Longitude (dd:mm:ss)"]
+        assert isinstance(latitude, str) and isinstance(longitude, str)
+        rows.append(
+            {
+                "provider_id": "za_dws",
+                "station_id": row["Station"],
+                "latitude": -_test_dms_magnitude(latitude),
+                "longitude": _test_dms_magnitude(longitude),
+                "crs": "unknown",
+            }
+        )
+    return pl.DataFrame(rows, schema=generator.STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
+
+
+def _product_metadata(
+    *, data_type: str, value_column: str, native_unit: str, canonical_unit: str, chunk_years: int, notes: str
+) -> str:
+    return json.dumps(
+        {
+            "data_type": data_type,
+            "value_column": value_column,
+            "native_unit": native_unit,
+            "canonical_unit": canonical_unit,
+            "chunk_years": chunk_years,
+            "notes": notes,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _expected_products() -> pl.DataFrame:
+    timezone_note = (
+        "Daily timestamps are date-only (YYYYMMDD), interpreted as UTC midnight (T00:00:00Z). "
+        "Point/instantaneous timestamps are SAST (Africa/Johannesburg, UTC+2, no DST) converted to UTC."
+    )
+    rows = [
+        {
+            "provider_id": "za_dws",
+            "product_id": "discharge_daily_mean",
+            "observed_property": "discharge",
+            "frequency": "daily",
+            "statistic": "mean",
+            "period_type": "interval",
+            "period_anchor": "provider_defined",
+            "unit": "m3/s",
+            "native_id": "D_AVG_FR",
+            "derived": False,
+            "derivation_method": None,
+            "metadata": _product_metadata(
+                data_type="Daily",
+                value_column="D_AVG_FR",
+                native_unit="m3/s",
+                canonical_unit="m3/s",
+                chunk_years=20,
+                notes=(
+                    "DWS daily average flow rate (D_AVG_FR column) in m³/s. "
+                    "Retrieved from DataType=Daily endpoint in 20-year windows. "
+                    f"{timezone_note}"
+                ),
+            ),
+        },
+        {
+            "provider_id": "za_dws",
+            "product_id": "discharge_instantaneous",
+            "observed_property": "discharge",
+            "frequency": "irregular",
+            "statistic": "instantaneous",
+            "period_type": "instant",
+            "period_anchor": "instant",
+            "unit": "m3/s",
+            "native_id": "COR_FLOW",
+            "derived": False,
+            "derivation_method": None,
+            "metadata": _product_metadata(
+                data_type="Point",
+                value_column="COR_FLOW",
+                native_unit="m3/s",
+                canonical_unit="m3/s",
+                chunk_years=1,
+                notes=(
+                    "DWS corrected flow (COR_FLOW column) in m³/s, derived from COR_LEVEL via rating curve. "
+                    "Retrieved from DataType=Point endpoint in 1-year windows. "
+                    f"{timezone_note}"
+                ),
+            ),
+        },
+        {
+            "provider_id": "za_dws",
+            "product_id": "stage_instantaneous",
+            "observed_property": "stage",
+            "frequency": "irregular",
+            "statistic": "instantaneous",
+            "period_type": "instant",
+            "period_anchor": "instant",
+            "unit": "m",
+            "native_id": "COR_LEVEL",
+            "derived": False,
+            "derivation_method": None,
+            "metadata": _product_metadata(
+                data_type="Point",
+                value_column="COR_LEVEL",
+                native_unit="m",
+                canonical_unit="m",
+                chunk_years=1,
+                notes=(
+                    "DWS corrected level (COR_LEVEL column) in metres. "
+                    "Retrieved from DataType=Point endpoint in 1-year windows. "
+                    f"{timezone_note}"
+                ),
+            ),
+        },
+    ]
+    return pl.DataFrame(rows, schema=generator.PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
+
+
+def _expected_station_products(native: NativeTable) -> pl.DataFrame:
+    maximum = native.data["retrieved_at"].max()
+    assert isinstance(maximum, datetime)
+    catalogue_date = maximum.date()
+    rows = []
+    for station_id in native.data["Station"]:
+        for product_id in PRODUCT_IDS:
+            metadata = {
+                "station_id": station_id,
+                "product_id": product_id,
+                "availability_source": "provider_station_catalogue_assumption",
+                "availability_note": (
+                    "Materialised as availability=unknown; the DWS station catalogue does not "
+                    "expose which data variables are available per station."
+                ),
+            }
+            rows.append(
+                {
+                    "provider_id": "za_dws",
+                    "station_id": station_id,
+                    "product_id": product_id,
+                    "availability": "unknown",
+                    "availability_reason": "DWS station catalogue does not expose per-variable availability",
+                    "start_date": None,
+                    "end_date": None,
+                    "last_catalogue_check": catalogue_date,
+                    "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+                }
+            )
+    return pl.DataFrame(rows, schema=generator.STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
+        pl.col("availability").cast(generator.AvailabilityDtype)
+    )
+
+
+def _expected_provider_info(native: NativeTable) -> dict[str, object]:
+    maximum = native.data["retrieved_at"].max()
+    assert isinstance(maximum, datetime)
+    metadata = {
+        "data_url": "https://www.dws.gov.za/Hydrology/Verified/HyData.aspx",
+        "catalogue_url": "https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx",
+        "station_catalogue_source": (
+            "HyCatalogue.aspx is a link index; the linked WMA River PDFs publish the station "
+            "records and coordinate representation headers."
+        ),
+        "variable_code": "100.00",
+        "timezone_note": (
+            "Daily timestamps are date-only (YYYYMMDD), interpreted as UTC midnight (T00:00:00Z). "
+            "Point/instantaneous timestamps are SAST (Africa/Johannesburg, UTC+2, no DST) converted to UTC."
+        ),
+        "generator_input": "native",
+    }
+    return {
+        "provider_id": "za_dws",
+        "name": "Department of Water and Sanitation — Verified Hydrology (DWS, South Africa)",
+        "live_stations": False,
+        "live_products": False,
+        "live_station_products": False,
+        "bulk_observations": (
+            "true: per (station, product) window requests; Point requests shared between "
+            "discharge_instantaneous and stage_instantaneous for the same station/window; "
+            "partial failures reported as recoverable issues"
+        ),
+        "catalogue_version": maximum.date().isoformat(),
+        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+    }
+
+
+def _canonical_value(value: object) -> object:
+    if isinstance(value, date | datetime):
+        return value.isoformat()
+    return value
+
+
+def _frame_content_sha256(frame: pl.DataFrame) -> str:
+    payload = {
+        "columns": frame.columns,
+        "rows": [[_canonical_value(value) for value in row] for row in frame.iter_rows()],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+
+
+def _provider_content_sha256(provider_info: dict[str, object]) -> str:
+    return hashlib.sha256(
+        json.dumps(provider_info, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+
+
+def test_native_build_matches_independent_exact_full_projections() -> None:
+    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+
+    native = read_native_table(_NATIVE_TABLE)
+    actual = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
+
+    pl_testing.assert_frame_equal(actual.stations, _expected_stations(native), check_exact=True)
+    pl_testing.assert_frame_equal(actual.products, _expected_products(), check_exact=True)
+    pl_testing.assert_frame_equal(actual.station_products, _expected_station_products(native), check_exact=True)
+    assert actual.provider_info == _expected_provider_info(native)
+
+
+def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
+    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+
+    provider_info = json.loads((CATALOGUE_PATH / "provider.json").read_text())
+    products = pl.read_parquet(CATALOGUE_PATH / "products.parquet")
+    stations = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
+    station_products = pl.read_parquet(CATALOGUE_PATH / "station_products.parquet")
+    generated = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
+
+    provider_digest = "61c9a3c844748c78e2fe8b22ad0ccc143a78f6c9cab392e48340ac6c7c407170"
+    products_digest = "9ec666e1593ea08c0847c1ae5e07b80bc394ac617270a1dc6246b74df6048448"
+    stations_digest = "362736b7f95535b309118c51eb5c21e8f0d0b52b06858f295fc7b44ecff2c562"
+    station_products_digest = "e31151f6129f74c8cc3cea7fd5759ccb6b48a349461bad96cfb18d5d96d4616e"
+    assert _provider_content_sha256(provider_info) == provider_digest
+    assert _frame_content_sha256(products) == products_digest
+    assert _frame_content_sha256(stations) == stations_digest
+    assert _frame_content_sha256(station_products) == station_products_digest
+    assert _provider_content_sha256(generated.provider_info) == provider_digest
+    assert _frame_content_sha256(generated.products) == products_digest
+    assert _frame_content_sha256(generated.stations) == stations_digest
+    assert _frame_content_sha256(generated.station_products) == station_products_digest
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--fixture", str(_METADATA_FIXTURE), "--out", "catalogue", "--retrieved-at", "2026-08-02T18:47:01+00:00"],
+        ["--live", "--out", "catalogue", "--retrieved-at", "2026-08-02T18:47:01+00:00"],
+        ["--archive-dir", "archive", "--manifest", "manifest", "--out", "catalogue"],
+        ["--archive-dir", "archive", "--native-out", "native.parquet"],
+        ["--manifest", "manifest", "--native-out", "native.parquet"],
+        [
+            "--fixture",
+            str(_METADATA_FIXTURE),
+            "--live",
+            "--native-out",
+            "native.parquet",
+            "--retrieved-at",
+            "2026-08-02T18:47:01+00:00",
+        ],
+        ["--fixture", str(_METADATA_FIXTURE), "--native", str(_NATIVE_TABLE), "--out", "catalogue"],
+        ["--native", str(_NATIVE_TABLE), "--native-out", "native.parquet"],
+        ["--native", str(_NATIVE_TABLE), "--out", "catalogue", "--retrieved-at", "2026-08-02T18:47:01+00:00"],
+    ],
+)
+def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        generator.main(argv)
+    assert exc_info.value.code != 0
+
+
+def test_canonical_cli_writes_only_four_native_built_artifacts(tmp_path: Path) -> None:
+    assert generator.main(["--native", str(_NATIVE_TABLE), "--out", str(tmp_path)]) == 0
+    assert {path.name for path in tmp_path.iterdir()} == {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+    }
+
+
+def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    attempts: list[str] = []
+
+    def fail(*_args: object, **_kwargs: object) -> object:
+        attempts.append("network")
+        raise AssertionError("refresh/network seam called by native build")
+
+    monkeypatch.setattr(generator, "refresh_native_table_from_live", fail)
+    monkeypatch.setattr(generator, "refresh_native_table_from_supplied_archive", fail)
+    monkeypatch.setattr(generator, "_request_bytes", fail)
+    monkeypatch.setattr(generator.urllib.request, "urlopen", fail)
+    native_bytes = _NATIVE_TABLE.read_bytes()
+
+    assert generator.main(["--native", str(_NATIVE_TABLE), "--out", str(tmp_path)]) == 0
+
+    assert attempts == []
+    assert _NATIVE_TABLE.read_bytes() == native_bytes
+    assert {path.name for path in tmp_path.iterdir()} == {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+    }
+    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

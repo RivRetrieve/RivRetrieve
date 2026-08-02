@@ -1,4 +1,4 @@
-"""DWS catalogue maintenance : refresh(CatalogueIndexCapture × Map[RiverPdfCapture]) → WithIssues[NativeTable], where each capture binds bytes to RetrievedAt; legacy canonical generation remains operational until m13-s2."""
+"""DWS catalogue maintenance : refresh(CatalogueIndexCapture × Map[RiverPdfCapture]) → WithIssues[NativeTable]; build(NativeTable × OriginDeclarations) → GeneratedZaDwsCatalogue."""
 
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import polars as pl
 from pypdf import PdfReader
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
     NativeTable,
@@ -41,10 +42,6 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.za_dws.metadata import (
-    ZaDwsProductMetadata,
-    ZaDwsStationProductMetadata,
-)
 
 PROVIDER_ID = ProviderId("za_dws")
 PROVIDER_NAME = "Department of Water and Sanitation — Verified Hydrology (DWS, South Africa)"
@@ -58,6 +55,11 @@ AVAILABILITY_NOTE = (
     "expose which data variables are available per station."
 )
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
+DMS_SIGN_CONVENTION = (
+    "DWS publishes unsigned DMS magnitudes with no leading sign, hemisphere marker, or "
+    "hemisphere note; the build applies a southern negative latitude sign and an eastern "
+    "positive longitude sign that the source does not carry."
+)
 
 MIN_REFRESH_STATIONS = 2_905
 
@@ -70,6 +72,7 @@ _STATION_PATTERN = re.compile(
 )
 
 _PDF_LINK_PATTERN = re.compile(r'href=["\']([^"\']*_River[^"\']*\.pdf)["\']', re.IGNORECASE)
+_DMS_PATTERN = re.compile(r"\d{2}:\d{2}:\d{2}")
 
 NATIVE_SOURCE_SCHEMA = pl.Schema(
     {
@@ -222,15 +225,15 @@ class ProductDefinition:
     notes: str
 
     @property
-    def metadata(self) -> ZaDwsProductMetadata:
-        return ZaDwsProductMetadata(
-            data_type=self.data_type,
-            value_column=self.value_column,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            chunk_years=self.chunk_years,
-            notes=self.notes,
-        )
+    def metadata(self) -> dict[str, object]:
+        return {
+            "data_type": self.data_type,
+            "value_column": self.value_column,
+            "native_unit": self.native_unit,
+            "canonical_unit": self.canonical_unit,
+            "chunk_years": self.chunk_years,
+            "notes": self.notes,
+        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -291,35 +294,25 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 )
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
 ) -> GeneratedZaDwsCatalogue:
-    raw = _read_fixture_json(Path(fixture_path))
-    return generate_catalogue(raw, catalogue_date=catalogue_date, generator_input="fixture")
-
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedZaDwsCatalogue:
-    raw = _fetch_live_stations()
-    return generate_catalogue(raw, catalogue_date=catalogue_date, generator_input="live")
-
-
-def generate_catalogue(
-    raw_stations: list[dict[str, object]],
-    *,
-    catalogue_date: date | None = None,
-    generator_input: str = "fixture",
-) -> GeneratedZaDwsCatalogue:
-    effective_date = catalogue_date or date.today()
+    if native_table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("za_dws native table does not have the exact required schema")
+    if native_table.data.is_empty():
+        raise FatalContractError("za_dws native table must not be empty")
     products = build_products()
-    stations = build_stations(raw_stations, generator_input=generator_input)
-    station_ids = stations["station_id"].to_list()
-    station_products = build_station_products(station_ids=station_ids, catalogue_date=effective_date)
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("za_dws native table has no valid retrieved_at values")
+    catalogue_date = maximum_retrieved_at.date()
+    station_products = build_station_products(
+        station_ids=stations["station_id"].to_list(), catalogue_date=catalogue_date
+    )
+    provider_info = build_provider_info(catalogue_date)
     _validate(provider_info, products, stations, station_products)
     return GeneratedZaDwsCatalogue(
         provider_info=provider_info,
@@ -350,18 +343,25 @@ def build_products() -> ProductCatalog:
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(
-    raw_stations: list[dict[str, object]],
-    *,
-    generator_input: str = "fixture",
-) -> StationCatalog:
-    rows = list(_iter_station_rows(raw_stations))
-    if not rows:
-        raise FatalContractError("za_dws: station build returned no rows")
-    if generator_input == "live" and len(rows) < MIN_REFRESH_STATIONS:
-        raise FatalContractError(
-            f"za_dws: live catalogue returned only {len(rows)} stations "
-            f"(expected >= {MIN_REFRESH_STATIONS}); possible fetch or parse failure"
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    rows: list[dict[str, object]] = []
+    for native_row in native_table.data.iter_rows(named=True):
+        station_id = native_row["Station"]
+        latitude_dms = native_row["Latitude (dd:mm:ss)"]
+        longitude_dms = native_row["Longitude (dd:mm:ss)"]
+        if not isinstance(station_id, str):
+            raise FatalContractError("za_dws native table contains a non-string Station")
+        if not isinstance(latitude_dms, str) or not isinstance(longitude_dms, str):
+            raise FatalContractError(f"za_dws station {station_id} has invalid DMS coordinates")
+        latitude, longitude = convert_unsigned_dms_coordinates(latitude_dms, longitude_dms, station_id=station_id)
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": station_id,
+                "latitude": latitude,
+                "longitude": longitude,
+                "crs": "unknown",
+            }
         )
     return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
@@ -376,12 +376,12 @@ def build_station_products(
         if not isinstance(station_id, str):
             raise FatalContractError("station_id must be a string")
         for d in PRODUCT_DEFINITIONS:
-            metadata = ZaDwsStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=AVAILABILITY_NOTE,
-            )
+            metadata = {
+                "station_id": station_id,
+                "product_id": d.product_id,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": AVAILABILITY_NOTE,
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -402,16 +402,17 @@ def build_station_products(
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "data_url": DATA_URL,
         "catalogue_url": CATALOGUE_URL,
-        "station_catalogue_source": "WMA River PDF files scraped from HyCatalogue.aspx",
+        "station_catalogue_source": (
+            "HyCatalogue.aspx is a link index; the linked WMA River PDFs publish the station "
+            "records and coordinate representation headers."
+        ),
         "variable_code": "100.00",
         "timezone_note": _TIMEZONE_NOTE,
-        "generator_input": generator_input,
+        "generator_input": "native",
     }
     return {
         "provider_id": PROVIDER_ID,
@@ -438,37 +439,6 @@ def write_catalogue(catalogue: GeneratedZaDwsCatalogue, out_dir: Path | str) -> 
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-
-
-# ---------------------------------------------------------------------------
-# Station row iterator
-# ---------------------------------------------------------------------------
-
-
-def _iter_station_rows(raw_stations: list[dict[str, object]]):  # type: ignore[return]
-    seen: set[str] = set()
-    for raw in raw_stations:
-        if not isinstance(raw, dict):
-            continue
-
-        station_id = _clean_text(raw.get("station_id"))
-        if station_id is None or station_id in seen:
-            continue
-
-        lat = _to_float(raw.get("latitude"))
-        lon = _to_float(raw.get("longitude"))
-        if lat is None or lon is None:
-            continue
-
-        seen.add(station_id)
-
-        yield {
-            "provider_id": PROVIDER_ID,
-            "station_id": station_id,
-            "latitude": lat,
-            "longitude": lon,
-            "crs": "unknown",
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -741,76 +711,6 @@ def _raise_on_error_issues(outcome: WithIssues[NativeTable]) -> NativeTable:
     return outcome.value
 
 
-def _fetch_live_stations() -> list[dict[str, object]]:
-    """Scrape all WMA River PDFs from HyCatalogue.aspx and parse station rows."""
-    pdf_urls = _fetch_pdf_urls()
-    if not pdf_urls:
-        raise FatalContractError("za_dws: no *_River.pdf links found on HyCatalogue.aspx")
-
-    all_stations: list[dict[str, object]] = []
-    for url in pdf_urls:
-        try:
-            stations = _parse_pdf_stations(url)
-            all_stations.extend(stations)
-        except FatalContractError:
-            raise
-        except Exception as exc:
-            raise FatalContractError(f"za_dws: failed to parse PDF {url}: {exc}") from exc
-
-    return all_stations
-
-
-def _fetch_pdf_urls() -> list[str]:
-    """Fetch HyCatalogue.aspx and return absolute URLs for all WMA River PDFs."""
-    req = urllib.request.Request(
-        CATALOGUE_URL,
-        headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            html = r.read().decode("utf-8", errors="replace")
-    except OSError as exc:
-        raise FatalContractError(f"za_dws: failed to fetch HyCatalogue.aspx: {exc}") from exc
-
-    hrefs = _PDF_LINK_PATTERN.findall(html)
-    return [h if h.startswith("http") else CATALOGUE_BASE + h.lstrip("/") for h in hrefs]
-
-
-def _parse_pdf_stations(pdf_url: str) -> list[dict[str, object]]:
-    """Download and parse one WMA River PDF into station dicts."""
-    req = urllib.request.Request(pdf_url, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            pdf_bytes = r.read()
-    except OSError as exc:
-        raise FatalContractError(f"za_dws: failed to download PDF {pdf_url}: {exc}") from exc
-
-    try:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        all_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    except Exception as exc:
-        raise FatalContractError(f"za_dws: failed to parse PDF {pdf_url}: {exc}") from exc
-
-    stations: list[dict[str, object]] = []
-    for line in all_text.split("\n"):
-        m = _STATION_PATTERN.match(line.strip())
-        if not m:
-            continue
-        station_id, _, lat_dms, lon_dms, _, _ = m.groups()
-        lat = _dms_to_dd(lat_dms, positive=False)
-        lon = _dms_to_dd(lon_dms, positive=True)
-        if lat is None or lon is None:
-            continue
-        stations.append(
-            {
-                "station_id": station_id,
-                "latitude": lat,
-                "longitude": lon,
-            }
-        )
-    return stations
-
-
 # ---------------------------------------------------------------------------
 # Fixture reader
 # ---------------------------------------------------------------------------
@@ -853,44 +753,35 @@ def _validate(
 # ---------------------------------------------------------------------------
 
 
-def _dms_to_dd(dms: str, *, positive: bool) -> float | None:
-    """Convert dd:mm:ss string to decimal degrees.
+def convert_unsigned_dms_coordinates(
+    latitude_dms: str,
+    longitude_dms: str,
+    *,
+    station_id: str,
+) -> tuple[float, float]:
+    """Transform a pair of unsigned native DMS magnitudes into signed decimal coordinates."""
 
-    South African latitude is always south (negative); longitude is always east (positive).
-    """
-    parts = dms.split(":")
-    if len(parts) != 3:
-        return None
+    # DWS publishes unsigned DMS magnitudes with no leading sign, hemisphere marker, or
+    # hemisphere note. This single representation boundary applies a southern negative
+    # latitude sign and an eastern positive longitude sign that the source does not carry.
     try:
-        d, m, s = float(parts[0]), float(parts[1]), float(parts[2])
-    except ValueError:
-        return None
-    dd = d + m / 60.0 + s / 3600.0
-    return dd if positive else -dd
+        if _DMS_PATTERN.fullmatch(latitude_dms) is None or _DMS_PATTERN.fullmatch(longitude_dms) is None:
+            raise ValueError
+        latitude_parts = latitude_dms.split(":")
+        longitude_parts = longitude_dms.split(":")
+        if len(latitude_parts) != 3 or len(longitude_parts) != 3:
+            raise ValueError
+        latitude_degrees, latitude_minutes, latitude_seconds = map(float, latitude_parts)
+        longitude_degrees, longitude_minutes, longitude_seconds = map(float, longitude_parts)
+    except ValueError as exc:
+        raise FatalContractError(f"za_dws station {station_id} has invalid DMS coordinates") from exc
+    latitude_magnitude = latitude_degrees + latitude_minutes / 60.0 + latitude_seconds / 3600.0
+    longitude_magnitude = longitude_degrees + longitude_minutes / 60.0 + longitude_seconds / 3600.0
+    return -latitude_magnitude, longitude_magnitude
 
 
-def _clean_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text or text.lower() in ("nan", "none", "null"):
-        return None
-    return text
-
-
-def _to_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _metadata_json(
-    model: ZaDwsProductMetadata | ZaDwsStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+def _metadata_json(value: Mapping[str, object]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 # ---------------------------------------------------------------------------
@@ -899,34 +790,34 @@ def _metadata_json(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate the packaged za_dws catalogue artifacts.")
-    parser.add_argument("--fixture", type=Path, help="Path to a stations JSON fixture.")
-    parser.add_argument("--live", action="store_true", help="Scrape the live DWS station PDFs.")
-    parser.add_argument("--archive-dir", type=Path, help="Directory containing the supplied capture payloads.")
+    parser = argparse.ArgumentParser(description="Refresh or build the packaged za_dws catalogue.")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--fixture", type=Path, help="Path to a stations JSON fixture.")
+    source.add_argument("--live", action="store_true", help="Scrape the live DWS station PDFs.")
+    source.add_argument("--archive-dir", type=Path, help="Directory containing supplied capture payloads.")
+    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     parser.add_argument("--manifest", type=Path, help="Manifest for supplied capture payloads.")
-    parser.add_argument("--native-out", type=Path, help="Output path for a refreshed native table.")
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--native-out", type=Path, help="Output path for a refreshed native table.")
+    destination.add_argument("--out", type=Path, help="Output directory for canonical artifacts.")
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
-    parser.add_argument("--out", type=Path, help="Output directory for legacy canonical artifacts.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     args = parser.parse_args(argv)
 
-    native_mode = args.native_out is not None or args.archive_dir is not None or args.manifest is not None
-    if native_mode:
-        supplied = args.archive_dir is not None or args.manifest is not None
-        fixture = args.fixture is not None
-        live = bool(args.live)
-        conflict = (
-            args.native_out is None
-            or args.out is not None
-            or sum((supplied, fixture, live)) != 1
-            or (supplied and (args.archive_dir is None or args.manifest is None or args.retrieved_at is not None))
-            or ((fixture or live) and args.retrieved_at is None)
-        )
-        if conflict:
-            raise FatalContractError("native-source-mode-conflict")
-        if supplied:
+    if args.archive_dir is None and args.manifest is not None:
+        parser.error("--manifest requires --archive-dir")
+    if args.archive_dir is not None and args.manifest is None:
+        parser.error("--archive-dir requires --manifest")
+
+    if args.native_out is not None:
+        if args.native is not None:
+            parser.error("--native cannot be combined with --native-out")
+        if args.archive_dir is not None and args.retrieved_at is not None:
+            parser.error("--retrieved-at is not valid with supplied-archive refresh mode")
+        if (args.fixture is not None or args.live) and args.retrieved_at is None:
+            parser.error("--retrieved-at is required with fixture or live refresh mode")
+        if args.archive_dir is not None:
             outcome = refresh_native_table_from_supplied_archive(args.archive_dir, args.manifest)
-        elif live:
+        elif args.live:
             outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
         else:
             outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=args.retrieved_at)
@@ -936,13 +827,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"za_dws native table canonical SHA-256: {digest}")
         return 0
 
-    if args.out is None or (args.fixture is None) == (not args.live):
-        raise FatalContractError("native-source-mode-conflict")
-    if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
-    else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
-    write_catalogue(catalogue, args.out)
+    if args.native is None:
+        parser.error("--out requires --native")
+    if args.retrieved_at is not None:
+        parser.error("--retrieved-at is only valid with fixture or live refresh mode")
+    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+
+    write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
     return 0
 
 

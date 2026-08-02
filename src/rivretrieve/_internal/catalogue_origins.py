@@ -89,6 +89,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("cz_chmi"),
         ProviderId("lt_lhmt"),
         ProviderId("usgs_nwis"),
+        ProviderId("za_dws"),
     }
 )
 
