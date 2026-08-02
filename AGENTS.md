@@ -96,7 +96,11 @@ and SHA-256.
   complete JSON response. Canonicalization serializes the complete parsed JSON object with
   `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8 encodes the
   result, and takes SHA-256; the result was
-  `a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The active three-row
+  `a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The committed native table
+  content digest sorts rows by `objID`, represents the columns in schema order and each row as an
+  aligned positional list, renders the UTC `retrieved_at` as an ISO 8601 string ending in `Z`, then
+  uses the same JSON serialization, UTF-8 encoding, and SHA-256 procedure; its result is
+  `b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b`. The active three-row
   fixture is an explicitly identified verbatim subset, not content-identical to the complete
   response. Its predecessor was source-incorrect in every row:
   `0-203-1-016000` carried `50.0014 / 14.4092` instead of `50.3427582 / 15.9249555`;

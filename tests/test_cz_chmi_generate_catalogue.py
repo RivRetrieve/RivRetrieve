@@ -256,15 +256,35 @@ def test_refresh_rejects_non_exact_header(header: str) -> None:
     "row",
     [
         "not-a-row",
-        EXPECTED_ROWS[0][:-1],
-        [*EXPECTED_ROWS[0], "extra"],
     ],
 )
 def test_refresh_rejects_invalid_row_shape(row: object) -> None:
     payload = _valid_payload()
-    _data_block(payload)["values"] = [row]
+    rows: list[object] = copy.deepcopy(EXPECTED_ROWS)
+    rows[1] = row
+    _data_block(payload)["values"] = rows
 
-    with pytest.raises(FatalContractError):
+    with pytest.raises(FatalContractError, match=r"cz_chmi metadata row 2 must be a list"):
+        generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
+
+
+@pytest.mark.parametrize(
+    ("row", "value_count"),
+    [
+        (EXPECTED_ROWS[0][:-1], 22),
+        ([*EXPECTED_ROWS[0], "extra"], 24),
+    ],
+)
+def test_refresh_rejects_invalid_row_width(row: list[object], value_count: int) -> None:
+    payload = _valid_payload()
+    rows: list[object] = copy.deepcopy(EXPECTED_ROWS)
+    rows[1] = row
+    _data_block(payload)["values"] = rows
+
+    with pytest.raises(
+        FatalContractError,
+        match=rf"cz_chmi metadata row 2 has {value_count} values; expected 23",
+    ):
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
@@ -391,15 +411,31 @@ def test_previous_fixture_source_defects_are_not_retained() -> None:
 def test_committed_native_table_invariants() -> None:
     table = read_native_table(NATIVE_PATH).data
     ids = sorted(cast("list[str]", table["objID"].to_list()))
-    digest = hashlib.sha256(
+    id_digest = hashlib.sha256(
         json.dumps(ids, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    canonical_table = {
+        "columns": table.columns,
+        "rows": [
+            [value.isoformat().replace("+00:00", "Z") if isinstance(value, datetime) else value for value in row]
+            for row in table.sort("objID").iter_rows()
+        ],
+    }
+    table_digest = hashlib.sha256(
+        json.dumps(
+            canonical_table,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
     ).hexdigest()
 
     assert table.height == 831
     assert table.schema == NATIVE_SCHEMA
     assert table["retrieved_at"].n_unique() == 1
     assert table["retrieved_at"].item(0) == ATTESTED_DATETIME
-    assert digest == "6af66556b1a0315cb22c40a31991ce5369c74d532e25d6a2796389ad7088bb9e"
+    assert id_digest == "6af66556b1a0315cb22c40a31991ce5369c74d532e25d6a2796389ad7088bb9e"
+    assert table_digest == "b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b"
 
 
 def test_fixture_refresh_equals_committed_source_rows_exactly() -> None:
