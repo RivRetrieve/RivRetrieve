@@ -23,8 +23,8 @@ def test_usgs_nwis_exposes_only_the_engine_stage_contract() -> None:
 
 def test_usgs_nwis_stations_offline() -> None:
     result = rr.provider("usgs_nwis").stations()
-    assert result.data.height > 1000
-    assert result.data["crs"].unique().to_list() == ["unknown"]
+    assert result.data.height == 26_258
+    assert result.data["crs"].unique().to_list() == ["EPSG:4269"]
 
 
 def test_usgs_nwis_products_offline() -> None:
@@ -43,14 +43,15 @@ def test_usgs_nwis_products_offline() -> None:
 
 def test_usgs_nwis_station_products_offline() -> None:
     result = rr.provider("usgs_nwis").station_products()
-    n_stations = rr.provider("usgs_nwis").stations().data.height
-    assert result.data.height == n_stations * 6
+    assert result.data.height == 157_548
+    assert "unknown" not in set(result.data["availability"].cast(str))
 
 
 def test_usgs_nwis_info() -> None:
     info = rr.provider("usgs_nwis").info()
     assert info.provider_id == "usgs_nwis"
     assert "USGS" in info.name or "Geological Survey" in info.name
+    assert info.catalogue_version == "2026-08-02"
 
 
 def test_usgs_nwis_row_annotation_schema_declared() -> None:
@@ -90,5 +91,5 @@ def test_usgs_nwis_station_fields() -> None:
     assert "crs" in df.columns
     row = df.filter(df["station_id"] == "07374000")
     assert row.height == 1
-    assert row["crs"][0] == "unknown"
+    assert row["crs"][0] == "EPSG:4269"
     assert abs(row["latitude"][0] - 30.44) < 0.1

@@ -94,6 +94,16 @@ the deterministic canonicalization and ordering rules, SHA-256 evidence, and a s
 comparison between the committed native content and a fresh materialization of the complete supplied
 response.
 
+### 4.1 Providers with a committed native table and origins
+
+For a provider with both a committed native table and origin declarations (currently `lt_lhmt` and
+`usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+`catalogue/products.parquet`, `catalogue/stations.parquet`, and
+`catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
+the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
+would reintroduce the nondeterminism the pure build removes. In particular, future USGS canonical
+generation must use its committed `native.parquet`, never `--live` or supplied RDB payloads.
+
 - USGS native-table attestation: the orchestrator made the following 102 requests for the ordered
   51-code (50 states plus DC) `_US_STATE_CODES` scope at `2026-08-02T01:14:11Z`:
 
@@ -230,16 +240,6 @@ response.
   from the attested response was compared with the committed native table using exact semantic frame
   equality; Parquet byte equality is not the provenance criterion.
 
-
-### 4.1 Providers with a committed native table and origins
-
-For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
-alone), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
-`catalogue/products.parquet`, `catalogue/stations.parquet`, and
-`catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
-the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
-would reintroduce the nondeterminism the pure build removes.
-
 - Lithuania native-table attestation: the orchestrator performed
   `GET https://api.meteo.lt/v1/hydro-stations` outside the executor sandbox at
   `2026-08-01T18:31:08Z`, received 97 stations, and verified the live payload content-identical to
@@ -254,7 +254,7 @@ native table and origins, and commit the resulting canonical artifacts alongside
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
-twelve), the four canonical packaged catalogue artifacts must be generated from the live provider
+eleven), the four canonical packaged catalogue artifacts must be generated from the live provider
 API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
