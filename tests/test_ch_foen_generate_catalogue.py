@@ -26,6 +26,7 @@ from rivretrieve._internal.providers.ch_foen import generate_catalogue
 
 FIXTURE_PATH = Path("tests/test_data/switzerland_metadata_locations.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
+STATIONS_PATH = NATIVE_PATH.with_name("stations.parquet")
 CATALOGUE_DATE = date(2026, 5, 28)
 ATTESTED_DATETIME = datetime(2026, 8, 2, 0, 14, 31, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
@@ -265,6 +266,15 @@ def test_ch_foen_generator_provider_json_drift_is_limited_to_bulk_observations(t
     assert changed_keys <= {"bulk_observations"}
 
 
+def test_committed_stations_match_fixture_regeneration() -> None:
+    regenerated = generate_catalogue.generate_catalogue_from_fixture(
+        FIXTURE_PATH,
+        catalogue_date=CATALOGUE_DATE,
+    ).stations
+
+    pl_testing.assert_frame_equal(pl.read_parquet(STATIONS_PATH), regenerated, check_exact=True)
+
+
 def test_swiss_fixture_matches_attested_complete_response() -> None:
     response = _fixture_response()
     canonical = json.dumps(
@@ -289,7 +299,7 @@ def test_refresh_native_table_has_exact_ordered_schema_and_preserves_source() ->
 
     assert outcome.value.data.schema == NATIVE_SCHEMA
     assert outcome.issues == ()
-    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame())
+    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(), check_exact=True)
 
 
 def test_refresh_native_table_normalizes_only_integer_details_id() -> None:
@@ -335,7 +345,7 @@ def test_refresh_native_table_from_fixture_is_network_free(monkeypatch: pytest.M
         retrieved_at=ATTESTED_RETRIEVED_AT,
     )
 
-    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame())
+    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(), check_exact=True)
 
 
 def test_refresh_native_table_from_live_exercises_transport_seam_offline(
@@ -353,7 +363,7 @@ def test_refresh_native_table_from_live_exercises_transport_seam_offline(
     outcome = generate_catalogue.refresh_native_table_from_live(retrieved_at=ATTESTED_RETRIEVED_AT)
 
     assert calls == [(generate_catalogue.SOURCE_URL, 30)]
-    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame())
+    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(), check_exact=True)
 
 
 def test_live_refresh_rejects_implausibly_small_station_count(
@@ -483,7 +493,11 @@ def test_native_output_cli_writes_expected_table(tmp_path: Path) -> None:
     )
 
     assert result == 0
-    pl_testing.assert_frame_equal(read_native_table(output_path).data, _expected_native_frame())
+    pl_testing.assert_frame_equal(
+        read_native_table(output_path).data,
+        _expected_native_frame(),
+        check_exact=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -521,4 +535,4 @@ def test_committed_native_table_matches_attested_rematerialization() -> None:
     committed = read_native_table(NATIVE_PATH).data
 
     assert committed.schema == NATIVE_SCHEMA
-    pl_testing.assert_frame_equal(committed, _expected_native_frame())
+    pl_testing.assert_frame_equal(committed, _expected_native_frame(), check_exact=True)
