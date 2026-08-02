@@ -1,17 +1,22 @@
+"""USGS catalogue maintenance : refresh(SeriesRdbRows × ExpandedRdbRows, RetrievedAt) → WithIssues[NativeTable]; digest : NativeTable → SHA256; legacy catalogue generation remains operational."""
+
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+from enum import Enum
 from pathlib import Path
 from typing import cast
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -23,6 +28,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis.metadata import (
     UsgsNwisProductMetadata,
@@ -35,6 +41,14 @@ METADATA_BASE_URL = "https://waterservices.usgs.gov/nwis/site/"
 METADATA_URL = (
     METADATA_BASE_URL
     + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&siteOutput=expanded&stateCd={state_cd}"
+)
+SERIES_CATALOGUE_URL = (
+    METADATA_BASE_URL
+    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&seriesCatalogOutput=true"
+)
+EXPANDED_SITE_URL = (
+    METADATA_BASE_URL
+    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
 )
 # USGS site service requires a geographic filter; nationwide queries return HTTP 400.
 # We iterate over all US state FIPS codes.
@@ -91,6 +105,182 @@ _US_STATE_CODES = [
     "WY",
     "DC",
 ]
+
+SERIES_HEADER = (
+    "agency_cd",
+    "site_no",
+    "station_nm",
+    "site_tp_cd",
+    "dec_lat_va",
+    "dec_long_va",
+    "coord_acy_cd",
+    "dec_coord_datum_cd",
+    "alt_va",
+    "alt_acy_va",
+    "alt_datum_cd",
+    "huc_cd",
+    "data_type_cd",
+    "parm_cd",
+    "stat_cd",
+    "ts_id",
+    "loc_web_ds",
+    "medium_grp_cd",
+    "parm_grp_cd",
+    "srs_id",
+    "access_cd",
+    "begin_date",
+    "end_date",
+    "count_nu",
+)
+SERIES_FORMAT = (
+    "5s",
+    "15s",
+    "50s",
+    "7s",
+    "16s",
+    "16s",
+    "1s",
+    "10s",
+    "8s",
+    "3s",
+    "10s",
+    "16s",
+    "2s",
+    "5s",
+    "5s",
+    "5n",
+    "30s",
+    "3s",
+    "3s",
+    "5n",
+    "4n",
+    "20d",
+    "20d",
+    "5n",
+)
+EXPANDED_HEADER = (
+    "agency_cd",
+    "site_no",
+    "station_nm",
+    "site_tp_cd",
+    "lat_va",
+    "long_va",
+    "dec_lat_va",
+    "dec_long_va",
+    "coord_meth_cd",
+    "coord_acy_cd",
+    "coord_datum_cd",
+    "dec_coord_datum_cd",
+    "district_cd",
+    "state_cd",
+    "county_cd",
+    "country_cd",
+    "land_net_ds",
+    "map_nm",
+    "map_scale_fc",
+    "alt_va",
+    "alt_meth_cd",
+    "alt_acy_va",
+    "alt_datum_cd",
+    "huc_cd",
+    "basin_cd",
+    "topo_cd",
+    "instruments_cd",
+    "construction_dt",
+    "inventory_dt",
+    "drain_area_va",
+    "contrib_drain_area_va",
+    "tz_cd",
+    "local_time_fg",
+    "reliability_cd",
+    "gw_file_cd",
+    "nat_aqfr_cd",
+    "aqfr_cd",
+    "aqfr_type_cd",
+    "well_depth_va",
+    "hole_depth_va",
+    "depth_src_cd",
+    "project_no",
+)
+EXPANDED_FORMAT = (
+    "5s",
+    "15s",
+    "50s",
+    "7s",
+    "16s",
+    "16s",
+    "16s",
+    "16s",
+    "1s",
+    "1s",
+    "10s",
+    "10s",
+    "3s",
+    "2s",
+    "3s",
+    "2s",
+    "23s",
+    "20s",
+    "7s",
+    "8s",
+    "1s",
+    "3s",
+    "10s",
+    "16s",
+    "2s",
+    "1s",
+    "30s",
+    "8s",
+    "8s",
+    "8s",
+    "8s",
+    "6s",
+    "1s",
+    "1s",
+    "30s",
+    "10s",
+    "8s",
+    "1s",
+    "8s",
+    "8s",
+    "1s",
+    "12s",
+)
+SHARED_STATION_FIELDS = SERIES_HEADER[:12]
+SERIES_ONLY_FIELDS = SERIES_HEADER[12:]
+NATIVE_SCHEMA = pl.Schema(
+    {
+        **dict.fromkeys(EXPANDED_HEADER, pl.String),
+        **{name: pl.List(pl.String) for name in SERIES_ONLY_FIELDS},
+        "retrieved_at": pl.Datetime(time_unit="us", time_zone="UTC"),
+    }
+)
+
+
+def native_table_content_sha256(table: NativeTable) -> str:
+    """Return the SHA-256 of the compact canonical JSON table in schema and row order."""
+    if table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS native table does not have the exact required schema")
+
+    digest = hashlib.sha256()
+    digest.update(b"[")
+    for index, row in enumerate(table.data.iter_rows()):
+        if index:
+            digest.update(b",")
+        values = [
+            value.isoformat(timespec="microseconds").replace("+00:00", "Z") if isinstance(value, datetime) else value
+            for value in row
+        ]
+        digest.update(json.dumps(values, separators=(",", ":"), ensure_ascii=False).encode())
+    digest.update(b"]")
+    return digest.hexdigest()
+
+
+class NativeInputKind(Enum):
+    FIXTURE = "fixture"
+    SUPPLIED_NATIONAL = "supplied-national"
+
+
 AVAILABILITY_REASON = (
     "USGS NWIS site catalogue does not expose per-variable station availability at catalogue-generation time"
 )
@@ -237,6 +427,278 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         notes=("Instantaneous gage height (15-minute or sub-hourly). Native unit is feet; converted to metres."),
     ),
 )
+
+
+def _iter_strict_rdb(
+    content: str,
+    expected_header: tuple[str, ...],
+    expected_format: tuple[str, ...],
+    *,
+    source_name: str,
+) -> Iterator[dict[str, str]]:
+    lines = (line for line in content.splitlines() if not line.startswith("#"))
+    try:
+        header_line = next(lines)
+    except StopIteration as exc:
+        raise FatalContractError(f"{source_name} RDB is empty") from exc
+    header = tuple(header_line.split("\t"))
+    if header != expected_header:
+        raise FatalContractError(f"{source_name} RDB header does not match the required ordered schema")
+    try:
+        format_line = next(lines)
+    except StopIteration as exc:
+        raise FatalContractError(f"{source_name} RDB is missing its format row") from exc
+    format_row = tuple(format_line.split("\t"))
+    if format_row != expected_format:
+        raise FatalContractError(f"{source_name} RDB format row does not match the required ordered schema")
+
+    row_count = 0
+    for line_number, line in enumerate(lines, start=3):
+        fields = tuple(line.split("\t"))
+        if fields in (expected_header, expected_format):
+            raise FatalContractError(
+                f"{source_name} RDB contains a repeated header or format row at line {line_number}"
+            )
+        if len(fields) != len(expected_header):
+            raise FatalContractError(
+                f"{source_name} RDB row {line_number} has {len(fields)} fields; expected {len(expected_header)}"
+            )
+        row_count += 1
+        yield dict(zip(expected_header, fields, strict=True))
+    if row_count == 0:
+        raise FatalContractError(f"{source_name} RDB data is empty")
+
+
+def parse_series_rdb(content: str) -> list[dict[str, str]]:
+    return list(_iter_strict_rdb(content, SERIES_HEADER, SERIES_FORMAT, source_name="series catalogue"))
+
+
+def parse_expanded_rdb(content: str) -> list[dict[str, str]]:
+    return list(_iter_strict_rdb(content, EXPANDED_HEADER, EXPANDED_FORMAT, source_name="expanded site"))
+
+
+def _validated_source_row(
+    item: object,
+    expected_header: tuple[str, ...],
+    *,
+    row_kind: str,
+) -> dict[str, str]:
+    if not isinstance(item, dict):
+        raise FatalContractError(f"USGS {row_kind} row must be an object")
+    row = cast("dict[object, object]", item)
+    if "site_no" not in row:
+        raise FatalContractError(f"USGS {row_kind} row has absent site_no")
+    if tuple(row) != expected_header or any(not isinstance(value, str) for value in row.values()):
+        raise FatalContractError(f"USGS {row_kind} row must have the exact ordered all-string source schema")
+    return cast("dict[str, str]", row)
+
+
+def _required_site_no(row: dict[str, str], *, row_kind: str) -> str:
+    site_no = row["site_no"]
+    if not site_no or site_no.isspace():
+        raise FatalContractError(f"USGS {row_kind} row has absent or blank site_no")
+    return site_no
+
+
+def _validate_national_products(series_records: dict[str, list[tuple[str, ...]]]) -> None:
+    matches = {
+        ("dv" if definition.endpoint == "dv" else "uv", definition.param_code, definition.stat_code or ""): 0
+        for definition in PRODUCT_DEFINITIONS
+    }
+    data_type_index = SERIES_ONLY_FIELDS.index("data_type_cd")
+    parm_index = SERIES_ONLY_FIELDS.index("parm_cd")
+    stat_index = SERIES_ONLY_FIELDS.index("stat_cd")
+    for records in series_records.values():
+        for record in records:
+            key = (record[data_type_index], record[parm_index], record[stat_index])
+            if key in matches:
+                matches[key] += 1
+    zero_matches = [key for key, count in matches.items() if count == 0]
+    if zero_matches:
+        raise FatalContractError(
+            f"USGS supplied-national input has products with zero matching series rows: {zero_matches}"
+        )
+
+
+def refresh_native_table(
+    series_rows: Iterable[object],
+    expanded_rows: Iterable[object],
+    *,
+    retrieved_at: RetrievedAt,
+    input_kind: NativeInputKind,
+) -> WithIssues[NativeTable]:
+    expanded_by_site: dict[str, dict[str, str]] = {}
+    for item in expanded_rows:
+        row = _validated_source_row(item, EXPANDED_HEADER, row_kind="expanded")
+        site_no = _required_site_no(row, row_kind="expanded")
+        if site_no in expanded_by_site:
+            raise FatalContractError(f"USGS expanded input contains duplicate site_no {site_no!r}")
+        expanded_by_site[site_no] = row
+    if not expanded_by_site:
+        raise FatalContractError("USGS expanded input is empty")
+
+    series_records: dict[str, list[tuple[str, ...]]] = {}
+    series_shared: dict[str, tuple[str, ...]] = {}
+    data_types: set[str] = set()
+    for item in series_rows:
+        row = _validated_source_row(item, SERIES_HEADER, row_kind="series")
+        site_no = _required_site_no(row, row_kind="series")
+        shared = tuple(row[name] for name in SHARED_STATION_FIELDS)
+        previous_shared = series_shared.setdefault(site_no, shared)
+        if shared != previous_shared:
+            differing = next(
+                name
+                for name, previous, current in zip(SHARED_STATION_FIELDS, previous_shared, shared, strict=True)
+                if previous != current
+            )
+            raise FatalContractError(f"USGS series rows conflict on {differing} for site_no {site_no!r}")
+        series_records.setdefault(site_no, []).append(tuple(row[name] for name in SERIES_ONLY_FIELDS))
+        data_types.add(row["data_type_cd"])
+    if not series_records:
+        raise FatalContractError("USGS series input is empty")
+
+    series_sites = set(series_records)
+    expanded_sites = set(expanded_by_site)
+    if series_sites != expanded_sites:
+        raise FatalContractError(
+            "USGS series and expanded site sets differ: "
+            f"expanded_only={len(expanded_sites - series_sites)}, series_only={len(series_sites - expanded_sites)}"
+        )
+    if not {"dv", "uv"}.issubset(data_types):
+        raise FatalContractError("USGS series input must contain both dv and uv data_type_cd values")
+    if input_kind is NativeInputKind.SUPPLIED_NATIONAL and len(expanded_by_site) < _LIVE_MIN_STATIONS:
+        raise FatalContractError(
+            f"USGS supplied-national native input has only {len(expanded_by_site):,} stations; "
+            f"expected at least {_LIVE_MIN_STATIONS:,}"
+        )
+    if input_kind is NativeInputKind.SUPPLIED_NATIONAL:
+        _validate_national_products(series_records)
+
+    native_rows: list[dict[str, object]] = []
+    for site_no in sorted(expanded_by_site):
+        expanded = expanded_by_site[site_no]
+        shared = series_shared[site_no]
+        for name, series_value in zip(SHARED_STATION_FIELDS, shared, strict=True):
+            if expanded[name] != series_value:
+                raise FatalContractError(f"USGS passes conflict on {name} for site_no {site_no!r}")
+        records = sorted(series_records[site_no])
+        native_row: dict[str, object] = dict(expanded)
+        native_row.update(
+            {name: [record[index] for record in records] for index, name in enumerate(SERIES_ONLY_FIELDS)}
+        )
+        native_rows.append(native_row)
+
+    source = pl.DataFrame(native_rows, schema=pl.Schema(dict(list(NATIVE_SCHEMA.items())[:-1])))
+    native = stamp_native_table(source, retrieved_at)
+    if native.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS native table does not have the exact required schema")
+    return WithIssues(value=native, issues=())
+
+
+def refresh_native_table_from_fixtures(
+    series_fixture_path: Path | str,
+    expanded_fixture_path: Path | str,
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    return refresh_native_table(
+        _read_fixture_json(Path(series_fixture_path)),
+        _read_fixture_json(Path(expanded_fixture_path)),
+        retrieved_at=retrieved_at,
+        input_kind=NativeInputKind.FIXTURE,
+    )
+
+
+def _read_rdb_file(
+    path: Path,
+    expected_header: tuple[str, ...],
+    expected_format: tuple[str, ...],
+    *,
+    source_name: str,
+) -> Iterator[dict[str, str]]:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise FatalContractError(f"Unable to read USGS RDB file: {path}") from exc
+    yield from _iter_strict_rdb(content, expected_header, expected_format, source_name=source_name)
+
+
+def refresh_native_table_from_rdb_directory(
+    rdb_directory: Path | str,
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    directory = Path(rdb_directory)
+    series_rows = (
+        row
+        for state_cd in _US_STATE_CODES
+        for row in _read_rdb_file(
+            directory / f"{state_cd}_series.rdb",
+            SERIES_HEADER,
+            SERIES_FORMAT,
+            source_name=f"{state_cd} series catalogue",
+        )
+    )
+    expanded_rows = (
+        row
+        for state_cd in _US_STATE_CODES
+        for row in _read_rdb_file(
+            directory / f"{state_cd}_expanded.rdb",
+            EXPANDED_HEADER,
+            EXPANDED_FORMAT,
+            source_name=f"{state_cd} expanded site",
+        )
+    )
+    return refresh_native_table(
+        series_rows,
+        expanded_rows,
+        retrieved_at=retrieved_at,
+        input_kind=NativeInputKind.SUPPLIED_NATIONAL,
+    )
+
+
+def _read_rdb_url(url: str, *, source_name: str, series: bool) -> list[dict[str, str]]:
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            if response.status < 200 or response.status >= 300:
+                raise FatalContractError(f"USGS site service request failed with HTTP {response.status}: {url}")
+            content = response.read().decode("utf-8")
+    except OSError as exc:
+        raise FatalContractError(f"USGS site service request failed: {url}") from exc
+    if series:
+        return parse_series_rdb(content)
+    return parse_expanded_rdb(content)
+
+
+def read_live_native_rows() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    series_rows: list[dict[str, str]] = []
+    expanded_rows: list[dict[str, str]] = []
+    for state_cd in _US_STATE_CODES:
+        series_rows.extend(
+            _read_rdb_url(
+                SERIES_CATALOGUE_URL.format(state_cd=state_cd),
+                source_name=f"{state_cd} series catalogue",
+                series=True,
+            )
+        )
+        expanded_rows.extend(
+            _read_rdb_url(
+                EXPANDED_SITE_URL.format(state_cd=state_cd),
+                source_name=f"{state_cd} expanded site",
+                series=False,
+            )
+        )
+    return series_rows, expanded_rows
+
+
+def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[NativeTable]:
+    series_rows, expanded_rows = read_live_native_rows()
+    return refresh_native_table(
+        series_rows,
+        expanded_rows,
+        retrieved_at=retrieved_at,
+        input_kind=NativeInputKind.SUPPLIED_NATIONAL,
+    )
 
 
 def generate_catalogue_from_fixture(
@@ -524,19 +986,52 @@ def _optional_float(value: object, name: str) -> float | None:
     return None
 
 
+def _parse_retrieved_at(value: str) -> RetrievedAt:
+    if not value.endswith("Z") or value.count("Z") != 1:
+        raise argparse.ArgumentTypeError("retrieved_at must be an ISO 8601 UTC instant ending in Z")
+    try:
+        parsed = datetime.fromisoformat(f"{value[:-1]}+00:00")
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("retrieved_at must be an ISO 8601 UTC instant ending in Z") from exc
+    try:
+        return RetrievedAt(parsed)
+    except FatalContractError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the packaged usgs_nwis catalogue artifacts.")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to a USGS sites JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live USGS NWIS site service.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for provider.json and parquet files.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
+    source.add_argument("--rdb-dir", type=Path, help="Absolute directory containing the two attested RDB passes.")
+    parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
+    parser.add_argument("--native-out", type=Path, help="Output path for an attested native Parquet table.")
+    parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
+    parser.add_argument("--catalogue-date", type=date.fromisoformat)
     args = parser.parse_args(argv)
 
+    if args.rdb_dir is not None:
+        if not args.rdb_dir.is_absolute():
+            parser.error("--rdb-dir must be an absolute path")
+        if args.native_out is None or args.retrieved_at is None:
+            parser.error("native RDB mode requires --native-out and --retrieved-at")
+        if args.out is not None or args.catalogue_date is not None:
+            parser.error("native RDB mode cannot be combined with --out or --catalogue-date")
+        outcome = refresh_native_table_from_rdb_directory(args.rdb_dir, retrieved_at=args.retrieved_at)
+        write_native_table(outcome.value, args.native_out)
+        print(f"USGS native table canonical SHA-256: {native_table_content_sha256(outcome.value)}")
+        return 0
+
+    if args.out is None:
+        parser.error("legacy fixture/live mode requires --out")
+    if args.native_out is not None or args.retrieved_at is not None:
+        parser.error("legacy fixture/live mode cannot be combined with --native-out or --retrieved-at")
+    catalogue_date = args.catalogue_date or date.today()
     if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
+        catalogue = generate_catalogue_from_live(catalogue_date=catalogue_date)
     else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
+        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=catalogue_date)
     write_catalogue(catalogue, args.out)
     return 0
 
