@@ -1,3 +1,5 @@
+"""Swiss catalogue maintenance : refresh(ExistenzHydroLocations, RetrievedAt) → WithIssues[NativeTable]; generate(ExistenzHydroLocations) → GeneratedChFoenCatalogue."""
+
 from __future__ import annotations
 
 import argparse
@@ -5,13 +7,14 @@ import json
 import urllib.request
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import cast
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -23,6 +26,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ch_foen.metadata import (
     ChFoenProductMetadata,
@@ -35,6 +39,27 @@ SOURCE_URL = "https://api.existenz.ch/apiv1/hydro/locations"
 LEGACY_SOURCE = "thirdparty/RivRetrieve-Python @ origin/switzerland"
 AVAILABILITY_REASON = "Existenz.ch locations catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
+LIVE_MINIMUM_STATIONS = 200
+
+NATIVE_SOURCE_SCHEMA = pl.Schema(
+    {
+        "payload_key": pl.String,
+        "id": pl.Int64,
+        "name": pl.String,
+        "details.id": pl.String,
+        "details.name": pl.String,
+        "details.water-body-name": pl.String,
+        "details.water-body-type": pl.String,
+        "details.chx": pl.Int64,
+        "details.chy": pl.Int64,
+        "details.lat": pl.Float64,
+        "details.lon": pl.Float64,
+        "source": pl.String,
+        "apiurl": pl.String,
+        "opendata": pl.String,
+        "license": pl.String,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -171,6 +196,37 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 EXPECTED_LEGACY_VARIABLES = frozenset(definition.legacy_variable for definition in PRODUCT_DEFINITIONS)
 
 
+def refresh_native_table(
+    raw_payload: Mapping[str, object],
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    envelope = _envelope_strings(raw_payload)
+    payload = _station_payload(raw_payload)
+    rows = [_native_source_row(payload_key, station, envelope) for payload_key, station in payload.items()]
+    source_rows = pl.DataFrame(rows, schema=NATIVE_SOURCE_SCHEMA).sort("payload_key")
+    return WithIssues(value=stamp_native_table(source_rows, retrieved_at), issues=())
+
+
+def refresh_native_table_from_fixture(
+    fixture_path: Path | str,
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    return refresh_native_table(
+        _read_fixture_json(Path(fixture_path)),
+        retrieved_at=retrieved_at,
+    )
+
+
+def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[NativeTable]:
+    raw_payload = _read_live_json(SOURCE_URL)
+    outcome = refresh_native_table(raw_payload, retrieved_at=retrieved_at)
+    if outcome.value.data.height < LIVE_MINIMUM_STATIONS:
+        raise FatalContractError(f"Swiss metadata live response returned fewer than {LIVE_MINIMUM_STATIONS} stations")
+    return outcome
+
+
 def generate_catalogue_from_fixture(
     fixture_path: Path | str,
     *,
@@ -206,6 +262,7 @@ def generate_catalogue(
     generator_input: str = "fixture",
 ) -> GeneratedChFoenCatalogue:
     effective_date = catalogue_date or date.today()
+    _envelope_strings(raw_payload)
     payload = _station_payload(raw_payload)
     products = build_products(product_definitions)
     stations = build_stations(payload)
@@ -292,14 +349,15 @@ def build_provider_info(
     *,
     generator_input: str,
 ) -> dict[str, object]:
+    envelope = _envelope_strings(raw_payload)
     metadata = {
         "source_url": SOURCE_URL,
         "legacy_source": LEGACY_SOURCE,
         "generator_input": generator_input,
-        "fixture_source": _optional_string(raw_payload.get("source")),
-        "fixture_apiurl": _optional_string(raw_payload.get("apiurl")),
-        "fixture_opendata": _optional_string(raw_payload.get("opendata")),
-        "fixture_license": _optional_string(raw_payload.get("license")),
+        "fixture_source": envelope["source"],
+        "fixture_apiurl": envelope["apiurl"],
+        "fixture_opendata": envelope["opendata"],
+        "fixture_license": envelope["license"],
     }
     return {
         "provider_id": PROVIDER_ID,
@@ -348,24 +406,84 @@ def write_catalogue(catalogue: GeneratedChFoenCatalogue, out_dir: Path | str) ->
 
 
 def _station_row(station_key: str, station: object) -> dict[str, object]:
-    if not isinstance(station, dict):
-        raise FatalContractError(f"Station {station_key} must be an object")
-    station_data = cast("dict[str, object]", station)
-    details = station_data.get("details")
-    if not isinstance(details, dict):
-        raise FatalContractError(f"Station {station_key} is missing details")
-    details_data = cast("dict[str, object]", details)
-
-    station_id_raw = details_data.get("id") or station_key
-    native_id = _required_string(str(station_id_raw).strip(), f"Station {station_key} id")
-    latitude = _required_float(details_data.get("lat"), f"Station {station_key} latitude")
-    longitude = _required_float(details_data.get("lon"), f"Station {station_key} longitude")
+    source_row = _validated_station_source(station_key, station)
     return {
         "provider_id": PROVIDER_ID,
-        "station_id": native_id,
-        "latitude": latitude,
-        "longitude": longitude,
+        "station_id": source_row["details.id"],
+        "latitude": source_row["details.lat"],
+        "longitude": source_row["details.lon"],
         "crs": "unknown",
+    }
+
+
+def _native_source_row(
+    payload_key: str,
+    station: object,
+    envelope: Mapping[str, str],
+) -> dict[str, object]:
+    return {**_validated_station_source(payload_key, station), **envelope}
+
+
+def _validated_station_source(station_key: str, station: object) -> dict[str, object]:
+    payload_key = _required_string(station_key, "Station payload key")
+    if not isinstance(station, dict):
+        raise FatalContractError(f"Station {payload_key} must be an object")
+    station_data = cast("dict[str, object]", station)
+    station_id = _required_integer(
+        _required_field(station_data, "id", f"Station {payload_key}"), f"Station {payload_key} id"
+    )
+    station_name = _required_string(
+        _required_field(station_data, "name", f"Station {payload_key}"),
+        f"Station {payload_key} name",
+    )
+    details = _required_field(station_data, "details", f"Station {payload_key}")
+    if not isinstance(details, dict):
+        raise FatalContractError(f"Station {payload_key} details must be an object")
+    details_data = cast("dict[str, object]", details)
+
+    return {
+        "payload_key": payload_key,
+        "id": station_id,
+        "name": station_name,
+        "details.id": _required_station_identifier(
+            _required_field(details_data, "id", f"Station {payload_key} details"),
+            f"Station {payload_key} details.id",
+        ),
+        "details.name": _required_string(
+            _required_field(details_data, "name", f"Station {payload_key} details"),
+            f"Station {payload_key} details.name",
+        ),
+        "details.water-body-name": _required_string(
+            _required_field(details_data, "water-body-name", f"Station {payload_key} details"),
+            f"Station {payload_key} details.water-body-name",
+        ),
+        "details.water-body-type": _required_string(
+            _required_field(details_data, "water-body-type", f"Station {payload_key} details"),
+            f"Station {payload_key} details.water-body-type",
+        ),
+        "details.chx": _required_integer(
+            _required_field(details_data, "chx", f"Station {payload_key} details"),
+            f"Station {payload_key} details.chx",
+        ),
+        "details.chy": _required_integer(
+            _required_field(details_data, "chy", f"Station {payload_key} details"),
+            f"Station {payload_key} details.chy",
+        ),
+        "details.lat": _required_float(
+            _required_field(details_data, "lat", f"Station {payload_key} details"),
+            f"Station {payload_key} details.lat",
+        ),
+        "details.lon": _required_float(
+            _required_field(details_data, "lon", f"Station {payload_key} details"),
+            f"Station {payload_key} details.lon",
+        ),
+    }
+
+
+def _envelope_strings(raw_payload: Mapping[str, object]) -> dict[str, str]:
+    return {
+        field: _required_string(_required_field(raw_payload, field, "Swiss metadata response"), field)
+        for field in ("source", "apiurl", "opendata", "license")
     }
 
 
@@ -433,14 +551,31 @@ def _required_string(value: object, name: str) -> str:
     return stripped
 
 
-def _optional_string(value: object) -> str | None:
-    return value if isinstance(value, str) else None
+def _required_field(mapping: Mapping[str, object], field: str, context: str) -> object:
+    try:
+        return mapping[field]
+    except KeyError as exc:
+        raise FatalContractError(f"{context} is missing required field '{field}'") from exc
+
+
+def _required_station_identifier(value: object, name: str) -> str:
+    if type(value) is int:
+        return str(value)
+    return _required_string(value, name)
+
+
+def _required_integer(value: object, name: str) -> int:
+    if type(value) is int:
+        return value
+    raise FatalContractError(f"{name} is required and must be an integer")
 
 
 def _required_float(value: object, name: str) -> float:
+    if isinstance(value, bool):
+        raise FatalContractError(f"{name} is required and must be numeric")
     if isinstance(value, int | float):
         return float(value)
-    raise FatalContractError(f"{name} is required")
+    raise FatalContractError(f"{name} is required and must be numeric")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -448,14 +583,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to an Existenz.ch hydro locations JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live Existenz.ch hydro locations endpoint.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for provider.json and parquet files.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
+    destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
+    parser.add_argument("--catalogue-date", type=date.fromisoformat)
+    parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     args = parser.parse_args(argv)
 
+    if args.native_out is not None:
+        if args.retrieved_at is None:
+            parser.error("--retrieved-at is required with --native-out")
+        if args.catalogue_date is not None:
+            parser.error("--catalogue-date is only valid with --out")
+        if args.live:
+            native_outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
+        else:
+            native_outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=args.retrieved_at)
+        write_native_table(native_outcome.value, args.native_out)
+        return 0
+
+    if args.retrieved_at is not None:
+        parser.error("--retrieved-at is only valid with --native-out")
+    catalogue_date = args.catalogue_date or date.today()
     if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
+        catalogue = generate_catalogue_from_live(catalogue_date=catalogue_date)
     else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
+        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=catalogue_date)
     write_catalogue(catalogue, args.out)
     return 0
 

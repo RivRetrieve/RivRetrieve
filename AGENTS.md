@@ -115,6 +115,16 @@ API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
+- Switzerland native-table attestation: the orchestrator performed
+  `GET https://api.existenz.ch/apiv1/hydro/locations` outside the executor sandbox at
+  `2026-08-02T00:14:31Z`, observed 246 stations under `payload`, and verified the supplied complete
+  response byte-identical to the replacement `tests/test_data/switzerland_metadata_locations.json`.
+  Canonicalization sorts all JSON object keys, serializes the complete response with compact
+  separators `(',', ':')` and `ensure_ascii=False`, UTF-8 encodes it, and takes SHA-256, producing
+  `7471e85de4f4a6d1e0968a9fe35a962c98729a4bb3b244e0991818f3038ce24a`. The sole integer
+  `details.id`, at station `2071`, is intentionally normalized to string so the native Parquet
+  column has one scalar dtype. Switzerland remains in this regime until origin declarations are
+  committed.
 - After writing all provider code and tests, run
   `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to
   produce the four canonical packaged artifacts.
