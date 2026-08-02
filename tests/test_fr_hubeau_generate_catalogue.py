@@ -209,6 +209,59 @@ def test_native_list_value_must_inhabit_schema() -> None:
     )
 
 
+def test_native_float_value_must_be_finite() -> None:
+    for invalid_value in (float("nan"), float("inf")):
+        hydro, temperature = _sample_payloads()
+        station_id = hydro["data"][0]["code_station"]
+        hydro["data"][0]["longitude_station"] = invalid_value
+        _assert_issue(
+            _refresh(hydro, temperature),
+            f"fr_hubeau hydrometry station {station_id} has source values outside the native schema",
+        )
+
+
+def test_native_float_value_must_not_be_boolean() -> None:
+    hydro, temperature = _sample_payloads()
+    station_id = hydro["data"][0]["code_station"]
+    hydro["data"][0]["longitude_station"] = True
+    _assert_issue(
+        _refresh(hydro, temperature),
+        f"fr_hubeau hydrometry station {station_id} has source values outside the native schema",
+    )
+
+
+def test_native_integer_value_must_not_be_boolean() -> None:
+    hydro, temperature = _sample_payloads()
+    station_id = hydro["data"][0]["code_station"]
+    hydro["data"][0]["code_projection"] = True
+    _assert_issue(
+        _refresh(hydro, temperature),
+        f"fr_hubeau hydrometry station {station_id} has source values outside the native schema",
+    )
+
+
+def test_native_en_service_value_must_be_boolean() -> None:
+    hydro, temperature = _sample_payloads()
+    station_id = hydro["data"][0]["code_station"]
+    hydro["data"][0]["en_service"] = 1
+    _assert_issue(
+        _refresh(hydro, temperature),
+        f"fr_hubeau hydrometry station {station_id} has source values outside the native schema",
+    )
+
+
+def test_native_upstream_field_addition_changes_nothing() -> None:
+    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
+    temperature = _full_payload(_TEMP_FULL_FIXTURE)
+    hydro["data"][0]["upstream_new_field"] = "ignored"
+
+    result = _refresh(hydro, temperature)
+
+    assert result.issues == ()
+    assert "upstream_new_field" not in result.value.data.columns
+    assert result.value.data.shape == (7323, 73)
+
+
 @pytest.mark.parametrize(
     "geometry",
     [[], {"coordinates": [1.0, 2.0], "crs": {"properties": {"name": 3}, "type": "name"}, "type": "Point"}],
@@ -252,6 +305,23 @@ def test_native_cross_endpoint_collision_is_an_issue() -> None:
     station_id = hydro["data"][0]["code_station"]
     temperature["data"][0]["code_station"] = station_id
     _assert_issue(_refresh(hydro, temperature), f"fr_hubeau station {station_id} occurs in both station endpoints")
+
+
+def test_native_hydrometry_station_count_is_exact() -> None:
+    hydro, temperature = _sample_payloads()
+    _assert_issue(
+        _refresh(hydro, temperature),
+        "fr_hubeau hydrometry response contains 2 stations; expected 6454",
+    )
+
+
+def test_native_temperature_station_count_is_exact() -> None:
+    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
+    _, temperature = _sample_payloads()
+    _assert_issue(
+        _refresh(hydro, temperature),
+        "fr_hubeau temperature response contains 2 stations; expected 869",
+    )
 
 
 def test_capture_boundaries_and_documentation_evidence() -> None:
@@ -345,9 +415,32 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
             "--native-out cannot be combined with canonical --out",
         ),
         (["--live", "--native-out", "native.parquet"], "--live cannot be combined with --native-out"),
+        (
+            [
+                "--live",
+                "--hydro-fixture",
+                str(_HYDRO_FIXTURE),
+                "--temp-fixture",
+                str(_TEMP_FIXTURE),
+                "--out",
+                "out",
+            ],
+            "--live cannot be combined with fixture input",
+        ),
+        (
+            ["--hydro-fixture", str(_HYDRO_FIXTURE), "--temp-fixture", str(_TEMP_FIXTURE)],
+            "canonical materialization requires --out",
+        ),
+        (["--out", "out"], "canonical materialization requires --live or both fixture paths"),
     ],
 )
-def test_native_cli_rejections(argv: list[str], message: str, capsys: pytest.CaptureFixture[str]) -> None:
+def test_native_cli_rejections(
+    argv: list[str], message: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_live(*args: object, **kwargs: object) -> object:
+        pytest.fail("rejected CLI arguments reached the live reader")
+
+    monkeypatch.setattr(generator, "generate_catalogue_from_live", fail_live)
     with pytest.raises(SystemExit, match="2"):
         generator.main(argv)
     assert message in capsys.readouterr().err

@@ -523,7 +523,7 @@ def _validated_native_rows(
             return _native_issue(f"fr_hubeau {source_endpoint} station {identifier} is missing required source fields")
         if not isinstance(raw_id, str) or not raw_id or not raw_id.strip():
             return _native_issue(f"fr_hubeau {source_endpoint} station {index} has invalid code_station")
-        if set(row_mapping) != required_set or not _row_values_inhabit_native_schema(row_mapping, required_fields):
+        if not _row_values_inhabit_native_schema(row_mapping, required_fields):
             return _native_issue(
                 f"fr_hubeau {source_endpoint} station {identifier} has source values outside the native schema"
             )
