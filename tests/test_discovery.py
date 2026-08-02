@@ -192,12 +192,13 @@ def test_default_provider_stations_share_canonical_schema_and_non_null_crs() -> 
     assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert set(result.data["provider_id"].unique()) == set(rr.providers())
     assert result.data["crs"].null_count() == 0
-    lithuania = result.data.filter(pl.col("provider_id") == "lt_lhmt")
+    documented_wgs84 = result.data.filter(pl.col("provider_id").is_in(["lt_lhmt", "ca_eccc"]))
     usgs = result.data.filter(pl.col("provider_id") == "usgs_nwis")
-    other_providers = result.data.filter(~pl.col("provider_id").is_in(["lt_lhmt", "usgs_nwis"]))
-    assert set(lithuania["crs"].to_list()) == {"EPSG:4326"}
+    other_providers = result.data.filter(~pl.col("provider_id").is_in(["lt_lhmt", "ca_eccc", "usgs_nwis"]))
+    assert set(documented_wgs84["crs"].to_list()) == {"EPSG:4326"}
     assert set(usgs["crs"].to_list()) == {"EPSG:4269"}
     assert set(other_providers["crs"].to_list()) == {"unknown"}
+    assert set(other_providers["provider_id"].unique()) == set(rr.providers()) - {"lt_lhmt", "ca_eccc", "usgs_nwis"}
 
 
 def test_global_products_aggregates_registered_packaged_artifacts(

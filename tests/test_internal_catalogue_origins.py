@@ -21,6 +21,13 @@ from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.ca_eccc.generate_catalogue import build_stations as build_canada_stations
+from rivretrieve._internal.providers.ca_eccc.origins import (
+    CRS_EVIDENCE_URL,
+)
+from rivretrieve._internal.providers.ca_eccc.origins import (
+    STATION_CATALOGUE_ORIGINS as CANADA_ORIGINS,
+)
 from rivretrieve._internal.providers.lt_lhmt.generate_catalogue import build_stations
 from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
 from rivretrieve._internal.providers.usgs_nwis.origins import (
@@ -28,6 +35,7 @@ from rivretrieve._internal.providers.usgs_nwis.origins import (
 )
 
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
+CANADA_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 
 
 def test_field_carries_an_exact_native_column_and_is_immutable() -> None:
@@ -172,8 +180,18 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_lithuania_and_usgs() -> None:
-    assert frozenset({ProviderId("lt_lhmt"), ProviderId("usgs_nwis")}) == ORIGIN_GATE_ENROLLED_PROVIDERS
+def test_origin_gate_enrols_exactly_canada_czechia_lithuania_and_usgs() -> None:
+    assert (
+        frozenset(
+            {
+                ProviderId("ca_eccc"),
+                ProviderId("cz_chmi"),
+                ProviderId("lt_lhmt"),
+                ProviderId("usgs_nwis"),
+            }
+        )
+        == ORIGIN_GATE_ENROLLED_PROVIDERS
+    )
 
 
 def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation() -> None:
@@ -204,6 +222,58 @@ def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
         "longitude": Field(NativeColumn("dec_long_va")),
         "crs": Field(NativeColumn("dec_coord_datum_cd")),
     } == USGS_STATION_CATALOGUE_ORIGINS
+
+
+def test_czech_declarations_match_canonical_schema_order_and_values() -> None:
+    from rivretrieve._internal.providers.cz_chmi.origins import (
+        STATION_CATALOGUE_ORIGINS as CZECH_ORIGINS,
+    )
+
+    assert tuple(CZECH_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("objID")),
+        "station_id": Field(NativeColumn("objID")),
+        "latitude": Field(NativeColumn("GEOGR1")),
+        "longitude": Field(NativeColumn("GEOGR2")),
+        "crs": NotPublished(Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")),
+    } == CZECH_ORIGINS
+
+
+def test_committed_czech_origins_pass_validation() -> None:
+    from rivretrieve._internal.providers.cz_chmi.generate_catalogue import build_stations as build_czech_stations
+    from rivretrieve._internal.providers.cz_chmi.origins import (
+        STATION_CATALOGUE_ORIGINS as CZECH_ORIGINS,
+    )
+
+    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet"))
+    stations = build_czech_stations(native_table)
+
+    assert validate_catalogue_origins(ProviderId("cz_chmi"), CZECH_ORIGINS, native_table, stations) == []
+
+
+def test_canada_declarations_match_canonical_schema_order_and_values() -> None:
+    assert tuple(CANADA_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("STATION_NUMBER")),
+        "station_id": Field(NativeColumn("STATION_NUMBER")),
+        "latitude": Field(NativeColumn("geometry.coordinates[1]")),
+        "longitude": Field(NativeColumn("geometry.coordinates[0]")),
+        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(CRS_EVIDENCE_URL)),
+    } == CANADA_ORIGINS
+
+
+def test_committed_canada_origins_pass_validation() -> None:
+    native_table = read_native_table(CANADA_NATIVE_PATH)
+    station_input = native_table.data.select(
+        "id",
+        "STATION_NUMBER",
+        pl.col("geometry.coordinates[1]").alias("LATITUDE"),
+        pl.col("geometry.coordinates[0]").alias("LONGITUDE"),
+    ).to_dicts()
+    stations = build_canada_stations(station_input)
+
+    assert validate_catalogue_origins(ProviderId("ca_eccc"), CANADA_ORIGINS, native_table, stations) == []
+    enforce_catalogue_origins(ProviderId("ca_eccc"), CANADA_ORIGINS, native_table, stations)
 
 
 def _native_and_stations():
