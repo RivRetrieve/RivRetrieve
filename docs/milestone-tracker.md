@@ -365,19 +365,20 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 
 - **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/usa.py` (legacy `USAFetcher` using `dataretrieval` package).
 - **Provider ID:** `usgs_nwis`
-- **Status:** Shipped. Registered alongside `ch_foen` and `lt_lhmt` in `_ensure_default_providers_registered()`. All 512 tests pass (36 usgs_nwis-specific).
+- **Status:** Shipped. Full provider with a committed native table and network-free canonical build.
 - **Products ported:** `discharge_daily_mean` (DV 00060/00003, cfs→m3/s), `discharge_instantaneous` (IV 00060, cfs→m3/s), `stage_daily_mean` (DV 00065/00003, ft→m), `stage_daily_max` (DV 00065/00001, ft→m), `stage_daily_min` (DV 00065/00002, ft→m), `stage_instantaneous` (IV 00065, ft→m).
-- **Stations:** 5 (2026-06-01 fixture; representative set). For production, regenerate from live USGS site service (8000+ stream gauges).
+- **Stations:** 26,258 (`catalogue_version=2026-08-02`) from the committed 55-column native table; six products and 157,548 station-product rows.
 - **Key decisions:**
   - Direct USGS WaterServices REST API calls (no `dataretrieval` package). DV and IV endpoints selected per product.
   - Annual 365-day windows for retrieval.
   - Timestamps carry explicit ISO 8601 timezone offsets (e.g. `-06:00` for CST); parsed and converted to UTC. Series annotation `timezone_source = "provider_timestamp_offset"`.
   - No auth token; public USGS API.
-  - Elevation converted ft→m; drainage area converted sq mi→km². Raw values preserved in station metadata.
-  - Station-product availability materialized as `unknown` (NWIS site catalogue does not expose per-variable availability).
+  - Canonical stations contain source identity, decimal coordinates, and `EPSG:4269` for the committed table's `NAD83` datum tokens. Other station facts remain in native vocabulary.
+  - Station-product availability and period of record come from exact `data_type_cd`/`parm_cd`/`stat_cd` source-series rows. Daily products match `dv`; instantaneous products match returned `uv` rows with empty `stat_cd`.
+  - Canonical artifacts are rebuilt only from committed `catalogue/native.parquet` plus origin declarations. Live and supplied-RDB modes refresh the native table and do not generate canonical artifacts.
   - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching lt_lhmt pattern.
 - **Port notes:** `docs/provider_ports/usgs_nwis.md`.
-- **Fixtures:** `tests/test_data/usgs_nwis_metadata_sites.json` (5 stations, 2026-06-01), `tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json` (DV discharge Jan 2023 for station 07374000).
+- **Fixtures:** `tests/test_data/usgs_nwis_metadata_series.json` and `usgs_nwis_metadata_expanded.json` preserve attested refresh subsets; `tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json` covers DV observations.
 - **Architecture.md impact:** None. Timestamp offset conversion is provider-specific. Unit conversions (cfs, ft) are provider-specific. No shared harness gap discovered.
 
 ## 11. `cz_chmi` — Czech Republic / CHMI provider port (post-V1)
@@ -512,26 +513,27 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 
 - **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/canada.py` (legacy `CanadaFetcher` using HYDAT SQLite). R reference: `https://github.com/bafg-bund/hydrodownloadR/blob/main/R/adapter_CA_ECCC.R`.
 - **Provider ID:** `ca_eccc`
-- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. All 822 tests pass (60 ca_eccc-specific).
-- **Products ported:** `discharge_daily_mean` (OGC `DISCHARGE` field, m³/s direct), `stage_daily_mean` (OGC `LEVEL` field, m direct).
-- **Stations:** 8055 (2026-06-04 live catalogue from ECCC OGC `hydrometric-stations/items`).
+- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`.
+- **Products ported:** `discharge_daily_mean` (HYDAT `DLY_FLOWS` / `FLOW`, m³/s direct), `stage_daily_mean` (HYDAT `DLY_LEVELS` / `LEVEL`, m direct).
+- **Stations:** 8,057 canonical stations from 8,057 attested native OGC features retrieved at `2026-08-02T01:09:10Z`.
 - **Key decisions:**
-  - **OGC API instead of HYDAT SQLite**: Both legacy Python and R use a ~1 GB HYDAT SQLite download. This port uses the ECCC OGC Features API (`api.weather.gc.ca`) instead — same data, REST/JSON, no auth, no giant download, consistent with all other RivRetrieve providers.
+  - **Source split**: Native catalogue refresh uses the ECCC OGC Features API; observation retrieval retains the complete HYDAT SQLite archive in the provider-managed cache.
   - **Timestamps**: `DATE` field is date-only (`YYYY-MM-DD`). Interpreted as UTC midnight. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` emitted per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily.
-  - **Response cache**: Both `discharge_daily_mean` and `stage_daily_mean` live in the same OGC response. The retrieval layer caches raw page bytes keyed by `(station_id, begin_date, end_date)` — one HTTP call serves both products when requested together.
-  - **Coordinates in geometry**: Live OGC API returns lat/lon in `feature["geometry"]["coordinates"]` (GeoJSON, lon-first), not in `properties`. Generator handles both GeoJSON format (live) and flat dict with `LATITUDE`/`LONGITUDE` (fixture).
-  - **Status field**: Live API uses `STATUS_EN` (`"Active"/"Discontinued"`); generator falls back to `HYD_STATUS` for fixture compatibility.
-  - **No unit conversions**: Both DISCHARGE (m³/s) and LEVEL (m) already in canonical units.
-  - **Elevation always null**: ECCC OGC stations endpoint does not provide elevation.
+  - **HYDAT cache**: The observation client downloads the date-stamped national SQLite archive on first use and queries it read-only; this catalogue migration does not change its lifecycle or queries.
+  - **Native catalogue**: The committed 18-column `native.parquet` preserves all 8,057 features, all 13 source properties, geometry type and coordinate scalars, plus the attested retrieval instant. Rows are sorted by feature `id`.
+  - **Coordinates and CRS**: Live OGC API returns longitude/latitude in `feature["geometry"]["coordinates"]` (CRS84, lon-first). Canonical columns map index 1 to latitude and index 0 to longitude and declare documented `EPSG:4326`; no transformation or reprojection occurs.
+  - **Reconciliation**: Full-population census found zero missing station numbers, zero duplicate station numbers, zero invalid coordinate rows, and zero `id`/`IDENTIFIER`/`STATION_NUMBER` disagreements. No station is silently filtered.
+  - **Drainage areas**: `DRAINAGE_AREA_EFFECT` has 1,661 populated values and 6,396 source nulls; both it and `DRAINAGE_AREA_GROSS` remain native-only source facts.
+  - **No unit conversions**: Both HYDAT FLOW (m³/s) and LEVEL (m) already use canonical units.
   - **Station-product availability**: All rows `unknown` — OGC does not expose per-variable availability per station.
-  - **Annual windowing**: `YYYY-01-01/YYYY-12-31` per OGC `datetime` interval parameter.
+  - **Windowing**: HYDAT queries select the inclusive range of endpoint years and the parser filters exact requested dates.
   - No auth token; public Government of Canada open data (Open Government Licence).
-  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
-  - Live station minimum guard: 1000 stations.
+  - Missing HYDAT station-product years produce the provider's existing named recoverable issue.
+  - Live station minimum guard: 8,055 usable stations, calibrated to the prior successful catalogue baseline.
 - **Port notes:** `docs/provider_ports/ca_eccc.md`.
-- **Fixtures:** `tests/test_data/ca_eccc_metadata.json` (3 stations with coords + 1 without, flat-dict format), `tests/test_data/ca_eccc_02GA010_daily_2020-01.json` (3 features: 2 with both DISCHARGE/LEVEL, 1 with both null — tests null-row filtering, quality symbols).
-- **Known limitation:** The OGC `hydrometric-daily-mean` collection does **not** contain the full HYDAT archive. Many stations have multi-decade gaps. Example: `08GA031` has OGC data for 1929–1956 and 2023–present, but the 1957–2022 period (which exists in HYDAT) is absent from the OGC endpoint. The legacy Python `test_canada.py` tests pass because they query HYDAT directly. `ca_eccc` is suitable for current/recent data and catalogue discovery, not as a full HYDAT archive replacement.
-- **Architecture.md impact:** None. OGC API coordinates-in-geometry pattern is provider-specific. Response cache deduplication is provider-internal. Date-only timestamp/UTC-midnight pattern follows established provider convention. No shared harness gap discovered.
+- **Fixtures:** `tests/test_data/ca_eccc_metadata.json` is a schema-faithful FeatureCollection containing three verbatim live features, with the complete property header, source JSON types, geometry, one null and two populated `DRAINAGE_AREA_EFFECT` values. `tests/test_data/ca_eccc_02GA010_daily_2020-01.json` remains the observation fixture.
+- **Known limitation:** Observation retrieval requires the large HYDAT SQLite cache to be downloaded before local queries can run.
+- **Architecture.md impact:** None. OGC catalogue coordinates-in-geometry and HYDAT observation caching remain provider-specific.
 
 ## 18. `pl_imgw` — Poland / IMGW provider port (post-V1)
 

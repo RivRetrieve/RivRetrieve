@@ -26,7 +26,7 @@ def test_ca_eccc_info_name() -> None:
 
 def test_ca_eccc_catalogue_version() -> None:
     info = rr.provider("ca_eccc").info()
-    assert info.catalogue_version is not None
+    assert info.catalogue_version == "2026-08-02"
 
 
 def test_ca_eccc_live_stations_capability() -> None:
@@ -43,8 +43,7 @@ def test_ca_eccc_stations_returns_catalog_result() -> None:
 
 def test_ca_eccc_stations_count() -> None:
     result = rr.provider("ca_eccc").stations()
-    # Live catalogue (2026-06-04): 8055 stations.
-    assert len(result.data) == 8055
+    assert len(result.data) == 8057
 
 
 def test_ca_eccc_products_count() -> None:
@@ -61,8 +60,7 @@ def test_ca_eccc_products_include_canonical() -> None:
 
 def test_ca_eccc_station_products_count() -> None:
     result = rr.provider("ca_eccc").station_products()
-    # 8055 stations × 2 products = 16110
-    assert len(result.data) == 16110
+    assert len(result.data) == 16114
 
 
 def test_ca_eccc_station_products_availability_unknown() -> None:
@@ -105,10 +103,10 @@ def test_ca_eccc_station_grand_river_present() -> None:
     assert "02GA010" in ids
 
 
-def test_ca_eccc_station_crs_unknown() -> None:
+def test_ca_eccc_station_crs_is_documented_wgs84() -> None:
     result = rr.provider("ca_eccc").stations()
     assert result.data["crs"].null_count() == 0
-    assert result.data["crs"].unique().to_list() == ["unknown"]
+    assert result.data["crs"].unique().to_list() == ["EPSG:4326"]
 
 
 def test_ca_eccc_exposes_only_the_engine_stage_contract() -> None:

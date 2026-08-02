@@ -85,16 +85,181 @@ The committed native table carries provenance. Produce it with the provider's `r
 against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
 when that fixture has been verified content-identical to a live payload and the repository record
 states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
-may enter the repository from a fixture.
+may enter the repository from a fixture. A third sanctioned route is a live fetch performed outside
+the executor sandbox and supplied as an orchestrator step input. That input requires the same complete
+attestation: exact request URL or URLs, UTC retrieval instant, row or feature count, canonicalization
+method, and SHA-256 digest.
+
+- Czechia native-table attestation: the orchestrator performed
+  `GET https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json` outside the executor
+  sandbox at `2026-08-02T00:14:31Z`, received 831 rows with 23 header columns, and supplied the
+  complete JSON response. Canonicalization serializes the complete parsed JSON object with
+  `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8 encodes the
+  result, and takes SHA-256; the result was
+  `a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The committed native table
+  content digest sorts rows by `objID`, represents the columns in schema order and each row as an
+  aligned positional list, renders the UTC `retrieved_at` as an ISO 8601 string ending in `Z`, then
+  uses the same JSON serialization, UTF-8 encoding, and SHA-256 procedure; its result is
+  `b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b`. The active three-row
+  fixture is an explicitly identified verbatim subset, not content-identical to the complete
+  response. Its predecessor was source-incorrect in every row:
+  `0-203-1-016000` carried `50.0014 / 14.4092` instead of `50.3427582 / 15.9249555`;
+  `0-203-1-020000` carried `50.3500 / 14.4741` instead of `50.3517105 / 16.1299498` (longitude
+  wrong by 1.66 degrees); and `0-204-1-001000` was not published by the source.
+
+
+An orchestrator may also perform a live fetch outside a network-disabled executor and supply the
+complete response as a step input. This route is sanctioned only when the same repository record
+contains every exact request URL, one UTC retrieval instant, the accepted row and station counts,
+the deterministic canonicalization and ordering rules, SHA-256 evidence, and a semantic frame
+comparison between the committed native content and a fresh materialization of the complete supplied
+response.
 
 ### 4.1 Providers with a committed native table and origins
 
-For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
-and `ch_foen`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
+`ch_foen`, `cz_chmi`, `lt_lhmt`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
 `catalogue/products.parquet`, `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
-would reintroduce the nondeterminism the pure build removes.
+would reintroduce the nondeterminism the pure build removes. In particular, future USGS canonical
+generation must use its committed `native.parquet`, never `--live` or supplied RDB payloads.
+
+- USGS native-table attestation: the orchestrator made the following 102 requests for the ordered
+  51-code (50 states plus DC) `_US_STATE_CODES` scope at `2026-08-02T01:14:11Z`:
+
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AL&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AL&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AK&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AK&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AZ&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AZ&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AR&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=AR&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CO&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CO&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=CT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DE&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DE&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=FL&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=FL&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=GA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=GA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=HI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=HI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ID&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ID&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IL&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IL&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IN&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IN&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=IA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KS&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KS&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KY&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=KY&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=LA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=LA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ME&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ME&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MD&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MD&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MN&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MN&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MS&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MS&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MO&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MO&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=MT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NE&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NE&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NV&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NV&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NH&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NH&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NJ&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NJ&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NM&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NM&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NY&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NY&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NC&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=NC&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ND&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=ND&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OH&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OH&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OK&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OK&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OR&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=OR&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=PA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=PA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=RI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=RI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SC&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SC&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SD&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=SD&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TN&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TN&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TX&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=TX&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=UT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=UT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VT&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VT&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=VA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WA&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WA&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WV&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WV&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WI&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WI&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WY&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=WY&siteOutput=expanded`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DC&seriesCatalogOutput=true`
+- `GET https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=DC&siteOutput=expanded`
+
+  The [USGS Site Service documentation](https://waterservices.usgs.gov/docs/site-service/site-service-details/)
+  states that `hasDataTypeCd` selects sites, `seriesCatalogOutput=true` returns period-of-record
+  rows, and `siteOutput=expanded` cannot be combined with `seriesCatalogOutput=true`. The complete
+  supplied response contained 55 codes and 110 files. Every entry passed `MANIFEST.sha256`; the
+  manifest's SHA-256 is `d29ee34feaef0dda458c369ed5448e96b7e8b7064176a5f94360881b6cbdf34a`.
+  The exact 102 consumed manifest lines have SHA-256
+  `e197d3d5eb6f971e631693d7d6e2b26d1c7b7031850d62ed11f5891011dbc6bc`.
+
+  The accepted 51-code scope has 26,258 stations in each pass, 2,036,546 series rows, zero
+  cross-pass orphans, only `NAD83` in `dec_coord_datum_cd`, and both `dv` and `uv` source
+  rows. The excluded `GU`, `MP`, `PR`, and `VI` files account for 275 stations. The complete
+  supplied 55-code census has 26,533 stations in each pass, 2,055,307 series rows, and zero
+  cross-pass orphans.
+
+  Canonicalization keeps all 42 expanded fields as exact scalar strings; checks the twelve repeated
+  series-pass station fields byte-for-byte against them; retains the twelve series-only fields as
+  aligned `List(String)` columns; preserves duplicate complete series rows; sorts complete
+  24-field series rows lexicographically in source header order within each station; sorts stations
+  by exact `site_no`; and appends the single UTC-microsecond `retrieved_at`. No field is trimmed,
+  renamed, parsed, converted, or harmonized. The compact UTF-8 JSON list of sorted `site_no`
+  values, serialized with separators `(",", ":")` and `ensure_ascii=False`, has SHA-256
+  `8ad79dac66b25a9dc46ebd30b650c1e647b44d9b31c9bc4fdd17c5e46f4ee241`. The full table is
+  serialized as a compact UTF-8 JSON outer list of row lists in the declared schema
+  order, using the same separators and `ensure_ascii=False`; `retrieved_at` is rendered as an
+  RFC 3339 UTC string with exactly six fractional digits and `Z`. Its SHA-256, emitted by the same
+  regeneration run that writes the native table, is
+  `e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f`. A fresh reconstruction
+  from the attested response was compared with the committed native table using exact semantic frame
+  equality; Parquet byte equality is not the provenance criterion.
 
 - Lithuania native-table attestation: the orchestrator performed
   `GET https://api.meteo.lt/v1/hydro-stations` outside the executor sandbox at
@@ -103,6 +268,33 @@ would reintroduce the nondeterminism the pure build removes.
   serializes JSON with sorted object keys and compact separators `(",", ":")` using Python's
   default `ensure_ascii=True`, UTF-8 encodes the result, and takes SHA-256; both inputs produced
   `02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8`.
+
+- Canada native-table attestation: the orchestrator performed nine paged requests outside the executor
+  sandbox at `2026-08-02T01:09:10Z`, with paging completed at `2026-08-02T01:09:20Z`:
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=0`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=1000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=2000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=3000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=4000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=5000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=6000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=7000`, and
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=8000`.
+  The assembled FeatureCollection contains 8,057 native features and has zero missing station ids,
+  zero duplicate station ids, zero invalid coordinate rows, and zero disagreements among feature
+  `id`, `IDENTIFIER`, and `STATION_NUMBER`, yielding 8,057 usable canonical stations. Canonicalization
+  serializes the complete assembled FeatureCollection in attested page order using sorted object keys,
+  compact separators `(",", ":")`, `ensure_ascii=False`, and UTF-8, producing SHA-256
+  `3613c17b3e1ad76e8490d6dcb659be251f2270e5568fb6ff1e05fe780037083d`. Native Parquet rows are
+  deterministically sorted by feature `id`. Its sorted JSON id list, serialized with compact separators,
+  `ensure_ascii=False`, and UTF-8, has SHA-256
+  `a55f028a344441cfb7e0d3dbad88366ec3834ff7a62135a6f5ab9faf5b0e1393`. The complete native table is
+  canonicalized as an object containing the 18 column names in schema order and every row as a positional
+  array in table order; UTC datetimes use ISO 8601 `Z`, nested lists preserve their order, and JSON uses
+  sorted object keys, compact separators, `ensure_ascii=False`, and UTF-8. Its SHA-256 is
+  `46780a69f07e9ed8a7eae343929d81b4c78f2330d6268ee1fdc7de701cd6fe48`. The refresh command recomputes
+  this digest from the written Parquet in the same run. The canonical artifacts contain 8,057 stations,
+  two products, and 16,114 station-products.
 
 - Switzerland native-table attestation: the orchestrator performed
   `GET https://api.existenz.ch/apiv1/hydro/locations` outside the executor sandbox at
@@ -115,14 +307,20 @@ would reintroduce the nondeterminism the pure build removes.
   column has one scalar dtype. Future Swiss canonical artifacts must be built network-free from
   the committed native table and origin declarations.
 
+
 After writing provider code and tests, run that provider's network-free build from its committed
 native table and origins, and commit the resulting canonical artifacts alongside the code.
 
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
+eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`, and
+`za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
+API before the provider is committed.
+
 eleven), the four canonical packaged catalogue artifacts must be generated from the live provider
 API before the provider is committed.
+
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.

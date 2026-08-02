@@ -178,10 +178,10 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
 
     provider_directory = Path(module.__file__).parent
     expected_module_files = set(CATALOGUE_MODULE_FILES)
-    if provider_id in {"lt_lhmt", "ch_foen"}:
+    if provider_id in {"ch_foen", "cz_chmi", "lt_lhmt"}:
         expected_module_files.add("origins.py")
-    if provider_id == "ch_foen":
-        expected_module_files.remove("metadata.py")
+    if provider_id in {"ch_foen", "cz_chmi"}:
+        expected_module_files.discard("metadata.py")
     assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in (
