@@ -6,7 +6,7 @@ Port of the legacy Python `BosniaHerzegovinaFetcher` (`thirdparty/RivRetrieve-Py
 
 | Endpoint | Role | Auth | Notes |
 |---|---|---|---|
-| `https://vodostaji.voda.ba/data/internet/layers/20/index.json` | Catalogue generation — station metadata snapshot | None | JSON array; one row per (station, parameter) timeseries — 60 unique stations as of 2026-06-08. Fields used: `metadata_station_no`, `metadata_station_name`, `metadata_river_name`, `metadata_catchment_name`, `metadata_station_latitude/longitude/elevation`, `metadata_CATCHMENT_SIZE`. |
+| `https://vodostaji.voda.ba/data/internet/layers/20/index.json` | Native-table refresh — station metadata snapshot | None | JSON array containing stable `metadata_*` station fields and volatile `L1_*` timeseries fields. Refresh preserves the 18 stable source-named fields and omits the volatile group. |
 | `https://vodostaji.voda.ba/data/internet/stations/{group}/{station_id}/{code}/{file}` | Observation retrieval — per-station-parameter Excel workbook | None | `group` is a numbered shard (1–10), `code` is `Q`/`H`/`WT`, `file` is `Q_1Y.xlsx`/`H_1Y.xlsx`/`Tvode_1Y.xlsx`. Always returns a rolling ~1-year window of hourly data (confirmed live: 8631 rows for station 4510/Q on 2026-06-08). |
 
 Both endpoints were exercised live during this port (not just against fixtures): the metadata endpoint returned 60 stations and the workbook endpoint returned a real 124 KB xlsx for station 4510 — see "Live verification" below.
@@ -26,15 +26,18 @@ The portal shards station workbooks across ten numbered "groups" (`/stations/{1.
 
 ## Catalogue Mapping
 
+The packaged catalogue is a pure, network-free projection of the committed
+`catalogue/native.parquet` and `STATION_CATALOGUE_ORIGINS`. Canonical station identity and decimal
+coordinates come directly from the declared native columns. The source-only names, river,
+catchment, elevation, projected/local coordinates, and other source vocabulary remain readable in
+the native table. The publisher's station document does not publish a horizontal CRS, so the
+declared `NotPublished` origin emits canonical `crs = "unknown"` without inference.
+
 | Source field | Canonical target | Notes |
 |---|---|---|
 | `metadata_station_no` | `station_id` | String station code, e.g. `"4510"` |
-| `metadata_station_name` | `name` | Station name (e.g. "HS Kaloševići") |
-| `metadata_river_name` | `metadata.river_name` | River name |
-| `metadata_catchment_name` | `metadata.catchment_name` | Catchment/sub-basin name |
-| `metadata_station_latitude`, `metadata_station_longitude` | `latitude`, `longitude` | Numeric strings parsed to float; stations without valid coordinates excluded |
-| `metadata_station_elevation` | `elevation_m` | Often an empty string in the live snapshot — parsed to `None` when not numeric |
-| `metadata_CATCHMENT_SIZE` | `drainage_area_km2` | String like `"123.4 km²"` — the `km²` suffix is stripped and the remainder parsed as a float |
+| `metadata_station_latitude`, `metadata_station_longitude` | `latitude`, `longitude` | Decimal-degree strings strictly coerced to `Float64`; no transformation or reprojection |
+| all other `metadata_*` fields | native only | Preserved exactly in source vocabulary and not promoted to canonical station columns |
 
 ## Products
 
@@ -82,13 +85,13 @@ All rows are `availability = "unknown"`. The metadata snapshot does not indicate
 
 Per the project convention of confirming downloads "really work" before declaring a port complete (and not repeating the `th_thaiwater` mistake where downloads were silently not happening), this port was exercised against the live portal during development:
 
-- `generate_catalogue_from_live()` fetched `layers/20/index.json` and produced 60 stations, 6 products, and 360 station-product rows, all passing harness validation — these are the artifacts packaged in `catalogue/`.
+- The attested `layers/20/index.json` response produced the committed 60-row native table. Packaged canonical artifacts are subsequently rebuilt only from that table and the origin declarations.
 - `BaFhmzbihObservationClient.fetch_workbook("4510", "Q", "Q_1Y.xlsx")` resolved to group `4`, returned HTTP 200 and 124,674 bytes, and parsed into 8,631 valid hourly rows spanning 2025-06-08 through 2026-06-07.
 - A full `retrieve_observations()` call against live data for station 4510 (discharge, stage, water-temperature, May–June 2026) returned 1,666 rows, three `timezone_local_to_utc` info issues, one `missing_data` warning for the empty water-temperature workbook, and correctly UTC-converted/aggregated daily-mean values (e.g. `2026-04-29 22:00:00 UTC` anchors `2026-04-30` local midnight in CEST).
 
 ## Live Catalogue
 
-`live_stations = False`, `live_products = False`, `live_station_products = False`. The generator is maintainer-only; runtime catalogue reads packaged Parquet artifacts. The live guard requires at least 30 stations (`MIN_LIVE_STATIONS`).
+`live_stations = False`, `live_products = False`, `live_station_products = False`. The generator is maintainer-only; runtime catalogue reads packaged Parquet artifacts. Canonical generation accepts only a committed native table and output directory. During native-table maintenance, `MIN_LIVE_STATIONS = 30` is enforced after parsing in the issue-returning live-refresh path; a smaller live payload returns `refresh_below_minimum` and writes nothing.
 
 ## Surprises and Pain Points
 

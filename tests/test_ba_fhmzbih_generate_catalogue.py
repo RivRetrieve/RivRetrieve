@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import urllib.request
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -10,13 +11,23 @@ import polars as pl
 import polars.testing as pl_testing
 import pytest
 
-from rivretrieve._internal.catalogues.native import RetrievedAt, read_native_table
+from rivretrieve._internal.catalogue_origins import Evidence, NotPublished
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    PROVIDER_INFO_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
+)
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ba_fhmzbih import generate_catalogue
 
 _TEST_DATA_DIR = Path(__file__).parent / "test_data"
 _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
 _NATIVE_TABLE = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
+_CATALOGUE_DIR = _NATIVE_TABLE.parent
+_CRS_EVIDENCE = _TEST_DATA_DIR / "ba_fhmzbih_crs_evidence_stations.json"
+_AGENTS = Path(__file__).parents[1] / "AGENTS.md"
 _RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC))
 _METADATA_COLUMNS = (
     "metadata_CATCHMENT_SIZE",
@@ -90,28 +101,232 @@ def _assert_materialization_issue(
     assert captured.out == captured.err == ""
 
 
-def test_generate_catalogue_station_count() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    assert cat.stations.height == 2
+def _origins():
+    from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
+
+    return STATION_CATALOGUE_ORIGINS
 
 
-def test_generate_catalogue_product_count() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    assert cat.products.height == 6
+def _catalogue():
+    return generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), _origins())
 
 
-def test_generate_catalogue_station_products_count() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    assert cat.station_products.height == 12
+def _json_objects(values: pl.Series) -> list[dict[str, object]]:
+    objects = [json.loads(value) for value in values]
+    assert all(isinstance(value, dict) for value in objects)
+    return objects
 
 
-def test_generate_catalogue_station_fields() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    row = cat.stations.filter(pl.col("station_id") == "4510")
-    assert row.height == 1
-    assert row["latitude"].item() == 44.64680728070949
-    assert row["longitude"].item() == 17.90406242892678
-    assert row["crs"].item() == "unknown"
+def _frame_content_digest(frame: pl.DataFrame) -> str:
+    def canonical_value(value: object) -> object:
+        if isinstance(value, datetime):
+            return value.isoformat(timespec="microseconds").replace("+00:00", "Z")
+        if isinstance(value, date):
+            return value.isoformat()
+        return value
+
+    payload = {
+        "columns": frame.columns,
+        "rows": [[canonical_value(value) for value in row] for row in frame.iter_rows()],
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def test_native_build_has_exact_counts_dates_and_schemas() -> None:
+    catalogue = _catalogue()
+
+    assert (catalogue.stations.height, catalogue.products.height, catalogue.station_products.height) == (60, 6, 360)
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
+    assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
+    assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
+    assert catalogue.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert catalogue.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert pl.DataFrame([catalogue.provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema).schema == (
+        PROVIDER_INFO_CATALOG_SCHEMA.polars_schema
+    )
+
+
+def test_native_build_is_exact_source_projection_and_preserves_native_material() -> None:
+    native = read_native_table(_NATIVE_TABLE)
+    actual = generate_catalogue.build_catalogue(native, _origins()).stations
+    expected = native.data.select(
+        pl.lit("ba_fhmzbih").cast(pl.String).alias("provider_id"),
+        pl.col("metadata_station_no").cast(pl.String).alias("station_id"),
+        pl.col("metadata_station_latitude").cast(pl.Float64, strict=True).alias("latitude"),
+        pl.col("metadata_station_longitude").cast(pl.Float64, strict=True).alias("longitude"),
+        pl.lit("unknown").cast(pl.String).alias("crs"),
+    ).sort("station_id")
+    pl_testing.assert_frame_equal(actual, expected, check_exact=True)
+
+    source = native.data.filter(pl.col("metadata_station_no") == "4510")
+    canonical = actual.filter(pl.col("station_id") == "4510")
+    assert source["metadata_station_id"].item() == "12191"
+    assert source["metadata_station_no"].item() != source["metadata_station_id"].item()
+    assert source["metadata_station_latitude"].item() == "44.64680728070949"
+    assert source["metadata_station_longitude"].item() == "17.90406242892678"
+    assert canonical.row(0, named=True) == {
+        "provider_id": "ba_fhmzbih",
+        "station_id": "4510",
+        "latitude": 44.64680728070949,
+        "longitude": 17.90406242892678,
+        "crs": "unknown",
+    }
+    assert source.select(
+        "metadata_station_name",
+        "metadata_station_longname",
+        "metadata_river_name",
+        "metadata_catchment_name",
+        "metadata_station_elevation",
+        "metadata_station_carteasting",
+        "metadata_station_cartnorthing",
+        "metadata_station_local_x",
+        "metadata_station_local_y",
+        "retrieved_at",
+    ).row(0, named=True) == {
+        "metadata_station_name": "HS Kaloševići",
+        "metadata_station_longname": "PODRUČJA NA SLIVU RIJEKE BOSNE",
+        "metadata_river_name": "Usora",
+        "metadata_catchment_name": "Bosna",
+        "metadata_station_elevation": "",
+        "metadata_station_carteasting": "6492481.45",
+        "metadata_station_cartnorthing": "4944707.34",
+        "metadata_station_local_x": "6492481.45",
+        "metadata_station_local_y": "4944707.34",
+        "retrieved_at": _RETRIEVED_AT.value,
+    }
+
+
+def test_publisher_capture_and_attestation_support_not_published_crs() -> None:
+    crs_origin = _origins()["crs"]
+    assert crs_origin == NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json"))
+    assert isinstance(crs_origin, NotPublished)
+    document = json.loads(_CRS_EVIDENCE.read_text(encoding="utf-8"))
+    assert isinstance(document, list) and len(document) == 230
+    keysets = {frozenset(row) for row in document}
+    assert len(keysets) == 1 and len(next(iter(keysets))) == 24
+    coordinate_fields = {
+        "station_latitude",
+        "station_longitude",
+        "station_carteasting",
+        "station_cartnorthing",
+        "station_local_x",
+        "station_local_y",
+    }
+    assert coordinate_fields <= next(iter(keysets))
+    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    assert hashlib.sha256(canonical).hexdigest() == "c78bd3b3aee2859eaef3c4373029fe7619a7d8e40b53fa0eab7f989ade3524bc"
+    searchable = canonical.decode().lower()
+    assert all(token not in searchable for token in ("epsg", "wgs", "4326", "projection", "srid"))
+    for field, minimum, maximum in (
+        ("station_gauge_datum", 74.36, 999.99),
+        ("GAUGE_DATUM", 74.36, 999.99),
+        ("GWREF_DATUM", 85.36, 514.98),
+    ):
+        values = [float(row[field]) for row in document if row[field] != ""]
+        assert values and min(values) == minimum and max(values) == maximum
+
+    agents = _AGENTS.read_text(encoding="utf-8")
+    record = agents[agents.index("Bosnia publisher CRS-capture attestation") :]
+    for literal in (
+        str(crs_origin.evidence),
+        "2026-08-02T16:43:18Z",
+        "230",
+        "one uniform 24-key keyset",
+        "json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)",
+        "c78bd3b3aee2859eaef3c4373029fe7619a7d8e40b53fa0eab7f989ade3524bc",
+    ):
+        assert literal in record
+
+
+def test_native_build_metadata_is_non_null_plain_json() -> None:
+    catalogue = _catalogue()
+    assert catalogue.products["metadata"].null_count() == 0
+    assert catalogue.station_products["metadata"].null_count() == 0
+    product_metadata = _json_objects(catalogue.products["metadata"])
+    station_product_metadata = _json_objects(catalogue.station_products["metadata"])
+    provider_metadata = json.loads(catalogue.provider_info["metadata"])
+    assert isinstance(provider_metadata, dict)
+    assert provider_metadata["generator_input"] == "native"
+    assert product_metadata[0].keys() == {
+        "parameter_code",
+        "workbook_file",
+        "native_unit",
+        "canonical_unit",
+        "unit_conversion",
+        "aggregate_daily",
+        "notes",
+    }
+    assert station_product_metadata[0].keys() == {
+        "station_id",
+        "product_id",
+        "availability_source",
+        "availability_note",
+    }
+
+
+def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
+    assert hashlib.sha256((_CATALOGUE_DIR / "provider.json").read_bytes()).hexdigest() == (
+        "03b4734305e5aa75544583111ff389fc5b1e4619d674318b2b77386177e82f2a"
+    )
+    assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
+        "5861d1000616f5ac200231ceffbe6c8db892582d6ec440d0f4005f3bee3f3f52"
+    )
+    assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
+        "761a93315a093b1cad5a4ce1e0480a6e36430a32d28467c9fe689f0257c053a4"
+    )
+    assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
+        "972e5ec21d5b05126115122e1120fdff16618ad1cb5455ac2938b234c353b818"
+    )
+
+
+def test_native_build_enforces_origins_before_writing(tmp_path: Path) -> None:
+    broken = dict(_origins())
+    del broken["longitude"]
+    with pytest.raises(FatalContractError, match=r"ba_fhmzbih\.longitude: canonical column has no origin declaration"):
+        generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), broken)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_native_build_rejects_empty_and_malformed_retrieval_timestamps() -> None:
+    native = read_native_table(_NATIVE_TABLE)
+    with pytest.raises(FatalContractError, match="native table must not be empty"):
+        generate_catalogue.build_catalogue(NativeTable(native.data.clear()), _origins())
+    malformed = object.__new__(NativeTable)
+    object.__setattr__(
+        malformed,
+        "data",
+        native.data.with_columns(pl.lit(None).cast(pl.Datetime("us", "UTC")).alias("retrieved_at")),
+    )
+    with pytest.raises(FatalContractError, match="retrieved_at"):
+        generate_catalogue.build_catalogue(malformed, _origins())
+
+
+def test_native_build_uses_per_station_dates_and_maximum_provider_date() -> None:
+    native = read_native_table(_NATIVE_TABLE)
+    mixed = native.data.head(2).with_columns(
+        pl.Series(
+            "retrieved_at",
+            [datetime(2026, 7, 31, 23, 59, tzinfo=UTC), datetime(2026, 8, 2, 1, 2, tzinfo=UTC)],
+            dtype=pl.Datetime("us", "UTC"),
+        )
+    )
+    catalogue = generate_catalogue.build_catalogue(NativeTable(mixed), _origins())
+    station_dates = {
+        station_id: set(group["last_catalogue_check"])
+        for (station_id,), group in catalogue.station_products.group_by("station_id", maintain_order=True)
+    }
+    assert station_dates == {
+        mixed["metadata_station_no"].item(0): {date(2026, 7, 31)},
+        mixed["metadata_station_no"].item(1): {date(2026, 8, 2)},
+    }
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
 def test_fixture_digest_is_pinned() -> None:
@@ -330,20 +545,12 @@ def test_main_raises_returned_issue_without_writing(tmp_path: Path) -> None:
     ("argv", "message"),
     [
         (
-            ["--native-payload", "payload.json", "--fixture", "fixture.json"],
-            "--native-payload cannot be combined with --fixture or --live",
-        ),
-        (
-            ["--native-payload", "payload.json", "--live"],
-            "--native-payload cannot be combined with --fixture or --live",
+            ["--native-payload", "payload.json", "--native", "native.parquet"],
+            "--native-payload cannot be combined with --native or --out",
         ),
         (
             ["--native-payload", "payload.json", "--out", "catalogue"],
-            "--native-payload cannot be combined with --out",
-        ),
-        (
-            ["--native-payload", "payload.json", "--catalogue-date", "2026-08-02"],
-            "--catalogue-date cannot be used with --native-payload",
+            "--native-payload cannot be combined with --native or --out",
         ),
         (
             [
@@ -387,9 +594,9 @@ def test_main_raises_returned_issue_without_writing(tmp_path: Path) -> None:
             ["--native-input-kind", "fixture"],
             "--native-input-kind requires --native-payload",
         ),
-        ([], "one of --fixture, --live, or --native-payload is required"),
-        (["--fixture", "fixture.json"], "--out is required with --fixture or --live"),
-        (["--live"], "--out is required with --fixture or --live"),
+        (["--native", "native.parquet"], "--native requires --out"),
+        (["--out", "catalogue"], "--out requires --native"),
+        ([], "one of --native or --native-payload is required"),
     ],
 )
 def test_main_rejects_incoherent_modes(
@@ -404,8 +611,24 @@ def test_main_rejects_incoherent_modes(
     assert message in captured.err
 
 
-def test_canonical_main_retains_default_catalogue_date(tmp_path: Path) -> None:
-    output = tmp_path / "catalogue"
-    assert generate_catalogue.main(["--fixture", str(_METADATA_FIXTURE), "--out", str(output)]) == 0
-    provider = json.loads((output / "provider.json").read_text(encoding="utf-8"))
-    assert provider["catalogue_version"] == date.today().isoformat()
+def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert hasattr(urllib.request, "urlopen")
+    calls: list[object] = []
+
+    def fail_network(*args: object, **kwargs: object) -> object:
+        calls.append((args, kwargs))
+        raise AssertionError("network call during native catalogue build")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fail_network)
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    argv = ["--native", str(_NATIVE_TABLE), "--out"]
+    assert generate_catalogue.main([*argv, str(first)]) == 0
+    assert generate_catalogue.main([*argv, str(second)]) == 0
+    assert calls == []
+    for artifact in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+        assert (first / artifact).read_bytes() == (second / artifact).read_bytes()
+        assert (first / artifact).read_bytes() == (_CATALOGUE_DIR / artifact).read_bytes()

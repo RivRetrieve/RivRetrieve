@@ -100,8 +100,8 @@ response.
 
 ### 4.1 Providers with a committed native table and origins
 
-For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
-`ch_foen`, `cz_chmi`, `lt_lhmt`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+For a provider with both a committed native table and origin declarations (currently `ba_fhmzbih`,
+`ca_eccc`, `ch_foen`, `cz_chmi`, `lt_lhmt`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
 `catalogue/products.parquet`, `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
@@ -308,16 +308,6 @@ generation must use its committed `native.parquet`, never `--live` or supplied R
   the committed native table and origin declarations.
 
 
-After writing provider code and tests, run that provider's network-free build from its committed
-native table and origins, and commit the resulting canonical artifacts alongside the code.
-
-### 4.2 Providers not yet migrated
-
-For a provider without both a committed native table and origin declarations (currently the other
-eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`, and
-`za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
-API before the provider is committed.
-
 - Bosnia native-table attestation: the orchestrator performed
   `GET https://vodostaji.voda.ba/data/internet/layers/20/index.json` outside the executor sandbox at
   `2026-08-02T12:42:03Z`, received 60 entries exactly matching the 60 committed stations, and supplied
@@ -335,6 +325,27 @@ API before the provider is committed.
   `metadata_*` fields remain source-named strings, including blank elevation and uninterpreted
   projected and local coordinate fields.
 
+- Bosnia publisher CRS-capture attestation: the orchestrator performed
+  `GET https://vodostaji.voda.ba/data/internet/stations/stations.json` outside the executor sandbox at
+  `2026-08-02T16:43:18Z`, received 230 station objects with one uniform 24-key keyset, and supplied the
+  complete JSON response. Canonicalization uses one
+  `json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)` call over the complete
+  parsed 230-element document, encoded as UTF-8, and produces SHA-256
+  `c78bd3b3aee2859eaef3c4373029fe7619a7d8e40b53fa0eab7f989ade3524bc`. The document carries
+  `station_latitude`, `station_longitude`, `station_carteasting`, `station_cartnorthing`,
+  `station_local_x`, and `station_local_y`, and contains zero horizontal-CRS tokens. Its datum-named
+  fields `station_gauge_datum`, `GAUGE_DATUM`, and `GWREF_DATUM` are vertical metre elevations, not
+  horizontal coordinate reference systems.
+
+After writing provider code and tests, run that provider's network-free build from its committed
+native table and origins, and commit the resulting canonical artifacts alongside the code.
+
+### 4.2 Providers not yet migrated
+
+For a provider without both a committed native table and origin declarations (currently the other
+seven: `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`, and
+`za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
+API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.

@@ -1,12 +1,11 @@
-"""Bosnia catalogue maintenance : refresh(WiskiLayerSnapshot, RetrievedAt, RefreshInputKind) → WithIssues[NativeTable]; legacy canonical catalogue generation remains operational."""
+"""Bosnia catalogue maintenance : refresh(WiskiLayerSnapshot, RetrievedAt, RefreshInputKind) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedBaFhmzbihCatalogue."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import urllib.request
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -15,6 +14,7 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
     NativeTable,
@@ -37,10 +37,6 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.ba_fhmzbih.metadata import (
-    BaFhmzbihProductMetadata,
-    BaFhmzbihStationProductMetadata,
-)
 
 PROVIDER_ID = ProviderId("ba_fhmzbih")
 PROVIDER_NAME = "FHMZBiH — Federal Hydrometeorological Institute of Bosnia and Herzegovina (vodostaji.voda.ba)"
@@ -134,16 +130,16 @@ class ProductDefinition:
     notes: str
 
     @property
-    def metadata(self) -> BaFhmzbihProductMetadata:
-        return BaFhmzbihProductMetadata(
-            parameter_code=self.parameter_code,
-            workbook_file=self.workbook_file,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            unit_conversion=None if self.conversion_factor == 1.0 else f"divide by {self.conversion_factor:g}",
-            aggregate_daily=self.aggregate_daily,
-            notes=self.notes,
-        )
+    def metadata(self) -> Mapping[str, object]:
+        return {
+            "parameter_code": self.parameter_code,
+            "workbook_file": self.workbook_file,
+            "native_unit": self.native_unit,
+            "canonical_unit": self.canonical_unit,
+            "unit_conversion": None if self.conversion_factor == 1.0 else f"divide by {self.conversion_factor:g}",
+            "aggregate_daily": self.aggregate_daily,
+            "notes": self.notes,
+        }
 
 
 _TIMEZONE_NOTE = (
@@ -357,35 +353,25 @@ def _canonical_json_value(value: object) -> object:
     return value
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
 ) -> GeneratedBaFhmzbihCatalogue:
-    raw = _read_fixture_json(Path(fixture_path))
-    return generate_catalogue(raw, catalogue_date=catalogue_date, generator_input="fixture")
-
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedBaFhmzbihCatalogue:
-    raw_payload = _fetch_live_metadata()
-    return generate_catalogue(raw_payload, catalogue_date=catalogue_date, generator_input="live")
-
-
-def generate_catalogue(
-    raw_payload: list[object],
-    *,
-    catalogue_date: date | None = None,
-    generator_input: str = "fixture",
-) -> GeneratedBaFhmzbihCatalogue:
-    effective_date = catalogue_date or date.today()
+    if native_table.data.is_empty():
+        raise FatalContractError("ba_fhmzbih native table must not be empty")
+    _validate_native_build_rows(native_table)
     products = build_products()
-    stations = build_stations(raw_payload, generator_input=generator_input)
-    station_ids = stations["station_id"].to_list()
-    station_products = build_station_products(station_ids=station_ids, catalogue_date=effective_date)
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    station_dates = native_table.data.select(
+        pl.col("metadata_station_no").alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
+    )
+    station_products = build_station_products(station_dates)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("ba_fhmzbih native table has no valid retrieved_at values")
+    provider_info = build_provider_info(maximum_retrieved_at.date())
     validate_generated_catalogue(provider_info, products, stations, station_products)
     return GeneratedBaFhmzbihCatalogue(
         provider_info=provider_info,
@@ -416,45 +402,37 @@ def build_products() -> ProductCatalog:
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(
-    raw_payload: list[object],
-    *,
-    generator_input: str = "fixture",
-) -> StationCatalog:
-    outcome = _iter_station_rows(raw_payload)
-    if outcome.issues:
-        raise FatalContractError(outcome.issues[0].message, issues=outcome.issues)
-    rows = outcome.value
-    if not rows:
-        raise FatalContractError("ba_fhmzbih: station build returned no rows")
-    if generator_input == "live" and len(rows) < MIN_LIVE_STATIONS:
-        raise FatalContractError(
-            f"ba_fhmzbih: live catalogue returned only {len(rows)} stations "
-            f"(expected >= {MIN_LIVE_STATIONS}); possible fetch failure"
-        )
-    return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    try:
+        return native_table.data.select(
+            pl.lit(PROVIDER_ID).cast(pl.String).alias("provider_id"),
+            pl.col("metadata_station_no").cast(pl.String, strict=True).alias("station_id"),
+            pl.col("metadata_station_latitude").cast(pl.Float64, strict=True).alias("latitude"),
+            pl.col("metadata_station_longitude").cast(pl.Float64, strict=True).alias("longitude"),
+            pl.lit("unknown").cast(pl.String).alias("crs"),
+        ).sort("station_id")
+    except pl.exceptions.PolarsError as exc:
+        raise FatalContractError("ba_fhmzbih native table has invalid station columns") from exc
 
 
 def build_station_products(
-    *,
-    station_ids: list[object],
-    catalogue_date: date,
+    station_dates: pl.DataFrame,
 ) -> StationProductCatalog:
     rows = []
-    for station_id in station_ids:
-        if not isinstance(station_id, str):
-            raise FatalContractError("station_id must be a string")
+    for station_id, retrieved_date in station_dates.iter_rows():
+        if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
+            raise FatalContractError("station retrieval date must pair a string identifier with a date")
         for d in PRODUCT_DEFINITIONS:
-            metadata = BaFhmzbihStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
+            metadata = {
+                "station_id": station_id,
+                "product_id": d.product_id,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": (
                     "Materialised as availability=unknown; the station metadata snapshot "
                     "does not indicate which parameters a station actually reports, and "
                     "workbooks for unreported parameters return zero rows."
                 ),
-            )
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -464,7 +442,7 @@ def build_station_products(
                     "availability_reason": AVAILABILITY_REASON,
                     "start_date": None,
                     "end_date": None,
-                    "last_catalogue_check": catalogue_date,
+                    "last_catalogue_check": retrieved_date,
                     "metadata": _metadata_json(metadata),
                 }
             )
@@ -475,13 +453,11 @@ def build_station_products(
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "metadata_url": METADATA_URL,
         "workbook_url_template": WORKBOOK_URL_TEMPLATE,
-        "generator_input": generator_input,
+        "generator_input": "native",
         "timestamp_convention": "local_to_utc_conversion",
         "source_timezone": "Europe/Sarajevo",
         "rolling_window_note": _ROLLING_WINDOW_NOTE,
@@ -636,39 +612,6 @@ def _iter_station_rows(raw_payload: list[object]) -> WithIssues[list[dict[str, o
 
 
 # ---------------------------------------------------------------------------
-# Live fetchers
-# ---------------------------------------------------------------------------
-
-
-def _fetch_live_metadata() -> list[object]:
-    req = urllib.request.Request(METADATA_URL, headers={"accept": "application/json"}, method="GET")
-    try:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            data = json.load(response)
-    except OSError as exc:
-        raise FatalContractError(f"ba_fhmzbih metadata request failed: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise FatalContractError(f"ba_fhmzbih metadata response is not valid JSON: {exc}") from exc
-
-    if isinstance(data, list):
-        return cast("list[object]", data)
-    raise FatalContractError("ba_fhmzbih live metadata response must be a JSON array")
-
-
-def _read_fixture_json(path: Path) -> list[object]:
-    try:
-        with path.open(encoding="utf-8") as f:
-            value = json.load(f)
-    except OSError as exc:
-        raise FatalContractError(f"Unable to read ba_fhmzbih fixture: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise FatalContractError(f"ba_fhmzbih fixture is not valid JSON: {path}") from exc
-    if isinstance(value, list):
-        return cast("list[object]", value)
-    raise FatalContractError("ba_fhmzbih fixture must be a JSON array")
-
-
-# ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
 
@@ -682,10 +625,32 @@ def _to_float(value: object) -> float | None:
         return None
 
 
-def _metadata_json(
-    model: BaFhmzbihProductMetadata | BaFhmzbihStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+def _validate_native_build_rows(native_table: NativeTable) -> None:
+    frame = native_table.data
+    missing = [column for column in (*METADATA_COLUMNS, "retrieved_at") if column not in frame.columns]
+    if missing:
+        raise FatalContractError(f"ba_fhmzbih native table is missing columns: {', '.join(missing)}")
+    seen: set[str] = set()
+    for index, row in enumerate(frame.select(*METADATA_COLUMNS, "retrieved_at").iter_rows(named=True)):
+        invalid_types = [column for column in METADATA_COLUMNS if not isinstance(row[column], str)]
+        if invalid_types:
+            raise FatalContractError(
+                f"ba_fhmzbih native table row {index} has non-string source fields: {', '.join(invalid_types)}"
+            )
+        station_id = cast("str", row["metadata_station_no"])
+        if not station_id.strip() or station_id.lower() in {"nan", "none", "null"}:
+            raise FatalContractError(f"ba_fhmzbih native table row {index} has invalid metadata_station_no")
+        if station_id in seen:
+            raise FatalContractError(f"ba_fhmzbih native table has duplicate metadata_station_no {station_id}")
+        seen.add(station_id)
+        if _to_float(row["metadata_station_latitude"]) is None or _to_float(row["metadata_station_longitude"]) is None:
+            raise FatalContractError(f"ba_fhmzbih native table station {station_id} has invalid coordinates")
+        if not isinstance(row["retrieved_at"], datetime):
+            raise FatalContractError(f"ba_fhmzbih native table station {station_id} has invalid retrieved_at")
+
+
+def _metadata_json(value: Mapping[str, object]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _empty_native_table(retrieved_at: RetrievedAt) -> NativeTable:
@@ -725,24 +690,20 @@ def _parse_retrieved_at(value: str) -> RetrievedAt:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate the packaged ba_fhmzbih catalogue artifacts.")
-    source = parser.add_mutually_exclusive_group()
-    source.add_argument("--fixture", type=Path, help="Path to a layers/20/index.json metadata fixture.")
-    source.add_argument("--live", action="store_true", help="Fetch the live FHMZBiH station metadata snapshot.")
+    parser = argparse.ArgumentParser(
+        description="Generate the packaged ba_fhmzbih catalogue artifacts.",
+        allow_abbrev=False,
+    )
+    parser.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     parser.add_argument("--native-payload", type=Path, help="Path to an attested layers/20 JSON payload.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
     parser.add_argument("--native-input-kind", choices=RefreshInputKind)
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=None)
     args = parser.parse_args(argv)
 
-    if args.native_payload is not None and (args.fixture is not None or args.live):
-        parser.error("--native-payload cannot be combined with --fixture or --live")
-    if args.native_payload is not None and args.out is not None:
-        parser.error("--native-payload cannot be combined with --out")
-    if args.native_payload is not None and args.catalogue_date is not None:
-        parser.error("--catalogue-date cannot be used with --native-payload")
+    if args.native_payload is not None and (args.native is not None or args.out is not None):
+        parser.error("--native-payload cannot be combined with --native or --out")
     if args.native_payload is not None and args.native_out is None:
         parser.error("--native-payload requires --native-out")
     if args.native_payload is not None and args.retrieved_at is None:
@@ -755,10 +716,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--retrieved-at requires --native-payload")
     if args.native_input_kind is not None and args.native_payload is None:
         parser.error("--native-input-kind requires --native-payload")
-    if args.fixture is None and not args.live and args.native_payload is None:
-        parser.error("one of --fixture, --live, or --native-payload is required")
-    if (args.fixture is not None or args.live) and args.out is None:
-        parser.error("--out is required with --fixture or --live")
+    if args.native is not None and args.out is None:
+        parser.error("--native requires --out")
+    if args.out is not None and args.native is None:
+        parser.error("--out requires --native")
+    if args.native is None and args.native_payload is None:
+        parser.error("one of --native or --native-payload is required")
 
     if args.native_payload is not None:
         try:
@@ -778,11 +741,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ba_fhmzbih native table content SHA-256: {digest}")
         return 0
 
-    catalogue_date = args.catalogue_date or date.today()
-    if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=catalogue_date)
-    else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=catalogue_date)
+    from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
+
+    catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
     write_catalogue(catalogue, args.out)
     return 0
 
