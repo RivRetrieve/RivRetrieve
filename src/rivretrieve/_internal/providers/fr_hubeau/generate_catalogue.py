@@ -1,17 +1,29 @@
+"""refresh : HubeauHydrometryStations × RetrievedAt × HubeauTemperatureStations × RetrievedAt → WithIssues[NativeTable]."""
+
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import urllib.request
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.native import (
+    RETRIEVED_AT_DTYPE,
+    NativeTable,
+    RetrievedAt,
+    read_native_table,
+    stamp_native_table,
+    write_native_table,
+)
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -23,13 +35,15 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
-from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.engine import WithIssues
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau.metadata import (
     FrHubeauProductMetadata,
     FrHubeauStationProductMetadata,
 )
 
-PROVIDER_ID = "fr_hubeau"
+PROVIDER_ID = ProviderId("fr_hubeau")
 PROVIDER_NAME = "Hubeau / SCHAPI — French national hydrometric network"
 
 HYDRO_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations"
@@ -42,6 +56,194 @@ AVAILABILITY_REASON = "Hubeau catalogue does not expose per-variable station ava
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 MIN_LIVE_HYDRO_STATIONS = 500
 MIN_LIVE_TEMP_STATIONS = 50
+
+NATIVE_SOURCE_COLUMNS = (
+    "altitude_ref_alti_station",
+    "code_commune_station",
+    "code_cours_eau",
+    "code_departement",
+    "code_finalite_station",
+    "code_projection",
+    "code_regime_station",
+    "code_region",
+    "code_sandre_reseau_station",
+    "code_site",
+    "code_station",
+    "code_systeme_alti_site",
+    "commentaire_influence_locale_station",
+    "commentaire_station",
+    "coordonnee_x_station",
+    "coordonnee_y_station",
+    "date_activation_ref_alti_station",
+    "date_debut_ref_alti_station",
+    "date_fermeture_station",
+    "date_maj_ref_alti_station",
+    "date_maj_station",
+    "date_ouverture_station",
+    "descriptif_station",
+    "en_service",
+    "geometry",
+    "influence_locale_station",
+    "latitude_station",
+    "libelle_commune",
+    "libelle_cours_eau",
+    "libelle_departement",
+    "libelle_region",
+    "libelle_site",
+    "libelle_station",
+    "longitude_station",
+    "qualification_donnees_station",
+    "type_contexte_loi_stat_station",
+    "type_loi_station",
+    "type_station",
+    "uri_cours_eau",
+    "uri_station",
+    "localisation",
+    "coordonnee_x",
+    "coordonnee_y",
+    "code_type_projection",
+    "longitude",
+    "latitude",
+    "code_commune",
+    "code_troncon_hydro",
+    "code_masse_eau",
+    "libelle_masse_eau",
+    "uri_masse_eau",
+    "code_sous_bassin",
+    "libelle_sous_bassin",
+    "code_bassin",
+    "libelle_bassin",
+    "uri_bassin",
+    "pk",
+    "altitude",
+    "date_maj_infos",
+    "libelle_type_projection",
+    "date_mise_en_service",
+    "date_mise_hors_service",
+    "code_eu_masse_eau",
+    "code_eu_bassin",
+    "superficie_topo",
+    "superficie_reelle",
+    "premier_mois_etiage",
+    "commentaire",
+    "nature_station",
+    "type_entite_hydro",
+    "uri_sous_bassin",
+)
+
+HYDROMETRY_REQUIRED_FIELDS = NATIVE_SOURCE_COLUMNS[:39]
+TEMPERATURE_REQUIRED_FIELDS = (
+    "code_station",
+    "libelle_station",
+    "uri_station",
+    "localisation",
+    "coordonnee_x",
+    "coordonnee_y",
+    "code_type_projection",
+    "longitude",
+    "latitude",
+    "code_commune",
+    "libelle_commune",
+    "code_departement",
+    "libelle_departement",
+    "code_region",
+    "libelle_region",
+    "code_troncon_hydro",
+    "code_cours_eau",
+    "libelle_cours_eau",
+    "uri_cours_eau",
+    "code_masse_eau",
+    "libelle_masse_eau",
+    "uri_masse_eau",
+    "code_sous_bassin",
+    "libelle_sous_bassin",
+    "code_bassin",
+    "libelle_bassin",
+    "uri_bassin",
+    "pk",
+    "altitude",
+    "date_maj_infos",
+    "geometry",
+    "libelle_type_projection",
+    "date_mise_en_service",
+    "date_mise_hors_service",
+    "code_eu_masse_eau",
+    "code_eu_bassin",
+    "superficie_topo",
+    "superficie_reelle",
+    "premier_mois_etiage",
+    "commentaire",
+    "nature_station",
+    "type_entite_hydro",
+    "uri_sous_bassin",
+)
+
+_FLOAT_COLUMNS = frozenset(
+    {
+        "altitude",
+        "altitude_ref_alti_station",
+        "coordonnee_x",
+        "coordonnee_x_station",
+        "coordonnee_y",
+        "coordonnee_y_station",
+        "latitude",
+        "latitude_station",
+        "longitude",
+        "longitude_station",
+        "pk",
+        "superficie_reelle",
+        "superficie_topo",
+    }
+)
+_INTEGER_COLUMNS = frozenset(
+    {
+        "code_projection",
+        "code_regime_station",
+        "code_systeme_alti_site",
+        "code_type_projection",
+        "influence_locale_station",
+        "premier_mois_etiage",
+        "qualification_donnees_station",
+        "type_contexte_loi_stat_station",
+        "type_loi_station",
+    }
+)
+_GEOMETRY_DTYPE = pl.Struct(
+    {
+        "coordinates": pl.List(pl.Float64),
+        "crs": pl.Struct(
+            {
+                "properties": pl.Struct({"name": pl.String}),
+                "type": pl.String,
+            }
+        ),
+        "type": pl.String,
+    }
+)
+
+
+def _native_source_dtype(column: str) -> pl.DataType | type[pl.DataType]:
+    if column in _FLOAT_COLUMNS:
+        return pl.Float64
+    if column in _INTEGER_COLUMNS:
+        return pl.Int64
+    if column == "en_service":
+        return pl.Boolean
+    if column == "code_sandre_reseau_station":
+        return pl.List(pl.String)
+    if column == "geometry":
+        return _GEOMETRY_DTYPE
+    return pl.String
+
+
+NATIVE_SOURCE_SCHEMA = pl.Schema({column: _native_source_dtype(column) for column in NATIVE_SOURCE_COLUMNS})
+NATIVE_SCHEMA = pl.Schema(
+    {
+        **dict(NATIVE_SOURCE_SCHEMA),
+        "source_endpoint": pl.String,
+        "retrieved_at": RETRIEVED_AT_DTYPE,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -202,6 +404,209 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 HYDRO_PRODUCT_DEFS = tuple(d for d in PRODUCT_DEFINITIONS if d.api_type in {"obs_elab", "obs_tr"})
 TEMP_PRODUCT_DEFS = tuple(d for d in PRODUCT_DEFINITIONS if d.api_type == "temperature")
 EXPECTED_PRODUCT_IDS = frozenset(d.product_id for d in PRODUCT_DEFINITIONS)
+
+
+def refresh_native_table(
+    hydro_payload: object,
+    temperature_payload: object,
+    *,
+    hydro_retrieved_at: RetrievedAt,
+    temperature_retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    hydro_result = _validated_native_rows(
+        hydro_payload,
+        source_endpoint="hydrometry",
+        required_fields=HYDROMETRY_REQUIRED_FIELDS,
+    )
+    if isinstance(hydro_result, Issue):
+        return _failed_native_refresh(hydro_result)
+    temperature_result = _validated_native_rows(
+        temperature_payload,
+        source_endpoint="temperature",
+        required_fields=TEMPERATURE_REQUIRED_FIELDS,
+    )
+    if isinstance(temperature_result, Issue):
+        return _failed_native_refresh(temperature_result)
+
+    hydro_ids = [cast(str, row["code_station"]) for row in hydro_result]
+    temperature_ids = [cast(str, row["code_station"]) for row in temperature_result]
+    collision = set(hydro_ids).intersection(temperature_ids)
+    if collision:
+        station_id = sorted(collision)[0]
+        return _failed_native_refresh(_native_issue(f"fr_hubeau station {station_id} occurs in both station endpoints"))
+    if len(hydro_ids) != 6454:
+        return _failed_native_refresh(
+            _native_issue(f"fr_hubeau hydrometry response contains {len(hydro_ids)} stations; expected 6454")
+        )
+    if len(temperature_ids) != 869:
+        return _failed_native_refresh(
+            _native_issue(f"fr_hubeau temperature response contains {len(temperature_ids)} stations; expected 869")
+        )
+
+    hydro_frame = _native_endpoint_frame(hydro_result, "hydrometrie/referentiel/stations")
+    temperature_frame = _native_endpoint_frame(temperature_result, "temperature/station")
+    stamped_hydro = stamp_native_table(hydro_frame, hydro_retrieved_at)
+    stamped_temperature = stamp_native_table(temperature_frame, temperature_retrieved_at)
+    union = pl.concat([stamped_hydro.data, stamped_temperature.data]).select(NATIVE_SCHEMA.names()).sort("code_station")
+    return WithIssues(value=NativeTable(union), issues=())
+
+
+def refresh_native_table_from_fixtures(
+    hydro_fixture_path: Path | str,
+    temperature_fixture_path: Path | str,
+    *,
+    hydro_retrieved_at: RetrievedAt,
+    temperature_retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    return refresh_native_table(
+        _read_fixture_json(Path(hydro_fixture_path)),
+        _read_fixture_json(Path(temperature_fixture_path)),
+        hydro_retrieved_at=hydro_retrieved_at,
+        temperature_retrieved_at=temperature_retrieved_at,
+    )
+
+
+def native_table_content_digest(native_table: NativeTable) -> str:
+    payload = {
+        "columns": native_table.data.columns,
+        "rows": [[_native_json_value(value) for value in row] for row in native_table.data.iter_rows(named=False)],
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _native_json_value(value: object) -> object:
+    if isinstance(value, datetime):
+        utc_value = value.astimezone(UTC)
+        return utc_value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    if isinstance(value, list):
+        return [_native_json_value(member) for member in value]
+    if isinstance(value, dict):
+        return {key: _native_json_value(member) for key, member in value.items()}
+    return value
+
+
+def _validated_native_rows(
+    payload: object,
+    *,
+    source_endpoint: str,
+    required_fields: tuple[str, ...],
+) -> list[dict[str, object]] | Issue:
+    if not isinstance(payload, dict):
+        return _native_issue(f"fr_hubeau {source_endpoint} response must be an object")
+    payload_mapping = cast("dict[str, object]", payload)
+    data = payload_mapping.get("data")
+    if not isinstance(data, list):
+        return _native_issue(f"fr_hubeau {source_endpoint} response data must be a list")
+    count = payload_mapping.get("count")
+    if type(count) is not int:
+        return _native_issue(f"fr_hubeau {source_endpoint} response count must be a non-boolean integer")
+    if count != len(data):
+        return _native_issue(f"fr_hubeau {source_endpoint} response count {count} does not match {len(data)} rows")
+
+    rows: list[dict[str, object]] = []
+    seen: set[str] = set()
+    required_set = set(required_fields)
+    for index, raw_row in enumerate(data):
+        if not isinstance(raw_row, dict):
+            return _native_issue(f"fr_hubeau {source_endpoint} station {index} must be an object")
+        row_mapping = cast("dict[str, object]", raw_row)
+        raw_id = row_mapping.get("code_station")
+        identifier = raw_id if isinstance(raw_id, str) and raw_id.strip() else index
+        if not required_set.issubset(row_mapping):
+            return _native_issue(f"fr_hubeau {source_endpoint} station {identifier} is missing required source fields")
+        if not isinstance(raw_id, str) or not raw_id or not raw_id.strip():
+            return _native_issue(f"fr_hubeau {source_endpoint} station {index} has invalid code_station")
+        if set(row_mapping) != required_set or not _row_values_inhabit_native_schema(row_mapping, required_fields):
+            return _native_issue(
+                f"fr_hubeau {source_endpoint} station {identifier} has source values outside the native schema"
+            )
+        if raw_id in seen:
+            return _native_issue(f"fr_hubeau {source_endpoint} repeats code_station {raw_id}")
+        seen.add(raw_id)
+        rows.append(row_mapping)
+    return rows
+
+
+def _row_values_inhabit_native_schema(row: Mapping[str, object], required_fields: tuple[str, ...]) -> bool:
+    for column in required_fields:
+        value = row[column]
+        if value is None:
+            continue
+        if column in _FLOAT_COLUMNS:
+            if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+                return False
+        elif column in _INTEGER_COLUMNS:
+            if type(value) is not int:
+                return False
+        elif column == "en_service":
+            if not isinstance(value, bool):
+                return False
+        elif column == "code_sandre_reseau_station":
+            if not isinstance(value, list) or not all(isinstance(member, str) for member in value):
+                return False
+        elif column == "geometry":
+            if not _geometry_inhabits_native_schema(value):
+                return False
+        elif not isinstance(value, str):
+            return False
+    return True
+
+
+def _geometry_inhabits_native_schema(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != {"coordinates", "crs", "type"}:
+        return False
+    geometry = cast("dict[str, object]", value)
+    coordinates = geometry["coordinates"]
+    crs = geometry["crs"]
+    if not isinstance(coordinates, list) or not all(
+        not isinstance(member, bool) and isinstance(member, int | float) and math.isfinite(member)
+        for member in coordinates
+    ):
+        return False
+    if not isinstance(crs, dict):
+        return False
+    crs_mapping = cast("dict[str, object]", crs)
+    if set(crs_mapping) != {"properties", "type"} or not isinstance(crs_mapping["type"], str):
+        return False
+    properties = crs_mapping["properties"]
+    if not isinstance(properties, dict):
+        return False
+    properties_mapping = cast("dict[str, object]", properties)
+    return (
+        set(properties_mapping) == {"name"}
+        and isinstance(properties_mapping["name"], str)
+        and isinstance(geometry["type"], str)
+    )
+
+
+def _native_endpoint_frame(rows: list[dict[str, object]], source_endpoint: str) -> pl.DataFrame:
+    aligned_rows = [
+        {**{column: row.get(column) for column in NATIVE_SOURCE_COLUMNS}, "source_endpoint": source_endpoint}
+        for row in rows
+    ]
+    schema = pl.Schema({**dict(NATIVE_SOURCE_SCHEMA), "source_endpoint": pl.String})
+    return pl.DataFrame(aligned_rows, schema=schema)
+
+
+def _native_issue(message: str) -> Issue:
+    return Issue(
+        severity="error",
+        code="invalid_native_station_capture",
+        message=message,
+        provider_id=PROVIDER_ID,
+    )
+
+
+def _failed_native_refresh(issue: Issue) -> WithIssues[NativeTable]:
+    empty = NativeTable(pl.DataFrame(schema=NATIVE_SCHEMA))
+    return WithIssues(value=empty, issues=(issue,))
 
 
 def generate_catalogue_from_fixture(
@@ -602,27 +1007,76 @@ def _metadata_json(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the packaged fr_hubeau catalogue artifacts.")
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--hydro-fixture", type=Path, help="Path to a Hubeau referentiel/stations JSON fixture.")
-    source.add_argument("--live", action="store_true", help="Fetch live Hubeau station endpoints.")
+    parser.add_argument("--hydro-fixture", type=Path, help="Path to a Hubeau referentiel/stations JSON fixture.")
+    parser.add_argument("--live", action="store_true", help="Fetch live Hubeau station endpoints.")
     parser.add_argument(
         "--temp-fixture",
         type=Path,
         help="Path to a Hubeau temperature/station JSON fixture (used with --hydro-fixture).",
     )
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for provider.json and parquet files.")
+    parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
+    parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
+    parser.add_argument("--hydro-retrieved-at", type=_parse_retrieved_at)
+    parser.add_argument("--temperature-retrieved-at", type=_parse_retrieved_at)
     parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     args = parser.parse_args(argv)
 
+    if args.native_out is not None and args.out is not None:
+        parser.error("--native-out cannot be combined with canonical --out")
+    if args.live and args.native_out is not None:
+        parser.error("--live cannot be combined with --native-out")
+    if (args.hydro_fixture is None) != (args.temp_fixture is None):
+        parser.error("--hydro-fixture and --temp-fixture must be supplied together")
+    if args.live and args.hydro_fixture is not None:
+        parser.error("--live cannot be combined with fixture input")
+
+    native_instants_requested = args.hydro_retrieved_at is not None or args.temperature_retrieved_at is not None
+    if args.native_out is not None:
+        if args.hydro_fixture is None:
+            parser.error("--hydro-fixture and --temp-fixture must be supplied together")
+        if args.hydro_retrieved_at is None or args.temperature_retrieved_at is None:
+            parser.error(
+                "--hydro-retrieved-at and --temperature-retrieved-at are required for fixture-native materialization"
+            )
+        outcome = refresh_native_table_from_fixtures(
+            args.hydro_fixture,
+            args.temp_fixture,
+            hydro_retrieved_at=args.hydro_retrieved_at,
+            temperature_retrieved_at=args.temperature_retrieved_at,
+        )
+        native_table = _raise_on_native_issues(outcome)
+        write_native_table(native_table, args.native_out)
+        written = read_native_table(args.native_out)
+        print(native_table_content_digest(written))
+        return 0
+
+    if native_instants_requested:
+        parser.error("--native-out is required for fixture-native materialization")
+    if args.out is None:
+        parser.error("canonical materialization requires --out")
     if args.live:
         catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
     else:
-        temp_path = args.temp_fixture
-        if temp_path is None:
-            parser.error("--temp-fixture is required when using --hydro-fixture")
-        catalogue = generate_catalogue_from_fixture(args.hydro_fixture, temp_path, catalogue_date=args.catalogue_date)
+        if args.hydro_fixture is None:
+            parser.error("canonical materialization requires --live or both fixture paths")
+        catalogue = generate_catalogue_from_fixture(
+            args.hydro_fixture,
+            args.temp_fixture,
+            catalogue_date=args.catalogue_date,
+        )
     write_catalogue(catalogue, args.out)
     return 0
+
+
+def _parse_retrieved_at(value: str) -> RetrievedAt:
+    return RetrievedAt(datetime.fromisoformat(value))
+
+
+def _raise_on_native_issues(outcome: WithIssues[NativeTable]) -> NativeTable:
+    errors = tuple(issue for issue in outcome.issues if issue.severity == "error")
+    if errors:
+        raise FatalContractError(issues=errors)
+    return outcome.value
 
 
 if __name__ == "__main__":
