@@ -463,11 +463,12 @@ def test_native_build_rejects_bad_station_rows(mutation, message: str) -> None:
         generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
 
 
-def test_native_build_rejects_invalid_payload_key() -> None:
+@pytest.mark.parametrize("payload_key", [None, ""])
+def test_native_build_rejects_invalid_payload_key(payload_key: object) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
     rows = _sample_native_rows()
-    rows[1]["payload_key"] = None
+    rows[1]["payload_key"] = payload_key
     native = object.__new__(NativeTable)
     object.__setattr__(native, "data", pl.DataFrame(rows, schema=NATIVE_SCHEMA, strict=False))
 
