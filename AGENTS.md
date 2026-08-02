@@ -93,10 +93,43 @@ method, and SHA-256 digest.
 
 An orchestrator may also perform a live fetch outside a network-disabled executor and supply the
 complete response as a step input. This route is sanctioned only when the same repository record
-contains every exact request URL, one UTC retrieval instant, the accepted row and station counts,
+contains every exact request URL, one UTC retrieval instant per supplied file, or a single campaign instant when the fetch is atomic, the accepted row and station counts,
 the deterministic canonicalization and ordering rules, SHA-256 evidence, and a semantic frame
 comparison between the committed native content and a fresh materialization of the complete supplied
 response.
+
+- South Africa DWS native-table attestation: the live host returned HTTP 403 to the orchestrator from
+  two independent egress points; the network-disabled executor did not perform a fetch. The
+  orchestrator supplied these nine Internet Archive captures, each with its own UTC retrieval instant:
+
+| File | Archived request URL | Origin URL | Snapshot | Bytes | SHA-256 | Retrieved at |
+|---|---|---|---:|---:|---|---|
+| `HyCatalogue.aspx` | `http://web.archive.org/web/20260311133455id_/https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx` | `https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx` | `20260311133455` | 6,778 | `6cf0495ce6ef31bba2d0e746cc8c001d91a8ac8b2c4e634b57f9099d5edafc71` | `2026-08-02T18:47:00Z` |
+| `WMA1_Limpopo-Olifants_River.pdf` | `http://web.archive.org/web/20251122081546id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf` | `20251122081546` | 977,280 | `b6efb89b9f74e0fe9bdca4f2984ce008d77b8f5692fd359a485b9ea4d8ad06a8` | `2026-08-02T18:47:01Z` |
+| `WMA2_Inkomati-Usuthu_River.pdf` | `http://web.archive.org/web/20251127140120id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA2_Inkomati-Usuthu_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA2_Inkomati-Usuthu_River.pdf` | `20251127140120` | 449,874 | `16186305a3fff3bdda90eaf0889827a773014837bdbb4cb2ab0f0ae1a2a360cf` | `2026-08-02T18:47:02Z` |
+| `WMA3_Pongola-Mtamvuna_River.pdf` | `http://web.archive.org/web/20251127181748id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA3_Pongola-Mtamvuna_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA3_Pongola-Mtamvuna_River.pdf` | `20251127181748` | 689,780 | `b9f0e0445484c980b708ff78c7a1cc8803a7d10f4d73c33925d5cae184611c8c` | `2026-08-02T18:47:03Z` |
+| `WMA4_Vaal-Orange_River.pdf` | `http://web.archive.org/web/20251126040946id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA4_Vaal-Orange_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA4_Vaal-Orange_River.pdf` | `20251126040946` | 1,179,466 | `dc502341aaf4928def221e32dc9543fd5a9f982aee9df7de4950e95805cf5bc3` | `2026-08-02T18:47:04Z` |
+| `WMA5_Mzimvubu-Tsitsikamma_River.pdf` | `http://web.archive.org/web/20251127142153id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA5_Mzimvubu-Tsitsikamma_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA5_Mzimvubu-Tsitsikamma_River.pdf` | `20251127142153` | 671,281 | `0d76cedcfdafe2ce9dc8e93eef909e288f6826d7ab729a4856b1cb3c6e0fdde0` | `2026-08-02T18:47:05Z` |
+| `WMA6_Breede-Olifants_River.pdf` | `http://web.archive.org/web/20251121090856id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA6_Breede-Olifants_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA6_Breede-Olifants_River.pdf` | `20251121090856` | 930,945 | `6fb1d753b22bb4fbe038913249d0c2c8b58a619df35754918061c52163acd91e` | `2026-08-02T18:47:06Z` |
+| `WMA7_Eswatini_River.pdf` | `http://web.archive.org/web/20251121161554id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA7_Eswatini_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA7_Eswatini_River.pdf` | `20251121161554` | 192,256 | `f820f9002cdba9a0f44b1ac98b1d160b2755dc0ddb27713bac6c435d3c8a7e86` | `2026-08-02T18:47:07Z` |
+| `WMA8_Lesotho_River.pdf` | `http://web.archive.org/web/20251121113702id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA8_Lesotho_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA8_Lesotho_River.pdf` | `20251121113702` | 214,048 | `9511f46b79d172a2e2540d90bb1679b93670ce75e9b0dc8660f1fde78277ee26` | `2026-08-02T18:47:09Z` |
+
+  All manifest HTTP statuses are 200. Deterministic PDF text parsing produces respectively 544, 210,
+  417, 702, 406, 567, 19, and 40 rows, totaling 2,905 rows and 2,905 unique `Station` values. It
+  repairs 40 standard-code rows lost because their drainage region is blank plus the suffixed codes
+  `A2H090Q` and `B6H018M01`. The schema, in order, is `Station`, `Description`,
+  `Latitude (dd:mm:ss)`, `Longitude (dd:mm:ss)`, `Drainage Region`, `Catchment Area km**2`,
+  `WMA source-file identity`, and UTC-microsecond `retrieved_at`. Source DMS and catchment strings,
+  null drainage regions, and exact PDF filenames remain unchanged; rows sort by exact `Station`, and
+  each row carries its originating PDF's retrieval instant. Full-table canonicalization emits a
+  compact UTF-8 JSON outer list of row lists in schema and row order, with `ensure_ascii=False`,
+  `allow_nan=False`, JSON nulls, and UTC datetimes rendered with exactly six fractional digits and
+  `Z`. Its SHA-256 is `7949369cf573d675cf8cb2374fa172038e10e492299572df442834d6a08e40fc`.
+  Fresh materialization of all supplied bytes is exactly semantically frame-equal to the committed
+  native table. `tests/test_data/za_dws_metadata.json` is the `A1H001`, `A2H090Q`, and `A8H017`
+  subset derived from `WMA1_Limpopo-Olifants_River.pdf`, whose attested SHA-256 is
+  `b6efb89b9f74e0fe9bdca4f2984ce008d77b8f5692fd359a485b9ea4d8ad06a8`; every fixture value is
+  identical to its corresponding committed-native row.
 
 ### 4.1 Providers with a committed native table and origins
 
