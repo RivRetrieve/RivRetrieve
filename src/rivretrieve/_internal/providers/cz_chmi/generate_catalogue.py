@@ -1,3 +1,5 @@
+"""Czech catalogue maintenance : refresh(ChmiMetadataEnvelope, RetrievedAt) → WithIssues[NativeTable]; existing catalogue generation remains operational."""
+
 from __future__ import annotations
 
 import argparse
@@ -5,13 +7,14 @@ import json
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import cast
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -23,6 +26,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.cz_chmi.metadata import (
     CzChmiProductMetadata,
@@ -34,6 +38,46 @@ PROVIDER_NAME = "Czech Hydrometeorological Institute (CHMI) Open Data"
 METADATA_URL = "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json"
 AVAILABILITY_REASON = "CHMI metadata catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
+SOURCE_COLUMNS = (
+    "objID",
+    "DBC",
+    "STATION_NAME",
+    "STREAM_NAME",
+    "GEOGR1",
+    "GEOGR2",
+    "SPA_TYP",
+    "SPAH_DS",
+    "SPAH_UNIT",
+    "DRYH",
+    "SPA1H",
+    "SPA2H",
+    "SPA3H",
+    "SPA4H",
+    "SPAQ_DS",
+    "SPAQ_UNIT",
+    "DRYQ",
+    "SPA1Q",
+    "SPA2Q",
+    "SPA3Q",
+    "SPA4Q",
+    "PLO_STA",
+    "HLGP4",
+)
+NUMERIC_COLUMNS = (
+    "GEOGR1",
+    "GEOGR2",
+    "DRYH",
+    "SPA1H",
+    "SPA2H",
+    "SPA3H",
+    "SPA4H",
+    "DRYQ",
+    "SPA1Q",
+    "SPA2Q",
+    "SPA3Q",
+    "SPA4Q",
+    "PLO_STA",
+)
 
 
 @dataclass(frozen=True)
@@ -143,6 +187,39 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         notes="Hourly instantaneous stage from CHMI hourly HQ file (tsConID=HH). Native unit is centimetres; converted to metres.",
     ),
 )
+
+
+def refresh_native_table(
+    payload: dict[str, object],
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    rows = _extract_stations(payload)
+    try:
+        source_rows = (
+            pl.DataFrame(rows, infer_schema_length=None)
+            .select(SOURCE_COLUMNS)
+            .with_columns(pl.col(column).cast(pl.Float64) for column in NUMERIC_COLUMNS)
+            .sort("objID")
+        )
+    except pl.exceptions.PolarsError as exc:
+        raise FatalContractError("cz_chmi metadata contains values incompatible with the native schema") from exc
+    return WithIssues(value=stamp_native_table(source_rows, retrieved_at), issues=())
+
+
+def refresh_native_table_from_fixture(
+    fixture_path: Path | str,
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    return refresh_native_table(
+        _read_fixture_json(Path(fixture_path)),
+        retrieved_at=retrieved_at,
+    )
+
+
+def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[NativeTable]:
+    return refresh_native_table(_read_live_json(METADATA_URL), retrieved_at=retrieved_at)
 
 
 def generate_catalogue_from_fixture(
@@ -309,35 +386,51 @@ def write_catalogue(catalogue: GeneratedCzChmiCatalogue, out_dir: Path | str) ->
 
 
 def _extract_stations(raw_metadata: dict[str, object]) -> list[dict[str, object]]:
-    """Parse the nested CHMI metadata structure.
-
-    The metadata endpoint returns:
-    { "data": { "data": { "header": "objID,...", "values": [[...], ...] } } }
-    """
     try:
-        inner = raw_metadata["data"]
-        if not isinstance(inner, dict):
-            raise FatalContractError("cz_chmi metadata: expected dict under 'data'")
-        inner2 = cast("dict[str, object]", inner)["data"]
-        if not isinstance(inner2, dict):
-            raise FatalContractError("cz_chmi metadata: expected dict under 'data.data'")
-        data_block = cast("dict[str, object]", inner2)
-        header_str = data_block.get("header", "")
-        values_raw = data_block.get("values", [])
-    except (KeyError, TypeError) as exc:
-        raise FatalContractError(f"cz_chmi metadata: unexpected JSON structure: {exc}") from exc
+        envelope_values = [
+            raw_metadata["zaznamID"],
+            raw_metadata["datovyZdrojID"],
+            raw_metadata["datovyTokID"],
+            raw_metadata["datumVytvoreni"],
+            raw_metadata["verzeDat"],
+        ]
+        data = raw_metadata["data"]
+        if not isinstance(data, dict):
+            raise FatalContractError("cz_chmi metadata: 'data' must be an object")
+        data_object = cast("dict[str, object]", data)
+        data_type = data_object["type"]
+        nested_data = data_object["data"]
+        if not isinstance(nested_data, dict):
+            raise FatalContractError("cz_chmi metadata: 'data.data' must be an object")
+        data_block = cast("dict[str, object]", nested_data)
+        header = data_block["header"]
+        values = data_block["values"]
+    except KeyError as exc:
+        raise FatalContractError(f"cz_chmi metadata missing required key: {exc}") from exc
 
-    if not isinstance(header_str, str) or not isinstance(values_raw, list):
-        raise FatalContractError("cz_chmi metadata: 'header' must be a string and 'values' must be a list")
-
-    columns = [c.strip() for c in header_str.split(",")]
+    if not all(isinstance(value, str) for value in envelope_values):
+        raise FatalContractError("cz_chmi metadata envelope fields must be strings")
+    if not isinstance(data_type, str):
+        raise FatalContractError("cz_chmi metadata: 'data.type' must be a string")
+    if not isinstance(header, str):
+        raise FatalContractError("cz_chmi metadata: 'header' must be a string")
+    if tuple(header.split(",")) != SOURCE_COLUMNS:
+        raise FatalContractError("cz_chmi metadata header does not match the required source header")
+    if not isinstance(values, list):
+        raise FatalContractError("cz_chmi metadata: 'values' must be a list")
 
     station_rows: list[dict[str, object]] = []
-    for row in values_raw:
+    for row_number, row in enumerate(values, start=1):
         if not isinstance(row, list):
-            continue
-        station_rows.append(dict(zip(columns, row, strict=False)))
-
+            raise FatalContractError(f"cz_chmi metadata row {row_number} must be a list")
+        if len(row) != len(SOURCE_COLUMNS):
+            raise FatalContractError(
+                f"cz_chmi metadata row {row_number} has {len(row)} values; expected {len(SOURCE_COLUMNS)}"
+            )
+        station_id = row[0]
+        if not isinstance(station_id, str) or not station_id.strip():
+            raise FatalContractError(f"cz_chmi metadata row {row_number} has an invalid objID")
+        station_rows.append(dict(zip(SOURCE_COLUMNS, row, strict=True)))
     return station_rows
 
 
@@ -409,10 +502,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to a CHMI metadata JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live CHMI metadata endpoint.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for provider.json and parquet files.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
+    destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
+    parser.add_argument("--catalogue-date", type=date.fromisoformat)
+    parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     args = parser.parse_args(argv)
 
+    if args.native_out is not None:
+        if args.retrieved_at is None:
+            parser.error("--retrieved-at is required with --native-out")
+        if args.catalogue_date is not None:
+            parser.error("--catalogue-date is only valid with --out")
+        if args.live:
+            native_outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
+        else:
+            native_outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=args.retrieved_at)
+        write_native_table(native_outcome.value, args.native_out)
+        return 0
+
+    if args.retrieved_at is not None:
+        parser.error("--retrieved-at is only valid with --native-out")
     if args.live:
         catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
     else:

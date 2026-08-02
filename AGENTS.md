@@ -85,7 +85,27 @@ The committed native table carries provenance. Produce it with the provider's `r
 against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
 when that fixture has been verified content-identical to a live payload and the repository record
 states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
-may enter the repository from a fixture.
+may enter the repository from a fixture. A live fetch performed outside the executor sandbox and
+supplied as a step input may also materialize a committed native table when the repository record
+states the exact request URL, UTC retrieval instant, row or feature count, canonicalization method,
+and SHA-256.
+
+- Czechia native-table attestation: the orchestrator performed
+  `GET https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json` outside the executor
+  sandbox at `2026-08-02T00:14:31Z`, received 831 rows with 23 header columns, and supplied the
+  complete JSON response. Canonicalization serializes the complete parsed JSON object with
+  `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8 encodes the
+  result, and takes SHA-256; the result was
+  `a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The committed native table
+  content digest sorts rows by `objID`, represents the columns in schema order and each row as an
+  aligned positional list, renders the UTC `retrieved_at` as an ISO 8601 string ending in `Z`, then
+  uses the same JSON serialization, UTF-8 encoding, and SHA-256 procedure; its result is
+  `b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b`. The active three-row
+  fixture is an explicitly identified verbatim subset, not content-identical to the complete
+  response. Its predecessor was source-incorrect in every row:
+  `0-203-1-016000` carried `50.0014 / 14.4092` instead of `50.3427582 / 15.9249555`;
+  `0-203-1-020000` carried `50.3500 / 14.4741` instead of `50.3517105 / 16.1299498` (longitude
+  wrong by 1.66 degrees); and `0-204-1-001000` was not published by the source.
 
 ### 4.1 Providers with a committed native table and origins
 
