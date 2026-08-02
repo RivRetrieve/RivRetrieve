@@ -1,8 +1,9 @@
-"""USGS catalogue maintenance : refresh(SeriesRdbRows × ExpandedRdbRows, RetrievedAt) → WithIssues[NativeTable]; legacy catalogue generation remains operational."""
+"""USGS catalogue maintenance : refresh(SeriesRdbRows × ExpandedRdbRows, RetrievedAt) → WithIssues[NativeTable]; digest : NativeTable → SHA256; legacy catalogue generation remains operational."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import urllib.request
 from collections.abc import Iterable, Iterator, Sequence
@@ -254,6 +255,25 @@ NATIVE_SCHEMA = pl.Schema(
         "retrieved_at": pl.Datetime(time_unit="us", time_zone="UTC"),
     }
 )
+
+
+def native_table_content_sha256(table: NativeTable) -> str:
+    """Return the SHA-256 of the compact canonical JSON table in schema and row order."""
+    if table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS native table does not have the exact required schema")
+
+    digest = hashlib.sha256()
+    digest.update(b"[")
+    for index, row in enumerate(table.data.iter_rows()):
+        if index:
+            digest.update(b",")
+        values = [
+            value.isoformat(timespec="microseconds").replace("+00:00", "Z") if isinstance(value, datetime) else value
+            for value in row
+        ]
+        digest.update(json.dumps(values, separators=(",", ":"), ensure_ascii=False).encode())
+    digest.update(b"]")
+    return digest.hexdigest()
 
 
 class NativeInputKind(Enum):
@@ -1000,6 +1020,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("native RDB mode cannot be combined with --out or --catalogue-date")
         outcome = refresh_native_table_from_rdb_directory(args.rdb_dir, retrieved_at=args.retrieved_at)
         write_native_table(outcome.value, args.native_out)
+        print(f"USGS native table canonical SHA-256: {native_table_content_sha256(outcome.value)}")
         return 0
 
     if args.out is None:

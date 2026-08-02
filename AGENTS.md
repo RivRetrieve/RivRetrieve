@@ -221,7 +221,12 @@ response.
   by exact `site_no`; and appends the single UTC-microsecond `retrieved_at`. No field is trimmed,
   renamed, parsed, converted, or harmonized. The compact UTF-8 JSON list of sorted `site_no`
   values, serialized with separators `(",", ":")` and `ensure_ascii=False`, has SHA-256
-  `8ad79dac66b25a9dc46ebd30b650c1e647b44d9b31c9bc4fdd17c5e46f4ee241`. A fresh reconstruction
+  `8ad79dac66b25a9dc46ebd30b650c1e647b44d9b31c9bc4fdd17c5e46f4ee241`. The full table is
+  serialized as a compact UTF-8 JSON outer list of row lists in the declared schema
+  order, using the same separators and `ensure_ascii=False`; `retrieved_at` is rendered as an
+  RFC 3339 UTC string with exactly six fractional digits and `Z`. Its SHA-256, emitted by the same
+  regeneration run that writes the native table, is
+  `e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f`. A fresh reconstruction
   from the attested response was compared with the committed native table using exact semantic frame
   equality; Parquet byte equality is not the provenance criterion.
 

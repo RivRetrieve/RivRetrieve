@@ -441,6 +441,33 @@ def test_supplied_national_refresh_enforces_live_minimum() -> None:
         )
 
 
+def _national_product_records(*, omitted_key: tuple[str, str, str] | None = None) -> dict[str, list[tuple[str, ...]]]:
+    records: list[tuple[str, ...]] = []
+    for definition in PRODUCT_DEFINITIONS:
+        key = (
+            "dv" if definition.endpoint == "dv" else "uv",
+            definition.param_code,
+            definition.stat_code or "",
+        )
+        if key == omitted_key:
+            continue
+        record = dict.fromkeys(SERIES_ONLY_FIELDS, "")
+        record.update(zip(("data_type_cd", "parm_cd", "stat_cd"), key, strict=True))
+        records.append(tuple(record[name] for name in SERIES_ONLY_FIELDS))
+    return {"national": records}
+
+
+def test_national_product_validation_rejects_a_product_with_zero_matching_rows() -> None:
+    missing_key = ("dv", "00065", "00001")
+
+    with pytest.raises(FatalContractError, match="zero matching series rows"):
+        generator._validate_national_products(_national_product_records(omitted_key=missing_key))
+
+
+def test_national_product_validation_accepts_the_complete_product_key_set() -> None:
+    generator._validate_national_products(_national_product_records())
+
+
 def test_fixture_refresh_preserves_exact_source_data_and_alignment() -> None:
     series_rows = _fixture_rows(SERIES_FIXTURE_PATH)
     expanded_row = _fixture_rows(EXPANDED_FIXTURE_PATH)[0]
@@ -507,6 +534,7 @@ def test_native_cli_requires_strict_z_retrieval_instant(tmp_path: Path) -> None:
 def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     native_out = tmp_path / "native.parquet"
     sentinel = tmp_path / "provider.json"
@@ -529,6 +557,9 @@ def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
     assert result == 0
     assert sentinel.read_text(encoding="utf-8") == "unchanged"
     pl_testing.assert_frame_equal(read_native_table(native_out).data, expected.value.data, check_exact=True)
+    assert capsys.readouterr().out == (
+        f"USGS native table canonical SHA-256: {generator.native_table_content_sha256(expected.value)}\n"
+    )
 
 
 @pytest.mark.parametrize(
@@ -555,7 +586,8 @@ def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
 
 
 def test_committed_native_table_exact_schema_counts_and_provenance() -> None:
-    native = read_native_table(NATIVE_PATH).data
+    native_table = read_native_table(NATIVE_PATH)
+    native = native_table.data
 
     assert native.schema == NATIVE_SCHEMA
     assert native.height == 26_258
@@ -565,6 +597,9 @@ def test_committed_native_table_exact_schema_counts_and_provenance() -> None:
     ids = native["site_no"].to_list()
     digest = hashlib.sha256(json.dumps(ids, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
     assert digest == "8ad79dac66b25a9dc46ebd30b650c1e647b44d9b31c9bc4fdd17c5e46f4ee241"
+    assert generator.native_table_content_sha256(native_table) == (
+        "e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"
+    )
     total_records = 0
     for row in native.iter_rows(named=True):
         aligned = list(zip(*(row[name] for name in SERIES_ONLY_FIELDS), strict=True))
