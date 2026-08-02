@@ -365,19 +365,20 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 
 - **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/usa.py` (legacy `USAFetcher` using `dataretrieval` package).
 - **Provider ID:** `usgs_nwis`
-- **Status:** Shipped. Registered alongside `ch_foen` and `lt_lhmt` in `_ensure_default_providers_registered()`. All 512 tests pass (36 usgs_nwis-specific).
+- **Status:** Shipped. Full provider with a committed native table and network-free canonical build.
 - **Products ported:** `discharge_daily_mean` (DV 00060/00003, cfs→m3/s), `discharge_instantaneous` (IV 00060, cfs→m3/s), `stage_daily_mean` (DV 00065/00003, ft→m), `stage_daily_max` (DV 00065/00001, ft→m), `stage_daily_min` (DV 00065/00002, ft→m), `stage_instantaneous` (IV 00065, ft→m).
-- **Stations:** 5 (2026-06-01 fixture; representative set). For production, regenerate from live USGS site service (8000+ stream gauges).
+- **Stations:** 26,258 (`catalogue_version=2026-08-02`) from the committed 55-column native table; six products and 157,548 station-product rows.
 - **Key decisions:**
   - Direct USGS WaterServices REST API calls (no `dataretrieval` package). DV and IV endpoints selected per product.
   - Annual 365-day windows for retrieval.
   - Timestamps carry explicit ISO 8601 timezone offsets (e.g. `-06:00` for CST); parsed and converted to UTC. Series annotation `timezone_source = "provider_timestamp_offset"`.
   - No auth token; public USGS API.
-  - Elevation converted ft→m; drainage area converted sq mi→km². Raw values preserved in station metadata.
-  - Station-product availability materialized as `unknown` (NWIS site catalogue does not expose per-variable availability).
+  - Canonical stations contain source identity, decimal coordinates, and `EPSG:4269` for the committed table's `NAD83` datum tokens. Other station facts remain in native vocabulary.
+  - Station-product availability and period of record come from exact `data_type_cd`/`parm_cd`/`stat_cd` source-series rows. Daily products match `dv`; instantaneous products match returned `uv` rows with empty `stat_cd`.
+  - Canonical artifacts are rebuilt only from committed `catalogue/native.parquet` plus origin declarations. Live and supplied-RDB modes refresh the native table and do not generate canonical artifacts.
   - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching lt_lhmt pattern.
 - **Port notes:** `docs/provider_ports/usgs_nwis.md`.
-- **Fixtures:** `tests/test_data/usgs_nwis_metadata_sites.json` (5 stations, 2026-06-01), `tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json` (DV discharge Jan 2023 for station 07374000).
+- **Fixtures:** `tests/test_data/usgs_nwis_metadata_series.json` and `usgs_nwis_metadata_expanded.json` preserve attested refresh subsets; `tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json` covers DV observations.
 - **Architecture.md impact:** None. Timestamp offset conversion is provider-specific. Unit conversions (cfs, ft) are provider-specific. No shared harness gap discovered.
 
 ## 11. `cz_chmi` — Czech Republic / CHMI provider port (post-V1)
