@@ -90,23 +90,6 @@ the executor sandbox and supplied as an orchestrator step input. That input requ
 attestation: exact request URL or URLs, UTC retrieval instant, row or feature count, canonicalization
 method, and SHA-256 digest.
 
-- Czechia native-table attestation: the orchestrator performed
-  `GET https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json` outside the executor
-  sandbox at `2026-08-02T00:14:31Z`, received 831 rows with 23 header columns, and supplied the
-  complete JSON response. Canonicalization serializes the complete parsed JSON object with
-  `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8 encodes the
-  result, and takes SHA-256; the result was
-  `a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The committed native table
-  content digest sorts rows by `objID`, represents the columns in schema order and each row as an
-  aligned positional list, renders the UTC `retrieved_at` as an ISO 8601 string ending in `Z`, then
-  uses the same JSON serialization, UTF-8 encoding, and SHA-256 procedure; its result is
-  `b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b`. The active three-row
-  fixture is an explicitly identified verbatim subset, not content-identical to the complete
-  response. Its predecessor was source-incorrect in every row:
-  `0-203-1-016000` carried `50.0014 / 14.4092` instead of `50.3427582 / 15.9249555`;
-  `0-203-1-020000` carried `50.3500 / 14.4741` instead of `50.3517105 / 16.1299498` (longitude
-  wrong by 1.66 degrees); and `0-204-1-001000` was not published by the source.
-
 
 An orchestrator may also perform a live fetch outside a network-disabled executor and supply the
 complete response as a step input. This route is sanctioned only when the same repository record
@@ -261,6 +244,23 @@ generation must use its committed `native.parquet`, never `--live` or supplied R
   from the attested response was compared with the committed native table using exact semantic frame
   equality; Parquet byte equality is not the provenance criterion.
 
+- Czechia native-table attestation: the orchestrator performed
+  `GET https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json` outside the executor
+  sandbox at `2026-08-02T00:14:31Z`, received 831 rows with 23 header columns, and supplied the
+  complete JSON response. Canonicalization serializes the complete parsed JSON object with
+  `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8 encodes the
+  result, and takes SHA-256; the result was
+  `a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The committed native table
+  content digest sorts rows by `objID`, represents the columns in schema order and each row as an
+  aligned positional list, renders the UTC `retrieved_at` as an ISO 8601 string ending in `Z`, then
+  uses the same JSON serialization, UTF-8 encoding, and SHA-256 procedure; its result is
+  `b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b`. The active three-row
+  fixture is an explicitly identified verbatim subset, not content-identical to the complete
+  response. Its predecessor was source-incorrect in every row:
+  `0-203-1-016000` carried `50.0014 / 14.4092` instead of `50.3427582 / 15.9249555`;
+  `0-203-1-020000` carried `50.3500 / 14.4741` instead of `50.3517105 / 16.1299498` (longitude
+  wrong by 1.66 degrees); and `0-204-1-001000` was not published by the source.
+
 - Lithuania native-table attestation: the orchestrator performed
   `GET https://api.meteo.lt/v1/hydro-stations` outside the executor sandbox at
   `2026-08-01T18:31:08Z`, received 97 stations, and verified the live payload content-identical to
@@ -316,9 +316,6 @@ native table and origins, and commit the resulting canonical artifacts alongside
 For a provider without both a committed native table and origin declarations (currently the other
 eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`, and
 `za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
-API before the provider is committed.
-
-eleven), the four canonical packaged catalogue artifacts must be generated from the live provider
 API before the provider is committed.
 
 
