@@ -318,6 +318,23 @@ eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_
 `za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
 API before the provider is committed.
 
+- Bosnia native-table attestation: the orchestrator performed
+  `GET https://vodostaji.voda.ba/data/internet/layers/20/index.json` outside the executor sandbox at
+  `2026-08-02T12:42:03Z`, received 60 entries exactly matching the 60 committed stations, and supplied
+  the complete JSON response. Canonicalization uses
+  `json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)` encoded as UTF-8 and
+  produces SHA-256 `907817ca04d3d5626151d8f57478b90dc22f5503b29b8097106768aca942545f`.
+  The response combines station metadata with a volatile timeseries snapshot. The native table excludes
+  exactly `L1_label`, `L1_req_timestamp`, `L1_station_longname`, `L1_stationparameter_name`,
+  `L1_stationparameter_no`, `L1_timestamp`, `L1_ts_id`, `L1_ts_name`, `L1_ts_precision`,
+  `L1_ts_unitsymbol`, `L1_ts_value`, and `L1_web_flow_class`: `L1_ts_value`, `L1_timestamp`, and
+  `L1_req_timestamp` change on every fetch, and the `L1_*` group as a whole describes the volatile
+  timeseries snapshot rather than station metadata. The reproducible stable proof deletes those twelve
+  keys from each object, sorts by `metadata_station_no`, serializes with the same settings, and produces
+  SHA-256 `14ab47126fe40f16f23ddc66620fc8ae30910cd812c69806f867a851e659b23d`. All 18
+  `metadata_*` fields remain source-named strings, including blank elevation and uninterpreted
+  projected and local coordinate fields.
+
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
