@@ -1,12 +1,13 @@
 """Maintainer-only catalogue generator for pl_imgw.
 
+refresh : RecoveredPolandStations × LiveImgwRoster × RetrievedAt → WithIssues[NativeTable]
+
 NOT imported during normal package use. Run manually to regenerate packaged
 catalogue artifacts when the IMGW station list changes.
 
-Station source: the packaged ``poland_sites.csv`` from the legacy Python
-RivRetrieve repo (1301 stations with identifiers and coordinates).
-The live IMGW ``/api/data/hydro`` JSON endpoint has only 913 current stations,
-314 of which lack coordinates, so the CSV is the richer source.
+The packaged 1,301-row geometry is a recovered historical import. The complete
+live IMGW roster independently checks its identifier set but carries no geometry.
+IMGW's coordinate routes are partial, coarser corroborating sources.
 
 Usage:
     uv run python -m rivretrieve._internal.providers.pl_imgw.generate_catalogue \\
@@ -21,16 +22,28 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import io
 import json
+import math
 import urllib.request
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Never
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.native import (
+    NativeTable,
+    RetrievedAt,
+    read_native_table,
+    stamp_native_table,
+    write_native_table,
+)
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -42,6 +55,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.pl_imgw.metadata import (
     PlImgwProductMetadata,
@@ -51,17 +65,31 @@ from rivretrieve._internal.providers.pl_imgw.metadata import (
 PROVIDER_ID = "pl_imgw"
 PROVIDER_NAME = "Poland Institute of Meteorology and Water Management (IMGW)"
 
-# Primary station source (packaged CSV from legacy Python repo).
-# Columns: gauge_id, gauge_name, river, area (km²), gauge_altitude (m), latitude, longitude
+# The live roster checks recovered station identity but has no coordinates.
 STATION_CSV_URL = (
     "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_stacji_hydro.csv"
 )
-# The live JSON endpoint is usable as fallback but has 314 stations without coordinates.
+# Intermediate compatibility source; it is not the shipped 1,301-row geometry.
 HYDRO_JSON_URL = "https://danepubliczne.imgw.pl/api/data/hydro"
 
 AVAILABILITY_REASON = "IMGW does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 LIVE_STATION_MINIMUM = 500
+
+NATIVE_SOURCE_SCHEMA = pl.Schema(
+    {
+        "gauge_id": pl.String,
+        "gauge_name": pl.String,
+        "river": pl.String,
+        "area": pl.Float64,
+        "gauge_altitude": pl.String,
+        "latitude": pl.Float64,
+        "longitude": pl.Float64,
+    }
+)
+_NATIVE_SOURCE_COLUMNS = NATIVE_SOURCE_SCHEMA.names()
+_EXPECTED_ROSTER_ROWS = 1301
+_NATIVE_COMBINATION_PREFIX = "pl_imgw native refresh requires --fixture, --roster, --roster-retrieved-at, --retrieved-at, and --native-out together; missing="
 
 
 @dataclass(frozen=True)
@@ -70,6 +98,12 @@ class GeneratedPlImgwCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+
+
+@dataclass(frozen=True, slots=True)
+class LiveImgwRoster:
+    identifiers: tuple[str, ...]
+    retrieved_at: RetrievedAt
 
 
 @dataclass(frozen=True)
@@ -140,6 +174,174 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 )
 
 
+def parse_roster_retrieved_at(value: str) -> RetrievedAt:
+    """Parse the independent roster capture instant at the file boundary."""
+    return _parse_utc_instant(value, option="--roster-retrieved-at")
+
+
+def parse_recovered_retrieved_at(value: str) -> RetrievedAt:
+    """Parse the recovered payload's provenance lower-bound instant."""
+    return _parse_utc_instant(value, option="--retrieved-at")
+
+
+def refresh_native_table(
+    recovered_rows: pl.DataFrame,
+    roster: LiveImgwRoster,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    """Check recovered identities against the live roster and stamp the source rows."""
+    if recovered_rows.schema != NATIVE_SOURCE_SCHEMA:
+        raise FatalContractError(
+            f"pl_imgw recovered header mismatch: expected={_NATIVE_SOURCE_COLUMNS!r}; actual={recovered_rows.columns!r}"
+        )
+
+    recovered_ids = set(recovered_rows["gauge_id"].to_list())
+    roster_ids = set(roster.identifiers)
+    recovered_only = sorted(recovered_ids - roster_ids)
+    roster_only = sorted(roster_ids - recovered_ids)
+    if recovered_only or roster_only:
+        raise FatalContractError(
+            f"pl_imgw roster identifier mismatch: recovered-only={recovered_only!r}; roster-only={roster_only!r}"
+        )
+
+    source_rows = recovered_rows.sort("gauge_id")
+    return WithIssues(value=stamp_native_table(source_rows, retrieved_at), issues=())
+
+
+def refresh_native_table_from_files(
+    recovered_path: Path | str,
+    roster_path: Path | str,
+    *,
+    roster_retrieved_at: RetrievedAt,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    """Parse strict offline captures and refresh the Poland native table."""
+    recovered_rows = _read_recovered_stations(Path(recovered_path))
+    roster = _read_live_roster(Path(roster_path), roster_retrieved_at)
+    return refresh_native_table(recovered_rows, roster, retrieved_at)
+
+
+def native_table_content_sha256(table: NativeTable) -> str:
+    """Hash the canonical semantic content of a Poland native table."""
+    frame = table.data.sort("gauge_id")
+    columns = frame.columns
+    rows: list[list[object]] = []
+    for row in frame.iter_rows(named=False):
+        rendered = list(row)
+        retrieved_at = rendered[-1]
+        if not isinstance(retrieved_at, datetime):
+            raise FatalContractError("pl_imgw native retrieved_at is not a datetime")
+        rendered[-1] = retrieved_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        rows.append(rendered)
+    canonical = json.dumps(
+        {"columns": columns, "rows": rows},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _parse_utc_instant(value: str, *, option: str) -> RetrievedAt:
+    message = f"pl_imgw invalid {option}: {value!r}; expected RFC 3339 UTC instant"
+    if not value.endswith("Z") or value.count("Z") != 1:
+        raise FatalContractError(message)
+    try:
+        parsed = datetime.fromisoformat(f"{value[:-1]}+00:00")
+    except ValueError as exc:
+        raise FatalContractError(message) from exc
+    try:
+        return RetrievedAt(parsed)
+    except FatalContractError as exc:
+        raise FatalContractError(message) from exc
+
+
+def _read_recovered_stations(path: Path) -> pl.DataFrame:
+    try:
+        with path.open(encoding="utf-8", newline="") as file:
+            reader = csv.DictReader(file)
+            actual_header = reader.fieldnames
+            if actual_header != _NATIVE_SOURCE_COLUMNS:
+                raise FatalContractError(
+                    f"pl_imgw recovered header mismatch: expected={_NATIVE_SOURCE_COLUMNS!r}; actual={actual_header!r}"
+                )
+            rows = [_parse_recovered_row(row, reader.line_num) for row in reader]
+    except FileNotFoundError as exc:
+        raise FatalContractError(f"pl_imgw recovered input not found: {path}") from exc
+    except UnicodeDecodeError as exc:
+        raise FatalContractError(
+            f"pl_imgw recovered value invalid: row=1; field=encoding; value={exc.object!r}"
+        ) from exc
+
+    if len(rows) != _EXPECTED_ROSTER_ROWS:
+        raise FatalContractError(f"pl_imgw recovered value invalid: row={len(rows) + 1}; field=gauge_id; value=''")
+    duplicate_ids = sorted(
+        station_id for station_id, count in Counter(row["gauge_id"] for row in rows).items() if count > 1
+    )
+    if duplicate_ids:
+        duplicate = duplicate_ids[0]
+        duplicate_row = next(index for index, row in enumerate(rows, start=2) if row["gauge_id"] == duplicate)
+        raise FatalContractError(
+            f"pl_imgw recovered value invalid: row={duplicate_row}; field=gauge_id; value={duplicate!r}"
+        )
+    return pl.DataFrame(rows, schema=NATIVE_SOURCE_SCHEMA)
+
+
+def _parse_recovered_row(row: dict[str | None, str | list[str] | None], row_number: int) -> dict[str, object]:
+    if None in row:
+        _invalid_recovered(row_number, _NATIVE_SOURCE_COLUMNS[-1], row[None])
+
+    parsed: dict[str, object] = {}
+    for field in ("gauge_id", "gauge_name", "river", "gauge_altitude"):
+        value = row.get(field)
+        if not isinstance(value, str) or value == "":
+            _invalid_recovered(row_number, field, value)
+        if field == "gauge_id" and (len(value) != 9 or not value.isdigit()):
+            _invalid_recovered(row_number, field, value)
+        parsed[field] = value
+
+    for field in ("area", "latitude", "longitude"):
+        value = row.get(field)
+        try:
+            number = float(value) if isinstance(value, str) and value != "" else math.nan
+        except ValueError:
+            _invalid_recovered(row_number, field, value)
+        if not math.isfinite(number):
+            _invalid_recovered(row_number, field, value)
+        parsed[field] = number
+    return parsed
+
+
+def _invalid_recovered(row_number: int, field: str, value: object) -> Never:
+    raise FatalContractError(f"pl_imgw recovered value invalid: row={row_number}; field={field}; value={value!r}")
+
+
+def _read_live_roster(path: Path, retrieved_at: RetrievedAt) -> LiveImgwRoster:
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError as exc:
+        raise FatalContractError(f"pl_imgw roster input not found: {path}") from exc
+    try:
+        text = raw.decode("cp1250", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise FatalContractError(f"pl_imgw roster encoding invalid: expected=cp1250; path={path}") from exc
+
+    rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=","))
+    for row_number, row in enumerate(rows, start=1):
+        if len(row) != 4:
+            raise FatalContractError(
+                f"pl_imgw roster row invalid: row={row_number}; expected_columns=4; actual_columns={len(row)}"
+            )
+    if len(rows) != _EXPECTED_ROSTER_ROWS:
+        raise FatalContractError(f"pl_imgw roster row count invalid: expected=1301; actual={len(rows)}")
+
+    identifiers = tuple(row[0].lstrip() for row in rows)
+    duplicate_ids = sorted(station_id for station_id, count in Counter(identifiers).items() if count > 1)
+    if duplicate_ids:
+        raise FatalContractError(f"pl_imgw roster identifiers duplicated: {duplicate_ids!r}")
+    return LiveImgwRoster(identifiers=identifiers, retrieved_at=retrieved_at)
+
+
 def generate_catalogue_from_fixture(
     fixture_path: Path | str,
     *,
@@ -156,10 +358,9 @@ def generate_catalogue_from_live(
 ) -> GeneratedPlImgwCatalogue:
     """Generate catalogue by downloading the live ``poland_sites.csv`` from IMGW.
 
-    Note: the live IMGW station list CSV does not include coordinates. This
-    falls back to the ``/api/data/hydro`` JSON endpoint to enrich with lat/lon,
-    but that endpoint has ~314 stations without coordinates. For a complete
-    catalogue, prefer ``--fixture tests/test_data/pl_imgw_stations.csv``.
+    This intermediate compatibility entry point uses the partial current API.
+    It is scheduled for deletion when the canonical builder consumes the
+    committed native table.
     """
     raw = _fetch_live_stations()
     return generate_catalogue(raw, catalogue_date=catalogue_date, generator_input="live")
@@ -347,7 +548,7 @@ def _read_fixture_csv(path: Path) -> list[dict[str, object]]:
 
 
 def _fetch_live_stations() -> list[dict[str, object]]:
-    """Download the live IMGW /api/data/hydro JSON and convert to the same dict shape as the CSV."""
+    """Download the partial live API for intermediate canonical compatibility."""
     try:
         with urllib.request.urlopen(HYDRO_JSON_URL, timeout=30) as resp:
             if resp.status < 200 or resp.status >= 300:
@@ -395,16 +596,58 @@ def _validate(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the packaged pl_imgw catalogue artifacts.")
-    source = parser.add_mutually_exclusive_group(required=True)
+    source = parser.add_mutually_exclusive_group()
     source.add_argument(
         "--fixture",
         type=Path,
         help="Path to a poland_sites.csv file (gauge_id, gauge_name, river, area, gauge_altitude, lat, lon).",
     )
     source.add_argument("--live", action="store_true", help="Fetch the live IMGW /api/data/hydro endpoint.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for catalogue artifacts.")
+    parser.add_argument("--out", type=Path, help="Output directory for catalogue artifacts.")
+    parser.add_argument("--roster", type=Path, help="Path to the captured CP1250 IMGW station roster.")
+    parser.add_argument("--roster-retrieved-at", help="Roster capture instant as RFC 3339 UTC.")
+    parser.add_argument("--retrieved-at", help="Recovered payload provenance instant as RFC 3339 UTC.")
+    parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     args = parser.parse_args(argv)
+
+    native_values = {
+        "--fixture": args.fixture,
+        "--roster": args.roster,
+        "--roster-retrieved-at": args.roster_retrieved_at,
+        "--retrieved-at": args.retrieved_at,
+        "--native-out": args.native_out,
+    }
+    native_mode = any(
+        native_values[flag] is not None
+        for flag in ("--roster", "--roster-retrieved-at", "--retrieved-at", "--native-out")
+    )
+    if native_mode:
+        missing = sorted(flag for flag, value in native_values.items() if value is None)
+        if missing == ["--roster-retrieved-at"]:
+            raise FatalContractError("pl_imgw --roster-retrieved-at is required for native refresh")
+        if missing:
+            raise FatalContractError(f"{_NATIVE_COMBINATION_PREFIX}{missing!r}")
+        if args.out is not None or args.live:
+            parser.error("native refresh cannot be combined with --out or --live")
+
+        roster_retrieved_at = parse_roster_retrieved_at(args.roster_retrieved_at)
+        retrieved_at = parse_recovered_retrieved_at(args.retrieved_at)
+        outcome = refresh_native_table_from_files(
+            args.fixture,
+            args.roster,
+            roster_retrieved_at=roster_retrieved_at,
+            retrieved_at=retrieved_at,
+        )
+        write_native_table(outcome.value, args.native_out)
+        reread = read_native_table(args.native_out)
+        print(f"pl_imgw native table canonical SHA-256: {native_table_content_sha256(reread)}")
+        return 0
+
+    if args.out is None:
+        parser.error("canonical generation requires --out")
+    if args.fixture is None and not args.live:
+        parser.error("canonical generation requires --fixture or --live")
 
     if args.live:
         catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
