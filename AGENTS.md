@@ -90,7 +90,7 @@ may enter the repository from a fixture.
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
-alone), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+and `ch_foen`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
 `catalogue/products.parquet`, `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
@@ -104,17 +104,6 @@ would reintroduce the nondeterminism the pure build removes.
   default `ensure_ascii=True`, UTF-8 encodes the result, and takes SHA-256; both inputs produced
   `02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8`.
 
-After writing provider code and tests, run that provider's network-free build from its committed
-native table and origins, and commit the resulting canonical artifacts alongside the code.
-
-### 4.2 Providers not yet migrated
-
-For a provider without both a committed native table and origin declarations (currently the other
-twelve), the four canonical packaged catalogue artifacts must be generated from the live provider
-API before the provider is committed.
-
-- `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
-  never be used to generate the four canonical packaged catalogue artifacts.
 - Switzerland native-table attestation: the orchestrator performed
   `GET https://api.existenz.ch/apiv1/hydro/locations` outside the executor sandbox at
   `2026-08-02T00:14:31Z`, observed 246 stations under `payload`, and verified the supplied complete
@@ -123,8 +112,20 @@ API before the provider is committed.
   separators `(',', ':')` and `ensure_ascii=False`, UTF-8 encodes it, and takes SHA-256, producing
   `7471e85de4f4a6d1e0968a9fe35a962c98729a4bb3b244e0991818f3038ce24a`. The sole integer
   `details.id`, at station `2071`, is intentionally normalized to string so the native Parquet
-  column has one scalar dtype. Switzerland remains in this regime until origin declarations are
-  committed.
+  column has one scalar dtype. Future Swiss canonical artifacts must be built network-free from
+  the committed native table and origin declarations.
+
+After writing provider code and tests, run that provider's network-free build from its committed
+native table and origins, and commit the resulting canonical artifacts alongside the code.
+
+### 4.2 Providers not yet migrated
+
+For a provider without both a committed native table and origin declarations (currently the other
+eleven), the four canonical packaged catalogue artifacts must be generated from the live provider
+API before the provider is committed.
+
+- `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
+  never be used to generate the four canonical packaged catalogue artifacts.
 - After writing all provider code and tests, run
   `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to
   produce the four canonical packaged artifacts.

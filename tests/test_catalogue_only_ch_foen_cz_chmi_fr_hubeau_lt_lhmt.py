@@ -177,7 +177,11 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert not hasattr(module, "series_annotation_schema")
 
     provider_directory = Path(module.__file__).parent
-    expected_module_files = CATALOGUE_MODULE_FILES | ({"origins.py"} if provider_id == "lt_lhmt" else set())
+    expected_module_files = set(CATALOGUE_MODULE_FILES)
+    if provider_id in {"lt_lhmt", "ch_foen"}:
+        expected_module_files.add("origins.py")
+    if provider_id == "ch_foen":
+        expected_module_files.remove("metadata.py")
     assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in (
@@ -241,16 +245,11 @@ def test_catalogue_only_provider_rejects_annotation_schema_requests(
         method()
 
 
-def test_ch_foen_internal_metadata_import_does_not_leak_public_names() -> None:
-    from rivretrieve._internal.providers.ch_foen import metadata
+def test_ch_foen_has_origins_and_no_metadata_module() -> None:
+    provider_directory = Path(import_module("rivretrieve._internal.providers.ch_foen.module").__file__).parent
 
-    assert metadata.ChFoenStationMetadata.__name__ == "ChFoenStationMetadata"
-    for name in (
-        "ChFoenStationMetadata",
-        "ChFoenProductMetadata",
-        "ChFoenStationProductMetadata",
-    ):
-        assert not hasattr(rr, name)
+    assert (provider_directory / "origins.py").is_file()
+    assert not (provider_directory / "metadata.py").exists()
 
 
 def test_reference_tree_preserves_ch_foen_fetch_evidence() -> None:

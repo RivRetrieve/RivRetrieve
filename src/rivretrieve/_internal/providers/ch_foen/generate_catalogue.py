@@ -1,4 +1,4 @@
-"""Swiss catalogue maintenance : refresh(ExistenzHydroLocations, RetrievedAt) → WithIssues[NativeTable]; generate(ExistenzHydroLocations) → GeneratedChFoenCatalogue."""
+"""Swiss catalogue maintenance : refresh(ExistenzHydroLocations, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedChFoenCatalogue."""
 
 from __future__ import annotations
 
@@ -13,8 +13,15 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
-from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
+from rivretrieve._internal.catalogues.native import (
+    NativeTable,
+    RetrievedAt,
+    read_native_table,
+    stamp_native_table,
+    write_native_table,
+)
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -28,12 +35,9 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.ch_foen.metadata import (
-    ChFoenProductMetadata,
-    ChFoenStationProductMetadata,
-)
+from rivretrieve._internal.primitives import ProviderId
 
-PROVIDER_ID = "ch_foen"
+PROVIDER_ID = ProviderId("ch_foen")
 PROVIDER_NAME = "Swiss Federal Office for the Environment FOEN / BAFU"
 SOURCE_URL = "https://api.existenz.ch/apiv1/hydro/locations"
 LEGACY_SOURCE = "thirdparty/RivRetrieve-Python @ origin/switzerland"
@@ -87,17 +91,17 @@ class ProductDefinition:
     notes: str | None
 
     @property
-    def metadata(self) -> ChFoenProductMetadata:
-        return ChFoenProductMetadata(
-            legacy_variable=self.legacy_variable,
-            native_id=self.preferred_parameter,
-            parameters=self.parameters,
-            preferred_parameter=self.preferred_parameter,
-            fallback_parameter=self.fallback_parameter,
-            aggregate_daily=self.aggregate_daily,
-            legacy_unit=self.unit,
-            notes=self.notes,
-        )
+    def metadata(self) -> dict[str, object]:
+        return {
+            "legacy_variable": self.legacy_variable,
+            "native_id": self.preferred_parameter,
+            "parameters": self.parameters,
+            "preferred_parameter": self.preferred_parameter,
+            "fallback_parameter": self.fallback_parameter,
+            "aggregate_daily": self.aggregate_daily,
+            "legacy_unit": self.unit,
+            "notes": self.notes,
+        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -227,47 +231,25 @@ def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[N
     return outcome
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
-    product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS,
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
 ) -> GeneratedChFoenCatalogue:
-    return generate_catalogue(
-        _read_fixture_json(Path(fixture_path)),
-        catalogue_date=catalogue_date,
-        product_definitions=product_definitions,
-        generator_input="fixture",
+    if native_table.data.is_empty():
+        raise FatalContractError("Swiss native table must not be empty")
+    envelope = _validate_native_build_rows(native_table)
+    products = build_products()
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    station_dates = native_table.data.select(
+        pl.col("name").alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
     )
-
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-    product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS,
-) -> GeneratedChFoenCatalogue:
-    return generate_catalogue(
-        _read_live_json(SOURCE_URL),
-        catalogue_date=catalogue_date,
-        product_definitions=product_definitions,
-        generator_input="live",
-    )
-
-
-def generate_catalogue(
-    raw_payload: Mapping[str, object],
-    *,
-    catalogue_date: date | None = None,
-    product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS,
-    generator_input: str = "fixture",
-) -> GeneratedChFoenCatalogue:
-    effective_date = catalogue_date or date.today()
-    _envelope_strings(raw_payload)
-    payload = _station_payload(raw_payload)
-    products = build_products(product_definitions)
-    stations = build_stations(payload)
-    station_products = build_station_products(stations, product_definitions, effective_date)
-    provider_info = build_provider_info(raw_payload, effective_date, generator_input=generator_input)
+    station_products = build_station_products(station_dates)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("Swiss native table has no valid retrieved_at values")
+    provider_info = build_provider_info(maximum_retrieved_at.date(), envelope)
 
     validate_generated_catalogue(provider_info, products, stations, station_products)
     return GeneratedChFoenCatalogue(
@@ -300,31 +282,32 @@ def build_products(product_definitions: Sequence[ProductDefinition] = PRODUCT_DE
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(payload: Mapping[str, object]) -> StationCatalog:
-    rows = [_station_row(station_key, station) for station_key, station in payload.items()]
-    return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    return native_table.data.select(
+        pl.lit(PROVIDER_ID).cast(pl.String).alias("provider_id"),
+        pl.col("name").cast(pl.String).alias("station_id"),
+        pl.col("details.lat").cast(pl.Float64).alias("latitude"),
+        pl.col("details.lon").cast(pl.Float64).alias("longitude"),
+        pl.lit("unknown").cast(pl.String).alias("crs"),
+    ).sort("station_id")
 
 
-def build_station_products(
-    stations: StationCatalog,
-    product_definitions: Sequence[ProductDefinition],
-    catalogue_date: date,
-) -> StationProductCatalog:
+def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog:
     rows = []
-    for station_id in stations["station_id"].to_list():
-        if not isinstance(station_id, str):
-            raise FatalContractError("station_id must be a string")
-        for definition in product_definitions:
-            metadata = ChFoenStationProductMetadata(
-                station_id=station_id,
-                product_id=definition.product_id,
-                native_parameters=definition.parameters,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
+    for station_id, retrieved_date in station_dates.iter_rows():
+        if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
+            raise FatalContractError("station retrieval date must pair a string identifier with a date")
+        for definition in PRODUCT_DEFINITIONS:
+            metadata = {
+                "station_id": station_id,
+                "product_id": definition.product_id,
+                "native_parameters": definition.parameters,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": (
                     "M3 materializes the known provider station-product universe with availability=unknown; "
                     "the locations catalogue does not guarantee observed data for every product."
                 ),
-            )
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -334,7 +317,7 @@ def build_station_products(
                     "availability_reason": AVAILABILITY_REASON,
                     "start_date": None,
                     "end_date": None,
-                    "last_catalogue_check": catalogue_date,
+                    "last_catalogue_check": retrieved_date,
                     "metadata": _metadata_json(metadata),
                 }
             )
@@ -343,21 +326,15 @@ def build_station_products(
     )
 
 
-def build_provider_info(
-    raw_payload: Mapping[str, object],
-    catalogue_date: date,
-    *,
-    generator_input: str,
-) -> dict[str, object]:
-    envelope = _envelope_strings(raw_payload)
+def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str]) -> dict[str, object]:
     metadata = {
         "source_url": SOURCE_URL,
         "legacy_source": LEGACY_SOURCE,
-        "generator_input": generator_input,
-        "fixture_source": envelope["source"],
-        "fixture_apiurl": envelope["apiurl"],
-        "fixture_opendata": envelope["opendata"],
-        "fixture_license": envelope["license"],
+        "generator_input": "native",
+        "source": envelope["source"],
+        "apiurl": envelope["apiurl"],
+        "opendata": envelope["opendata"],
+        "license": envelope["license"],
     }
     return {
         "provider_id": PROVIDER_ID,
@@ -369,7 +346,7 @@ def build_provider_info(
             "true: 366-day window decomposition with stitched N x M station-product requests; partial failures reported "
             "as recoverable issues"
         ),
-        "catalogue_version": catalogue_date.isoformat(),
+        "catalogue_version": catalogue_version_date.isoformat(),
         "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
@@ -403,17 +380,6 @@ def write_catalogue(catalogue: GeneratedChFoenCatalogue, out_dir: Path | str) ->
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-
-
-def _station_row(station_key: str, station: object) -> dict[str, object]:
-    source_row = _validated_station_source(station_key, station)
-    return {
-        "provider_id": PROVIDER_ID,
-        "station_id": source_row["details.id"],
-        "latitude": source_row["details.lat"],
-        "longitude": source_row["details.lon"],
-        "crs": "unknown",
-    }
 
 
 def _native_source_row(
@@ -538,8 +504,42 @@ def _validate_product_definitions(product_definitions: Sequence[ProductDefinitio
             raise FatalContractError(f"{definition.legacy_variable} preferred parameter is absent from parameters")
 
 
-def _metadata_json(model: ChFoenProductMetadata | ChFoenStationProductMetadata) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+def _validate_native_build_rows(native_table: NativeTable) -> dict[str, str]:
+    expected_envelope: dict[str, str] | None = None
+    station_ids: set[str] = set()
+    for row in native_table.data.iter_rows(named=True):
+        payload_key = row.get("payload_key")
+        if not isinstance(payload_key, str) or not payload_key.strip():
+            raise FatalContractError("Swiss native table row has invalid payload_key")
+        station_id = row.get("name")
+        if not isinstance(station_id, str) or not station_id.strip():
+            raise FatalContractError(f"payload_key {payload_key} has invalid name")
+        if station_id in station_ids:
+            raise FatalContractError(f"payload_key {payload_key} has duplicate station identity '{station_id}'")
+        station_ids.add(station_id)
+        for field in ("details.lat", "details.lon"):
+            value = row.get(field)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise FatalContractError(f"payload_key {payload_key} has invalid {field}")
+        if not isinstance(row.get("retrieved_at"), datetime):
+            raise FatalContractError(f"payload_key {payload_key} has invalid retrieved_at")
+        envelope: dict[str, str] = {}
+        for field in ("source", "apiurl", "opendata", "license"):
+            value = row.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise FatalContractError(f"payload_key {payload_key} has invalid {field}")
+            envelope[field] = value
+            if expected_envelope is not None and value != expected_envelope[field]:
+                raise FatalContractError(f"payload_key {payload_key} has inconsistent {field}")
+        if expected_envelope is None:
+            expected_envelope = envelope
+    if expected_envelope is None:
+        raise FatalContractError("Swiss native table must not be empty")
+    return expected_envelope
+
+
+def _metadata_json(metadata: Mapping[str, object]) -> str:
+    return json.dumps(metadata, sort_keys=True, separators=(",", ":"))
 
 
 def _required_string(value: object, name: str) -> str:
@@ -583,18 +583,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to an Existenz.ch hydro locations JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live Existenz.ch hydro locations endpoint.")
+    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat)
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     args = parser.parse_args(argv)
 
     if args.native_out is not None:
+        if args.native is not None:
+            parser.error("--native cannot be used with --native-out")
         if args.retrieved_at is None:
             parser.error("--retrieved-at is required with --native-out")
-        if args.catalogue_date is not None:
-            parser.error("--catalogue-date is only valid with --out")
         if args.live:
             native_outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
         else:
@@ -602,13 +602,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_native_table(native_outcome.value, args.native_out)
         return 0
 
+    if args.native is None:
+        parser.error("--out requires --native")
     if args.retrieved_at is not None:
-        parser.error("--retrieved-at is only valid with --native-out")
-    catalogue_date = args.catalogue_date or date.today()
-    if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=catalogue_date)
-    else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=catalogue_date)
+        parser.error("--retrieved-at is only valid with refresh mode")
+    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
+
+    catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
     write_catalogue(catalogue, args.out)
     return 0
 
