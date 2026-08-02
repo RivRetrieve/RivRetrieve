@@ -169,8 +169,8 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_only_lithuania() -> None:
-    assert frozenset({ProviderId("lt_lhmt")}) == ORIGIN_GATE_ENROLLED_PROVIDERS
+def test_origin_gate_enrols_exactly_lithuania_and_czechia() -> None:
+    assert frozenset({ProviderId("lt_lhmt"), ProviderId("cz_chmi")}) == ORIGIN_GATE_ENROLLED_PROVIDERS
 
 
 def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation() -> None:
@@ -190,6 +190,33 @@ def test_lithuania_declarations_match_canonical_schema_order_and_values() -> Non
         "longitude": Field(NativeColumn("coordinates")),
         "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://api.meteo.lt/")),
     } == STATION_CATALOGUE_ORIGINS
+
+
+def test_czech_declarations_match_canonical_schema_order_and_values() -> None:
+    from rivretrieve._internal.providers.cz_chmi.origins import (
+        STATION_CATALOGUE_ORIGINS as CZECH_ORIGINS,
+    )
+
+    assert tuple(CZECH_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("objID")),
+        "station_id": Field(NativeColumn("objID")),
+        "latitude": Field(NativeColumn("GEOGR1")),
+        "longitude": Field(NativeColumn("GEOGR2")),
+        "crs": NotPublished(Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")),
+    } == CZECH_ORIGINS
+
+
+def test_committed_czech_origins_pass_validation() -> None:
+    from rivretrieve._internal.providers.cz_chmi.generate_catalogue import build_stations as build_czech_stations
+    from rivretrieve._internal.providers.cz_chmi.origins import (
+        STATION_CATALOGUE_ORIGINS as CZECH_ORIGINS,
+    )
+
+    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet"))
+    stations = build_czech_stations(native_table)
+
+    assert validate_catalogue_origins(ProviderId("cz_chmi"), CZECH_ORIGINS, native_table, stations) == []
 
 
 def _native_and_stations():

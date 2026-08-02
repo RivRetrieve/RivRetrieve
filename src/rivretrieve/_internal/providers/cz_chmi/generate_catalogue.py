@@ -1,11 +1,11 @@
-"""Czech catalogue maintenance : refresh(ChmiMetadataEnvelope, RetrievedAt) → WithIssues[NativeTable]; existing catalogue generation remains operational."""
+"""Czech catalogue maintenance : refresh(ChmiMetadataEnvelope, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedCzChmiCatalogue."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -13,8 +13,15 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
-from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
+from rivretrieve._internal.catalogues.native import (
+    NativeTable,
+    RetrievedAt,
+    read_native_table,
+    stamp_native_table,
+    write_native_table,
+)
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -28,12 +35,9 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.cz_chmi.metadata import (
-    CzChmiProductMetadata,
-    CzChmiStationProductMetadata,
-)
+from rivretrieve._internal.primitives import ProviderId
 
-PROVIDER_ID = "cz_chmi"
+PROVIDER_ID = ProviderId("cz_chmi")
 PROVIDER_NAME = "Czech Hydrometeorological Institute (CHMI) Open Data"
 METADATA_URL = "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json"
 AVAILABILITY_REASON = "CHMI metadata catalogue does not expose per-variable station availability"
@@ -104,15 +108,15 @@ class ProductDefinition:
     notes: str | None
 
     @property
-    def metadata(self) -> CzChmiProductMetadata:
-        return CzChmiProductMetadata(
-            ts_con_id=self.ts_con_id,
-            url_type=self.url_type,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            unit_conversion=self.unit_conversion,
-            notes=self.notes,
-        )
+    def metadata(self) -> Mapping[str, object]:
+        return {
+            "ts_con_id": self.ts_con_id,
+            "url_type": self.url_type,
+            "native_unit": self.native_unit,
+            "canonical_unit": self.canonical_unit,
+            "unit_conversion": self.unit_conversion,
+            "notes": self.notes,
+        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -222,41 +226,24 @@ def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[N
     return refresh_native_table(_read_live_json(METADATA_URL), retrieved_at=retrieved_at)
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
 ) -> GeneratedCzChmiCatalogue:
-    return generate_catalogue(
-        _read_fixture_json(Path(fixture_path)),
-        catalogue_date=catalogue_date,
-        generator_input="fixture",
-    )
-
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedCzChmiCatalogue:
-    return generate_catalogue(
-        _read_live_json(METADATA_URL),
-        catalogue_date=catalogue_date,
-        generator_input="live",
-    )
-
-
-def generate_catalogue(
-    raw_metadata: dict[str, object],
-    *,
-    catalogue_date: date | None = None,
-    generator_input: str = "fixture",
-) -> GeneratedCzChmiCatalogue:
-    effective_date = catalogue_date or date.today()
-    raw_stations = _extract_stations(raw_metadata)
+    if native_table.data.is_empty():
+        raise FatalContractError("Czech native table must not be empty")
     products = build_products()
-    stations = build_stations(raw_stations)
-    station_products = build_station_products(stations, effective_date)
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("Czech native table has no valid retrieved_at values")
+    station_dates = native_table.data.select(
+        pl.col("objID").alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
+    )
+    station_products = build_station_products(station_dates)
+    provider_info = build_provider_info(maximum_retrieved_at.date())
 
     validate_generated_catalogue(provider_info, products, stations, station_products)
     return GeneratedCzChmiCatalogue(
@@ -288,27 +275,32 @@ def build_products() -> ProductCatalog:
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(raw_stations: list[dict[str, object]]) -> StationCatalog:
-    rows = [_station_row(item) for item in raw_stations]
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    rows = [
+        _native_station_row(item, row_number=row_number)
+        for row_number, item in enumerate(native_table.data.iter_rows(named=True), start=1)
+    ]
     return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
 
-def build_station_products(stations: StationCatalog, catalogue_date: date) -> StationProductCatalog:
-    rows = []
-    for station_id in stations["station_id"].to_list():
+def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog:
+    rows: list[dict[str, object]] = []
+    for station_id, retrieved_date in station_dates.iter_rows():
         if not isinstance(station_id, str):
-            raise FatalContractError("station_id must be a string")
+            raise FatalContractError("cz_chmi station retrieval date has an invalid identifier")
+        if not isinstance(retrieved_date, date):
+            raise FatalContractError(f"cz_chmi station {station_id} retrieval date is invalid")
         for defn in PRODUCT_DEFINITIONS:
-            meta = CzChmiStationProductMetadata(
-                station_id=station_id,
-                product_id=defn.product_id,
-                ts_con_id=defn.ts_con_id,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
+            metadata: dict[str, object] = {
+                "station_id": station_id,
+                "product_id": defn.product_id,
+                "ts_con_id": defn.ts_con_id,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": (
                     "CHMI metadata catalogue does not expose per-variable station availability; "
                     "all station-product pairs are materialized as availability=unknown."
                 ),
-            )
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -318,8 +310,8 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
                     "availability_reason": AVAILABILITY_REASON,
                     "start_date": None,
                     "end_date": None,
-                    "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(meta),
+                    "last_catalogue_check": retrieved_date,
+                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -329,14 +321,12 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata = {
         "metadata_url": METADATA_URL,
         "daily_url_template": "https://opendata.chmi.cz/hydrology/historical/data/daily/H_{station_id}_DQ_{year}.json",
         "hourly_url_template": "https://opendata.chmi.cz/hydrology/historical/data/hourly/H_{station_id}_HQ_{year}.json",
-        "generator_input": generator_input,
+        "generator_input": "native",
         "terms_of_use": "https://opendata.chmi.cz/",
     }
     return {
@@ -434,16 +424,13 @@ def _extract_stations(raw_metadata: dict[str, object]) -> list[dict[str, object]
     return station_rows
 
 
-def _station_row(item: dict[str, object]) -> dict[str, object]:
-    station_id_raw = item.get("objID")
-    if not isinstance(station_id_raw, str) or not str(station_id_raw).strip():
-        raise FatalContractError(f"cz_chmi station entry missing required string field 'objID': {item}")
-    station_id = str(station_id_raw).strip()
+def _native_station_row(item: dict[str, object], *, row_number: int) -> dict[str, object]:
+    station_id = item.get("objID")
+    if not isinstance(station_id, str) or not station_id.strip():
+        raise FatalContractError(f"cz_chmi native station row {row_number} has an invalid objID")
 
-    latitude = _optional_float(item.get("GEOGR1"), f"station {station_id} latitude")
-    longitude = _optional_float(item.get("GEOGR2"), f"station {station_id} longitude")
-    if latitude is None or longitude is None:
-        raise FatalContractError(f"cz_chmi station {station_id} missing required latitude/longitude")
+    latitude = _required_native_coordinate(item.get("GEOGR1"), station_id, "latitude")
+    longitude = _required_native_coordinate(item.get("GEOGR2"), station_id, "longitude")
 
     return {
         "provider_id": PROVIDER_ID,
@@ -482,38 +469,35 @@ def _read_live_json(url: str) -> dict[str, object]:
     return cast("dict[str, object]", value)
 
 
-def _metadata_json(
-    model: CzChmiProductMetadata | CzChmiStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+def _metadata_json(value: Mapping[str, object]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-def _optional_float(value: object, name: str) -> float | None:
+def _required_native_coordinate(value: object, station_id: str, label: str) -> float:
     if value is None:
-        return None
-    try:
-        return float(str(value))
-    except (TypeError, ValueError):
-        return None
+        raise FatalContractError(f"cz_chmi native station {station_id} has missing or null {label}")
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise FatalContractError(f"cz_chmi native station {station_id} has non-numeric {label}")
+    return float(value)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate the packaged cz_chmi catalogue artifacts.")
+    parser = argparse.ArgumentParser(description="Refresh or build the packaged cz_chmi catalogue.")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to a CHMI metadata JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live CHMI metadata endpoint.")
+    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat)
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     args = parser.parse_args(argv)
 
     if args.native_out is not None:
+        if args.native is not None:
+            parser.error("--native cannot be used with --native-out")
         if args.retrieved_at is None:
             parser.error("--retrieved-at is required with --native-out")
-        if args.catalogue_date is not None:
-            parser.error("--catalogue-date is only valid with --out")
         if args.live:
             native_outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
         else:
@@ -521,13 +505,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_native_table(native_outcome.value, args.native_out)
         return 0
 
+    if args.native is None:
+        parser.error("--out requires --native")
     if args.retrieved_at is not None:
-        parser.error("--retrieved-at is only valid with --native-out")
-    if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
-    else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
-    write_catalogue(catalogue, args.out)
+        parser.error("--retrieved-at is only valid with refresh mode")
+    from rivretrieve._internal.providers.cz_chmi.origins import STATION_CATALOGUE_ORIGINS
+
+    write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
     return 0
 
 
