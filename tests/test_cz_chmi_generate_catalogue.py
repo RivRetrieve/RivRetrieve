@@ -4,7 +4,7 @@ import copy
 import hashlib
 import io
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import cast
 
@@ -12,12 +12,19 @@ import polars as pl
 import polars.testing as pl_testing
 import pytest
 
-from rivretrieve._internal.catalogues.native import RetrievedAt, read_native_table
+from rivretrieve._internal.catalogue_origins import Evidence, Field, NativeColumn, NotPublished
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
+)
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.cz_chmi import generate_catalogue
 
 FIXTURE_PATH = Path("tests/test_data/cz_chmi_metadata.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
+CATALOGUE_PATH = NATIVE_PATH.parent
 ATTESTED_DATETIME = datetime(2026, 8, 2, 0, 14, 31, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 EXPECTED_HEADER = [
@@ -150,6 +157,13 @@ NATIVE_SCHEMA = pl.Schema(
         "retrieved_at": pl.Datetime(time_unit="us", time_zone="UTC"),
     }
 )
+CZ_ORIGINS = {
+    "provider_id": Field(NativeColumn("objID")),
+    "station_id": Field(NativeColumn("objID")),
+    "latitude": Field(NativeColumn("GEOGR1")),
+    "longitude": Field(NativeColumn("GEOGR2")),
+    "crs": NotPublished(Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")),
+}
 
 
 def _fixture_payload() -> dict[str, object]:
@@ -184,23 +198,23 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
-def test_generate_catalogue_from_fixture_station_count() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH)
-    assert cat.stations.height == 3
+def _build_committed_catalogue() -> generate_catalogue.GeneratedCzChmiCatalogue:
+    return generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), CZ_ORIGINS)
 
 
-def test_generate_catalogue_from_fixture_product_count() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH)
+def test_committed_native_build_has_expected_counts_and_schema() -> None:
+    cat = _build_committed_catalogue()
+
+    assert cat.stations.height == 831
     assert cat.products.height == 5
-
-
-def test_generate_catalogue_from_fixture_station_products_cross() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH)
-    assert cat.station_products.height == 3 * 5
+    assert cat.station_products.height == 831 * 5
+    assert cat.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert cat.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
+    assert cat.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
 
 
 def test_generate_catalogue_station_fields_are_source_correct() -> None:
-    cat = generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH)
+    cat = _build_committed_catalogue()
     station = cat.stations.filter(pl.col("station_id") == "0-203-1-016000")
 
     assert station.height == 1
@@ -231,7 +245,7 @@ def test_refresh_rejects_missing_envelope_keys(path: tuple[str, ...]) -> None:
         target = cast("dict[str, object]", target[key])
     del target[path[-1]]
 
-    with pytest.raises(FatalContractError):
+    with pytest.raises(FatalContractError, match=rf"cz_chmi metadata missing required key: '{path[-1]}'"):
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
@@ -248,7 +262,10 @@ def test_refresh_rejects_non_exact_header(header: str) -> None:
     payload = _valid_payload()
     _data_block(payload)["header"] = header
 
-    with pytest.raises(FatalContractError):
+    with pytest.raises(
+        FatalContractError,
+        match="cz_chmi metadata header does not match the required source header",
+    ):
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
@@ -293,9 +310,11 @@ def test_refresh_rejects_invalid_obj_id(station_id: object) -> None:
     payload = _valid_payload()
     row = copy.deepcopy(EXPECTED_ROWS[0])
     row[0] = station_id
-    _data_block(payload)["values"] = [row]
+    rows = copy.deepcopy(EXPECTED_ROWS)
+    rows[1] = row
+    _data_block(payload)["values"] = rows
 
-    with pytest.raises(FatalContractError):
+    with pytest.raises(FatalContractError, match=r"cz_chmi metadata row 2 has an invalid objID"):
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
@@ -356,24 +375,10 @@ def test_refresh_cli_writes_fixture_native_table(tmp_path: Path) -> None:
     "argv",
     [
         ["--fixture", str(FIXTURE_PATH), "--native-out", "native.parquet"],
-        [
-            "--fixture",
-            str(FIXTURE_PATH),
-            "--out",
-            "catalogue",
-            "--native-out",
-            "native.parquet",
-            "--retrieved-at",
-            "2026-08-02T00:14:31Z",
-        ],
-        [
-            "--fixture",
-            str(FIXTURE_PATH),
-            "--out",
-            "catalogue",
-            "--retrieved-at",
-            "2026-08-02T00:14:31Z",
-        ],
+        ["--fixture", str(FIXTURE_PATH), "--out", "catalogue"],
+        ["--live", "--out", "catalogue"],
+        ["--native", str(NATIVE_PATH), "--native-out", "native.parquet", "--retrieved-at", "2026-08-02T00:14:31Z"],
+        ["--native", str(NATIVE_PATH), "--out", "catalogue", "--retrieved-at", "2026-08-02T00:14:31Z"],
     ],
 )
 def test_cli_rejects_invalid_mode_combinations(argv: list[str]) -> None:
@@ -457,3 +462,194 @@ def test_fixture_refresh_equals_committed_source_rows_exactly() -> None:
         "0-203-1-016000": (50.3427582, 15.9249555),
         "0-203-1-020000": (50.3517105, 16.1299498),
     }
+
+
+def test_native_build_is_gated_on_origins() -> None:
+    broken = dict(CZ_ORIGINS)
+    del broken["longitude"]
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"cz_chmi\.longitude: canonical column has no origin declaration",
+    ):
+        generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), broken)
+
+
+def test_native_and_canonical_identity_and_coordinates_are_exactly_aligned() -> None:
+    native = read_native_table(NATIVE_PATH).data
+    stations = _build_committed_catalogue().stations
+    expected = (
+        native.select(
+            pl.lit("cz_chmi").alias("provider_id"),
+            pl.col("objID").alias("station_id"),
+            pl.col("GEOGR1").alias("latitude"),
+            pl.col("GEOGR2").alias("longitude"),
+            pl.lit("unknown").alias("crs"),
+        )
+        .cast(STATION_CATALOG_SCHEMA.polars_schema)
+        .sort("station_id")
+    )
+
+    pl_testing.assert_frame_equal(stations, expected, check_exact=True)
+    assert {"STATION_NAME", "STREAM_NAME", "PLO_STA", "HLGP4"} <= set(native.columns)
+
+
+def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version() -> None:
+    source = read_native_table(NATIVE_PATH).data.head(2)
+    station_ids = source["objID"].to_list()
+    mixed = source.with_columns(
+        pl.when(pl.col("objID") == station_ids[0])
+        .then(datetime(2026, 7, 31, 12, tzinfo=UTC))
+        .otherwise(datetime(2026, 8, 3, 12, tzinfo=UTC))
+        .cast(pl.Datetime(time_unit="us", time_zone="UTC"))
+        .alias("retrieved_at")
+    )
+
+    catalogue = generate_catalogue.build_catalogue(NativeTable(mixed), CZ_ORIGINS)
+
+    assert set(catalogue.station_products.filter(pl.col("station_id") == station_ids[0])["last_catalogue_check"]) == {
+        date(2026, 7, 31)
+    }
+    assert set(catalogue.station_products.filter(pl.col("station_id") == station_ids[1])["last_catalogue_check"]) == {
+        date(2026, 8, 3)
+    }
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
+
+
+def test_metadata_columns_remain_non_null_json_objects() -> None:
+    catalogue = _build_committed_catalogue()
+    provider_metadata = json.loads(cast("str", catalogue.provider_info["metadata"]))
+    product_metadata = json.loads(catalogue.products["metadata"].item(0))
+    station_product_metadata = json.loads(catalogue.station_products["metadata"].item(0))
+
+    assert provider_metadata["generator_input"] == "native"
+    assert {
+        "ts_con_id",
+        "url_type",
+        "native_unit",
+        "canonical_unit",
+        "unit_conversion",
+        "notes",
+    } == set(product_metadata)
+    assert {
+        "station_id",
+        "product_id",
+        "ts_con_id",
+        "availability_source",
+        "availability_note",
+    } == set(station_product_metadata)
+    for frame in (catalogue.products, catalogue.station_products):
+        assert frame["metadata"].null_count() == 0
+        assert all(isinstance(json.loads(value), dict) for value in frame["metadata"])
+
+
+def _two_row_native() -> pl.DataFrame:
+    return read_native_table(NATIVE_PATH).data.head(2)
+
+
+def test_build_rejects_empty_native_table_by_message() -> None:
+    empty = read_native_table(NATIVE_PATH).data.head(0)
+
+    with pytest.raises(FatalContractError, match="Czech native table must not be empty"):
+        generate_catalogue.build_catalogue(NativeTable(empty), CZ_ORIGINS)
+
+
+@pytest.mark.parametrize("station_id", [None, 206200, "", "   "])
+def test_build_rejects_one_invalid_obj_id_in_multi_row_native_by_message(station_id: object) -> None:
+    source = _two_row_native()
+    broken = source.with_columns(pl.Series("objID", [source["objID"].item(0), station_id], dtype=pl.Object))
+
+    with pytest.raises(FatalContractError, match=r"cz_chmi native station row 2 has an invalid objID"):
+        generate_catalogue.build_catalogue(NativeTable(broken), CZ_ORIGINS)
+
+
+@pytest.mark.parametrize(("column", "label"), [("GEOGR1", "latitude"), ("GEOGR2", "longitude")])
+def test_build_rejects_one_missing_coordinate_in_multi_row_native_by_message(column: str, label: str) -> None:
+    station_id = _two_row_native()["objID"].item(1)
+    broken = _two_row_native().with_columns(
+        pl.when(pl.int_range(pl.len()) == 1).then(None).otherwise(pl.col(column)).alias(column)
+    )
+
+    with pytest.raises(
+        FatalContractError,
+        match=rf"cz_chmi native station {station_id} has missing or null {label}",
+    ):
+        generate_catalogue.build_catalogue(NativeTable(broken), CZ_ORIGINS)
+
+
+@pytest.mark.parametrize(("column", "label"), [("GEOGR1", "latitude"), ("GEOGR2", "longitude")])
+def test_build_rejects_one_non_numeric_coordinate_in_multi_row_native_by_message(column: str, label: str) -> None:
+    source = _two_row_native()
+    station_id = source["objID"].item(1)
+    broken = source.with_columns(pl.Series(column, [source[column].item(0), "not-numeric"], dtype=pl.Object))
+
+    with pytest.raises(
+        FatalContractError,
+        match=rf"cz_chmi native station {station_id} has non-numeric {label}",
+    ):
+        generate_catalogue.build_catalogue(NativeTable(broken), CZ_ORIGINS)
+
+
+def test_build_rejects_invalid_per_row_retrieval_date_pairing_by_message() -> None:
+    station_id = _two_row_native()["objID"].item(1)
+    station_dates = pl.DataFrame(
+        {
+            "station_id": [_two_row_native()["objID"].item(0), station_id],
+            "retrieved_date": [date(2026, 8, 2), None],
+        }
+    )
+
+    with pytest.raises(
+        FatalContractError,
+        match=rf"cz_chmi station {station_id} retrieval date is invalid",
+    ):
+        generate_catalogue.build_station_products(station_dates)
+
+
+def test_native_table_rejects_null_retrieval_timestamps_before_build() -> None:
+    broken = _two_row_native().with_columns(pl.lit(None).cast(NATIVE_SCHEMA["retrieved_at"]).alias("retrieved_at"))
+
+    with pytest.raises(FatalContractError, match="native table retrieved_at must not contain nulls"):
+        NativeTable(broken)
+
+
+def test_legacy_canonical_generation_apis_are_removed() -> None:
+    assert not hasattr(generate_catalogue, "generate_catalogue")
+    assert not hasattr(generate_catalogue, "generate_catalogue_from_fixture")
+    assert not hasattr(generate_catalogue, "generate_catalogue_from_live")
+
+
+def test_native_cli_writes_four_artifacts_without_touching_native(tmp_path: Path) -> None:
+    native_bytes = NATIVE_PATH.read_bytes()
+
+    result = generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+
+    assert result == 0
+    assert NATIVE_PATH.read_bytes() == native_bytes
+    assert {path.name for path in tmp_path.iterdir()} == {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+    }
+
+
+def test_native_build_is_network_free_and_byte_deterministic(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def fail_network(*args: object, **kwargs: object) -> object:
+        calls.append("network")
+        raise AssertionError("network must not be accessed during build")
+
+    monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_network)
+    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fail_network)
+
+    result = generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+
+    assert result == 0
+    assert calls == []
+    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

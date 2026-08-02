@@ -109,8 +109,8 @@ and SHA-256.
 
 ### 4.1 Providers with a committed native table and origins
 
-For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
-alone), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+For a provider with both a committed native table and origin declarations (currently `lt_lhmt` and
+`cz_chmi`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
 `catalogue/products.parquet`, `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
@@ -129,9 +129,10 @@ native table and origins, and commit the resulting canonical artifacts alongside
 
 ### 4.2 Providers not yet migrated
 
-For a provider without both a committed native table and origin declarations (currently the other
-twelve), the four canonical packaged catalogue artifacts must be generated from the live provider
-API before the provider is committed.
+For a provider without both a committed native table and origin declarations (currently
+`ba_fhmzbih`, `br_ana`, `ca_eccc`, `ch_foen`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`,
+`th_thaiwater`, `usgs_nwis`, and `za_dws`), the four canonical packaged catalogue artifacts must be
+generated from the live provider API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
