@@ -123,9 +123,9 @@ def test_refresh_rejects_incomplete_eight_pdf_input() -> None:
     assert outcome.issues[0].code == "incomplete-pdf-input"
 
 
-def test_refresh_reports_below_minimum_with_exact_details(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refresh_reports_below_minimum_with_exact_details() -> None:
     rows = [f"A{i // 1000 % 10}H{i % 1000:03d} Station {i} 25:00:00 28:00:00 A10A 0" for i in range(2863)]
-    monkeypatch.setattr(generator, "MIN_REFRESH_STATIONS", 2905)
+    assert generator.MIN_REFRESH_STATIONS == 2905
     outcome = generator.refresh_native_table_from_captures(_index_bytes(), _captures(rows))
     assert outcome.issues[0].code == "below-minimum"
     assert outcome.issues[0].details == {"actual": 2863, "minimum": 2905}
