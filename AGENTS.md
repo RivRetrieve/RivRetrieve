@@ -87,7 +87,7 @@ when that fixture has been verified content-identical to a live payload and the 
 states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
 may enter the repository from a fixture.
 
-+An orchestrator may also perform a live fetch outside a network-disabled executor and supply the
+An orchestrator may also perform a live fetch outside a network-disabled executor and supply the
 complete response as a step input. This route is sanctioned only when the same repository record
 contains every exact request URL, one UTC retrieval instant, the accepted row and station counts,
 the deterministic canonicalization and ordering rules, SHA-256 evidence, and a semantic frame
