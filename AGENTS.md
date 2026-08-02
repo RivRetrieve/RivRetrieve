@@ -85,12 +85,15 @@ The committed native table carries provenance. Produce it with the provider's `r
 against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
 when that fixture has been verified content-identical to a live payload and the repository record
 states the source URL, retrieval instant, canonicalization method, and digest. Nothing unattested
-may enter the repository from a fixture.
+may enter the repository from a fixture. A third sanctioned route is a live fetch performed outside
+the executor sandbox and supplied as an orchestrator step input. That input requires the same complete
+attestation: exact request URL or URLs, UTC retrieval instant, row or feature count, canonicalization
+method, and SHA-256 digest.
 
 ### 4.1 Providers with a committed native table and origins
 
-For a provider with both a committed native table and origin declarations (currently `lt_lhmt`
-alone), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+For a provider with both a committed native table and origin declarations (currently `lt_lhmt` and
+`ca_eccc`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
 `catalogue/products.parquet`, `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
@@ -104,13 +107,33 @@ would reintroduce the nondeterminism the pure build removes.
   default `ensure_ascii=True`, UTF-8 encodes the result, and takes SHA-256; both inputs produced
   `02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8`.
 
+- Canada native-table attestation: the orchestrator performed nine paged requests outside the executor
+  sandbox at `2026-08-02T01:09:10Z`, with paging completed at `2026-08-02T01:09:20Z`:
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=0`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=1000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=2000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=3000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=4000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=5000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=6000`,
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=7000`, and
+  `GET https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset=8000`.
+  The assembled FeatureCollection contains 8,057 native features and has zero missing station ids,
+  zero duplicate station ids, zero invalid coordinate rows, and zero disagreements among feature
+  `id`, `IDENTIFIER`, and `STATION_NUMBER`, yielding 8,057 usable canonical stations. Canonicalization
+  serializes the complete assembled FeatureCollection in attested page order using sorted object keys,
+  compact separators `(",", ":")`, `ensure_ascii=False`, and UTF-8, producing SHA-256
+  `3613c17b3e1ad76e8490d6dcb659be251f2270e5568fb6ff1e05fe780037083d`. Native Parquet rows are
+  deterministically sorted by feature `id`; the canonical artifacts contain 8,057 stations, two
+  products, and 16,114 station-products.
+
 After writing provider code and tests, run that provider's network-free build from its committed
 native table and origins, and commit the resulting canonical artifacts alongside the code.
 
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
-twelve), the four canonical packaged catalogue artifacts must be generated from the live provider
+eleven), the four canonical packaged catalogue artifacts must be generated from the live provider
 API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
