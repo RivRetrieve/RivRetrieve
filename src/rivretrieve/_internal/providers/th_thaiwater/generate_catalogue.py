@@ -1,17 +1,22 @@
+"""ThaiWater catalogue maintenance : refresh(ThaiWaterWaterlevelEnvelope, RetrievedAt) → WithIssues[NativeTable]; legacy canonical generation remains operational."""
+
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -23,6 +28,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.th_thaiwater.metadata import (
     ThThaiWaterProductMetadata,
@@ -36,6 +42,114 @@ AVAILABILITY_REASON = "ThaiWater metadata catalogue does not expose per-variable
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 VERTICAL_DATUM = "MSL"
 STATION_TYPE_FILTER = "tele_waterlevel"
+
+NATIVE_SOURCE_SCHEMA = pl.Schema(
+    {
+        "agency.agency_name.en": pl.String,
+        "agency.agency_name.jp": pl.String,
+        "agency.agency_name.th": pl.String,
+        "agency.agency_shortname.en": pl.String,
+        "agency.agency_shortname.jp": pl.String,
+        "agency.agency_shortname.th": pl.String,
+        "agency.id": pl.Int64,
+        "basin.basin_code": pl.Int64,
+        "basin.basin_name.en": pl.String,
+        "basin.basin_name.th": pl.String,
+        "basin.id": pl.Int64,
+        "diff_wl_bank": pl.String,
+        "diff_wl_bank_text": pl.String,
+        "discharge": pl.String,
+        "flow_rate": pl.String,
+        "geocode.amphoe_code": pl.String,
+        "geocode.amphoe_name.en": pl.String,
+        "geocode.amphoe_name.th": pl.String,
+        "geocode.area_code": pl.String,
+        "geocode.area_name.en": pl.String,
+        "geocode.area_name.th": pl.String,
+        "geocode.province_code": pl.String,
+        "geocode.province_name.en": pl.String,
+        "geocode.province_name.th": pl.String,
+        "geocode.tumbon_code": pl.String,
+        "geocode.tumbon_name.en": pl.String,
+        "geocode.tumbon_name.th": pl.String,
+        "id": pl.Int64,
+        "river_gid": pl.Int64,
+        "river_name": pl.String,
+        "situation_level": pl.Int64,
+        "sort_order": pl.Null,
+        "station.agency_id": pl.Int64,
+        "station.critical_level_m": pl.Float64,
+        "station.critical_level_msl": pl.Float64,
+        "station.geocode_id": pl.Int64,
+        "station.ground_level": pl.Float64,
+        "station.hydro_id": pl.Int64,
+        "station.id": pl.String,
+        "station.is_key_station": pl.Boolean,
+        "station.left_bank": pl.Float64,
+        "station.min_bank": pl.Float64,
+        "station.offset": pl.Float64,
+        "station.qmax": pl.Float64,
+        "station.right_bank": pl.Float64,
+        "station.sponsor_by": pl.String,
+        "station.sub_basin_id": pl.Int64,
+        "station.tele_station_lat": pl.Float64,
+        "station.tele_station_long": pl.Float64,
+        "station.tele_station_name.en": pl.String,
+        "station.tele_station_name.jp": pl.String,
+        "station.tele_station_name.th": pl.String,
+        "station.tele_station_oldcode": pl.String,
+        "station.tele_station_type": pl.String,
+        "station.warning_level_m": pl.Float64,
+        "station_type": pl.String,
+        "storage_percent": pl.String,
+        "waterlevel_datetime": pl.String,
+        "waterlevel_m": pl.Null,
+        "waterlevel_msl": pl.String,
+        "waterlevel_msl_previous": pl.String,
+    }
+)
+NATIVE_SCHEMA = pl.Schema(
+    {
+        **dict(NATIVE_SOURCE_SCHEMA.items()),
+        "retrieved_at": pl.Datetime(time_unit="us", time_zone="UTC"),
+    }
+)
+
+_PERMITTED_ABSENT_LEAVES = frozenset(
+    {
+        "river_gid",
+        "river_name",
+        "situation_level",
+        "station.ground_level",
+        "station.sponsor_by",
+        "station.tele_station_name.en",
+        "station.tele_station_name.jp",
+    }
+)
+_REQUIRED_OBJECTS = (
+    "station",
+    "agency",
+    "basin",
+    "geocode",
+    "station.tele_station_name",
+    "agency.agency_name",
+    "agency.agency_shortname",
+    "basin.basin_name",
+    "geocode.amphoe_name",
+    "geocode.area_name",
+    "geocode.province_name",
+    "geocode.tumbon_name",
+)
+_LANGUAGE_MAP_KEYS = {
+    "station.tele_station_name": frozenset({"en", "jp", "th"}),
+    "agency.agency_name": frozenset({"en", "jp", "th"}),
+    "agency.agency_shortname": frozenset({"en", "jp", "th"}),
+    "basin.basin_name": frozenset({"en", "th"}),
+    "geocode.amphoe_name": frozenset({"en", "th"}),
+    "geocode.area_name": frozenset({"en", "th"}),
+    "geocode.province_name": frozenset({"en", "th"}),
+    "geocode.tumbon_name": frozenset({"en", "th"}),
+}
 
 
 @dataclass(frozen=True)
@@ -136,6 +250,170 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 )
 
 EXPECTED_PRODUCT_IDS = frozenset(d.product_id for d in PRODUCT_DEFINITIONS)
+
+
+def refresh_native_table(
+    payload: dict[str, object],
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    """Project a strict ThaiWater water-level envelope into its native dotted schema."""
+    if "waterlevel_data" not in payload:
+        raise FatalContractError("ThaiWater payload missing required object 'waterlevel_data'")
+    waterlevel_data = payload["waterlevel_data"]
+    if not isinstance(waterlevel_data, dict):
+        raise FatalContractError("ThaiWater payload field 'waterlevel_data' must be an object")
+    waterlevel_object = cast("dict[str, object]", waterlevel_data)
+    if "data" not in waterlevel_object:
+        raise FatalContractError("ThaiWater payload missing required list 'waterlevel_data.data'")
+    raw_rows = waterlevel_object["data"]
+    if not isinstance(raw_rows, list):
+        raise FatalContractError("ThaiWater payload field 'waterlevel_data.data' must be a list")
+
+    rows: list[dict[str, object]] = []
+    seen_ids: set[int] = set()
+    for index, raw_row in enumerate(raw_rows):
+        if not isinstance(raw_row, dict):
+            raise FatalContractError(f"ThaiWater row {index} must be an object")
+        row = cast("dict[str, object]", raw_row)
+        _validate_required_objects(row, index)
+        _validate_language_maps(row, index)
+        station_id = _source_leaf(row, "station.id", index=index)
+        if type(station_id) is not int:
+            raise FatalContractError(f"ThaiWater row {index} station.id must be a JSON integer; Boolean is invalid")
+        if station_id in seen_ids:
+            raise FatalContractError(f"ThaiWater duplicate station.id {station_id}")
+        seen_ids.add(station_id)
+        for path, dtype in NATIVE_SOURCE_SCHEMA.items():
+            if path == "station.id":
+                continue
+            value = _source_leaf(
+                row,
+                path,
+                index=index,
+                absent_ok=path in _PERMITTED_ABSENT_LEAVES,
+            )
+            _validate_scalar(value, dtype, index=index, path=path)
+        rows.append(row)
+
+    flattened_rows = [_flatten_native_row(row) for row in rows]
+    source_rows = pl.DataFrame(flattened_rows, schema=NATIVE_SOURCE_SCHEMA).sort("station.id")
+    return WithIssues(value=stamp_native_table(source_rows, retrieved_at), issues=())
+
+
+def refresh_native_table_from_fixture(
+    fixture_path: Path | str,
+    *,
+    retrieved_at: RetrievedAt,
+) -> WithIssues[NativeTable]:
+    return refresh_native_table(_read_fixture_json(Path(fixture_path)), retrieved_at=retrieved_at)
+
+
+def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[NativeTable]:
+    return refresh_native_table(_read_live_json(METADATA_URL), retrieved_at=retrieved_at)
+
+
+def native_table_content_sha256(table: NativeTable) -> str:
+    """Hash the exact native table as canonical aligned JSON values."""
+    if table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("ThaiWater native table does not have the exact required schema")
+    rows = [
+        [
+            value.isoformat(timespec="microseconds").replace("+00:00", "Z") if isinstance(value, datetime) else value
+            for value in row
+        ]
+        for row in table.data.sort("station.id").iter_rows()
+    ]
+    canonical = json.dumps(
+        {"columns": table.data.columns, "rows": rows},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _validate_required_objects(row: dict[str, object], index: int) -> None:
+    for path in _REQUIRED_OBJECTS:
+        present, value = _find_source_value(row, path)
+        if not present:
+            raise FatalContractError(f"ThaiWater row {index} missing required object '{path}'")
+        if not isinstance(value, dict):
+            raise FatalContractError(f"ThaiWater row {index} field '{path}' must be an object")
+
+
+def _validate_language_maps(row: dict[str, object], index: int) -> None:
+    for path, expected_keys in _LANGUAGE_MAP_KEYS.items():
+        language_map = _source_leaf(row, path, index=index)
+        if not isinstance(language_map, dict):
+            raise FatalContractError(f"ThaiWater row {index} field '{path}' must be an object")
+        for key in language_map:
+            if key not in expected_keys:
+                raise FatalContractError(f"ThaiWater row {index} language map '{path}' contains unexpected key '{key}'")
+
+
+def _find_source_value(row: dict[str, object], path: str) -> tuple[bool, object]:
+    value: object = row
+    for component in path.split("."):
+        if not isinstance(value, dict) or component not in value:
+            return False, None
+        value = cast("dict[str, object]", value)[component]
+    return True, value
+
+
+def _source_leaf(
+    row: dict[str, object],
+    path: str,
+    *,
+    index: int = 0,
+    absent_ok: bool = False,
+) -> object:
+    present, value = _find_source_value(row, path)
+    if present:
+        return value
+    if absent_ok:
+        return None
+    raise FatalContractError(f"ThaiWater row {index} missing required leaf '{path}'")
+
+
+def _validate_scalar(value: object, dtype: pl.DataType, *, index: int, path: str) -> None:
+    if value is None:
+        return
+    valid: bool
+    family: str
+    if dtype == pl.String:
+        valid = isinstance(value, str)
+        family = "a JSON string"
+    elif dtype == pl.Int64:
+        valid = type(value) is int
+        family = "a JSON integer"
+    elif dtype == pl.Float64:
+        valid = type(value) in (int, float)
+        family = "a JSON number"
+    elif dtype == pl.Boolean:
+        valid = type(value) is bool
+        family = "a JSON Boolean"
+    elif dtype == pl.Null:
+        valid = False
+        family = "JSON null"
+    else:
+        raise FatalContractError(f"ThaiWater native schema has unsupported dtype for '{path}'")
+    if not valid:
+        raise FatalContractError(
+            f"ThaiWater row {index} leaf '{path}' must be {family} or null; Boolean is invalid for numeric families"
+        )
+
+
+def _flatten_native_row(row: dict[str, object]) -> dict[str, object]:
+    flattened: dict[str, object] = {}
+    for path, dtype in NATIVE_SOURCE_SCHEMA.items():
+        value = _source_leaf(row, path, absent_ok=path in _PERMITTED_ABSENT_LEAVES)
+        if path == "station.id":
+            value = str(value)
+        elif dtype == pl.Float64 and value is not None:
+            value = float(cast("int | float", value))
+        flattened[path] = value
+    return flattened
 
 
 def generate_catalogue_from_fixture(
@@ -411,12 +689,33 @@ def _read_live_json(url: str) -> dict[str, object]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the packaged th_thaiwater catalogue artifacts.")
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--fixture", type=Path, help="Path to a ThaiWater waterlevel_load JSON fixture.")
-    source.add_argument("--live", action="store_true", help="Fetch the live ThaiWater metadata endpoint.")
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for provider.json and parquet files.")
+    parser.add_argument("--fixture", type=Path, help="Path to a ThaiWater waterlevel_load JSON fixture.")
+    parser.add_argument("--live", action="store_true", help="Fetch the live ThaiWater metadata endpoint.")
+    parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
+    parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
+    parser.add_argument("--retrieved-at")
     parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     args = parser.parse_args(argv)
+
+    if (args.fixture is None) == (not args.live):
+        parser.error("choose exactly one ThaiWater source: --fixture or --live")
+    if (args.out is None) == (args.native_out is None):
+        parser.error("choose exactly one ThaiWater destination: --out or --native-out")
+    if args.native_out is not None and args.retrieved_at is None:
+        parser.error("--retrieved-at is required with --native-out")
+    if args.out is not None and args.retrieved_at is not None:
+        parser.error("--retrieved-at is only valid with --native-out")
+
+    if args.native_out is not None:
+        retrieved_at = _parse_retrieved_at(args.retrieved_at, parser)
+        if args.live:
+            native_outcome = refresh_native_table_from_live(retrieved_at=retrieved_at)
+        else:
+            native_outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=retrieved_at)
+        if any(issue.severity == "error" for issue in native_outcome.issues):
+            parser.error("ThaiWater native refresh returned issues; refusing to write")
+        write_native_table(native_outcome.value, args.native_out)
+        return 0
 
     if args.live:
         catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
@@ -424,6 +723,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
     write_catalogue(catalogue, args.out)
     return 0
+
+
+def _parse_retrieved_at(value: str, parser: argparse.ArgumentParser) -> RetrievedAt:
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value) is None:
+        parser.error("ThaiWater --retrieved-at must be UTC in YYYY-MM-DDTHH:MM:SSZ form")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        parser.error("ThaiWater --retrieved-at must be UTC in YYYY-MM-DDTHH:MM:SSZ form")
+    return RetrievedAt(parsed)
 
 
 if __name__ == "__main__":

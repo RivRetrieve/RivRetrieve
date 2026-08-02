@@ -1,89 +1,347 @@
 {
   "waterlevel_data": {
+    "result": "OK",
     "data": [
       {
-        "station": {
-          "id": "S13A",
-          "tele_station_type": "tele_waterlevel",
-          "tele_station_name": {"en": "Wang Noi", "th": "วังน้อย"},
-          "tele_station_lat": "14.2156",
-          "tele_station_long": "100.7411",
-          "tele_station_oldcode": "W13A"
-        },
-        "station_type": "tele_waterlevel",
-        "river_name": "Chao Phraya",
-        "geocode": {
-          "province_name": {"en": "Phra Nakhon Si Ayutthaya", "th": "พระนครศรีอยุธยา"},
-          "amphoe_name": {"en": "Wang Noi", "th": "วังน้อย"},
-          "tumbon_name": {"en": "Lam Sai", "th": "ลำไทร"}
+        "agency": {
+          "agency_name": {
+            "en": "Hydro – Informatics Institute (Public Organization)",
+            "jp": "",
+            "th": "สถาบันสารสนเทศทรัพยากรน้ำ (องค์การมหาชน)"
+          },
+          "agency_shortname": {
+            "en": "HII",
+            "jp": "",
+            "th": "สสน."
+          },
+          "id": 9
         },
         "basin": {
-          "basin_name": {"en": "Chao Phraya", "th": "เจ้าพระยา"}
+          "basin_code": 10,
+          "basin_name": {
+            "en": "Chao Phraya Basin",
+            "th": "ลุ่มน้ำเจ้าพระยา"
+          },
+          "id": 10
         },
-        "agency": {
-          "agency_name": {"en": "Royal Irrigation Department", "th": "กรมชลประทาน"}
-        }
-      },
-      {
+        "diff_wl_bank": "0.43",
+        "diff_wl_bank_text": "ล้นตลิ่ง (ม.)",
+        "discharge": null,
+        "flow_rate": null,
+        "geocode": {
+          "amphoe_code": "04",
+          "amphoe_name": {
+            "en": "Phra Pradaeng District",
+            "th": "พระประแดง"
+          },
+          "area_code": "2",
+          "area_name": {
+            "en": "Central",
+            "th": "ภาคกลาง"
+          },
+          "province_code": "11",
+          "province_name": {
+            "en": "Samut Prakan",
+            "th": "สมุทรปราการ"
+          },
+          "tumbon_code": "11",
+          "tumbon_name": {
+            "en": "Bang Krasop",
+            "th": "บางกระสอบ"
+          }
+        },
+        "id": 1281368481,
+        "river_gid": 188375,
+        "river_name": "แม่น้ำเจ้าพระยา",
+        "situation_level": 5,
+        "sort_order": null,
         "station": {
-          "id": "P1",
+          "agency_id": 9,
+          "critical_level_m": null,
+          "critical_level_msl": null,
+          "geocode_id": 252,
+          "ground_level": -1.63,
+          "hydro_id": null,
+          "id": 575568,
+          "is_key_station": false,
+          "left_bank": 1.49,
+          "min_bank": 0.91,
+          "offset": null,
+          "qmax": null,
+          "right_bank": 0.905,
+          "sub_basin_id": 240,
+          "tele_station_lat": 13.661021,
+          "tele_station_long": 100.56727,
+          "tele_station_name": {
+            "en": "Khlong Lat Bang Yo 2 Gate",
+            "th": "ปตร. คลองลัดบางยอ 2"
+          },
+          "tele_station_oldcode": "BKC004",
           "tele_station_type": "tele_waterlevel",
-          "tele_station_name": {"en": "Ping at Chiang Mai", "th": "ปิง ที่ เชียงใหม่"},
-          "tele_station_lat": "18.7883",
-          "tele_station_long": "98.9853",
-          "tele_station_oldcode": "P001"
+          "warning_level_m": null
         },
         "station_type": "tele_waterlevel",
-        "river_name": "Ping",
-        "geocode": {
-          "province_name": {"en": "Chiang Mai", "th": "เชียงใหม่"},
-          "amphoe_name": {"en": "Mueang Chiang Mai", "th": "เมืองเชียงใหม่"},
-          "tumbon_name": {"en": "Si Phum", "th": "ศรีภูมิ"}
-        },
-        "basin": {
-          "basin_name": {"en": "Ping", "th": "ปิง"}
-        },
-        "agency": {
-          "agency_name": {"en": "Royal Irrigation Department", "th": "กรมชลประทาน"}
-        }
+        "storage_percent": "116.77",
+        "waterlevel_datetime": "2026-08-02 19:20",
+        "waterlevel_m": null,
+        "waterlevel_msl": "1.33",
+        "waterlevel_msl_previous": "1.26"
       },
       {
+        "agency": {
+          "agency_name": {
+            "en": "Royal Irrigation Department",
+            "jp": "",
+            "th": "กรมชลประทาน "
+          },
+          "agency_shortname": {
+            "en": "RID",
+            "jp": "",
+            "th": "ชป."
+          },
+          "id": 12
+        },
+        "basin": {
+          "basin_code": 5,
+          "basin_name": {
+            "en": "Mun Basin",
+            "th": "ลุ่มน้ำมูล"
+          },
+          "id": 5
+        },
+        "diff_wl_bank": "3.10",
+        "diff_wl_bank_text": "ต่ำกว่าตลิ่ง (ม.)",
+        "discharge": "5.50",
+        "flow_rate": null,
+        "geocode": {
+          "amphoe_code": "21",
+          "amphoe_name": {
+            "en": "Pak Chong District",
+            "th": "ปากช่อง"
+          },
+          "area_code": "4",
+          "area_name": {
+            "en": "Northeast",
+            "th": "ภาคตะวันออกเฉียงเหนือ"
+          },
+          "province_code": "30",
+          "province_name": {
+            "en": "Nakhon Ratchasima",
+            "th": "นครราชสีมา"
+          },
+          "tumbon_code": "07",
+          "tumbon_name": {
+            "en": "Khanong Phra",
+            "th": "ขนงพระ"
+          }
+        },
+        "id": 1281365468,
+        "river_gid": 150856,
+        "river_name": "ลำโดมน้อย",
+        "situation_level": 4,
+        "sort_order": null,
         "station": {
-          "id": "N7A",
+          "agency_id": 12,
+          "critical_level_m": null,
+          "critical_level_msl": null,
+          "geocode_id": 1921,
+          "ground_level": 0,
+          "hydro_id": 4,
+          "id": 1117894,
+          "is_key_station": false,
+          "left_bank": 663.260988,
+          "min_bank": 333.8,
+          "offset": 328.799988,
+          "qmax": 190,
+          "right_bank": 663.583988,
+          "sub_basin_id": 154,
+          "tele_station_lat": 14.60611,
+          "tele_station_long": 101.472778,
+          "tele_station_name": {
+            "th": "บ้านขนงพระเหนือ"
+          },
+          "tele_station_oldcode": "M.199",
           "tele_station_type": "tele_waterlevel",
-          "tele_station_name": {"en": "Nan at Phitsanulok", "th": "น่าน ที่ พิษณุโลก"},
-          "tele_station_lat": "16.8200",
-          "tele_station_long": "100.2654",
-          "tele_station_oldcode": "N007"
+          "warning_level_m": null
         },
         "station_type": "tele_waterlevel",
-        "river_name": "Nan",
-        "geocode": {
-          "province_name": {"en": "Phitsanulok", "th": "พิษณุโลก"},
-          "amphoe_name": {"en": "Mueang Phitsanulok", "th": "เมืองพิษณุโลก"},
-          "tumbon_name": {"en": "Nai Mueang", "th": "ในเมือง"}
-        },
-        "basin": {
-          "basin_name": {"en": "Nan", "th": "น่าน"}
-        },
-        "agency": {
-          "agency_name": {"en": "Royal Irrigation Department", "th": "กรมชลประทาน"}
-        }
+        "storage_percent": "99.07",
+        "waterlevel_datetime": "2026-08-02 18:00",
+        "waterlevel_m": null,
+        "waterlevel_msl": "330.70",
+        "waterlevel_msl_previous": "330.69"
       },
       {
-        "station": {
-          "id": "RAIN01",
-          "tele_station_type": "tele_rainfall",
-          "tele_station_name": {"en": "Bangkok Rain", "th": "กรุงเทพฝน"},
-          "tele_station_lat": "13.7563",
-          "tele_station_long": "100.5018",
-          "tele_station_oldcode": null
+        "agency": {
+          "agency_name": {
+            "en": "Royal Irrigation Department",
+            "jp": "",
+            "th": "กรมชลประทาน "
+          },
+          "agency_shortname": {
+            "en": "RID",
+            "jp": "",
+            "th": "ชป."
+          },
+          "id": 12
         },
-        "station_type": "tele_rainfall",
-        "river_name": null,
-        "geocode": {},
-        "basin": {},
-        "agency": {}
+        "basin": {
+          "basin_code": 21,
+          "basin_name": {
+            "en": "Peninsula - Lower East Coast Basin",
+            "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนล่าง"
+          },
+          "id": 26
+        },
+        "diff_wl_bank": "3.94",
+        "diff_wl_bank_text": "ต่ำกว่าตลิ่ง (ม.)",
+        "discharge": "62.20",
+        "flow_rate": null,
+        "geocode": {
+          "amphoe_code": "01",
+          "amphoe_name": {
+            "en": "Mueang Yala District",
+            "th": "เมืองยะลา"
+          },
+          "area_code": "5",
+          "area_name": {
+            "en": "South",
+            "th": "ภาคใต้"
+          },
+          "province_code": "95",
+          "province_name": {
+            "en": "Yala",
+            "th": "ยะลา"
+          },
+          "tumbon_code": "01",
+          "tumbon_name": {
+            "en": "Sateng",
+            "th": "สะเตง"
+          }
+        },
+        "id": 1281351943,
+        "river_gid": 230173,
+        "river_name": "แม่น้ำปัตตานี",
+        "situation_level": 3,
+        "sort_order": null,
+        "station": {
+          "agency_id": 12,
+          "critical_level_m": 16.5,
+          "critical_level_msl": 16.5,
+          "geocode_id": 8265,
+          "ground_level": 10.49,
+          "hydro_id": null,
+          "id": 2583,
+          "is_key_station": true,
+          "left_bank": 16.5,
+          "min_bank": 16.5,
+          "offset": 0,
+          "qmax": 470,
+          "right_bank": 16.5,
+          "sub_basin_id": 336,
+          "tele_station_lat": 6.552798,
+          "tele_station_long": 101.266294,
+          "tele_station_name": {
+            "en": " ",
+            "jp": " ",
+            "th": "บ้านท่าสาบ"
+          },
+          "tele_station_oldcode": "X.40A",
+          "tele_station_type": "tele_waterlevel",
+          "warning_level_m": null
+        },
+        "station_type": "tele_waterlevel",
+        "storage_percent": "34.44",
+        "waterlevel_datetime": "2026-08-02 18:00",
+        "waterlevel_m": null,
+        "waterlevel_msl": "12.56",
+        "waterlevel_msl_previous": "12.58"
+      },
+      {
+        "agency": {
+          "agency_name": {
+            "en": "Friend in Need (of “Pa”) Volunteers Foundation",
+            "jp": "",
+            "th": "มูลนิธิอาสาเพื่อนพึ่ง (ภาฯ) ยามยาก สภากาชาดไทย"
+          },
+          "agency_shortname": {
+            "en": "FOP",
+            "jp": "",
+            "th": "พพภ"
+          },
+          "id": 91
+        },
+        "basin": {
+          "basin_code": 14,
+          "basin_name": {
+            "en": "Mae Klong Basin",
+            "th": "ลุ่มน้ำแม่กลอง"
+          },
+          "id": 15
+        },
+        "diff_wl_bank": "1.54",
+        "diff_wl_bank_text": "ต่ำกว่าตลิ่ง (ม.)",
+        "discharge": null,
+        "flow_rate": null,
+        "geocode": {
+          "amphoe_code": "08",
+          "amphoe_name": {
+            "en": "Umphang District",
+            "th": "อุ้มผาง"
+          },
+          "area_code": "3",
+          "area_name": {
+            "en": "North",
+            "th": "ภาคเหนือ"
+          },
+          "province_code": "63",
+          "province_name": {
+            "en": "Tak",
+            "th": "ตาก"
+          },
+          "tumbon_code": "06",
+          "tumbon_name": {
+            "en": "Mae Klong",
+            "th": "แม่กลอง"
+          }
+        },
+        "id": 1281375778,
+        "river_gid": 165896,
+        "river_name": "แม่น้ำแควใหญ่",
+        "situation_level": 4,
+        "sort_order": null,
+        "station": {
+          "agency_id": 91,
+          "critical_level_m": null,
+          "critical_level_msl": null,
+          "geocode_id": 6031,
+          "ground_level": 415.668,
+          "hydro_id": null,
+          "id": 1121258,
+          "is_key_station": false,
+          "left_bank": 455.345,
+          "min_bank": 454.79,
+          "offset": null,
+          "qmax": null,
+          "right_bank": 454.79,
+          "sponsor_by": "มูลนิธิอาสาเพื่อนพึ่ง (ภาฯ) ยามยาก สภากาชาดไทย",
+          "sub_basin_id": 260,
+          "tele_station_lat": 16.04928,
+          "tele_station_long": 98.844765,
+          "tele_station_name": {
+            "en": "Khwae Yai Bridge",
+            "th": "สะพานแม่น้ำแควใหญ่"
+          },
+          "tele_station_oldcode": "MOU431",
+          "tele_station_type": "tele_waterlevel",
+          "warning_level_m": null
+        },
+        "station_type": "tele_waterlevel",
+        "storage_percent": "96.06",
+        "waterlevel_datetime": "2026-08-02 19:30",
+        "waterlevel_m": null,
+        "waterlevel_msl": "453.25",
+        "waterlevel_msl_previous": "453.25"
       }
     ]
   }

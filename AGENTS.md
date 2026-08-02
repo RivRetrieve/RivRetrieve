@@ -318,6 +318,29 @@ eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_
 `za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
 API before the provider is committed.
 
+- Thailand native-table attestation: the orchestrator performed
+  `GET https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load` outside the executor
+  sandbox at `2026-08-02T12:42:03Z`, supplied the complete response, and observed 825
+  `waterlevel_data.data` rows with 825 unique integer `station.id` values. Response canonicalization
+  uses `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8 encoding,
+  and SHA-256, producing
+  `d42fdac929ddf87f348ed8cd9a6732768fb9775a47fff2bc54f4e0e74ee8bdee`. The native table preserves
+  61 lexicographically ordered dotted source columns, widens only integer `station.id` to its exact
+  decimal String and mixed numeric columns losslessly, sorts rows lexically by the stored String ID,
+  and appends one UTC-microsecond `retrieved_at`. Its full content is canonicalized as an object with
+  `columns` in schema order and `rows` as aligned positional lists, rendering `retrieved_at` as RFC
+  3339 UTC with exactly six fractional digits and `Z`, then using the same compact sorted-key JSON,
+  `ensure_ascii=False`, UTF-8, and SHA-256 procedure. The resulting digest is
+  `3e2085ce51e3714d35feb053973c5074a0994278943b51c620c862be1f281cfd`, and the committed table was
+  compared with a fresh materialization of the complete supplied response using exact semantic frame
+  equality. Station-name language keys were `{en, th}` on 425 rows, `{th}` on 399 rows, and
+  `{en, jp, th}` on the sole row with `station.id == 2583`; both agency name maps contained
+  `{en, jp, th}` on all 825 rows. Every row met both legacy `tele_waterlevel` and valid-coordinate
+  predicates. Comparison with the unchanged 754-row canonical catalogue found 87 currently present
+  IDs and 16 no-longer-present IDs, establishing source membership churn and net growth rather than
+  a missing filter. `tests/test_data/th_thaiwater_metadata.json` is a four-row verbatim subset and is
+  not content-identical to the complete response.
+
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
