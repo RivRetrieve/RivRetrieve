@@ -521,10 +521,16 @@ def test_station_product_matching_covers_absent_unique_duplicate_agreeing_blank_
         == rows["discharge_daily_mean"]
     )
     assert json.loads(rows["discharge_instantaneous"]["metadata"])["exact_match_count"] == 2
-    assert rows["stage_daily_mean"]["availability_reason"] == generator.BLANK_COVERAGE_REASON
-    assert rows["stage_daily_max"]["availability_reason"] == generator.CONFLICTING_COVERAGE_REASON
+    assert rows["stage_daily_mean"]["availability_reason"] == "Matching USGS source series states blank coverage dates"
+    assert (
+        rows["stage_daily_max"]["availability_reason"]
+        == "Several matching USGS source series state conflicting coverage boundaries"
+    )
     assert rows["stage_daily_min"]["availability"] == "unavailable"
-    assert rows["stage_daily_min"]["availability_reason"] == generator.NO_MATCH_REASON
+    assert (
+        rows["stage_daily_min"]["availability_reason"]
+        == "No matching USGS source series was published for this station-product"
+    )
     assert rows["stage_daily_min"]["start_date"] is None
     assert rows["stage_daily_min"]["end_date"] is None
 
@@ -664,6 +670,14 @@ def test_native_build_rejects_malformed_series_alignment() -> None:
         generator.build_catalogue(NativeTable(malformed), STATION_CATALOGUE_ORIGINS)
 
 
+def test_native_build_rejects_non_exact_schema() -> None:
+    native = _native_table()
+    reordered = native.data.select("site_no", *[column for column in native.data.columns if column != "site_no"])
+
+    with pytest.raises(FatalContractError, match="USGS native table does not have the exact required schema"):
+        generator.build_catalogue(NativeTable(reordered), STATION_CATALOGUE_ORIGINS)
+
+
 def test_native_build_rejects_invalid_nonblank_coverage_date() -> None:
     series = _complete_product_series()
     series[0]["begin_date"] = "not-a-date"
@@ -775,7 +789,6 @@ def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
     "case",
     [
         "removed-fixture",
-        "native-with-native-out",
         "live-with-out",
         "rdb-with-out",
     ],
@@ -793,7 +806,6 @@ def test_cli_rejects_cross_mode_combinations(
     monkeypatch.setattr(generator, "refresh_native_table_from_rdb_directory", fail)
     argv_by_case = {
         "removed-fixture": ["--fixture", "removed.json"],
-        "native-with-native-out": ["--native", "native.parquet", "--native-out", "other.parquet"],
         "live-with-out": [
             "--live",
             "--out",
@@ -817,6 +829,71 @@ def test_cli_rejects_cross_mode_combinations(
 
     with pytest.raises(SystemExit):
         generator.main(argv_by_case[case])
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--native", "native.parquet"], "--native requires --out"),
+        (
+            ["--native", "native.parquet", "--out", "catalogue", "--native-out", "other.parquet"],
+            "--native cannot be combined with --native-out or --retrieved-at",
+        ),
+        (
+            [
+                "--native",
+                "native.parquet",
+                "--out",
+                "catalogue",
+                "--retrieved-at",
+                "2026-08-02T01:14:11Z",
+            ],
+            "--native cannot be combined with --native-out or --retrieved-at",
+        ),
+    ],
+    ids=["requires-out", "rejects-native-out", "rejects-retrieved-at"],
+)
+def test_cli_rejects_invalid_native_mode_options(
+    argv: list[str],
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        generator,
+        "read_native_table",
+        lambda path: pytest.fail(f"invalid CLI reached native reader: {path}"),
+    )
+
+    with pytest.raises(SystemExit):
+        generator.main(argv)
+
+    assert message in capsys.readouterr().err
+
+
+def test_cli_rejects_relative_rdb_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        generator,
+        "refresh_native_table_from_rdb_directory",
+        lambda *args, **kwargs: pytest.fail("invalid CLI reached RDB reader"),
+    )
+
+    with pytest.raises(SystemExit):
+        generator.main(
+            [
+                "--rdb-dir",
+                "relative-rdb",
+                "--native-out",
+                "native.parquet",
+                "--retrieved-at",
+                "2026-08-02T01:14:11Z",
+            ]
+        )
+
+    assert "--rdb-dir must be an absolute path" in capsys.readouterr().err
 
 
 def test_committed_native_table_exact_schema_counts_and_provenance() -> None:
