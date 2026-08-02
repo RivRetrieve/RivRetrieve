@@ -177,7 +177,11 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert not hasattr(module, "series_annotation_schema")
 
     provider_directory = Path(module.__file__).parent
-    expected_module_files = CATALOGUE_MODULE_FILES | ({"origins.py"} if provider_id == "lt_lhmt" else set())
+    expected_module_files = (
+        (CATALOGUE_MODULE_FILES | {"origins.py"}) - {"metadata.py"}
+        if provider_id == "cz_chmi"
+        else CATALOGUE_MODULE_FILES | ({"origins.py"} if provider_id == "lt_lhmt" else set())
+    )
     assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in (
