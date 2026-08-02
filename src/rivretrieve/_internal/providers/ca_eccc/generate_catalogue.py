@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -701,6 +702,31 @@ def _metadata_json(value: Mapping[str, object]) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def native_table_content_digest(table: NativeTable) -> str:
+    payload = {
+        "columns": table.data.columns,
+        "rows": [[_canonical_json_value(value) for value in row] for row in table.data.iter_rows()],
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _canonical_json_value(value: object) -> object:
+    if isinstance(value, datetime):
+        return value.isoformat().replace("+00:00", "Z")
+    if isinstance(value, tuple | list):
+        return [_canonical_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _canonical_json_value(item) for key, item in value.items()}
+    return value
+
+
 def _raise_on_error_issues(outcome: WithIssues[NativeTable]) -> NativeTable:
     errors = tuple(issue for issue in outcome.issues if issue.severity == "error")
     if errors:
@@ -730,6 +756,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             else refresh_native_table_from_fixture(args.fixture, retrieved_at=args.retrieved_at)
         )
         write_native_table(_raise_on_error_issues(outcome), args.native_out)
+        digest = native_table_content_digest(read_native_table(args.native_out))
+        print(f"ca_eccc native table content SHA-256: {digest}")
         return 0
     if args.native is None:
         parser.error("--out requires --native")

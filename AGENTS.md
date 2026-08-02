@@ -124,8 +124,15 @@ would reintroduce the nondeterminism the pure build removes.
   serializes the complete assembled FeatureCollection in attested page order using sorted object keys,
   compact separators `(",", ":")`, `ensure_ascii=False`, and UTF-8, producing SHA-256
   `3613c17b3e1ad76e8490d6dcb659be251f2270e5568fb6ff1e05fe780037083d`. Native Parquet rows are
-  deterministically sorted by feature `id`; the canonical artifacts contain 8,057 stations, two
-  products, and 16,114 station-products.
+  deterministically sorted by feature `id`. Its sorted JSON id list, serialized with compact separators,
+  `ensure_ascii=False`, and UTF-8, has SHA-256
+  `a55f028a344441cfb7e0d3dbad88366ec3834ff7a62135a6f5ab9faf5b0e1393`. The complete native table is
+  canonicalized as an object containing the 18 column names in schema order and every row as a positional
+  array in table order; UTC datetimes use ISO 8601 `Z`, nested lists preserve their order, and JSON uses
+  sorted object keys, compact separators, `ensure_ascii=False`, and UTF-8. Its SHA-256 is
+  `46780a69f07e9ed8a7eae343929d81b4c78f2330d6268ee1fdc7de701cd6fe48`. The refresh command recomputes
+  this digest from the written Parquet in the same run. The canonical artifacts contain 8,057 stations,
+  two products, and 16,114 station-products.
 
 After writing provider code and tests, run that provider's network-free build from its committed
 native table and origins, and commit the resulting canonical artifacts alongside the code.

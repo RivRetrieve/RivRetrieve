@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -275,6 +276,45 @@ def test_complete_fixture_rejects_count_underflow_or_overflow(number_matched: in
     assert [issue.code for issue in outcome.issues] == [expected_code]
 
 
+@pytest.mark.parametrize(
+    ("feature", "reason"),
+    [
+        (None, "invalid_feature"),
+        (
+            deepcopy(_features()[0]),
+            "missing_source_fields",
+        ),
+        (deepcopy(_features()[0]), "invalid_geometry"),
+        (deepcopy(_features()[0]), "invalid_source_types"),
+    ],
+)
+def test_refresh_returns_named_issue_for_each_invalid_feature_reason(feature: object, reason: str) -> None:
+    if reason == "missing_source_fields":
+        assert isinstance(feature, dict)
+        properties = feature["properties"]
+        assert isinstance(properties, dict)
+        del properties["VERTICAL_DATUM"]
+    elif reason == "invalid_geometry":
+        assert isinstance(feature, dict)
+        geometry = feature["geometry"]
+        assert isinstance(geometry, dict)
+        geometry["coordinates"] = [-70.0]
+    elif reason == "invalid_source_types":
+        assert isinstance(feature, dict)
+        properties = feature["properties"]
+        assert isinstance(properties, dict)
+        properties["REAL_TIME"] = "not-an-integer"
+
+    outcome = generate_catalogue.refresh_native_table(
+        _page([feature], 1),
+        retrieved_at=ATTESTED_RETRIEVED_AT,
+    )
+
+    assert len(outcome.issues) == 1
+    assert outcome.issues[0].code == "refresh_invalid_page"
+    assert outcome.issues[0].details["reason"] == reason
+
+
 def test_live_refresh_applies_provider_calibrated_minimum(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         generate_catalogue,
@@ -303,6 +343,25 @@ def test_cli_refresh_boundary_raises_on_returned_error_issue(monkeypatch: pytest
     assert [issue.code for issue in exc_info.value.issues] == ["refresh_premature_empty_page"]
 
 
+def test_cli_refresh_reports_digest_of_written_native_table(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    output_path = tmp_path / "native.parquet"
+
+    result = generate_catalogue.main(
+        [
+            "--fixture",
+            str(FIXTURE_PATH),
+            "--native-out",
+            str(output_path),
+            "--retrieved-at",
+            "2026-08-02T01:09:10Z",
+        ]
+    )
+
+    digest = generate_catalogue.native_table_content_digest(read_native_table(output_path))
+    assert result == 0
+    assert capsys.readouterr().out == f"ca_eccc native table content SHA-256: {digest}\n"
+
+
 def test_committed_native_table_has_exact_schema_population_and_id_digest() -> None:
     native = read_native_table(NATIVE_PATH).data
     encoded_ids = json.dumps(native["id"].to_list(), separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -318,6 +377,21 @@ def test_committed_native_table_has_exact_schema_population_and_id_digest() -> N
     assert native["DRAINAGE_AREA_EFFECT"].len() - native["DRAINAGE_AREA_EFFECT"].null_count() == 1661
     assert native["id"].equals(native["IDENTIFIER"])
     assert native["id"].equals(native["STATION_NUMBER"])
+
+
+def test_committed_native_table_has_attested_whole_table_content_digest() -> None:
+    native = read_native_table(NATIVE_PATH)
+
+    assert generate_catalogue.native_table_content_digest(native) == (
+        "46780a69f07e9ed8a7eae343929d81b4c78f2330d6268ee1fdc7de701cd6fe48"
+    )
+
+
+def test_committed_native_coordinates_are_inside_declared_collection_bbox() -> None:
+    native = read_native_table(NATIVE_PATH).data
+
+    assert native["geometry.coordinates[0]"].is_between(-142, -52).fill_null(False).all()
+    assert native["geometry.coordinates[1]"].is_between(42, 84).fill_null(False).all()
 
 
 @pytest.mark.parametrize(
