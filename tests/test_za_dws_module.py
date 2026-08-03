@@ -19,11 +19,12 @@ def test_za_dws_stations_offline() -> None:
 
 def test_za_dws_station_count_reasonable() -> None:
     result = rr.provider("za_dws").stations()
-    assert result.data.height >= 2000
+    assert result.data.height == 2905
 
 
 def test_za_dws_products_offline() -> None:
     result = rr.provider("za_dws").products()
+    assert result.data.height == 3
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
         "discharge_daily_mean",
@@ -36,6 +37,7 @@ def test_za_dws_station_products_offline() -> None:
     stations = rr.provider("za_dws").stations()
     products = rr.provider("za_dws").products()
     result = rr.provider("za_dws").station_products()
+    assert result.data.height == 8715
     assert result.data.height == stations.data.height * products.data.height
 
 
@@ -91,7 +93,9 @@ def test_za_dws_station_x3h001_present() -> None:
 
 def test_za_dws_station_coordinates_in_south_africa_range() -> None:
     result = rr.provider("za_dws").stations()
-    lats = result.data["latitude"].drop_nulls().to_list()
-    lons = result.data["longitude"].drop_nulls().to_list()
+    assert result.data["latitude"].null_count() == 0
+    assert result.data["longitude"].null_count() == 0
+    lats = result.data["latitude"].to_list()
+    lons = result.data["longitude"].to_list()
     assert all(-35.0 <= lat <= -22.0 for lat in lats), "All latitudes should be in South Africa range"
     assert all(16.0 <= lon <= 34.0 for lon in lons), "All longitudes should be in South Africa range"
