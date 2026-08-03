@@ -72,12 +72,18 @@ CONTEXT_PATH = REPOSITORY_ROOT / "CONTEXT.md"
 
 
 class _CanonicalLinkParser(HTMLParser):
-    canonical_url: str | None = None
+    canonical_urls: list[str]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.canonical_urls = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         if tag == "link" and attributes.get("rel") == "canonical":
-            self.canonical_url = attributes.get("href")
+            href = attributes.get("href")
+            if href is not None:
+                self.canonical_urls.append(href)
 
 
 def test_field_carries_an_exact_native_column_and_is_immutable() -> None:
@@ -514,8 +520,9 @@ def test_thailand_declarations_match_schema_and_committed_coordinate_evidence() 
         "longitude": Field(NativeColumn("station.tele_station_long")),
         "crs": NotPublished(Evidence(THAI_CRS_EVIDENCE_URL)),
     } == THAI_STATION_ORIGINS
-    assert parser.canonical_url == THAI_CRS_EVIDENCE_URL
-    assert THAI_CRS_EVIDENCE_URL in capture
+    assert len(THAI_CRS_EVIDENCE_URL) == 104
+    assert capture.count(THAI_CRS_EVIDENCE_URL) == 2
+    assert parser.canonical_urls == [THAI_CRS_EVIDENCE_URL]
 
 
 def test_committed_thailand_origins_pass_validation() -> None:

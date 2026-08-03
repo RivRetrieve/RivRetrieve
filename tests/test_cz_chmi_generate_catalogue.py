@@ -11,6 +11,7 @@ from typing import cast
 import polars as pl
 import polars.testing as pl_testing
 import pytest
+from pypdf import PdfReader
 
 from rivretrieve._internal.catalogue_origins import Evidence, Field, NativeColumn, NotPublished
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
@@ -164,6 +165,43 @@ CZ_ORIGINS = {
     "longitude": Field(NativeColumn("GEOGR2")),
     "crs": NotPublished(Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")),
 }
+
+CRS_EVIDENCE_PATH = Path("tests/test_data/cz_chmi_popis_kodu_historical.pdf")
+CRS_ABSENCE_TOKENS = (
+    "wgs84",
+    "wgs 84",
+    "wgs-84",
+    "epsg",
+    "datum",
+    "crs",
+    "srid",
+    "coordinate reference",
+    "geodetic",
+    "geodät",
+    "ellipsoid",
+    "etrs",
+    "souřadnic",
+    "referenč",
+    "elipsoid",
+    "s-jtsk",
+)
+
+
+def test_publisher_crs_evidence_names_coordinates_but_no_reference_system() -> None:
+    capture = CRS_EVIDENCE_PATH.read_bytes()
+    reader = PdfReader(CRS_EVIDENCE_PATH)
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    folded = text.casefold()
+
+    assert len(capture) == 423_157
+    assert hashlib.sha256(capture).hexdigest() == ("41958b49634d2dc01b51ff72b65d054402628cd154bbcd6b8020def12d88d45a")
+    assert capture.count(b"/Font") == 31
+    assert capture.count(b"/DCTDecode") == 0
+    assert len(reader.pages) == 1
+    assert text
+    assert "GEOGR1" in text and "Zeměpisná šířka" in text
+    assert "GEOGR2" in text and "Zeměpisná délka" in text
+    assert all(token.casefold() not in folded for token in CRS_ABSENCE_TOKENS)
 
 
 def _fixture_payload() -> dict[str, object]:

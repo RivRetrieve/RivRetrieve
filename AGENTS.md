@@ -437,7 +437,8 @@ supplied live JSON, or a fixture-backed canonical route.
   `GET https://standard.thaiwater.net/docs/การจัดทำมาตรฐานน้ำ-ระยะ/ข้อมูลอ้างอิง-ข้อมูลอ้า/การระบุพิกัดตำแหน่ง/`
   outside the executor sandbox at `2026-08-02T13:51:44Z`; the coordinate-standard page capture is
   607,845 bytes with SHA-256
-  `64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04`. Future Thailand canonical
+  `64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04`; its byte-identical committed
+  capture is `tests/test_data/th_thaiwater_coordinate_standard.html`. Future Thailand canonical
   artifacts must be built network-free from committed `native.parquet` and origin declarations,
   never from `--live` or a fixture.
 
@@ -464,12 +465,38 @@ supplied live JSON, or a fixture-backed canonical route.
   `2026-08-02T16:43:18Z`, received 230 station objects with one uniform 24-key keyset, and supplied the
   complete JSON response. Canonicalization uses one
   `json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)` call over the complete
-  parsed 230-element document, encoded as UTF-8, and produces SHA-256
+  parsed 230-element document committed as
+  `tests/test_data/ba_fhmzbih_crs_evidence_stations.json`, encoded as UTF-8, and produces SHA-256
   `c78bd3b3aee2859eaef3c4373029fe7619a7d8e40b53fa0eab7f989ade3524bc`. The document carries
   `station_latitude`, `station_longitude`, `station_carteasting`, `station_cartnorthing`,
   `station_local_x`, and `station_local_y`, and contains zero horizontal-CRS tokens. Its datum-named
   fields `station_gauge_datum`, `GAUGE_DATUM`, and `GWREF_DATUM` are vertical metre elevations, not
   horizontal coordinate reference systems.
+
+- Switzerland publisher CRS-capture attestation: the declared evidence URL is
+  `https://api.existenz.ch/#hydro`. The orchestrator requested `GET https://api.existenz.ch/`
+  outside the executor sandbox at `2026-08-03T12:31:42Z`; the final URL was identical, with no
+  redirect, and the response was HTTP 200. The response has 15,737 raw bytes and raw SHA-256
+  `488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df`; its byte-identical
+  committed capture is `tests/test_data/ch_foen_api_docs.html`. The `#hydro` suffix is a page-fragment
+  selector and was never sent to the server.
+
+- Czechia publisher CRS-capture attestation: the declared, requested, and final URL was
+  `https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf`, with no redirect. The
+  orchestrator performed the request outside the executor sandbox at `2026-08-03T12:31:42Z` and
+  received HTTP 200. The response has 423,157 raw bytes and raw SHA-256
+  `41958b49634d2dc01b51ff72b65d054402628cd154bbcd6b8020def12d88d45a`; its byte-identical
+  committed capture is `tests/test_data/cz_chmi_popis_kodu_historical.pdf`.
+
+- Japan publisher CRS-capture attestation: the milestone-14 accepted response used the identical
+  declared, requested, and final URL
+  `http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010`. It returned historical
+  HTTP 200 at `2026-08-02T19:35:42Z`; the response has 3,208 raw bytes and raw SHA-256
+  `81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9`. Its byte-identical
+  committed capture is `tests/test_data/jp_mlit_site_info_detail_301011281104010.html`, and its
+  acceptance is bound to the milestone-14 requirement that the body contain the EUC-JP bytes for
+  `世界測地系`. A separate attempt at `2026-08-03T12:31:42Z` returned HTTP 403 with a 77-byte
+  access-restriction body, so this evidence is non-refetchable; no later success is claimed.
 
 - Japan native-table capture attestation: the
   orchestrator performed the endpoint-expanded 1,024-request capture outside the executor sandbox.
