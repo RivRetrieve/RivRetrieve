@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 
 import polars as pl
 import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.native import RetrievedAt, read_native_table
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau import generate_catalogue as generator
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
@@ -209,6 +211,16 @@ def test_native_list_value_must_inhabit_schema() -> None:
     )
 
 
+def test_native_list_value_must_be_a_list() -> None:
+    hydro, temperature = _sample_payloads()
+    station_id = hydro["data"][0]["code_station"]
+    hydro["data"][0]["code_sandre_reseau_station"] = "BSH164"
+    _assert_issue(
+        _refresh(hydro, temperature),
+        f"fr_hubeau hydrometry station {station_id} has source values outside the native schema",
+    )
+
+
 def test_native_float_value_must_be_finite() -> None:
     for invalid_value in (float("nan"), float("inf")):
         hydro, temperature = _sample_payloads()
@@ -277,17 +289,100 @@ def test_native_upstream_field_addition_changes_nothing(endpoint: str, injected_
 
 
 @pytest.mark.parametrize(
-    "geometry",
-    [[], {"coordinates": [1.0, 2.0], "crs": {"properties": {"name": 3}, "type": "name"}, "type": "Point"}],
+    "geometries",
+    [
+        pytest.param(
+            [
+                MappingProxyType(
+                    {
+                        "coordinates": [1.0, 2.0],
+                        "crs": {"properties": {"name": "CRS84"}, "type": "name"},
+                        "type": "Point",
+                    }
+                )
+            ],
+            id="container-must-be-dict",
+        ),
+        pytest.param(
+            [
+                {"coordinates": [1.0, 2.0], "type": "Point"},
+                {"coordinates": [1.0, 2.0], "srs": {}, "type": "Point"},
+            ],
+            id="container-key-set",
+        ),
+        pytest.param(
+            [{"coordinates": [1.0, 2.0], "crs": None, "type": "Point"}],
+            id="crs-must-be-dict",
+        ),
+        pytest.param(
+            [
+                {"coordinates": [1.0, 2.0], "crs": {"properties": {"name": "CRS84"}}, "type": "Point"},
+                {
+                    "coordinates": [1.0, 2.0],
+                    "crs": {"properties": {"name": "CRS84"}, "type": "name", "extra": None},
+                    "type": "Point",
+                },
+            ],
+            id="crs-key-set",
+        ),
+        pytest.param(
+            [{"coordinates": [1.0, 2.0], "crs": {"properties": {"name": "CRS84"}, "type": 7}, "type": "Point"}],
+            id="crs-type-must-be-string",
+        ),
+        pytest.param(
+            [{"coordinates": [1.0, 2.0], "crs": {"properties": None, "type": "name"}, "type": "Point"}],
+            id="crs-properties-must-be-dict",
+        ),
+        pytest.param(
+            [
+                {"coordinates": [1.0, 2.0], "crs": {"properties": {}, "type": "name"}, "type": "Point"},
+                {
+                    "coordinates": [1.0, 2.0],
+                    "crs": {"properties": {"name": "CRS84", "extra": None}, "type": "name"},
+                    "type": "Point",
+                },
+            ],
+            id="crs-properties-key-set",
+        ),
+        pytest.param(
+            [{"coordinates": [1.0, 2.0], "crs": {"properties": {"name": 3}, "type": "name"}, "type": "Point"}],
+            id="crs-name-must-be-string",
+        ),
+        pytest.param(
+            [{"coordinates": [1.0, 2.0], "crs": {"properties": {"name": "CRS84"}, "type": "name"}, "type": 7}],
+            id="geometry-type-must-be-string",
+        ),
+        pytest.param(
+            [{"coordinates": (1.0, 2.0), "crs": {"properties": {"name": "CRS84"}, "type": "name"}, "type": "Point"}],
+            id="coordinates-must-be-list",
+        ),
+        pytest.param(
+            [{"coordinates": [True, 2.0], "crs": {"properties": {"name": "CRS84"}, "type": "name"}, "type": "Point"}],
+            id="coordinates-must-not-contain-booleans",
+        ),
+        pytest.param(
+            [{"coordinates": ["1.0", 2.0], "crs": {"properties": {"name": "CRS84"}, "type": "name"}, "type": "Point"}],
+            id="coordinates-must-be-numeric",
+        ),
+        pytest.param(
+            [
+                {
+                    "coordinates": [float("inf"), 2.0],
+                    "crs": {"properties": {"name": "CRS84"}, "type": "name"},
+                    "type": "Point",
+                }
+            ],
+            id="coordinates-must-be-finite",
+        ),
+    ],
 )
-def test_native_geometry_container_and_nested_members_are_strict(geometry: object) -> None:
-    hydro, temperature = _sample_payloads()
-    station_id = hydro["data"][0]["code_station"]
-    hydro["data"][0]["geometry"] = geometry
-    _assert_issue(
-        _refresh(hydro, temperature),
-        f"fr_hubeau hydrometry station {station_id} has source values outside the native schema",
-    )
+def test_native_geometry_container_and_nested_members_are_strict(geometries: list[object]) -> None:
+    for geometry in geometries:
+        hydro, temperature = _sample_payloads()
+        station_id = hydro["data"][0]["code_station"]
+        hydro["data"][0]["geometry"] = geometry
+        message = f"fr_hubeau hydrometry station {station_id} has source values outside the native schema"
+        _assert_issue(_refresh(hydro, temperature), message)
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
@@ -347,16 +442,92 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
     geojson = _full_payload(_GEOJSON_EVIDENCE)
     crs_name = "urn:ogc:def:crs:OGC:1.3:CRS84"
     assert geojson["crs"]["properties"]["name"] == crs_name
-    assert geojson["features"][0]["geometry"]["crs"]["properties"]["name"] == crs_name
+    feature = geojson["features"][0]
+    assert feature["properties"]["code_station"] == "1011000101"
+    assert feature["geometry"]["crs"]["properties"]["name"] == crs_name
+    assert feature["geometry"]["coordinates"] == [
+        feature["properties"]["longitude_station"],
+        feature["properties"]["latitude_station"],
+    ]
+
+    hydro_station = next(row for row in hydro["data"] if row["code_station"] == "1011000101")
+    geojson_longitude, geojson_latitude = feature["geometry"]["coordinates"]
+    assert round(geojson_longitude, 9) == hydro_station["longitude_station"]
+    assert round(geojson_latitude, 9) == hydro_station["latitude_station"]
+    assert geojson_longitude != hydro_station["longitude_station"]
+    assert geojson_latitude != hydro_station["latitude_station"]
+
+    hydro_agreeing = {
+        row["code_station"]
+        for row in hydro["data"]
+        if row["geometry"]["coordinates"] == [row["longitude_station"], row["latitude_station"]]
+    }
+    hydro_projection_31 = {row["code_station"] for row in hydro["data"] if row["code_projection"] == 31}
+    assert hydro_agreeing == hydro_projection_31
+    assert len(hydro_agreeing) == 54
+    assert (
+        sum(
+            row["geometry"]["coordinates"] != [row["longitude_station"], row["latitude_station"]]
+            for row in hydro["data"]
+        )
+        == 6400
+    )
+    assert all(
+        round(row["geometry"]["coordinates"][0], 9) == row["longitude_station"]
+        and round(row["geometry"]["coordinates"][1], 9) == row["latitude_station"]
+        for row in hydro["data"]
+    )
+    assert (
+        sum(row["geometry"]["coordinates"] != [row["longitude"], row["latitude"]] for row in temperature["data"]) == 869
+    )
+    assert all(
+        round(row["geometry"]["coordinates"][0], 9) == row["longitude"]
+        and round(row["geometry"]["coordinates"][1], 9) == row["latitude"]
+        for row in temperature["data"]
+    )
+    coordinate_discrepancies = [
+        abs(row["geometry"]["coordinates"][axis] - row[field])
+        for rows, coordinate_fields in (
+            (hydro["data"], ("longitude_station", "latitude_station")),
+            (temperature["data"], ("longitude", "latitude")),
+        )
+        for row in rows
+        for axis, field in enumerate(coordinate_fields)
+    ]
+    assert max(coordinate_discrepancies) == pytest.approx(5.0e-10, abs=1.0e-13)
 
     openapi = _full_payload(_OPENAPI_EVIDENCE)
-    description = openapi["definitions"]["Station hydrométrique"]["properties"]["code_projection"]["description"]
+    station_properties = openapi["definitions"]["Station hydrométrique"]["properties"]
+    for coordinate_name in (
+        "latitude_station",
+        "longitude_station",
+        "coordonnee_x_station",
+        "coordonnee_y_station",
+    ):
+        assert station_properties[coordinate_name]["type"] == "number"
+        assert station_properties[coordinate_name]["format"] == "double"
+    assert "WGS84" in station_properties["latitude_station"]["description"]
+    assert "WGS84" in station_properties["longitude_station"]["description"]
+    assert station_properties["coordonnee_x_station"]["description"] == "Coordonnée X de la station hydrométrique"
+    assert station_properties["coordonnee_y_station"]["description"] == "Coordonnée Y de la station hydrométrique"
+    description = station_properties["code_projection"]["description"]
     assert description == "Type de projection de la station hydrométrique. Voir ProjCoordSiteHydro"
 
 
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
+        (
+            [
+                "--native-out",
+                "native.parquet",
+                "--hydro-retrieved-at",
+                "2026-08-02T17:32:58+00:00",
+                "--temperature-retrieved-at",
+                "2026-08-02T17:33:34+00:00",
+            ],
+            "--hydro-fixture and --temp-fixture must be supplied together",
+        ),
         (
             ["--hydro-fixture", str(_HYDRO_FIXTURE), "--out", "out"],
             "--hydro-fixture and --temp-fixture must be supplied together",
@@ -486,6 +657,36 @@ def test_fixture_native_cli_is_offline_and_prints_only_digest(
     committed = read_native_table(native_path)
     assert committed.data.shape == (7323, 73)
     assert capsys.readouterr().out == native_table_content_digest(committed) + "\n"
+
+
+def test_fixture_native_cli_rejects_census_error_without_writing(tmp_path: Path) -> None:
+    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
+    hydro["data"] = hydro["data"][:5]
+    hydro["count"] = 5
+    hydro_path = tmp_path / "truncated-hydrometry.json"
+    hydro_path.write_text(json.dumps(hydro))
+    native_path = tmp_path / "native.parquet"
+
+    with pytest.raises(FatalContractError) as raised:
+        generator.main(
+            [
+                "--hydro-fixture",
+                str(hydro_path),
+                "--temp-fixture",
+                str(_TEMP_FULL_FIXTURE),
+                "--native-out",
+                str(native_path),
+                "--hydro-retrieved-at",
+                "2026-08-02T17:32:58+00:00",
+                "--temperature-retrieved-at",
+                "2026-08-02T17:33:34+00:00",
+            ]
+        )
+
+    assert [issue.message for issue in raised.value.issues] == [
+        "fr_hubeau hydrometry response contains 5 stations; expected 6454"
+    ]
+    assert not native_path.exists()
 
 
 def test_complete_native_table_is_source_faithful() -> None:
