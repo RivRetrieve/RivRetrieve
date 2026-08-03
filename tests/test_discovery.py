@@ -140,7 +140,6 @@ def test_provider_info_aggregates_registered_provider_rows(
                 "live_station_products": False,
                 "bulk_observations": "none",
                 "catalogue_version": "2026.02",
-                "metadata": '{"homepage":"https://a_provider.example.invalid"}',
             },
             {
                 "provider_id": "z_provider",
@@ -150,7 +149,6 @@ def test_provider_info_aggregates_registered_provider_rows(
                 "live_station_products": False,
                 "bulk_observations": "none",
                 "catalogue_version": None,
-                "metadata": '{"homepage":"https://z_provider.example.invalid"}',
             },
         ],
         schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema,
@@ -158,7 +156,7 @@ def test_provider_info_aggregates_registered_provider_rows(
 
     result = rr.provider_info()
 
-    pl_testing.assert_frame_equal(result.data, expected)
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.issues == ()
     assert result.provenance.source == "packaged"
 
@@ -236,7 +234,7 @@ def test_global_product_info_matches_products_contract(
     products_result = products()
     product_info_result = product_info()
 
-    pl_testing.assert_frame_equal(product_info_result.data, products_result.data)
+    pl_testing.assert_frame_equal(product_info_result.data, products_result.data, check_exact=True)
     assert product_info_result.provenance == products_result.provenance
     assert product_info_result.issues == products_result.issues
 

@@ -404,42 +404,6 @@ def test_native_build_uses_per_station_retrieval_dates_and_maximum_provider_date
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_native_build_metadata_is_non_null_plain_json_objects() -> None:
-    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
-
-    catalogue = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
-
-    assert catalogue.products["metadata"].null_count() == 0
-    assert catalogue.station_products["metadata"].null_count() == 0
-    product_metadata = _json_objects(catalogue.products["metadata"])
-    station_product_metadata = _json_objects(catalogue.station_products["metadata"])
-    provider_metadata = json.loads(catalogue.provider_info["metadata"])
-    assert isinstance(provider_metadata, dict)
-    assert provider_metadata == {
-        "source_url": generate_catalogue.SOURCE_URL,
-        "legacy_source": generate_catalogue.LEGACY_SOURCE,
-        "generator_input": "native",
-        **ENVELOPE,
-    }
-    assert product_metadata[0] == {
-        "aggregate_daily": True,
-        "fallback_parameter": "flow_ls",
-        "legacy_unit": "m3/s",
-        "legacy_variable": "DISCHARGE_DAILY_MEAN",
-        "native_id": "flow",
-        "notes": "Legacy fetcher aggregates preferred flow or fallback flow_ls values to daily means.",
-        "parameters": ["flow", "flow_ls"],
-        "preferred_parameter": "flow",
-    }
-    assert station_product_metadata[0].keys() == {
-        "station_id",
-        "product_id",
-        "native_parameters",
-        "availability_source",
-        "availability_note",
-    }
-
-
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [

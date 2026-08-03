@@ -46,7 +46,15 @@ def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
     generated = build_provider_info(date(2026, 6, 4))
     assert generated["bulk_observations"] == BULK_OBSERVATIONS
     assert generated["catalogue_version"] == "2026-06-04"
-    assert __import__("json").loads(generated["metadata"])["generator_input"] == "native"
+    assert tuple(generated) == (
+        "provider_id",
+        "name",
+        "live_stations",
+        "live_products",
+        "live_station_products",
+        "bulk_observations",
+        "catalogue_version",
+    )
     assert rr.provider("pl_imgw").info().bulk_observations == BULK_OBSERVATIONS
 
 

@@ -105,19 +105,6 @@ class ProductDefinition:
     period_anchor: str
     canonical_unit: str
     native_column: str
-    native_unit: str
-    unit_conversion: str | None
-    notes: str | None
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "native_column": self.native_column,
-            "native_unit": self.native_unit,
-            "canonical_unit": self.canonical_unit,
-            "unit_conversion": self.unit_conversion,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -130,9 +117,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         native_column="Flow [m^3/s]",
-        native_unit="m3/s",
-        unit_conversion=None,
-        notes="Daily mean discharge. Native unit is m³/s; no conversion required.",
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -143,9 +127,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         native_column="Water level [cm]",
-        native_unit="cm",
-        unit_conversion="divide_by_100",
-        notes="Daily mean water stage. Native unit is centimetres; converted to metres.",
     ),
     ProductDefinition(
         product_id="water_temperature_daily_mean",
@@ -156,9 +137,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="degC",
         native_column="Water temperature [deg. C]",
-        native_unit="degC",
-        unit_conversion=None,
-        notes="Daily mean water temperature. Native unit is degrees Celsius.",
     ),
 )
 
@@ -366,7 +344,6 @@ def build_products() -> ProductCatalog:
             "native_id": defn.native_column,
             "derived": False,
             "derivation_method": None,
-            "metadata": _meta_json(defn.metadata),
         }
         for defn in PRODUCT_DEFINITIONS
     ]
@@ -424,12 +401,6 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
         if not isinstance(station_id, str):
             raise FatalContractError("station_id must be a string")
         for defn in PRODUCT_DEFINITIONS:
-            meta: dict[str, object] = {
-                "station_id": station_id,
-                "product_id": defn.product_id,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": AVAILABILITY_REASON,
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -440,7 +411,6 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": _meta_json(meta),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -449,20 +419,6 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
 
 
 def build_provider_info(catalogue_date: date) -> dict[str, object]:
-    metadata = {
-        "station_source": "poland_sites.csv from legacy RivRetrieve-Python repo (1301 stations)",
-        "data_base_url": (
-            "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/"
-        ),
-        "annual_zip_from_year": 2023,
-        "annual_zip_template": "codz_{year}.zip",
-        "monthly_zip_template": "codz_{year}_{month:02d}.zip",
-        "csv_encoding_recent": "utf-8-sig (BOM), semicolon-separated",
-        "csv_encoding_legacy": "cp1250, comma-separated, quoted",
-        "cache_format": "parquet",
-        "generator_input": "native",
-        "terms_of_use": "https://danepubliczne.imgw.pl/",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -474,7 +430,6 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
             "catalogue-only provider exposes neither observation retrieval nor cache controls"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 

@@ -743,18 +743,6 @@ def test_dates_come_only_from_each_native_row_and_maximum_retrieval_date() -> No
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_all_metadata_values_are_plain_non_null_json_object_strings() -> None:
-    catalogue = _build()
-    metadata_values = [
-        *catalogue.products["metadata"].to_list(),
-        *catalogue.station_products["metadata"].to_list(),
-        catalogue.provider_info["metadata"],
-    ]
-
-    assert all(isinstance(value, str) and isinstance(json.loads(value), dict) for value in metadata_values)
-    assert json.loads(cast("str", catalogue.provider_info["metadata"]))["generator_input"] == "native"
-
-
 def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

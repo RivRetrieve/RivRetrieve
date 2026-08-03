@@ -26,7 +26,6 @@ def provider_info_dict(**overrides: object) -> dict[str, object]:
         "live_station_products": False,
         "bulk_observations": "none",
         "catalogue_version": "2026.01",
-        "metadata": {"homepage": "https://example.invalid"},
     }
     data.update(overrides)
     return data
@@ -45,7 +44,6 @@ def products_df(**overrides: object) -> pl.DataFrame:
         "native_id": ["WATER_LEVEL"],
         "derived": [False],
         "derivation_method": [None],
-        "metadata": ["{}"],
     }
     data.update(overrides)
     return pl.DataFrame(
@@ -62,7 +60,6 @@ def products_df(**overrides: object) -> pl.DataFrame:
             "native_id": pl.Utf8,
             "derived": pl.Boolean,
             "derivation_method": pl.Utf8,
-            "metadata": pl.Utf8,
         },
     )
 
@@ -102,7 +99,6 @@ def station_products_df(
         "start_date": [date(2020, 1, 1)],
         "end_date": [None],
         "last_catalogue_check": [date(2026, 1, 1)],
-        "metadata": ["{}"],
     }
     data.update(overrides)
     return pl.DataFrame(
@@ -116,7 +112,6 @@ def station_products_df(
             "start_date": pl.Date,
             "end_date": pl.Date,
             "last_catalogue_check": pl.Date,
-            "metadata": pl.Utf8,
         },
     )
 
@@ -153,10 +148,9 @@ def test_packaged_artifact_from_components_happy_path() -> None:
 
     assert isinstance(artifact, PackagedCatalogArtifact)
     assert artifact.provider_info["provider_id"] == "synthetic"
-    assert artifact.provider_info["metadata"] == '{"homepage":"https://example.invalid"}'
-    pl_testing.assert_frame_equal(artifact.products, products_df())
-    pl_testing.assert_frame_equal(artifact.stations, stations_df())
-    pl_testing.assert_frame_equal(artifact.station_products, station_products_df())
+    pl_testing.assert_frame_equal(artifact.products, products_df(), check_exact=True)
+    pl_testing.assert_frame_equal(artifact.stations, stations_df(), check_exact=True)
+    pl_testing.assert_frame_equal(artifact.station_products, station_products_df(), check_exact=True)
 
 
 def test_packaged_artifact_from_path_happy_path(tmp_path: Path) -> None:
@@ -246,16 +240,6 @@ def test_packaged_artifact_non_nullable_null_raises_corrupt() -> None:
         )
 
 
-def test_packaged_artifact_metadata_non_object_json_raises_corrupt() -> None:
-    with pytest.raises(CorruptCatalogArtifactError):
-        packaged_catalogue_artifact_from_components(
-            provider_info_dict(),
-            products_df(metadata=["[]"]),
-            stations_df(),
-            station_products_df(),
-        )
-
-
 def test_packaged_artifact_invalid_availability_raises_corrupt() -> None:
     with pytest.raises(CorruptCatalogArtifactError):
         packaged_catalogue_artifact_from_components(
@@ -298,7 +282,6 @@ def test_packaged_artifact_duplicate_product_key_raises_corrupt() -> None:
                 native_id=["WATER_LEVEL", "WATER_LEVEL"],
                 derived=[False, False],
                 derivation_method=[None, None],
-                metadata=["{}", "{}"],
             ),
             stations_df(),
             station_products_df(),
@@ -320,7 +303,6 @@ def test_packaged_artifact_duplicate_station_product_key_raises_corrupt() -> Non
                 start_date=[date(2020, 1, 1), date(2020, 1, 1)],
                 end_date=[None, None],
                 last_catalogue_check=[date(2026, 1, 1), date(2026, 1, 1)],
-                metadata=["{}", "{}"],
             ),
         )
 
@@ -336,7 +318,6 @@ def test_packaged_artifact_duplicate_provider_info_key_raises_corrupt() -> None:
                 "live_station_products": [False, False],
                 "bulk_observations": ["none", "none"],
                 "catalogue_version": ["2026.01", "2026.01"],
-                "metadata": [{}, {}],
             },
             products_df(),
             stations_df(),

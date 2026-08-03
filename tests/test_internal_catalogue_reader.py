@@ -104,7 +104,7 @@ def test_catalogue_reader_products_returns_packaged_catalog_result(
     result = _reader(artifact).read_products()
 
     assert isinstance(result, CatalogResult)
-    pl_testing.assert_frame_equal(result.data, artifact.products)
+    pl_testing.assert_frame_equal(result.data, artifact.products, check_exact=True)
     assert result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.provenance == _expected_provenance()
     assert result.issues == ()
@@ -118,7 +118,7 @@ def test_catalogue_reader_stations_returns_packaged_catalog_result(
     result = _reader(artifact).read_stations()
 
     assert isinstance(result, CatalogResult)
-    pl_testing.assert_frame_equal(result.data, artifact.stations)
+    pl_testing.assert_frame_equal(result.data, artifact.stations, check_exact=True)
     assert result.data.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert result.provenance == _expected_provenance()
     assert result.issues == ()
@@ -132,7 +132,7 @@ def test_catalogue_reader_station_products_returns_packaged_catalog_result(
     result = _reader(artifact).read_station_products()
 
     assert isinstance(result, CatalogResult)
-    pl_testing.assert_frame_equal(result.data, artifact.station_products)
+    pl_testing.assert_frame_equal(result.data, artifact.station_products, check_exact=True)
     assert result.data.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert result.provenance == _expected_provenance()
     assert result.issues == ()
@@ -166,11 +166,12 @@ def test_catalogue_reader_product_filter_no_match_returns_empty_result(
     assert result.issues == ()
 
 
-def test_catalogue_reader_product_filters_do_not_parse_metadata(
+def test_catalogue_reader_products_use_exact_reduced_schema(
     stub_packaged_catalogue_artifact_rich: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     result = _reader(stub_packaged_catalogue_artifact_rich()).read_products(observed_property="water_level")
 
+    assert result.data.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert "flow" not in result.data["product_id"].to_list()
 
 
@@ -190,7 +191,8 @@ def test_catalogue_reader_station_products_empty_sequence_matches_none(
     none_result = reader.read_station_products(stations=None)
     empty_result = reader.read_station_products(stations=[])
 
-    pl_testing.assert_frame_equal(empty_result.data, none_result.data)
+    pl_testing.assert_frame_equal(empty_result.data, none_result.data, check_exact=True)
+    assert empty_result.data.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert empty_result.issues == ()
 
 
@@ -268,7 +270,7 @@ def test_catalogue_reader_packaged_products_unchanged_by_live_capability(
 ) -> None:
     for artifact in (stub_packaged_catalogue_artifact(), stub_packaged_catalogue_artifact_live_capable()):
         result = _reader(artifact).read_products(source="packaged")
-        pl_testing.assert_frame_equal(result.data, artifact.products)
+        pl_testing.assert_frame_equal(result.data, artifact.products, check_exact=True)
         assert result.provenance == _expected_provenance()
         assert result.issues == ()
 
@@ -279,7 +281,7 @@ def test_catalogue_reader_packaged_stations_unchanged_by_live_capability(
 ) -> None:
     for artifact in (stub_packaged_catalogue_artifact(), stub_packaged_catalogue_artifact_live_capable()):
         result = _reader(artifact).read_stations(source="packaged")
-        pl_testing.assert_frame_equal(result.data, artifact.stations)
+        pl_testing.assert_frame_equal(result.data, artifact.stations, check_exact=True)
         assert result.provenance == _expected_provenance()
         assert result.issues == ()
 
@@ -290,7 +292,7 @@ def test_catalogue_reader_packaged_station_products_unchanged_by_live_capability
 ) -> None:
     for artifact in (stub_packaged_catalogue_artifact(), stub_packaged_catalogue_artifact_live_capable()):
         result = _reader(artifact).read_station_products(source="packaged")
-        pl_testing.assert_frame_equal(result.data, artifact.station_products)
+        pl_testing.assert_frame_equal(result.data, artifact.station_products, check_exact=True)
         assert result.provenance == _expected_provenance()
         assert result.issues == ()
 

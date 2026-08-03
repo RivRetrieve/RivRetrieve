@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -102,21 +102,6 @@ class ProductDefinition:
     period_anchor: str
     canonical_unit: str
     ts_con_id: str
-    url_type: str
-    native_unit: str
-    unit_conversion: str | None
-    notes: str | None
-
-    @property
-    def metadata(self) -> Mapping[str, object]:
-        return {
-            "ts_con_id": self.ts_con_id,
-            "url_type": self.url_type,
-            "native_unit": self.native_unit,
-            "canonical_unit": self.canonical_unit,
-            "unit_conversion": self.unit_conversion,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -129,10 +114,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         ts_con_id="QD",
-        url_type="daily",
-        native_unit="m3/s",
-        unit_conversion=None,
-        notes="Daily mean discharge from CHMI daily DQ file (tsConID=QD). Native unit is m3/s.",
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -143,10 +124,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         ts_con_id="HD",
-        url_type="daily",
-        native_unit="cm",
-        unit_conversion="divide_by_100",
-        notes="Daily mean stage from CHMI daily DQ file (tsConID=HD). Native unit is centimetres; converted to metres.",
     ),
     ProductDefinition(
         product_id="water_temperature_daily_mean",
@@ -157,10 +134,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="degC",
         ts_con_id="TD",
-        url_type="daily",
-        native_unit="degC",
-        unit_conversion=None,
-        notes="Daily mean water temperature from CHMI daily DQ file (tsConID=TD). Native unit is degrees Celsius.",
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
@@ -171,10 +144,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="m3/s",
         ts_con_id="QH",
-        url_type="hourly",
-        native_unit="m3/s",
-        unit_conversion=None,
-        notes="Hourly instantaneous discharge from CHMI hourly HQ file (tsConID=QH). Native unit is m3/s.",
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -185,10 +154,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="m",
         ts_con_id="HH",
-        url_type="hourly",
-        native_unit="cm",
-        unit_conversion="divide_by_100",
-        notes="Hourly instantaneous stage from CHMI hourly HQ file (tsConID=HH). Native unit is centimetres; converted to metres.",
     ),
 )
 
@@ -268,7 +233,6 @@ def build_products() -> ProductCatalog:
             "native_id": defn.ts_con_id,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(defn.metadata),
         }
         for defn in PRODUCT_DEFINITIONS
     ]
@@ -291,16 +255,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
         if not isinstance(retrieved_date, date):
             raise FatalContractError(f"cz_chmi station {station_id} retrieval date is invalid")
         for defn in PRODUCT_DEFINITIONS:
-            metadata: dict[str, object] = {
-                "station_id": station_id,
-                "product_id": defn.product_id,
-                "ts_con_id": defn.ts_con_id,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": (
-                    "CHMI metadata catalogue does not expose per-variable station availability; "
-                    "all station-product pairs are materialized as availability=unknown."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -311,7 +265,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": retrieved_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -322,13 +275,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata = {
-        "metadata_url": METADATA_URL,
-        "daily_url_template": "https://opendata.chmi.cz/hydrology/historical/data/daily/H_{station_id}_DQ_{year}.json",
-        "hourly_url_template": "https://opendata.chmi.cz/hydrology/historical/data/hourly/H_{station_id}_HQ_{year}.json",
-        "generator_input": "native",
-        "terms_of_use": "https://opendata.chmi.cz/",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -340,7 +286,6 @@ def build_provider_info(
             "404 years silently skipped; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -467,10 +412,6 @@ def _read_live_json(url: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise FatalContractError("cz_chmi metadata live response must contain a JSON object")
     return cast("dict[str, object]", value)
-
-
-def _metadata_json(value: Mapping[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _required_native_coordinate(value: object, station_id: str, label: str) -> float:

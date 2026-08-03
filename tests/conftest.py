@@ -37,7 +37,6 @@ def _provider_info(
         "live_station_products": live_station_products,
         "bulk_observations": "none",
         "catalogue_version": catalogue_version,
-        "metadata": {"homepage": f"https://{provider_id}.example.invalid"},
     }
 
 
@@ -55,7 +54,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "native_id": "WATER_LEVEL",
             "derived": False,
             "derivation_method": None,
-            "metadata": "{}",
         }
     ]
     if rich:
@@ -73,7 +71,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "native_id": "FLOW",
                     "derived": False,
                     "derivation_method": None,
-                    "metadata": '{"observed_property":"water_level"}',
                 },
                 {
                     "provider_id": provider_id,
@@ -87,7 +84,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "native_id": "WATER_LEVEL_HOURLY",
                     "derived": False,
                     "derivation_method": None,
-                    "metadata": "{}",
                 },
                 {
                     "provider_id": provider_id,
@@ -101,7 +97,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "native_id": "WATER_LEVEL_MAX",
                     "derived": True,
                     "derivation_method": "daily_max",
-                    "metadata": "{}",
                 },
             ]
         )
@@ -120,7 +115,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "native_id": pl.Utf8,
             "derived": pl.Boolean,
             "derivation_method": pl.Utf8,
-            "metadata": pl.Utf8,
         },
     )
 
@@ -169,7 +163,6 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "start_date": date(2020, 1, 1),
             "end_date": None,
             "last_catalogue_check": date(2026, 1, 1),
-            "metadata": "{}",
         }
     ]
     if rich:
@@ -184,7 +177,6 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": date(2026, 1, 1),
-                    "metadata": "{}",
                 },
                 {
                     "provider_id": provider_id,
@@ -195,7 +187,6 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "start_date": date(2021, 1, 1),
                     "end_date": None,
                     "last_catalogue_check": date(2026, 1, 1),
-                    "metadata": "{}",
                 },
                 {
                     "provider_id": provider_id,
@@ -206,7 +197,6 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": date(2026, 1, 1),
-                    "metadata": "{}",
                 },
             ]
         )
@@ -222,7 +212,6 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "start_date": pl.Date,
             "end_date": pl.Date,
             "last_catalogue_check": pl.Date,
-            "metadata": pl.Utf8,
         },
     )
 

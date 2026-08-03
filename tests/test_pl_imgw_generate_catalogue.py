@@ -182,13 +182,6 @@ def _expected_stations(native: NativeTable) -> pl.DataFrame:
 def _expected_products() -> pl.DataFrame:
     rows = []
     for definition in generate_catalogue.PRODUCT_DEFINITIONS:
-        metadata = {
-            "native_column": definition.native_column,
-            "native_unit": definition.native_unit,
-            "canonical_unit": definition.canonical_unit,
-            "unit_conversion": definition.unit_conversion,
-            "notes": definition.notes,
-        }
         rows.append(
             {
                 "provider_id": "pl_imgw",
@@ -202,7 +195,6 @@ def _expected_products() -> pl.DataFrame:
                 "native_id": definition.native_column,
                 "derived": False,
                 "derivation_method": None,
-                "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
             }
         )
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -212,12 +204,6 @@ def _expected_station_products(native: NativeTable) -> pl.DataFrame:
     rows = []
     for station_id in native.data["gauge_id"].sort().to_list():
         for definition in generate_catalogue.PRODUCT_DEFINITIONS:
-            metadata = {
-                "station_id": station_id,
-                "product_id": definition.product_id,
-                "availability_source": generate_catalogue.AVAILABILITY_SOURCE,
-                "availability_note": generate_catalogue.AVAILABILITY_REASON,
-            }
             rows.append(
                 {
                     "provider_id": "pl_imgw",
@@ -228,7 +214,6 @@ def _expected_station_products(native: NativeTable) -> pl.DataFrame:
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": date(2025, 10, 10),
-                    "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -777,22 +762,6 @@ def test_native_build_matches_independent_exact_full_projections() -> None:
             "catalogue-only provider exposes neither observation retrieval nor cache controls"
         ),
         "catalogue_version": "2025-10-10",
-        "metadata": json.dumps(
-            {
-                "station_source": "poland_sites.csv from legacy RivRetrieve-Python repo (1301 stations)",
-                "data_base_url": "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/",
-                "annual_zip_from_year": 2023,
-                "annual_zip_template": "codz_{year}.zip",
-                "monthly_zip_template": "codz_{year}_{month:02d}.zip",
-                "csv_encoding_recent": "utf-8-sig (BOM), semicolon-separated",
-                "csv_encoding_legacy": "cp1250, comma-separated, quoted",
-                "cache_format": "parquet",
-                "generator_input": "native",
-                "terms_of_use": "https://danepubliczne.imgw.pl/",
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
     }
 
 
@@ -819,10 +788,10 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert (
-        hashlib.sha256(provider_bytes).hexdigest() == "e869702d4d99b990a198d22022e4aa0e32c022bc4990b825db86c030e72a73a8"
+        hashlib.sha256(provider_bytes).hexdigest() == "20edf013c5da42e986cf6f04c30f510adf09c75264caf2dde49c3a463792d448"
     )
-    assert _frame_content_sha256(products) == "dd988fd6b31e25711a02332c4bb0806967a0ed3fe03f5b00c9408206124f6322"
+    assert _frame_content_sha256(products) == "1b776aa29f2cb2adcaeb065a723ad9555ce7a5de611ecde5656de19956eafcd5"
     assert _frame_content_sha256(stations) == "738b3a71030b3ef7dfe6763a2780cabae6e00cffd2bad9e1f7b1222238de71f9"
     assert _frame_content_sha256(station_products) == (
-        "600aa7e04f5519a80302ccb49d13a3c3eaf72831ff7c035ea5c344451bcc72e5"
+        "474447afadda12b2ed70c4e27a127f804c1b376e5b88e0e92563fb92feb295c8"
     )
