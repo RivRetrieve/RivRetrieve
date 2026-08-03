@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,6 +19,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
+from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
 
 FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
@@ -193,6 +194,24 @@ def _expected_fixture_native_frame() -> pl.DataFrame:
         records.append(flattened)
     source = pl.DataFrame(records, schema=generate_catalogue.NATIVE_SOURCE_SCHEMA).sort("station.id")
     return stamp_native_table(source, ATTESTED_RETRIEVED_AT).data
+
+
+def _committed_native_table() -> NativeTable:
+    return read_native_table(NATIVE_PATH)
+
+
+def _build(table: NativeTable | None = None) -> generate_catalogue.GeneratedThThaiWaterCatalogue:
+    return generate_catalogue.build_catalogue(table or _committed_native_table(), STATION_CATALOGUE_ORIGINS)
+
+
+def _expected_station_projection(table: NativeTable) -> pl.DataFrame:
+    return table.data.select(
+        pl.lit(str(generate_catalogue.PROVIDER_ID)).alias("provider_id"),
+        pl.col("station.id").alias("station_id"),
+        pl.col("station.tele_station_lat").cast(pl.Float64).alias("latitude"),
+        pl.col("station.tele_station_long").cast(pl.Float64).alias("longitude"),
+        pl.lit("unknown").alias("crs"),
+    ).sort("station_id")
 
 
 def _assert_cli_error(argv: list[str], substring: str) -> None:
@@ -409,9 +428,8 @@ def test_permitted_absence_projects_to_null(path: str, source_index: int) -> Non
 
 def test_complete_native_table_shape_census_and_membership() -> None:
     committed = read_native_table(NATIVE_PATH).data
-    canonical = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
     native_ids = set(committed["station.id"].to_list())
-    canonical_ids = set(canonical["station_id"].to_list())
+    former_canonical_ids = (native_ids - ADDITIONS) | REMOVALS
 
     assert committed.height == committed["station.id"].n_unique() == 825
     assert committed.schema == generate_catalogue.NATIVE_SCHEMA
@@ -457,11 +475,17 @@ def test_complete_native_table_shape_census_and_membership() -> None:
         "station.tele_station_name.en": 399,
         "station.tele_station_name.jp": 824,
     }
-    assert native_ids - canonical_ids == ADDITIONS
-    assert canonical_ids - native_ids == REMOVALS
+    assert len(former_canonical_ids) == 754
     assert len(ADDITIONS) == 87
     assert len(REMOVALS) == 16
     assert 825 - 754 == 71
+
+
+def test_complete_native_table_station_type_census() -> None:
+    committed = read_native_table(NATIVE_PATH).data
+
+    assert committed.height == 825
+    assert committed.group_by("station_type").len().to_dicts() == [{"station_type": "tele_waterlevel", "len": 825}]
 
 
 def test_complete_native_table_has_pinned_full_content() -> None:
@@ -498,10 +522,10 @@ def test_live_native_cli_uses_exact_transport_seam(monkeypatch: pytest.MonkeyPat
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
-        (["--out", "catalogue"], "choose exactly one ThaiWater source: --fixture or --live"),
+        (["--out", "catalogue"], "--out requires --native"),
         (
             ["--fixture", str(FIXTURE_PATH), "--live", "--out", "catalogue"],
-            "choose exactly one ThaiWater source: --fixture or --live",
+            "--fixture/--live cannot be used with --out",
         ),
         (["--fixture", str(FIXTURE_PATH)], "choose exactly one ThaiWater destination: --out or --native-out"),
         (
@@ -514,7 +538,12 @@ def test_live_native_cli_uses_exact_transport_seam(monkeypatch: pytest.MonkeyPat
         ),
         (
             ["--fixture", str(FIXTURE_PATH), "--out", "catalogue", "--retrieved-at", "2026-08-02T12:42:03Z"],
-            "--retrieved-at is only valid with --native-out",
+            "--fixture/--live cannot be used with --out",
+        ),
+        (["--native", str(NATIVE_PATH), "--native-out", "native.parquet"], "--native cannot be used with --native-out"),
+        (
+            ["--native", str(NATIVE_PATH), "--out", "catalogue", "--retrieved-at", "2026-08-02T12:42:03Z"],
+            "--retrieved-at is only valid with refresh mode",
         ),
         (
             [
@@ -591,28 +620,179 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
-def test_generate_catalogue_from_fixture_station_count() -> None:
-    assert generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH).stations.height == 4
+def test_native_build_counts_and_identity_station_fields() -> None:
+    catalogue = _build()
+    committed = _committed_native_table().data
+    source_id = committed["station.id"].item(0)
+    station = catalogue.stations.filter(pl.col("station_id") == source_id)
 
-
-def test_generate_catalogue_from_fixture_product_count() -> None:
-    assert generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH).products.height == 4
-
-
-def test_generate_catalogue_from_fixture_station_products_cross() -> None:
-    assert generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH).station_products.height == 4 * 4
-
-
-def test_generate_catalogue_station_fields() -> None:
-    station = generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH).stations.filter(
-        pl.col("station_id") == "575568"
-    )
+    assert catalogue.stations.height == 825
+    assert catalogue.products.height == 4
+    assert catalogue.station_products.height == 825 * 4 == 3_300
     assert station.height == 1
-    assert station["crs"][0] == "unknown"
+    assert station["station_id"].dtype == committed["station.id"].dtype == pl.String
+    assert station["station_id"].item() == source_id
+    assert station["crs"].item() == "unknown"
 
 
-def test_fixture_rows_all_generate_as_waterlevel_stations() -> None:
-    rows = _fixture_rows()
-    generated_ids = set(generate_catalogue.generate_catalogue_from_fixture(FIXTURE_PATH).stations["station_id"])
-    assert all(row["station_type"] == "tele_waterlevel" for row in rows)
-    assert generated_ids == {str(row["station"]["id"]) for row in rows}
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("empty", "ThaiWater native table contains no stations"),
+        ("station_type", "ThaiWater station 100 has station_type 'tele_rainfall'; expected 'tele_waterlevel'"),
+        ("latitude", "ThaiWater station 100 has null station.tele_station_lat"),
+        ("longitude", "ThaiWater station 100 has null station.tele_station_long"),
+        ("duplicate", "ThaiWater native table contains duplicate station.id 100"),
+    ],
+)
+def test_native_build_contracts_fail_loud(mutation: str, message: str) -> None:
+    base = _committed_native_table().data.head(2).with_columns(pl.Series("station.id", ["100", "200"], dtype=pl.String))
+    if mutation == "empty":
+        data = base.clear()
+    elif mutation == "station_type":
+        data = base.with_columns(
+            pl.when(pl.col("station.id") == "100")
+            .then(pl.lit("tele_rainfall"))
+            .otherwise(pl.col("station_type"))
+            .alias("station_type")
+        )
+    elif mutation == "latitude":
+        data = base.with_columns(
+            pl.when(pl.col("station.id") == "100")
+            .then(None)
+            .otherwise(pl.col("station.tele_station_lat"))
+            .alias("station.tele_station_lat")
+        )
+    elif mutation == "longitude":
+        data = base.with_columns(
+            pl.when(pl.col("station.id") == "100")
+            .then(None)
+            .otherwise(pl.col("station.tele_station_long"))
+            .alias("station.tele_station_long")
+        )
+    else:
+        data = base.with_columns(pl.lit("100").alias("station.id"))
+
+    with pytest.raises(FatalContractError, match=re.escape(message)):
+        _build(NativeTable(data))
+
+
+def test_native_build_rejects_non_string_station_id() -> None:
+    data = _committed_native_table().data.head(2).with_columns(pl.col("station.id").cast(pl.Int64))
+
+    with pytest.raises(FatalContractError, match="ThaiWater native station.id must have String dtype"):
+        _build(NativeTable(data))
+
+
+def test_generated_station_projection_matches_native_exactly() -> None:
+    native = _committed_native_table()
+    generated = _build(native)
+
+    assert native.data.schema["station.id"] == generated.stations.schema["station_id"] == pl.String
+    pl_testing.assert_frame_equal(generated.stations, _expected_station_projection(native), check_exact=True)
+
+
+def test_native_preserves_displaced_source_fields() -> None:
+    native = _committed_native_table().data
+    displaced = native.select(
+        "station.tele_station_name.en",
+        "station.tele_station_name.th",
+        "river_name",
+        "station_type",
+        "agency.agency_name.en",
+        "basin.basin_name.en",
+        "geocode.province_name.en",
+        "station.tele_station_oldcode",
+    )
+
+    assert displaced.height == 825
+    assert displaced["station_type"].null_count() == 0
+    assert displaced["station.tele_station_name.th"].null_count() == 0
+    assert displaced["agency.agency_name.en"].null_count() == 0
+    assert displaced["station.tele_station_oldcode"].null_count() == 0
+
+
+def test_origin_enforcement_is_part_of_native_build() -> None:
+    declarations = dict(STATION_CATALOGUE_ORIGINS)
+    del declarations["longitude"]
+
+    with pytest.raises(FatalContractError, match="th_thaiwater.longitude: canonical column has no origin declaration"):
+        generate_catalogue.build_catalogue(_committed_native_table(), declarations)
+
+
+def test_dates_come_only_from_each_native_row_and_maximum_retrieval_date() -> None:
+    data = (
+        _committed_native_table()
+        .data.head(2)
+        .with_columns(
+            pl.Series("station.id", ["100", "200"], dtype=pl.String),
+            pl.Series(
+                "retrieved_at",
+                [datetime(2026, 8, 1, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC)],
+                dtype=pl.Datetime("us", "UTC"),
+            ),
+        )
+    )
+    catalogue = _build(NativeTable(data))
+
+    dates = {
+        station_id: values["last_catalogue_check"].unique().to_list()
+        for station_id, values in catalogue.station_products.group_by("station_id")
+    }
+    assert dates == {("100",): [date(2026, 8, 1)], ("200",): [date(2026, 8, 2)]}
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
+
+
+def test_all_metadata_values_are_plain_non_null_json_object_strings() -> None:
+    catalogue = _build()
+    metadata_values = [
+        *catalogue.products["metadata"].to_list(),
+        *catalogue.station_products["metadata"].to_list(),
+        catalogue.provider_info["metadata"],
+    ]
+
+    assert all(isinstance(value, str) and isinstance(json.loads(value), dict) for value in metadata_values)
+    assert json.loads(cast("str", catalogue.provider_info["metadata"]))["generator_input"] == "native"
+
+
+def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    before = NATIVE_PATH.read_bytes()
+    monkeypatch.setattr(
+        generate_catalogue,
+        "_read_live_json",
+        lambda url: (_ for _ in ()).throw(AssertionError(f"unexpected live request to {url}")),
+    )
+    monkeypatch.setattr(generate_catalogue, "_read_fixture_json", lambda path: pytest.fail(f"fixture read: {path}"))
+
+    assert generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)]) == 0
+    assert NATIVE_PATH.read_bytes() == before
+    assert {path.name for path in tmp_path.iterdir()} == {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+    }
+
+
+def test_committed_catalogue_station_projection_matches_native() -> None:
+    native = _committed_native_table()
+    committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
+
+    pl_testing.assert_frame_equal(committed, _expected_station_projection(native), check_exact=True)
+
+
+def test_committed_catalogue_ids_match_native_ids() -> None:
+    native = _committed_native_table().data
+    committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
+
+    assert native.schema["station.id"] == committed.schema["station_id"] == pl.String
+    assert set(committed["station_id"]) == set(native["station.id"])
+
+
+def test_fresh_build_matches_all_committed_artefact_bytes(tmp_path: Path) -> None:
+    generate_catalogue.write_catalogue(_build(), tmp_path)
+
+    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

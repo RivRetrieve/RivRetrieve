@@ -101,7 +101,7 @@ response.
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
-`ch_foen`, `cz_chmi`, `lt_lhmt`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
+`ch_foen`, `cz_chmi`, `lt_lhmt`, `th_thaiwater`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
 `catalogue/products.parquet`, `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
@@ -307,17 +307,6 @@ generation must use its committed `native.parquet`, never `--live` or supplied R
   column has one scalar dtype. Future Swiss canonical artifacts must be built network-free from
   the committed native table and origin declarations.
 
-
-After writing provider code and tests, run that provider's network-free build from its committed
-native table and origins, and commit the resulting canonical artifacts alongside the code.
-
-### 4.2 Providers not yet migrated
-
-For a provider without both a committed native table and origin declarations (currently the other
-eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`, and
-`za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
-API before the provider is committed.
-
 - Thailand native-table attestation: the orchestrator performed
   `GET https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load` outside the executor
   sandbox at `2026-08-02T12:42:03Z`, supplied the complete response, and observed 825
@@ -339,7 +328,23 @@ API before the provider is committed.
   predicates. Comparison with the unchanged 754-row canonical catalogue found 87 currently present
   IDs and 16 no-longer-present IDs, establishing source membership churn and net growth rather than
   a missing filter. `tests/test_data/th_thaiwater_metadata.json` is a four-row verbatim subset and is
-  not content-identical to the complete response.
+  not content-identical to the complete response. The orchestrator also performed
+  `GET https://standard.thaiwater.net/docs/การจัดทำมาตรฐานน้ำ-ระยะ/ข้อมูลอ้างอิง-ข้อมูลอ้า/การระบุพิกัดตำแหน่ง/`
+  outside the executor sandbox at `2026-08-02T13:51:44Z`; the coordinate-standard page capture is
+  607,845 bytes with SHA-256
+  `64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04`. Future Thailand canonical
+  artifacts must be built network-free from committed `native.parquet` and origin declarations,
+  never from `--live` or a fixture.
+
+
+After writing provider code and tests, run that provider's network-free build from its committed
+native table and origins, and commit the resulting canonical artifacts alongside the code.
+
+### 4.2 Providers not yet migrated
+
+For a provider without both a committed native table and origin declarations (currently the other
+seven: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, and `za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
+API before the provider is committed.
 
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must

@@ -1,4 +1,4 @@
-"""ThaiWater catalogue maintenance : refresh(ThaiWaterWaterlevelEnvelope, RetrievedAt) → WithIssues[NativeTable]; legacy canonical generation remains operational."""
+"""ThaiWater catalogue maintenance : refresh(ThaiWaterWaterlevelEnvelope, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedThThaiWaterCatalogue."""
 
 from __future__ import annotations
 
@@ -7,16 +7,23 @@ import hashlib
 import json
 import re
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
-from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table, write_native_table
+from rivretrieve._internal.catalogues.native import (
+    NativeTable,
+    RetrievedAt,
+    read_native_table,
+    stamp_native_table,
+    write_native_table,
+)
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -30,12 +37,9 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.th_thaiwater.metadata import (
-    ThThaiWaterProductMetadata,
-    ThThaiWaterStationProductMetadata,
-)
+from rivretrieve._internal.primitives import ProviderId
 
-PROVIDER_ID = "th_thaiwater"
+PROVIDER_ID = ProviderId("th_thaiwater")
 PROVIDER_NAME = "ThaiWater public API / Hydro-Informatics Institute (HII)"
 METADATA_URL = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
 AVAILABILITY_REASON = "ThaiWater metadata catalogue does not expose per-variable station availability"
@@ -175,14 +179,14 @@ class ProductDefinition:
     notes: str | None
 
     @property
-    def metadata(self) -> ThThaiWaterProductMetadata:
-        return ThThaiWaterProductMetadata(
-            native_field=self.native_field,
-            aggregate_daily=self.aggregate_daily,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            notes=self.notes,
-        )
+    def metadata(self) -> dict[str, object]:
+        return {
+            "native_field": self.native_field,
+            "aggregate_daily": self.aggregate_daily,
+            "native_unit": self.native_unit,
+            "canonical_unit": self.canonical_unit,
+            "notes": self.notes,
+        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -416,53 +420,50 @@ def _flatten_native_row(row: dict[str, object]) -> dict[str, object]:
     return flattened
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
-    product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS,
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
 ) -> GeneratedThThaiWaterCatalogue:
-    return generate_catalogue(
-        _read_fixture_json(Path(fixture_path)),
-        catalogue_date=catalogue_date,
-        product_definitions=product_definitions,
-        generator_input="fixture",
+    _validate_canonical_native_table(native_table)
+    products = build_products()
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    station_dates = native_table.data.select(
+        pl.col("station.id").alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
     )
-
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-    product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS,
-) -> GeneratedThThaiWaterCatalogue:
-    return generate_catalogue(
-        _read_live_json(METADATA_URL),
-        catalogue_date=catalogue_date,
-        product_definitions=product_definitions,
-        generator_input="live",
-    )
-
-
-def generate_catalogue(
-    raw_payload: dict[str, object],
-    *,
-    catalogue_date: date | None = None,
-    product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS,
-    generator_input: str = "fixture",
-) -> GeneratedThThaiWaterCatalogue:
-    effective_date = catalogue_date or date.today()
-    products = build_products(product_definitions)
-    stations = build_stations(raw_payload)
-    station_products = build_station_products(stations, product_definitions, effective_date)
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
+    station_products = build_station_products(station_dates)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("ThaiWater native table has no valid retrieved_at values")
+    provider_info = build_provider_info(maximum_retrieved_at.date())
 
     validate_generated_catalogue(provider_info, products, stations, station_products)
-    return GeneratedThThaiWaterCatalogue(
-        provider_info=provider_info,
-        products=products,
-        stations=stations,
-        station_products=station_products,
-    )
+    return GeneratedThThaiWaterCatalogue(provider_info, products, stations, station_products)
+
+
+def _validate_canonical_native_table(native_table: NativeTable) -> None:
+    data = native_table.data
+    if data.is_empty():
+        raise FatalContractError("ThaiWater native table contains no stations")
+    if data.schema.get("station.id") != pl.String:
+        raise FatalContractError("ThaiWater native station.id must have String dtype")
+
+    invalid_types = data.filter(pl.col("station_type") != STATION_TYPE_FILTER)
+    if not invalid_types.is_empty():
+        station_id, station_type = invalid_types.select("station.id", "station_type").row(0)
+        raise FatalContractError(
+            f"ThaiWater station {station_id} has station_type {station_type!r}; expected {STATION_TYPE_FILTER!r}"
+        )
+    for coordinate_column in ("station.tele_station_lat", "station.tele_station_long"):
+        null_coordinates = data.filter(pl.col(coordinate_column).is_null())
+        if not null_coordinates.is_empty():
+            station_id = null_coordinates["station.id"].item(0)
+            raise FatalContractError(f"ThaiWater station {station_id} has null {coordinate_column}")
+    duplicates = data.filter(pl.col("station.id").is_duplicated())
+    if not duplicates.is_empty():
+        duplicate_id = duplicates["station.id"].item(0)
+        raise FatalContractError(f"ThaiWater native table contains duplicate station.id {duplicate_id}")
 
 
 def build_products(
@@ -488,43 +489,44 @@ def build_products(
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_stations(raw_payload: dict[str, object]) -> StationCatalog:
-    rows = list(_iter_station_rows(raw_payload))
-    if not rows:
-        raise FatalContractError("ThaiWater metadata returned no tele_waterlevel stations")
-    return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    return native_table.data.select(
+        pl.lit(str(PROVIDER_ID)).alias("provider_id"),
+        pl.col("station.id").alias("station_id"),
+        pl.col("station.tele_station_lat").cast(STATION_CATALOG_SCHEMA.polars_schema["latitude"]).alias("latitude"),
+        pl.col("station.tele_station_long").cast(STATION_CATALOG_SCHEMA.polars_schema["longitude"]).alias("longitude"),
+        pl.lit("unknown").alias("crs"),
+    ).sort("station_id")
 
 
 def build_station_products(
-    stations: StationCatalog,
-    product_definitions: Sequence[ProductDefinition],
-    catalogue_date: date,
+    station_dates: pl.DataFrame,
 ) -> StationProductCatalog:
-    rows = []
-    for station_id in stations["station_id"].to_list():
-        if not isinstance(station_id, str):
-            raise FatalContractError("station_id must be a string")
-        for d in product_definitions:
-            metadata = ThThaiWaterStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                native_field=d.native_field,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
+    rows: list[dict[str, object]] = []
+    for station_id, retrieved_date in station_dates.iter_rows():
+        if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
+            raise FatalContractError("station retrieval date must pair a string identifier with a date")
+        for definition in PRODUCT_DEFINITIONS:
+            metadata: dict[str, object] = {
+                "station_id": station_id,
+                "product_id": definition.product_id,
+                "native_field": definition.native_field,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": (
                     "Materialised as availability=unknown; "
                     "waterlevel_load does not guarantee observed data for every product."
                 ),
-            )
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
-                    "product_id": d.product_id,
+                    "product_id": definition.product_id,
                     "availability": "unknown",
                     "availability_reason": AVAILABILITY_REASON,
                     "start_date": None,
                     "end_date": None,
-                    "last_catalogue_check": catalogue_date,
+                    "last_catalogue_check": retrieved_date,
                     "metadata": _metadata_json(metadata),
                 }
             )
@@ -535,12 +537,10 @@ def build_station_products(
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "source_url": METADATA_URL,
-        "generator_input": generator_input,
+        "generator_input": "native",
         "local_timezone": "Asia/Bangkok",
         "vertical_datum": VERTICAL_DATUM,
         "station_type_filter": STATION_TYPE_FILTER,
@@ -591,72 +591,8 @@ def write_catalogue(catalogue: GeneratedThThaiWaterCatalogue, out_dir: Path | st
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
 
 
-def _iter_station_rows(raw_payload: dict[str, object]):  # type: ignore[return]
-    waterlevel_data = raw_payload.get("waterlevel_data", {})
-    if not isinstance(waterlevel_data, dict):
-        return
-    waterlevel_data_d = cast(dict[str, object], waterlevel_data)
-    data_list = waterlevel_data_d.get("data", [])
-    if not isinstance(data_list, list):
-        return
-
-    seen: set[str] = set()
-    for row in cast(list[dict[str, object]], data_list):
-        if not isinstance(row, dict):
-            continue
-
-        station_raw = row.get("station", {})
-        if not isinstance(station_raw, dict):
-            continue
-        station = cast(dict[str, object], station_raw)
-
-        station_type = _clean_text(row.get("station_type") or station.get("tele_station_type"))
-        if station_type != STATION_TYPE_FILTER:
-            continue
-
-        gauge_id = _clean_text(station.get("id"))
-        if gauge_id is None:
-            continue
-        if gauge_id in seen:
-            continue
-        seen.add(gauge_id)
-
-        lat = _to_float(station.get("tele_station_lat"))
-        lon = _to_float(station.get("tele_station_long"))
-        if lat is None or lon is None:
-            continue
-
-        yield {
-            "provider_id": PROVIDER_ID,
-            "station_id": gauge_id,
-            "latitude": lat,
-            "longitude": lon,
-            "crs": "unknown",
-        }
-
-
-def _clean_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text or text.lower() == "nan":
-        return None
-    return text
-
-
-def _to_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _metadata_json(
-    model: ThThaiWaterProductMetadata | ThThaiWaterStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+def _metadata_json(value: Mapping[str, object]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _read_fixture_json(path: Path) -> dict[str, object]:
@@ -688,40 +624,48 @@ def _read_live_json(url: str) -> dict[str, object]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate the packaged th_thaiwater catalogue artifacts.")
+    parser = argparse.ArgumentParser(description="Refresh or build the packaged th_thaiwater catalogue.")
     parser.add_argument("--fixture", type=Path, help="Path to a ThaiWater waterlevel_load JSON fixture.")
     parser.add_argument("--live", action="store_true", help="Fetch the live ThaiWater metadata endpoint.")
+    parser.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     args = parser.parse_args(argv)
 
-    if (args.fixture is None) == (not args.live):
-        parser.error("choose exactly one ThaiWater source: --fixture or --live")
-    if (args.out is None) == (args.native_out is None):
+    if args.out is not None and args.native_out is not None:
         parser.error("choose exactly one ThaiWater destination: --out or --native-out")
-    if args.native_out is not None and args.retrieved_at is None:
-        parser.error("--retrieved-at is required with --native-out")
-    if args.out is not None and args.retrieved_at is not None:
-        parser.error("--retrieved-at is only valid with --native-out")
+    if args.out is None and args.native_out is None:
+        parser.error("choose exactly one ThaiWater destination: --out or --native-out")
 
-    if args.native_out is not None:
-        retrieved_at = _parse_retrieved_at(args.retrieved_at, parser)
-        if args.live:
-            native_outcome = refresh_native_table_from_live(retrieved_at=retrieved_at)
-        else:
-            native_outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=retrieved_at)
-        if any(issue.severity == "error" for issue in native_outcome.issues):
-            parser.error("ThaiWater native refresh returned issues; refusing to write")
-        write_native_table(native_outcome.value, args.native_out)
+    if args.out is not None:
+        if args.fixture is not None or args.live:
+            parser.error("--fixture/--live cannot be used with --out")
+        if args.native is None:
+            parser.error("--out requires --native")
+        if args.retrieved_at is not None:
+            parser.error("--retrieved-at is only valid with refresh mode")
+        from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
+
+        catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
+        write_catalogue(catalogue, args.out)
         return 0
 
+    if args.native is not None:
+        parser.error("--native cannot be used with --native-out")
+    if (args.fixture is None) == (not args.live):
+        parser.error("choose exactly one ThaiWater source: --fixture or --live")
+    if args.native_out is not None and args.retrieved_at is None:
+        parser.error("--retrieved-at is required with --native-out")
+
+    retrieved_at = _parse_retrieved_at(args.retrieved_at, parser)
     if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
+        native_outcome = refresh_native_table_from_live(retrieved_at=retrieved_at)
     else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
-    write_catalogue(catalogue, args.out)
+        native_outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=retrieved_at)
+    if any(issue.severity == "error" for issue in native_outcome.issues):
+        parser.error("ThaiWater native refresh returned issues; refusing to write")
+    write_native_table(native_outcome.value, args.native_out)
     return 0
 
 
