@@ -584,7 +584,7 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
   - No auth token; public FHMZBiH open data.
   - Live station minimum guard: 30 stations.
 - **Port notes:** `docs/provider_ports/ba_fhmzbih.md`.
-- **Fixtures:** `tests/test_data/ba_fhmzbih_metadata.json` (2 stations, reused from upstream legacy test data), `tests/test_data/ba_fhmzbih_4510_{Q,H,Tvode}_1Y.xlsx` (real workbook samples for station 4510 — discharge, stage, and an empty water-temperature workbook — reused from the upstream legacy test fixtures).
+- **Fixtures:** `tests/test_data/ba_fhmzbih_metadata.json` (2 stations, attested verbatim two-row 4510/4121 subset of the orchestrator-supplied 2026-08-02 live capture), `tests/test_data/ba_fhmzbih_4510_{Q,H,Tvode}_1Y.xlsx` (real workbook samples for station 4510 — discharge, stage, and an empty water-temperature workbook — reused from the upstream legacy test fixtures).
 - **Known limitation:** No historical date-range queries are possible — see "rolling 1-year window" above. `ba_fhmzbih` is suitable for recent/current data and catalogue discovery, not historical archive retrieval.
 - **Architecture.md impact:** None. Station-group URL probing, xlsx workbook parsing, and the rolling-window constraint are provider-specific. The local-to-UTC timezone-inference pattern (info issue + `source_timezone`/`timezone_source` series annotations) follows the established `th_thaiwater` convention rather than introducing a new shared mechanism. No shared harness gap discovered.
 

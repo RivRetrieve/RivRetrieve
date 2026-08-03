@@ -33,12 +33,12 @@ CACHE_HTTP_CARVE_OUTS = {
     "ca_eccc/observation_client.py": {"requests"},
     "pl_imgw/observation_client.py": {"requests"},
 }
-RUNTIME_FILE_COUNTS = Counter(
+_BASE_RUNTIME_FILE_COUNTS = Counter(
     {
         "__init__.py": 13,
         "module.py": 13,
-        "metadata.py": 9,
-        "origins.py": 5,
+        "metadata.py": 8,
+        "origins.py": 6,
         "issue_codes.py": 11,
         "config.py": 2,
         "fetch.py": 2,
@@ -47,6 +47,9 @@ RUNTIME_FILE_COUNTS = Counter(
         "parser.py": 1,
     }
 )
+RUNTIME_FILE_COUNTS = _BASE_RUNTIME_FILE_COUNTS.copy()
+RUNTIME_FILE_COUNTS["origins.py"] += 1
+RUNTIME_FILE_COUNTS["metadata.py"] -= 1
 
 
 def _runtime_provider_files() -> list[Path]:
