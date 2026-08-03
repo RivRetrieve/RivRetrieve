@@ -47,10 +47,13 @@ state it.
 
 `crs` is added on the terms ADR 0006 set for time. Coordinates and their reference travel
 together, `unknown` where the source states no datum, values being EPSG identifiers, which
-is the registry national systems already live in. `jp_mlit` shows why it is per station
-rather than per provider: the scraper reads WGS84 coordinates from the 世界測地系 row and
-falls back to `japan_sites.csv` values of unrecorded datum when that fails, so one provider's
-rows may mix datums differing by roughly 400 metres.
+is the registry national systems already live in. The reference remains per station because
+`usgs_nwis` declares `crs` from the Native table's per-station `dec_coord_datum_cd` Origin.
+
+Japan's 1,023 published rows carry exact whole-arc-second source coordinates and an evidenced
+Unknown CRS: MLIT publishes the coordinate representation but no datum identifier. The
+HTTP-200 source-confirmed absence `307051287711040` is omitted, MLIT values replace the three
+unreproducible coordinates, and the Japanese source labels remain verbatim in the Native table.
 
 ## Consequence: ADR 0007's deferred timezone question is answered no
 

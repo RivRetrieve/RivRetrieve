@@ -46,6 +46,7 @@ from rivretrieve._internal.providers.usgs_nwis.origins import (
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 CANADA_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 THAI_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
+JAPAN_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 THAI_COORDINATE_EVIDENCE_PATH = Path("tests/test_data/th_thaiwater_coordinate_standard.html")
 
 
@@ -200,7 +201,7 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa_switzerland_thailand_and_usgs() -> (
+def test_origin_gate_enrols_exactly_bosnia_canada_czechia_japan_lithuania_south_africa_switzerland_thailand_and_usgs() -> (
     None
 ):
     assert (
@@ -210,6 +211,7 @@ def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa
                 ProviderId("ca_eccc"),
                 ProviderId("ch_foen"),
                 ProviderId("cz_chmi"),
+                ProviderId("jp_mlit"),
                 ProviderId("lt_lhmt"),
                 ProviderId("th_thaiwater"),
                 ProviderId("usgs_nwis"),
@@ -218,6 +220,32 @@ def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa
         )
         == ORIGIN_GATE_ENROLLED_PROVIDERS
     )
+
+
+def test_japan_declarations_match_canonical_schema_order_and_values() -> None:
+    from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+
+    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("観測所記号")),
+        "station_id": Field(NativeColumn("観測所記号")),
+        "latitude": Field(NativeColumn("世界測地系")),
+        "longitude": Field(NativeColumn("世界測地系")),
+        "crs": NotPublished(Evidence("http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010")),
+    } == STATION_CATALOGUE_ORIGINS
+
+
+def test_committed_japan_origins_and_build_pass_gate() -> None:
+    from rivretrieve._internal.providers.jp_mlit.generate_catalogue import build_catalogue
+    from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+
+    native_table = read_native_table(JAPAN_NATIVE_PATH)
+    catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
+    assert (
+        validate_catalogue_origins(ProviderId("jp_mlit"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
+        == []
+    )
+    enforce_catalogue_origins(ProviderId("jp_mlit"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
 
 
 def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
