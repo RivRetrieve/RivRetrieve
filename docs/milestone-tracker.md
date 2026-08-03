@@ -555,9 +555,8 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
   - **Station-product availability**: All rows `unknown`. IMGW does not expose per-variable availability.
   - No auth token; public IMGW Open Data.
   - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
-  - Live station minimum guard: 500 stations.
 - **Port notes:** `docs/provider_ports/pl_imgw.md`.
-- **Shipped catalogue artifacts:** The existing `provider.json`, `products.parquet`, `stations.parquet`, and `station_products.parquet` remain fixture-backed at this intermediate boundary. `catalogue/native.parquet` adds the exact 1,301-row recovered native table; Poland origin declarations and the network-free canonical rebuild follow separately.
+- **Shipped catalogue artifacts:** `provider.json`, `products.parquet`, `stations.parquet`, and `station_products.parquet` are built offline from committed `catalogue/native.parquet` plus origin declarations: 1,301 stations, 3 products, and 3,903 station-products, with `catalogue_version` and `last_catalogue_check` derived as `2025-10-10` from native `retrieved_at`.
 - **Fixtures and evidence:** `tests/test_data/pl_imgw_stations.csv` (1,301-row recovered geometry), `tests/test_data/pl_imgw_metadata.csv` (321-byte exact three-row subset), `tests/test_data/pl_imgw_apiinfo.html`, `tests/test_data/pl_imgw_kody_stacji.csv`, and `tests/test_data/pl_imgw_hydro_api.json` (byte-pinned publisher evidence), plus `tests/test_data/pl_imgw_151140030_annual_2023.zip` (4 CSV rows: 3 for station 151140030 with sentinel tests, 1 for another station to verify filtering).
 - **Known limitation:** For pre-2023 data, a 10-year request fetches up to 120 monthly ZIPs (~240 MB compressed). Long historical requests are network-heavier than providers with per-station REST APIs. Documented in provider metadata.
 - **Architecture.md impact:** None. Two-era CSV format is provider-specific. Hydrological year calendar is provider-specific. All-station ZIP + parse-time filter is provider-specific. Date-only UTC-midnight pattern follows established provider convention. No shared harness gap discovered.

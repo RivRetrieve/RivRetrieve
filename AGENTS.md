@@ -167,13 +167,15 @@ a partial or coarser live route does not by itself close the recovered route.
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `ba_fhmzbih`,
-`ca_eccc`, `ch_foen`, `cz_chmi`, `lt_lhmt`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
+`ca_eccc`, `ch_foen`, `cz_chmi`, `lt_lhmt`, `pl_imgw`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
 canonical packaged catalogue artifacts (`catalogue/provider.json`, `catalogue/products.parquet`,
 `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
 would reintroduce the nondeterminism the pure build removes. In particular, future USGS canonical
-generation must use its committed `native.parquet`, never `--live` or supplied RDB payloads.
+generation must use its committed `native.parquet`, never `--live` or supplied RDB payloads. Future
+Poland canonical generation must likewise use committed `native.parquet` plus origins, never `--live`,
+supplied live JSON, or a fixture-backed canonical route.
 
 - South Africa DWS native-table attestation: the live host returned HTTP 403 to the orchestrator from
   two independent egress points; the network-disabled executor did not perform a fetch. The
@@ -472,7 +474,7 @@ native table and origins, and commit the resulting canonical artifacts alongside
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
-five: `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, and `pl_imgw`), the four canonical packaged
+four: `br_ana`, `fr_hubeau`, `jp_mlit`, and `no_nve`), the four canonical packaged
 catalogue artifacts must be generated from the live provider API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
