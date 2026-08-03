@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 from datetime import UTC, date, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 import polars as pl
@@ -51,6 +52,44 @@ ENVELOPE = {
         "Liefer-%20und%20Nutzungsbedingungen%20hydrologische%20Daten%20BAFU%202020.pdf"
     ),
 }
+
+CRS_EVIDENCE_PATH = Path("tests/test_data/ch_foen_api_docs.html")
+CRS_ABSENCE_TOKENS = (
+    "wgs84",
+    "wgs 84",
+    "wgs-84",
+    "epsg",
+    "datum",
+    "crs",
+    "srid",
+    "coordinate reference",
+    "geodetic",
+    "geodät",
+    "ellipsoid",
+    "etrs",
+)
+
+
+class _TextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def test_publisher_crs_evidence_names_hydro_but_no_reference_system() -> None:
+    capture = CRS_EVIDENCE_PATH.read_bytes()
+    parser = _TextParser()
+    parser.feed(capture.decode("utf-8"))
+    text = " ".join(" ".join(parser.parts).split()).casefold()
+
+    assert len(capture) == 15_737
+    assert hashlib.sha256(capture).hexdigest() == ("488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df")
+    assert text
+    assert "hydro" in text
+    assert all(token.casefold() not in text for token in CRS_ABSENCE_TOKENS)
 
 
 def _fixture_response() -> dict[str, object]:
