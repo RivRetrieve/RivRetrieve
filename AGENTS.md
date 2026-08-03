@@ -318,6 +318,41 @@ eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_
 `za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
 API before the provider is committed.
 
+- Japan native-table capture attestation (native table present, origins intentionally deferred): the
+  orchestrator performed the endpoint-expanded 1,024-request capture outside the executor sandbox.
+  Its request seed was exactly the sorted unique station ids in
+  `jp_mlit/catalogue/stations.parquet` at `origin/main` / `22ff07c`, containing 1,024 ids; the compact
+  sorted JSON id list (sorted keys, separators `(",", ":")`, `ensure_ascii=False`, UTF-8) has
+  SHA-256 `e7930a7c374c5b3efe1f066eb4ccf511c0c7690c30afc2f7b2583d26d2b6981e`. This is a
+  reproducible 1,024-row legacy subset, not MLIT's complete 2,456-station enumeration. Each request
+  used `GET http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=<station_id>`. Responses are decoded
+  with strict EUC-JP, and acceptance requires HTTP 200 plus the EUC-JP bytes for `世界測地系`.
+  The accepted campaign window was `2026-08-02T19:35:42Z` through `2026-08-02T19:50:45Z`;
+  each manifest entry's own instant is authoritative, yielding 902 distinct accepted instants.
+  The truthful arithmetic is 1,024 requested, 1,023 published, and one source-confirmed absence.
+  The corresponding unpunctuated count bindings are `requested=1024` and `published=1023`.
+  Station `307051287711040` returned HTTP 200 with a 489-byte body lacking the marker and SHA-256
+  `2e83eed5a64cf91d9351f2abc28c151dec420a24265dd9db194fd7132bd31faf`; the byte-identical body is
+  tracked separately as `tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html`.
+
+  The complete manifest object and all reverified response bindings have canonical SHA-256
+  `d935586b317cdf234760959c9e97788803bfda9cea2ff6551beaefaeb6e20d21`. Native rows retain the
+  deterministic fifteen-column schema order, sort by exact `観測所記号`, carry each accepted
+  request's UTC-microsecond instant, and preserve source null, empty-string, and non-breaking-space
+  states distinctly. The published sorted-id digest is
+  `9016935eea6c6c7b3c56ee280a1467f74b4d7b60f2fc10f17e1ed3baa0fb42bd`; the sorted station/whole-second
+  timestamp-pair digest is `0f742e2f37bb9c6bfffb7e0d109f8025e5350e6416175c983e79bf8fb8b6fdd0`; and the complete native-frame
+  digest is `f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268602aec0`. The committed native
+  Parquet is a semantic materialization of all 1,023 accepted supplied responses, not of a fixture,
+  and was compared with exact frame equality against a fresh complete supplied-response
+  materialization.
+
+  `tests/test_data/jp_mlit_metadata.json` is only the exact three-record subset for ids
+  `301011281104010`, `303051283310060`, and `309191289913130`, with SHA-256
+  `5002cbc510e9dc4946e740286011b0c4d7bb76fe6d115c5fed715816c6144926`; nothing was materialized
+  from that fixture. Both `世界測地系` and `日本測地系` remain source vocabulary, the former-system
+  pair is never consumed, and no EPSG or datum inference is made.
+
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
