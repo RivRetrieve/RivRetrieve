@@ -250,16 +250,30 @@ def test_native_en_service_value_must_be_boolean() -> None:
     )
 
 
-def test_native_upstream_field_addition_changes_nothing() -> None:
+@pytest.mark.parametrize(
+    ("endpoint", "injected_field"),
+    [
+        ("hydrometry", "upstream_new_field"),
+        ("temperature", "descriptif_station"),
+        ("hydrometry", "nature_station"),
+    ],
+)
+def test_native_upstream_field_addition_changes_nothing(endpoint: str, injected_field: str) -> None:
     hydro = _full_payload(_HYDRO_FULL_FIXTURE)
     temperature = _full_payload(_TEMP_FULL_FIXTURE)
-    hydro["data"][0]["upstream_new_field"] = "ignored"
+    target = hydro if endpoint == "hydrometry" else temperature
+    target["data"][0][injected_field] = "ignored"
 
     result = _refresh(hydro, temperature)
 
     assert result.issues == ()
-    assert "upstream_new_field" not in result.value.data.columns
-    assert result.value.data.shape == (7323, 73)
+    if injected_field in NATIVE_SOURCE_COLUMNS:
+        source_endpoint = "hydrometrie/referentiel/stations" if endpoint == "hydrometry" else "temperature/station"
+        injected_endpoint = result.value.data.filter(pl.col("source_endpoint") == source_endpoint)
+        assert injected_endpoint[injected_field].null_count() == injected_endpoint.height
+    else:
+        assert injected_field not in result.value.data.columns
+    assert native_table_content_digest(result.value) == _PINNED_NATIVE_DIGEST
 
 
 @pytest.mark.parametrize(

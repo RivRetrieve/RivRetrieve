@@ -443,8 +443,16 @@ def refresh_native_table(
             _native_issue(f"fr_hubeau temperature response contains {len(temperature_ids)} stations; expected 869")
         )
 
-    hydro_frame = _native_endpoint_frame(hydro_result, "hydrometrie/referentiel/stations")
-    temperature_frame = _native_endpoint_frame(temperature_result, "temperature/station")
+    hydro_frame = _native_endpoint_frame(
+        hydro_result,
+        "hydrometrie/referentiel/stations",
+        HYDROMETRY_REQUIRED_FIELDS,
+    )
+    temperature_frame = _native_endpoint_frame(
+        temperature_result,
+        "temperature/station",
+        TEMPERATURE_REQUIRED_FIELDS,
+    )
     stamped_hydro = stamp_native_table(hydro_frame, hydro_retrieved_at)
     stamped_temperature = stamp_native_table(temperature_frame, temperature_retrieved_at)
     union = pl.concat([stamped_hydro.data, stamped_temperature.data]).select(NATIVE_SCHEMA.names()).sort("code_station")
@@ -586,9 +594,16 @@ def _geometry_inhabits_native_schema(value: object) -> bool:
     )
 
 
-def _native_endpoint_frame(rows: list[dict[str, object]], source_endpoint: str) -> pl.DataFrame:
+def _native_endpoint_frame(
+    rows: list[dict[str, object]],
+    source_endpoint: str,
+    required_fields: tuple[str, ...],
+) -> pl.DataFrame:
     aligned_rows = [
-        {**{column: row.get(column) for column in NATIVE_SOURCE_COLUMNS}, "source_endpoint": source_endpoint}
+        {
+            **{column: row[column] if column in required_fields else None for column in NATIVE_SOURCE_COLUMNS},
+            "source_endpoint": source_endpoint,
+        }
         for row in rows
     ]
     schema = pl.Schema({**dict(NATIVE_SOURCE_SCHEMA), "source_endpoint": pl.String})
