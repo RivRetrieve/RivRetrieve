@@ -386,6 +386,39 @@ def test_duplicate_native_identifier_fails_loudly() -> None:
     )
 
 
+def test_build_catalogue_is_gated_on_origins() -> None:
+    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
+
+    broken = dict(STATION_CATALOGUE_ORIGINS)
+    del broken["longitude"]
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"pl_imgw\.longitude: canonical column has no origin declaration",
+    ):
+        generate_catalogue.build_catalogue(read_native_table(_NATIVE_PATH), broken)
+
+
+def test_mixed_retrieval_dates_use_maximum_for_catalogue_date() -> None:
+    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
+
+    mixed = _weak_native(second_id="151140031").data.with_columns(
+        pl.Series(
+            "retrieved_at",
+            [
+                datetime(2025, 10, 9, 12, tzinfo=UTC),
+                datetime(2025, 10, 10, 12, tzinfo=UTC),
+            ],
+            dtype=pl.Datetime(time_unit="us", time_zone="UTC"),
+        )
+    )
+
+    catalogue = generate_catalogue.build_catalogue(NativeTable(mixed), STATION_CATALOGUE_ORIGINS)
+
+    assert catalogue.provider_info["catalogue_version"] == "2025-10-10"
+    assert catalogue.station_products["last_catalogue_check"].unique().to_list() == [date(2025, 10, 10)]
+
+
 @pytest.mark.parametrize("field", ["latitude", "longitude"])
 @pytest.mark.parametrize(("value", "rendered"), [(None, "None"), ("", "''"), ("invalid", "'invalid'")])
 def test_invalid_native_coordinate_fails_loudly(field: str, value: object, rendered: str) -> None:
@@ -761,6 +794,19 @@ def test_native_build_matches_independent_exact_full_projections() -> None:
             separators=(",", ":"),
         ),
     }
+
+
+def test_native_build_is_byte_identical_to_committed_artifacts(tmp_path: Path) -> None:
+    result = generate_catalogue.main(["--native", str(_NATIVE_PATH), "--out", str(tmp_path)])
+
+    assert result == 0
+    for artifact_name in (
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+    ):
+        assert (tmp_path / artifact_name).read_bytes() == (_CATALOGUE_PATH / artifact_name).read_bytes()
 
 
 def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
