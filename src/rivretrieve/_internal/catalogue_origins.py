@@ -88,6 +88,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("ca_eccc"),
         ProviderId("ch_foen"),
         ProviderId("cz_chmi"),
+        ProviderId("fr_hubeau"),
         ProviderId("jp_mlit"),
         ProviderId("lt_lhmt"),
         ProviderId("th_thaiwater"),

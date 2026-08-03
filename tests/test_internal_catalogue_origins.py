@@ -30,6 +30,20 @@ from rivretrieve._internal.providers.ca_eccc.origins import (
 from rivretrieve._internal.providers.ca_eccc.origins import (
     STATION_CATALOGUE_ORIGINS as CANADA_ORIGINS,
 )
+from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
+    build_hydro_stations,
+    build_temp_stations,
+)
+from rivretrieve._internal.providers.fr_hubeau.origins import (
+    CRS_EVIDENCE_URL as FRANCE_CRS_EVIDENCE_URL,
+)
+from rivretrieve._internal.providers.fr_hubeau.origins import (
+    HYDROMETRY_STATION_CATALOGUE_ORIGINS as FRANCE_HYDROMETRY_ORIGINS,
+)
+from rivretrieve._internal.providers.fr_hubeau.origins import (
+    TEMPERATURE_CRS_EVIDENCE_URL,
+    TEMPERATURE_STATION_CATALOGUE_ORIGINS,
+)
 from rivretrieve._internal.providers.lt_lhmt.generate_catalogue import build_stations
 from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS as LT_STATION_ORIGINS
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import build_stations as build_thai_stations
@@ -201,7 +215,7 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_bosnia_canada_czechia_japan_lithuania_south_africa_switzerland_thailand_and_usgs() -> (
+def test_origin_gate_enrols_exactly_bosnia_canada_czechia_france_japan_lithuania_south_africa_switzerland_thailand_and_usgs() -> (
     None
 ):
     assert (
@@ -211,6 +225,7 @@ def test_origin_gate_enrols_exactly_bosnia_canada_czechia_japan_lithuania_south_
                 ProviderId("ca_eccc"),
                 ProviderId("ch_foen"),
                 ProviderId("cz_chmi"),
+                ProviderId("fr_hubeau"),
                 ProviderId("jp_mlit"),
                 ProviderId("lt_lhmt"),
                 ProviderId("th_thaiwater"),
@@ -246,6 +261,51 @@ def test_committed_japan_origins_and_build_pass_gate() -> None:
         == []
     )
     enforce_catalogue_origins(ProviderId("jp_mlit"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
+
+
+def test_france_declarations_match_schema_order_and_endpoint_values() -> None:
+    expected_hydrometry = {
+        "provider_id": Field(NativeColumn("code_station")),
+        "station_id": Field(NativeColumn("code_station")),
+        "latitude": Field(NativeColumn("latitude_station")),
+        "longitude": Field(NativeColumn("longitude_station")),
+        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(FRANCE_CRS_EVIDENCE_URL)),
+    }
+    expected_temperature = {
+        "provider_id": Field(NativeColumn("code_station")),
+        "station_id": Field(NativeColumn("code_station")),
+        "latitude": Field(NativeColumn("latitude")),
+        "longitude": Field(NativeColumn("longitude")),
+        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(TEMPERATURE_CRS_EVIDENCE_URL)),
+    }
+    schema_order = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert tuple(FRANCE_HYDROMETRY_ORIGINS) == schema_order
+    assert tuple(TEMPERATURE_STATION_CATALOGUE_ORIGINS) == schema_order
+    assert expected_hydrometry == FRANCE_HYDROMETRY_ORIGINS
+    assert expected_temperature == TEMPERATURE_STATION_CATALOGUE_ORIGINS
+    assert TEMPERATURE_CRS_EVIDENCE_URL != FRANCE_CRS_EVIDENCE_URL
+
+
+def test_france_endpoint_declarations_validate_complete_native_partitions() -> None:
+    native = read_native_table(
+        Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+    )
+    hydro = type(native)(native.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations"))
+    temperature = type(native)(native.data.filter(pl.col("source_endpoint") == "temperature/station"))
+    hydro_stations = build_hydro_stations(hydro)
+    temperature_stations = build_temp_stations(temperature)
+
+    assert validate_catalogue_origins(ProviderId("fr_hubeau"), FRANCE_HYDROMETRY_ORIGINS, hydro, hydro_stations) == []
+    assert (
+        validate_catalogue_origins(
+            ProviderId("fr_hubeau"), TEMPERATURE_STATION_CATALOGUE_ORIGINS, temperature, temperature_stations
+        )
+        == []
+    )
+    enforce_catalogue_origins(ProviderId("fr_hubeau"), FRANCE_HYDROMETRY_ORIGINS, hydro, hydro_stations)
+    enforce_catalogue_origins(
+        ProviderId("fr_hubeau"), TEMPERATURE_STATION_CATALOGUE_ORIGINS, temperature, temperature_stations
+    )
 
 
 def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
