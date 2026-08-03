@@ -1,75 +1,83 @@
 # fr_hubeau Provider Port Notes
 
-These notes capture evidence and context from porting France / Hubeau. They are not user documentation and not an architecture contract.
-
 ## Source Endpoints
 
-| Endpoint | Role | Credentials |
-| --- | --- | --- |
-| `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations` | Maintainer-only: station catalogue generation (paginated). | None — public API. |
-| `https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab` | Runtime: observation retrieval (paginated with `next` link). | None — public API. |
+| Endpoint | Role | Auth | Notes |
+|---|---|---|---|
+| `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations` | Native hydrometry catalogue refresh | None | Seven attested JSON pages; 6,454 rows. |
+| `https://hubeau.eaufrance.fr/api/v1/temperature/station` | Native temperature catalogue refresh | None | One attested JSON response; 869 rows disjoint from hydrometry. |
+| `https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab` and `observations_tr` | Observation retrieval | None | Existing paginated observation behavior is unchanged. |
+| `https://hubeau.eaufrance.fr/api/v1/temperature/chronique` | Temperature observation retrieval | None | Existing observation behavior is unchanged. |
 
-## Catalogue Mapping
+## Catalogue and Observation Source Split
 
-| Legacy / source field | Canonical target | Provider metadata | Decision |
-| --- | --- | --- | --- |
-| `code_station` | `station_id` | `native_id` | Direct — matches Hubeau obs_elab `code_entite`. |
-| `libelle_station` | `name` | `name` | Provider station label. |
-| `longitude_station`, `latitude_station` | `longitude`, `latitude` | `latitude`, `longitude` | WGS84 decimal degrees — used directly. Stations without valid coordinates are filtered out. |
-| `altitude_ref_alti_station` | `elevation_m` | `elevation_m` | In meters — used directly. Null when not provided. |
-| `surface_bv_reel_station` | `drainage_area_km2` | `drainage_area_km2` | In km² — used directly. Null when not provided. |
-| `libelle_cours_eau` | None (no common column) | `river_name` | Preserved as metadata. |
-| `libelle_commune`, `libelle_departement` | None | `commune`, `departement` | Preserved as metadata for administrative reference. |
-| `en_service`, `date_ouverture_station` | None | `in_service`, `opening_date` | Preserved as metadata. |
+Catalogue refresh preserves the two station endpoints in a committed 7,323-row `native.parquet`.
+Canonical generation is a pure, network-free build from that table and endpoint-specific origin
+declarations. Observation retrieval remains on the existing hydrometry and temperature clients; this
+migration changes no pagination, windowing, issue vocabulary, parsing, or unit conversion.
 
-## Product Mapping
+## Native Catalogue and Origins
 
-| Legacy variable | Hubeau grandeur | Native unit | Canonical product | Conversion |
-| --- | --- | --- | --- | --- |
-| `constants.DISCHARGE_DAILY_MEAN` | `QmnJ` (débit moyen journalier) | l/s | `discharge_daily_mean` | ÷ 1000 → m³/s |
-| `constants.STAGE_DAILY_MAX` | `HIXnJ` (hauteur instantanée maximale journalière) | mm | `stage_daily_max` | ÷ 1000 → m |
+The native table contains 6,454 `hydrometrie/referentiel/stations` rows retrieved at
+`2026-08-02T17:32:58Z` and 869 `temperature/station` rows retrieved at `2026-08-02T17:33:34Z`.
+Both complete captures have zero null coordinate rows. Endpoint vocabularies and all 54
+`code_projection == 31` source rows remain verbatim; no native value is renamed, coalesced, corrected,
+or filtered.
 
-Both products are V1 canonical. No fr_hubeau-specific product IDs needed.
+| Source field | Canonical target | Notes |
+|---|---|---|
+| Hydrometry `code_station` | `provider_id`, `station_id` | Exact string identity. |
+| Hydrometry `latitude_station`, `longitude_station` | `latitude`, `longitude` | Documented as EPSG:4326; CRS84 establishes longitude/latitude source order while canonical columns name each axis separately. No transformation or reprojection. |
+| Temperature `code_station` | `provider_id`, `station_id` | Exact string identity. |
+| Temperature `latitude`, `longitude` | `latitude`, `longitude` | Documented as EPSG:4326; CRS84 establishes longitude/latitude source order while canonical columns name each axis separately. No transformation or reprojection. |
 
-## Timezone / Timestamp Convention
+Hydrometry evidence is
+`https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1011000101&format=geojson`,
+captured in `tests/test_data/fr_hubeau_geojson_crs_evidence.json`. Its collection and feature geometry
+declare `urn:ogc:def:crs:OGC:1.3:CRS84`; geometry and properties contain the same unrounded values.
+The complete JSON capture in `tests/test_data/fr_hubeau_referentiel_stations_full.json` uses the same
+properties rounded to nine decimal places: 6,400 rows differ before rounding, all agree afterward,
+and the 54 exact agreements are precisely the projection-31 subset. The OpenAPI capture corroborates
+that the decimal properties are WGS 84 and documents `code_projection` as belonging to the separate
+projected coordinate pair.
 
-**Key decision:** Hubeau `obs_elab` returns `date_obs_elab` as date-only strings (`YYYY-MM-DD`). No time-of-day component.
+Temperature evidence is the endpoint-local
+`https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json`, captured in
+`tests/test_data/fr_hubeau_temperature_stations_full.json`. Every geometry carries CRS84; all 869
+geometry scalars differ from the consumed nine-decimal properties before rounding and agree after it.
 
-- Interpretation: UTC midnight (`YYYY-MM-DDT00:00:00Z`).
-- Series annotation `date_only_timestamp_flag = "true"` always set.
-- Series annotation `timezone_source = "date_only_utc_midnight"`.
-- Warning issue `date_only_timestamp` emitted per parser call when date-only rows are encountered.
+## Narrow Coordinate Correction
 
-France operates on CET (UTC+1) / CEST (UTC+2). For daily elaborated observations, the date represents a French calendar day but the underlying timezone is not tracked in the response. The UTC midnight interpretation is consistent and follows the same pattern as Lithuania (lt_lhmt). A user wanting French-civil-day alignment should use the date component, not the full timestamp.
+Exactly 54 hydrometry rows have integer `code_projection == 31` and the evidenced signature
+`coordonnee_x_station == latitude_station` plus `coordonnee_y_station == longitude_station`. The
+canonical build transposes only those two scalar axes. It rejects a signature mismatch and applies an
+inclusive metropolitan tripwire of latitude `42.4174..49.989435` and longitude
+`-0.616424..5.593353` after transposition. These bounds describe only the known code-31 subset, not
+France or French territory generally. Every non-code-31 scalar passes through unchanged. No geometry
+value is substituted and no reprojection occurs.
 
-## Pagination
+## Products and Availability
 
-Hubeau `obs_elab` uses cursor-based pagination:
-- Initial request to base URL with query parameters.
-- Response includes `"next"` field with full URL for the next page (or `null`).
-- Subsequent requests use the full `next` URL with no additional parameters.
-- HTTP 206 (Partial Content) is returned for paginated results — this is not an error; `requests.raise_for_status()` does not raise for 2xx codes.
+The six existing product identities and assignments are unchanged: five hydrometry products and one
+water-temperature product. All 33,139 station-product rows retain `availability = "unknown"` because
+the station endpoints do not publish per-variable availability. Product and station-product metadata
+is non-null compact JSON.
 
-The observation client makes one HTTP call at a time; the retrieval layer loops until `next_url is None`.
+## Dates and Determinism
 
-The station catalogue generator uses the same `next` URL pattern.
+Each station-product row uses its own native row's retrieval date for `last_catalogue_check`.
+`catalogue_version` is the maximum native retrieval date. The canonical CLI accepts only
+`--native <path> --out <directory>` and cannot fetch live or consume fixtures. Fixture-native refresh
+remains available solely to maintain the source-faithful native table.
 
-## Quirks and Pain Points
+## Station Count
 
-| Issue | Resolution |
-| --- | --- |
-| HTTP 206 on paginated results | Not an error — 206 is a valid 2xx response; `raise_for_status()` does not raise. Pagination followed via `parsed.next_url`. |
-| Large paginated response | Station `A021005050` (Rhine at Basel) returns 18848 obs_elab records total when fetching a long range — pagination essential. |
-| Date-only timestamps | Hubeau `date_obs_elab` is date-only for daily obs_elab products. Interpreted as UTC midnight; `date_only_timestamp` warning emitted. |
-| Unit conversion | `QmnJ` in l/s (÷1000 → m³/s); `HIXnJ` in mm (÷1000 → m). Same factor for both but different semantics documented in product metadata. |
-| No per-variable station availability | `referentiel/stations` does not expose which grandeurs each station reports. All station-product pairs materialised as `availability=unknown`. |
-| Station coordinates | Stations without `latitude_station` or `longitude_station` are filtered out during catalogue generation. |
-| Overseas stations | Hubeau includes stations in DOM-TOM (French overseas: Guadeloupe, Martinique, etc.) — these are included in the catalogue under `country="France"`. |
+7,323 canonical stations: 6,454 hydrometry plus 869 disjoint temperature stations. No station is
+filtered. The former 6,420 hydrometry / 7,289 total was the superseded pre-m10-s3 shipping state; the
+truthful live-refresh safety floor remains 500.
 
-## Station Count (2026-06-03)
+## Observation Notes
 
-6420 stations with valid coordinates from Hubeau `referentiel/stations?in_use=true`. Minimum live-station guard set at 500 in `generate_catalogue.py`.
-
-## Schema Divergence from Legacy
-
-Legacy `FranceFetcher.get_data()` returns a wide-form pandas DataFrame indexed by date, one column per variable. The new provider returns long-form `ObservationResult` with canonical columns `time`, `station_id`, `product_id`, `value`, plus row and series annotations and structured provenance.
+Hydrometry pagination follows response `next` links and accepts HTTP 206. Daily elaborated timestamps
+remain date-only values interpreted as UTC midnight. Existing conversions remain l/s ÷ 1000 for
+discharge and mm ÷ 1000 for stage. Temperature observations remain in degrees Celsius.

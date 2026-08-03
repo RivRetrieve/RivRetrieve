@@ -1,25 +1,42 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
+from urllib.parse import parse_qs, urlsplit
 
 import polars as pl
 import polars.testing as pl_testing
 import pytest
 
-from rivretrieve._internal.catalogues.native import RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
+    AvailabilityDtype,
+)
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau import generate_catalogue as generator
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
+    HYDRO_PRODUCT_DEFS,
     NATIVE_SCHEMA,
     NATIVE_SOURCE_COLUMNS,
-    generate_catalogue_from_fixture,
+    TEMP_PRODUCT_DEFS,
+    build_catalogue,
     native_table_content_digest,
     refresh_native_table,
     refresh_native_table_from_fixtures,
+)
+from rivretrieve._internal.providers.fr_hubeau.origins import (
+    CODE_PROJECTION_31_AXIS_TRANSPOSITION,
+    CODE_PROJECTION_31_METROPOLITAN_BOUNDS,
+    CRS_EVIDENCE_URL,
+    FRANCE_ORIGIN_DECLARATIONS,
+    TEMPERATURE_CRS_EVIDENCE_URL,
 )
 
 _TEST_DATA_DIR = Path(__file__).parent / "test_data"
@@ -32,6 +49,7 @@ _OPENAPI_EVIDENCE = _TEST_DATA_DIR / "fr_hubeau_openapi_v2.json"
 _HYDRO_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 32, 58, tzinfo=UTC))
 _TEMP_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 33, 34, tzinfo=UTC))
 _PINNED_NATIVE_DIGEST = "f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322"
+NATIVE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
 
 
 def _full_payload(path: Path) -> dict[str, object]:
@@ -69,47 +87,45 @@ def _assert_issue(result: object, message: str) -> None:
     assert result.value.data.height == 0
 
 
+def _catalogue():
+    return build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS)
+
+
 def test_generate_catalogue_station_count() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    # 2 hydro (with valid coords) + 1 temp (with valid coords) = 3
-    assert cat.stations.height == 3
+    assert _catalogue().stations.height == 7323
 
 
 def test_generate_catalogue_product_count() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
+    cat = _catalogue()
     assert cat.products.height == 6
 
 
 def test_generate_catalogue_station_products_cross() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    # 2 hydro × 5 products + 1 temp × 1 product = 11
-    assert cat.station_products.height == 11
+    cat = _catalogue()
+    assert cat.station_products.height == 33139
 
 
 def test_generate_catalogue_hydro_station_fields() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    station = cat.stations.filter(pl.col("station_id") == "O0050010")
+    cat = _catalogue()
+    station = cat.stations.filter(pl.col("station_id") == "1011000101")
     assert station.height == 1
-    assert station["crs"][0] == "unknown"
+    assert station["crs"][0] == "EPSG:4326"
 
 
 def test_generate_catalogue_temp_station_fields() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    station = cat.stations.filter(pl.col("station_id") == "T123456001")
+    cat = _catalogue()
+    station = cat.stations.filter(pl.col("station_id") == "01001336")
     assert station.height == 1
-    assert station["crs"][0] == "unknown"
+    assert station["crs"][0] == "EPSG:4326"
 
 
-def test_generate_catalogue_filters_no_coord_stations() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    station_ids = set(cat.stations["station_id"].to_list())
-    assert "K123456001" not in station_ids  # hydro no-coord
-    assert "T999999001" not in station_ids  # temp no-coord
+def test_generate_catalogue_filters_no_stations() -> None:
+    assert _catalogue().stations.height == read_native_table(NATIVE_PATH).data.height
 
 
 def test_generate_catalogue_hydro_station_products() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    hydro_sp = cat.station_products.filter(pl.col("station_id") == "O0050010")
+    cat = _catalogue()
+    hydro_sp = cat.station_products.filter(pl.col("station_id") == "1011000101")
     hydro_products = set(hydro_sp["product_id"].to_list())
     assert hydro_products == {
         "discharge_instantaneous",
@@ -121,9 +137,234 @@ def test_generate_catalogue_hydro_station_products() -> None:
 
 
 def test_generate_catalogue_temp_station_products() -> None:
-    cat = generate_catalogue_from_fixture(_HYDRO_FIXTURE, _TEMP_FIXTURE)
-    temp_sp = cat.station_products.filter(pl.col("station_id") == "T123456001")
+    cat = _catalogue()
+    temp_sp = cat.station_products.filter(pl.col("station_id") == "01001336")
     assert temp_sp["product_id"].to_list() == ["water_temperature_instantaneous"]
+
+
+def _assert_fatal_issue(table: NativeTable, code: str, message: str) -> None:
+    with pytest.raises(FatalContractError) as raised:
+        build_catalogue(table, FRANCE_ORIGIN_DECLARATIONS)
+    assert [(issue.provider_id, issue.code, issue.message) for issue in raised.value.issues] == [
+        (ProviderId("fr_hubeau"), code, message)
+    ]
+
+
+def test_native_builder_rejects_one_unknown_endpoint_row() -> None:
+    native = read_native_table(NATIVE_PATH)
+    station_id = native.data["code_station"][0]
+    bad = NativeTable(
+        native.data.with_columns(
+            pl.when(pl.col("code_station") == station_id)
+            .then(pl.lit("third/endpoint"))
+            .otherwise(pl.col("source_endpoint"))
+            .alias("source_endpoint")
+        )
+    )
+    _assert_fatal_issue(
+        bad,
+        "catalogue_native.unknown_source_endpoint",
+        "fr_hubeau native table contains unknown source_endpoint third/endpoint",
+    )
+
+
+@pytest.mark.parametrize(
+    ("column", "message"),
+    [
+        ("longitude_station", "fr_hubeau.longitude: native column 'longitude_station' does not exist"),
+        ("latitude", "fr_hubeau.latitude: native column 'latitude' does not exist"),
+    ],
+)
+def test_native_builder_rejects_each_absent_endpoint_coordinate(column: str, message: str) -> None:
+    native = read_native_table(NATIVE_PATH)
+    _assert_fatal_issue(
+        NativeTable(native.data.drop(column)),
+        "catalogue_origin.absent_native_column",
+        message,
+    )
+
+
+@pytest.mark.parametrize("signature_column", ["coordonnee_x_station", "coordonnee_y_station"])
+def test_code_31_correction_requires_each_signature_half(signature_column: str) -> None:
+    native = read_native_table(NATIVE_PATH)
+    station_id = "H000000201"
+    bad = NativeTable(
+        native.data.with_columns(
+            pl.when(pl.col("code_station") == station_id)
+            .then(pl.col(signature_column) + 0.001)
+            .otherwise(pl.col(signature_column))
+            .alias(signature_column)
+        )
+    )
+    _assert_fatal_issue(
+        bad,
+        "catalogue_coordinate.correction_precondition_failed",
+        f"fr_hubeau station {station_id} code_projection=31 does not match the documented transposition signature",
+    )
+
+
+@pytest.mark.parametrize(
+    ("source_column", "signature_column", "value"),
+    [
+        ("longitude_station", "coordonnee_y_station", 42.4173),
+        ("longitude_station", "coordonnee_y_station", 49.989436),
+        ("latitude_station", "coordonnee_x_station", -0.616425),
+        ("latitude_station", "coordonnee_x_station", 5.593354),
+    ],
+)
+def test_code_31_correction_checks_each_inclusive_bound(
+    source_column: str, signature_column: str, value: float
+) -> None:
+    native = read_native_table(NATIVE_PATH)
+    station_id = "H000000201"
+    condition = pl.col("code_station") == station_id
+    bad = NativeTable(
+        native.data.with_columns(
+            pl.when(condition).then(pl.lit(value)).otherwise(pl.col(source_column)).alias(source_column),
+            pl.when(condition).then(pl.lit(value)).otherwise(pl.col(signature_column)).alias(signature_column),
+        )
+    )
+    _assert_fatal_issue(
+        bad,
+        "catalogue_coordinate.outside_metropolitan_bounds",
+        f"fr_hubeau station {station_id} remains outside the evidenced metropolitan bounds after code_projection=31 correction",
+    )
+
+
+def test_only_code_31_coordinates_are_transposed() -> None:
+    native = read_native_table(NATIVE_PATH).data
+    stations = _catalogue().stations
+    code_31 = native.filter(pl.col("code_projection") == 31)
+    assert code_31.height == 54
+    corrected = stations.join(
+        code_31.select(
+            pl.col("code_station").alias("station_id"),
+            pl.col("longitude_station").alias("expected_latitude"),
+            pl.col("latitude_station").alias("expected_longitude"),
+        ),
+        on="station_id",
+    )
+    assert corrected["latitude"].to_list() == corrected["expected_latitude"].to_list()
+    assert corrected["longitude"].to_list() == corrected["expected_longitude"].to_list()
+    lat_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["latitude"]
+    lon_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["longitude"]
+    assert corrected["latitude"].is_between(*lat_bounds, closed="both").all()
+    assert corrected["longitude"].is_between(*lon_bounds, closed="both").all()
+    assert CODE_PROJECTION_31_AXIS_TRANSPOSITION == {
+        "latitude": "longitude_station",
+        "longitude": "latitude_station",
+    }
+    sample = stations.filter(pl.col("station_id") == "H000000201").row(0, named=True)
+    assert (sample["latitude"], sample["longitude"]) == (49.989435, 4.099322)
+    control = stations.filter(pl.col("station_id") == "1011000101").row(0, named=True)
+    assert (control["latitude"], control["longitude"]) == (16.189402471, -61.658989597)
+
+    formerly_shipped = {
+        "H001000301",
+        "H002001101",
+        "H003000201",
+        "H004000101",
+        "H004000201",
+        "H010002201",
+        "H010002301",
+        "H012000201",
+        "H013000101",
+        "H124000301",
+        "H125000201",
+        "H125000202",
+        "H127000101",
+        "H143000201",
+        "K451000101",
+        "K455000201",
+        "K462000101",
+        "K465000101",
+        "K467000301",
+        "K468000201",
+        "K469000201",
+        "K469000202",
+        "K471000201",
+        "K476000101",
+        "K476000102",
+        "K478000301",
+        "K478000401",
+        "O312102101",
+        "O821000101",
+        "O821000201",
+        "O822000101",
+        "O823153101",
+        "O825501101",
+        "O826401101",
+        "O831000201",
+        "O831000301",
+        "Y021401101",
+        "Y043642201",
+        "Y060401201",
+        "Y111201201",
+        "Y122502201",
+        "Y142203401",
+        "Y200002801",
+        "Y345402401",
+        "Y401202101",
+        "Y402201401",
+        "Y412541101",
+    }
+    newly_affected = {
+        "H000000201",
+        "H000000301",
+        "H001000401",
+        "H003000301",
+        "R423001101",
+        "R423001201",
+        "R521001101",
+    }
+    assert formerly_shipped | newly_affected == set(code_31["code_station"])
+    old_orientation = code_31.filter(pl.col("code_station").is_in(formerly_shipped)).select(
+        pl.col("code_station").alias("station_id"), "latitude_station", "longitude_station"
+    )
+    old_vs_new = stations.join(old_orientation, on="station_id")
+    assert (
+        (old_vs_new["latitude"] != old_vs_new["latitude_station"])
+        & (old_vs_new["longitude"] != old_vs_new["longitude_station"])
+    ).all()
+    assert old_orientation["latitude_station"].min() == 1.4279124
+    assert old_orientation["latitude_station"].max() == 5.593353
+    assert old_orientation["longitude_station"].min() == 42.4174
+    assert old_orientation["longitude_station"].max() == 49.9048593
+
+
+def test_code_26_changed_ids_pass_through_exactly() -> None:
+    ids = [
+        "F462000701",
+        "K040301001",
+        "K040302002",
+        "K041031001",
+        "K480001001",
+        "L001061101",
+        "L440000101",
+        "O017402901",
+        "O773000101",
+        "P011501101",
+        "P036000101",
+        "P089000101",
+        "P115000101",
+        "P177000101",
+        "P302000101",
+        "U321401001",
+    ]
+    native = read_native_table(NATIVE_PATH).data
+    expected = (
+        native.filter(pl.col("code_station").is_in(ids))
+        .select(
+            pl.lit("fr_hubeau").alias("provider_id"),
+            pl.col("code_station").alias("station_id"),
+            pl.col("latitude_station").alias("latitude"),
+            pl.col("longitude_station").alias("longitude"),
+            pl.lit("EPSG:4326").alias("crs"),
+        )
+        .sort("station_id")
+    )
+    actual = _catalogue().stations.filter(pl.col("station_id").is_in(ids)).sort("station_id")
+    pl_testing.assert_frame_equal(actual, expected, check_exact=True)
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
@@ -445,10 +686,9 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
     feature = geojson["features"][0]
     assert feature["properties"]["code_station"] == "1011000101"
     assert feature["geometry"]["crs"]["properties"]["name"] == crs_name
-    assert feature["geometry"]["coordinates"] == [
-        feature["properties"]["longitude_station"],
-        feature["properties"]["latitude_station"],
-    ]
+    assert feature["geometry"]["coordinates"] == [-61.65898959694908, 16.18940247103205]
+    assert feature["properties"]["longitude_station"] == -61.65898959694908
+    assert feature["properties"]["latitude_station"] == 16.18940247103205
 
     hydro_station = next(row for row in hydro["data"] if row["code_station"] == "1011000101")
     geojson_longitude, geojson_latitude = feature["geometry"]["coordinates"]
@@ -494,7 +734,24 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
         for row in rows
         for axis, field in enumerate(coordinate_fields)
     ]
-    assert max(coordinate_discrepancies) == pytest.approx(5.0e-10, abs=1.0e-13)
+    assert max(coordinate_discrepancies) <= 5.0e-10
+    assert all(row["geometry"]["crs"] is not None for row in temperature["data"])
+    assert {row["geometry"]["crs"]["properties"]["name"] for row in temperature["data"]} == {crs_name}
+
+    for declaration_url, capture in (
+        (CRS_EVIDENCE_URL, geojson),
+        (TEMPERATURE_CRS_EVIDENCE_URL, temperature),
+    ):
+        declared = urlsplit(declaration_url)
+        captured = urlsplit(capture["first"])
+        assert (declared.scheme, declared.netloc, declared.path) == (
+            captured.scheme,
+            captured.netloc,
+            captured.path,
+        )
+        declared_query = parse_qs(declared.query)
+        captured_query = parse_qs(captured.query)
+        assert all(captured_query[key] == value for key, value in declared_query.items())
 
     openapi = _full_payload(_OPENAPI_EVIDENCE)
     station_properties = openapi["definitions"]["Station hydrométrique"]["properties"]
@@ -512,120 +769,72 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
     assert station_properties["coordonnee_y_station"]["description"] == "Coordonnée Y de la station hydrométrique"
     description = station_properties["code_projection"]["description"]
     assert description == "Type de projection de la station hydrométrique. Voir ProjCoordSiteHydro"
+    assert (hydro_station["coordonnee_x_station"], hydro_station["coordonnee_y_station"]) == (
+        643352.0,
+        1790354.0,
+    )
+    assert Counter(row["code_projection"] for row in hydro["data"]) == {
+        26: 6059,
+        39: 142,
+        5: 74,
+        38: 54,
+        31: 54,
+        40: 48,
+        41: 23,
+    }
 
 
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
+        (["--out", "out"], "--native is required for canonical build"),
+        (["--native", str(NATIVE_PATH)], "--out is required for canonical build"),
         (
-            [
-                "--native-out",
-                "native.parquet",
-                "--hydro-retrieved-at",
-                "2026-08-02T17:32:58+00:00",
-                "--temperature-retrieved-at",
-                "2026-08-02T17:33:34+00:00",
-            ],
-            "--hydro-fixture and --temp-fixture must be supplied together",
+            ["--native", str(NATIVE_PATH), "--out", "out", "--hydro-fixture", str(_HYDRO_FIXTURE)],
+            "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            ["--hydro-fixture", str(_HYDRO_FIXTURE), "--out", "out"],
-            "--hydro-fixture and --temp-fixture must be supplied together",
+            ["--native", str(NATIVE_PATH), "--out", "out", "--temp-fixture", str(_TEMP_FIXTURE)],
+            "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            ["--temp-fixture", str(_TEMP_FIXTURE), "--out", "out"],
-            "--hydro-fixture and --temp-fixture must be supplied together",
+            ["--native", str(NATIVE_PATH), "--out", "out", "--native-out", "native.parquet"],
+            "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            [
-                "--hydro-fixture",
-                str(_HYDRO_FIXTURE),
-                "--temp-fixture",
-                str(_TEMP_FIXTURE),
-                "--native-out",
-                "native.parquet",
-            ],
-            "--hydro-retrieved-at and --temperature-retrieved-at are required for fixture-native materialization",
+            ["--native", str(NATIVE_PATH), "--out", "out", "--hydro-retrieved-at", "2026-08-02T17:32:58+00:00"],
+            "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            [
-                "--hydro-fixture",
-                str(_HYDRO_FIXTURE),
-                "--temp-fixture",
-                str(_TEMP_FIXTURE),
-                "--native-out",
-                "native.parquet",
-                "--hydro-retrieved-at",
-                "2026-08-02T17:32:58+00:00",
-            ],
-            "--hydro-retrieved-at and --temperature-retrieved-at are required for fixture-native materialization",
+            ["--native", str(NATIVE_PATH), "--out", "out", "--temperature-retrieved-at", "2026-08-02T17:33:34+00:00"],
+            "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
-        (
-            [
-                "--hydro-fixture",
-                str(_HYDRO_FIXTURE),
-                "--temp-fixture",
-                str(_TEMP_FIXTURE),
-                "--native-out",
-                "native.parquet",
-                "--temperature-retrieved-at",
-                "2026-08-02T17:33:34+00:00",
-            ],
-            "--hydro-retrieved-at and --temperature-retrieved-at are required for fixture-native materialization",
-        ),
-        (
-            [
-                "--hydro-fixture",
-                str(_HYDRO_FIXTURE),
-                "--temp-fixture",
-                str(_TEMP_FIXTURE),
-                "--hydro-retrieved-at",
-                "2026-08-02T17:32:58+00:00",
-                "--temperature-retrieved-at",
-                "2026-08-02T17:33:34+00:00",
-            ],
-            "--native-out is required for fixture-native materialization",
-        ),
-        (
-            [
-                "--hydro-fixture",
-                str(_HYDRO_FIXTURE),
-                "--temp-fixture",
-                str(_TEMP_FIXTURE),
-                "--out",
-                "out",
-                "--native-out",
-                "native.parquet",
-            ],
-            "--native-out cannot be combined with canonical --out",
-        ),
-        (["--live", "--native-out", "native.parquet"], "--live cannot be combined with --native-out"),
-        (
-            [
-                "--live",
-                "--hydro-fixture",
-                str(_HYDRO_FIXTURE),
-                "--temp-fixture",
-                str(_TEMP_FIXTURE),
-                "--out",
-                "out",
-            ],
-            "--live cannot be combined with fixture input",
-        ),
-        (
-            ["--hydro-fixture", str(_HYDRO_FIXTURE), "--temp-fixture", str(_TEMP_FIXTURE)],
-            "canonical materialization requires --out",
-        ),
-        (["--out", "out"], "canonical materialization requires --live or both fixture paths"),
     ],
 )
-def test_native_cli_rejections(
-    argv: list[str], message: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def fail_live(*args: object, **kwargs: object) -> object:
-        pytest.fail("rejected CLI arguments reached the live reader")
+def test_native_cli_rejections(argv: list[str], message: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        generator.main(argv)
+    assert message in capsys.readouterr().err
 
-    monkeypatch.setattr(generator, "generate_catalogue_from_live", fail_live)
+
+def test_retired_live_argument_is_unrecognized(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        generator.main(["--live"])
+    assert "unrecognized arguments: --live" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--hydro-fixture", str(_HYDRO_FIXTURE)], "--hydro-fixture and --temp-fixture must be supplied together"),
+        (["--temp-fixture", str(_TEMP_FIXTURE)], "--hydro-fixture and --temp-fixture must be supplied together"),
+        (
+            ["--hydro-fixture", str(_HYDRO_FIXTURE), "--temp-fixture", str(_TEMP_FIXTURE)],
+            "--native-out is required for fixture-native materialization",
+        ),
+    ],
+)
+def test_fixture_refresh_cli_rejections(argv: list[str], message: str, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit, match="2"):
         generator.main(argv)
     assert message in capsys.readouterr().err
@@ -782,3 +991,220 @@ def test_fixture_wrapper_matches_direct_refresh() -> None:
     direct = _refresh(_full_payload(_HYDRO_FULL_FIXTURE), _full_payload(_TEMP_FULL_FIXTURE))
     assert wrapped.issues == direct.issues == ()
     pl_testing.assert_frame_equal(wrapped.value.data, direct.value.data, check_exact=True)
+
+
+def test_native_dates_flow_to_station_rows_and_provider_maximum() -> None:
+    native = read_native_table(NATIVE_PATH)
+    hydro_first = native.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations")["code_station"][0]
+    changed = NativeTable(
+        native.data.with_columns(
+            pl.when(pl.col("source_endpoint") == "temperature/station")
+            .then(pl.lit(datetime(2026, 8, 3, 0, 1, tzinfo=UTC)))
+            .when(pl.col("code_station") == hydro_first)
+            .then(pl.lit(datetime(2026, 8, 1, 23, 59, tzinfo=UTC)))
+            .otherwise(pl.lit(datetime(2026, 8, 1, 0, 1, tzinfo=UTC)))
+            .alias("retrieved_at")
+        )
+    )
+    catalogue = build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS)
+    hydro_dates = catalogue.station_products.filter(pl.col("station_id") == hydro_first)[
+        "last_catalogue_check"
+    ].unique()
+    temperature_id = changed.data.filter(pl.col("source_endpoint") == "temperature/station")["code_station"][0]
+    temperature_dates = catalogue.station_products.filter(pl.col("station_id") == temperature_id)[
+        "last_catalogue_check"
+    ].unique()
+    assert hydro_dates.to_list() == [datetime(2026, 8, 1).date()]
+    assert temperature_dates.to_list() == [datetime(2026, 8, 3).date()]
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
+
+
+def _canonical_value(value: object) -> object:
+    if isinstance(value, datetime):
+        return value.isoformat().replace("+00:00", "Z")
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    if isinstance(value, tuple | list):
+        return [_canonical_value(member) for member in value]
+    if isinstance(value, dict):
+        return {key: _canonical_value(member) for key, member in value.items()}
+    return value
+
+
+def _frame_digest(frame: pl.DataFrame) -> str:
+    payload = {
+        "columns": frame.columns,
+        "rows": [[_canonical_value(value) for value in row] for row in frame.iter_rows()],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+_PINNED_PROVIDER_JSON_SHA256 = "edfa0f038c4b33f21a0000ecb676795840e3a11b990b2758cdb45d7e65e42355"
+_PINNED_PRODUCTS_FRAME_SHA256 = "2b11e548681ab40be8bf2d23ae3b6515d65c0fb9f20ec60c6b0c2317e223ec93"
+_PINNED_STATIONS_FRAME_SHA256 = "0958c6dfe6fa44d0a66e105c51b7d3ae3ac675337fe0fa07f98e02017726c1c1"
+_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "b89ed8e8b367cc78989e8edca11973cc4d4dd4bee884cf6a46c834545d737872"
+
+
+def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
+    native = read_native_table(NATIVE_PATH).data
+    catalogue_dir = NATIVE_PATH.parent
+    committed_products = pl.read_parquet(catalogue_dir / "products.parquet")
+    committed_stations = pl.read_parquet(catalogue_dir / "stations.parquet")
+    committed_station_products = pl.read_parquet(catalogue_dir / "station_products.parquet")
+    committed_provider = json.loads((catalogue_dir / "provider.json").read_text())
+
+    hydro = native.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations")
+    temperature = native.filter(pl.col("source_endpoint") == "temperature/station")
+    expected_stations = pl.concat(
+        [
+            hydro.select(
+                pl.lit("fr_hubeau").alias("provider_id"),
+                pl.col("code_station").alias("station_id"),
+                pl.when(pl.col("code_projection") == 31)
+                .then(pl.col("longitude_station"))
+                .otherwise(pl.col("latitude_station"))
+                .alias("latitude"),
+                pl.when(pl.col("code_projection") == 31)
+                .then(pl.col("latitude_station"))
+                .otherwise(pl.col("longitude_station"))
+                .alias("longitude"),
+                pl.lit("EPSG:4326").alias("crs"),
+            ),
+            temperature.select(
+                pl.lit("fr_hubeau").alias("provider_id"),
+                pl.col("code_station").alias("station_id"),
+                "latitude",
+                "longitude",
+                pl.lit("EPSG:4326").alias("crs"),
+            ),
+        ]
+    ).sort("station_id")
+    pl_testing.assert_frame_equal(committed_stations, expected_stations, check_exact=True)
+
+    definitions = HYDRO_PRODUCT_DEFS + TEMP_PRODUCT_DEFS
+    expected_products = pl.DataFrame(
+        [
+            {
+                "provider_id": "fr_hubeau",
+                "product_id": definition.product_id,
+                "observed_property": definition.observed_property,
+                "frequency": definition.frequency,
+                "statistic": definition.statistic,
+                "period_type": definition.period_type,
+                "period_anchor": definition.period_anchor,
+                "unit": definition.canonical_unit,
+                "native_id": definition.grandeur_code or definition.api_type,
+                "derived": False,
+                "derivation_method": None,
+                "metadata": json.dumps(definition.metadata, sort_keys=True, separators=(",", ":")),
+            }
+            for definition in definitions
+        ],
+        schema=PRODUCT_CATALOG_SCHEMA.polars_schema,
+    ).sort("product_id")
+    pl_testing.assert_frame_equal(committed_products, expected_products, check_exact=True)
+
+    expected_station_product_rows: list[dict[str, object]] = []
+    for endpoint_frame, endpoint_definitions, note in (
+        (
+            hydro,
+            HYDRO_PRODUCT_DEFS,
+            "referentiel/stations does not guarantee observed data for every grandeur.",
+        ),
+        (
+            temperature,
+            TEMP_PRODUCT_DEFS,
+            "temperature/station does not guarantee observed data continuity.",
+        ),
+    ):
+        for station_id, retrieved_at in (
+            endpoint_frame.select("code_station", "retrieved_at").sort("code_station").iter_rows()
+        ):
+            for definition in endpoint_definitions:
+                metadata = {
+                    "availability_note": f"Materialised as availability=unknown; {note}",
+                    "availability_source": "provider_station_catalogue_assumption",
+                    "grandeur_code": definition.grandeur_code,
+                    "product_id": definition.product_id,
+                    "station_id": station_id,
+                }
+                expected_station_product_rows.append(
+                    {
+                        "provider_id": "fr_hubeau",
+                        "station_id": station_id,
+                        "product_id": definition.product_id,
+                        "availability": "unknown",
+                        "availability_reason": "Hubeau catalogue does not expose per-variable station availability",
+                        "start_date": None,
+                        "end_date": None,
+                        "last_catalogue_check": retrieved_at.date(),
+                        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+                    }
+                )
+    expected_station_products = (
+        pl.DataFrame(expected_station_product_rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+        .with_columns(pl.col("availability").cast(AvailabilityDtype))
+        .sort("station_id", "product_id")
+    )
+    pl_testing.assert_frame_equal(committed_station_products, expected_station_products, check_exact=True)
+
+    expected_provider = {
+        "provider_id": "fr_hubeau",
+        "name": "Hubeau / SCHAPI — French national hydrometric network",
+        "live_stations": False,
+        "live_products": False,
+        "live_station_products": False,
+        "bulk_observations": (
+            "true: 365-day window decomposition with paginated obs_elab, observations_tr, "
+            "and temperature/chronique requests; partial failures reported as recoverable issues"
+        ),
+        "catalogue_version": "2026-08-02",
+        "metadata": json.dumps(
+            {
+                "catalogue_source": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+                "generator_input": "native",
+                "hydro_sites_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/sites",
+                "hydro_stations_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations",
+                "obs_elab_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+                "obs_tr_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
+                "temp_stations_url": "https://hubeau.eaufrance.fr/api/v1/temperature/station",
+                "temperature_url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique",
+                "timestamp_convention": "obs_elab=date_only_utc_midnight; obs_tr=utc_iso; temperature=utc_iso",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    }
+    assert committed_provider == expected_provider
+    assert hashlib.sha256((catalogue_dir / "provider.json").read_bytes()).hexdigest() == _PINNED_PROVIDER_JSON_SHA256
+    assert _frame_digest(committed_products) == _PINNED_PRODUCTS_FRAME_SHA256
+    assert _frame_digest(committed_stations) == _PINNED_STATIONS_FRAME_SHA256
+    assert _frame_digest(committed_station_products) == _PINNED_STATION_PRODUCTS_FRAME_SHA256
+
+
+def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+
+    def forbidden(*args: object, **kwargs: object) -> object:
+        calls.append("forbidden")
+        raise AssertionError("native build reached a network or refresh entry point")
+
+    monkeypatch.setattr(generator.urllib.request, "urlopen", forbidden)
+    monkeypatch.setattr(generator, "_read_live_stations", forbidden)
+    monkeypatch.setattr(generator, "refresh_native_table", forbidden)
+    monkeypatch.setattr(generator, "refresh_native_table_from_fixtures", forbidden)
+    native_before = NATIVE_PATH.read_bytes()
+    assert generator.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)]) == 0
+    assert calls == []
+    assert NATIVE_PATH.read_bytes() == native_before
+    assert {path.name for path in tmp_path.iterdir()} == {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+    }
+    for artifact in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+        assert (tmp_path / artifact).read_bytes() == (NATIVE_PATH.parent / artifact).read_bytes()

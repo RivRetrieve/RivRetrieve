@@ -101,7 +101,7 @@ response.
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `ba_fhmzbih`,
-`ca_eccc`, `ch_foen`, `cz_chmi`, `lt_lhmt`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
+`ca_eccc`, `ch_foen`, `cz_chmi`, `fr_hubeau`, `lt_lhmt`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
 canonical packaged catalogue artifacts (`catalogue/provider.json`, `catalogue/products.parquet`,
 `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
@@ -403,12 +403,6 @@ generation must use its committed `native.parquet`, never `--live` or supplied R
 After writing provider code and tests, run that provider's network-free build from its committed
 native table and origins, and commit the resulting canonical artifacts alongside the code.
 
-### 4.2 Providers not yet migrated
-
-For a provider without both a committed native table and origin declarations (currently the other
-five: `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, and `pl_imgw`), the four canonical packaged
-catalogue artifacts must be generated from the live provider API before the provider is committed.
-
 - France native-table attestation: the orchestrator performed seven paged GETs outside the executor
   sandbox at `2026-08-02T17:32:58Z`, each returning `HTTP 206 Partial Content`:
   `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=1&format=json`,
@@ -455,10 +449,10 @@ catalogue artifacts must be generated from the live provider API before the prov
   `tests/test_data/fr_hubeau_temperature_stations_full.json`,
   `tests/test_data/fr_hubeau_geojson_crs_evidence.json`, and
   `tests/test_data/fr_hubeau_openapi_v2.json` are the reviewable captures. The two station captures
-  supply native rows; GeoJSON and OpenAPI are documentation evidence only. The shipped 7,289 stations
-  decompose into a 6,420-row hydrometry subset plus all 869 disjoint temperature stations. The complete
-  hydrometry response grew by 34 genuine stations to 6,454, so the complete disjoint live union is
-  7,323 and the retracted 835-row-loss interpretation is false.
+  supply native rows; GeoJSON and OpenAPI are documentation evidence only. The canonical catalogue
+  contains the complete `7,323 = 6,454 hydrometry + 869 disjoint temperature` station union. The
+  `7,289 = 6,420 + 869` result was the superseded pre-m10-s3 shipping state; the hydrometry response
+  grew by 34 genuine stations and the retracted 835-row-loss interpretation is false.
 
   Native materialization sorts by exact `code_station`, preserves both endpoint vocabularies without
   renaming, coalescing, or correction, appends exact `source_endpoint` and endpoint-specific
@@ -468,8 +462,16 @@ catalogue artifacts must be generated from the live provider API before the prov
   retained, UTC datetimes are RFC 3339 with exactly six fractional digits and `Z`, and JSON uses sorted
   object keys, compact separators, `ensure_ascii=False`, and `allow_nan=False`. Its SHA-256 is
   `f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322`. All 54 rows where
-  `code_projection == 31`, including `H000000201`, remain source-faithful despite the documented
-  upstream transposition; correction is deferred to m10-s3.
+  `code_projection == 31`, including `H000000201`, remain source-faithful in `native.parquet` despite
+  the documented upstream transposition; the pure, network-free canonical build transposes exactly
+  those 54 rows and otherwise preserves source coordinates. France's four canonical artifacts are a
+  pure function of the committed native material and its two endpoint-specific origin declarations.
+
+### 4.2 Providers not yet migrated
+
+For a provider without both a committed native table and origin declarations (currently the other
+four: `br_ana`, `jp_mlit`, `no_nve`, and `pl_imgw`), the four canonical packaged catalogue artifacts
+must be generated from the live provider API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.

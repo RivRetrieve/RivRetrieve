@@ -55,6 +55,7 @@ _BASE_RUNTIME_FILE_COUNTS = Counter(
 # already carried Bosnia and South Africa.
 _MIGRATED_SINCE_BASE = (
     "ba_fhmzbih",
+    "fr_hubeau",
     "th_thaiwater",
     "za_dws",
 )

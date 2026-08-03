@@ -1,4 +1,4 @@
-"""refresh : HubeauHydrometryStations × RetrievedAt × HubeauTemperatureStations × RetrievedAt → WithIssues[NativeTable]."""
+"""refresh : HubeauHydrometryStations × RetrievedAt × HubeauTemperatureStations × RetrievedAt → WithIssues[NativeTable]; build : NativeTable × FranceOriginDeclarations → GeneratedFrHubeauCatalogue (pure)."""
 
 from __future__ import annotations
 
@@ -7,14 +7,15 @@ import hashlib
 import json
 import math
 import urllib.request
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
     RETRIEVED_AT_DTYPE,
@@ -38,10 +39,6 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.fr_hubeau.metadata import (
-    FrHubeauProductMetadata,
-    FrHubeauStationProductMetadata,
-)
 
 PROVIDER_ID = ProviderId("fr_hubeau")
 PROVIDER_NAME = "Hubeau / SCHAPI — French national hydrometric network"
@@ -270,15 +267,15 @@ class ProductDefinition:
     notes: str | None
 
     @property
-    def metadata(self) -> FrHubeauProductMetadata:
-        return FrHubeauProductMetadata(
-            grandeur_code=self.grandeur_code,
-            api_type=self.api_type,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            conversion_factor=self.conversion_factor,
-            notes=self.notes,
-        )
+    def metadata(self) -> dict[str, object]:
+        return {
+            "api_type": self.api_type,
+            "canonical_unit": self.canonical_unit,
+            "conversion_factor": self.conversion_factor,
+            "grandeur_code": self.grandeur_code,
+            "native_unit": self.native_unit,
+            "notes": self.notes,
+        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -624,65 +621,66 @@ def _failed_native_refresh(issue: Issue) -> WithIssues[NativeTable]:
     return WithIssues(value=empty, issues=(issue,))
 
 
-def generate_catalogue_from_fixture(
-    hydro_fixture_path: Path | str,
-    temp_fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
+def build_catalogue(
+    native_table: NativeTable,
+    origins: Mapping[str, OriginDeclarations],
 ) -> GeneratedFrHubeauCatalogue:
-    return generate_catalogue(
-        _read_fixture_json(Path(hydro_fixture_path)),
-        _read_fixture_json(Path(temp_fixture_path)),
-        catalogue_date=catalogue_date,
-        generator_input="fixture",
-    )
-
-
-def generate_catalogue_from_live(
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedFrHubeauCatalogue:
-    hydro_payload = _read_live_stations(HYDRO_STATIONS_URL, HYDRO_STATIONS_PARAMS, "hydrometric")
-    temp_payload = _read_live_stations(TEMP_STATIONS_URL, TEMP_STATIONS_PARAMS, "temperature")
-    return generate_catalogue(
-        hydro_payload,
-        temp_payload,
-        catalogue_date=catalogue_date,
-        generator_input="live",
-    )
-
-
-def generate_catalogue(
-    hydro_payload: dict[str, object],
-    temp_payload: dict[str, object],
-    *,
-    catalogue_date: date | None = None,
-    generator_input: str = "fixture",
-) -> GeneratedFrHubeauCatalogue:
-    effective_date = catalogue_date or date.today()
+    endpoints = native_table.data["source_endpoint"].unique().sort().to_list()
+    expected = frozenset({"hydrometrie/referentiel/stations", "temperature/station"})
+    unknown = sorted(value for value in endpoints if value not in expected)
+    if unknown:
+        _raise_catalogue_issue(
+            "catalogue_native.unknown_source_endpoint",
+            f"fr_hubeau native table contains unknown source_endpoint {unknown[0]}",
+        )
+    hydro = NativeTable(native_table.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations"))
+    temperature = NativeTable(native_table.data.filter(pl.col("source_endpoint") == "temperature/station"))
+    if hydro.data.height != 6454:
+        raise FatalContractError(f"fr_hubeau native hydrometry partition has {hydro.data.height} rows; expected 6454")
+    if temperature.data.height != 869:
+        raise FatalContractError(
+            f"fr_hubeau native temperature partition has {temperature.data.height} rows; expected 869"
+        )
+    hydro_origins = origins["hydrometrie/referentiel/stations"]
+    temperature_origins = origins["temperature/station"]
+    _require_origin_columns(hydro, hydro_origins)
+    _require_origin_columns(temperature, temperature_origins)
+    hydro_stations = build_hydro_stations(hydro)
+    temperature_stations = build_temp_stations(temperature)
+    enforce_catalogue_origins(PROVIDER_ID, hydro_origins, hydro, hydro_stations)
+    enforce_catalogue_origins(PROVIDER_ID, temperature_origins, temperature, temperature_stations)
+    stations: StationCatalog = pl.concat([hydro_stations, temperature_stations]).sort("station_id")
+    hydro_dates = hydro.data.select(
+        pl.col("code_station").cast(pl.String).alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
+    ).sort("station_id")
+    temperature_dates = temperature.data.select(
+        pl.col("code_station").cast(pl.String).alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
+    ).sort("station_id")
     products = build_products()
-    hydro_stations = build_hydro_stations(hydro_payload, generator_input=generator_input)
-    temp_stations = build_temp_stations(temp_payload, generator_input=generator_input)
-
-    # Merge: hydro first, then temp; both sorted by station_id afterwards.
-    stations: StationCatalog = pl.concat([hydro_stations, temp_stations]).sort("station_id")
-
-    hydro_ids = hydro_stations["station_id"].to_list()
-    temp_ids = temp_stations["station_id"].to_list()
-    station_products = build_station_products(
-        hydro_station_ids=hydro_ids,
-        temp_station_ids=temp_ids,
-        catalogue_date=effective_date,
-    )
-
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
+    station_products = build_station_products(hydro_dates, temperature_dates)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("fr_hubeau native table has no valid retrieved_at values")
+    provider_info = build_provider_info(maximum_retrieved_at.date())
     validate_generated_catalogue(provider_info, products, stations, station_products)
-    return GeneratedFrHubeauCatalogue(
-        provider_info=provider_info,
-        products=products,
-        stations=stations,
-        station_products=station_products,
-    )
+    return GeneratedFrHubeauCatalogue(provider_info, products, stations, station_products)
+
+
+def _require_origin_columns(native_table: NativeTable, origins: OriginDeclarations) -> None:
+    for canonical_column, origin in origins.items():
+        native_column = getattr(origin, "native_column", None)
+        if native_column is not None and str(native_column) not in native_table.data.columns:
+            _raise_catalogue_issue(
+                "catalogue_origin.absent_native_column",
+                f"fr_hubeau.{canonical_column}: native column '{native_column}' does not exist",
+            )
+
+
+def _raise_catalogue_issue(code: str, message: str) -> None:
+    issue = Issue(severity="error", code=code, message=message, provider_id=PROVIDER_ID)
+    raise FatalContractError(message, issues=(issue,))
 
 
 def build_products() -> ProductCatalog:
@@ -706,61 +704,90 @@ def build_products() -> ProductCatalog:
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_hydro_stations(
-    raw_payload: dict[str, object],
-    *,
-    generator_input: str = "fixture",
-) -> StationCatalog:
-    rows = list(_iter_hydro_station_rows(raw_payload))
-    if not rows:
-        raise FatalContractError("fr_hubeau: hydrometric station build returned no rows with valid coordinates")
-    if generator_input == "live" and len(rows) < MIN_LIVE_HYDRO_STATIONS:
-        raise FatalContractError(
-            f"fr_hubeau: live hydrometric catalogue returned only {len(rows)} stations "
-            f"(expected ≥ {MIN_LIVE_HYDRO_STATIONS}); possible fetch failure"
+def build_hydro_stations(native_table: NativeTable) -> StationCatalog:
+    from rivretrieve._internal.providers.fr_hubeau.origins import CODE_PROJECTION_31_METROPOLITAN_BOUNDS
+
+    correction_rows = native_table.data.filter(pl.col("code_projection") == 31)
+    for row in correction_rows.select(
+        "code_station",
+        "latitude_station",
+        "longitude_station",
+        "coordonnee_x_station",
+        "coordonnee_y_station",
+    ).iter_rows(named=True):
+        station_id = row["code_station"]
+        if (
+            row["coordonnee_x_station"] != row["latitude_station"]
+            or row["coordonnee_y_station"] != row["longitude_station"]
+        ):
+            _raise_catalogue_issue(
+                "catalogue_coordinate.correction_precondition_failed",
+                f"fr_hubeau station {station_id} code_projection=31 does not match the documented transposition signature",
+            )
+        corrected_latitude = row["longitude_station"]
+        corrected_longitude = row["latitude_station"]
+        latitude_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["latitude"]
+        longitude_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["longitude"]
+        if not (
+            latitude_bounds[0] <= corrected_latitude <= latitude_bounds[1]
+            and longitude_bounds[0] <= corrected_longitude <= longitude_bounds[1]
+        ):
+            _raise_catalogue_issue(
+                "catalogue_coordinate.outside_metropolitan_bounds",
+                f"fr_hubeau station {station_id} remains outside the evidenced metropolitan bounds after code_projection=31 correction",
+            )
+    return (
+        native_table.data.select(
+            pl.lit(PROVIDER_ID, dtype=pl.String).alias("provider_id"),
+            pl.col("code_station").cast(pl.String).alias("station_id"),
+            pl.when(pl.col("code_projection") == 31)
+            .then(pl.col("longitude_station"))
+            .otherwise(pl.col("latitude_station"))
+            .alias("latitude"),
+            pl.when(pl.col("code_projection") == 31)
+            .then(pl.col("latitude_station"))
+            .otherwise(pl.col("longitude_station"))
+            .alias("longitude"),
+            pl.lit("EPSG:4326").alias("crs"),
         )
-    return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
+        .cast(STATION_CATALOG_SCHEMA.polars_schema)
+        .sort("station_id")
+    )
 
 
-def build_temp_stations(
-    raw_payload: dict[str, object],
-    *,
-    generator_input: str = "fixture",
-) -> StationCatalog:
-    rows = list(_iter_temp_station_rows(raw_payload))
-    if generator_input == "live" and len(rows) < MIN_LIVE_TEMP_STATIONS:
-        raise FatalContractError(
-            f"fr_hubeau: live temperature catalogue returned only {len(rows)} stations "
-            f"(expected ≥ {MIN_LIVE_TEMP_STATIONS}); possible fetch failure"
+def build_temp_stations(native_table: NativeTable) -> StationCatalog:
+    return (
+        native_table.data.select(
+            pl.lit(PROVIDER_ID, dtype=pl.String).alias("provider_id"),
+            pl.col("code_station").cast(pl.String).alias("station_id"),
+            pl.col("latitude"),
+            pl.col("longitude"),
+            pl.lit("EPSG:4326").alias("crs"),
         )
-    # Return empty schema-valid DataFrame when fixture has no temp stations.
-    if not rows:
-        return pl.DataFrame(schema=STATION_CATALOG_SCHEMA.polars_schema)
-    return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
+        .cast(STATION_CATALOG_SCHEMA.polars_schema)
+        .sort("station_id")
+    )
 
 
 def build_station_products(
-    *,
-    hydro_station_ids: list[object],
-    temp_station_ids: list[object],
-    catalogue_date: date,
+    hydro_station_dates: pl.DataFrame,
+    temperature_station_dates: pl.DataFrame,
 ) -> StationProductCatalog:
-    rows = []
-
-    for station_id in hydro_station_ids:
-        if not isinstance(station_id, str):
-            raise FatalContractError("station_id must be a string")
+    rows: list[dict[str, object]] = []
+    for station_id, catalogue_date in hydro_station_dates.iter_rows():
+        if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
+            raise FatalContractError("hydrometry station retrieval date must pair a string identifier with a date")
         for d in HYDRO_PRODUCT_DEFS:
-            metadata = FrHubeauStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                grandeur_code=d.grandeur_code,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
+            metadata: dict[str, object] = {
+                "station_id": station_id,
+                "product_id": d.product_id,
+                "grandeur_code": d.grandeur_code,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": (
                     "Materialised as availability=unknown; "
                     "referentiel/stations does not guarantee observed data for every grandeur."
                 ),
-            )
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -775,20 +802,20 @@ def build_station_products(
                 }
             )
 
-    for station_id in temp_station_ids:
-        if not isinstance(station_id, str):
-            raise FatalContractError("temperature station_id must be a string")
+    for station_id, catalogue_date in temperature_station_dates.iter_rows():
+        if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
+            raise FatalContractError("temperature station retrieval date must pair a string identifier with a date")
         for d in TEMP_PRODUCT_DEFS:
-            metadata = FrHubeauStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                grandeur_code=d.grandeur_code,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
+            metadata = {
+                "station_id": station_id,
+                "product_id": d.product_id,
+                "grandeur_code": d.grandeur_code,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": (
                     "Materialised as availability=unknown; "
                     "temperature/station does not guarantee observed data continuity."
                 ),
-            )
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -803,15 +830,15 @@ def build_station_products(
                 }
             )
 
-    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
-        pl.col("availability").cast(AvailabilityDtype)
+    return (
+        pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+        .with_columns(pl.col("availability").cast(AvailabilityDtype))
+        .sort("station_id", "product_id")
     )
 
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "hydro_stations_url": HYDRO_STATIONS_URL,
@@ -820,7 +847,8 @@ def build_provider_info(
         "obs_elab_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
         "obs_tr_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
         "temperature_url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique",
-        "generator_input": generator_input,
+        "catalogue_source": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+        "generator_input": "native",
         "timestamp_convention": "obs_elab=date_only_utc_midnight; obs_tr=utc_iso; temperature=utc_iso",
     }
     return {
@@ -867,78 +895,6 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-
-
-# ---------------------------------------------------------------------------
-# Station row iterators
-# ---------------------------------------------------------------------------
-
-
-def _iter_hydro_station_rows(
-    raw_payload: dict[str, object],
-) -> Iterator[dict[str, object]]:
-    data_list = raw_payload.get("data", [])
-    if not isinstance(data_list, list):
-        return
-
-    seen: set[str] = set()
-    for row in cast(list[dict[str, object]], data_list):
-        if not isinstance(row, dict):
-            continue
-
-        station_id = _clean_text(row.get("code_station"))
-        if station_id is None:
-            continue
-        if station_id in seen:
-            continue
-
-        lat = _to_float(row.get("latitude_station"))
-        lon = _to_float(row.get("longitude_station"))
-        if lat is None or lon is None:
-            continue
-
-        seen.add(station_id)
-
-        yield {
-            "provider_id": PROVIDER_ID,
-            "station_id": station_id,
-            "latitude": lat,
-            "longitude": lon,
-            "crs": "unknown",
-        }
-
-
-def _iter_temp_station_rows(raw_payload: dict[str, object]) -> Iterator[dict[str, object]]:
-    data_list = raw_payload.get("data", [])
-    if not isinstance(data_list, list):
-        return
-
-    seen: set[str] = set()
-    for row in cast(list[dict[str, object]], data_list):
-        if not isinstance(row, dict):
-            continue
-
-        station_id = _clean_text(row.get("code_station"))
-        if station_id is None:
-            continue
-        if station_id in seen:
-            continue
-
-        # Temperature API uses 'latitude'/'longitude', not '*_station' variants.
-        lat = _to_float(row.get("latitude"))
-        lon = _to_float(row.get("longitude"))
-        if lat is None or lon is None:
-            continue
-
-        seen.add(station_id)
-
-        yield {
-            "provider_id": PROVIDER_ID,
-            "station_id": station_id,
-            "latitude": lat,
-            "longitude": lon,
-            "crs": "unknown",
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -991,95 +947,69 @@ def _read_fixture_json(path: Path) -> dict[str, object]:
     return cast("dict[str, object]", value)
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _clean_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text or text.lower() in ("nan", "none", "null"):
-        return None
-    return text
-
-
-def _to_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _metadata_json(
-    model: FrHubeauProductMetadata | FrHubeauStationProductMetadata,
+    model: Mapping[str, object],
 ) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return json.dumps(model, sort_keys=True, separators=(",", ":"))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate the packaged fr_hubeau catalogue artifacts.")
+    parser = argparse.ArgumentParser(description="Refresh or build the packaged fr_hubeau catalogue artifacts.")
     parser.add_argument("--hydro-fixture", type=Path, help="Path to a Hubeau referentiel/stations JSON fixture.")
-    parser.add_argument("--live", action="store_true", help="Fetch live Hubeau station endpoints.")
     parser.add_argument(
         "--temp-fixture",
         type=Path,
         help="Path to a Hubeau temperature/station JSON fixture (used with --hydro-fixture).",
     )
+    parser.add_argument("--native", type=Path, help="Committed native Parquet input for canonical build.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--hydro-retrieved-at", type=_parse_retrieved_at)
     parser.add_argument("--temperature-retrieved-at", type=_parse_retrieved_at)
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     args = parser.parse_args(argv)
 
-    if args.native_out is not None and args.out is not None:
-        parser.error("--native-out cannot be combined with canonical --out")
-    if args.live and args.native_out is not None:
-        parser.error("--live cannot be combined with --native-out")
-    if (args.hydro_fixture is None) != (args.temp_fixture is None):
-        parser.error("--hydro-fixture and --temp-fixture must be supplied together")
-    if args.live and args.hydro_fixture is not None:
-        parser.error("--live cannot be combined with fixture input")
-
-    native_instants_requested = args.hydro_retrieved_at is not None or args.temperature_retrieved_at is not None
-    if args.native_out is not None:
-        if args.hydro_fixture is None:
-            parser.error("--hydro-fixture and --temp-fixture must be supplied together")
-        if args.hydro_retrieved_at is None or args.temperature_retrieved_at is None:
-            parser.error(
-                "--hydro-retrieved-at and --temperature-retrieved-at are required for fixture-native materialization"
-            )
-        outcome = refresh_native_table_from_fixtures(
+    refresh_requested = any(
+        value is not None
+        for value in (
             args.hydro_fixture,
             args.temp_fixture,
-            hydro_retrieved_at=args.hydro_retrieved_at,
-            temperature_retrieved_at=args.temperature_retrieved_at,
+            args.native_out,
+            args.hydro_retrieved_at,
+            args.temperature_retrieved_at,
         )
-        native_table = _raise_on_native_issues(outcome)
-        write_native_table(native_table, args.native_out)
-        written = read_native_table(args.native_out)
-        print(native_table_content_digest(written))
+    )
+    if args.native is not None:
+        if refresh_requested:
+            parser.error("--native build mode cannot be combined with refresh sources or retrieval instants")
+        if args.out is None:
+            parser.error("--out is required for canonical build")
+        from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
+
+        write_catalogue(build_catalogue(read_native_table(args.native), FRANCE_ORIGIN_DECLARATIONS), args.out)
         return 0
 
-    if native_instants_requested:
+    if args.out is not None:
+        parser.error("--native is required for canonical build")
+    if (args.hydro_fixture is None) != (args.temp_fixture is None):
+        parser.error("--hydro-fixture and --temp-fixture must be supplied together")
+    if args.hydro_fixture is None:
+        parser.error("--native is required for canonical build")
+    if args.native_out is None:
         parser.error("--native-out is required for fixture-native materialization")
-    if args.out is None:
-        parser.error("canonical materialization requires --out")
-    if args.live:
-        catalogue = generate_catalogue_from_live(catalogue_date=args.catalogue_date)
-    else:
-        if args.hydro_fixture is None:
-            parser.error("canonical materialization requires --live or both fixture paths")
-        catalogue = generate_catalogue_from_fixture(
-            args.hydro_fixture,
-            args.temp_fixture,
-            catalogue_date=args.catalogue_date,
+    if args.hydro_retrieved_at is None or args.temperature_retrieved_at is None:
+        parser.error(
+            "--hydro-retrieved-at and --temperature-retrieved-at are required for fixture-native materialization"
         )
-    write_catalogue(catalogue, args.out)
+    outcome = refresh_native_table_from_fixtures(
+        args.hydro_fixture,
+        args.temp_fixture,
+        hydro_retrieved_at=args.hydro_retrieved_at,
+        temperature_retrieved_at=args.temperature_retrieved_at,
+    )
+    native_table = _raise_on_native_issues(outcome)
+    write_native_table(native_table, args.native_out)
+    written = read_native_table(args.native_out)
+    print(native_table_content_digest(written))
     return 0
 
 
