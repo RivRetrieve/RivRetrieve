@@ -97,6 +97,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("za_dws"),
     }
 )
+"""The eleven providers certified by this vision. br_ana and no_nve were deliberately deferred by the 2026-08-03 human scope ruling and remain unenrolled for a separate effort ticket."""
 
 
 def validate_catalogue_origins(

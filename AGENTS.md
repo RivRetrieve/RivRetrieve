@@ -81,6 +81,8 @@ pl_testing.assert_frame_equal(result_df, expected_df)
 Packaged catalogue generation has two regimes, keyed on whether the provider has both a committed
 native table and origin declarations.
 
+Origin certification for this vision closes over eleven providers. br_ana and no_nve are deliberately deferred by the operator's 2026-08-03 scope ruling to a separate effort ticket; they remain outside ORIGIN_GATE_ENROLLED_PROVIDERS, not overlooked. The enrolment gate remains because removing it would silently treat deferred providers as certified.
+
 The committed native table carries provenance. Produce it with the provider's `refresh` operation
 against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
 when that fixture has been verified content-identical to a live payload and the repository record
@@ -597,9 +599,10 @@ native table and origins, and commit the resulting canonical artifacts alongside
 
 ### 4.2 Providers not yet migrated
 
-For a provider without both a committed native table and origin declarations (currently the other
-two: `br_ana` and `no_nve`), the four canonical packaged catalogue artifacts must be
-generated from the live provider API before the provider is committed.
+Exactly two providers, `br_ana` and `no_nve`, remain without both a committed native table and origin
+declarations. Their legacy catalogue generation remains outside this certification, and their four
+canonical packaged catalogue artifacts must be generated from the live provider API before the
+provider is committed.
 
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must

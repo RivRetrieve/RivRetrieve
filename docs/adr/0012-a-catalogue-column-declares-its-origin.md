@@ -39,9 +39,14 @@ bug it exists to catch. Absence from a payload proves only how we asked, and the
 payload genuinely contains no period of record, so a payload-only check would certify the
 false claim cleanly. A person reads the source's documentation once and links it.
 
-## Consequence: the build stays red until all thirteen are declared
+## Consequence: the build stays red until every enrolled provider is declared
 
-There is no half-landed state in which the rules exist and some providers are undeclared.
-Brazil's availability is fixed because no honest evidence link can be written for it, and
-USGS's request is corrected for the same reason. Those two providers are 64% of the
-284,399 `unknown` rows in `station_products`.
+On 2026-08-03 the operator deferred `br_ana` and `no_nve` to a separate effort ticket.
+The complete-provider rule quantifies over `ORIGIN_GATE_ENROLLED_PROVIDERS`: all eleven
+enrolled members must be completely declared, while the two deferred providers are
+intentionally unenrolled rather than compliant. There is no half-landed state within
+`ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled set is completely
+declared, while the explicitly deferred `br_ana` and `no_nve` remain outside that set.
+Brazil's availability must ultimately be fixed because no honest evidence link can be
+written for it, and USGS's request was corrected for the same reason. Those two providers
+are 64% of the 284,399 `unknown` rows in `station_products`.
