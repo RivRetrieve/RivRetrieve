@@ -98,6 +98,72 @@ the deterministic canonicalization and ordering rules, SHA-256 evidence, and a s
 comparison between the committed native content and a fresh materialization of the complete supplied
 response.
 
+A fourth sanctioned route is a recovered historical import whose complete committed payload cannot
+be reproduced from publisher routes. Its repository record must name the third-party materialization
+and exact commit, establish raw-byte SHA-256 identity, use a defensible provenance lower-bound instant,
+cross-check the complete identifier set against an independent live source, and measure coverage,
+precision, and agreement against every available publisher route. This route is closed to every
+provider whose complete committed payload can be reproduced by a publisher route. It is permitted only
+where the repository record explicitly establishes why every available publisher route is insufficient;
+a partial or coarser live route does not by itself close the recovered route.
+
+- Poland recovered native-table attestation: `tests/test_data/pl_imgw_stations.csv` is byte-identical
+  to `rivretrieve/cached_site_data/poland_sites.csv` in `kratzert/RivRetrieve-Python` at commit
+  `f67f6d8507a55144bf235feb3f27f65648b90f83`. It contains 1,301 recovered rows and has raw SHA-256
+  `8c4cdd675c2811cd3b91a5889cbcd4273830c2fa4ee90ad6142c69ba7a198f49`. That upstream commit's
+  timestamp, `2025-10-10T18:46:34Z`, is the native rows' defensible provenance lower bound. The
+  IMGW-to-GRDC email delivery and `hydrodownloadR`'s later `Metadata_GRDC_30.10.2025.xlsx`
+  materialization corroborate the recovery. The later spreadsheet is not established as the fixture's
+  exact delivery, and its later `source_stamp` is not the native timestamp. Provenance is recovered,
+  so an unestablished-provenance escalation is unnecessary. The coordinates in `bczernecki/climate`
+  are a different, falsified candidate dataset and are not the geometry source.
+
+  The orchestrator retrieved
+  `GET https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_stacji_hydro.csv`
+  outside the executor sandbox at `2026-08-02T19:54:27Z`. The response has 66,632 raw bytes,
+  SHA-256 `4b401f44942b59ac82b4485d07194215d5847127aefc8ba911386720a7e24755`, and 1,301
+  CP1250, headerless, comma-delimited, quoted four-column rows. Stripping only leading whitespace
+  from station identifiers yields 1,301 unique nine-character identifiers. Sorting those identifiers,
+  serializing the list as compact JSON with separators `(",", ":")`, and UTF-8 encoding it yields
+  SHA-256 `1afe2782a67081642aabebd40b0b7547e7c3b9231fb26a79b738175860a3fc20`, exactly equal to
+  the recovered identifier set. The roster contains no geometry and contributes none to the native rows.
+
+  The orchestrator also supplied `inputs/apiinfo.html`, `inputs/kody_stacji.csv`, and
+  `inputs/hydro_api.json`; fresh-clone tests consume their byte-identical committed copies
+  `tests/test_data/pl_imgw_apiinfo.html`, `tests/test_data/pl_imgw_kody_stacji.csv`, and
+  `tests/test_data/pl_imgw_hydro_api.json`. All were captured at `2026-08-02T18:45:32Z`:
+  `GET https://danepubliczne.imgw.pl/pl/apiinfo` returned 37,075 HTML bytes with SHA-256
+  `9b82e28e580d4b22ab6475e129f4dd6d798a0c860d52b9e2f9d2bc3098418d9c`;
+  `GET https://danepubliczne.imgw.pl/datastore/getfiledown/Arch/Telemetria/Hydro/kody_stacji.csv`
+  returned 68,371 bytes and 887 unique stations in clean UTF-8, semicolon-delimited CRLF form with
+  whole-arc-second DMS coordinates, with SHA-256
+  `0ffbaa1cbda89bf9092d728552cce63ae95fd830d16b8e98d5b8de9d4b57aab5`; and
+  `GET https://danepubliczne.imgw.pl/api/data/hydro/?format=json` returned 554,065 JSON bytes and
+  913 published station rows, 32 with zero or absent coordinates, with SHA-256
+  `e2b61c8772ca53e8a39a9296362b0ba1b87205afbf156b49691fb6f86679eb1f`.
+
+  The 881 API rows with usable non-zero coordinates have IDs that are a subset of the 887
+  `kody_stacji.csv` IDs, and therefore the 779 API-covered committed stations are a subset of the
+  784 CSV-covered committed stations. The 32 zero-or-absent-coordinate API rows are exactly the 32
+  published API IDs absent from the CSV. Separately, of all 913 published API IDs, 106 are absent
+  from the 1,301-station recovered/roster set. Publisher-route union coverage is 784 and leaves 517
+  recovered stations uncovered. Deterministic DMS conversion uses
+  `degrees + minutes / 60 + seconds / 3600`; at `1.5 / 3600` degrees absolute tolerance on each axis,
+  zero of 784 pairs are exact, 779 agree on both axes, and five are accepted disagreements. Station
+  `154180190` is worst at a maximum absolute axis difference of approximately `0.0053675` degrees
+  (`0.0054` degrees). The 913-row JSON is rejected as replacement geometry because it is partial,
+  includes 32 unusable coordinate rows, and does not reproduce the recovered population or precision.
+
+  The recovered import is sanctioned because the live publisher route covers only 784 of the 1,301 committed stations (60%), leaves 517 stations (40%) without publisher-published coordinates, and publishes only whole-arc-second coordinates where the recovered import provides all 1,301 stations at finer precision, so the live route cannot reproduce the committed catalogue.
+
+  The committed native table preserves the seven source columns in declared order, sorts rows by exact
+  `gauge_id`, and appends the single UTC-microsecond lower-bound `retrieved_at`. Its content digest is
+  computed from an object containing columns in exact schema order and positional rows sorted by
+  `gauge_id`; timestamps have exactly six fractional digits and `Z`, and compact JSON uses sorted object
+  keys, separators `(",", ":")`, `ensure_ascii=False`, and UTF-8. The full-frame SHA-256 is
+  `c7fb3582edcc4b66a154d5dac52acd22d2847cd04ed54f5ee94fbf7c8bc6d9ec`, recomputed from the
+  Parquet reread in the same run that writes it.
+
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
