@@ -6,7 +6,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 import polars as pl
 import polars.testing as pl_testing
@@ -36,7 +36,9 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     CODE_PROJECTION_31_METROPOLITAN_BOUNDS,
     CRS_EVIDENCE_URL,
     FRANCE_ORIGIN_DECLARATIONS,
+    HYDROMETRY_STATION_CATALOGUE_ORIGINS,
     TEMPERATURE_CRS_EVIDENCE_URL,
+    TEMPERATURE_STATION_CATALOGUE_ORIGINS,
 )
 
 _TEST_DATA_DIR = Path(__file__).parent / "test_data"
@@ -89,6 +91,60 @@ def _assert_issue(result: object, message: str) -> None:
 
 def _catalogue():
     return build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS)
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "endpoint_origins"),
+    [
+        ("hydrometrie/referentiel/stations", HYDROMETRY_STATION_CATALOGUE_ORIGINS),
+        ("temperature/station", TEMPERATURE_STATION_CATALOGUE_ORIGINS),
+    ],
+    ids=["hydrometry", "temperature"],
+)
+def test_native_build_enforces_each_endpoint_origin_declaration(
+    endpoint: str,
+    endpoint_origins: dict[str, object],
+) -> None:
+    broken = dict(endpoint_origins)
+    del broken["longitude"]
+    origins = {
+        "hydrometrie/referentiel/stations": HYDROMETRY_STATION_CATALOGUE_ORIGINS,
+        "temperature/station": TEMPERATURE_STATION_CATALOGUE_ORIGINS,
+        endpoint: broken,
+    }
+
+    with pytest.raises(
+        FatalContractError,
+        match=r"^fr_hubeau\.longitude: canonical column has no origin declaration$",
+    ):
+        build_catalogue(read_native_table(NATIVE_PATH), origins)
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "partition", "remaining", "expected"),
+    [
+        ("hydrometrie/referentiel/stations", "hydrometry", 6453, 6454),
+        ("temperature/station", "temperature", 868, 869),
+    ],
+    ids=["hydrometry", "temperature"],
+)
+def test_native_build_enforces_each_partition_census(
+    endpoint: str,
+    partition: str,
+    remaining: int,
+    expected: int,
+) -> None:
+    native = read_native_table(NATIVE_PATH)
+    row_to_remove = native.data.filter(pl.col("source_endpoint") == endpoint).row(0, named=True)
+    shortened = NativeTable(
+        native.data.filter(
+            ~((pl.col("source_endpoint") == endpoint) & (pl.col("code_station") == row_to_remove["code_station"]))
+        )
+    )
+
+    with pytest.raises(FatalContractError) as raised:
+        build_catalogue(shortened, FRANCE_ORIGIN_DECLARATIONS)
+    assert str(raised.value) == (f"fr_hubeau native {partition} partition has {remaining} rows; expected {expected}")
 
 
 def test_generate_catalogue_station_count() -> None:
@@ -738,9 +794,9 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
     assert all(row["geometry"]["crs"] is not None for row in temperature["data"])
     assert {row["geometry"]["crs"]["properties"]["name"] for row in temperature["data"]} == {crs_name}
 
-    for declaration_url, capture in (
-        (CRS_EVIDENCE_URL, geojson),
-        (TEMPERATURE_CRS_EVIDENCE_URL, temperature),
+    for declaration_url, capture, pagination_parameters in (
+        (CRS_EVIDENCE_URL, geojson, [("page", "1"), ("size", "1000")]),
+        (TEMPERATURE_CRS_EVIDENCE_URL, temperature, [("page", "1")]),
     ):
         declared = urlsplit(declaration_url)
         captured = urlsplit(capture["first"])
@@ -749,9 +805,9 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
             captured.netloc,
             captured.path,
         )
-        declared_query = parse_qs(declared.query)
-        captured_query = parse_qs(captured.query)
-        assert all(captured_query[key] == value for key, value in declared_query.items())
+        declared_query = Counter(parse_qsl(declared.query, keep_blank_values=True))
+        captured_query = Counter(parse_qsl(captured.query, keep_blank_values=True))
+        assert captured_query == declared_query + Counter(pagination_parameters)
 
     openapi = _full_payload(_OPENAPI_EVIDENCE)
     station_properties = openapi["definitions"]["Station hydrométrique"]["properties"]
