@@ -1,5 +1,7 @@
+import hashlib
 import typing
 from dataclasses import FrozenInstanceError
+from html.parser import HTMLParser
 from pathlib import Path
 
 import polars as pl
@@ -30,12 +32,30 @@ from rivretrieve._internal.providers.ca_eccc.origins import (
 )
 from rivretrieve._internal.providers.lt_lhmt.generate_catalogue import build_stations
 from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS as LT_STATION_ORIGINS
+from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import build_stations as build_thai_stations
+from rivretrieve._internal.providers.th_thaiwater.origins import (
+    CRS_EVIDENCE_URL as THAI_CRS_EVIDENCE_URL,
+)
+from rivretrieve._internal.providers.th_thaiwater.origins import (
+    STATION_CATALOGUE_ORIGINS as THAI_STATION_ORIGINS,
+)
 from rivretrieve._internal.providers.usgs_nwis.origins import (
     STATION_CATALOGUE_ORIGINS as USGS_STATION_CATALOGUE_ORIGINS,
 )
 
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 CANADA_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
+THAI_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
+THAI_COORDINATE_EVIDENCE_PATH = Path("tests/test_data/th_thaiwater_coordinate_standard.html")
+
+
+class _CanonicalLinkParser(HTMLParser):
+    canonical_url: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "link" and attributes.get("rel") == "canonical":
+            self.canonical_url = attributes.get("href")
 
 
 def test_field_carries_an_exact_native_column_and_is_immutable() -> None:
@@ -180,7 +200,9 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa_switzerland_and_usgs() -> None:
+def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa_switzerland_thailand_and_usgs() -> (
+    None
+):
     assert (
         frozenset(
             {
@@ -189,6 +211,7 @@ def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa
                 ProviderId("ch_foen"),
                 ProviderId("cz_chmi"),
                 ProviderId("lt_lhmt"),
+                ProviderId("th_thaiwater"),
                 ProviderId("usgs_nwis"),
                 ProviderId("za_dws"),
             }
@@ -262,6 +285,35 @@ def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
         "longitude": Field(NativeColumn("dec_long_va")),
         "crs": Field(NativeColumn("dec_coord_datum_cd")),
     } == USGS_STATION_CATALOGUE_ORIGINS
+
+
+def test_thailand_declarations_match_schema_and_committed_coordinate_evidence() -> None:
+    parser = _CanonicalLinkParser()
+    capture_bytes = THAI_COORDINATE_EVIDENCE_PATH.read_bytes()
+    capture = capture_bytes.decode("utf-8")
+    parser.feed(capture)
+
+    assert len(capture_bytes) == 607_845
+    assert hashlib.sha256(capture_bytes).hexdigest() == (
+        "64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04"
+    )
+    assert tuple(THAI_STATION_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("station.id")),
+        "station_id": Field(NativeColumn("station.id")),
+        "latitude": Field(NativeColumn("station.tele_station_lat")),
+        "longitude": Field(NativeColumn("station.tele_station_long")),
+        "crs": NotPublished(Evidence(THAI_CRS_EVIDENCE_URL)),
+    } == THAI_STATION_ORIGINS
+    assert parser.canonical_url == THAI_CRS_EVIDENCE_URL
+    assert THAI_CRS_EVIDENCE_URL in capture
+
+
+def test_committed_thailand_origins_pass_validation() -> None:
+    native_table = read_native_table(THAI_NATIVE_PATH)
+    stations = build_thai_stations(native_table)
+
+    assert validate_catalogue_origins(ProviderId("th_thaiwater"), THAI_STATION_ORIGINS, native_table, stations) == []
 
 
 def test_czech_declarations_match_canonical_schema_order_and_values() -> None:

@@ -37,8 +37,8 @@ _BASE_RUNTIME_FILE_COUNTS = Counter(
     {
         "__init__.py": 13,
         "module.py": 13,
-        "metadata.py": 8,
-        "origins.py": 6,
+        "metadata.py": 9,
+        "origins.py": 5,
         "issue_codes.py": 11,
         "config.py": 2,
         "fetch.py": 2,
@@ -47,9 +47,20 @@ _BASE_RUNTIME_FILE_COUNTS = Counter(
         "parser.py": 1,
     }
 )
+# Providers migrated to declared origins since the base inventory above. Each one adds an
+# `origins.py` and removes a `metadata.py`. They are named individually, and one per line, so that
+# two branches enrolling DIFFERENT providers merge as a union. An anonymous `+= 1` on both sides is
+# byte-identical text, so git deduplicates it and the count silently under-reports by one for every
+# enrolment beyond the first -- which is exactly what happened merging Thailand into a main that
+# already carried Bosnia and South Africa.
+_MIGRATED_SINCE_BASE = (
+    "ba_fhmzbih",
+    "th_thaiwater",
+    "za_dws",
+)
 RUNTIME_FILE_COUNTS = _BASE_RUNTIME_FILE_COUNTS.copy()
-RUNTIME_FILE_COUNTS["origins.py"] += 1
-RUNTIME_FILE_COUNTS["metadata.py"] -= 1
+RUNTIME_FILE_COUNTS["origins.py"] += len(_MIGRATED_SINCE_BASE)
+RUNTIME_FILE_COUNTS["metadata.py"] -= len(_MIGRATED_SINCE_BASE)
 
 
 def _runtime_provider_files() -> list[Path]:
