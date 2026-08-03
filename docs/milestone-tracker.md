@@ -428,7 +428,7 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Provider ID:** `fr_hubeau`
 - **Status:** Shipped. Registered alongside `ch_foen`, `lt_lhmt`, `usgs_nwis`, `cz_chmi`, and `th_thaiwater` in `_ensure_default_providers_registered()`. All 601 tests pass (30 fr_hubeau-specific).
 - **Products ported:** `discharge_daily_mean` (grandeur `QmnJ`, l/s ÷ 1000 → m³/s), `stage_daily_max` (grandeur `HIXnJ`, mm ÷ 1000 → m).
-- **Stations:** 6420 (2026-06-03 live catalogue from Hubeau `referentiel/stations?in_use=true`, with valid coordinates).
+- **Stations:** 7,323 canonical stations from committed `native.parquet`: 6,454 hydrometry plus 869 disjoint temperature rows, retrieved on 2026-08-02.
 - **Key decisions:**
   - Direct Hubeau public REST API. 365-day window decomposition per `MAX_WINDOW_DAYS = 365`.
   - **Pagination**: Both the station catalogue endpoint and the obs_elab observation endpoint use cursor-based pagination via a `"next"` field in the response body. HTTP 206 (Partial Content) is returned for paginated results — this is not an error. The retrieval layer follows `next_url` until `None`.
@@ -437,9 +437,9 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
   - Elevation in m and drainage area in km² available directly from station catalogue (nullable).
   - Overseas DOM-TOM stations (Guadeloupe, Martinique, etc.) included under `country="France"`.
   - No auth token; public Hubeau Open API.
-  - Stations without valid coordinates filtered out at catalogue-generation time.
+  - Both complete station captures have zero null coordinate rows; no station is filtered. Native values remain verbatim, while the canonical build transposes exactly the evidenced 54 `code_projection == 31` rows and passes every other coordinate through unchanged.
   - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
-  - Live station minimum guard: 500 stations (conservative; live catalogue returned 6420).
+  - Live station minimum guard: 500 stations (a retained conservative refresh floor, not the canonical count).
 - **Port notes:** `docs/provider_ports/fr_hubeau.md`.
 - **Fixtures:** `tests/test_data/fr_hubeau_metadata.json` (2 stations with coordinates + 1 without, fixture), `tests/test_data/fr_hubeau_O0050010_QmnJ_2020.json` (3 daily discharge observations for station `O0050010`).
 - **Architecture.md impact:** None. Date-only timestamp/UTC-midnight pattern is provider-specific (same as lt_lhmt). Pagination is provider-specific. Unit conversions (l/s, mm) are provider-specific. No shared harness gap discovered.

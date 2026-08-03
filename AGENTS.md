@@ -167,7 +167,8 @@ a partial or coarser live route does not by itself close the recovered route.
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `ba_fhmzbih`,
-`ca_eccc`, `ch_foen`, `cz_chmi`, `lt_lhmt`, `pl_imgw`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
+`ca_eccc`, `ch_foen`, `cz_chmi`, `fr_hubeau`, `jp_mlit`, `lt_lhmt`, `pl_imgw`, `th_thaiwater`,
+`usgs_nwis`, and `za_dws`), the four
 canonical packaged catalogue artifacts (`catalogue/provider.json`, `catalogue/products.parquet`,
 `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
@@ -468,14 +469,138 @@ supplied live JSON, or a fixture-backed canonical route.
   fields `station_gauge_datum`, `GAUGE_DATUM`, and `GWREF_DATUM` are vertical metre elevations, not
   horizontal coordinate reference systems.
 
+- Japan native-table capture attestation: the
+  orchestrator performed the endpoint-expanded 1,024-request capture outside the executor sandbox.
+  Its request seed was exactly the sorted unique station ids in
+  `jp_mlit/catalogue/stations.parquet` at `origin/main` / `22ff07c`, containing 1,024 ids; the compact
+  sorted JSON id list (sorted keys, separators `(",", ":")`, `ensure_ascii=False`, UTF-8) has
+  SHA-256 `e7930a7c374c5b3efe1f066eb4ccf511c0c7690c30afc2f7b2583d26d2b6981e`. This is a
+  reproducible 1,024-row legacy subset, not MLIT's complete 2,456-station enumeration. Each request
+  used `GET http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=<station_id>`. Responses are decoded
+  with strict EUC-JP, and acceptance requires HTTP 200 plus the EUC-JP bytes for `世界測地系`.
+  The accepted-response retrieval window was `2026-08-02T19:35:42Z` through
+  `2026-08-02T19:50:44Z`; the manifest campaign itself ended at `2026-08-02T19:50:45Z`.
+  Each manifest entry's whole-second UTC instant is authoritative, yielding 902 distinct accepted
+  instants; the manifest format carries no sub-second component.
+  The truthful arithmetic is 1,024 requested, 1,023 published, and one source-confirmed absence.
+  The corresponding unpunctuated count bindings are `requested=1024` and `published=1023`.
+  Station `307051287711040` returned HTTP 200 with a 489-byte body lacking the marker and SHA-256
+  `2e83eed5a64cf91d9351f2abc28c151dec420a24265dd9db194fd7132bd31faf`; the byte-identical body is
+  tracked separately as `tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html`.
+
+  The complete manifest object and all reverified response bindings have canonical SHA-256
+  `d935586b317cdf234760959c9e97788803bfda9cea2ff6551beaefaeb6e20d21`. Native rows retain the
+  deterministic fifteen-column schema order, sort by exact `観測所記号`, carry each accepted
+  request's whole-second UTC instant, and preserve source null, empty-string, and non-breaking-space
+  states distinctly. The published sorted-id digest is
+  `9016935eea6c6c7b3c56ee280a1467f74b4d7b60f2fc10f17e1ed3baa0fb42bd`; the sorted station/whole-second
+  timestamp-pair digest is `0f742e2f37bb9c6bfffb7e0d109f8025e5350e6416175c983e79bf8fb8b6fdd0`; and the complete native-frame
+  digest is `f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268602aec0`. The committed native
+  Parquet is a semantic materialization of all 1,023 accepted supplied responses, not of a fixture,
+  and was compared with exact frame equality against a fresh complete supplied-response
+  materialization.
+
+  Two accepted response bodies are tracked as independent parser witnesses. Station
+  `301031281101220` is `tests/test_data/jp_mlit_site_info_detail_accepted_301031281101220.html`,
+  3,175 bytes with SHA-256
+  `bb9caa28f43a8c94f9c65c4929f6677b85266a4c0140ba2082254361f4954da3`; its `日本測地系`
+  cell contains a bare `<BR>`. Station `301011281104310` is
+  `tests/test_data/jp_mlit_site_info_detail_accepted_301011281104310.html`, 3,199 bytes with
+  SHA-256 `2727f485592f5cbf0fa31538a150c5ca2a6a571d12f224658629c821d27a9dd7`; its `流域面積`
+  cell contains an NBSP. Both are byte-identical copies from the accepted supplied capture, and tests
+  refresh them through the production parser and compare the result exactly with the committed native
+  rows.
+
+  Exactly three previously packaged coordinates diverged from the committed source DMS coordinates:
+  `302011282228100` was packaged as `37.424166666666665, 140.52472222222224` versus source
+  `37.415277777777774, 140.48333333333332` (about 3.79 km); `302011282218050` was packaged as
+  `37.81055555555555, 140.49499999999998` versus source
+  `37.81111111111111, 140.4958333333333` (about 96 m); and `308011288805010` was packaged as
+  `33.78361111111111, 132.87416666666667` versus source
+  `33.78333333333333, 132.8738888888889` (about 40 m).
+
+  `tests/test_data/jp_mlit_metadata.json` is only the exact three-record subset for ids
+  `301011281104010`, `303051283310060`, and `309191289913130`, with SHA-256
+  `5002cbc510e9dc4946e740286011b0c4d7bb76fe6d115c5fed715816c6144926`; nothing was materialized
+  from that fixture. Both `世界測地系` and `日本測地系` remain source vocabulary, the former-system
+  pair is never consumed, and no EPSG or datum inference is made. This Japan attestation states nine
+  SHA-256 digests; tests hard-code eight of them, while the complete-manifest digest remains an
+  attested provenance binding rather than a test literal. Its packaged `crs` is `unknown`, declared
+  by the present-tense `crs: NotPublished` Origin with the station-detail page as Evidence.
+
 After writing provider code and tests, run that provider's network-free build from its committed
 native table and origins, and commit the resulting canonical artifacts alongside the code.
+
+- France native-table attestation: the orchestrator performed seven paged GETs outside the executor
+  sandbox at `2026-08-02T17:32:58Z`, each returning `HTTP 206 Partial Content`:
+  `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=1&format=json`,
+  `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=2&format=json`,
+  `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=3&format=json`,
+  `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=4&format=json`,
+  `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=5&format=json`,
+  `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=6&format=json`, and
+  `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=7&format=json`.
+  Pages returned 1000 × 6 + 454 = 6,454 rows, every page's `count` reported 6454, all 6,454
+  non-empty string `code_station` values were unique, and paging terminated on the absence of a
+  `next` link. Canonicalization sorts rows by `code_station`, then applies
+  `json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8 encoded,
+  producing SHA-256 `fb3ea87f634554d4d679e5a422c1e5c5df80442f8f3c7a549e4d8bd0fa964c46`.
+  Verified twice, by an independent live re-fetch. A fresh seven-page paged fetch was performed and
+  its canonical digest compared against the staged capture on disk; the two are byte-identical.
+
+  The orchestrator also performed
+  `GET https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json` outside the
+  executor sandbox at `2026-08-02T17:33:34Z`. The `HTTP 200` response was 1,381,753 bytes and
+  contained 869 stations, its `count` reported 869, all IDs were unique, and the single request was
+  complete without paging. Canonicalization sorts `data` rows by `code_station`, then uses the same
+  `json.dumps` / UTF-8 procedure, producing SHA-256
+  `125e4dee1b6ccf3fd17c800f170fc9cd8dc25244091773bb36ff9b61bc89ac2a`.
+  Verified twice, by an independent live re-fetch. The capture was re-requested live and its
+  canonical digest compared against the staged copy on disk; the two matched.
+
+  The documentation evidence consists of two further orchestrator requests outside the executor.
+  `GET https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1011000101&format=geojson`
+  at `2026-08-02T17:33:42Z` returned `HTTP 200` and 1,924 bytes. Canonicalization uses
+  `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, UTF-8, producing
+  SHA-256 `51f0259e182d2002c9a2352e2616d7ef20d5ffbdb830da725add3ecf8f52a7b7`.
+  Verified twice, by an independent live re-fetch. The capture was re-requested live and its
+  canonical digest compared against the staged copy on disk; the two matched.
+  `GET https://hubeau.eaufrance.fr/api/v2/hydrometrie/api-docs` at `2026-08-02T17:33:43Z` returned
+  `HTTP 200` and 117,460 bytes. Canonicalization: as above. Its SHA-256 is
+  `4e668183a03a674e9d12a7a4152781f05167eee43002da188738a173e09c5b02`.
+  Verified twice, by an independent live re-fetch. The capture was re-requested live and its
+  canonical digest compared against the staged copy on disk; the two matched. Every canonical digest
+  was independently reproduced by a fresh live re-fetch outside the executor, and the staged bytes
+  were reproduced exactly.
+
+  The committed full JSON bytes in `tests/test_data/fr_hubeau_referentiel_stations_full.json`,
+  `tests/test_data/fr_hubeau_temperature_stations_full.json`,
+  `tests/test_data/fr_hubeau_geojson_crs_evidence.json`, and
+  `tests/test_data/fr_hubeau_openapi_v2.json` are the reviewable captures. The two station captures
+  supply native rows; GeoJSON and OpenAPI are documentation evidence only. The canonical catalogue
+  contains the complete `7,323 = 6,454 hydrometry + 869 disjoint temperature` station union. The
+  `7,289 = 6,420 + 869` result was the superseded pre-m10-s3 shipping state; the hydrometry response
+  grew by 34 genuine stations and the retracted 835-row-loss interpretation is false.
+
+  Native materialization sorts by exact `code_station`, preserves both endpoint vocabularies without
+  renaming, coalescing, or correction, appends exact `source_endpoint` and endpoint-specific
+  UTC-microsecond `retrieved_at`, uses the ordered 73-column schema, and requires exact semantic frame
+  comparison against both station captures. The full-frame digest serializes an object containing the
+  ordered `columns` and every positional `rows` array; nested list and struct order and values are
+  retained, UTC datetimes are RFC 3339 with exactly six fractional digits and `Z`, and JSON uses sorted
+  object keys, compact separators, `ensure_ascii=False`, and `allow_nan=False`. Its SHA-256 is
+  `f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322`. All 54 rows where
+  `code_projection == 31`, including `H000000201`, remain source-faithful in `native.parquet` despite
+  the documented upstream transposition; the pure, network-free canonical build transposes exactly
+  those 54 rows and otherwise preserves source coordinates. France's four canonical artifacts are a
+  pure function of the committed native material and its two endpoint-specific origin declarations.
 
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
-four: `br_ana`, `fr_hubeau`, `jp_mlit`, and `no_nve`), the four canonical packaged
-catalogue artifacts must be generated from the live provider API before the provider is committed.
+two: `br_ana` and `no_nve`), the four canonical packaged catalogue artifacts must be
+generated from the live provider API before the provider is committed.
+
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
