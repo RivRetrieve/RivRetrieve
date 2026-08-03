@@ -93,20 +93,54 @@ method, and SHA-256 digest.
 
 An orchestrator may also perform a live fetch outside a network-disabled executor and supply the
 complete response as a step input. This route is sanctioned only when the same repository record
-contains every exact request URL, one UTC retrieval instant, the accepted row and station counts,
+contains every exact request URL, one UTC retrieval instant per supplied file, or a single campaign instant when the fetch is atomic, the accepted row and station counts,
 the deterministic canonicalization and ordering rules, SHA-256 evidence, and a semantic frame
 comparison between the committed native content and a fresh materialization of the complete supplied
 response.
 
 ### 4.1 Providers with a committed native table and origins
 
-For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
-`ch_foen`, `cz_chmi`, `lt_lhmt`, `th_thaiwater`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
-`catalogue/products.parquet`, `catalogue/stations.parquet`, and
+For a provider with both a committed native table and origin declarations (currently `ba_fhmzbih`,
+`ca_eccc`, `ch_foen`, `cz_chmi`, `lt_lhmt`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
+canonical packaged catalogue artifacts (`catalogue/provider.json`, `catalogue/products.parquet`,
+`catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
 the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
 would reintroduce the nondeterminism the pure build removes. In particular, future USGS canonical
 generation must use its committed `native.parquet`, never `--live` or supplied RDB payloads.
+
+- South Africa DWS native-table attestation: the live host returned HTTP 403 to the orchestrator from
+  two independent egress points; the network-disabled executor did not perform a fetch. The
+  orchestrator supplied these nine Internet Archive captures, each with its own UTC retrieval instant:
+
+| File | Archived request URL | Origin URL | Snapshot | Bytes | SHA-256 | Retrieved at |
+|---|---|---|---:|---:|---|---|
+| `HyCatalogue.aspx` | `http://web.archive.org/web/20260311133455id_/https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx` | `https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx` | `20260311133455` | 6,778 | `6cf0495ce6ef31bba2d0e746cc8c001d91a8ac8b2c4e634b57f9099d5edafc71` | `2026-08-02T18:47:00Z` |
+| `WMA1_Limpopo-Olifants_River.pdf` | `http://web.archive.org/web/20251122081546id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf` | `20251122081546` | 977,280 | `b6efb89b9f74e0fe9bdca4f2984ce008d77b8f5692fd359a485b9ea4d8ad06a8` | `2026-08-02T18:47:01Z` |
+| `WMA2_Inkomati-Usuthu_River.pdf` | `http://web.archive.org/web/20251127140120id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA2_Inkomati-Usuthu_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA2_Inkomati-Usuthu_River.pdf` | `20251127140120` | 449,874 | `16186305a3fff3bdda90eaf0889827a773014837bdbb4cb2ab0f0ae1a2a360cf` | `2026-08-02T18:47:02Z` |
+| `WMA3_Pongola-Mtamvuna_River.pdf` | `http://web.archive.org/web/20251127181748id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA3_Pongola-Mtamvuna_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA3_Pongola-Mtamvuna_River.pdf` | `20251127181748` | 689,780 | `b9f0e0445484c980b708ff78c7a1cc8803a7d10f4d73c33925d5cae184611c8c` | `2026-08-02T18:47:03Z` |
+| `WMA4_Vaal-Orange_River.pdf` | `http://web.archive.org/web/20251126040946id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA4_Vaal-Orange_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA4_Vaal-Orange_River.pdf` | `20251126040946` | 1,179,466 | `dc502341aaf4928def221e32dc9543fd5a9f982aee9df7de4950e95805cf5bc3` | `2026-08-02T18:47:04Z` |
+| `WMA5_Mzimvubu-Tsitsikamma_River.pdf` | `http://web.archive.org/web/20251127142153id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA5_Mzimvubu-Tsitsikamma_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA5_Mzimvubu-Tsitsikamma_River.pdf` | `20251127142153` | 671,281 | `0d76cedcfdafe2ce9dc8e93eef909e288f6826d7ab729a4856b1cb3c6e0fdde0` | `2026-08-02T18:47:05Z` |
+| `WMA6_Breede-Olifants_River.pdf` | `http://web.archive.org/web/20251121090856id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA6_Breede-Olifants_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA6_Breede-Olifants_River.pdf` | `20251121090856` | 930,945 | `6fb1d753b22bb4fbe038913249d0c2c8b58a619df35754918061c52163acd91e` | `2026-08-02T18:47:06Z` |
+| `WMA7_Eswatini_River.pdf` | `http://web.archive.org/web/20251121161554id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA7_Eswatini_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA7_Eswatini_River.pdf` | `20251121161554` | 192,256 | `f820f9002cdba9a0f44b1ac98b1d160b2755dc0ddb27713bac6c435d3c8a7e86` | `2026-08-02T18:47:07Z` |
+| `WMA8_Lesotho_River.pdf` | `http://web.archive.org/web/20251121113702id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA8_Lesotho_River.pdf` | `https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA8_Lesotho_River.pdf` | `20251121113702` | 214,048 | `9511f46b79d172a2e2540d90bb1679b93670ce75e9b0dc8660f1fde78277ee26` | `2026-08-02T18:47:09Z` |
+
+  All manifest HTTP statuses are 200. Deterministic PDF text parsing produces respectively 544, 210,
+  417, 702, 406, 567, 19, and 40 rows, totaling 2,905 rows and 2,905 unique `Station` values. It
+  repairs 40 standard-code rows lost because their drainage region is blank plus the suffixed codes
+  `A2H090Q` and `B6H018M01`. The schema, in order, is `Station`, `Description`,
+  `Latitude (dd:mm:ss)`, `Longitude (dd:mm:ss)`, `Drainage Region`, `Catchment Area km**2`,
+  `WMA source-file identity`, and UTC-microsecond `retrieved_at`. Source DMS and catchment strings,
+  null drainage regions, and exact PDF filenames remain unchanged; rows sort by exact `Station`, and
+  each row carries its originating PDF's retrieval instant. Full-table canonicalization emits a
+  compact UTF-8 JSON outer list of row lists in schema and row order, with `ensure_ascii=False`,
+  `allow_nan=False`, JSON nulls, and UTC datetimes rendered with exactly six fractional digits and
+  `Z`. Its SHA-256 is `7949369cf573d675cf8cb2374fa172038e10e492299572df442834d6a08e40fc`.
+  Fresh materialization of all supplied bytes is exactly semantically frame-equal to the committed
+  native table. `tests/test_data/za_dws_metadata.json` is the `A1H001`, `A2H090Q`, and `A8H017`
+  subset derived from `WMA1_Limpopo-Olifants_River.pdf`, whose attested SHA-256 is
+  `b6efb89b9f74e0fe9bdca4f2984ce008d77b8f5692fd359a485b9ea4d8ad06a8`; every fixture value is
+  identical to its corresponding committed-native row.
 
 - USGS native-table attestation: the orchestrator made the following 102 requests for the ordered
   51-code (50 states plus DC) `_US_STATE_CODES` scope at `2026-08-02T01:14:11Z`:
@@ -337,15 +371,43 @@ generation must use its committed `native.parquet`, never `--live` or supplied R
   never from `--live` or a fixture.
 
 
+- Bosnia native-table attestation: the orchestrator performed
+  `GET https://vodostaji.voda.ba/data/internet/layers/20/index.json` outside the executor sandbox at
+  `2026-08-02T12:42:03Z`, received 60 entries exactly matching the 60 committed stations, and supplied
+  the complete JSON response. Canonicalization uses
+  `json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)` encoded as UTF-8 and
+  produces SHA-256 `907817ca04d3d5626151d8f57478b90dc22f5503b29b8097106768aca942545f`.
+  The response combines station metadata with a volatile timeseries snapshot. The native table excludes
+  exactly `L1_label`, `L1_req_timestamp`, `L1_station_longname`, `L1_stationparameter_name`,
+  `L1_stationparameter_no`, `L1_timestamp`, `L1_ts_id`, `L1_ts_name`, `L1_ts_precision`,
+  `L1_ts_unitsymbol`, `L1_ts_value`, and `L1_web_flow_class`: `L1_ts_value`, `L1_timestamp`, and
+  `L1_req_timestamp` change on every fetch, and the `L1_*` group as a whole describes the volatile
+  timeseries snapshot rather than station metadata. The reproducible stable proof deletes those twelve
+  keys from each object, sorts by `metadata_station_no`, serializes with the same settings, and produces
+  SHA-256 `14ab47126fe40f16f23ddc66620fc8ae30910cd812c69806f867a851e659b23d`. All 18
+  `metadata_*` fields remain source-named strings, including blank elevation and uninterpreted
+  projected and local coordinate fields.
+
+- Bosnia publisher CRS-capture attestation: the orchestrator performed
+  `GET https://vodostaji.voda.ba/data/internet/stations/stations.json` outside the executor sandbox at
+  `2026-08-02T16:43:18Z`, received 230 station objects with one uniform 24-key keyset, and supplied the
+  complete JSON response. Canonicalization uses one
+  `json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)` call over the complete
+  parsed 230-element document, encoded as UTF-8, and produces SHA-256
+  `c78bd3b3aee2859eaef3c4373029fe7619a7d8e40b53fa0eab7f989ade3524bc`. The document carries
+  `station_latitude`, `station_longitude`, `station_carteasting`, `station_cartnorthing`,
+  `station_local_x`, and `station_local_y`, and contains zero horizontal-CRS tokens. Its datum-named
+  fields `station_gauge_datum`, `GAUGE_DATUM`, and `GWREF_DATUM` are vertical metre elevations, not
+  horizontal coordinate reference systems.
+
 After writing provider code and tests, run that provider's network-free build from its committed
 native table and origins, and commit the resulting canonical artifacts alongside the code.
 
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
-seven: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, and `za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
-API before the provider is committed.
-
+five: `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, and `pl_imgw`), the four canonical packaged
+catalogue artifacts must be generated from the live provider API before the provider is committed.
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
   never be used to generate the four canonical packaged catalogue artifacts.
