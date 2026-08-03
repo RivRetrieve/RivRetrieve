@@ -53,10 +53,10 @@ PUBLISHED_ID_DIGEST = "9016935eea6c6c7b3c56ee280a1467f74b4d7b60f2fc10f17e1ed3baa
 TIMESTAMP_PAIR_DIGEST = "0f742e2f37bb9c6bfffb7e0d109f8025e5350e6416175c983e79bf8fb8b6fdd0"
 NATIVE_FRAME_DIGEST = "f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268602aec0"
 CANONICAL_CONTENT_DIGESTS = {
-    "products.parquet": "06fec69adcd3b3f870ca6aeaf4188e8cd25a2c2a9175a36f2d275890d9412ae1",
+    "products.parquet": "fdb7bb41c6cc28656777ede3206d81b904f23a7adad946b110434deb638264bb",
     "stations.parquet": "43f0369f650ec971fa49d507998f3e4e6104e4644a21204c43cef85e2227f1cb",
-    "station_products.parquet": "236cd50c3b12b5a0a913214d69ff1e8f63346569e69b1b692cb787950225ff43",
-    "provider.json": "0964f893f66ed84af0cdfdb382e886c42e359f226298bf4cbf633a76cb0bd823",
+    "station_products.parquet": "9f0da43465de653becc5ee76946fc5526269894103a0183b16700a46a0751deb",
+    "provider.json": "322aa743d6f7b3b101a266f0873615e341fc93c0f494ae7ca9144f6edc72c19a",
 }
 NATIVE_SCHEMA = generate_catalogue.NATIVE_SCHEMA
 
@@ -173,15 +173,8 @@ def test_provider_specific_products_have_correct_frequency() -> None:
     assert row["statistic"][0] == "mean"
 
 
-def test_product_metadata_contains_kind() -> None:
-    for row in _products().iter_rows(named=True):
-        assert isinstance(json.loads(row["metadata"])["kind"], int)
-
-
-def test_station_product_metadata_contains_plain_integer_kinds() -> None:
-    kinds = {json.loads(row["metadata"])["kind"] for row in _station_products().iter_rows(named=True)}
-    assert kinds == {2, 3, 6, 7}
-    assert all(isinstance(kind, int) for kind in kinds)
+def test_product_native_ids_preserve_integer_kind_identity() -> None:
+    assert set(_products()["native_id"]) == {"2", "3", "6", "7"}
 
 
 def test_stations_count() -> None:
@@ -808,7 +801,6 @@ def test_committed_canonical_components_have_pinned_full_content() -> None:
     for name in ("products.parquet", "stations.parquet", "station_products.parquet"):
         assert _frame_content_digest(pl.read_parquet(CATALOGUE_PATH / name)) == CANONICAL_CONTENT_DIGESTS[name]
     provider = json.loads((CATALOGUE_PATH / "provider.json").read_text())
-    provider["metadata"] = json.loads(provider["metadata"])
     assert _canonical_digest(provider) == CANONICAL_CONTENT_DIGESTS["provider.json"]
 
 
@@ -886,17 +878,19 @@ def test_each_station_product_date_is_its_native_station_date() -> None:
     assert _provider()["catalogue_version"] == "2026-08-02"
 
 
-def test_provider_metadata_is_native_and_truthful() -> None:
+def test_provider_info_is_exactly_the_reduced_carrier() -> None:
     fresh = _provider()
     committed = json.loads((CATALOGUE_PATH / "provider.json").read_text())
     assert fresh == committed
-    metadata = json.loads(str(fresh["metadata"]))
-    assert metadata["site_info_url"] == "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe"
-    assert metadata["generator_input"] == "native"
-    assert metadata["catalogue_source"] == generate_catalogue.CATALOGUE_SOURCE
-    assert metadata["dsp_url"] == generate_catalogue.DSP_URL
-    assert metadata["timestamp_convention"] == ("hourly_kinds_2_6=jst_to_utc; daily_kinds_3_7=date_only_utc_midnight")
-    assert all("SiteInfo.exe" not in str(value) and "japan_sites.csv" not in str(value) for value in metadata.values())
+    assert tuple(fresh) == (
+        "provider_id",
+        "name",
+        "live_stations",
+        "live_products",
+        "live_station_products",
+        "bulk_observations",
+        "catalogue_version",
+    )
 
 
 def test_broken_longitude_origin_fails_with_full_gate_message() -> None:

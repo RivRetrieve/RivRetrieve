@@ -464,11 +464,7 @@ def test_supplied_national_refresh_enforces_live_minimum() -> None:
 def _national_product_records(*, omitted_key: tuple[str, str, str] | None = None) -> dict[str, list[tuple[str, ...]]]:
     records: list[tuple[str, ...]] = []
     for definition in PRODUCT_DEFINITIONS:
-        key = (
-            "dv" if definition.endpoint == "dv" else "uv",
-            definition.param_code,
-            definition.stat_code or "",
-        )
+        key = definition.series_key
         if key == omitted_key:
             continue
         record = dict.fromkeys(SERIES_ONLY_FIELDS, "")
@@ -520,7 +516,9 @@ def test_station_product_matching_covers_absent_unique_duplicate_agreeing_blank_
         }
         == rows["discharge_daily_mean"]
     )
-    assert json.loads(rows["discharge_instantaneous"]["metadata"])["exact_match_count"] == 2
+    assert rows["discharge_instantaneous"]["availability"] == "available"
+    assert rows["discharge_instantaneous"]["start_date"] == date(2001, 1, 2)
+    assert rows["discharge_instantaneous"]["end_date"] == date(2025, 3, 4)
     assert rows["stage_daily_mean"]["availability_reason"] == "Matching USGS source series states blank coverage dates"
     assert (
         rows["stage_daily_max"]["availability_reason"]
@@ -977,12 +975,12 @@ def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert (
-        hashlib.sha256(provider_bytes).hexdigest() == "ce8e47ed05eff1ac46fa7bfbd5575c5a18013c721fd7b27215fb3980db2d0e44"
+        hashlib.sha256(provider_bytes).hexdigest() == "825bce9e3b4e9d204e1c58f9587f9b0b651c12a6bca8ef264032d27a2793d2bc"
     )
-    assert _frame_content_sha256(products) == "1f2f10f7570daf3c397175f89c7f924bea571fc79bec80b5523d9b3fb7049af8"
+    assert _frame_content_sha256(products) == "13053ee6547748e8e8d5bc11cc7bb9225e8c57bf59a669a3f66cad58b3ea8bf5"
     assert _frame_content_sha256(stations) == "27b3dfc6d71445798eda982d6f9d11de4839be1f6adbb30faed8052cefdc26c7"
     assert _frame_content_sha256(station_products) == (
-        "3b4f6c822be370bf042f9ee91f2ff73c360aa0cec492f1acc02fe38642833791"
+        "a8ac1cc876ef1b2aac04fc09141eb9b0e5e59df3c767f7bddfdcb27fc59152d8"
     )
 
 

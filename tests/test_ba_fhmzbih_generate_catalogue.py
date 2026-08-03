@@ -245,44 +245,18 @@ def test_publisher_capture_and_attestation_support_not_published_crs() -> None:
         assert literal in record
 
 
-def test_native_build_metadata_is_non_null_plain_json() -> None:
-    catalogue = _catalogue()
-    assert catalogue.products["metadata"].null_count() == 0
-    assert catalogue.station_products["metadata"].null_count() == 0
-    product_metadata = _json_objects(catalogue.products["metadata"])
-    station_product_metadata = _json_objects(catalogue.station_products["metadata"])
-    provider_metadata = json.loads(catalogue.provider_info["metadata"])
-    assert isinstance(provider_metadata, dict)
-    assert provider_metadata["generator_input"] == "native"
-    assert product_metadata[0].keys() == {
-        "parameter_code",
-        "workbook_file",
-        "native_unit",
-        "canonical_unit",
-        "unit_conversion",
-        "aggregate_daily",
-        "notes",
-    }
-    assert station_product_metadata[0].keys() == {
-        "station_id",
-        "product_id",
-        "availability_source",
-        "availability_note",
-    }
-
-
 def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
     assert hashlib.sha256((_CATALOGUE_DIR / "provider.json").read_bytes()).hexdigest() == (
-        "03b4734305e5aa75544583111ff389fc5b1e4619d674318b2b77386177e82f2a"
+        "859dbb9b2bb23179651ace699c3e921ef3354289b5e5435b7c8a81b17baec64c"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
-        "5861d1000616f5ac200231ceffbe6c8db892582d6ec440d0f4005f3bee3f3f52"
+        "2eecd24289a487bf97b9906027fc49c6549c81047e3b32cce94760900be8ede0"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
         "761a93315a093b1cad5a4ce1e0480a6e36430a32d28467c9fe689f0257c053a4"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
-        "972e5ec21d5b05126115122e1120fdff16618ad1cb5455ac2938b234c353b818"
+        "7c8dd139521881263af34048dfe10482e221fb91888189ddfd3965ceb8658342"
     )
 
 

@@ -30,12 +30,13 @@ How one [[provider]] fills one catalogue column. Declared per provider rather th
 column, so the same canonical column is filled one way by one source and left empty by
 another. It takes one of four forms: a column of that provider's [[native table]]; a
 [[documented]] constant; the statement that this source publishes nothing for that
-column, carrying [[evidence]]; or [[native-only]]. Every column carries one for every
-provider, so an empty cell is a claim rather than an absence that could equally mean we
-never asked. The ways to breach it are an undeclared column, an origin naming a native
-column that was never fetched, a null where the native column held a value, a documented
-constant differing from the emitted value, and a documented or not-published claim
-carrying no evidence. Each fails the build rather than shipping.
+column, carrying [[evidence]]; or [[native-only]]. Every canonical column carries one for
+every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled provider is explicitly
+outside origin certification rather than treated as compliant. The ways to breach it are
+an undeclared column, an origin naming a native column that was never fetched, a null where
+the native column held a value, a documented constant differing from the emitted value,
+and a documented or not-published claim carrying no evidence. Each fails the build rather
+than shipping.
 _Avoid_: mapping, provenance (which names the receipt travelling with a result, not the
 per-column declaration), nullable
 
@@ -79,8 +80,9 @@ justification
 **Best-effort**:
 A field or behaviour that is filled when the source provides what it needs, and
 [[unknown]] otherwise. Never fabricated. In the catalogue this is enforced rather than
-intended: a best-effort column still carries an [[origin]] for every [[provider]], so
-being empty is a declared claim and not permission to leave it unfilled.
+intended: a best-effort column still carries an [[origin]] for every [[provider]] in
+`ORIGIN_GATE_ENROLLED_PROVIDERS`, so being empty is a declared claim and not permission to
+leave it unfilled.
 
 **Issue**:
 A fact about the data, returned rather than raised. A station answering 404, a window

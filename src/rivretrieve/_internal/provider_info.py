@@ -1,3 +1,5 @@
+"""provider-info parsing : ProviderInfoRow → ProviderInfo."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -23,7 +25,6 @@ class ProviderInfo:
     live_station_products: bool
     bulk_observations: str
     catalogue_version: str | None
-    metadata: str
 
     @classmethod
     def from_row(cls, row: Mapping[str, object]) -> ProviderInfo:
@@ -58,7 +59,6 @@ class ProviderInfo:
             live_station_products=validated_row["live_station_products"],
             bulk_observations=validated_row["bulk_observations"],
             catalogue_version=validated_row["catalogue_version"],
-            metadata=validated_row["metadata"],
         )
 
     def to_row(self) -> dict[str, object]:
@@ -70,5 +70,4 @@ class ProviderInfo:
             "live_station_products": self.live_station_products,
             "bulk_observations": self.bulk_observations,
             "catalogue_version": self.catalogue_version,
-            "metadata": self.metadata,
         }

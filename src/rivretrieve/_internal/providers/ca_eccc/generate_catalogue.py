@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -98,21 +98,6 @@ class ProductDefinition:
     period_anchor: str
     canonical_unit: str
     ogc_field: str
-    ogc_symbol_field: str
-    native_unit: str
-    notes: str | None
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "canonical_unit": self.canonical_unit,
-            "frequency": self.frequency,
-            "native_unit": self.native_unit,
-            "notes": self.notes,
-            "ogc_field": self.ogc_field,
-            "ogc_symbol_field": self.ogc_symbol_field,
-            "timezone_handling": "date_only_utc_midnight",
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -125,13 +110,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         ogc_field="DISCHARGE",
-        ogc_symbol_field="DISCHARGE_SYMBOL",
-        native_unit="m3/s",
-        notes=(
-            "ECCC OGC hydrometric-daily-mean collection, DISCHARGE field. Values in m³/s — no conversion. "
-            "DATE field is date-only (YYYY-MM-DD); interpreted as UTC midnight. Quality code in "
-            "DISCHARGE_SYMBOL (A=Estimated, B=Ice, D=Dry, E=Estimated, R=Revised)."
-        ),
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -142,13 +120,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         ogc_field="LEVEL",
-        ogc_symbol_field="LEVEL_SYMBOL",
-        native_unit="m",
-        notes=(
-            "ECCC OGC hydrometric-daily-mean collection, LEVEL field. Values in m — no conversion. "
-            "DATE field is date-only (YYYY-MM-DD); interpreted as UTC midnight. Quality code in LEVEL_SYMBOL "
-            "(A=Estimated, B=Ice, D=Dry, E=Estimated, R=Revised)."
-        ),
     ),
 )
 
@@ -388,7 +359,6 @@ def build_products() -> ProductCatalog:
             "native_id": definition.ogc_field,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(definition.metadata),
         }
         for definition in PRODUCT_DEFINITIONS
     ]
@@ -477,28 +447,21 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
         if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
             raise FatalContractError("station retrieval date must pair a string identifier with a date")
         for definition in PRODUCT_DEFINITIONS:
-            metadata: dict[str, object] = {
-                "availability_note": (
-                    "ECCC OGC hydrometric-stations endpoint does not expose per-variable availability. "
-                    f"Actual availability depends on whether the station has {definition.ogc_field!r} values "
-                    "in the daily-mean collection."
-                ),
-                "availability_source": "catalogue_assumption",
-                "ogc_field": definition.ogc_field,
-                "product_id": definition.product_id,
-                "station_id": station_id,
-            }
+            availability_reason = (
+                "ECCC OGC hydrometric-stations endpoint does not expose per-variable availability. "
+                f"Actual availability depends on whether the station has {definition.ogc_field!r} values "
+                "in the daily-mean collection."
+            )
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
                     "product_id": definition.product_id,
                     "availability": "unknown",
-                    "availability_reason": metadata["availability_note"],
+                    "availability_reason": availability_reason,
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": retrieved_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -507,26 +470,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
 
 
 def build_provider_info(catalogue_date: date) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "auth": "none — public Government of Canada open data",
-        "catalogue_stations_url": STATIONS_URL,
-        "coverage_note": (
-            "HYDAT is the complete national archive. Some stations have multi-decade gaps where data was not "
-            "submitted to the national programme."
-        ),
-        "generator_input": "native",
-        "hydat_url_template": "https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/Hydat_sqlite3_YYYYMMDD.zip",
-        "license": "Open Government Licence - Canada (https://open.canada.ca/en/open-government-licence-canada)",
-        "observation_source": "HYDAT SQLite — full national archive downloaded on first use",
-        "quality_flags": (
-            "FLOW_SYMBOL / LEVEL_SYMBOL from HYDAT: A=Estimated, B=Ice conditions, D=Dry, "
-            "E=Estimated (ice-affected), R=Revised, S=Sample"
-        ),
-        "timestamp_convention": (
-            "date_only_utc_midnight — HYDAT stores YEAR/MONTH/DAY integers; interpreted as T00:00:00Z"
-        ),
-        "unit_convention": "m for stage, m3/s for discharge — no conversions needed",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -540,7 +483,6 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
             "recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": _metadata_json(metadata),
     }
 
 
@@ -696,10 +638,6 @@ def _refresh_failure(
     details: dict[str, object],
 ) -> WithIssues[NativeTable]:
     return WithIssues(value=_empty_native_table(retrieved_at), issues=(_issue(code, message, details),))
-
-
-def _metadata_json(value: Mapping[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def native_table_content_digest(table: NativeTable) -> str:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -123,23 +123,6 @@ class ProductDefinition:
     period_anchor: str
     canonical_unit: str
     parameter_code: str
-    workbook_file: str
-    native_unit: str
-    conversion_factor: float
-    aggregate_daily: bool
-    notes: str
-
-    @property
-    def metadata(self) -> Mapping[str, object]:
-        return {
-            "parameter_code": self.parameter_code,
-            "workbook_file": self.workbook_file,
-            "native_unit": self.native_unit,
-            "canonical_unit": self.canonical_unit,
-            "unit_conversion": None if self.conversion_factor == 1.0 else f"divide by {self.conversion_factor:g}",
-            "aggregate_daily": self.aggregate_daily,
-            "notes": self.notes,
-        }
 
 
 _TIMEZONE_NOTE = (
@@ -162,11 +145,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="m3/s",
         parameter_code="Q",
-        workbook_file="Q_1Y.xlsx",
-        native_unit="m3/s",
-        conversion_factor=1.0,
-        aggregate_daily=False,
-        notes=f"FHMZBiH hourly discharge, m3/s direct (no conversion). {_TIMEZONE_NOTE} {_ROLLING_WINDOW_NOTE}",
     ),
     ProductDefinition(
         product_id="discharge_daily_mean",
@@ -177,14 +155,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         parameter_code="Q",
-        workbook_file="Q_1Y.xlsx",
-        native_unit="m3/s",
-        conversion_factor=1.0,
-        aggregate_daily=True,
-        notes=(
-            "Derived by averaging hourly readings over each Europe/Sarajevo calendar day "
-            f"and anchoring the result at local midnight before UTC conversion. {_TIMEZONE_NOTE} {_ROLLING_WINDOW_NOTE}"
-        ),
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -195,14 +165,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="m",
         parameter_code="H",
-        workbook_file="H_1Y.xlsx",
-        native_unit="cm",
-        conversion_factor=100.0,
-        aggregate_daily=False,
-        notes=(
-            "FHMZBiH hourly stage in cm, divided by 100 to convert to m. "
-            f"Raw cm value preserved in raw_value row annotation. {_TIMEZONE_NOTE} {_ROLLING_WINDOW_NOTE}"
-        ),
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -213,15 +175,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         parameter_code="H",
-        workbook_file="H_1Y.xlsx",
-        native_unit="cm",
-        conversion_factor=100.0,
-        aggregate_daily=True,
-        notes=(
-            "Derived by averaging hourly cm readings over each Europe/Sarajevo calendar day, "
-            "converting the mean to m, and anchoring the result at local midnight before UTC "
-            f"conversion. {_TIMEZONE_NOTE} {_ROLLING_WINDOW_NOTE}"
-        ),
     ),
     ProductDefinition(
         product_id="water_temperature_instantaneous",
@@ -232,11 +185,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="degC",
         parameter_code="WT",
-        workbook_file="Tvode_1Y.xlsx",
-        native_unit="degC",
-        conversion_factor=1.0,
-        aggregate_daily=False,
-        notes=f"FHMZBiH hourly water temperature, degC direct (no conversion). {_TIMEZONE_NOTE} {_ROLLING_WINDOW_NOTE}",
     ),
     ProductDefinition(
         product_id="water_temperature_daily_mean",
@@ -247,14 +195,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="degC",
         parameter_code="WT",
-        workbook_file="Tvode_1Y.xlsx",
-        native_unit="degC",
-        conversion_factor=1.0,
-        aggregate_daily=True,
-        notes=(
-            "Derived by averaging hourly readings over each Europe/Sarajevo calendar day "
-            f"and anchoring the result at local midnight before UTC conversion. {_TIMEZONE_NOTE} {_ROLLING_WINDOW_NOTE}"
-        ),
     ),
 )
 
@@ -395,7 +335,6 @@ def build_products() -> ProductCatalog:
             "native_id": d.parameter_code,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(d.metadata),
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -423,16 +362,6 @@ def build_station_products(
         if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
             raise FatalContractError("station retrieval date must pair a string identifier with a date")
         for d in PRODUCT_DEFINITIONS:
-            metadata = {
-                "station_id": station_id,
-                "product_id": d.product_id,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": (
-                    "Materialised as availability=unknown; the station metadata snapshot "
-                    "does not indicate which parameters a station actually reports, and "
-                    "workbooks for unreported parameters return zero rows."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -443,7 +372,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": retrieved_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -454,15 +382,6 @@ def build_station_products(
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "metadata_url": METADATA_URL,
-        "workbook_url_template": WORKBOOK_URL_TEMPLATE,
-        "generator_input": "native",
-        "timestamp_convention": "local_to_utc_conversion",
-        "source_timezone": "Europe/Sarajevo",
-        "rolling_window_note": _ROLLING_WINDOW_NOTE,
-        "station_groups": "1-10 (discovered per-station by URL probing; not exposed in metadata)",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -475,7 +394,6 @@ def build_provider_info(
             "window of history is available from the source"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -647,10 +565,6 @@ def _validate_native_build_rows(native_table: NativeTable) -> None:
             raise FatalContractError(f"ba_fhmzbih native table station {station_id} has invalid coordinates")
         if not isinstance(row["retrieved_at"], datetime):
             raise FatalContractError(f"ba_fhmzbih native table station {station_id} has invalid retrieved_at")
-
-
-def _metadata_json(value: Mapping[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _empty_native_table(retrieved_at: RetrievedAt) -> NativeTable:

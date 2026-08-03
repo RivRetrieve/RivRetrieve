@@ -70,13 +70,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         {"EPSG:4326"},
     ),
 )
-CATALOGUE_MODULE_FILES = {
-    "__init__.py",
-    "generate_catalogue.py",
-    "issue_codes.py",
-    "metadata.py",
-    "module.py",
-}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "ch_foen": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
     "cz_chmi": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
@@ -85,7 +78,6 @@ ENROLLED_CATALOGUE_MODULE_FILES = {
         "__init__.py",
         "generate_catalogue.py",
         "issue_codes.py",
-        "metadata.py",
         "module.py",
         "origins.py",
     },
@@ -190,7 +182,8 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert not hasattr(module, "series_annotation_schema")
 
     provider_directory = Path(module.__file__).parent
-    expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES.get(provider_id, CATALOGUE_MODULE_FILES)
+    assert set(ENROLLED_CATALOGUE_MODULE_FILES) == {row[0] for row in CATALOGUE_ONLY_PROVIDERS}
+    expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES[provider_id]
     assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in (

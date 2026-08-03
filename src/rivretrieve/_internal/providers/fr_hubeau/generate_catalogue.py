@@ -262,20 +262,6 @@ class ProductDefinition:
     canonical_unit: str
     api_type: str
     grandeur_code: str | None
-    native_unit: str
-    conversion_factor: float
-    notes: str | None
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "api_type": self.api_type,
-            "canonical_unit": self.canonical_unit,
-            "conversion_factor": self.conversion_factor,
-            "grandeur_code": self.grandeur_code,
-            "native_unit": self.native_unit,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -290,14 +276,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m3/s",
         api_type="obs_tr",
         grandeur_code="Q",
-        native_unit="l/s",
-        conversion_factor=1000.0,
-        notes=(
-            "Hubeau observations_tr grandeur Q (débit). "
-            "Native unit l/s divided by 1000 to convert to m³/s. "
-            "Timestamps are full UTC ISO 8601 (date_obs). "
-            "Real-time only: Hubeau rejects requests older than ~1 month."
-        ),
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -309,14 +287,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m",
         api_type="obs_tr",
         grandeur_code="H",
-        native_unit="mm",
-        conversion_factor=1000.0,
-        notes=(
-            "Hubeau observations_tr grandeur H (hauteur). "
-            "Native unit mm divided by 1000 to convert to m. "
-            "Timestamps are full UTC ISO 8601 (date_obs). "
-            "Real-time only: Hubeau rejects requests older than ~1 month."
-        ),
     ),
     # --- obs_elab (historical archive) ----------------------------------------
     # NOTE: HmnJ (daily mean height) does NOT exist in Hubeau obs_elab.
@@ -332,13 +302,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m3/s",
         api_type="obs_elab",
         grandeur_code="QmnJ",
-        native_unit="l/s",
-        conversion_factor=1000.0,
-        notes=(
-            "Hubeau obs_elab grandeur QmnJ (débit moyen journalier). "
-            "Native unit l/s divided by 1000 to convert to m³/s. "
-            "Timestamps are date-only YYYY-MM-DD interpreted as UTC midnight."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_daily_max",
@@ -350,13 +313,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m3/s",
         api_type="obs_elab",
         grandeur_code="QIXnJ",
-        native_unit="l/s",
-        conversion_factor=1000.0,
-        notes=(
-            "Hubeau obs_elab grandeur QIXnJ (débit instantané maximal journalier). "
-            "Native unit l/s divided by 1000 to convert to m³/s. "
-            "Timestamps are date-only YYYY-MM-DD interpreted as UTC midnight."
-        ),
     ),
     ProductDefinition(
         product_id="stage_daily_max",
@@ -368,14 +324,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m",
         api_type="obs_elab",
         grandeur_code="HIXnJ",
-        native_unit="mm",
-        conversion_factor=1000.0,
-        notes=(
-            "Hubeau obs_elab grandeur HIXnJ (hauteur instantanée maximale journalière). "
-            "Native unit mm divided by 1000 to convert to m. "
-            "Timestamps are date-only YYYY-MM-DD interpreted as UTC midnight. "
-            "Note: daily mean height (HmnJ) does not exist in Hubeau obs_elab."
-        ),
     ),
     # --- temperature/chronique (historical archive) ---------------------------
     ProductDefinition(
@@ -388,13 +336,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="degC",
         api_type="temperature",
         grandeur_code=None,
-        native_unit="degC",
-        conversion_factor=1.0,
-        notes=(
-            "Hubeau temperature/chronique endpoint. "
-            "Temperature in °C, no conversion needed. "
-            "Timestamps from date_mesure_temp + heure_mesure_temp, interpreted as UTC."
-        ),
     ),
 )
 
@@ -697,7 +638,6 @@ def build_products() -> ProductCatalog:
             "native_id": d.grandeur_code or d.api_type,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(d.metadata),
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -778,16 +718,6 @@ def build_station_products(
         if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
             raise FatalContractError("hydrometry station retrieval date must pair a string identifier with a date")
         for d in HYDRO_PRODUCT_DEFS:
-            metadata: dict[str, object] = {
-                "station_id": station_id,
-                "product_id": d.product_id,
-                "grandeur_code": d.grandeur_code,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": (
-                    "Materialised as availability=unknown; "
-                    "referentiel/stations does not guarantee observed data for every grandeur."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -798,7 +728,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
 
@@ -806,16 +735,6 @@ def build_station_products(
         if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
             raise FatalContractError("temperature station retrieval date must pair a string identifier with a date")
         for d in TEMP_PRODUCT_DEFS:
-            metadata = {
-                "station_id": station_id,
-                "product_id": d.product_id,
-                "grandeur_code": d.grandeur_code,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": (
-                    "Materialised as availability=unknown; "
-                    "temperature/station does not guarantee observed data continuity."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -826,7 +745,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
 
@@ -840,17 +758,6 @@ def build_station_products(
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "hydro_stations_url": HYDRO_STATIONS_URL,
-        "hydro_sites_url": HYDRO_SITES_URL,
-        "temp_stations_url": TEMP_STATIONS_URL,
-        "obs_elab_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
-        "obs_tr_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
-        "temperature_url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique",
-        "catalogue_source": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-        "generator_input": "native",
-        "timestamp_convention": "obs_elab=date_only_utc_midnight; obs_tr=utc_iso; temperature=utc_iso",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -862,7 +769,6 @@ def build_provider_info(
             "and temperature/chronique requests; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -945,12 +851,6 @@ def _read_fixture_json(path: Path) -> dict[str, object]:
     if not isinstance(value, dict):
         raise FatalContractError("fr_hubeau fixture must contain a JSON object")
     return cast("dict[str, object]", value)
-
-
-def _metadata_json(
-    model: Mapping[str, object],
-) -> str:
-    return json.dumps(model, sort_keys=True, separators=(",", ":"))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

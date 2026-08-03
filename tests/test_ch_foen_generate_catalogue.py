@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 from datetime import UTC, date, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 import polars as pl
@@ -51,6 +52,44 @@ ENVELOPE = {
         "Liefer-%20und%20Nutzungsbedingungen%20hydrologische%20Daten%20BAFU%202020.pdf"
     ),
 }
+
+CRS_EVIDENCE_PATH = Path("tests/test_data/ch_foen_api_docs.html")
+CRS_ABSENCE_TOKENS = (
+    "wgs84",
+    "wgs 84",
+    "wgs-84",
+    "epsg",
+    "datum",
+    "crs",
+    "srid",
+    "coordinate reference",
+    "geodetic",
+    "geodät",
+    "ellipsoid",
+    "etrs",
+)
+
+
+class _TextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def test_publisher_crs_evidence_names_hydro_but_no_reference_system() -> None:
+    capture = CRS_EVIDENCE_PATH.read_bytes()
+    parser = _TextParser()
+    parser.feed(capture.decode("utf-8"))
+    text = " ".join(" ".join(parser.parts).split()).casefold()
+
+    assert len(capture) == 15_737
+    assert hashlib.sha256(capture).hexdigest() == ("488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df")
+    assert text
+    assert "hydro" in text
+    assert all(token.casefold() not in text for token in CRS_ABSENCE_TOKENS)
 
 
 def _fixture_response() -> dict[str, object]:
@@ -402,42 +441,6 @@ def test_native_build_uses_per_station_retrieval_dates_and_maximum_provider_date
     }
     assert station_dates == {rows[0]["name"]: {date(2026, 7, 31)}, rows[1]["name"]: {date(2026, 8, 2)}}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
-
-
-def test_native_build_metadata_is_non_null_plain_json_objects() -> None:
-    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
-
-    catalogue = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
-
-    assert catalogue.products["metadata"].null_count() == 0
-    assert catalogue.station_products["metadata"].null_count() == 0
-    product_metadata = _json_objects(catalogue.products["metadata"])
-    station_product_metadata = _json_objects(catalogue.station_products["metadata"])
-    provider_metadata = json.loads(catalogue.provider_info["metadata"])
-    assert isinstance(provider_metadata, dict)
-    assert provider_metadata == {
-        "source_url": generate_catalogue.SOURCE_URL,
-        "legacy_source": generate_catalogue.LEGACY_SOURCE,
-        "generator_input": "native",
-        **ENVELOPE,
-    }
-    assert product_metadata[0] == {
-        "aggregate_daily": True,
-        "fallback_parameter": "flow_ls",
-        "legacy_unit": "m3/s",
-        "legacy_variable": "DISCHARGE_DAILY_MEAN",
-        "native_id": "flow",
-        "notes": "Legacy fetcher aggregates preferred flow or fallback flow_ls values to daily means.",
-        "parameters": ["flow", "flow_ls"],
-        "preferred_parameter": "flow",
-    }
-    assert station_product_metadata[0].keys() == {
-        "station_id",
-        "product_id",
-        "native_parameters",
-        "availability_source",
-        "availability_note",
-    }
 
 
 @pytest.mark.parametrize(

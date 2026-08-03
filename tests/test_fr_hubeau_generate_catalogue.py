@@ -1096,10 +1096,10 @@ def _frame_digest(frame: pl.DataFrame) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-_PINNED_PROVIDER_JSON_SHA256 = "edfa0f038c4b33f21a0000ecb676795840e3a11b990b2758cdb45d7e65e42355"
-_PINNED_PRODUCTS_FRAME_SHA256 = "2b11e548681ab40be8bf2d23ae3b6515d65c0fb9f20ec60c6b0c2317e223ec93"
+_PINNED_PROVIDER_JSON_SHA256 = "2b208cdb76a812fd2cdd6173f0a46d5d27dbd00ced5869e8cf7c3fc8c044c255"
+_PINNED_PRODUCTS_FRAME_SHA256 = "73d03559a3f2552b66f5161f0d09d7cd892f58c57dfa1232fd68739b3ac64608"
 _PINNED_STATIONS_FRAME_SHA256 = "0958c6dfe6fa44d0a66e105c51b7d3ae3ac675337fe0fa07f98e02017726c1c1"
-_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "b89ed8e8b367cc78989e8edca11973cc4d4dd4bee884cf6a46c834545d737872"
+_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "f94fdf6418e4b27d7dec305eb382a7fef480e2efa6cb7071cbdf0f83e12ee424"
 
 
 def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
@@ -1153,7 +1153,6 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
                 "native_id": definition.grandeur_code or definition.api_type,
                 "derived": False,
                 "derivation_method": None,
-                "metadata": json.dumps(definition.metadata, sort_keys=True, separators=(",", ":")),
             }
             for definition in definitions
         ],
@@ -1162,29 +1161,14 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
     pl_testing.assert_frame_equal(committed_products, expected_products, check_exact=True)
 
     expected_station_product_rows: list[dict[str, object]] = []
-    for endpoint_frame, endpoint_definitions, note in (
-        (
-            hydro,
-            HYDRO_PRODUCT_DEFS,
-            "referentiel/stations does not guarantee observed data for every grandeur.",
-        ),
-        (
-            temperature,
-            TEMP_PRODUCT_DEFS,
-            "temperature/station does not guarantee observed data continuity.",
-        ),
+    for endpoint_frame, endpoint_definitions in (
+        (hydro, HYDRO_PRODUCT_DEFS),
+        (temperature, TEMP_PRODUCT_DEFS),
     ):
         for station_id, retrieved_at in (
             endpoint_frame.select("code_station", "retrieved_at").sort("code_station").iter_rows()
         ):
             for definition in endpoint_definitions:
-                metadata = {
-                    "availability_note": f"Materialised as availability=unknown; {note}",
-                    "availability_source": "provider_station_catalogue_assumption",
-                    "grandeur_code": definition.grandeur_code,
-                    "product_id": definition.product_id,
-                    "station_id": station_id,
-                }
                 expected_station_product_rows.append(
                     {
                         "provider_id": "fr_hubeau",
@@ -1195,7 +1179,6 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
                         "start_date": None,
                         "end_date": None,
                         "last_catalogue_check": retrieved_at.date(),
-                        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
                     }
                 )
     expected_station_products = (
@@ -1216,21 +1199,6 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
             "and temperature/chronique requests; partial failures reported as recoverable issues"
         ),
         "catalogue_version": "2026-08-02",
-        "metadata": json.dumps(
-            {
-                "catalogue_source": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-                "generator_input": "native",
-                "hydro_sites_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/sites",
-                "hydro_stations_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations",
-                "obs_elab_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
-                "obs_tr_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
-                "temp_stations_url": "https://hubeau.eaufrance.fr/api/v1/temperature/station",
-                "temperature_url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique",
-                "timestamp_convention": "obs_elab=date_only_utc_midnight; obs_tr=utc_iso; temperature=utc_iso",
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
     }
     assert committed_provider == expected_provider
     assert hashlib.sha256((catalogue_dir / "provider.json").read_bytes()).hexdigest() == _PINNED_PROVIDER_JSON_SHA256

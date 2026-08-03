@@ -86,22 +86,6 @@ class ProductDefinition:
     unit: str
     parameters: tuple[str, ...]
     preferred_parameter: str
-    fallback_parameter: str | None
-    aggregate_daily: bool
-    notes: str | None
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "legacy_variable": self.legacy_variable,
-            "native_id": self.preferred_parameter,
-            "parameters": self.parameters,
-            "preferred_parameter": self.preferred_parameter,
-            "fallback_parameter": self.fallback_parameter,
-            "aggregate_daily": self.aggregate_daily,
-            "legacy_unit": self.unit,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -116,9 +100,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         unit="m3/s",
         parameters=("flow", "flow_ls"),
         preferred_parameter="flow",
-        fallback_parameter="flow_ls",
-        aggregate_daily=True,
-        notes="Legacy fetcher aggregates preferred flow or fallback flow_ls values to daily means.",
     ),
     ProductDefinition(
         legacy_variable="DISCHARGE_INSTANT",
@@ -131,9 +112,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         unit="m3/s",
         parameters=("flow", "flow_ls"),
         preferred_parameter="flow",
-        fallback_parameter="flow_ls",
-        aggregate_daily=False,
-        notes="Legacy fetcher prefers flow over flow_ls when both are present.",
     ),
     ProductDefinition(
         legacy_variable="STAGE_DAILY_MEAN",
@@ -146,9 +124,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         unit="m",
         parameters=("height_abs", "height"),
         preferred_parameter="height_abs",
-        fallback_parameter="height",
-        aggregate_daily=True,
-        notes="Legacy fetcher aggregates preferred height_abs or fallback height values to daily means.",
     ),
     ProductDefinition(
         legacy_variable="STAGE_INSTANT",
@@ -161,9 +136,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         unit="m",
         parameters=("height_abs", "height"),
         preferred_parameter="height_abs",
-        fallback_parameter="height",
-        aggregate_daily=False,
-        notes="Legacy fetcher prefers height_abs over height when both are present.",
     ),
     ProductDefinition(
         legacy_variable="WATER_TEMPERATURE_DAILY_MEAN",
@@ -176,9 +148,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         unit="degC",
         parameters=("temperature",),
         preferred_parameter="temperature",
-        fallback_parameter=None,
-        aggregate_daily=True,
-        notes="Legacy fetcher aggregates temperature values to daily means.",
     ),
     ProductDefinition(
         legacy_variable="WATER_TEMPERATURE_INSTANT",
@@ -191,9 +160,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         unit="degC",
         parameters=("temperature",),
         preferred_parameter="temperature",
-        fallback_parameter=None,
-        aggregate_daily=False,
-        notes=None,
     ),
 )
 
@@ -275,7 +241,6 @@ def build_products(product_definitions: Sequence[ProductDefinition] = PRODUCT_DE
             "native_id": definition.preferred_parameter,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(definition.metadata),
         }
         for definition in product_definitions
     ]
@@ -298,16 +263,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
         if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
             raise FatalContractError("station retrieval date must pair a string identifier with a date")
         for definition in PRODUCT_DEFINITIONS:
-            metadata = {
-                "station_id": station_id,
-                "product_id": definition.product_id,
-                "native_parameters": definition.parameters,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": (
-                    "M3 materializes the known provider station-product universe with availability=unknown; "
-                    "the locations catalogue does not guarantee observed data for every product."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -318,7 +273,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": retrieved_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -327,7 +281,7 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
 
 
 def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str]) -> dict[str, object]:
-    metadata = {
+    {
         "source_url": SOURCE_URL,
         "legacy_source": LEGACY_SOURCE,
         "generator_input": "native",
@@ -347,7 +301,6 @@ def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str
             "as recoverable issues"
         ),
         "catalogue_version": catalogue_version_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -536,10 +489,6 @@ def _validate_native_build_rows(native_table: NativeTable) -> dict[str, str]:
     if expected_envelope is None:
         raise FatalContractError("Swiss native table must not be empty")
     return expected_envelope
-
-
-def _metadata_json(metadata: Mapping[str, object]) -> str:
-    return json.dumps(metadata, sort_keys=True, separators=(",", ":"))
 
 
 def _required_string(value: object, name: str) -> str:

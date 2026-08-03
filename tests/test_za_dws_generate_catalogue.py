@@ -299,7 +299,7 @@ def test_native_build_rejects_empty_or_non_exact_native_table() -> None:
         generator.build_catalogue(NativeTable(malformed), STATION_CATALOGUE_ORIGINS)
 
 
-def test_native_build_counts_ids_crs_dates_and_retained_metadata() -> None:
+def test_native_build_counts_ids_crs_and_dates() -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
     catalogue = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
@@ -314,25 +314,6 @@ def test_native_build_counts_ids_crs_dates_and_retained_metadata() -> None:
     assert set(catalogue.stations["crs"]) == {"unknown"}
     assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
-    product_metadata = [json.loads(value) for value in catalogue.products["metadata"]]
-    assert all(
-        set(value) == {"canonical_unit", "chunk_years", "data_type", "native_unit", "notes", "value_column"}
-        for value in product_metadata
-    )
-    station_product_metadata = json.loads(catalogue.station_products["metadata"][0])
-    assert set(station_product_metadata) == {
-        "availability_note",
-        "availability_source",
-        "product_id",
-        "station_id",
-    }
-    provider_metadata = json.loads(str(catalogue.provider_info["metadata"]))
-    assert provider_metadata["data_url"] == generator.DATA_URL
-    assert provider_metadata["catalogue_url"] == generator.CATALOGUE_URL
-    assert provider_metadata["generator_input"] == "native"
-    assert "link index" in provider_metadata["station_catalogue_source"]
-    assert "River PDFs" in provider_metadata["station_catalogue_source"]
-    assert "date-only" in provider_metadata["timezone_note"]
     assert "station" in str(catalogue.provider_info["bulk_observations"])
 
 
@@ -575,28 +556,7 @@ def _expected_stations(native: NativeTable) -> pl.DataFrame:
     return pl.DataFrame(rows, schema=generator.STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
 
-def _product_metadata(
-    *, data_type: str, value_column: str, native_unit: str, canonical_unit: str, chunk_years: int, notes: str
-) -> str:
-    return json.dumps(
-        {
-            "data_type": data_type,
-            "value_column": value_column,
-            "native_unit": native_unit,
-            "canonical_unit": canonical_unit,
-            "chunk_years": chunk_years,
-            "notes": notes,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
 def _expected_products() -> pl.DataFrame:
-    timezone_note = (
-        "Daily timestamps are date-only (YYYYMMDD), interpreted as UTC midnight (T00:00:00Z). "
-        "Point/instantaneous timestamps are SAST (Africa/Johannesburg, UTC+2, no DST) converted to UTC."
-    )
     rows = [
         {
             "provider_id": "za_dws",
@@ -610,18 +570,6 @@ def _expected_products() -> pl.DataFrame:
             "native_id": "D_AVG_FR",
             "derived": False,
             "derivation_method": None,
-            "metadata": _product_metadata(
-                data_type="Daily",
-                value_column="D_AVG_FR",
-                native_unit="m3/s",
-                canonical_unit="m3/s",
-                chunk_years=20,
-                notes=(
-                    "DWS daily average flow rate (D_AVG_FR column) in m³/s. "
-                    "Retrieved from DataType=Daily endpoint in 20-year windows. "
-                    f"{timezone_note}"
-                ),
-            ),
         },
         {
             "provider_id": "za_dws",
@@ -635,18 +583,6 @@ def _expected_products() -> pl.DataFrame:
             "native_id": "COR_FLOW",
             "derived": False,
             "derivation_method": None,
-            "metadata": _product_metadata(
-                data_type="Point",
-                value_column="COR_FLOW",
-                native_unit="m3/s",
-                canonical_unit="m3/s",
-                chunk_years=1,
-                notes=(
-                    "DWS corrected flow (COR_FLOW column) in m³/s, derived from COR_LEVEL via rating curve. "
-                    "Retrieved from DataType=Point endpoint in 1-year windows. "
-                    f"{timezone_note}"
-                ),
-            ),
         },
         {
             "provider_id": "za_dws",
@@ -660,18 +596,6 @@ def _expected_products() -> pl.DataFrame:
             "native_id": "COR_LEVEL",
             "derived": False,
             "derivation_method": None,
-            "metadata": _product_metadata(
-                data_type="Point",
-                value_column="COR_LEVEL",
-                native_unit="m",
-                canonical_unit="m",
-                chunk_years=1,
-                notes=(
-                    "DWS corrected level (COR_LEVEL column) in metres. "
-                    "Retrieved from DataType=Point endpoint in 1-year windows. "
-                    f"{timezone_note}"
-                ),
-            ),
         },
     ]
     return pl.DataFrame(rows, schema=generator.PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -684,15 +608,6 @@ def _expected_station_products(native: NativeTable) -> pl.DataFrame:
     rows = []
     for station_id in native.data["Station"]:
         for product_id in PRODUCT_IDS:
-            metadata = {
-                "station_id": station_id,
-                "product_id": product_id,
-                "availability_source": "provider_station_catalogue_assumption",
-                "availability_note": (
-                    "Materialised as availability=unknown; the DWS station catalogue does not "
-                    "expose which data variables are available per station."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": "za_dws",
@@ -703,7 +618,6 @@ def _expected_station_products(native: NativeTable) -> pl.DataFrame:
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
                 }
             )
     return pl.DataFrame(rows, schema=generator.STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -714,20 +628,6 @@ def _expected_station_products(native: NativeTable) -> pl.DataFrame:
 def _expected_provider_info(native: NativeTable) -> dict[str, object]:
     maximum = native.data["retrieved_at"].max()
     assert isinstance(maximum, datetime)
-    metadata = {
-        "data_url": "https://www.dws.gov.za/Hydrology/Verified/HyData.aspx",
-        "catalogue_url": "https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx",
-        "station_catalogue_source": (
-            "HyCatalogue.aspx is a link index; the linked WMA River PDFs publish the station "
-            "records and coordinate representation headers."
-        ),
-        "variable_code": "100.00",
-        "timezone_note": (
-            "Daily timestamps are date-only (YYYYMMDD), interpreted as UTC midnight (T00:00:00Z). "
-            "Point/instantaneous timestamps are SAST (Africa/Johannesburg, UTC+2, no DST) converted to UTC."
-        ),
-        "generator_input": "native",
-    }
     return {
         "provider_id": "za_dws",
         "name": "Department of Water and Sanitation — Verified Hydrology (DWS, South Africa)",
@@ -740,7 +640,6 @@ def _expected_provider_info(native: NativeTable) -> dict[str, object]:
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": maximum.date().isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -787,10 +686,10 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     station_products = pl.read_parquet(CATALOGUE_PATH / "station_products.parquet")
     generated = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
 
-    provider_digest = "61c9a3c844748c78e2fe8b22ad0ccc143a78f6c9cab392e48340ac6c7c407170"
-    products_digest = "9ec666e1593ea08c0847c1ae5e07b80bc394ac617270a1dc6246b74df6048448"
+    provider_digest = "3ebe10bb1479e7f70bd97354bdc18eaae7f32c93766d844d200ff8e592ded258"
+    products_digest = "b60c9ed3f3110172be344b6dbbf48cb9edc1757c1bd4fdefd43c3895e778de47"
     stations_digest = "362736b7f95535b309118c51eb5c21e8f0d0b52b06858f295fc7b44ecff2c562"
-    station_products_digest = "e31151f6129f74c8cc3cea7fd5759ccb6b48a349461bad96cfb18d5d96d4616e"
+    station_products_digest = "e840b2c83275616e9a10d0350e51ba2219a33bd716e250091bce36964ae7da94"
     assert _provider_content_sha256(provider_info) == provider_digest
     assert _frame_content_sha256(products) == products_digest
     assert _frame_content_sha256(stations) == stations_digest

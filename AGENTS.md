@@ -81,6 +81,8 @@ pl_testing.assert_frame_equal(result_df, expected_df)
 Packaged catalogue generation has two regimes, keyed on whether the provider has both a committed
 native table and origin declarations.
 
+Origin certification for this vision closes over eleven providers. br_ana and no_nve are deliberately deferred by the operator's 2026-08-03 scope ruling to a separate effort ticket; they remain outside ORIGIN_GATE_ENROLLED_PROVIDERS, not overlooked. The enrolment gate remains because removing it would silently treat deferred providers as certified.
+
 The committed native table carries provenance. Produce it with the provider's `refresh` operation
 against the live provider API. It may instead be materialized from a `tests/test_data/` fixture only
 when that fixture has been verified content-identical to a live payload and the repository record
@@ -435,7 +437,8 @@ supplied live JSON, or a fixture-backed canonical route.
   `GET https://standard.thaiwater.net/docs/การจัดทำมาตรฐานน้ำ-ระยะ/ข้อมูลอ้างอิง-ข้อมูลอ้า/การระบุพิกัดตำแหน่ง/`
   outside the executor sandbox at `2026-08-02T13:51:44Z`; the coordinate-standard page capture is
   607,845 bytes with SHA-256
-  `64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04`. Future Thailand canonical
+  `64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04`; its byte-identical committed
+  capture is `tests/test_data/th_thaiwater_coordinate_standard.html`. Future Thailand canonical
   artifacts must be built network-free from committed `native.parquet` and origin declarations,
   never from `--live` or a fixture.
 
@@ -462,12 +465,38 @@ supplied live JSON, or a fixture-backed canonical route.
   `2026-08-02T16:43:18Z`, received 230 station objects with one uniform 24-key keyset, and supplied the
   complete JSON response. Canonicalization uses one
   `json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)` call over the complete
-  parsed 230-element document, encoded as UTF-8, and produces SHA-256
+  parsed 230-element document committed as
+  `tests/test_data/ba_fhmzbih_crs_evidence_stations.json`, encoded as UTF-8, and produces SHA-256
   `c78bd3b3aee2859eaef3c4373029fe7619a7d8e40b53fa0eab7f989ade3524bc`. The document carries
   `station_latitude`, `station_longitude`, `station_carteasting`, `station_cartnorthing`,
   `station_local_x`, and `station_local_y`, and contains zero horizontal-CRS tokens. Its datum-named
   fields `station_gauge_datum`, `GAUGE_DATUM`, and `GWREF_DATUM` are vertical metre elevations, not
   horizontal coordinate reference systems.
+
+- Switzerland publisher CRS-capture attestation: the declared evidence URL is
+  `https://api.existenz.ch/#hydro`. The orchestrator requested `GET https://api.existenz.ch/`
+  outside the executor sandbox at `2026-08-03T12:31:42Z`; the final URL was identical, with no
+  redirect, and the response was HTTP 200. The response has 15,737 raw bytes and raw SHA-256
+  `488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df`; its byte-identical
+  committed capture is `tests/test_data/ch_foen_api_docs.html`. The `#hydro` suffix is a page-fragment
+  selector and was never sent to the server.
+
+- Czechia publisher CRS-capture attestation: the declared, requested, and final URL was
+  `https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf`, with no redirect. The
+  orchestrator performed the request outside the executor sandbox at `2026-08-03T12:31:42Z` and
+  received HTTP 200. The response has 423,157 raw bytes and raw SHA-256
+  `41958b49634d2dc01b51ff72b65d054402628cd154bbcd6b8020def12d88d45a`; its byte-identical
+  committed capture is `tests/test_data/cz_chmi_popis_kodu_historical.pdf`.
+
+- Japan publisher CRS-capture attestation: the milestone-14 accepted response used the identical
+  declared, requested, and final URL
+  `http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010`. It returned historical
+  HTTP 200 at `2026-08-02T19:35:42Z`; the response has 3,208 raw bytes and raw SHA-256
+  `81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9`. Its byte-identical
+  committed capture is `tests/test_data/jp_mlit_site_info_detail_301011281104010.html`, and its
+  acceptance is bound to the milestone-14 requirement that the body contain the EUC-JP bytes for
+  `世界測地系`. A separate attempt at `2026-08-03T12:31:42Z` returned HTTP 403 with a 77-byte
+  access-restriction body, so this evidence is non-refetchable; no later success is claimed.
 
 - Japan native-table capture attestation: the
   orchestrator performed the endpoint-expanded 1,024-request capture outside the executor sandbox.
@@ -597,9 +626,10 @@ native table and origins, and commit the resulting canonical artifacts alongside
 
 ### 4.2 Providers not yet migrated
 
-For a provider without both a committed native table and origin declarations (currently the other
-two: `br_ana` and `no_nve`), the four canonical packaged catalogue artifacts must be
-generated from the live provider API before the provider is committed.
+Exactly two providers, `br_ana` and `no_nve`, remain without both a committed native table and origin
+declarations. Their legacy catalogue generation remains outside this certification, and their four
+canonical packaged catalogue artifacts must be generated from the live provider API before the
+provider is committed.
 
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must

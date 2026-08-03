@@ -36,10 +36,6 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.lt_lhmt.metadata import (
-    LtLhmtProductMetadata,
-    LtLhmtStationProductMetadata,
-)
 
 PROVIDER_ID = ProviderId("lt_lhmt")
 PROVIDER_NAME = "Lithuanian Hydrometeorological Service LHMT (Meteo.lt)"
@@ -66,19 +62,6 @@ class ProductDefinition:
     period_anchor: str
     canonical_unit: str
     native_field: str
-    native_unit: str
-    unit_conversion: str | None
-    notes: str | None
-
-    @property
-    def metadata(self) -> LtLhmtProductMetadata:
-        return LtLhmtProductMetadata(
-            native_field=self.native_field,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            unit_conversion=self.unit_conversion,
-            notes=self.notes,
-        )
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -91,9 +74,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         native_field="waterDischarge",
-        native_unit="m3/s",
-        unit_conversion=None,
-        notes="Daily mean discharge. Timestamps are date-only UTC strings interpreted as UTC midnight.",
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -104,10 +84,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         native_field="waterLevel",
-        native_unit="cm",
-        unit_conversion="divide_by_100",
-        notes="Daily mean stage. Native unit is centimetres; converted to metres on ingest. "
-        "Timestamps are date-only UTC strings interpreted as UTC midnight.",
     ),
 )
 
@@ -184,7 +160,6 @@ def build_products() -> ProductCatalog:
             "native_id": defn.native_field,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(defn.metadata),
         }
         for defn in PRODUCT_DEFINITIONS
     ]
@@ -216,16 +191,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
         if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
             raise FatalContractError("station retrieval date must pair a string identifier with a date")
         for defn in PRODUCT_DEFINITIONS:
-            meta = LtLhmtStationProductMetadata(
-                station_id=station_id,
-                product_id=defn.product_id,
-                native_field=defn.native_field,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
-                    "Meteo.lt hydro-stations catalogue does not expose per-variable station availability; "
-                    "all station-product pairs are materialized as availability=unknown."
-                ),
-            )
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -236,7 +201,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": retrieved_date,
-                    "metadata": _metadata_json(meta),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -247,12 +211,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata = {
-        "source_url": METADATA_URL,
-        "generator_input": "native",
-        "terms_of_use": "https://api.meteo.lt/",
-        "rate_limit": "180 requests per minute",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -264,7 +222,6 @@ def build_provider_info(
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -343,10 +300,6 @@ def _read_live_json(url: str) -> list[object]:
     if not isinstance(value, list):
         raise FatalContractError("Lithuania metadata live response must contain a JSON array")
     return cast("list[object]", value)
-
-
-def _metadata_json(model: LtLhmtProductMetadata | LtLhmtStationProductMetadata) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
 def _required_float(value: object, name: str) -> float:

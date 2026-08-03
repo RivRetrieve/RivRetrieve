@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import typing
 from dataclasses import FrozenInstanceError
@@ -7,6 +8,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+import rivretrieve as rr
 from rivretrieve._internal.catalogue_origins import (
     ORIGIN_GATE_ENROLLED_PROVIDERS,
     CatalogueOrigin,
@@ -62,15 +64,26 @@ CANADA_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue
 THAI_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 JAPAN_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 THAI_COORDINATE_EVIDENCE_PATH = Path("tests/test_data/th_thaiwater_coordinate_standard.html")
+REPOSITORY_ROOT = Path(__file__).parents[1]
+CATALOGUE_ORIGINS_MODULE_PATH = REPOSITORY_ROOT / "src/rivretrieve/_internal/catalogue_origins.py"
+CATALOGUE_ORIGINS_ADR_PATH = REPOSITORY_ROOT / "docs/adr/0012-a-catalogue-column-declares-its-origin.md"
+AGENTS_PATH = REPOSITORY_ROOT / "AGENTS.md"
+CONTEXT_PATH = REPOSITORY_ROOT / "CONTEXT.md"
 
 
 class _CanonicalLinkParser(HTMLParser):
-    canonical_url: str | None = None
+    canonical_urls: list[str]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.canonical_urls = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         if tag == "link" and attributes.get("rel") == "canonical":
-            self.canonical_url = attributes.get("href")
+            href = attributes.get("href")
+            if href is not None:
+                self.canonical_urls.append(href)
 
 
 def test_field_carries_an_exact_native_column_and_is_immutable() -> None:
@@ -215,27 +228,104 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_bosnia_canada_czechia_france_japan_lithuania_poland_south_africa_switzerland_thailand_and_usgs() -> (
-    None
-):
-    assert (
-        frozenset(
-            {
-                ProviderId("ba_fhmzbih"),
-                ProviderId("ca_eccc"),
-                ProviderId("ch_foen"),
-                ProviderId("cz_chmi"),
-                ProviderId("fr_hubeau"),
-                ProviderId("jp_mlit"),
-                ProviderId("lt_lhmt"),
-                ProviderId("pl_imgw"),
-                ProviderId("th_thaiwater"),
-                ProviderId("usgs_nwis"),
-                ProviderId("za_dws"),
-            }
-        )
-        == ORIGIN_GATE_ENROLLED_PROVIDERS
+def test_origin_gate_enrols_exactly_the_eleven_in_scope_providers() -> None:
+    expected = frozenset(
+        {
+            ProviderId("ba_fhmzbih"),
+            ProviderId("ca_eccc"),
+            ProviderId("ch_foen"),
+            ProviderId("cz_chmi"),
+            ProviderId("fr_hubeau"),
+            ProviderId("jp_mlit"),
+            ProviderId("lt_lhmt"),
+            ProviderId("pl_imgw"),
+            ProviderId("th_thaiwater"),
+            ProviderId("usgs_nwis"),
+            ProviderId("za_dws"),
+        }
     )
+    registered = frozenset(map(ProviderId, rr.providers()))
+
+    assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
+    assert registered >= ORIGIN_GATE_ENROLLED_PROVIDERS
+    assert registered - ORIGIN_GATE_ENROLLED_PROVIDERS == frozenset({ProviderId("br_ana"), ProviderId("no_nve")})
+
+
+def _collapse_whitespace(value: str) -> str:
+    return " ".join(value.split())
+
+
+def test_origin_scope_documentation_contract_pins_the_constant_docstring() -> None:
+    module = ast.parse(CATALOGUE_ORIGINS_MODULE_PATH.read_text())
+    assignment_index = next(
+        (
+            index
+            for index, statement in enumerate(module.body)
+            if isinstance(statement, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "ORIGIN_GATE_ENROLLED_PROVIDERS"
+                for target in statement.targets
+            )
+        ),
+        None,
+    )
+    assert assignment_index is not None, "ORIGIN_GATE_ENROLLED_PROVIDERS assignment is missing"
+    assert assignment_index + 1 < len(module.body), "origin gate scope docstring is missing after the assignment"
+    docstring_statement = module.body[assignment_index + 1]
+    assert isinstance(docstring_statement, ast.Expr) and isinstance(docstring_statement.value, ast.Constant), (
+        "origin gate scope docstring is not immediately after the assignment"
+    )
+    assert docstring_statement.value.value == (
+        "The eleven providers certified by this vision. br_ana and no_nve were deliberately deferred by the "
+        "2026-08-03 human scope ruling and remain unenrolled for a separate effort ticket."
+    ), "origin gate scope docstring has drifted"
+
+
+def test_origin_scope_documentation_contract_pins_adr_and_agents_ruling() -> None:
+    adr = _collapse_whitespace(CATALOGUE_ORIGINS_ADR_PATH.read_text())
+    agents = _collapse_whitespace(AGENTS_PATH.read_text())
+    scoped_state = _collapse_whitespace(
+        "There is no half-landed state within `ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled "
+        "set is completely declared, while the explicitly deferred `br_ana` and `no_nve` remain outside that set."
+    )
+    agents_scope = _collapse_whitespace(
+        "Origin certification for this vision closes over eleven providers. br_ana and no_nve are deliberately "
+        "deferred by the operator's 2026-08-03 scope ruling to a separate effort ticket; they remain outside "
+        "ORIGIN_GATE_ENROLLED_PROVIDERS, not overlooked. The enrolment gate remains because removing it would "
+        "silently treat deferred providers as certified."
+    )
+
+    assert "## Consequence: the build stays red until every enrolled provider is declared" in adr, (
+        "ADR consequence heading does not scope the build-red rule to enrolled providers"
+    )
+    assert "2026-08-03" in adr, "ADR is missing the dated human scope ruling"
+    assert "`br_ana`" in adr, "ADR is missing the deferred br_ana provider id"
+    assert "`no_nve`" in adr, "ADR is missing the deferred no_nve provider id"
+    assert "deferred `br_ana` and `no_nve` to a separate effort ticket" in adr, (
+        "ADR does not state that both providers were deferred to a separate effort ticket"
+    )
+    assert scoped_state in adr, "ADR is missing the exact scoped half-landed-state contract"
+    assert "ORIGIN_GATE_ENROLLED_PROVIDERS" in adr, "ADR is missing the explicit enrolment boundary name"
+    assert "26,231" in adr, "ADR lost the USGS defect-history station count"
+    assert "52,145" in adr, "ADR lost the Brazil defect-history row count"
+    assert "4,889" in adr, "ADR lost the Norway defect-history station count"
+    assert agents_scope in agents, "AGENTS.md is missing the exact durable eleven-provider scope ruling"
+
+
+def test_origin_scope_documentation_contract_pins_glossary_boundary() -> None:
+    glossary = _collapse_whitespace(CONTEXT_PATH.read_text())
+    origin_scope = _collapse_whitespace(
+        "Every canonical column carries one for every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled "
+        "provider is explicitly outside origin certification rather than treated as compliant."
+    )
+    best_effort_scope = _collapse_whitespace(
+        "In the catalogue this is enforced rather than intended: a best-effort column still carries an [[origin]] "
+        "for every [[provider]] in `ORIGIN_GATE_ENROLLED_PROVIDERS`, so being empty is a declared claim and not "
+        "permission to leave it unfilled."
+    )
+
+    assert origin_scope in glossary, "Origin glossary entry is missing the explicit enrolment boundary"
+    assert best_effort_scope in glossary, "Best-effort glossary entry is missing the explicit enrolment boundary"
 
 
 def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
@@ -382,12 +472,12 @@ def test_committed_bosnia_origins_pass_validation_and_enforcement() -> None:
     enforce_catalogue_origins(ProviderId("ba_fhmzbih"), STATION_CATALOGUE_ORIGINS, native_table, stations)
 
 
-def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation() -> None:
-    with pytest.raises(
-        FatalContractError,
-        match=r"other_provider: provider is not enrolled in catalogue origin gate",
-    ):
-        enforce_catalogue_origins(ProviderId("other_provider"), {}, None, None)  # type: ignore[arg-type]
+@pytest.mark.parametrize("provider_id", [ProviderId("br_ana"), ProviderId("no_nve"), ProviderId("other_provider")])
+def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation(provider_id: ProviderId) -> None:
+    with pytest.raises(FatalContractError) as exc_info:
+        enforce_catalogue_origins(provider_id, {}, None, None)  # type: ignore[arg-type]
+
+    assert str(exc_info.value) == f"{provider_id}: provider is not enrolled in catalogue origin gate"
 
 
 def test_lithuania_declarations_match_canonical_schema_order_and_values() -> None:
@@ -430,8 +520,9 @@ def test_thailand_declarations_match_schema_and_committed_coordinate_evidence() 
         "longitude": Field(NativeColumn("station.tele_station_long")),
         "crs": NotPublished(Evidence(THAI_CRS_EVIDENCE_URL)),
     } == THAI_STATION_ORIGINS
-    assert parser.canonical_url == THAI_CRS_EVIDENCE_URL
-    assert THAI_CRS_EVIDENCE_URL in capture
+    assert len(THAI_CRS_EVIDENCE_URL) == 104
+    assert capture.count(THAI_CRS_EVIDENCE_URL) == 2
+    assert parser.canonical_urls == [THAI_CRS_EVIDENCE_URL]
 
 
 def test_committed_thailand_origins_pass_validation() -> None:
