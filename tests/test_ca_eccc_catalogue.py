@@ -420,7 +420,7 @@ def test_committed_native_first_middle_and_last_ids_are_pinned() -> None:
     assert ids.item(-1) == "11AF005"
 
 
-def test_native_build_counts_crs_metadata_and_dates() -> None:
+def test_native_build_counts_crs_and_dates() -> None:
     catalogue = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
 
     assert catalogue.stations.height == 8057
@@ -429,11 +429,7 @@ def test_native_build_counts_crs_metadata_and_dates() -> None:
     assert set(catalogue.stations["crs"]) == {"EPSG:4326"}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
     assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
-    product_metadata = json.loads(catalogue.products.row(0, named=True)["metadata"])
-    assert product_metadata["ogc_field"] == "DISCHARGE"
-    provider_metadata = json.loads(catalogue.provider_info["metadata"])
-    assert provider_metadata["generator_input"] == "native"
-    assert "HYDAT" in provider_metadata["observation_source"]
+    assert set(catalogue.products["native_id"]) == {"DISCHARGE", "LEVEL"}
 
 
 def test_build_catalogue_is_gated_on_origins() -> None:

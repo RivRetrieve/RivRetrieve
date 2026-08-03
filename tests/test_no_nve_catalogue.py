@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date
+import hashlib
+import json
+from datetime import date, datetime
 from pathlib import Path
 
 import polars as pl
 
+from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    PROVIDER_INFO_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
+)
 from rivretrieve._internal.providers.no_nve.generate_catalogue import (
     generate_catalogue_from_fixture,
 )
@@ -118,3 +125,39 @@ def test_catalogue_provider_id_is_no_nve() -> None:
 def test_catalogue_respects_catalogue_date() -> None:
     cat = generate_catalogue_from_fixture(_FIXTURE, catalogue_date=date(2024, 1, 15))
     assert cat.provider_info["catalogue_version"] == "2024-01-15"
+
+
+def test_fixture_build_uses_exact_reduced_carriers() -> None:
+    cat = generate_catalogue_from_fixture(_FIXTURE)
+    assert cat.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert cat.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert tuple(cat.provider_info) == tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
+
+
+def _frame_content_sha256(frame: pl.DataFrame) -> str:
+    def normalized(value: object) -> object:
+        return value.isoformat() if isinstance(value, date | datetime) else value
+
+    payload = {
+        "columns": frame.columns,
+        "rows": [[normalized(value) for value in row] for row in frame.iter_rows()],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+
+
+def test_projected_national_artifacts_have_pinned_complete_content() -> None:
+    catalogue = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/no_nve/catalogue"
+    assert hashlib.sha256((catalogue / "provider.json").read_bytes()).hexdigest() == (
+        "19ea7b5e39b30806bcdd1bbe150b7c0dfad1383bb8af064473b6a2fc21ae05ad"
+    )
+    assert _frame_content_sha256(pl.read_parquet(catalogue / "products.parquet")) == (
+        "54955f245e2cb59508f0b4585c39fa884d540d7371c7b5bed41d398774b243a5"
+    )
+    assert _frame_content_sha256(pl.read_parquet(catalogue / "stations.parquet")) == (
+        "04d72696921bab0da6f0fe69f0f8df0059e77120fbd3c6e220a642b8b570f28b"
+    )
+    assert _frame_content_sha256(pl.read_parquet(catalogue / "station_products.parquet")) == (
+        "19bcf56f22282f9a3efc4e89d0df85723951e74a62677d48a6ba1b01fa20c176"
+    )

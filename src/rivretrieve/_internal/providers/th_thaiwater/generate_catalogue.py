@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -174,19 +174,6 @@ class ProductDefinition:
     period_anchor: str
     canonical_unit: str
     native_field: str
-    aggregate_daily: bool
-    native_unit: str
-    notes: str | None
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "native_field": self.native_field,
-            "aggregate_daily": self.aggregate_daily,
-            "native_unit": self.native_unit,
-            "canonical_unit": self.canonical_unit,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -199,9 +186,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         native_field="value",
-        aggregate_daily=True,
-        native_unit="m",
-        notes=("Daily mean stage from ThaiWater waterlevel_graph 'value' field aggregated over Bangkok calendar days."),
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -212,12 +196,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="m",
         native_field="value",
-        aggregate_daily=False,
-        native_unit="m",
-        notes=(
-            "Instantaneous stage from ThaiWater waterlevel_graph 'value' field. "
-            "Timestamps are in Asia/Bangkok and converted to UTC."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_daily_mean",
@@ -228,12 +206,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         native_field="discharge",
-        aggregate_daily=True,
-        native_unit="m3/s",
-        notes=(
-            "Daily mean discharge from ThaiWater waterlevel_graph 'discharge' field "
-            "aggregated over Bangkok calendar days."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
@@ -244,12 +216,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="m3/s",
         native_field="discharge",
-        aggregate_daily=False,
-        native_unit="m3/s",
-        notes=(
-            "Instantaneous discharge from ThaiWater waterlevel_graph 'discharge' field. "
-            "Timestamps are in Asia/Bangkok and converted to UTC."
-        ),
     ),
 )
 
@@ -482,7 +448,6 @@ def build_products(
             "native_id": d.native_field,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(d.metadata),
         }
         for d in product_definitions
     ]
@@ -507,16 +472,6 @@ def build_station_products(
         if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
             raise FatalContractError("station retrieval date must pair a string identifier with a date")
         for definition in PRODUCT_DEFINITIONS:
-            metadata: dict[str, object] = {
-                "station_id": station_id,
-                "product_id": definition.product_id,
-                "native_field": definition.native_field,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": (
-                    "Materialised as availability=unknown; "
-                    "waterlevel_load does not guarantee observed data for every product."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -527,7 +482,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": retrieved_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -538,13 +492,6 @@ def build_station_products(
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "source_url": METADATA_URL,
-        "generator_input": "native",
-        "local_timezone": "Asia/Bangkok",
-        "vertical_datum": VERTICAL_DATUM,
-        "station_type_filter": STATION_TYPE_FILTER,
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -556,7 +503,6 @@ def build_provider_info(
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -589,10 +535,6 @@ def write_catalogue(catalogue: GeneratedThThaiWaterCatalogue, out_dir: Path | st
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-
-
-def _metadata_json(value: Mapping[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _read_fixture_json(path: Path) -> dict[str, object]:

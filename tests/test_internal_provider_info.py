@@ -15,7 +15,6 @@ def valid_provider_info_row() -> dict[str, object]:
         "live_station_products": False,
         "bulk_observations": "none",
         "catalogue_version": "2026.01",
-        "metadata": '{"homepage":"https://stub.example.invalid"}',
     }
 
 
@@ -30,7 +29,6 @@ def test_provider_info_from_row_matches_provider_info_catalog_contract() -> None
         live_station_products=False,
         bulk_observations="none",
         catalogue_version="2026.01",
-        metadata='{"homepage":"https://stub.example.invalid"}',
     )
 
 
@@ -38,12 +36,6 @@ def test_provider_info_to_row_round_trips_catalogue_row() -> None:
     row = valid_provider_info_row()
 
     assert ProviderInfo.from_row(row).to_row() == row
-
-
-def test_provider_info_metadata_is_raw_json_string() -> None:
-    info = ProviderInfo.from_row(valid_provider_info_row())
-
-    assert isinstance(info.metadata, str)
 
 
 @pytest.mark.parametrize("field_name", list(valid_provider_info_row()))
@@ -65,29 +57,11 @@ def test_provider_info_rejects_missing_required_field(field_name: str) -> None:
         ("live_station_products", None),
         ("bulk_observations", False),
         ("catalogue_version", 123),
-        ("metadata", {"homepage": "https://stub.example.invalid"}),
     ],
 )
 def test_provider_info_rejects_wrong_field_type(field_name: str, bad_value: object) -> None:
     row = valid_provider_info_row()
     row[field_name] = bad_value
-
-    with pytest.raises(ProviderInfoValidationError):
-        ProviderInfo.from_row(row)
-
-
-def test_provider_info_rejects_invalid_metadata_json() -> None:
-    row = valid_provider_info_row()
-    row["metadata"] = "{"
-
-    with pytest.raises(ProviderInfoValidationError):
-        ProviderInfo.from_row(row)
-
-
-@pytest.mark.parametrize("metadata", ["[]", "null"])
-def test_provider_info_rejects_non_object_metadata_json(metadata: str) -> None:
-    row = valid_provider_info_row()
-    row["metadata"] = metadata
 
     with pytest.raises(ProviderInfoValidationError):
         ProviderInfo.from_row(row)

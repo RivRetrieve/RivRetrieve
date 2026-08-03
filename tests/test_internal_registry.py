@@ -202,10 +202,12 @@ def test_registry_engine_module_drives_and_packages_public_result(
     pl_testing.assert_frame_equal(
         result.row_annotations.data,
         pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
+        check_exact=True,
     )
     pl_testing.assert_frame_equal(
         result.series_annotations.data,
         pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
+        check_exact=True,
     )
     assert result.provenance.source == "test-engine"
     assert result.raw == RawPayload(provider_id=ProviderId("test_provider"))
@@ -349,7 +351,7 @@ def test_provider_handle_info_fatal_failures_are_direct(
 ) -> None:
     artifact = stub_packaged_catalogue_artifact("stub_provider")
     bad_artifact = PackagedCatalogArtifact(
-        provider_info={**artifact.provider_info, "metadata": "[]"},
+        provider_info={**artifact.provider_info, "name": 123},
         products=artifact.products,
         stations=artifact.stations,
         station_products=artifact.station_products,
@@ -395,7 +397,7 @@ def test_provider_handle_products_reads_artifact_not_provider_module(registered_
 
     result = registered_stub.handle.products()
 
-    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.products)
+    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.products, check_exact=True)
     assert result.issues == ()
 
 
@@ -405,7 +407,7 @@ def test_provider_handle_stations_reads_artifact_not_provider_module(registered_
 
     result = registered_stub.handle.stations()
 
-    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.stations)
+    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.stations, check_exact=True)
     assert result.issues == ()
 
 
@@ -415,7 +417,7 @@ def test_provider_handle_station_products_reads_artifact_not_provider_module(reg
 
     result = registered_stub.handle.station_products()
 
-    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.station_products)
+    pl_testing.assert_frame_equal(result.data, registered_stub.handle._artifact.station_products, check_exact=True)
     assert result.issues == ()
 
 

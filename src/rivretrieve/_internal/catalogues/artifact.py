@@ -1,10 +1,11 @@
+"""packaged catalogue loading : ArtifactFiles → PackagedCatalogArtifact."""
+
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 import polars as pl
 
@@ -128,28 +129,12 @@ def _read_parquet(path: Path) -> pl.DataFrame:
 
 def _provider_info_to_df(provider_info: Mapping[str, object]) -> pl.DataFrame:
     normalized = dict(provider_info)
-    metadata = normalized.get("metadata")
-    if _is_row_sequence(metadata):
-        normalized["metadata"] = [_canonical_metadata_value(value) for value in cast(Sequence[object], metadata)]
-    else:
-        normalized["metadata"] = _canonical_metadata_value(metadata)
-
     try:
         if any(_is_row_sequence(value) for value in normalized.values()):
             return pl.DataFrame(normalized, schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
         return pl.DataFrame([normalized], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     except pl.exceptions.PolarsError as exc:
         raise FatalContractError("Provider info cannot be converted to the catalogue schema") from exc
-
-
-def _canonical_metadata_value(value: object) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, str):
-        return value
-    if not isinstance(value, dict):
-        raise FatalContractError("Provider info metadata must be a JSON object or JSON object string")
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _is_row_sequence(value: object) -> bool:

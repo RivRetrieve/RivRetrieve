@@ -1,3 +1,5 @@
+"""Brazil catalogue build : ProviderStationPayload → GeneratedBrAnaCatalogue."""
+
 from __future__ import annotations
 
 import argparse
@@ -27,25 +29,12 @@ from rivretrieve._internal.catalogues.schemas import (
     validate_catalogue,
 )
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.br_ana.metadata import (
-    BrAnaProductMetadata,
-    BrAnaStationProductMetadata,
-)
 
 PROVIDER_ID = "br_ana"
 PROVIDER_NAME = "ANA Hidroweb — Brazilian National Water and Sanitation Agency"
 
 AUTH_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/OAUth/v1"
 METADATA_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1"
-DISCHARGE_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1"
-STAGE_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1"
-TELEMETRIC_ADOTADA_URL = (
-    "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
-)
-TELEMETRIC_DETALHADA_URL = (
-    "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaDetalhada/v1"
-)
-
 AVAILABILITY_REASON = "ANA catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 
@@ -100,24 +89,8 @@ class ProductDefinition:
     period_type: str
     period_anchor: str
     canonical_unit: str
-    api_endpoint: str
-    native_unit: str
-    conversion_factor: float
-    notes: str | None
     day_column_prefix: str | None = None  # "Vazao_" / "Cota_" — daily columnar series
     native_field: str | None = None  # "Vazao_Adotada" etc. — telemetric/instantaneous series
-
-    @property
-    def metadata(self) -> BrAnaProductMetadata:
-        return BrAnaProductMetadata(
-            day_column_prefix=self.day_column_prefix,
-            native_field=self.native_field,
-            api_endpoint=self.api_endpoint,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            conversion_factor=self.conversion_factor,
-            notes=self.notes,
-        )
 
     @property
     def native_id(self) -> str:
@@ -136,16 +109,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         day_column_prefix="Vazao_",
-        api_endpoint=DISCHARGE_URL,
-        native_unit="m3/s",
-        conversion_factor=1.0,
-        notes=(
-            "ANA Hidroweb HidroSerieVazao/v1. "
-            "Daily mean discharge in m³/s (no unit conversion needed). "
-            "Timestamps are date-only, reconstructed from year/month/day columns "
-            "and interpreted as UTC midnight (T00:00:00Z). "
-            "True local timezone is undocumented (likely Brasília Standard Time, UTC-3)."
-        ),
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -156,17 +119,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         day_column_prefix="Cota_",
-        api_endpoint=STAGE_URL,
-        native_unit="cm",
-        conversion_factor=100.0,
-        notes=(
-            "ANA Hidroweb HidroSerieCotas/v1. "
-            "Daily mean stage in cm, divided by 100 to convert to m. "
-            "Raw cm value preserved in raw_value row annotation. "
-            "Timestamps are date-only, reconstructed from year/month/day columns "
-            "and interpreted as UTC midnight (T00:00:00Z). "
-            "True local timezone is undocumented (likely Brasília Standard Time, UTC-3)."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
@@ -177,19 +129,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         native_field="Vazao_Adotada",
-        api_endpoint=TELEMETRIC_ADOTADA_URL,
-        native_unit="m3/s",
-        conversion_factor=1.0,
-        notes=(
-            "ANA Hidroweb HidroinfoanaSerieTelemetricaAdotada/v1 — telemetric "
-            "(QC-adopted) discharge series at the station's native telemetry cadence "
-            "(commonly ~15 minutes). Includes a per-reading quality flag "
-            "(Vazao_Adotada_Status: 0=ok/1=suspeito/2=ruim) captured as the "
-            "'quality_flag' row annotation ('ok'/'suspect'/'poor'). Timestamps carry "
-            "genuine time-of-day (Data_Hora_Medicao); interpreted as Brasília Standard "
-            "Time (UTC-3) and converted to UTC. Requests are limited to 30-day windows "
-            "(Range Intervalo de busca = DIAS_30, anchored via Data de Busca)."
-        ),
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -200,20 +139,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         native_field="Cota_Adotada",
-        api_endpoint=TELEMETRIC_ADOTADA_URL,
-        native_unit="cm",
-        conversion_factor=100.0,
-        notes=(
-            "ANA Hidroweb HidroinfoanaSerieTelemetricaAdotada/v1 — telemetric "
-            "(QC-adopted) stage series at the station's native telemetry cadence "
-            "(commonly ~15 minutes), in cm, divided by 100 to convert to m. Raw cm "
-            "value preserved in the raw_value row annotation. Includes a per-reading "
-            "quality flag (Cota_Adotada_Status: 0=ok/1=suspeito/2=ruim) captured as the "
-            "'quality_flag' row annotation ('ok'/'suspect'/'poor'). Timestamps carry "
-            "genuine time-of-day (Data_Hora_Medicao); interpreted as Brasília Standard "
-            "Time (UTC-3) and converted to UTC. Requests are limited to 30-day windows "
-            "(Range Intervalo de busca = DIAS_30, anchored via Data de Busca)."
-        ),
     ),
     ProductDefinition(
         product_id="water_temperature_instantaneous",
@@ -224,25 +149,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="degC",
         native_field="Temperatura_Agua",
-        api_endpoint=TELEMETRIC_DETALHADA_URL,
-        native_unit="degC",
-        conversion_factor=1.0,
-        notes=(
-            "ANA Hidroweb HidroinfoanaSerieTelemetricaDetalhada/v1 — raw sensor water "
-            "temperature (Temperatura_Agua) at the station's native telemetry cadence "
-            "(commonly ~15 minutes); only available via the 'Detalhada' (not 'Adotada') "
-            "endpoint, which also returns Temperatura_Interna (logger/internal "
-            "temperature, no QC flag — not currently mapped to a canonical product). "
-            "Includes a per-reading quality flag (Temperatura_Agua_Status: "
-            "0=ok/1=suspeito/2=ruim) captured as the 'quality_flag' row annotation "
-            "('ok'/'suspect'/'poor'). Timestamps carry genuine time-of-day "
-            "(Data_Hora_Medicao); interpreted as Brasília Standard Time (UTC-3) and "
-            "converted to UTC. Requests are limited to 30-day windows (Range Intervalo "
-            "de busca = DIAS_30, anchored via Data de Busca). Availability is likely far "
-            "sparser than discharge/stage — only stations with water-temperature sensors "
-            "report this field; materialised as availability=unknown for all stations "
-            "pending per-variable availability data from ANA."
-        ),
     ),
 )
 
@@ -316,7 +222,6 @@ def build_products() -> ProductCatalog:
             "native_id": d.native_id,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(d.metadata),
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -349,15 +254,6 @@ def build_station_products(
         if not isinstance(station_id, str):
             raise FatalContractError("station_id must be a string")
         for d in PRODUCT_DEFINITIONS:
-            metadata = BrAnaStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
-                    "Materialised as availability=unknown; "
-                    "ANA inventory endpoint does not guarantee observed data for each variable."
-                ),
-            )
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -368,7 +264,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -381,15 +276,6 @@ def build_provider_info(
     *,
     generator_input: str,
 ) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "auth_url": AUTH_URL,
-        "metadata_url": METADATA_URL,
-        "discharge_url": DISCHARGE_URL,
-        "stage_url": STAGE_URL,
-        "generator_input": generator_input,
-        "timestamp_convention": "date_only_utc_midnight",
-        "credential_requirement": "ANA_IDENTIFICADOR and ANA_SENHA env vars required for live catalogue and observations",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -401,7 +287,6 @@ def build_provider_info(
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -638,12 +523,6 @@ def _to_bool(value: Any) -> bool:
         return value != 0
     text = str(value).strip().lower()
     return text in _TRUTHY_TEXT
-
-
-def _metadata_json(
-    model: BrAnaProductMetadata | BrAnaStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

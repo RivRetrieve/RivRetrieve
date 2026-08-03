@@ -1,3 +1,5 @@
+"""Norway catalogue build : ProviderStationPayload → GeneratedNoNveCatalogue."""
+
 from __future__ import annotations
 
 import argparse
@@ -24,10 +26,6 @@ from rivretrieve._internal.catalogues.schemas import (
     validate_catalogue,
 )
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.no_nve.metadata import (
-    NoNveProductMetadata,
-    NoNveStationProductMetadata,
-)
 
 PROVIDER_ID = "no_nve"
 PROVIDER_NAME = "NVE HydAPI — Norwegian Water Resources and Energy Directorate"
@@ -50,21 +48,6 @@ class ProductDefinition:
     canonical_unit: str
     parameter_id: int
     resolution_time: int
-    native_unit: str
-    timezone_handling: str
-    notes: str | None
-
-    @property
-    def metadata(self) -> NoNveProductMetadata:
-        return NoNveProductMetadata(
-            parameter_id=self.parameter_id,
-            resolution_time=self.resolution_time,
-            frequency=self.frequency,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            timezone_handling=self.timezone_handling,
-            notes=self.notes,
-        )
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -78,13 +61,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m",
         parameter_id=1000,
         resolution_time=1440,
-        native_unit="m",
-        timezone_handling="date_only_utc_midnight",
-        notes=(
-            "NVE parameter 1000 (water level), resolution 1440 min (daily). "
-            "Daily timestamps are date-only; interpreted as UTC midnight (T00:00:00Z). "
-            "No unit conversion: values already in metres."
-        ),
     ),
     ProductDefinition(
         product_id="stage_hourly_mean",
@@ -96,14 +72,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m",
         parameter_id=1000,
         resolution_time=60,
-        native_unit="m",
-        timezone_handling="provider_timestamp_offset",
-        notes=(
-            "NVE parameter 1000 (water level), resolution 60 min (hourly). "
-            "Timestamps carry explicit ISO 8601 timezone offset; converted to UTC. "
-            "Provider-specific product ID: no canonical hourly stage in V1 dictionary. "
-            "No unit conversion: values already in metres."
-        ),
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -115,13 +83,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m",
         parameter_id=1000,
         resolution_time=0,
-        native_unit="m",
-        timezone_handling="provider_timestamp_offset",
-        notes=(
-            "NVE parameter 1000 (water level), resolution 0 (instantaneous). "
-            "Timestamps carry explicit ISO 8601 timezone offset; converted to UTC. "
-            "No unit conversion: values already in metres."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_daily_mean",
@@ -133,13 +94,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m3/s",
         parameter_id=1001,
         resolution_time=1440,
-        native_unit="m3/s",
-        timezone_handling="date_only_utc_midnight",
-        notes=(
-            "NVE parameter 1001 (discharge), resolution 1440 min (daily). "
-            "Daily timestamps are date-only; interpreted as UTC midnight (T00:00:00Z). "
-            "No unit conversion: values already in m³/s."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_hourly_mean",
@@ -151,14 +105,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m3/s",
         parameter_id=1001,
         resolution_time=60,
-        native_unit="m3/s",
-        timezone_handling="provider_timestamp_offset",
-        notes=(
-            "NVE parameter 1001 (discharge), resolution 60 min (hourly). "
-            "Timestamps carry explicit ISO 8601 timezone offset; converted to UTC. "
-            "Provider-specific product ID: no canonical hourly discharge in V1 dictionary. "
-            "No unit conversion: values already in m³/s."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
@@ -170,13 +116,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="m3/s",
         parameter_id=1001,
         resolution_time=0,
-        native_unit="m3/s",
-        timezone_handling="provider_timestamp_offset",
-        notes=(
-            "NVE parameter 1001 (discharge), resolution 0 (instantaneous). "
-            "Timestamps carry explicit ISO 8601 timezone offset; converted to UTC. "
-            "No unit conversion: values already in m³/s."
-        ),
     ),
     ProductDefinition(
         product_id="water_temperature_daily_mean",
@@ -188,13 +127,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="degC",
         parameter_id=1003,
         resolution_time=1440,
-        native_unit="degC",
-        timezone_handling="date_only_utc_midnight",
-        notes=(
-            "NVE parameter 1003 (water temperature), resolution 1440 min (daily). "
-            "Daily timestamps are date-only; interpreted as UTC midnight (T00:00:00Z). "
-            "No unit conversion: values already in °C."
-        ),
     ),
     ProductDefinition(
         product_id="water_temperature_hourly_mean",
@@ -206,14 +138,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="degC",
         parameter_id=1003,
         resolution_time=60,
-        native_unit="degC",
-        timezone_handling="provider_timestamp_offset",
-        notes=(
-            "NVE parameter 1003 (water temperature), resolution 60 min (hourly). "
-            "Timestamps carry explicit ISO 8601 timezone offset; converted to UTC. "
-            "Provider-specific product ID: no canonical hourly water_temperature in V1 dictionary. "
-            "No unit conversion: values already in °C."
-        ),
     ),
     ProductDefinition(
         product_id="water_temperature_instantaneous",
@@ -225,13 +149,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         canonical_unit="degC",
         parameter_id=1003,
         resolution_time=0,
-        native_unit="degC",
-        timezone_handling="provider_timestamp_offset",
-        notes=(
-            "NVE parameter 1003 (water temperature), resolution 0 (instantaneous). "
-            "Timestamps carry explicit ISO 8601 timezone offset; converted to UTC. "
-            "No unit conversion: values already in °C."
-        ),
     ),
 )
 
@@ -332,7 +249,6 @@ def build_products() -> ProductCatalog:
             "native_id": f"{d.parameter_id}:{d.resolution_time}",
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(d.metadata),
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -392,26 +308,14 @@ def build_station_products(
             if available_pairs is not None and pair in available_pairs:
                 availability = "available"
                 availability_reason = f"NVE seriesList confirms parameter {d.parameter_id}, resTime {d.resolution_time}"
-                availability_source = "nve_series_list"
             elif available_pairs is not None:
                 availability = "unavailable"
                 availability_reason = (
                     f"NVE seriesList does not include parameter {d.parameter_id}, resTime {d.resolution_time}"
                 )
-                availability_source = "nve_series_list"
             else:
                 availability = "unknown"
                 availability_reason = "NVE seriesList not present in catalogue input"
-                availability_source = "catalogue_assumption"
-
-            metadata = NoNveStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                parameter_id=d.parameter_id,
-                resolution_time=d.resolution_time,
-                availability_source=availability_source,
-                availability_note=availability_reason,
-            )
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -422,7 +326,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -435,18 +338,6 @@ def build_provider_info(
     *,
     generator_input: str,
 ) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "stations_url": STATIONS_URL,
-        "observations_url": OBSERVATIONS_URL,
-        "generator_input": generator_input,
-        "auth_env_var": "NVE_API_KEY",
-        "timestamp_convention": (
-            "daily_resolution_1440=date_only_utc_midnight; "
-            "hourly_resolution_60_and_instantaneous_resolution_0=provider_timestamp_offset_to_utc"
-        ),
-        "unit_convention": "m for stage, m3/s for discharge, degC for water_temperature — no conversions needed",
-        "terms_of_use": "https://hydapi.nve.no/UserDocumentation/#termsofuse",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -459,7 +350,6 @@ def build_provider_info(
             "requires NVE_API_KEY; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -561,12 +451,6 @@ def _to_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
-
-
-def _metadata_json(
-    model: NoNveProductMetadata | NoNveStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
 def main(argv: list[str] | None = None) -> int:

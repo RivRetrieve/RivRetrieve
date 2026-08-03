@@ -104,20 +104,6 @@ class ProductDefinition:
     period_anchor: str
     canonical_unit: str
     kind: int
-    native_unit: str
-    timezone_handling: str
-    notes: str | None
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "kind": self.kind,
-            "frequency": self.frequency,
-            "native_unit": self.native_unit,
-            "canonical_unit": self.canonical_unit,
-            "timezone_handling": self.timezone_handling,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -130,14 +116,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         kind=2,
-        native_unit="m",
-        timezone_handling="jst_to_utc",
-        notes=(
-            "MLIT KIND 2 hourly stage. "
-            "Timestamps in Japan Standard Time (JST = Asia/Tokyo = UTC+9); converted to UTC. "
-            "No unit conversion: values are already in metres. "
-            "Note: the MLIT website labels KIND 2 as 'Daily' but it provides HOURLY data."
-        ),
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -148,14 +126,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m",
         kind=3,
-        native_unit="m",
-        timezone_handling="date_only_utc_midnight",
-        notes=(
-            "MLIT KIND 3 daily stage mean. "
-            "Timestamps are date-only (Japanese calendar day = JST day); "
-            "interpreted as UTC midnight (T00:00:00Z) following the established pattern. "
-            "No unit conversion: values are already in metres."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_hourly_mean",
@@ -166,14 +136,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         kind=6,
-        native_unit="m3/s",
-        timezone_handling="jst_to_utc",
-        notes=(
-            "MLIT KIND 6 hourly discharge. "
-            "Timestamps in Japan Standard Time (JST = Asia/Tokyo = UTC+9); converted to UTC. "
-            "No unit conversion: values are already in m³/s. "
-            "Note: the MLIT website labels KIND 6 as 'Daily' but it provides HOURLY data."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_daily_mean",
@@ -184,14 +146,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="provider_defined",
         canonical_unit="m3/s",
         kind=7,
-        native_unit="m3/s",
-        timezone_handling="date_only_utc_midnight",
-        notes=(
-            "MLIT KIND 7 daily discharge mean. "
-            "Timestamps are date-only (Japanese calendar day = JST day); "
-            "interpreted as UTC midnight (T00:00:00Z) following the established pattern. "
-            "No unit conversion: values are already in m³/s."
-        ),
     ),
 )
 
@@ -233,7 +187,6 @@ def build_products() -> ProductCatalog:
             "native_id": str(d.kind),
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(d.metadata),
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -288,16 +241,6 @@ def build_station_products(
         if not isinstance(station_id, str):
             raise FatalContractError("station_id must be a string")
         for d in PRODUCT_DEFINITIONS:
-            metadata = {
-                "station_id": station_id,
-                "product_id": d.product_id,
-                "kind": d.kind,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": (
-                    "Materialised as availability=unknown; the native station table does not publish "
-                    "per-KIND data availability."
-                ),
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -308,7 +251,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -319,17 +261,6 @@ def build_station_products(
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "dsp_url": DSP_URL,
-        "site_info_url": SITE_INFO_DETAIL_URL,
-        "generator_input": "native",
-        "catalogue_source": CATALOGUE_SOURCE,
-        "timestamp_convention": ("hourly_kinds_2_6=jst_to_utc; daily_kinds_3_7=date_only_utc_midnight"),
-        "note": (
-            "MLIT website labels KINDs 2 and 6 as 'Daily' but they provide HOURLY data. "
-            "KINDs 3 and 7 provide true DAILY data."
-        ),
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -342,7 +273,6 @@ def build_provider_info(
             "HTML scrape + Shift-JIS .dat download; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -831,10 +761,6 @@ def _write_native_atomic(table: NativeTable, destination: Path) -> None:
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
-
-
-def _metadata_json(value: Mapping[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def main(argv: list[str] | None = None) -> int:

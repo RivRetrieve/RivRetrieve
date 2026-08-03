@@ -61,9 +61,14 @@ _MIGRATED_SINCE_BASE = (
     "th_thaiwater",
     "za_dws",
 )
+_METADATA_REMOVED_AFTER_SCHEMA_NARROWING = (
+    "br_ana",
+    "lt_lhmt",
+    "no_nve",
+)
 RUNTIME_FILE_COUNTS = _BASE_RUNTIME_FILE_COUNTS.copy()
 RUNTIME_FILE_COUNTS["origins.py"] += len(_MIGRATED_SINCE_BASE)
-RUNTIME_FILE_COUNTS["metadata.py"] -= len(_MIGRATED_SINCE_BASE)
+RUNTIME_FILE_COUNTS["metadata.py"] -= len(_MIGRATED_SINCE_BASE) + len(_METADATA_REMOVED_AFTER_SCHEMA_NARROWING)
 
 
 def _runtime_provider_files() -> list[Path]:
@@ -140,6 +145,17 @@ def _engine_owned_operations(path: Path) -> list[str]:
 def test_runtime_provider_inventory_has_only_ratified_roles() -> None:
     assert Counter(path.name for path in _runtime_provider_files()) == RUNTIME_FILE_COUNTS
     assert {path.parent.name for path in _runtime_provider_files() if path.name == "parser.py"} == {"pl_imgw"}
+
+
+def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
+    model_names = {
+        node.name
+        for path in PROVIDERS_ROOT.glob("*/*.py")
+        for node in _tree(path).body
+        if isinstance(node, ast.ClassDef)
+        and any(isinstance(base, ast.Name) and base.id == "BaseModel" for base in node.bases)
+    }
+    assert model_names == set()
 
 
 def test_provider_modules_do_not_expose_observations() -> None:

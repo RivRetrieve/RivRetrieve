@@ -6,7 +6,7 @@ import argparse
 import hashlib
 import json
 import urllib.request
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
@@ -314,32 +314,14 @@ class ProductDefinition:
     period_type: str
     period_anchor: str
     canonical_unit: str
-    native_unit: str
     param_code: str
     stat_code: str | None
-    endpoint: str
     returned_data_type_cd: str
     returned_stat_cd: str
-    unit_conversion: str
-    notes: str | None
 
     @property
     def series_key(self) -> tuple[str, str, str]:
         return (self.returned_data_type_cd, self.param_code, self.returned_stat_cd)
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "param_code": self.param_code,
-            "stat_code": self.stat_code,
-            "endpoint": self.endpoint,
-            "returned_data_type_cd": self.returned_data_type_cd,
-            "returned_stat_cd": self.returned_stat_cd,
-            "native_unit": self.native_unit,
-            "canonical_unit": self.canonical_unit,
-            "unit_conversion": self.unit_conversion,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -351,18 +333,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="interval",
         period_anchor="start",
         canonical_unit="m3/s",
-        native_unit="ft3/s",
         param_code="00060",
         stat_code="00003",
-        endpoint="dv",
         returned_data_type_cd="dv",
         returned_stat_cd="00003",
-        unit_conversion="cfs_to_m3s",
-        notes=(
-            "Daily mean discharge. Native unit is cubic feet per second (cfs); "
-            "converted to m3/s by multiplying by 0.0283168466. "
-            "Timestamps are midnight local time with explicit timezone offset; converted to UTC."
-        ),
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
@@ -372,18 +346,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="instant",
         period_anchor="instant",
         canonical_unit="m3/s",
-        native_unit="ft3/s",
         param_code="00060",
         stat_code=None,
-        endpoint="iv",
         returned_data_type_cd="uv",
         returned_stat_cd="",
-        unit_conversion="cfs_to_m3s",
-        notes=(
-            "Instantaneous discharge (15-minute or sub-hourly). "
-            "Native unit is cfs; converted to m3/s. "
-            "Timestamps include explicit timezone offset; converted to UTC."
-        ),
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -393,14 +359,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="interval",
         period_anchor="start",
         canonical_unit="m",
-        native_unit="ft",
         param_code="00065",
         stat_code="00003",
-        endpoint="dv",
         returned_data_type_cd="dv",
         returned_stat_cd="00003",
-        unit_conversion="ft_to_m",
-        notes=("Daily mean gage height (stage). Native unit is feet; converted to metres by multiplying by 0.3048."),
     ),
     ProductDefinition(
         product_id="stage_daily_max",
@@ -410,14 +372,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="interval",
         period_anchor="start",
         canonical_unit="m",
-        native_unit="ft",
         param_code="00065",
         stat_code="00001",
-        endpoint="dv",
         returned_data_type_cd="dv",
         returned_stat_cd="00001",
-        unit_conversion="ft_to_m",
-        notes="Daily maximum gage height. Native unit is feet; converted to metres.",
     ),
     ProductDefinition(
         product_id="stage_daily_min",
@@ -427,14 +385,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="interval",
         period_anchor="start",
         canonical_unit="m",
-        native_unit="ft",
         param_code="00065",
         stat_code="00002",
-        endpoint="dv",
         returned_data_type_cd="dv",
         returned_stat_cd="00002",
-        unit_conversion="ft_to_m",
-        notes="Daily minimum gage height. Native unit is feet; converted to metres.",
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -444,14 +398,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="instant",
         period_anchor="instant",
         canonical_unit="m",
-        native_unit="ft",
         param_code="00065",
         stat_code=None,
-        endpoint="iv",
         returned_data_type_cd="uv",
         returned_stat_cd="",
-        unit_conversion="ft_to_m",
-        notes=("Instantaneous gage height (15-minute or sub-hourly). Native unit is feet; converted to metres."),
     ),
 )
 
@@ -769,7 +719,6 @@ def build_products() -> ProductCatalog:
             "native_id": (f"{defn.param_code}:{defn.stat_code}" if defn.stat_code else defn.param_code),
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(defn.metadata),
         }
         for defn in PRODUCT_DEFINITIONS
     ]
@@ -816,7 +765,7 @@ def build_station_products(
                 defn.product_id,
                 matches,
             )
-            metadata = {
+            {
                 "station_id": station_id,
                 "product_id": defn.product_id,
                 "returned_series_key": {
@@ -836,7 +785,6 @@ def build_station_products(
                     "start_date": start_date,
                     "end_date": end_date,
                     "last_catalogue_check": retrieved_at.date(),
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return (
@@ -896,17 +844,6 @@ def _matching_coverage(
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata = {
-        "dv_endpoint": "https://waterservices.usgs.gov/nwis/dv/",
-        "iv_endpoint": "https://waterservices.usgs.gov/nwis/iv/",
-        "site_service_url": "https://waterservices.usgs.gov/nwis/site/",
-        "generator_input": "native",
-        "terms_of_use": "https://waterservices.usgs.gov/",
-        "unit_conversions": {
-            "cfs_to_m3s": _CFS_TO_M3S,
-            "ft_to_m": _FT_TO_M,
-        },
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -919,7 +856,6 @@ def build_provider_info(
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -965,10 +901,6 @@ def _read_fixture_json(path: Path) -> list[object]:
     if not isinstance(value, list):
         raise FatalContractError("USGS NWIS sites fixture must contain a JSON array")
     return cast("list[object]", value)
-
-
-def _metadata_json(value: Mapping[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _required_native_string(value: object, column: str) -> str:

@@ -48,7 +48,6 @@ def station_product_catalog_df(**overrides: object) -> pl.DataFrame:
         "start_date": [date(2020, 1, 1), None, None],
         "end_date": [None, None, None],
         "last_catalogue_check": [date(2026, 1, 1), date(2026, 1, 1), date(2026, 1, 1)],
-        "metadata": ["{}", "{}", "{}"],
     }
     data.update(overrides)
     return pl.DataFrame(
@@ -62,7 +61,6 @@ def station_product_catalog_df(**overrides: object) -> pl.DataFrame:
             "start_date": pl.Date,
             "end_date": pl.Date,
             "last_catalogue_check": pl.Date,
-            "metadata": pl.Utf8,
         },
     )
 
@@ -87,7 +85,6 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "native_id",
         "derived",
         "derivation_method",
-        "metadata",
     )
     assert tuple(STATION_PRODUCT_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
@@ -98,7 +95,6 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "start_date",
         "end_date",
         "last_catalogue_check",
-        "metadata",
     )
     assert tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
@@ -108,7 +104,6 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "live_station_products",
         "bulk_observations",
         "catalogue_version",
-        "metadata",
     )
 
 
@@ -122,14 +117,12 @@ def test_catalogue_schema_objects_define_polars_dtypes() -> None:
             "crs": pl.Utf8,
         }
     )
-    assert PRODUCT_CATALOG_SCHEMA.polars_schema["metadata"] == pl.Utf8
     assert PRODUCT_CATALOG_SCHEMA.polars_schema["derived"] == pl.Boolean
     assert PRODUCT_CATALOG_SCHEMA.polars_schema["native_id"] == pl.Utf8
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["availability"] == AvailabilityDtype
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["start_date"] == pl.Date
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["end_date"] == pl.Date
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["last_catalogue_check"] == pl.Date
-    assert PROVIDER_INFO_CATALOG_SCHEMA.polars_schema["metadata"] == pl.Utf8
 
 
 def test_station_catalog_validates_five_column_row() -> None:
@@ -193,7 +186,6 @@ def test_availability_rejects_invalid_value() -> None:
             "start_date": [None],
             "end_date": [None],
             "last_catalogue_check": [date(2026, 1, 1)],
-            "metadata": ["{}"],
         },
         schema={
             "provider_id": pl.Utf8,
@@ -204,28 +196,11 @@ def test_availability_rejects_invalid_value() -> None:
             "start_date": pl.Date,
             "end_date": pl.Date,
             "last_catalogue_check": pl.Date,
-            "metadata": pl.Utf8,
         },
     )
 
     with pytest.raises(FatalContractError):
         validate_catalogue(df, STATION_PRODUCT_CATALOG_SCHEMA)
-
-
-def test_metadata_column_is_opaque_json_object_string() -> None:
-    df = station_product_catalog_df(metadata=['{"provider": {"deep": ["kept", 1]}}'] * 3)
-
-    issues = validate_catalogue(df, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-
-    assert issues == []
-
-
-def test_metadata_column_rejects_non_object_json() -> None:
-    with pytest.raises(FatalContractError):
-        validate_catalogue(
-            station_product_catalog_df(metadata=["[]"] * 3),
-            STATION_PRODUCT_CATALOG_SCHEMA,
-        )
 
 
 def test_provider_info_catalog_validates_row_shape() -> None:
@@ -241,7 +216,6 @@ def test_provider_info_catalog_validates_row_shape() -> None:
                 "reported as recoverable issues"
             ],
             "catalogue_version": ["2026.01"],
-            "metadata": ['{"homepage": "https://example.invalid"}'],
         },
         schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema,
     )

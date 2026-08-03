@@ -218,22 +218,7 @@ class ProductDefinition:
     period_type: str
     period_anchor: str
     canonical_unit: str
-    data_type: str
     value_column: str
-    native_unit: str
-    chunk_years: int
-    notes: str
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "data_type": self.data_type,
-            "value_column": self.value_column,
-            "native_unit": self.native_unit,
-            "canonical_unit": self.canonical_unit,
-            "chunk_years": self.chunk_years,
-            "notes": self.notes,
-        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -245,15 +230,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="interval",
         period_anchor="provider_defined",
         canonical_unit="m3/s",
-        data_type="Daily",
         value_column="D_AVG_FR",
-        native_unit="m3/s",
-        chunk_years=20,
-        notes=(
-            "DWS daily average flow rate (D_AVG_FR column) in m³/s. "
-            "Retrieved from DataType=Daily endpoint in 20-year windows. "
-            f"{_TIMEZONE_NOTE}"
-        ),
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
@@ -263,15 +240,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="instant",
         period_anchor="instant",
         canonical_unit="m3/s",
-        data_type="Point",
         value_column="COR_FLOW",
-        native_unit="m3/s",
-        chunk_years=1,
-        notes=(
-            "DWS corrected flow (COR_FLOW column) in m³/s, derived from COR_LEVEL via rating curve. "
-            "Retrieved from DataType=Point endpoint in 1-year windows. "
-            f"{_TIMEZONE_NOTE}"
-        ),
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
@@ -281,15 +250,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_type="instant",
         period_anchor="instant",
         canonical_unit="m",
-        data_type="Point",
         value_column="COR_LEVEL",
-        native_unit="m",
-        chunk_years=1,
-        notes=(
-            "DWS corrected level (COR_LEVEL column) in metres. "
-            "Retrieved from DataType=Point endpoint in 1-year windows. "
-            f"{_TIMEZONE_NOTE}"
-        ),
     ),
 )
 
@@ -336,7 +297,6 @@ def build_products() -> ProductCatalog:
             "native_id": d.value_column,
             "derived": False,
             "derivation_method": None,
-            "metadata": _metadata_json(d.metadata),
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -376,12 +336,6 @@ def build_station_products(
         if not isinstance(station_id, str):
             raise FatalContractError("station_id must be a string")
         for d in PRODUCT_DEFINITIONS:
-            metadata = {
-                "station_id": station_id,
-                "product_id": d.product_id,
-                "availability_source": AVAILABILITY_SOURCE,
-                "availability_note": AVAILABILITY_NOTE,
-            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -392,7 +346,6 @@ def build_station_products(
                     "start_date": None,
                     "end_date": None,
                     "last_catalogue_check": catalogue_date,
-                    "metadata": _metadata_json(metadata),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
@@ -403,17 +356,6 @@ def build_station_products(
 def build_provider_info(
     catalogue_date: date,
 ) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "data_url": DATA_URL,
-        "catalogue_url": CATALOGUE_URL,
-        "station_catalogue_source": (
-            "HyCatalogue.aspx is a link index; the linked WMA River PDFs publish the station "
-            "records and coordinate representation headers."
-        ),
-        "variable_code": "100.00",
-        "timezone_note": _TIMEZONE_NOTE,
-        "generator_input": "native",
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -426,7 +368,6 @@ def build_provider_info(
             "for the same station/window; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
-        "metadata": json.dumps(metadata, sort_keys=True, separators=(",", ":")),
     }
 
 
@@ -778,10 +719,6 @@ def convert_unsigned_dms_coordinates(
     latitude_magnitude = latitude_degrees + latitude_minutes / 60.0 + latitude_seconds / 3600.0
     longitude_magnitude = longitude_degrees + longitude_minutes / 60.0 + longitude_seconds / 3600.0
     return -latitude_magnitude, longitude_magnitude
-
-
-def _metadata_json(value: Mapping[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 # ---------------------------------------------------------------------------

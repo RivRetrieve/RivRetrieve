@@ -1,6 +1,7 @@
+"""catalogue validation : DataFrame × CatalogueSchema × OnIssue → list[Issue]."""
+
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 
 import polars as pl
@@ -58,7 +59,6 @@ PRODUCT_CATALOG_SCHEMA = CatalogueSchema(
         CatalogueColumn("native_id", pl.Utf8, nullable=True),
         CatalogueColumn("derived", pl.Boolean),
         CatalogueColumn("derivation_method", pl.Utf8, nullable=True),
-        CatalogueColumn("metadata", pl.Utf8),
     ),
     unique_keys=(("provider_id", "product_id"),),
 )
@@ -74,7 +74,6 @@ STATION_PRODUCT_CATALOG_SCHEMA = CatalogueSchema(
         CatalogueColumn("start_date", pl.Date, nullable=True),
         CatalogueColumn("end_date", pl.Date, nullable=True),
         CatalogueColumn("last_catalogue_check", pl.Date),
-        CatalogueColumn("metadata", pl.Utf8),
     ),
     unique_keys=(("provider_id", "station_id", "product_id"),),
     enum_values={"availability": frozenset(AVAILABILITY_VALUES)},
@@ -90,7 +89,6 @@ PROVIDER_INFO_CATALOG_SCHEMA = CatalogueSchema(
         CatalogueColumn("live_station_products", pl.Boolean),
         CatalogueColumn("bulk_observations", pl.Utf8),
         CatalogueColumn("catalogue_version", pl.Utf8, nullable=True),
-        CatalogueColumn("metadata", pl.Utf8),
     ),
     unique_keys=(("provider_id",),),
 )
@@ -124,7 +122,6 @@ def validate_catalogue(
             raise FatalContractError(f"{schema.name}.{column.name} contains null values")
 
     _validate_enum_values(df, schema)
-    _validate_metadata_json_objects(df, schema)
     _validate_unique_keys(df, schema)
 
     return issues
@@ -154,21 +151,6 @@ def _validate_enum_values(df: pl.DataFrame, schema: CatalogueSchema) -> None:
             raise FatalContractError(
                 f"{schema.name}.{column_name} contains invalid enum values: {', '.join(invalid_values)}"
             )
-
-
-def _validate_metadata_json_objects(df: pl.DataFrame, schema: CatalogueSchema) -> None:
-    if "metadata" not in df.columns:
-        return
-
-    for row_number, value in enumerate(df["metadata"].to_list()):
-        if value is None:
-            continue
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError as exc:
-            raise FatalContractError(f"{schema.name}.metadata row {row_number} is not valid JSON") from exc
-        if not isinstance(parsed, dict):
-            raise FatalContractError(f"{schema.name}.metadata row {row_number} is not a JSON object")
 
 
 def _validate_unique_keys(df: pl.DataFrame, schema: CatalogueSchema) -> None:

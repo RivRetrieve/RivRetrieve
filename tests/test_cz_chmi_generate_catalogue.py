@@ -536,33 +536,6 @@ def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version() -
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
-def test_metadata_columns_remain_non_null_json_objects() -> None:
-    catalogue = _build_committed_catalogue()
-    provider_metadata = json.loads(cast("str", catalogue.provider_info["metadata"]))
-    product_metadata = json.loads(catalogue.products["metadata"].item(0))
-    station_product_metadata = json.loads(catalogue.station_products["metadata"].item(0))
-
-    assert provider_metadata["generator_input"] == "native"
-    assert {
-        "ts_con_id",
-        "url_type",
-        "native_unit",
-        "canonical_unit",
-        "unit_conversion",
-        "notes",
-    } == set(product_metadata)
-    assert {
-        "station_id",
-        "product_id",
-        "ts_con_id",
-        "availability_source",
-        "availability_note",
-    } == set(station_product_metadata)
-    for frame in (catalogue.products, catalogue.station_products):
-        assert frame["metadata"].null_count() == 0
-        assert all(isinstance(json.loads(value), dict) for value in frame["metadata"])
-
-
 def _two_row_native() -> pl.DataFrame:
     return read_native_table(NATIVE_PATH).data.head(2)
 
