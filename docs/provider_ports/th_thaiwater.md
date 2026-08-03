@@ -6,7 +6,7 @@ These notes capture evidence and handoff context from the `th_thaiwater` provide
 
 | Endpoint | Role | Credential | Notes |
 | --- | --- | --- | --- |
-| `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load` | Maintainer-side catalogue input; returns all telemetered stations in one response. | None. Public ThaiWater Open API. | Filtered to `station_type == "tele_waterlevel"`. |
+| `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load` | Maintainer-side native-table refresh input; returns all telemetered stations in one response. | None. Public ThaiWater Open API. | Canonical artefacts are built offline from committed `native.parquet` plus origins. |
 | `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph` | Runtime observation retrieval. Query params: `station_type=tele_waterlevel`, `station_id`, `start_date` (YYYY-MM-DD), `end_date` (YYYY-MM-DD). | None. | Returns a `data.graph_data` list with `datetime`, `value` (stage in m), and `discharge` (m³/s) fields per row. |
 
 ## Timezone — Critical Quirk
@@ -26,17 +26,13 @@ The legacy `ThailandFetcher` drops timezone after localizing (`.dt.tz_localize(N
 
 | Legacy / source field | Canonical target | Provider metadata | Decision |
 | --- | --- | --- | --- |
-| `station.id` | `station_id` | `native_id` | String, stripped. Station filtered on `station_type == "tele_waterlevel"`. |
-| `station.tele_station_name` (multilingual dict) | `name` | `name`, `name_local` | English preferred, Thai fallback. Local name (`"th"` preferred) stored separately in metadata. |
-| `station.tele_station_lat`, `tele_station_long` | `latitude`, `longitude` | `latitude`, `longitude` | Parsed via `float()` from string or numeric. Rows with null lat/lon are skipped. |
-| `river_name` | No common column | `river_name` | Retained in station metadata. |
-| `geocode.{province,amphoe,tumbon}_name` | No common columns | `province`, `district`, `subdistrict` | Multilingual dicts, English preferred. |
-| `basin.basin_name` | No common column | `basin` | English preferred. |
-| `agency.agency_name` | No common column | `agency` | English preferred. |
-| `station.tele_station_oldcode` | No common column | `station_code` | Legacy station code. |
-| Elevation | `elevation_m = None` | `elevation_m = None` | Not provided by ThaiWater API. |
-| Drainage area | `drainage_area_km2 = None` | `drainage_area_km2 = None` | Not provided by ThaiWater API. |
-| `station_type == "tele_rainfall"` | Excluded | — | Non-waterlevel stations filtered out during catalogue generation. |
+| `station.id` | `provider_id`, `station_id` | Native only | Exact identity copy of the committed String value; `station.tele_station_oldcode` is not identity. |
+| `station.tele_station_name.*` | No canonical column | Native only | Multilingual source values remain readable in `native.parquet`. |
+| `station.tele_station_lat`, `station.tele_station_long` | `latitude`, `longitude` | Native only | Exact decimal values, cast only to canonical schema dtypes. Null values fail the build. |
+| `river_name`, `geocode.*`, `basin.*`, `agency.*` | No canonical columns | Native only | Source vocabulary remains readable in `native.parquet`; RivRetrieve does not adjudicate these labels. |
+| `station.tele_station_oldcode` | No canonical column | Native only | Preserved source station code; never substituted for `station.id`. |
+| CRS | `crs = "unknown"` | Origin evidence | ThaiWater's captured coordinate-standard page specifies ISO 6709 formatting but no datum, CRS, EPSG code, or projection. |
+| `station_type` | Build contract | Native only | Every native row must equal `tele_waterlevel`; any other value fails loudly. |
 
 ## Product Dictionary
 
@@ -61,7 +57,7 @@ Both `value` (stage, m) and `discharge` (m³/s) are natively already in SI units
 
 ## Station Count
 
-754 stations retrieved from the live `waterlevel_load` endpoint on 2026-06-02. All `station_type == "tele_waterlevel"`. Non-waterlevel stations (e.g., `tele_rainfall`) are filtered at catalogue-generation time.
+825 stations at catalogue version `2026-08-02`, built offline from committed `native.parquet` plus the five station origins. Every native row is required to have `station_type == "tele_waterlevel"`, non-null latitude and longitude, and a unique String `station.id`; violations fail the build rather than being filtered, dropped, or deduplicated.
 
 ## Architecture.md Impact
 
@@ -74,5 +70,5 @@ None. The Bangkok→UTC conversion is provider-specific. The structured `timezon
 | Naive Bangkok timestamps | Documented; handled by zoneinfo conversion in parser. | Keep timezone annotation + issue; do not change. |
 | Daily aggregation on Bangkok calendar days | Implemented in transform layer via `convert_time_zone("Asia/Bangkok").dt.truncate("1d")`. | Bangkok midnight UTC timestamps (e.g., 17:00Z) may look surprising to users; the series annotation `local_timezone = "Asia/Bangkok"` documents this. |
 | No elevation or drainage area | `None` in both common columns; documented in metadata. | No action needed. |
-| Multilingual station names | `_pick_localized_text` prefers English. Thai name preserved in `name_local` metadata field. | No action needed. |
-| Non-waterlevel station filter | `tele_waterlevel` filter applied in `_iter_station_rows`. | Catalogue generation from fixture verifies the filter (fixture has 4 entries, 3 are `tele_waterlevel`). |
+| Multilingual station names | Preserved as flattened native columns in `native.parquet`. | Keep source language values unchanged. |
+| Former station-type, null-coordinate, and duplicate-ID filters | Replaced by explicit fatal build contracts. | Never silently reject a native row during canonical generation. |

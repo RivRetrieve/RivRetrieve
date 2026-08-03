@@ -60,9 +60,9 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
     (
         "th_thaiwater",
-        754,
+        825,
         4,
-        3016,
+        3300,
         {
             "discharge_daily_mean",
             "discharge_instantaneous",
@@ -70,11 +70,12 @@ CATALOGUE_ONLY_PROVIDERS = (
             "stage_instantaneous",
         },
         "ThaiWater public API / Hydro-Informatics Institute (HII)",
-        "2026-06-02",
+        "2026-08-02",
         {"unknown"},
     ),
 )
 CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "metadata.py", "module.py"}
+THAI_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"}
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
 
 
@@ -178,7 +179,8 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert not hasattr(module, "row_annotation_schema")
     assert not hasattr(module, "series_annotation_schema")
     provider_directory = Path(module.__file__).parent
-    assert {path.name for path in provider_directory.glob("*.py")} == CATALOGUE_MODULE_FILES
+    expected_files = THAI_CATALOGUE_MODULE_FILES if provider_id == "th_thaiwater" else CATALOGUE_MODULE_FILES
+    assert {path.name for path in provider_directory.glob("*.py")} == expected_files
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in ("provider.json", "stations.parquet", "products.parquet", "station_products.parquet"):
         assert (module._CATALOGUE_PATH / artifact_name).exists()
