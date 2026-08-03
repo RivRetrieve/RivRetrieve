@@ -56,6 +56,7 @@ _BASE_RUNTIME_FILE_COUNTS = Counter(
 _MIGRATED_SINCE_BASE = (
     "ba_fhmzbih",
     "fr_hubeau",
+    "jp_mlit",
     "th_thaiwater",
     "za_dws",
 )
