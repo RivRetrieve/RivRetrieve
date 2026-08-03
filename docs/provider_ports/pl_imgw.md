@@ -105,7 +105,10 @@ All rows are `availability = "unknown"`. IMGW does not expose per-variable stati
 
 ## Live Catalogue
 
-`live_stations = False`. The generator is maintainer-only. Runtime catalogue reads packaged Parquet artifacts. The live guard is 500 stations minimum.
+`live_stations = False`. Runtime catalogue reads packaged artifacts. `provider.json`,
+`products.parquet`, `stations.parquet`, and `station_products.parquet` are a network-free function of
+committed `catalogue/native.parquet` plus `STATION_CATALOGUE_ORIGINS`. The maintainer generator's
+canonical mode accepts only that native table; live JSON and fixtures cannot produce these artifacts.
 
 ## Surprises and Pain Points
 

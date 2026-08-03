@@ -43,8 +43,10 @@ def test_pl_imgw_station_products_and_artifacts() -> None:
 
 
 def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
-    generated = build_provider_info(date(2026, 6, 4), generator_input="fixture")
+    generated = build_provider_info(date(2026, 6, 4))
     assert generated["bulk_observations"] == BULK_OBSERVATIONS
+    assert generated["catalogue_version"] == "2026-06-04"
+    assert __import__("json").loads(generated["metadata"])["generator_input"] == "native"
     assert rr.provider("pl_imgw").info().bulk_observations == BULK_OBSERVATIONS
 
 

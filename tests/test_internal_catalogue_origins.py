@@ -200,7 +200,7 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa_switzerland_thailand_and_usgs() -> (
+def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_poland_south_africa_switzerland_thailand_and_usgs() -> (
     None
 ):
     assert (
@@ -211,6 +211,7 @@ def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa
                 ProviderId("ch_foen"),
                 ProviderId("cz_chmi"),
                 ProviderId("lt_lhmt"),
+                ProviderId("pl_imgw"),
                 ProviderId("th_thaiwater"),
                 ProviderId("usgs_nwis"),
                 ProviderId("za_dws"),
@@ -218,6 +219,42 @@ def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa
         )
         == ORIGIN_GATE_ENROLLED_PROVIDERS
     )
+
+
+def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
+    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
+
+    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("gauge_id")),
+        "station_id": Field(NativeColumn("gauge_id")),
+        "latitude": Field(NativeColumn("latitude")),
+        "longitude": Field(NativeColumn("longitude")),
+        "crs": NotPublished(Evidence("https://danepubliczne.imgw.pl/pl/apiinfo")),
+    } == STATION_CATALOGUE_ORIGINS
+
+
+def test_committed_poland_origins_pass_validation_and_enforcement() -> None:
+    from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_stations
+    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
+
+    native = read_native_table(Path("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet"))
+    assert native.data.schema == pl.Schema(
+        {
+            "gauge_id": pl.String,
+            "gauge_name": pl.String,
+            "river": pl.String,
+            "area": pl.Float64,
+            "gauge_altitude": pl.String,
+            "latitude": pl.Float64,
+            "longitude": pl.Float64,
+            "retrieved_at": pl.Datetime("us", "UTC"),
+        }
+    )
+    stations = build_stations(native)
+    assert native.data.schema["gauge_id"] == stations.schema["station_id"]
+    assert validate_catalogue_origins(ProviderId("pl_imgw"), STATION_CATALOGUE_ORIGINS, native, stations) == []
+    enforce_catalogue_origins(ProviderId("pl_imgw"), STATION_CATALOGUE_ORIGINS, native, stations)
 
 
 def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
