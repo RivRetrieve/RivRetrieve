@@ -1019,7 +1019,7 @@ def _load_supplied_capture(
         if hashlib.sha256(body).hexdigest() != digest:
             raise _manifest_failure("manifest-sha256", station_id)
         if _SOURCE_MARKER not in body:
-            raise _manifest_failure("manifest-acceptance-marker", station_id)
+            raise _manifest_failure("manifest-entry-marker-absent", station_id)
         responses[station_id] = body
         timestamps[station_id] = _manifest_instant(value["retrieved_at"], start=start, end=end)
         files.add(filename)
@@ -1056,8 +1056,10 @@ def _load_supplied_capture(
             body = rejection_path.read_bytes()
         except OSError as exc:
             raise _manifest_failure("manifest-rejection", filename) from exc
-        if value["bytes"] != len(body) or hashlib.sha256(body).hexdigest() != digest or _SOURCE_MARKER in body:
+        if value["bytes"] != len(body) or hashlib.sha256(body).hexdigest() != digest:
             raise _manifest_failure("manifest-rejection", station_id)
+        if _SOURCE_MARKER in body:
+            raise _manifest_failure("manifest-rejection-marker-present", station_id)
         responses[station_id] = body
         timestamps[station_id] = _manifest_instant(
             value["retrieved_at"], start=datetime.min.replace(tzinfo=UTC), end=datetime.max.replace(tzinfo=UTC)

@@ -31,6 +31,20 @@ FIXTURE_PATH = Path("tests/test_data/jp_mlit_metadata.json")
 REJECTED_PATH = Path("tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html")
 NATIVE_PATH = CATALOGUE_PATH / "native.parquet"
 FIXTURE_IDS = ["301011281104010", "303051283310060", "309191289913130"]
+ACCEPTED_SOURCE_FIXTURES = {
+    "301011281104310": (
+        Path("tests/test_data/jp_mlit_site_info_detail_accepted_301011281104310.html"),
+        3199,
+        "2727f485592f5cbf0fa31538a150c5ca2a6a571d12f224658629c821d27a9dd7",
+        datetime(2026, 8, 2, 19, 35, 54, tzinfo=UTC),
+    ),
+    "301031281101220": (
+        Path("tests/test_data/jp_mlit_site_info_detail_accepted_301031281101220.html"),
+        3175,
+        "bb9caa28f43a8c94f9c65c4929f6677b85266a4c0140ba2082254361f4954da3",
+        datetime(2026, 8, 2, 19, 36, 18, tzinfo=UTC),
+    ),
+}
 FIXTURE_DIGEST = "5002cbc510e9dc4946e740286011b0c4d7bb76fe6d115c5fed715816c6144926"
 BASE_ID_DIGEST = "e7930a7c374c5b3efe1f066eb4ccf511c0c7690c30afc2f7b2583d26d2b6981e"
 PUBLISHED_ID_DIGEST = "9016935eea6c6c7b3c56ee280a1467f74b4d7b60f2fc10f17e1ed3baa0fb42bd"
@@ -102,6 +116,13 @@ def test_legacy_parser_rejects_source_confirmed_absence() -> None:
     html = REJECTED_PATH.read_bytes().decode("euc-jp", errors="replace")
     with pytest.raises(FatalContractError, match="307051287711040"):
         generate_catalogue._parse_site_detail_html(html)
+
+
+def test_rejected_response_fixture_identity() -> None:
+    body = REJECTED_PATH.read_bytes()
+    assert len(body) == 489
+    assert hashlib.sha256(body).hexdigest() == "2e83eed5a64cf91d9351f2abc28c151dec420a24265dd9db194fd7132bd31faf"
+    assert body.count(generate_catalogue._SOURCE_MARKER) == 0
 
 
 def test_products_count() -> None:
@@ -414,6 +435,20 @@ def test_refresh_issue_code(code: str, monkeypatch: pytest.MonkeyPatch) -> None:
     assert issue.details is not None and issue.details["station_id"] == station_id and issue.details["reason"]
 
 
+def test_absence_response_for_different_station_is_rejected() -> None:
+    station_id = "100000000000001"
+    prior = _native_for([station_id])
+    outcome = generate_catalogue.refresh_native_table(
+        {station_id: REJECTED_PATH.read_bytes()},
+        station_ids=[station_id],
+        retrieved_at_by_station=_timestamps([station_id]),
+        prior=prior,
+    )
+    pl_testing.assert_frame_equal(outcome.value.data, prior.data, check_exact=True)
+    assert [issue.code for issue in outcome.issues] == ["refresh_response_rejected"]
+    assert station_id in outcome.issues[0].message
+
+
 def test_failures_carry_whole_prior_row_and_fresh_rows() -> None:
     ids = ["100000000000001", "100000000000002"]
     prior = _native_for(ids)
@@ -501,7 +536,9 @@ MANIFEST_TOKENS = [
     "manifest-sha256",
     "manifest-retrieved-at",
     "manifest-acceptance-marker",
+    "manifest-entry-marker-absent",
     "manifest-rejection",
+    "manifest-rejection-marker-present",
 ]
 
 
@@ -545,8 +582,18 @@ def test_manifest_guard_message(token: str, tmp_path: Path) -> None:
         manifest["entries"][0]["retrieved_at"] = "not-an-instant"
     elif token == "manifest-acceptance-marker":
         manifest["encoding"] = "UTF-8"
+    elif token == "manifest-entry-marker-absent":
+        body = b"HTTP 200 response without the accepted source marker"
+        (responses / manifest["entries"][0]["file"]).write_bytes(body)
+        manifest["entries"][0]["bytes"] = len(body)
+        manifest["entries"][0]["sha256"] = hashlib.sha256(body).hexdigest()
     elif token == "manifest-rejection":
         manifest["failures"][0]["has_marker"] = True
+    elif token == "manifest-rejection-marker-present":
+        body = _page(manifest["failures"][0]["station_id"])
+        (tmp_path / manifest["failures"][0]["file"]).write_bytes(body)
+        manifest["failures"][0]["bytes"] = len(body)
+        manifest["failures"][0]["sha256"] = hashlib.sha256(body).hexdigest()
     if token != "manifest-missing":
         manifest_path.write_text(json.dumps(manifest))
     output.write_bytes(b"sentinel")
@@ -650,12 +697,39 @@ def test_committed_native_source_states_and_fixture_records() -> None:
     assert native.filter(pl.col("日本測地系") == "").height == 89
     assert (
         native.filter(
+            pl.any_horizontal([pl.col(column).str.contains("BR") for column in generate_catalogue.NATIVE_COLUMNS])
+        ).height
+        == 0
+    )
+    assert (
+        native.filter(
             pl.any_horizontal([pl.col(column).str.contains("\u00a0") for column in generate_catalogue.NATIVE_COLUMNS])
         ).height
         > 0
     )
     missing = native.filter(pl.col("観測所記号") == "302011282228100")
     assert missing["流域面積"][0] is None and missing["零点高"][0] is None
+
+
+def test_committed_accepted_responses_rematerialize_exact_native_rows() -> None:
+    responses: dict[str, bytes] = {}
+    retrieved_at_by_station: dict[str, RetrievedAt] = {}
+    for station_id, (path, size, digest, instant) in ACCEPTED_SOURCE_FIXTURES.items():
+        body = path.read_bytes()
+        assert len(body) == size
+        assert hashlib.sha256(body).hexdigest() == digest
+        assert body.count(generate_catalogue._SOURCE_MARKER) == 1
+        responses[station_id] = body
+        retrieved_at_by_station[station_id] = RetrievedAt(instant)
+    actual = generate_catalogue.refresh_native_table(
+        responses,
+        station_ids=list(ACCEPTED_SOURCE_FIXTURES),
+        retrieved_at_by_station=retrieved_at_by_station,
+    ).value.data
+    expected = read_native_table(NATIVE_PATH).data.filter(pl.col("観測所記号").is_in(list(ACCEPTED_SOURCE_FIXTURES)))
+    pl_testing.assert_frame_equal(actual, expected, check_exact=True)
+    assert actual.filter(pl.col("観測所記号") == "301031281101220")["日本測地系"].item() == ""
+    assert actual.filter(pl.col("観測所記号") == "301011281104310")["流域面積"].item() == "\u00a0"
 
 
 def test_native_coordinates_rematerialize_source_with_three_pinned_changes() -> None:
