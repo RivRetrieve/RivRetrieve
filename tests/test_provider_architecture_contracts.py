@@ -57,6 +57,7 @@ _MIGRATED_SINCE_BASE = (
     "ba_fhmzbih",
     "fr_hubeau",
     "jp_mlit",
+    "pl_imgw",
     "th_thaiwater",
     "za_dws",
 )

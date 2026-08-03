@@ -4,8 +4,9 @@
 
 | Endpoint | Role | Auth | Notes |
 |---|---|---|---|
-| `https://danepubliczne.imgw.pl/api/data/hydro` | Catalogue generation — station list with coordinates | None | JSON array; 913 stations (2026-06-04). Fields: `id_stacji`, `stacja`, `rzeka`, `wojewodztwo`, `lon`, `lat`. Real-time metadata; not historical. |
-| `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_stacji_hydro.csv` | Alternative station list (no coordinates) | None | 1301 stations; CP1250; no lat/lon. Not used for catalogue — coordinates come from the JSON endpoint. |
+| `https://danepubliczne.imgw.pl/api/data/hydro/?format=json` | Partial publisher coordinate corroboration | None | JSON array; 913 published stations at 2026-08-02, 32 with zero or absent coordinates. It does not reproduce the packaged population. |
+| `https://danepubliczne.imgw.pl/datastore/getfiledown/Arch/Telemetria/Hydro/kody_stacji.csv` | Primary publisher coordinate corroboration | None | 887 UTF-8, semicolon-delimited stations with whole-arc-second DMS coordinates; covers 784 packaged stations. |
+| `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_stacji_hydro.csv` | Independent complete identity roster | None | 1,301 CP1250, headerless, comma-delimited rows; its stripped identifier set exactly equals the recovered set and it contains no geometry. |
 | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/codz_{year}.zip` | Observation retrieval — annual ZIP (2023+) | None | One file per year; ~1.5 MB compressed, ~20 MB uncompressed. Contains all stations for the year. |
 | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/codz_{year}_{month:02d}.zip` | Observation retrieval — monthly ZIP (pre-2023) | None | 12 files per year; ~2 MB each. Same schema as annual ZIP. Annual ZIPs do not exist for 2022 and earlier. |
 
@@ -21,13 +22,17 @@ The retained private `ImgwCacheClient` implementation still contains `cache_path
 
 | Source field | Canonical target | Notes |
 |---|---|---|
-| `id_stacji` | `station_id` | Strip whitespace; 9-digit numeric string |
-| `stacja` | `name` | Station name (Polish) |
-| `rzeka` | `metadata.river` | River or water body name |
-| `wojewodztwo` | `metadata.province` | Polish administrative province |
-| `lon`, `lat` | `longitude`, `latitude` | Float from string; stations without valid coordinates excluded |
-| (not in API) | `elevation_m` | Always null — IMGW `/api/data/hydro` does not provide elevation |
-| (not in API) | `drainage_area_km2` | Always null — not in any IMGW endpoint used |
+| `gauge_id` | `station_id` | Exact nine-character recovered token, retained as String |
+| `latitude`, `longitude` | `latitude`, `longitude` | Exact recovered floating-point geometry; no publisher-coordinate substitution |
+| `gauge_name`, `river`, `area`, `gauge_altitude` | Native table only | Preserved in source vocabulary; `gauge_altitude` remains String because `ND` is published |
+
+The 1,301-row recovered source is byte-identical to `kratzert/RivRetrieve-Python`'s
+`rivretrieve/cached_site_data/poland_sites.csv` at commit
+`f67f6d8507a55144bf235feb3f27f65648b90f83`. Its commit timestamp,
+`2025-10-10T18:46:34Z`, is the native-table provenance lower bound. The complete live roster captured
+at `2026-08-02T19:54:27Z` independently establishes exact identity-set agreement but contributes no
+geometry, names, area, or altitude. Publisher coordinate captures from `2026-08-02T18:45:32Z` are
+partial, whole-arc-second corroboration only.
 
 ## Products
 
@@ -92,20 +97,25 @@ All rows are `availability = "unknown"`. IMGW does not expose per-variable stati
 
 | Source | Count | Date | Notes |
 |---|---|---|---|
-| `/api/data/hydro` JSON | 913 | 2026-06-04 | Active stations with coordinates |
-| `lista_stacji_hydro.csv` | 1301 | 2026-06-04 | Includes inactive; no coordinates |
-| Packaged catalogue | 913 | 2026-06-04 | From JSON; stations without valid lat/lon excluded |
+| Recovered `poland_sites.csv` | 1,301 | 2025-10-10 provenance lower bound | Complete finer-precision packaged geometry |
+| `lista_stacji_hydro.csv` | 1,301 | 2026-08-02 | Complete exact identifier cross-check; no coordinates |
+| `kody_stacji.csv` | 887 | 2026-08-02 | Whole-arc-second DMS; covers 784 packaged stations |
+| `/api/data/hydro/?format=json` | 913 | 2026-08-02 | 881 usable coordinates; covers 779 packaged stations |
+| Packaged catalogue | 1,301 | recovered import | Recovered geometry; publisher-route union covers 784 and leaves 517 uncovered |
 
 ## Live Catalogue
 
-`live_stations = False`. The generator is maintainer-only. Runtime catalogue reads packaged Parquet artifacts. The live guard is 500 stations minimum.
+`live_stations = False`. Runtime catalogue reads packaged artifacts. `provider.json`,
+`products.parquet`, `stations.parquet`, and `station_products.parquet` are a network-free function of
+committed `catalogue/native.parquet` plus `STATION_CATALOGUE_ORIGINS`. The maintainer generator's
+canonical mode accepts only that native table; live JSON and fixtures cannot produce these artifacts.
 
 ## Surprises and Pain Points
 
 | Issue | Detail |
 |---|---|
 | Two CSV format eras | 2023+ is UTF-8 BOM + semicolon; pre-2023 is CP1250 + comma + quoting. Parser tries UTF-8-sig first (BOM detection), then CP1250, then latin-1. |
-| Coordinates not in station list CSV | `lista_stacji_hydro.csv` has 1301 stations but no coordinates. Catalogue uses `/api/data/hydro` JSON (913 active stations with lat/lon). Historical-only stations are not in the catalogue. |
+| Publisher geometry is partial and coarser | `lista_stacji_hydro.csv` has 1,301 identities but no coordinates. `kody_stacji.csv` covers 784 packaged stations and the usable API subset covers 779, leaving 517 without publisher-published coordinates. The DMS route has zero exact recovered pairs, 779 within 1.5 arc-seconds on both axes, and five accepted disagreements; worst is `154180190` at approximately 0.0053675° on one axis. Recovered values remain authoritative. |
 | ZIP contains all stations | Every download fetches data for all ~900+ stations. The parser filters by `station_ids` immediately after decoding, discarding unrequested station rows. Memory usage peaks at ~20 MB per ZIP before filtering. |
 | Sentinel masking | Water level 9999, discharge 99999.999/999, temperature 99.9 → `None`. The parser rounds to 3 decimal places before sentinel comparison to avoid floating-point near-miss. |
 | Leading spaces in pre-2023 station codes | Pre-2023 CP1250 CSV has quoted station codes like `" 149180020"`. The parser strips whitespace after CSV unquoting. |

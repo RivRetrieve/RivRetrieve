@@ -195,9 +195,11 @@ def test_default_provider_stations_share_canonical_schema_and_non_null_crs() -> 
     documented_wgs84 = result.data.filter(pl.col("provider_id").is_in(["lt_lhmt", "ca_eccc", "fr_hubeau"]))
     usgs = result.data.filter(pl.col("provider_id") == "usgs_nwis")
     other_providers = result.data.filter(~pl.col("provider_id").is_in(["lt_lhmt", "ca_eccc", "fr_hubeau", "usgs_nwis"]))
+    poland = result.data.filter(pl.col("provider_id") == "pl_imgw")
     assert set(documented_wgs84["crs"].to_list()) == {"EPSG:4326"}
     assert set(usgs["crs"].to_list()) == {"EPSG:4269"}
     assert set(other_providers["crs"].to_list()) == {"unknown"}
+    assert set(poland["crs"].to_list()) == {"unknown"}
     assert set(other_providers["provider_id"].unique()) == set(rr.providers()) - {
         "lt_lhmt",
         "ca_eccc",
