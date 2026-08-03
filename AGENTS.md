@@ -98,6 +98,16 @@ the deterministic canonicalization and ordering rules, SHA-256 evidence, and a s
 comparison between the committed native content and a fresh materialization of the complete supplied
 response.
 
+### 4.1 Providers with a committed native table and origins
+
+For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
+`ch_foen`, `cz_chmi`, `lt_lhmt`, `usgs_nwis`, and `za_dws`), the four canonical packaged catalogue
+artifacts (`catalogue/provider.json`, `catalogue/products.parquet`, `catalogue/stations.parquet`, and
+`catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
+the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
+would reintroduce the nondeterminism the pure build removes. In particular, future USGS canonical
+generation must use its committed `native.parquet`, never `--live` or supplied RDB payloads.
+
 - South Africa DWS native-table attestation: the live host returned HTTP 403 to the orchestrator from
   two independent egress points; the network-disabled executor did not perform a fetch. The
   orchestrator supplied these nine Internet Archive captures, each with its own UTC retrieval instant:
@@ -130,16 +140,6 @@ response.
   subset derived from `WMA1_Limpopo-Olifants_River.pdf`, whose attested SHA-256 is
   `b6efb89b9f74e0fe9bdca4f2984ce008d77b8f5692fd359a485b9ea4d8ad06a8`; every fixture value is
   identical to its corresponding committed-native row.
-
-### 4.1 Providers with a committed native table and origins
-
-For a provider with both a committed native table and origin declarations (currently `ca_eccc`,
-`ch_foen`, `cz_chmi`, `lt_lhmt`, and `usgs_nwis`), the four canonical packaged catalogue artifacts (`catalogue/provider.json`,
-`catalogue/products.parquet`, `catalogue/stations.parquet`, and
-`catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
-the provider's origins. Generating the canonical artifacts from a live API is forbidden because it
-would reintroduce the nondeterminism the pure build removes. In particular, future USGS canonical
-generation must use its committed `native.parquet`, never `--live` or supplied RDB payloads.
 
 - USGS native-table attestation: the orchestrator made the following 102 requests for the ordered
   51-code (50 states plus DC) `_US_STATE_CODES` scope at `2026-08-02T01:14:11Z`:
@@ -347,9 +347,9 @@ native table and origins, and commit the resulting canonical artifacts alongside
 ### 4.2 Providers not yet migrated
 
 For a provider without both a committed native table and origin declarations (currently the other
-eight: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, `th_thaiwater`, and
-`za_dws`), the four canonical packaged catalogue artifacts must be generated from the live provider
-API before the provider is committed.
+seven: `ba_fhmzbih`, `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, `pl_imgw`, and `th_thaiwater`), the
+four canonical packaged catalogue artifacts must be generated from the live provider API before the
+provider is committed.
 
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must

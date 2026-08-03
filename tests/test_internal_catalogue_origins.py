@@ -180,7 +180,7 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_canada_czechia_lithuania_switzerland_and_usgs() -> None:
+def test_origin_gate_enrols_exactly_canada_czechia_lithuania_south_africa_switzerland_and_usgs() -> None:
     assert (
         frozenset(
             {
@@ -189,6 +189,7 @@ def test_origin_gate_enrols_exactly_canada_czechia_lithuania_switzerland_and_usg
                 ProviderId("cz_chmi"),
                 ProviderId("lt_lhmt"),
                 ProviderId("usgs_nwis"),
+                ProviderId("za_dws"),
             }
         )
         == ORIGIN_GATE_ENROLLED_PROVIDERS
@@ -275,6 +276,52 @@ def test_committed_canada_origins_pass_validation() -> None:
 
     assert validate_catalogue_origins(ProviderId("ca_eccc"), CANADA_ORIGINS, native_table, stations) == []
     enforce_catalogue_origins(ProviderId("ca_eccc"), CANADA_ORIGINS, native_table, stations)
+
+
+def test_dws_declarations_match_canonical_schema_order_and_values() -> None:
+    from rivretrieve._internal.providers.za_dws.generate_catalogue import CATALOGUE_URL
+    from rivretrieve._internal.providers.za_dws.origins import (
+        CRS_EVIDENCE_EXPLANATION,
+        DMS_SIGN_CONVENTION,
+        STATION_CATALOGUE_ORIGINS,
+    )
+
+    evidence_url = "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf"
+    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("Station")),
+        "station_id": Field(NativeColumn("Station")),
+        "latitude": Field(NativeColumn("Latitude (dd:mm:ss)")),
+        "longitude": Field(NativeColumn("Longitude (dd:mm:ss)")),
+        "crs": NotPublished(Evidence(evidence_url)),
+    } == STATION_CATALOGUE_ORIGINS
+    assert CATALOGUE_URL not in str(STATION_CATALOGUE_ORIGINS["crs"])
+    assert CRS_EVIDENCE_EXPLANATION == (
+        "The cited River PDF's own two-line coordinate header reads Latitude / dd:mm:ss and "
+        "Longitude / dd:mm:ss; this names a representation format but never a datum. A "
+        "case-insensitive review of all eight River PDFs found zero datum, WGS, ellipsoid, "
+        "geodetic, projection, or EPSG occurrences. HyCatalogue.aspx is only a link index with "
+        "no prose or coordinate header and is not CRS evidence."
+    )
+    assert DMS_SIGN_CONVENTION == (
+        "DWS publishes unsigned DMS magnitudes with no leading sign, hemisphere marker, or "
+        "hemisphere note; the build applies a southern negative latitude sign and an eastern "
+        "positive longitude sign that the source does not carry."
+    )
+
+
+def test_committed_dws_origins_and_build_pass_gate() -> None:
+    from rivretrieve._internal.providers.za_dws.generate_catalogue import build_catalogue
+    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+
+    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet"))
+    catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
+
+    assert (
+        validate_catalogue_origins(ProviderId("za_dws"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
+        == []
+    )
+    enforce_catalogue_origins(ProviderId("za_dws"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
 
 
 def _native_and_stations():

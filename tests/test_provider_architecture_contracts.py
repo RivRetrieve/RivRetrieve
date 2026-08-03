@@ -37,8 +37,8 @@ RUNTIME_FILE_COUNTS = Counter(
     {
         "__init__.py": 13,
         "module.py": 13,
-        "metadata.py": 9,
-        "origins.py": 5,
+        "metadata.py": 8,
+        "origins.py": 6,
         "issue_codes.py": 11,
         "config.py": 2,
         "fetch.py": 2,
