@@ -180,10 +180,11 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_canada_czechia_lithuania_south_africa_switzerland_and_usgs() -> None:
+def test_origin_gate_enrols_exactly_bosnia_canada_czechia_lithuania_south_africa_switzerland_and_usgs() -> None:
     assert (
         frozenset(
             {
+                ProviderId("ba_fhmzbih"),
                 ProviderId("ca_eccc"),
                 ProviderId("ch_foen"),
                 ProviderId("cz_chmi"),
@@ -194,6 +195,43 @@ def test_origin_gate_enrols_exactly_canada_czechia_lithuania_south_africa_switze
         )
         == ORIGIN_GATE_ENROLLED_PROVIDERS
     )
+
+
+def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
+    from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
+
+    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert {
+        "provider_id": Field(NativeColumn("metadata_station_no")),
+        "station_id": Field(NativeColumn("metadata_station_no")),
+        "latitude": Field(NativeColumn("metadata_station_latitude")),
+        "longitude": Field(NativeColumn("metadata_station_longitude")),
+        "crs": NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json")),
+    } == STATION_CATALOGUE_ORIGINS
+    carriers = {str(origin.native_column) for origin in STATION_CATALOGUE_ORIGINS.values() if isinstance(origin, Field)}
+    assert carriers.isdisjoint(
+        {
+            "metadata_station_id",
+            "metadata_station_carteasting",
+            "metadata_station_cartnorthing",
+            "metadata_station_local_x",
+            "metadata_station_local_y",
+            "station_gauge_datum",
+            "GAUGE_DATUM",
+            "GWREF_DATUM",
+        }
+    )
+    assert "EPSG:4326" not in repr(STATION_CATALOGUE_ORIGINS)
+
+
+def test_committed_bosnia_origins_pass_validation_and_enforcement() -> None:
+    from rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue import build_stations
+    from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
+
+    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"))
+    stations = build_stations(native_table)
+    assert validate_catalogue_origins(ProviderId("ba_fhmzbih"), STATION_CATALOGUE_ORIGINS, native_table, stations) == []
+    enforce_catalogue_origins(ProviderId("ba_fhmzbih"), STATION_CATALOGUE_ORIGINS, native_table, stations)
 
 
 def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation() -> None:
