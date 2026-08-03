@@ -1,3 +1,4 @@
+import hashlib
 import typing
 from dataclasses import FrozenInstanceError
 from html.parser import HTMLParser
@@ -247,9 +248,14 @@ def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
 
 def test_thailand_declarations_match_schema_and_committed_coordinate_evidence() -> None:
     parser = _CanonicalLinkParser()
-    capture = THAI_COORDINATE_EVIDENCE_PATH.read_text(encoding="utf-8")
+    capture_bytes = THAI_COORDINATE_EVIDENCE_PATH.read_bytes()
+    capture = capture_bytes.decode("utf-8")
     parser.feed(capture)
 
+    assert len(capture_bytes) == 607_845
+    assert hashlib.sha256(capture_bytes).hexdigest() == (
+        "64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04"
+    )
     assert tuple(THAI_STATION_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
         "provider_id": Field(NativeColumn("station.id")),
