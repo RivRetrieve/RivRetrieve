@@ -101,7 +101,7 @@ response.
 ### 4.1 Providers with a committed native table and origins
 
 For a provider with both a committed native table and origin declarations (currently `ba_fhmzbih`,
-`ca_eccc`, `ch_foen`, `cz_chmi`, `lt_lhmt`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
+`ca_eccc`, `ch_foen`, `cz_chmi`, `jp_mlit`, `lt_lhmt`, `th_thaiwater`, `usgs_nwis`, and `za_dws`), the four
 canonical packaged catalogue artifacts (`catalogue/provider.json`, `catalogue/products.parquet`,
 `catalogue/stations.parquet`, and
 `catalogue/station_products.parquet`) are a pure, network-free function of that committed table and
@@ -400,16 +400,7 @@ generation must use its committed `native.parquet`, never `--live` or supplied R
   fields `station_gauge_datum`, `GAUGE_DATUM`, and `GWREF_DATUM` are vertical metre elevations, not
   horizontal coordinate reference systems.
 
-After writing provider code and tests, run that provider's network-free build from its committed
-native table and origins, and commit the resulting canonical artifacts alongside the code.
-
-### 4.2 Providers not yet migrated
-
-For a provider without both a committed native table and origin declarations (currently the other
-five: `br_ana`, `fr_hubeau`, `jp_mlit`, `no_nve`, and `pl_imgw`), the four canonical packaged
-catalogue artifacts must be generated from the live provider API before the provider is committed.
-
-- Japan native-table capture attestation (native table present, origins intentionally deferred): the
+- Japan native-table capture attestation: the
   orchestrator performed the endpoint-expanded 1,024-request capture outside the executor sandbox.
   Its request seed was exactly the sorted unique station ids in
   `jp_mlit/catalogue/stations.parquet` at `origin/main` / `22ff07c`, containing 1,024 ids; the compact
@@ -451,11 +442,11 @@ catalogue artifacts must be generated from the live provider API before the prov
   refresh them through the production parser and compare the result exactly with the committed native
   rows.
 
-  Exactly three packaged coordinates diverge from the committed source DMS coordinates:
-  `302011282228100` is packaged as `37.424166666666665, 140.52472222222224` versus source
-  `37.415277777777774, 140.48333333333332` (about 3.79 km); `302011282218050` is packaged as
+  Exactly three previously packaged coordinates diverged from the committed source DMS coordinates:
+  `302011282228100` was packaged as `37.424166666666665, 140.52472222222224` versus source
+  `37.415277777777774, 140.48333333333332` (about 3.79 km); `302011282218050` was packaged as
   `37.81055555555555, 140.49499999999998` versus source
-  `37.81111111111111, 140.4958333333333` (about 96 m); and `308011288805010` is packaged as
+  `37.81111111111111, 140.4958333333333` (about 96 m); and `308011288805010` was packaged as
   `33.78361111111111, 132.87416666666667` versus source
   `33.78333333333333, 132.8738888888889` (about 40 m).
 
@@ -465,9 +456,17 @@ catalogue artifacts must be generated from the live provider API before the prov
   from that fixture. Both `世界測地系` and `日本測地系` remain source vocabulary, the former-system
   pair is never consumed, and no EPSG or datum inference is made. This Japan attestation states nine
   SHA-256 digests; tests hard-code eight of them, while the complete-manifest digest remains an
-  attested provenance binding rather than a test literal. `jp_mlit` has no `origins.py` in this step,
-  its packaged `crs` literal remains `unknown`, and no present-tense `crs: NotPublished` declaration
-  is claimed before m14-s2.
+  attested provenance binding rather than a test literal. Its packaged `crs` is `unknown`, declared
+  by the present-tense `crs: NotPublished` Origin with the station-detail page as Evidence.
+
+After writing provider code and tests, run that provider's network-free build from its committed
+native table and origins, and commit the resulting canonical artifacts alongside the code.
+
+### 4.2 Providers not yet migrated
+
+For a provider without both a committed native table and origin declarations (currently the other
+four: `br_ana`, `fr_hubeau`, `no_nve`, and `pl_imgw`), the four canonical packaged
+catalogue artifacts must be generated from the live provider API before the provider is committed.
 
 
 - `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must

@@ -1,12 +1,11 @@
 """refresh_native_table : Responses × StationIds × RetrievedAtByStation × PriorNativeTable? → WithIssues[NativeTable]
 
-Japan catalogue maintenance and legacy catalogue generation.
+build_catalogue : NativeTable × OriginDeclarations → GeneratedJpMlitCatalogue
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import re
@@ -19,11 +18,11 @@ from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 import polars.testing as pl_testing
 
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
 from rivretrieve._internal.catalogues.schemas import (
@@ -40,23 +39,19 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.jp_mlit.metadata import (
-    JpMlitProductMetadata,
-    JpMlitStationProductMetadata,
-)
 
 PROVIDER_ID = ProviderId("jp_mlit")
 PROVIDER_NAME = "MLIT Water Information System — Japan national hydrometric network"
 
-SITE_INFO_URL = "http://www1.river.go.jp/cgi-bin/SiteInfo.exe"
 SITE_INFO_DETAIL_URL = "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe"
 DSP_URL = "http://www1.river.go.jp/cgi-bin/DspWaterData.exe"
+CATALOGUE_SOURCE = "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet"
 
 _LIVE_REQUEST_DELAY_SECONDS = 0.3  # polite rate limit between SiteInfoDetail requests
 _LIVE_TIMEOUT_SECONDS = 20
 
-AVAILABILITY_REASON = "jp_mlit catalogue (japan_sites.csv) does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "cached_csv_assumption"
+AVAILABILITY_REASON = "jp_mlit native station table does not publish per-KIND station availability"
+AVAILABILITY_SOURCE = "native_station_table_not_published"
 
 MIN_LIVE_STATIONS = 500
 
@@ -114,15 +109,15 @@ class ProductDefinition:
     notes: str | None
 
     @property
-    def metadata(self) -> JpMlitProductMetadata:
-        return JpMlitProductMetadata(
-            kind=self.kind,
-            frequency=self.frequency,
-            native_unit=self.native_unit,
-            canonical_unit=self.canonical_unit,
-            timezone_handling=self.timezone_handling,
-            notes=self.notes,
-        )
+    def metadata(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "frequency": self.frequency,
+            "native_unit": self.native_unit,
+            "canonical_unit": self.canonical_unit,
+            "timezone_handling": self.timezone_handling,
+            "notes": self.notes,
+        }
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -203,93 +198,25 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 EXPECTED_PRODUCT_IDS = frozenset(d.product_id for d in PRODUCT_DEFINITIONS)
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
-) -> GeneratedJpMlitCatalogue:
-    """Build catalogue from a fixture file (.json array or .csv of station rows)."""
-    path = Path(fixture_path)
-    rows = _read_json_fixture(path) if path.suffix.lower() == ".json" else _read_csv_fixture(path)
-    return generate_catalogue(rows, catalogue_date=catalogue_date, generator_input="fixture")
-
-
-def generate_catalogue_from_live(
-    csv_path: Path | str,
-    *,
-    catalogue_date: date | None = None,
-    verbose: bool = False,
-) -> GeneratedJpMlitCatalogue:
-    """Build a fully-enriched catalogue by calling SiteInfoDetail.exe once per station.
-
-    Station IDs are read from the cached japan_sites.csv (the MLIT portal has no
-    bulk-list API). For each ID, SiteInfoDetail.exe is called to retrieve:
-    - station name (Japanese)
-    - drainage area (流域面積, km²)
-    - observation start date (観測開始時期)
-    - WGS84 lat/lon (世界測地系)
-    - zero-point elevation (零点高, metres)
-    - water system, river name, manager, address
-
-    This makes ~1030 HTTP requests and takes a few minutes. Run it once to produce
-    the packaged catalogue artifacts; normal users read those offline.
-
-    Rate limit: {_LIVE_REQUEST_DELAY_SECONDS}s between requests.
-    """
-    station_ids = _read_station_ids_from_csv(Path(csv_path))
-    if not station_ids:
-        raise FatalContractError(f"jp_mlit: no station IDs found in CSV: {csv_path}")
-
-    try:
-        from tqdm import tqdm  # type: ignore[import-untyped]
-
-        iterator = tqdm(station_ids, desc="jp_mlit SiteInfoDetail", unit="station")
-    except ImportError:
-        print(f"jp_mlit live enrichment: fetching {len(station_ids)} stations (install tqdm for a progress bar)")
-        iterator = iter(station_ids)  # type: ignore[assignment]
-
-    enriched_rows: list[dict[str, object]] = []
-    failed = 0
-
-    for station_id in iterator:
-        detail = _fetch_site_detail(station_id)
-        enriched_rows.append({"gauge_id": station_id, **detail})
-        time.sleep(_LIVE_REQUEST_DELAY_SECONDS)
-        if detail.get("_fetch_error"):
-            failed += 1
-
-    if failed:
-        print(f"Warning: {failed}/{len(station_ids)} stations had fetch errors (kept with None fields)")
-
-    return generate_catalogue(
-        enriched_rows,
-        catalogue_date=catalogue_date,
-        generator_input="live_siteinfo_detail",
-    )
-
-
-def generate_catalogue(
-    station_rows: list[dict[str, object]],
-    *,
-    catalogue_date: date | None = None,
-    generator_input: str = "fixture",
-) -> GeneratedJpMlitCatalogue:
-    effective_date = catalogue_date or date.today()
+def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> GeneratedJpMlitCatalogue:
+    if native_table.data.is_empty():
+        raise FatalContractError("jp_mlit native table must not be empty")
+    if native_table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("jp_mlit native table schema does not match NATIVE_SCHEMA")
     products = build_products()
-    stations = build_stations(station_rows, generator_input=generator_input)
-    station_ids = stations["station_id"].to_list()
-    station_products = build_station_products(
-        station_ids=station_ids,
-        catalogue_date=effective_date,
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    station_dates = native_table.data.select(
+        pl.col("観測所記号").alias("station_id"),
+        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
     )
-    provider_info = build_provider_info(effective_date, generator_input=generator_input)
-    validate_generated_catalogue(provider_info, products, stations, station_products)
-    return GeneratedJpMlitCatalogue(
-        provider_info=provider_info,
-        products=products,
-        stations=stations,
-        station_products=station_products,
-    )
+    station_products = build_station_products(station_dates)
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        raise FatalContractError("jp_mlit native table has no valid retrieved_at values")
+    provider_info = build_provider_info(maximum_retrieved_at.date())
+    _validate(provider_info, products, stations, station_products)
+    return GeneratedJpMlitCatalogue(provider_info, products, stations, station_products)
 
 
 def build_products() -> ProductCatalog:
@@ -314,41 +241,63 @@ def build_products() -> ProductCatalog:
 
 
 def build_stations(
-    station_rows: list[dict[str, object]],
-    *,
-    generator_input: str = "fixture",
+    native_table: NativeTable,
 ) -> StationCatalog:
-    rows = list(_iter_station_rows(station_rows))
-    if not rows:
-        raise FatalContractError("jp_mlit: station build returned no rows")
-    if generator_input == "live" and len(rows) < MIN_LIVE_STATIONS:
-        raise FatalContractError(
-            f"jp_mlit: catalogue returned only {len(rows)} stations "
-            f"(expected ≥ {MIN_LIVE_STATIONS}); possible fetch failure"
+    rows: list[dict[str, object]] = []
+    for station_id, coordinate in native_table.data.select("観測所記号", "世界測地系").iter_rows():
+        if not isinstance(coordinate, str) or (match := _STRICT_DMS_PATTERN.fullmatch(coordinate)) is None:
+            raise FatalContractError(
+                f"jp_mlit station {station_id}: 世界測地系 has no parseable whole-number DMS coordinate"
+            )
+        (
+            latitude_degrees,
+            latitude_minutes,
+            latitude_seconds,
+            longitude_degrees,
+            longitude_minutes,
+            longitude_seconds,
+        ) = map(int, match.groups())
+        latitude = latitude_degrees + latitude_minutes / 60 + latitude_seconds / 3600
+        longitude = longitude_degrees + longitude_minutes / 60 + longitude_seconds / 3600
+        if (
+            latitude > 90
+            or longitude > 180
+            or latitude_minutes >= 60
+            or longitude_minutes >= 60
+            or latitude_seconds > 60
+            or longitude_seconds > 60
+        ):
+            raise FatalContractError(f"jp_mlit station {station_id}: 世界測地系 contains an impossible DMS coordinate")
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": station_id,
+                "latitude": latitude,
+                "longitude": longitude,
+                "crs": "unknown",
+            }
         )
     return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
 
 def build_station_products(
-    *,
-    station_ids: list[object],
-    catalogue_date: date,
+    station_dates: pl.DataFrame,
 ) -> StationProductCatalog:
     rows = []
-    for station_id in station_ids:
+    for station_id, catalogue_date in station_dates.iter_rows():
         if not isinstance(station_id, str):
             raise FatalContractError("station_id must be a string")
         for d in PRODUCT_DEFINITIONS:
-            metadata = JpMlitStationProductMetadata(
-                station_id=station_id,
-                product_id=d.product_id,
-                kind=d.kind,
-                availability_source=AVAILABILITY_SOURCE,
-                availability_note=(
-                    "Materialised as availability=unknown; "
-                    "japan_sites.csv does not indicate per-KIND data availability."
+            metadata = {
+                "station_id": station_id,
+                "product_id": d.product_id,
+                "kind": d.kind,
+                "availability_source": AVAILABILITY_SOURCE,
+                "availability_note": (
+                    "Materialised as availability=unknown; the native station table does not publish "
+                    "per-KIND data availability."
                 ),
-            )
+            }
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -369,14 +318,12 @@ def build_station_products(
 
 def build_provider_info(
     catalogue_date: date,
-    *,
-    generator_input: str,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "dsp_url": DSP_URL,
-        "site_info_url": SITE_INFO_URL,
-        "generator_input": generator_input,
-        "catalogue_source": "cached japan_sites.csv from legacy RivRetrieve-Python",
+        "site_info_url": SITE_INFO_DETAIL_URL,
+        "generator_input": "native",
+        "catalogue_source": CATALOGUE_SOURCE,
         "timestamp_convention": ("hourly_kinds_2_6=jst_to_utc; daily_kinds_3_7=date_only_utc_midnight"),
         "note": (
             "MLIT website labels KINDs 2 and 6 as 'Daily' but they provide HOURLY data. "
@@ -399,7 +346,7 @@ def build_provider_info(
     }
 
 
-def validate_generated_catalogue(
+def _validate(
     provider_info: dict[str, object],
     products: ProductCatalog,
     stations: StationCatalog,
@@ -663,212 +610,6 @@ def refresh_native_table_from_live(
     return WithIssues(value=_native_table_from_rows(rows), issues=tuple(issues))
 
 
-# ---------------------------------------------------------------------------
-# Station row iterator
-# ---------------------------------------------------------------------------
-
-
-def _iter_station_rows(station_rows: list[dict[str, object]]):  # type: ignore[return]
-    """Yield one station catalogue row per input dict.
-
-    Fixture and live-enriched rows both produce canonical identity and geometry.
-    """
-    seen: set[str] = set()
-    for row in station_rows:
-        if not isinstance(row, dict):
-            continue
-        station_id = _clean_text(row.get("gauge_id"))
-        if station_id is None or station_id in seen:
-            continue
-
-        # Prefer WGS84 lat/lon from live enrichment; fall back to cached CSV values.
-        lat = _to_float(row.get("latitude_wgs84")) or _to_float(row.get("latitude"))
-        lon = _to_float(row.get("longitude_wgs84")) or _to_float(row.get("longitude"))
-        if lat is None or lon is None:
-            continue
-        seen.add(station_id)
-
-        yield {
-            "provider_id": PROVIDER_ID,
-            "station_id": station_id,
-            "latitude": lat,
-            "longitude": lon,
-            "crs": "unknown",
-        }
-
-
-# ---------------------------------------------------------------------------
-# Live enrichment — SiteInfoDetail.exe per station
-# ---------------------------------------------------------------------------
-
-_DMS_PATTERN = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
-_DRAIN_PATTERN = re.compile(r"([\d.]+)\s*km2")
-_ELEV_PATTERN = re.compile(r"([-\d.]+)\s*m$")
-_DIST_PATTERN = re.compile(r"([\d.]+)\s*km$")
-_JP_DATE_PATTERN = re.compile(r"(\d{4})年(\d{2})月(\d{2})日")
-_LABEL_VALUE_PATTERN = re.compile(r"<TD[^>]*>(.*?)</TD>\s*<TD[^>]*>(.*?)</TD>", re.DOTALL)
-
-
-def _read_station_ids_from_csv(path: Path) -> list[str]:
-    rows = _read_csv_fixture(path)
-    ids: list[str] = []
-    for row in rows:
-        sid = _clean_text(row.get("gauge_id"))
-        if sid and sid not in ids:
-            ids.append(sid)
-    return ids
-
-
-def _fetch_site_detail(station_id: str) -> dict[str, object]:
-    """Fetch SiteInfoDetail.exe for one station and return a dict of parsed fields.
-
-    Returns an empty dict with _fetch_error=True on any network or parse failure
-    so the caller can fall back to None fields rather than aborting the whole run.
-    """
-    url = f"{SITE_INFO_DETAIL_URL}?ID={station_id}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "http://www1.river.go.jp"})
-        with urllib.request.urlopen(req, timeout=_LIVE_TIMEOUT_SECONDS) as resp:
-            raw = resp.read()
-        html = raw.decode("euc-jp", errors="replace")
-        return _parse_site_detail_html(html)
-    except Exception:
-        return {"_fetch_error": True}
-
-
-def _parse_site_detail_html(html: str) -> dict[str, object]:
-    """Extract station fields from a SiteInfoDetail.exe HTML response."""
-    if match := _ABSENCE_PATTERN.search(html):
-        raise FatalContractError(f"jp_mlit station {match.group(1)} is absent from the source")
-    result: dict[str, object] = {}
-
-    def first_td_after(label: str) -> str | None:
-        m = re.search(
-            re.escape(label) + r"</TD>\s*(?:<TD[^>]*>){1,3}(.*?)</TD>",
-            html,
-            re.DOTALL,
-        )
-        if not m:
-            return None
-        return re.sub(r"<[^>]+>", "", m.group(1)).strip() or None
-
-    # Station name
-    result["name"] = first_td_after("観測所名")
-    # Observation type (水位流量 etc.)
-    result["observation_type"] = first_td_after("観測項目")
-    # Water system / river
-    result["water_system_name"] = first_td_after("水系名")
-    result["river_name"] = first_td_after("河川名")
-    # Managing agency
-    result["manager"] = first_td_after("観測所管理者名")
-    # Station type code
-    result["station_type_code"] = first_td_after("観測所種別")
-    # Observation start date
-    start_raw = first_td_after("観測開始時期")
-    result["start_date"] = _jp_date_to_iso(start_raw) if start_raw else None
-    # Address
-    result["address"] = first_td_after("所在地")
-    # Distance from river mouth
-    dist_raw = first_td_after("河口または合流点からの距離")
-    result["distance_from_mouth_km"] = _extract_float(_DIST_PATTERN, dist_raw)
-    # WGS84 lat/lon (世界測地系 row)
-    latlon_raw = first_td_after("世界測地系")
-    if latlon_raw:
-        lat, lon = _parse_dms(latlon_raw)
-        result["latitude_wgs84"] = lat
-        result["longitude_wgs84"] = lon
-    else:
-        result["latitude_wgs84"] = None
-        result["longitude_wgs84"] = None
-    # Drainage area (流域面積)
-    drain_raw = first_td_after("流域面積")
-    result["drainage_area_km2"] = _extract_float(_DRAIN_PATTERN, drain_raw)
-    # Zero-point elevation (零点高)
-    elev_raw = first_td_after("零点高")
-    result["elevation_m"] = _extract_float(_ELEV_PATTERN, elev_raw)
-
-    return result
-
-
-def _parse_dms(text: str) -> tuple[float | None, float | None]:
-    """Parse '北緯 44度04分29秒 東経 142度44分25秒' → (lat, lon) decimal degrees."""
-    m = _DMS_PATTERN.search(text)
-    if not m:
-        return None, None
-    lat_d, lat_m, lat_s, lon_d, lon_m, lon_s = (int(x) for x in m.groups())
-    lat = lat_d + lat_m / 60.0 + lat_s / 3600.0
-    lon = lon_d + lon_m / 60.0 + lon_s / 3600.0
-    return lat, lon
-
-
-def _jp_date_to_iso(text: str) -> str | None:
-    """Parse '1970年11月01日' → '1970-11-01'."""
-    m = _JP_DATE_PATTERN.search(text)
-    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
-
-
-def _extract_float(pattern: re.Pattern[str], text: str | None) -> float | None:
-    if not text:
-        return None
-    m = pattern.search(text)
-    if not m:
-        return None
-    try:
-        return float(m.group(1))
-    except ValueError:
-        return None
-
-
-# ---------------------------------------------------------------------------
-# CSV reader
-# ---------------------------------------------------------------------------
-
-
-def _read_json_fixture(path: Path) -> list[dict[str, object]]:
-    try:
-        with path.open(encoding="utf-8") as f:
-            value = json.load(f)
-    except OSError as exc:
-        raise FatalContractError(f"Unable to read jp_mlit JSON fixture: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise FatalContractError(f"jp_mlit JSON fixture is not valid JSON: {path}") from exc
-    if not isinstance(value, list):
-        raise FatalContractError(f"jp_mlit JSON fixture must be a JSON array: {path}")
-    return [dict(row) for row in value if isinstance(row, dict)]
-
-
-def _read_csv_fixture(path: Path) -> list[dict[str, object]]:
-    try:
-        with path.open(newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            return [dict(row) for row in reader]
-    except OSError as exc:
-        raise FatalContractError(f"Unable to read jp_mlit fixture CSV: {path}") from exc
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _clean_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip().strip('"')
-    if not text or text.lower() in ("nan", "none", "null"):
-        return None
-    return text
-
-
-def _to_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(str(value).strip().strip('"'))
-    except (TypeError, ValueError):
-        return None
-
-
 def native_table_content_digest(table: NativeTable) -> str:
     ordered = table.data.sort("観測所記号")
     rows: list[list[object]] = []
@@ -1092,57 +833,38 @@ def _write_native_atomic(table: NativeTable, destination: Path) -> None:
         raise
 
 
-def _metadata_json(
-    model: JpMlitProductMetadata | JpMlitStationProductMetadata,
-) -> str:
-    return json.dumps(model.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+def _metadata_json(value: Mapping[str, object]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Generate the packaged jp_mlit catalogue artifacts.\n\n"
-            "Two modes:\n"
-            "  --fixture PATH   Fast, offline. Uses only the cached japan_sites.csv "
-            "(gauge_id, lat, lon). No station names or drainage areas.\n"
-            "  --live PATH      Slow, online. Uses japan_sites.csv for IDs, then calls "
-            "SiteInfoDetail.exe once per station (~1030 requests, ~5 min) to enrich "
-            "with real names, drainage areas, start dates, river names, etc."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument(
-        "--fixture",
-        type=Path,
-        metavar="CSV_OR_JSON",
-        help="Path to japan_sites.csv (or a JSON fixture). Offline, no enrichment.",
-    )
-    source.add_argument(
-        "--live",
-        type=Path,
-        metavar="CSV",
-        help=(
-            "Path to japan_sites.csv. Fetches SiteInfoDetail.exe for each station ID "
-            "to enrich name, drainage area, start date, etc. Takes ~5 minutes."
-        ),
-    )
-    source.add_argument(
-        "--station-catalogue",
-        type=Path,
-        help="Packaged station catalogue whose IDs bind a supplied native capture.",
-    )
+    parser = argparse.ArgumentParser(description="Build or materialize the jp_mlit catalogue.")
+    parser.add_argument("--native", type=Path)
+    parser.add_argument("--station-catalogue", type=Path)
     parser.add_argument("--responses-dir", type=Path)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--native-out", type=Path)
-    parser.add_argument("--out", type=Path, help="Output directory for catalogue artifacts.")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
-    parser.add_argument("--verbose", action="store_true", help="Print progress for every station (--live only).")
+    parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
 
-    if args.station_catalogue is not None:
-        if args.responses_dir is None or args.manifest is None or args.native_out is None or args.out is not None:
-            parser.error("--station-catalogue requires --responses-dir, --manifest, and --native-out only")
+    native_mode = args.native is not None or args.out is not None
+    capture_mode = any(
+        value is not None for value in (args.station_catalogue, args.responses_dir, args.manifest, args.native_out)
+    )
+    if native_mode and capture_mode:
+        parser.error("jp_mlit modes cannot mix native-build and supplied-capture arguments")
+    if native_mode:
+        if args.native is None or args.out is None:
+            parser.error("jp_mlit native mode requires both --native and --out")
+        from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+
+        write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
+        return 0
+    if capture_mode:
+        if any(value is None for value in (args.station_catalogue, args.responses_dir, args.manifest, args.native_out)):
+            parser.error(
+                "jp_mlit supplied-capture mode requires --station-catalogue, --responses-dir, --manifest, and --native-out"
+            )
         outcome = refresh_native_table_from_supplied_capture(
             args.station_catalogue,
             args.responses_dir,
@@ -1153,20 +875,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{issue.code}: {issue.message}")
         print(f"jp_mlit native table content SHA-256: {native_table_content_digest(outcome.value)}")
         return 0
-
-    if args.out is None or args.native_out is not None or args.responses_dir is not None or args.manifest is not None:
-        parser.error("legacy --fixture/--live mode requires --out and no native-capture arguments")
-
-    if args.live:
-        catalogue = generate_catalogue_from_live(
-            args.live,
-            catalogue_date=args.catalogue_date,
-            verbose=args.verbose,
-        )
-    else:
-        catalogue = generate_catalogue_from_fixture(args.fixture, catalogue_date=args.catalogue_date)
-    write_catalogue(catalogue, args.out)
-    return 0
+    parser.error("jp_mlit requires native-build or supplied-capture mode")
 
 
 if __name__ == "__main__":

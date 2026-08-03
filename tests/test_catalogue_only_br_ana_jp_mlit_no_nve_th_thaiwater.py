@@ -30,12 +30,12 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
     (
         "jp_mlit",
-        1024,
+        1023,
         4,
-        4096,
+        4092,
         {"discharge_daily_mean", "discharge_hourly_mean", "stage_daily_mean", "stage_hourly_mean"},
         "MLIT Water Information System — Japan national hydrometric network",
-        "2026-06-03",
+        "2026-08-02",
         {"unknown"},
     ),
     (
@@ -87,7 +87,9 @@ CATALOGUE_ONLY_PROVIDERS = (
 CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "metadata.py", "module.py"}
 THAI_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"}
 DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "module.py", "origins.py"}
+JAPAN_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
+    "jp_mlit": JAPAN_CATALOGUE_MODULE_FILES,
     "th_thaiwater": THAI_CATALOGUE_MODULE_FILES,
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
@@ -230,6 +232,20 @@ def test_no_nve_packaged_availability_examples_are_retained() -> None:
         row = station_products.filter((pl.col("station_id") == "12.210.0") & (pl.col("product_id") == product_id))
         assert row.height == 1
         assert row.select(pl.col("availability").cast(str)).item() == "available"
+
+
+def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
+    stations = rr.provider("jp_mlit").stations().data
+    expected = {
+        "302011282228100": (37.415277777777774, 140.48333333333332),
+        "302011282218050": (37.81111111111111, 140.4958333333333),
+        "308011288805010": (33.78333333333333, 132.8738888888889),
+    }
+    assert "307051287711040" not in stations["station_id"].to_list()
+    assert stations["crs"].unique().to_list() == ["unknown"]
+    for station_id, coordinates in expected.items():
+        row = stations.filter(pl.col("station_id") == station_id)
+        assert row.select("latitude", "longitude").row(0) == coordinates
 
 
 def test_reference_tree_preserves_complete_porting_evidence() -> None:
