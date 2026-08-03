@@ -44,9 +44,9 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
     (
         "fr_hubeau",
-        7289,
+        7323,
         6,
-        32969,
+        33139,
         {
             "discharge_daily_max",
             "discharge_daily_mean",
@@ -57,7 +57,7 @@ CATALOGUE_ONLY_PROVIDERS = (
         },
         "Hubeau / SCHAPI — French national hydrometric network",
         {"unknown"},
-        {"unknown"},
+        {"EPSG:4326"},
     ),
     (
         "lt_lhmt",
@@ -76,6 +76,19 @@ CATALOGUE_MODULE_FILES = {
     "issue_codes.py",
     "metadata.py",
     "module.py",
+}
+ENROLLED_CATALOGUE_MODULE_FILES = {
+    "ch_foen": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
+    "cz_chmi": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
+    "fr_hubeau": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
+    "lt_lhmt": {
+        "__init__.py",
+        "generate_catalogue.py",
+        "issue_codes.py",
+        "metadata.py",
+        "module.py",
+        "origins.py",
+    },
 }
 UNAVAILABLE_METHODS = ("row_annotation_schema", "series_annotation_schema")
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
@@ -177,11 +190,7 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert not hasattr(module, "series_annotation_schema")
 
     provider_directory = Path(module.__file__).parent
-    expected_module_files = set(CATALOGUE_MODULE_FILES)
-    if provider_id in {"ch_foen", "cz_chmi", "lt_lhmt"}:
-        expected_module_files.add("origins.py")
-    if provider_id in {"ch_foen", "cz_chmi"}:
-        expected_module_files.discard("metadata.py")
+    expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES.get(provider_id, CATALOGUE_MODULE_FILES)
     assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
     assert module._CATALOGUE_PATH.exists()
     for artifact_name in (
