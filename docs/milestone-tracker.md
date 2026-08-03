@@ -407,15 +407,15 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Provider ID:** `th_thaiwater`
 - **Status:** Shipped. Registered alongside `ch_foen`, `lt_lhmt`, `usgs_nwis`, and `cz_chmi` in `_ensure_default_providers_registered()`. All 572 tests pass (28 th_thaiwater-specific).
 - **Products ported:** `stage_daily_mean` (value field, m, Bangkok-day mean), `stage_instantaneous` (value field, m), `discharge_daily_mean` (discharge field, m³/s, Bangkok-day mean), `discharge_instantaneous` (discharge field, m³/s).
-- **Stations:** 754 (2026-06-02 live catalogue from ThaiWater `waterlevel_load` endpoint, `tele_waterlevel` stations only).
+- **Stations:** 825 at catalogue version `2026-08-02`, built offline from committed `native.parquet` plus origins; every native row must satisfy the `tele_waterlevel`, non-null-coordinate, and unique-String-ID contracts.
 - **Key decisions:**
   - Direct ThaiWater public REST API. 365-day window decomposition per `MAX_WINDOW_DAYS = 365`.
   - **Timezone**: API timestamps (`graph_data[].datetime`) are naive local `Asia/Bangkok` time (UTC+7). Parsed via `datetime.strptime`, localized with `ZoneInfo("Asia/Bangkok")`, converted to UTC. Series annotation `timezone_source = "local_to_utc_conversion"`, `local_timezone = "Asia/Bangkok"`. An `info`-severity issue `timezone_local_to_utc` is emitted per station-product series to document the conversion explicitly.
   - **Daily aggregation**: Bangkok calendar days — group by `dt.convert_time_zone("Asia/Bangkok").dt.truncate("1d")`, mean, convert Bangkok midnight to UTC (= previous day 17:00Z). Legacy `ThailandFetcher` stored naive Bangkok-time datetimes; port correctly converts to UTC.
   - No unit conversions: `value` (stage) is already in m, `discharge` is already in m³/s.
   - Elevation and drainage area always `None` (not in ThaiWater API).
-  - Station names are multilingual dicts; English preferred, Thai (`name_local`) preserved in station metadata.
-  - Non-waterlevel stations (`tele_rainfall`, etc.) filtered at catalogue-generation time.
+  - Station names and all other provider-only labels remain readable in the native table without canonical judgement.
+  - Station type, coordinates, and station-ID uniqueness are loud native-build contracts; canonical generation filters no rows.
   - No auth token; public ThaiWater Open API.
   - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
 - **Port notes:** `docs/provider_ports/th_thaiwater.md`.
@@ -584,7 +584,7 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
   - No auth token; public FHMZBiH open data.
   - Live station minimum guard: 30 stations.
 - **Port notes:** `docs/provider_ports/ba_fhmzbih.md`.
-- **Fixtures:** `tests/test_data/ba_fhmzbih_metadata.json` (2 stations, reused from upstream legacy test data), `tests/test_data/ba_fhmzbih_4510_{Q,H,Tvode}_1Y.xlsx` (real workbook samples for station 4510 — discharge, stage, and an empty water-temperature workbook — reused from the upstream legacy test fixtures).
+- **Fixtures:** `tests/test_data/ba_fhmzbih_metadata.json` (2 stations, attested verbatim two-row 4510/4121 subset of the orchestrator-supplied 2026-08-02 live capture), `tests/test_data/ba_fhmzbih_4510_{Q,H,Tvode}_1Y.xlsx` (real workbook samples for station 4510 — discharge, stage, and an empty water-temperature workbook — reused from the upstream legacy test fixtures).
 - **Known limitation:** No historical date-range queries are possible — see "rolling 1-year window" above. `ba_fhmzbih` is suitable for recent/current data and catalogue discovery, not historical archive retrieval.
 - **Architecture.md impact:** None. Station-group URL probing, xlsx workbook parsing, and the rolling-window constraint are provider-specific. The local-to-UTC timezone-inference pattern (info issue + `source_timezone`/`timezone_source` series annotations) follows the established `th_thaiwater` convention rather than introducing a new shared mechanism. No shared harness gap discovered.
 
