@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 
 import polars as pl
 import polars.testing as pl_testing
@@ -19,10 +19,17 @@ from rivretrieve._internal.engine import (
     RowsSchema,
     SourceCoordinates,
     Unit,
+    WindowEndpoint,
     WithIssues,
     ZoneValue,
 )
-from rivretrieve._internal.issues import FatalContractError, Issue, IssuePolicyError, ObservationsUnavailableError
+from rivretrieve._internal.issues import (
+    FatalContractError,
+    InvalidObservationRequestError,
+    Issue,
+    IssuePolicyError,
+    ObservationsUnavailableError,
+)
 from rivretrieve._internal.observations import (
     AnnotationSchema,
     RawPayload,
@@ -176,7 +183,7 @@ def test_registry_module_without_engine_stages_rejects_observation_dispatch(
     assert called is False
 
 
-def test_registry_engine_module_drives_and_packages_public_result(
+def test_registry_passes_normalized_window_to_engine_once(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     registry = ProviderRegistry()
@@ -198,6 +205,9 @@ def test_registry_engine_module_drives_and_packages_public_result(
 
     assert _EngineModule.events == ["fetch", "parse"]
     assert isinstance(_EngineModule.fetched_window, FetchWindow)
+    assert isinstance(_EngineModule.fetched_window.start, WindowEndpoint)
+    assert _EngineModule.fetched_window.start.isoformat() == "2026-01-01T00:00:00"
+    assert _EngineModule.fetched_window.end.isoformat() == "2026-01-02T23:59:59.999999"
     assert set(result.data.columns) == {"time", "station_id", "product_id", "value"}
     pl_testing.assert_frame_equal(
         result.row_annotations.data,
@@ -210,8 +220,75 @@ def test_registry_engine_module_drives_and_packages_public_result(
         check_exact=True,
     )
     assert result.provenance.source == "test-engine"
+    assert result.provenance.request is not None
+    assert result.provenance.request["start"] == "2026-01-01T00:00:00"
+    assert result.provenance.request["end"] == "2026-01-02T23:59:59.999999"
     assert result.raw == RawPayload(provider_id=ProviderId("test_provider"))
     assert [issue.code for issue in result.issues] == ["test.engine.warning"]
+
+
+def test_registry_preserves_explicit_midnight_end(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    _EngineModule.events = []
+    handle = registry.register(
+        "test_provider",
+        stub_packaged_catalogue_artifact("test_provider"),
+        engine_provider_module=_EngineModule,
+    )
+
+    result = handle.observations(
+        stations="station-1",
+        products="level",
+        start="2026-01-01",
+        end="2026-01-02 00:00",
+        on_issue="ignore",
+    )
+
+    assert _EngineModule.fetched_window is not None
+    assert _EngineModule.fetched_window.end.isoformat() == "2026-01-02T00:00:00"
+    assert result.provenance.request is not None
+    assert result.provenance.request["end"] == "2026-01-02T00:00:00"
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (
+            datetime(2026, 1, 1, tzinfo=UTC),
+            "start must be wall-clock time without a time zone; remove it with `start = start.replace(tzinfo=None)`.",
+        ),
+        (
+            "2026-01-01T00:00:00+02:00",
+            "start must be wall-clock time without a time zone; remove it with `start = datetime.fromisoformat(start).replace(tzinfo=None)`.",
+        ),
+    ],
+)
+def test_registry_rejects_zone_carrying_endpoint_before_fetch(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    value: object,
+    message: str,
+) -> None:
+    registry = ProviderRegistry()
+    _EngineModule.events = []
+    handle = registry.register(
+        "test_provider",
+        stub_packaged_catalogue_artifact("test_provider"),
+        engine_provider_module=_EngineModule,
+    )
+
+    with pytest.raises(InvalidObservationRequestError) as exc_info:
+        handle.observations(
+            stations="station-1",
+            products="level",
+            start=value,
+            end="2026-01-02",
+            on_issue="ignore",
+        )
+
+    assert str(exc_info.value) == message
+    assert _EngineModule.events == []
 
 
 def test_registry_engine_module_warns_for_accumulated_issue(

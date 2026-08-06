@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -10,6 +11,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema, validate_catalogue
+from rivretrieve._internal.engine import WindowEndpoint
 from rivretrieve._internal.issues import (
     AnnotationSchemaViolationError,
     FatalContractError,
@@ -70,8 +72,8 @@ class ObservationRequest:
     provider_id: ProviderId
     stations: tuple[str, ...]
     products: tuple[str, ...]
-    start: datetime
-    end: datetime
+    start: WindowEndpoint
+    end: WindowEndpoint
 
     @classmethod
     def from_inputs(
@@ -83,12 +85,16 @@ class ObservationRequest:
         start: object,
         end: object,
     ) -> Self:
+        normalized_start = _normalize_window_endpoint(start, name="start")
+        normalized_end = _normalize_window_endpoint(end, name="end")
+        if normalized_start > normalized_end:
+            raise InvalidObservationRequestError("requested window start must not be after end")
         return cls(
             provider_id=_coerce_provider_id(provider_id),
             stations=_coerce_id_sequence(stations, name="stations"),
             products=_coerce_id_sequence(products, name="products"),
-            start=_coerce_datetime(start, name="start"),
-            end=_coerce_datetime(end, name="end"),
+            start=normalized_start,
+            end=normalized_end,
         )
 
 
@@ -287,19 +293,34 @@ def _coerce_id_sequence(value: object, *, name: str) -> tuple[str, ...]:
     return tuple(normalized)
 
 
-def _coerce_datetime(value: object, *, name: str) -> datetime:
+def _normalize_window_endpoint(value: object, *, name: str) -> WindowEndpoint:
     if value is None:
         raise InvalidObservationRequestError(f"{name} is required")
     if isinstance(value, datetime):
-        return value
+        if value.tzinfo is not None:
+            raise InvalidObservationRequestError(
+                f"{name} must be wall-clock time without a time zone; "
+                f"remove it with `{name} = {name}.replace(tzinfo=None)`."
+            )
+        return WindowEndpoint.from_datetime(value)
     if isinstance(value, date):
-        return datetime.combine(value, time.min)
+        raise InvalidObservationRequestError(f"{name} must be a datetime or ISO-like string")
     if isinstance(value, str):
         try:
-            return datetime.fromisoformat(value)
+            if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is not None:
+                parsed_date = date.fromisoformat(value)
+                parsed = datetime.combine(parsed_date, time.max if name == "end" else time.min)
+            else:
+                parsed = datetime.fromisoformat(value)
         except ValueError as exc:
             raise InvalidObservationRequestError(f"{name} must be an ISO-like datetime string") from exc
-    raise InvalidObservationRequestError(f"{name} must be a datetime, date, or ISO-like string")
+        if parsed.tzinfo is not None:
+            raise InvalidObservationRequestError(
+                f"{name} must be wall-clock time without a time zone; remove it with "
+                f"`{name} = datetime.fromisoformat({name}).replace(tzinfo=None)`."
+            )
+        return WindowEndpoint.from_datetime(parsed)
+    raise InvalidObservationRequestError(f"{name} must be a datetime or ISO-like string")
 
 
 def _require_non_empty_string(value: object, name: str, error_type: type[FatalContractError]) -> None:

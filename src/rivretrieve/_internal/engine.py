@@ -1,13 +1,14 @@
-"""Engine stage seams ≔ WindowEndpoint × RequestedWindow × FetchWindow × ObservationRequest × SourceCoordinates × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig."""
+"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × ObservationRequest × SourceCoordinates × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import NewType
+from typing import Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import polars as pl
@@ -16,7 +17,73 @@ from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueS
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 
-WindowEndpoint = NewType("WindowEndpoint", object)
+
+@dataclass(frozen=True, slots=True, order=True)
+class WindowEndpoint:
+    """An immutable wall-clock endpoint exposing rendering fields only."""
+
+    year: int
+    month: int
+    day: int
+    hour: int
+    minute: int
+    second: int
+    microsecond: int
+
+    def __post_init__(self) -> None:
+        """Require integer fields and a valid calendar value."""
+        values = (
+            self.year,
+            self.month,
+            self.day,
+            self.hour,
+            self.minute,
+            self.second,
+            self.microsecond,
+        )
+        if any(type(value) is not int for value in values):
+            raise TypeError("wall-clock endpoint fields must be integers")
+        datetime(*values)
+
+    @classmethod
+    def from_datetime(cls, value: datetime) -> Self:
+        """Create an endpoint from a naive standard-library datetime.
+
+        Parameters
+        ----------
+        value
+            Naive wall-clock datetime.
+        """
+        if not isinstance(value, datetime):
+            raise TypeError("wall-clock endpoint requires a datetime")
+        if value.tzinfo is not None:
+            raise TypeError("wall-clock endpoint must not carry a time zone")
+        return cls(
+            value.year,
+            value.month,
+            value.day,
+            value.hour,
+            value.minute,
+            value.second,
+            value.microsecond,
+        )
+
+    @property
+    def date(self) -> str:
+        """Return the calendar date in ISO form."""
+        return f"{self.year:04d}-{self.month:02d}-{self.day:02d}"
+
+    def isoformat(self) -> str:
+        """Return the wall-clock endpoint in standard datetime ISO form."""
+        return datetime(
+            self.year,
+            self.month,
+            self.day,
+            self.hour,
+            self.minute,
+            self.second,
+            self.microsecond,
+        ).isoformat()
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,13 +93,33 @@ class RequestedWindow:
     start: WindowEndpoint
     end: WindowEndpoint
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.start, WindowEndpoint) or not isinstance(self.end, WindowEndpoint):
+            raise TypeError("requested window endpoints must be WindowEndpoint values")
+        if self.start > self.end:
+            raise ValueError("requested window start must not be after end")
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, init=False)
 class FetchWindow:
     """A fetch interval closed at both ends."""
 
     start: WindowEndpoint
     end: WindowEndpoint
+
+    def __init__(self, *, start: WindowEndpoint, end: WindowEndpoint) -> None:
+        raise TypeError("FetchWindow is engine-owned and cannot be constructed by providers")
+
+
+def _make_fetch_window(start: WindowEndpoint, end: WindowEndpoint) -> FetchWindow:
+    if not isinstance(start, WindowEndpoint) or not isinstance(end, WindowEndpoint):
+        raise TypeError("fetch window endpoints must be WindowEndpoint values")
+    if start > end:
+        raise ValueError("fetch window start must not be after end")
+    window = object.__new__(FetchWindow)
+    object.__setattr__(window, "start", start)
+    object.__setattr__(window, "end", end)
+    return window
 
 
 @dataclass(frozen=True, slots=True)

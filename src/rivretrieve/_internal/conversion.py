@@ -18,6 +18,7 @@ from rivretrieve._internal.engine import (
     Rows,
     RowsSchema,
     Unit,
+    WindowEndpoint,
     WithIssues,
     ZoneValue,
 )
@@ -41,8 +42,8 @@ def convert(
 
     supplied_start = window.start
     supplied_end = window.end
-    if not isinstance(supplied_start, datetime) or not isinstance(supplied_end, datetime):
-        raise TypeError("requested window endpoints must be datetime values")
+    adapted_start = _endpoint_datetime(supplied_start)
+    adapted_end = _endpoint_datetime(supplied_end)
 
     canonical_records: list[dict[str, object]] = []
     unknown_station_products: set[tuple[str, str]] = set()
@@ -58,8 +59,6 @@ def convert(
         validated_zone = ZoneValue(row_zone).value
 
         if isinstance(product.semantics, Daily):
-            if supplied_start.date() > supplied_end.date():
-                raise ValueError("requested window start must not be after end")
             if (
                 native_time.hour != 0
                 or native_time.minute != 0
@@ -69,12 +68,10 @@ def convert(
                 raise FatalContractError(
                     f"Daily row for station {station_id} and product {product_id} must have a midnight label"
                 )
-            keep = supplied_start.date() <= native_time.date() <= supplied_end.date()
+            keep = adapted_start.date() <= native_time.date() <= adapted_end.date()
         elif isinstance(product.semantics, Instant):
-            start_utc = _endpoint_utc(supplied_start)
-            end_utc = _endpoint_utc(supplied_end)
-            if start_utc > end_utc:
-                raise ValueError("requested window start must not be after end")
+            start_utc = _endpoint_utc(adapted_start)
+            end_utc = _endpoint_utc(adapted_end)
             if validated_zone == "unknown":
                 keep = True
                 unknown_row_count += 1
@@ -128,9 +125,19 @@ def convert(
 
 
 def _endpoint_utc(endpoint: datetime) -> datetime:
-    if endpoint.tzinfo is None:
-        return endpoint.replace(tzinfo=UTC)
-    return endpoint.astimezone(UTC)
+    return endpoint.replace(tzinfo=UTC)
+
+
+def _endpoint_datetime(endpoint: WindowEndpoint) -> datetime:
+    return datetime(
+        endpoint.year,
+        endpoint.month,
+        endpoint.day,
+        endpoint.hour,
+        endpoint.minute,
+        endpoint.second,
+        endpoint.microsecond,
+    )
 
 
 def _time_zone(value: str) -> tzinfo:

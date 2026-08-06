@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime
 
 import polars as pl
 import pytest
@@ -33,8 +33,8 @@ def _rows(records: Sequence[Mapping[str, object]]) -> pl.DataFrame:
     return pl.DataFrame(records, schema=RowsSchema.polars_schema)
 
 
-def _window(start: object, end: object) -> RequestedWindow:
-    return RequestedWindow(WindowEndpoint(start), WindowEndpoint(end))
+def _window(start: datetime, end: datetime) -> RequestedWindow:
+    return RequestedWindow(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
 
 
 def _product(unit: Unit = Unit.M, semantics: Instant | Daily | None = None) -> ProductConfig:
@@ -52,7 +52,7 @@ def _config(products: dict[str, ProductConfig]) -> ProviderConfig:
     )
 
 
-def test_convert_validates_rows_schema_before_endpoint_or_product_work() -> None:
+def test_convert_validates_rows_schema_before_product_work() -> None:
     from rivretrieve._internal.conversion import convert
 
     rows = pl.DataFrame(
@@ -71,7 +71,7 @@ def test_convert_validates_rows_schema_before_endpoint_or_product_work() -> None
     )
 
     with pytest.raises(FatalContractError, match="time_zone"):
-        convert(rows, _config({}), _window(object(), object()))
+        convert(rows, _config({}), _window(datetime(2023, 1, 1), datetime(2023, 1, 1)))
 
 
 def test_convert_invokes_real_rows_and_canonical_validators_in_order(
@@ -106,7 +106,7 @@ def test_convert_invokes_real_rows_and_canonical_validators_in_order(
     conversion.convert(
         rows,
         _config({"level": _product()}),
-        _window(datetime(2023, 1, 15, 11, tzinfo=UTC), datetime(2023, 1, 15, 13, tzinfo=UTC)),
+        _window(datetime(2023, 1, 15, 11), datetime(2023, 1, 15, 13)),
     )
 
     assert calls == ["Rows", "CanonicalRows"]
@@ -154,7 +154,7 @@ def test_convert_preserves_source_declared_iana_and_offset_zones_exactly(zone: s
             ]
         ),
         _config({"level": _product()}),
-        _window(datetime(2023, 1, 14, tzinfo=UTC), datetime(2023, 1, 16, tzinfo=UTC)),
+        _window(datetime(2023, 1, 14), datetime(2023, 1, 16)),
     )
 
     assert result.value["time_zone"].to_list() == [zone]
@@ -215,8 +215,8 @@ def test_convert_converts_all_eight_units(unit: Unit, input_value: float, expect
         ),
         _config({"product": _product(unit)}),
         _window(
-            datetime(2023, 1, 15, 11, tzinfo=UTC),
-            datetime(2023, 1, 15, 13, tzinfo=UTC),
+            datetime(2023, 1, 15, 11),
+            datetime(2023, 1, 15, 13),
         ),
     )
 
@@ -251,8 +251,8 @@ def test_convert_preserves_null_measurements_for_every_unit() -> None:
         _rows(records),
         _config({product_id: _product(unit) for product_id, unit in product_units.items()}),
         _window(
-            datetime(2023, 1, 15, 11, tzinfo=UTC),
-            datetime(2023, 1, 15, 13, tzinfo=UTC),
+            datetime(2023, 1, 15, 11),
+            datetime(2023, 1, 15, 13),
         ),
     )
 
@@ -282,7 +282,7 @@ def test_convert_instant_window_is_closed_at_both_endpoints() -> None:
     result = convert(
         _rows(records),
         _config({"level": _product()}),
-        _window(datetime(2023, 1, 1, 12, tzinfo=UTC), datetime(2023, 1, 1, 13, tzinfo=UTC)),
+        _window(datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 13)),
     )
 
     assert result.value["station_id"].to_list() == ["station-start", "station-end"]
@@ -311,7 +311,7 @@ def test_convert_aligns_known_instant_rows_before_clipping() -> None:
             ]
         ),
         _config({"level": _product()}),
-        _window(datetime(2020, 5, 31, 15, tzinfo=UTC), datetime(2020, 5, 31, 16, tzinfo=UTC)),
+        _window(datetime(2020, 5, 31, 15), datetime(2020, 5, 31, 16)),
     )
 
     assert result.value["time"].to_list() == [datetime(2020, 6, 1, 0, 30)]
@@ -339,10 +339,10 @@ def test_convert_binds_naive_instant_endpoints_to_the_utc_calendar() -> None:
     assert result.value.is_empty()
 
 
-def test_convert_normalizes_aware_instant_endpoints_to_utc() -> None:
+def test_convert_adapts_concrete_instant_endpoints_to_utc_comparison() -> None:
     from rivretrieve._internal.conversion import convert
 
-    endpoint = datetime(2023, 1, 31, 20, tzinfo=timezone(timedelta(hours=-6)))
+    endpoint = datetime(2023, 2, 1, 2)
     result = convert(
         _rows(
             [
@@ -360,54 +360,6 @@ def test_convert_normalizes_aware_instant_endpoints_to_utc() -> None:
     )
 
     assert result.value.height == 1
-
-
-@pytest.mark.parametrize(("start", "end"), [(object(), datetime(2023, 1, 1)), (datetime(2023, 1, 1), object())])
-def test_convert_rejects_non_datetime_window_endpoints(start: object, end: object) -> None:
-    from rivretrieve._internal.conversion import convert
-
-    with pytest.raises(TypeError, match="requested window endpoints must be datetime values"):
-        convert(
-            _rows(
-                [
-                    {
-                        "station_id": "station-1",
-                        "product_id": "level",
-                        "time": datetime(2023, 1, 1),
-                        "value": 1.0,
-                        "time_zone": "+00:00",
-                    }
-                ]
-            ),
-            _config({"level": _product()}),
-            _window(start, end),
-        )
-
-
-@pytest.mark.parametrize(
-    "semantics",
-    [Instant(), Daily(DayDefinition("unknown"))],
-    ids=["instant", "daily"],
-)
-def test_convert_rejects_reversed_windows(semantics: Instant | Daily) -> None:
-    from rivretrieve._internal.conversion import convert
-
-    with pytest.raises(ValueError, match="requested window start must not be after end"):
-        convert(
-            _rows(
-                [
-                    {
-                        "station_id": "station-1",
-                        "product_id": "level",
-                        "time": datetime(2023, 1, 15),
-                        "value": 1.0,
-                        "time_zone": "+00:00",
-                    }
-                ]
-            ),
-            _config({"level": _product(semantics=semantics)}),
-            _window(datetime(2023, 2, 1), datetime(2023, 1, 1)),
-        )
 
 
 def test_convert_mixed_known_and_unknown_instants_clip_only_known_rows_and_warn() -> None:
@@ -441,8 +393,8 @@ def test_convert_mixed_known_and_unknown_instants_clip_only_known_rows_and_warn(
         ),
         _config({"level": _product()}),
         _window(
-            datetime(2023, 1, 1, tzinfo=UTC),
-            datetime(2023, 1, 31, 23, 59, tzinfo=UTC),
+            datetime(2023, 1, 1),
+            datetime(2023, 1, 31, 23, 59),
         ),
     )
 
@@ -510,10 +462,10 @@ def test_convert_daily_negative_offset_does_not_project_or_shift_the_requested_d
     assert result.value["time"].to_list() == [datetime(2023, 1, 1), datetime(2023, 1, 31)]
 
 
-def test_convert_daily_reads_aware_endpoint_calendar_dates_as_supplied() -> None:
+def test_convert_daily_reads_naive_explicit_midnight_calendar_date() -> None:
     from rivretrieve._internal.conversion import convert
 
-    endpoint = datetime(2023, 1, 31, 20, tzinfo=timezone(timedelta(hours=-6)))
+    endpoint = datetime(2023, 1, 31)
     result = convert(
         _rows(
             [
@@ -608,7 +560,7 @@ def test_convert_returns_exact_canonical_column_order_and_native_time_dtype() ->
             ]
         ),
         _config({"level": _product(Unit.CM)}),
-        _window(datetime(2023, 1, 15, 16, tzinfo=UTC), datetime(2023, 1, 15, 18, tzinfo=UTC)),
+        _window(datetime(2023, 1, 15, 16), datetime(2023, 1, 15, 18)),
     )
     expected = pl.DataFrame(
         {

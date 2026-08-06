@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date, datetime
 from pathlib import Path
 
-from rivretrieve._internal.engine import FetchWindow, Payload, ProviderConfig, WithIssues
+from rivretrieve._internal.engine import FetchWindow, Payload, ProviderConfig, WindowEndpoint, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.ca_eccc.config import HydatSourceCoordinates
@@ -116,9 +115,7 @@ def _query_years(fetch_window: FetchWindow) -> tuple[int, int]:
     return start_year, end_year
 
 
-def _endpoint_year(endpoint: object) -> int:
-    if not isinstance(endpoint, (date, datetime)):
-        raise TypeError("HYDAT fetch window endpoints must be date or datetime values")
+def _endpoint_year(endpoint: WindowEndpoint) -> int:
     return endpoint.year
 
 

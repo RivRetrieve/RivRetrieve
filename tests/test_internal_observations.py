@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 import pandas.testing as pd_testing
 import polars as pl
@@ -132,12 +133,12 @@ def test_observation_request_from_sequences_preserves_order() -> None:
     assert request.products == ("level", "flow")
 
 
-def test_observation_request_coerces_typed_temporal_inputs() -> None:
+def test_observation_request_normalizes_typed_temporal_inputs() -> None:
     request = ObservationRequest.from_inputs(
         provider_id="provider-a",
         stations="station-1",
         products="flow",
-        start=date(2026, 1, 1),
+        start=datetime(2026, 1, 1),
         end=datetime(2026, 1, 2, 3, 4, 5),
     )
     string_request = ObservationRequest.from_inputs(
@@ -148,10 +149,88 @@ def test_observation_request_coerces_typed_temporal_inputs() -> None:
         end="2026-01-02",
     )
 
-    assert request.start == datetime(2026, 1, 1)
-    assert request.end == datetime(2026, 1, 2, 3, 4, 5)
-    assert string_request.start == datetime(2026, 1, 1, 12, 30)
-    assert string_request.end == datetime(2026, 1, 2)
+    assert request.start.isoformat() == "2026-01-01T00:00:00"
+    assert request.end.isoformat() == "2026-01-02T03:04:05"
+    assert string_request.start.isoformat() == "2026-01-01T12:30:00"
+    assert string_request.end.isoformat() == "2026-01-02T23:59:59.999999"
+
+
+def test_bare_date_end_expands_but_explicit_midnight_is_preserved() -> None:
+    kwargs = {"provider_id": "provider-a", "stations": "station-1", "products": "flow"}
+    bare = ObservationRequest.from_inputs(**kwargs, start="2020-07-31", end="2020-07-31")
+    explicit = ObservationRequest.from_inputs(**kwargs, start="2020-07-31", end="2020-07-31 00:00")
+
+    assert bare.start.isoformat() == explicit.start.isoformat() == "2020-07-31T00:00:00"
+    assert bare.end.isoformat() == "2020-07-31T23:59:59.999999"
+    assert explicit.end.isoformat() == "2020-07-31T00:00:00"
+
+
+def test_datetime_midnight_is_explicit_not_a_bare_date() -> None:
+    request = ObservationRequest.from_inputs(
+        provider_id="provider-a",
+        stations="station-1",
+        products="flow",
+        start=datetime(2020, 7, 31),
+        end=datetime(2020, 7, 31),
+    )
+    assert request.end.isoformat() == "2020-07-31T00:00:00"
+
+
+def test_observation_request_rejects_reversed_normalized_window() -> None:
+    with pytest.raises(
+        InvalidObservationRequestError,
+        match="^requested window start must not be after end$",
+    ):
+        ObservationRequest.from_inputs(
+            provider_id="provider-a",
+            stations="station-1",
+            products="flow",
+            start="2020-08-01",
+            end="2020-07-31",
+        )
+
+
+@pytest.mark.parametrize("name", ["start", "end"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime(2020, 7, 31, tzinfo=UTC),
+        datetime(2020, 7, 31, tzinfo=timezone(timedelta(hours=2))),
+        datetime(2020, 7, 31, tzinfo=ZoneInfo("Europe/Zurich")),
+    ],
+)
+def test_observation_request_rejects_zone_carrying_datetime_with_fix(name: str, value: datetime) -> None:
+    inputs: dict[str, object] = {"start": "2020-07-31", "end": "2020-07-31"}
+    inputs[name] = value
+    with pytest.raises(InvalidObservationRequestError) as exc_info:
+        ObservationRequest.from_inputs(provider_id="provider-a", stations="station-1", products="flow", **inputs)
+    assert str(exc_info.value) == (
+        f"{name} must be wall-clock time without a time zone; remove it with `{name} = {name}.replace(tzinfo=None)`."
+    )
+
+
+@pytest.mark.parametrize("name", ["start", "end"])
+@pytest.mark.parametrize("value", ["2020-07-31T00:00:00Z", "2020-07-31T00:00:00+02:00", "2020-07-31T00:00:00-06:00"])
+def test_observation_request_rejects_offset_bearing_iso_string_with_fix(name: str, value: str) -> None:
+    inputs: dict[str, object] = {"start": "2020-07-31", "end": "2020-07-31"}
+    inputs[name] = value
+    with pytest.raises(InvalidObservationRequestError) as exc_info:
+        ObservationRequest.from_inputs(provider_id="provider-a", stations="station-1", products="flow", **inputs)
+    assert str(exc_info.value) == (
+        f"{name} must be wall-clock time without a time zone; remove it with "
+        f"`{name} = datetime.fromisoformat({name}).replace(tzinfo=None)`."
+    )
+
+
+@pytest.mark.parametrize("name", ["start", "end"])
+def test_observation_request_rejects_date_object(name: str) -> None:
+    inputs: dict[str, object] = {"start": "2020-07-31", "end": "2020-07-31"}
+    inputs[name] = date(2020, 7, 31)
+    with pytest.raises(
+        InvalidObservationRequestError,
+        match=rf"^{name} must be a datetime or ISO-like string$",
+    ):
+        ObservationRequest.from_inputs(provider_id="provider-a", stations="station-1", products="flow", **inputs)
 
 
 @pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
