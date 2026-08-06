@@ -7,6 +7,7 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
+from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
     Daily,
     DayDefinition,
@@ -15,6 +16,7 @@ from rivretrieve._internal.engine import (
     Payload,
     ProductConfig,
     ProviderConfig,
+    RequestedWindow,
     RowsSchema,
     SourceCoordinates,
     Unit,
@@ -65,8 +67,17 @@ def _payload(
     return Payload(
         source_coordinates=SourceCoordinates(coordinates),
         station_products=pairs,
-        fetch_window=FetchWindow(WindowEndpoint(object()), WindowEndpoint(object())),
+        fetch_window=_fetch_window(),
         content=content,
+    )
+
+
+def _fetch_window() -> FetchWindow:
+    return identity_window(
+        RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2010, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2010, 12, 31, 23, 59, 59, 999999)),
+        )
     )
 
 
@@ -288,7 +299,7 @@ def test_parse_rejects_coordinate_and_declaration_seam_breaks() -> None:
             Payload(
                 SourceCoordinates(object()),
                 (("02GA010", ProductId("discharge_daily_mean")),),
-                FetchWindow(WindowEndpoint(object()), WindowEndpoint(object())),
+                _fetch_window(),
                 [],
             ),
             config,

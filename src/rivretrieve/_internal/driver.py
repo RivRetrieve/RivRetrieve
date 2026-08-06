@@ -1,4 +1,4 @@
-"""drive : ObservationRequest × ProviderStages × WindowPadder × ObservationProvenance × RawPayload → _AssemblyResult."""
+"""drive : concrete ObservationRequest × ProviderStages × WindowPadder × ObservationProvenance × RawPayload → _AssemblyResult."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from rivretrieve._internal.engine import (
     Rows,
     RowsSchema,
     WithIssues,
+    _make_fetch_window,
 )
 from rivretrieve._internal.observations import ObservationProvenance, RawPayload
 from rivretrieve._internal.primitives import ProductId
@@ -47,7 +48,7 @@ class ProviderStages(Protocol):
 
 def identity_window(window: RequestedWindow) -> FetchWindow:
     """Change only the nominal window type; perform no padding arithmetic."""
-    return FetchWindow(start=window.start, end=window.end)
+    return _make_fetch_window(window.start, window.end)
 
 
 def drive(

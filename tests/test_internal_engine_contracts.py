@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import FrozenInstanceError
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -10,6 +10,7 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.schemas import CatalogueSchema, validate_catalogue
+from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
     CanonicalRowsSchema,
     FetchWindow,
@@ -26,11 +27,33 @@ from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 
 
-def test_requested_and_fetch_windows_are_closed_immutable_nominal_carriers() -> None:
-    start = WindowEndpoint(object())
-    end = WindowEndpoint(object())
+def test_window_endpoint_exposes_rendering_fields_without_arithmetic() -> None:
+    endpoint = WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999))
+
+    assert (
+        endpoint.year,
+        endpoint.month,
+        endpoint.day,
+        endpoint.hour,
+        endpoint.minute,
+        endpoint.second,
+        endpoint.microsecond,
+    ) == (2020, 7, 31, 23, 59, 59, 999999)
+    assert endpoint.date == "2020-07-31"
+    assert endpoint.isoformat() == "2020-07-31T23:59:59.999999"
+    with pytest.raises(TypeError):
+        endpoint + timedelta(days=1)  # type: ignore[unsupported-operator]
+    with pytest.raises(TypeError):
+        endpoint - timedelta(days=1)  # type: ignore[unsupported-operator]
+    with pytest.raises(FrozenInstanceError):
+        endpoint.year = 2021
+
+
+def test_requested_and_fetch_windows_remain_nominally_distinct_and_immutable() -> None:
+    start = WindowEndpoint.from_datetime(datetime(2020, 7, 31))
+    end = WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999))
     requested = RequestedWindow(start=start, end=end)
-    fetch = FetchWindow(start=start, end=end)
+    fetch = identity_window(requested)
 
     assert requested.start is start
     assert requested.end is end
@@ -46,11 +69,25 @@ def test_requested_and_fetch_windows_are_closed_immutable_nominal_carriers() -> 
         setattr(fetch, start_attribute, start)
 
 
+def test_direct_fetch_window_construction_raises_for_provider_code() -> None:
+    start = WindowEndpoint.from_datetime(datetime(2020, 7, 31))
+    end = WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999))
+
+    with pytest.raises(
+        TypeError,
+        match="^FetchWindow is engine-owned and cannot be constructed by providers$",
+    ):
+        FetchWindow(start=start, end=end)
+
+
 def test_engine_observation_request_preserves_requested_window_and_ids() -> None:
     provider_id = ProviderId("provider")
     stations = ("station-1", "station-2")
     products = (ProductId("flow"), ProductId("level"))
-    window = RequestedWindow(WindowEndpoint(object()), WindowEndpoint(object()))
+    window = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2020, 7, 31)),
+        WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999)),
+    )
     request = ObservationRequest(
         provider_id=provider_id,
         stations=stations,
@@ -84,7 +121,12 @@ def test_payload_accepts_opaque_content_and_preserves_complete_tag(content: obje
         ("station-1", ProductId("flow")),
         ("station-2", ProductId("level")),
     )
-    window = FetchWindow(WindowEndpoint(object()), WindowEndpoint(object()))
+    window = identity_window(
+        RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2020, 7, 31)),
+            WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999)),
+        )
+    )
     payload = Payload(
         source_coordinates=coordinates,
         station_products=station_products,
