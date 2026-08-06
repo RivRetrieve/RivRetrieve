@@ -8,7 +8,8 @@ from typing import Any, cast
 
 import pytest
 
-from rivretrieve._internal.engine import FetchWindow, WindowEndpoint
+from rivretrieve._internal.driver import identity_window
+from rivretrieve._internal.engine import FetchWindow, RequestedWindow, WindowEndpoint
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
@@ -68,10 +69,10 @@ def hydat_db(tmp_path: Path) -> Path:
 
 
 def _window(
-    start: object = datetime(2010, 1, 2),
-    end: object = datetime(2010, 1, 2),
+    start: datetime = datetime(2010, 1, 2),
+    end: datetime = datetime(2010, 1, 2),
 ) -> FetchWindow:
-    return FetchWindow(WindowEndpoint(start), WindowEndpoint(end))
+    return identity_window(RequestedWindow(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end)))
 
 
 def _point_fetch_at(
@@ -300,24 +301,26 @@ def test_fetch_missing_hydat_day_columns_raises(
         )
 
 
-def test_fetch_rejects_unrepresentable_window_endpoint(
+def test_ca_eccc_fetch_reads_years_from_legal_wall_clock_endpoints(
+    hydat_db: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def unexpected_cache_lookup(_cache_dir: Path) -> Path | None:
-        raise AssertionError("cache lookup must follow endpoint parsing")
+    _point_fetch_at(monkeypatch, hydat_db)
+    window = _window(
+        datetime(2010, 1, 2, 12, 34, 56, 123456),
+        datetime(2010, 12, 31, 23, 59, 59, 999999),
+    )
 
-    monkeypatch.setattr(fetch_module, "_find_sqlite", unexpected_cache_lookup)
+    result = fetch(
+        ("02GA010",),
+        (ProductId("discharge_daily_mean"),),
+        window,
+        config,
+    )
 
-    with pytest.raises(
-        TypeError,
-        match="HYDAT fetch window endpoints must be date or datetime values",
-    ):
-        fetch(
-            ("02GA010",),
-            (ProductId("discharge_daily_mean"),),
-            _window(object(), datetime(2010, 1, 2)),
-            config,
-        )
+    assert [(row["YEAR"], row["MONTH"]) for row in result.value[0].content] == [(2010, 1), (2010, 12)]
+    assert result.value[0].fetch_window is window
+    assert result.issues == ()
 
 
 def test_fetch_never_calls_hydat_acquisition(

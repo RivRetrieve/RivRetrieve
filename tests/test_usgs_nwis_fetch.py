@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import get_type_hints
 
 import polars as pl
 import pytest
 
+from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
     Daily,
     DayDefinition,
@@ -15,6 +16,7 @@ from rivretrieve._internal.engine import (
     Instant,
     ProductConfig,
     ProviderConfig,
+    RequestedWindow,
     SourceCoordinates,
     Unit,
     WindowEndpoint,
@@ -58,9 +60,11 @@ class RecordingHttpClient:
 
 
 def _window() -> FetchWindow:
-    return FetchWindow(
-        WindowEndpoint("2023-01-01"),
-        WindowEndpoint("2023-01-10"),
+    return identity_window(
+        RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
+        )
     )
 
 
@@ -444,32 +448,25 @@ def test_successful_malformed_body_stays_opaque_until_parse(
         parse(fetched.value[0], provider_config)
 
 
-@pytest.mark.parametrize(
-    "endpoint",
-    [
-        WindowEndpoint(None),
-        WindowEndpoint(True),
-        WindowEndpoint(date(2023, 1, 1)),
-        WindowEndpoint(object()),
-    ],
-)
-def test_fetch_rejects_unrepresentable_window_without_formatting_or_network(
-    monkeypatch: pytest.MonkeyPatch,
-    endpoint: WindowEndpoint,
-) -> None:
-    def forbidden_client() -> RecordingHttpClient:
-        raise AssertionError("HttpClient must not be constructed")
+def test_usgs_fetch_renders_legal_wall_clock_endpoint_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _patch_client(monkeypatch, [_response(b"{}")])
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2023, 1, 1, 12, 34, 56, 123456)),
+        WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
+    )
+    window = identity_window(requested)
 
-    monkeypatch.setattr(fetch_module, "HttpClient", forbidden_client)
-    window = FetchWindow(endpoint, WindowEndpoint("2023-01-10"))
+    result = fetch(
+        ("station-1",),
+        (ProductId("discharge_instantaneous"),),
+        window,
+        config(),
+    )
 
-    with pytest.raises(FatalContractError, match="already-representable"):
-        fetch(
-            ("station-1",),
-            (ProductId("discharge_instantaneous"),),
-            window,
-            config(),
-        )
+    assert client.requests[0].params["startDT"] == "2023-01-01"
+    assert client.requests[0].params["endDT"] == "2023-01-10"
+    assert result.value[0].fetch_window is window
+    assert result.issues == ()
 
 
 def test_fetch_fails_loudly_for_missing_or_wrong_coordinate_declaration(

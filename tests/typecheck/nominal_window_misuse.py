@@ -1,12 +1,9 @@
-from rivretrieve._internal.engine import FetchWindow, RequestedWindow, WindowEndpoint
+from rivretrieve._internal.engine import FetchWindow, RequestedWindow
 
 
 def clip(window: RequestedWindow) -> None:
     pass
 
 
-fetch_window = FetchWindow(
-    start=WindowEndpoint(object()),
-    end=WindowEndpoint(object()),
-)
-clip(fetch_window)
+def misuse(fetch_window: FetchWindow) -> None:
+    clip(fetch_window)

@@ -12,7 +12,7 @@ from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.driver import ProviderStages, drive, identity_window
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
-from rivretrieve._internal.engine import RequestedWindow, WindowEndpoint
+from rivretrieve._internal.engine import RequestedWindow
 from rivretrieve._internal.issues import (
     FatalContractError,
     ObservationsUnavailableError,
@@ -149,8 +149,8 @@ class _ProviderHandle:
             stations=request.stations,
             products=tuple(ProductId(product_id) for product_id in request.products),
             window=RequestedWindow(
-                start=WindowEndpoint(request.start),
-                end=WindowEndpoint(request.end),
+                start=request.start,
+                end=request.end,
             ),
         )
         requested_at = datetime.now(UTC)

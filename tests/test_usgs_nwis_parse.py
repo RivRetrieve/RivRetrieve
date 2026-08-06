@@ -9,10 +9,11 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
+from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
-    FetchWindow,
     Payload,
     ProviderConfig,
+    RequestedWindow,
     RowsSchema,
     SourceCoordinates,
     WindowEndpoint,
@@ -32,7 +33,12 @@ def _payload(
     return Payload(
         SourceCoordinates(object()),
         station_products,
-        FetchWindow(WindowEndpoint(object()), WindowEndpoint(object())),
+        identity_window(
+            RequestedWindow(
+                WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+                WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
+            )
+        ),
         content,
     )
 

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 import polars as pl
 import polars.testing as pl_testing
@@ -180,21 +180,16 @@ def _raw(request: ObservationRequest) -> RawPayload:
 
 
 def _windows() -> tuple[RequestedWindow, FetchWindow]:
-    return (
-        RequestedWindow(
-            start=WindowEndpoint(datetime(2026, 1, 2, 0, tzinfo=UTC)),
-            end=WindowEndpoint(datetime(2026, 1, 2, 23, tzinfo=UTC)),
-        ),
-        FetchWindow(
-            start=WindowEndpoint(object()),
-            end=WindowEndpoint(object()),
-        ),
+    requested = RequestedWindow(
+        start=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 0)),
+        end=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23)),
     )
+    return requested, driver_module.identity_window(requested)
 
 
 def test_identity_window_changes_only_the_nominal_type() -> None:
-    start = WindowEndpoint(object())
-    end = WindowEndpoint(object())
+    start = WindowEndpoint.from_datetime(datetime(2026, 1, 2))
+    end = WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23))
     requested = RequestedWindow(start=start, end=end)
 
     fetched = driver_module.identity_window(requested)
@@ -531,8 +526,8 @@ def _drive_boundary_rows(
     events: list[str],
 ) -> _AssemblyResult:
     requested_window = RequestedWindow(
-        start=WindowEndpoint(datetime(2026, 1, 2, 0, tzinfo=UTC)),
-        end=WindowEndpoint(datetime(2026, 1, 2, 23, tzinfo=UTC)),
+        start=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 0)),
+        end=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23)),
     )
     request = ObservationRequest(
         provider_id=ProviderId("throwaway"),
@@ -540,10 +535,7 @@ def _drive_boundary_rows(
         products=(ProductId("level"),),
         window=requested_window,
     )
-    fetch_window = FetchWindow(
-        start=WindowEndpoint(object()),
-        end=WindowEndpoint(object()),
-    )
+    fetch_window = driver_module.identity_window(requested_window)
     coordinates = SourceCoordinates({"parameter": "height"})
     config = ProviderConfig(
         zone=ZoneValue("+00:00"),
