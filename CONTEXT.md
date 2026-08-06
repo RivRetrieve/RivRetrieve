@@ -168,6 +168,49 @@ a result it would be indistinguishable from a zone the source did establish.
 _Avoid_: provider timezone (a zone is a per-station fact wherever a country spans
 several), inferred timezone
 
+**Requested window**:
+The interval a caller asks for, closed at both ends, expressed as wall-clock time in the
+calendar each station's own source publishes. It is never an absolute interval on the
+world's timeline: asking for one day across two stations in different zones asks each
+gauge for its own day, not for one shared 24 hours. An endpoint carrying a zone is
+refused rather than reinterpreted, because a window that means an instant can only be
+placed against a [[station-timezone]], and five of the thirteen sources publish none — the
+capability would evaporate by country. This is what makes clipping possible for a station
+whose zone is [[unknown]]: wall clock compares to wall clock without needing a zone on
+either side. A caller wanting an absolute interval converts the returned [[native-time]]
+afterwards, as ADR 0006 intends.
+_Avoid_: date range, time range, requested period, UTC window
+
+**Fetch window**:
+The [[requested-window]] widened outward by a fixed two days at each end, and the only
+window a [[provider]] ever sees. The pad is uniform rather than computed per source
+because the widest disagreement between any two calendars on Earth is 26 hours, so a
+fixed two days cannot fail to contain the request whatever calendar the source's date
+parameters turn out to be in — which leaves no per-provider padding for a port to get
+wrong. It is always a superset of the requested window; the extra rows are removed when
+[[convert]] clips.
+_Avoid_: query window, padded window, over-fetch window
+
+**Sub-window**:
+One piece of a [[fetch-window]] a [[provider]] can actually ask its source for, computed
+by the [[engine]] from a granularity the provider declares — one file per year, one per
+year-month, a chunk of N years, a capped span, or the whole window unsplit. Six of the
+thirteen sources cannot answer an arbitrary window in one request, and each expressed
+that with its own private splitting code; the granularity is a fact about the source, the
+splitting is arithmetic, and the two are separated so that only the engine performs the
+arithmetic.
+_Avoid_: chunk, window split, decomposition (which names the act, not the piece)
+
+**Window rendering**:
+Turning a [[fetch-window]] or [[sub-window]] into the vocabulary one source's request
+uses: an ISO instant, a date, a year, a year-month, or nothing at all where the source
+accepts no date parameter. It is the whole of what a [[provider]] does with a window, and
+it is [[source-coordinates]]-shaped — a fact about how the source names things rather
+than behaviour. A window carries no arithmetic a provider can reach: it cannot be added
+to, shifted, or split outside the [[engine]], which is what keeps thirteen ports from
+each inventing their own calendar handling.
+_Avoid_: window formatting, window translation, window conversion
+
 **Day definition**:
 The 24 hours a daily product actually covers, declared per provider-product. It is not
 assumed: where a source does not state which 24 hours its daily value spans, the day
