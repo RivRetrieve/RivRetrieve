@@ -15,9 +15,20 @@ source silence.
 _Avoid_: missing, N/A, not available, default
 
 **Raw**:
-The exact bytes handed to a [[provider]]'s parse [[stage]], retained alongside the
-returned result only when the caller requests them. When they are not requested, the
-result's raw slot is empty.
+What a [[provider]]'s parse [[stage]] was handed, kept alongside the returned result so a
+user can audit a value against what the source actually said, and only when the caller
+asks for it — unasked, the slot exists and is empty and no response bytes are reachable
+from the result. It is bytes and stays bytes: thirteen sources answer in JSON, CSV, HTML
+and spreadsheets, and modelling that would be parsing. Each entry carries a uniform
+envelope naming where the bytes came from — for eleven providers an HTTP call, for
+`ca_eccc` a query against the local [[cache]], for `pl_imgw` a member of a downloaded
+zip — with the fields that do not apply left [[unknown]], and request headers excluded
+entirely so a credential has no route in. It is deliberately what parse read rather than
+what came off the wire: a zip explains no value, and `ca_eccc` never touches the network,
+so the wire would hand back an empty box for the one provider where a stale cache is the
+likeliest cause of a wrong number.
+_Avoid_: untouched payload (one unzipping step removes it from what the server sent),
+response, blob
 
 **Native table**:
 One [[provider]]'s station metadata in the source's own vocabulary: its column names,
