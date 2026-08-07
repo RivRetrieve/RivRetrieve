@@ -87,8 +87,8 @@ def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.Monk
     _assert_empty_annotations(result)
     params = client.requests[0].params
     assert params is not None
-    assert params["startDT"] == "2023-01-01"
-    assert params["endDT"] == "2023-01-01"
+    assert params["startDT"] == "2022-12-30"
+    assert params["endDT"] == "2023-01-03"
 
 
 def test_usgs_nwis_all_missing_preserves_issue_policy(monkeypatch: pytest.MonkeyPatch) -> None:

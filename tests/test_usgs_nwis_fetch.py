@@ -8,7 +8,6 @@ from typing import get_type_hints
 import polars as pl
 import pytest
 
-from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
     Daily,
     DayDefinition,
@@ -16,11 +15,11 @@ from rivretrieve._internal.engine import (
     Instant,
     ProductConfig,
     ProviderConfig,
-    RequestedWindow,
     SourceCoordinates,
     Unit,
     WindowEndpoint,
     ZoneValue,
+    _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
@@ -60,11 +59,9 @@ class RecordingHttpClient:
 
 
 def _window() -> FetchWindow:
-    return identity_window(
-        RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
-            WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
-        )
+    return _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
     )
 
 
@@ -450,11 +447,10 @@ def test_successful_malformed_body_stays_opaque_until_parse(
 
 def test_usgs_fetch_renders_legal_wall_clock_endpoint_dates(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _patch_client(monkeypatch, [_response(b"{}")])
-    requested = RequestedWindow(
+    window = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2023, 1, 1, 12, 34, 56, 123456)),
         WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
     )
-    window = identity_window(requested)
 
     result = fetch(
         ("station-1",),
