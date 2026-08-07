@@ -568,8 +568,6 @@ def _expected_products() -> pl.DataFrame:
             "period_anchor": "provider_defined",
             "unit": "m3/s",
             "native_id": "D_AVG_FR",
-            "derived": False,
-            "derivation_method": None,
         },
         {
             "provider_id": "za_dws",
@@ -581,8 +579,6 @@ def _expected_products() -> pl.DataFrame:
             "period_anchor": "instant",
             "unit": "m3/s",
             "native_id": "COR_FLOW",
-            "derived": False,
-            "derivation_method": None,
         },
         {
             "provider_id": "za_dws",
@@ -594,8 +590,6 @@ def _expected_products() -> pl.DataFrame:
             "period_anchor": "instant",
             "unit": "m",
             "native_id": "COR_LEVEL",
-            "derived": False,
-            "derivation_method": None,
         },
     ]
     return pl.DataFrame(rows, schema=generator.PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -687,7 +681,7 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     generated = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
 
     provider_digest = "3ebe10bb1479e7f70bd97354bdc18eaae7f32c93766d844d200ff8e592ded258"
-    products_digest = "b60c9ed3f3110172be344b6dbbf48cb9edc1757c1bd4fdefd43c3895e778de47"
+    products_digest = "ac641caa1ed8b4a351b7060b7e5269328242279de0e5d96a56d9b1416184275f"
     stations_digest = "362736b7f95535b309118c51eb5c21e8f0d0b52b06858f295fc7b44ecff2c562"
     station_products_digest = "e840b2c83275616e9a10d0350e51ba2219a33bd716e250091bce36964ae7da94"
     assert _provider_content_sha256(provider_info) == provider_digest
