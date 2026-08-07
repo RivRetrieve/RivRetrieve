@@ -61,14 +61,9 @@ CATALOGUE_ONLY_PROVIDERS = (
     (
         "th_thaiwater",
         825,
-        4,
-        3300,
-        {
-            "discharge_daily_mean",
-            "discharge_instantaneous",
-            "stage_daily_mean",
-            "stage_instantaneous",
-        },
+        2,
+        1650,
+        {"discharge_instantaneous", "stage_instantaneous"},
         "ThaiWater public API / Hydro-Informatics Institute (HII)",
         "2026-08-02",
         {"unknown"},
