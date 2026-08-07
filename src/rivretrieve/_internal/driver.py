@@ -1,8 +1,8 @@
-"""drive : concrete ObservationRequest × ProviderStages × WindowPadder × ObservationProvenance × RawPayload → _AssemblyResult."""
+"""drive : concrete ObservationRequest × ProviderStages × ObservationProvenance × RawPayload → _AssemblyResult."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from datetime import datetime, timedelta
 from typing import Protocol
 
 import polars as pl
@@ -16,16 +16,16 @@ from rivretrieve._internal.engine import (
     ObservationRequest,
     Payload,
     ProviderConfig,
-    RequestedWindow,
     Rows,
     RowsSchema,
+    WindowEndpoint,
     WithIssues,
     _make_fetch_window,
 )
 from rivretrieve._internal.observations import ObservationProvenance, RawPayload
 from rivretrieve._internal.primitives import ProductId
 
-type WindowPadder = Callable[[RequestedWindow], FetchWindow]
+_FETCH_WINDOW_PADDING = timedelta(days=2)
 
 
 class ProviderStages(Protocol):
@@ -46,21 +46,42 @@ class ProviderStages(Protocol):
     ) -> WithIssues[Rows]: ...
 
 
-def identity_window(window: RequestedWindow) -> FetchWindow:
-    """Change only the nominal window type; perform no padding arithmetic."""
-    return _make_fetch_window(window.start, window.end)
-
-
 def drive(
     request: ObservationRequest,
     provider: ProviderStages,
-    pad_window: WindowPadder,
     *,
     provenance: ObservationProvenance,
     raw: RawPayload,
 ) -> _AssemblyResult:
     config = provider.config
-    fetch_window = pad_window(request.window)
+    requested_start = request.window.start
+    requested_end = request.window.end
+    fetch_window = _make_fetch_window(
+        WindowEndpoint.from_datetime(
+            datetime(
+                requested_start.year,
+                requested_start.month,
+                requested_start.day,
+                requested_start.hour,
+                requested_start.minute,
+                requested_start.second,
+                requested_start.microsecond,
+            )
+            - _FETCH_WINDOW_PADDING
+        ),
+        WindowEndpoint.from_datetime(
+            datetime(
+                requested_end.year,
+                requested_end.month,
+                requested_end.day,
+                requested_end.hour,
+                requested_end.minute,
+                requested_end.second,
+                requested_end.microsecond,
+            )
+            + _FETCH_WINDOW_PADDING
+        ),
+    )
     fetched = provider.fetch(request.stations, request.products, fetch_window, config)
     parsed: list[WithIssues[Rows]] = []
     for payload in fetched.value:

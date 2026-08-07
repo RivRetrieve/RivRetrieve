@@ -7,7 +7,6 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
     Daily,
     DayDefinition,
@@ -16,12 +15,12 @@ from rivretrieve._internal.engine import (
     Payload,
     ProductConfig,
     ProviderConfig,
-    RequestedWindow,
     RowsSchema,
     SourceCoordinates,
     Unit,
     WindowEndpoint,
     ZoneValue,
+    _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
@@ -73,11 +72,9 @@ def _payload(
 
 
 def _fetch_window() -> FetchWindow:
-    return identity_window(
-        RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2010, 1, 1)),
-            WindowEndpoint.from_datetime(datetime(2010, 12, 31, 23, 59, 59, 999999)),
-        )
+    return _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2010, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2010, 12, 31, 23, 59, 59, 999999)),
     )
 
 

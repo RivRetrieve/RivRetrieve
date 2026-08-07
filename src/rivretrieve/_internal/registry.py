@@ -10,7 +10,7 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-from rivretrieve._internal.driver import ProviderStages, drive, identity_window
+from rivretrieve._internal.driver import ProviderStages, drive
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.engine import RequestedWindow
 from rivretrieve._internal.issues import (
@@ -157,7 +157,6 @@ class _ProviderHandle:
         assembled = drive(
             engine_request,
             stages,
-            identity_window,
             provenance=ObservationProvenance(
                 source=observation_source,
                 provider_id=self.provider_id,
