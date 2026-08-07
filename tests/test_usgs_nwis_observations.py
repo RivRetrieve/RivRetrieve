@@ -22,6 +22,7 @@ from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
 FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json")
 INSTANT_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_iv_00060_2023-01-01.json")
+ARIZONA_INSTANT_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_09380000_iv_00060_2020-07-01.json")
 
 
 class RecordingHttpClient:
@@ -127,6 +128,41 @@ def test_usgs_nwis_bare_date_returns_full_local_day_for_instant_product(
         "sites": "07374000",
         "startDT": "2022-12-30",
         "endDT": "2023-01-03",
+        "parameterCd": "00060",
+    }
+    assert request.headers == {"Accept": "application/json"}
+
+
+def test_usgs_nwis_arizona_explicit_local_day_returns_24_hourly_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use a constructed, source-shaped fixture with synthetic queryURL, criteria, station metadata, and values—not a captured USGS response."""
+    client = _patch_client(monkeypatch, ARIZONA_INSTANT_FIXTURE_PATH.read_bytes())
+
+    result = rr.provider("usgs_nwis").observations(
+        stations="09380000",
+        products="discharge_instantaneous",
+        start="2020-07-01 00:00",
+        end="2020-07-01 23:00",
+        on_issue="ignore",
+    )
+
+    expected_times = [datetime(2020, 7, 1, hour) for hour in range(24)]
+    assert result.data.height == 24
+    assert result.data["time"].to_list() == expected_times
+    assert result.data["time"][0] == datetime(2020, 7, 1, 0, 0)
+    assert result.data["time"][-1] == datetime(2020, 7, 1, 23, 0)
+    assert result.data["station_id"].unique(maintain_order=True).to_list() == ["09380000"]
+    assert result.data["product_id"].unique(maintain_order=True).to_list() == ["discharge_instantaneous"]
+
+    assert len(client.requests) == 1
+    request = client.requests[0]
+    assert request.url == "https://waterservices.usgs.gov/nwis/iv/"
+    assert request.params == {
+        "format": "json",
+        "sites": "09380000",
+        "startDT": "2020-06-29",
+        "endDT": "2020-07-03",
         "parameterCd": "00060",
     }
     assert request.headers == {"Accept": "application/json"}

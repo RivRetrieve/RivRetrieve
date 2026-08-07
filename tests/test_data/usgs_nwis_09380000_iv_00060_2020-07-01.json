@@ -1,0 +1,313 @@
+{
+  "name": "ns1:timeSeriesResponseType",
+  "value": {
+    "queryInfo": {
+      "queryURL": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=09380000&startDT=2020-06-29&endDT=2020-07-03&parameterCd=00060",
+      "criteria": {
+        "locationParam": "ALL:09380000",
+        "variableParam": "00060",
+        "timeParam": {
+          "beginDateTime": "2020-06-29T00:00:00.000",
+          "endDateTime": "2020-07-03T23:59:59.999"
+        },
+        "parameter": []
+      },
+      "note": [
+        {
+          "value": "[constructed source-shaped fixture; not a captured USGS response]",
+          "title": "fixture:provenance"
+        },
+        {
+          "value": "NWIS",
+          "title": "site"
+        }
+      ]
+    },
+    "timeSeries": [
+      {
+        "sourceInfo": {
+          "siteName": "Colorado River at Lees Ferry, Arizona",
+          "siteCode": [
+            {
+              "value": "09380000",
+              "network": "NWIS",
+              "agencyCode": "USGS"
+            }
+          ],
+          "timeZoneInfo": {
+            "defaultTimeZone": {
+              "zoneOffset": "-07:00",
+              "zoneAbbreviation": "MST"
+            },
+            "daylightSavingsTimeZone": {
+              "zoneOffset": "-07:00",
+              "zoneAbbreviation": "MST"
+            },
+            "siteUsesDaylightSavingsTime": false
+          },
+          "geoLocation": {
+            "geogLocation": {
+              "srs": "EPSG:4269",
+              "latitude": 36.8643333,
+              "longitude": -111.5878722
+            },
+            "note": []
+          },
+          "note": [],
+          "siteType": [],
+          "siteProperty": [
+            {
+              "name": "siteTypeCd",
+              "value": "ST"
+            },
+            {
+              "name": "hucCd",
+              "value": "15010001"
+            },
+            {
+              "name": "stateCd",
+              "value": "04"
+            },
+            {
+              "name": "countyCd",
+              "value": "04005"
+            }
+          ]
+        },
+        "variable": {
+          "variableCode": [
+            {
+              "value": "00060",
+              "network": "NWIS",
+              "vocabulary": "NWIS:UnitValues",
+              "variableID": 45807197,
+              "default": true
+            }
+          ],
+          "variableName": "Streamflow, ft3/s",
+          "variableDescription": "Discharge, cubic feet per second",
+          "valueType": "Derived Value",
+          "unit": {
+            "unitCode": "ft3/s"
+          },
+          "options": {
+            "option": []
+          },
+          "note": [],
+          "noDataValue": -999999.0,
+          "variableProperty": [],
+          "oid": "45807197"
+        },
+        "values": [
+          {
+            "value": [
+              {
+                "value": "10000",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-06-30T23:00:00.000-07:00"
+              },
+              {
+                "value": "10001",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T00:00:00.000-07:00"
+              },
+              {
+                "value": "10002",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T01:00:00.000-07:00"
+              },
+              {
+                "value": "10003",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T02:00:00.000-07:00"
+              },
+              {
+                "value": "10004",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T03:00:00.000-07:00"
+              },
+              {
+                "value": "10005",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T04:00:00.000-07:00"
+              },
+              {
+                "value": "10006",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T05:00:00.000-07:00"
+              },
+              {
+                "value": "10007",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T06:00:00.000-07:00"
+              },
+              {
+                "value": "10008",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T07:00:00.000-07:00"
+              },
+              {
+                "value": "10009",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T08:00:00.000-07:00"
+              },
+              {
+                "value": "10010",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T09:00:00.000-07:00"
+              },
+              {
+                "value": "10011",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T10:00:00.000-07:00"
+              },
+              {
+                "value": "10012",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T11:00:00.000-07:00"
+              },
+              {
+                "value": "10013",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T12:00:00.000-07:00"
+              },
+              {
+                "value": "10014",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T13:00:00.000-07:00"
+              },
+              {
+                "value": "10015",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T14:00:00.000-07:00"
+              },
+              {
+                "value": "10016",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T15:00:00.000-07:00"
+              },
+              {
+                "value": "10017",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T16:00:00.000-07:00"
+              },
+              {
+                "value": "10018",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T17:00:00.000-07:00"
+              },
+              {
+                "value": "10019",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T18:00:00.000-07:00"
+              },
+              {
+                "value": "10020",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T19:00:00.000-07:00"
+              },
+              {
+                "value": "10021",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T20:00:00.000-07:00"
+              },
+              {
+                "value": "10022",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T21:00:00.000-07:00"
+              },
+              {
+                "value": "10023",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T22:00:00.000-07:00"
+              },
+              {
+                "value": "10024",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-01T23:00:00.000-07:00"
+              },
+              {
+                "value": "10025",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2020-07-02T00:00:00.000-07:00"
+              }
+            ],
+            "qualifier": [
+              {
+                "qualifierCode": "P",
+                "qualifierDescription": "Provisional data subject to revision.",
+                "qualifierID": 1,
+                "network": "NWIS",
+                "vocabulary": "uv_rmk_cd"
+              }
+            ],
+            "qualityControlLevel": [],
+            "method": [
+              {
+                "methodDescription": "",
+                "methodID": 112
+              }
+            ],
+            "source": [],
+            "offset": [],
+            "sample": [],
+            "censorCode": []
+          }
+        ],
+        "name": "USGS:09380000:00060:00000"
+      }
+    ]
+  }
+}
