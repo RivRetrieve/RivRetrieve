@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 
@@ -23,9 +24,11 @@ from rivretrieve._internal.engine import (
     RenderedWindow,
     Rows,
     RowsSchema,
+    SourceCallOrigin,
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownOriginFact,
     WindowDeclaration,
     WindowEndpoint,
     WindowGranularity,
@@ -52,6 +55,11 @@ from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderErro
 from rivretrieve._internal.results import CatalogProvenance
 from tests._stubs import stub_provider
 from tests.conftest import RegisteredStub
+
+
+def _origin() -> SourceCallOrigin:
+    unknown = UnknownOriginFact()
+    return SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)
 
 
 class _EngineModule:
@@ -95,6 +103,7 @@ class _EngineModule:
             station_products=((stations[0], products[0]),),
             fetch_window=window,
             content=b"test payload",
+            origin=_origin(),
         )
         _EngineModule.emitted_payload = payload
         return WithIssues(
@@ -379,7 +388,8 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
                         source_coordinates=_ExclusiveStopModule.coordinates,
                         station_products=((stations[0], products[0]),),
                         fetch_window=window,
-                        content=selected,
+                        content=json.dumps([value.isoformat() for value in selected]).encode(),
+                        origin=_origin(),
                     ),
                 )
             )
@@ -387,8 +397,7 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
         @staticmethod
         def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
             _ExclusiveStopModule.events.append("parse")
-            readings = payload.content
-            assert isinstance(readings, tuple)
+            readings = tuple(datetime.fromisoformat(value) for value in json.loads(payload.content))
             return WithIssues(
                 value=pl.DataFrame(
                     {
@@ -499,7 +508,8 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
                         source_coordinates=_FixedSpanModule.coordinates,
                         station_products=((stations[0], products[0]),),
                         fetch_window=window,
-                        content=(datetime(2026, 1, 1), datetime(2026, 1, 2)),
+                        content=b'["2026-01-01T00:00:00","2026-01-02T00:00:00"]',
+                        origin=_origin(),
                     ),
                 ),
                 issues=(undercoverage_issue,),
@@ -508,8 +518,7 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
         @staticmethod
         def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
             _FixedSpanModule.events.append("parse")
-            readings = payload.content
-            assert isinstance(readings, tuple)
+            readings = tuple(datetime.fromisoformat(value) for value in json.loads(payload.content))
             return WithIssues(
                 value=pl.DataFrame(
                     {

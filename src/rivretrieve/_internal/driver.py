@@ -91,6 +91,8 @@ def _require_canonical_rows_within_requested(
 
 
 class ProviderStages(Protocol):
+    """Fetch returns ordered source calls; parse receives each exact Payload without transformation."""
+
     config: ProviderConfig
     window_declarations: ProductWindowDeclarations
 
@@ -161,9 +163,9 @@ def drive(
     fetched = provider.fetch(request.stations, request.products, rendered_windows, fetch_window, config)
     parsed: list[WithIssues[Rows]] = []
     for payload in fetched.value:
-        result = provider.parse(payload, config)
-        validate_catalogue(result.value, RowsSchema, on_issue="raise")
-        parsed.append(result)
+        parsed_payload = provider.parse(payload, config)
+        validate_catalogue(parsed_payload.value, RowsSchema, on_issue="raise")
+        parsed.append(parsed_payload)
     rows = pl.concat([result.value for result in parsed] + [pl.DataFrame(schema=RowsSchema.polars_schema)])
     converted = convert(rows, config, request.window)
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")

@@ -1,12 +1,22 @@
-"""fetch : tuple[str, ...] × tuple[ProductId, ...] × Mapping[ProductId, tuple[RenderedWindow, ...]] × FetchWindow × ProviderConfig → WithIssues[tuple[Payload, ...]]."""
+"""ca_eccc fetch : stations × products × rendered windows × FetchWindow × ProviderConfig → WithIssues[Payload[]]."""
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 
-from rivretrieve._internal.engine import FetchWindow, Payload, ProviderConfig, RenderedWindow, WithIssues
+from rivretrieve._internal.engine import (
+    FetchWindow,
+    Payload,
+    ProviderConfig,
+    RenderedWindow,
+    SourceCallOrigin,
+    SourceQuery,
+    UnknownOriginFact,
+    WithIssues,
+)
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.ca_eccc.config import HydatSourceCoordinates
@@ -72,7 +82,7 @@ def fetch(
             _require_hydat_schema(connection, coordinates)
 
             for station_id in stations:
-                rows = _query_station_product(
+                rows, query = _query_station_product(
                     connection,
                     coordinates,
                     station_id,
@@ -102,7 +112,16 @@ def fetch(
                         source_coordinates=product.coordinates,
                         station_products=((station_id, product_id),),
                         fetch_window=fetch_window,
-                        content=rows,
+                        content=_encode_rows(rows),
+                        origin=SourceCallOrigin(
+                            url=UnknownOriginFact(),
+                            request_parameters=UnknownOriginFact(),
+                            status_code=UnknownOriginFact(),
+                            retrieved_at=UnknownOriginFact(),
+                            content_type="application/json",
+                            source_path=str(sqlite_path.resolve()),
+                            query=query,
+                        ),
                     )
                 )
     finally:
@@ -149,13 +168,26 @@ def _query_station_product(
     station_id: str,
     start_year: str,
     end_year: str,
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], SourceQuery]:
     table_identifier = _quote_identifier(coordinates.table_name)
-    cursor = connection.execute(
-        (f"SELECT * FROM {table_identifier} WHERE STATION_NUMBER = ? AND YEAR BETWEEN ? AND ? ORDER BY YEAR, MONTH"),
-        (station_id, start_year, end_year),
+    query = SourceQuery(
+        statement=(
+            f"SELECT * FROM {table_identifier} WHERE STATION_NUMBER = ? AND YEAR BETWEEN ? AND ? ORDER BY YEAR, MONTH"
+        ),
+        parameters=(station_id, start_year, end_year),
     )
-    return [dict(row) for row in cursor.fetchall()]
+    cursor = connection.execute(query.statement, query.parameters)
+    return [dict(row) for row in cursor.fetchall()], query
+
+
+def _encode_rows(rows: list[dict[str, object]]) -> bytes:
+    return json.dumps(
+        rows,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 def _quote_identifier(value: str) -> str:

@@ -4,7 +4,7 @@ import ast
 import inspect
 import subprocess
 from dataclasses import FrozenInstanceError, fields
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -22,7 +22,10 @@ from rivretrieve._internal.engine import (
     RequestedWindow,
     Rows,
     RowsSchema,
+    SourceCallOrigin,
     SourceCoordinates,
+    SourceQuery,
+    UnknownOriginFact,
     WindowEndpoint,
     WithIssues,
     _make_fetch_window,
@@ -256,8 +259,7 @@ def test_obsolete_window_symbols_are_absent_from_tracked_source() -> None:
     assert occurrences == []
 
 
-@pytest.mark.parametrize("content", [b"payload", "payload", object()])
-def test_payload_accepts_opaque_content_and_preserves_complete_tag(content: object) -> None:
+def test_payload_accepts_bytes_and_preserves_complete_source_call() -> None:
     coordinates = SourceCoordinates(object())
     station_products = (
         ("station-1", ProductId("flow")),
@@ -267,20 +269,102 @@ def test_payload_accepts_opaque_content_and_preserves_complete_tag(content: obje
         WindowEndpoint.from_datetime(datetime(2020, 7, 31)),
         WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999)),
     )
+    parameters = {"station": "station-1"}
+    query = SourceQuery("SELECT value FROM observations WHERE station = ?", ("station-1",))
+    origin = SourceCallOrigin(
+        url="https://source.example/data",
+        request_parameters=parameters,
+        status_code=200,
+        retrieved_at=datetime(2026, 7, 29, 12, 0, tzinfo=UTC),
+        content_type="application/octet-stream",
+        source_path=UnknownOriginFact(),
+        query=query,
+    )
+    content = b"payload"
     payload = Payload(
         source_coordinates=coordinates,
         station_products=station_products,
         fetch_window=window,
         content=content,
+        origin=origin,
     )
 
     assert payload.source_coordinates is coordinates
     assert payload.station_products == station_products
     assert payload.fetch_window is window
     assert payload.content is content
+    assert payload.origin is origin
+    assert tuple(field.name for field in fields(SourceCallOrigin)) == (
+        "url",
+        "request_parameters",
+        "status_code",
+        "retrieved_at",
+        "content_type",
+        "source_path",
+        "query",
+    )
+    assert "headers" not in {field.name for field in fields(SourceCallOrigin)}
+    assert origin.request_parameters == {"station": "station-1"}
+    parameters["station"] = "mutated"
+    assert origin.request_parameters == {"station": "station-1"}
+    with pytest.raises(TypeError):
+        origin.request_parameters["station"] = "mutated"  # type: ignore[index]
     content_attribute = "content"
     with pytest.raises(FrozenInstanceError):
         setattr(payload, content_attribute, content)
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["payload", object(), bytearray(b"payload"), memoryview(b"payload"), [], {}, ()],
+)
+def test_payload_rejects_non_byte_content(content: object) -> None:
+    with pytest.raises(TypeError, match="payload content must be bytes"):
+        Payload(
+            SourceCoordinates(object()),
+            (("station", ProductId("flow")),),
+            _make_fetch_window(
+                WindowEndpoint.from_datetime(datetime(2020, 1, 1)),
+                WindowEndpoint.from_datetime(datetime(2020, 1, 2)),
+            ),
+            content,  # type: ignore[arg-type]
+            SourceCallOrigin(
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+            ),
+        )
+
+
+def test_source_call_origin_distinguishes_known_empty_parameters_and_validates_facts() -> None:
+    unknown = UnknownOriginFact()
+    known = SourceCallOrigin(
+        "https://source.example/data",
+        {},
+        200,
+        datetime(2026, 7, 29, 12, 0, tzinfo=UTC),
+        "application/json",
+        unknown,
+        SourceQuery("SELECT 1", ()),
+    )
+    absent = SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)
+
+    assert known.request_parameters == {}
+    assert not isinstance(known.request_parameters, UnknownOriginFact)
+    assert isinstance(absent.request_parameters, UnknownOriginFact)
+    assert SourceQuery("SELECT ?", (b"value",)).parameters == (b"value",)
+    with pytest.raises(TypeError):
+        SourceQuery("SELECT ?", ["value"])  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="timezone-aware UTC"):
+        SourceCallOrigin("url", {}, 200, datetime(2026, 7, 29), "type", "path", unknown)
+    with pytest.raises(ValueError, match="timezone-aware UTC"):
+        SourceCallOrigin(
+            "url", {}, 200, datetime(2026, 7, 29, tzinfo=datetime.now().astimezone().tzinfo), "type", "path", unknown
+        )
 
 
 def test_with_issues_preserves_value_and_concatenates_existing_issues() -> None:

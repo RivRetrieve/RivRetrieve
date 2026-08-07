@@ -1,7 +1,8 @@
-"""parse : Payload × ProviderConfig → WithIssues[Rows]"""
+"""ca_eccc parse : Payload × ProviderConfig → WithIssues[Rows]"""
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import cast
 
@@ -44,7 +45,10 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     if payload.source_coordinates != product.coordinates:
         raise FatalContractError("ca_eccc payload source coordinates do not match the declared product")
 
-    content = payload.content
+    try:
+        content = json.loads(payload.content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise FatalContractError("invalid CA ECCC payload JSON") from error
     if not isinstance(content, list):
         return _result(
             _empty_rows(),

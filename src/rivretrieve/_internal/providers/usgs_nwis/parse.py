@@ -1,4 +1,4 @@
-"""parse : Payload × ProviderConfig → WithIssues[Rows]"""
+"""usgs_nwis parse : Payload × ProviderConfig → WithIssues[Rows]"""
 
 from __future__ import annotations
 
@@ -28,8 +28,6 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
         raise FatalContractError("usgs_nwis payload must contain exactly one station-product pair")
     station_id, product_id = payload.station_products[0]
 
-    if not isinstance(payload.content, bytes):
-        raise FatalContractError("usgs_nwis payload content must be bytes")
     if not payload.content.strip():
         return _result(_empty_rows(), [_missing_data_issue(station_id)])
 

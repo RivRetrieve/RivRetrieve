@@ -27,9 +27,11 @@ from rivretrieve._internal.engine import (
     RequestedWindow,
     Rows,
     RowsSchema,
+    SourceCallOrigin,
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownOriginFact,
     WindowDeclaration,
     WindowEndpoint,
     WindowGranularity,
@@ -102,7 +104,12 @@ class _ThrowawayProvider:
     ) -> WithIssues[Rows]:
         station_id = payload.station_products[0][0]
         self._events.append(f"parse:{station_id}")
-        assert payload in self._payloads
+        expected_payload = next(
+            candidate for candidate in self._payloads if candidate.station_products == payload.station_products
+        )
+        assert payload is expected_payload
+        assert payload.content is expected_payload.content
+        assert payload.origin is expected_payload.origin
         assert config is self.config
         return WithIssues(
             value=self._rows_by_station[station_id],
@@ -266,8 +273,14 @@ def _payload(
         source_coordinates=coordinates,
         station_products=((station_id, ProductId("level")),),
         fetch_window=fetch_window,
-        content={"station_id": station_id},
+        content=(f'{{"station_id":"{station_id}"}}').encode(),
+        origin=_origin(),
     )
+
+
+def _origin() -> SourceCallOrigin:
+    unknown = UnknownOriginFact()
+    return SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)
 
 
 def _rows(
@@ -835,7 +848,8 @@ def _drive_boundary_rows(
             source_coordinates=coordinates,
             station_products=((station_id, ProductId("level")),),
             fetch_window=fetch_window,
-            content={"payload_index": index},
+            content=(f'{{"payload_index":{index}}}').encode(),
+            origin=_origin(),
         )
         for index, station_id in enumerate(request.stations, start=1)
     )
