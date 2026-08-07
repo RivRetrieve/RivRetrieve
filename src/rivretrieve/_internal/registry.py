@@ -15,6 +15,7 @@ from rivretrieve._internal.engine import ObservationRequest as EngineObservation
 from rivretrieve._internal.engine import ProductWindowDeclarations, RequestedWindow
 from rivretrieve._internal.issues import (
     FatalContractError,
+    Issue,
     ObservationsUnavailableError,
     apply_on_issue,
 )
@@ -155,13 +156,44 @@ class _ProviderHandle:
             ),
         )
         requested_at = datetime.now(UTC)
+        provider_info = self.info()
+        provenance_issues: tuple[Issue, ...] = (
+            *(
+                (
+                    Issue(
+                        severity="info",
+                        code="provenance.license_not_established",
+                        message=f"RivRetrieve has not yet established the license for provider {self.provider_id}.",
+                        details={"field": "license"},
+                        provider_id=self.provider_id,
+                    ),
+                )
+                if provider_info.license is None
+                else ()
+            ),
+            *(
+                (
+                    Issue(
+                        severity="info",
+                        code="provenance.citation_not_established",
+                        message=f"RivRetrieve has not yet established the citation for provider {self.provider_id}.",
+                        details={"field": "citation"},
+                        provider_id=self.provider_id,
+                    ),
+                )
+                if provider_info.citation is None
+                else ()
+            ),
+        )
         assembled = drive(
             engine_request,
             stages,
             provenance=ObservationProvenance(
                 source=observation_source,
                 provider_id=self.provider_id,
-                catalogue_version=self.info().catalogue_version,
+                catalogue_version=provider_info.catalogue_version,
+                license=provider_info.license,
+                citation=provider_info.citation,
                 requested_at=requested_at,
                 request={
                     "stations": list(request.stations),
@@ -183,7 +215,7 @@ class _ProviderHandle:
                 schema=SeriesAnnotationTableSchema,
             ),
             provenance=assembled.provenance,
-            issues=assembled.issues,
+            issues=(*assembled.issues, *provenance_issues),
             raw=assembled.raw,
         )
 

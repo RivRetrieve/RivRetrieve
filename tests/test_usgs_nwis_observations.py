@@ -119,7 +119,10 @@ def test_usgs_nwis_bare_date_returns_full_local_day_for_instant_product(
     assert result.data["time"][-1] == datetime(2023, 1, 1, 23, 45)
     assert result.data["station_id"].unique(maintain_order=True).to_list() == ["07374000"]
     assert result.data["product_id"].unique(maintain_order=True).to_list() == ["discharge_instantaneous"]
-    assert result.issues == ()
+    assert [issue.code for issue in result.issues] == [
+        "provenance.license_not_established",
+        "provenance.citation_not_established",
+    ]
     assert result.provenance.source == "live"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
     assert result.raw == RawPayload(provider_id=ProviderId("usgs_nwis"))
@@ -185,7 +188,11 @@ def test_usgs_nwis_all_missing_preserves_issue_policy(monkeypatch: pytest.Monkey
     )
 
     pl_testing.assert_frame_equal(result.data, pl.DataFrame(schema=ObservationDataSchema.polars_schema))
-    assert [issue.code for issue in result.issues] == [str(UsgsNwisObservationIssueCodes.HTTP_NOT_FOUND)]
+    assert [issue.code for issue in result.issues] == [
+        str(UsgsNwisObservationIssueCodes.HTTP_NOT_FOUND),
+        "provenance.license_not_established",
+        "provenance.citation_not_established",
+    ]
     _assert_empty_annotations(result)
 
     with pytest.raises(IssuePolicyError):
