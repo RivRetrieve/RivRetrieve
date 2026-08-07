@@ -12,6 +12,7 @@ from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationRequest,
     ObservationResult,
+    RawPayload,
     RowAnnotationTableSchema,
     SeriesAnnotationTableSchema,
 )
@@ -157,7 +158,7 @@ def observations(
             },
         ),
         issues=(),
-        raw=None,
+        raw=RawPayload(provider_id=request.provider_id),
     )
 
 

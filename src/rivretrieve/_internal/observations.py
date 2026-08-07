@@ -1,3 +1,5 @@
+"""observation boundary : caller inputs → ObservationRequest; ObservationData × AnnotationTable × AnnotationTable × ObservationProvenance × tuple[Issue, ...] × RawPayload → ObservationResult."""
+
 from __future__ import annotations
 
 import json
@@ -5,13 +7,14 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
+from enum import StrEnum
 from typing import Any, Self, cast
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema, validate_catalogue
-from rivretrieve._internal.engine import WindowEndpoint
+from rivretrieve._internal.engine import SourceCallOrigin, WindowEndpoint
 from rivretrieve._internal.issues import (
     AnnotationSchemaViolationError,
     FatalContractError,
@@ -193,12 +196,31 @@ class AnnotationTable:
             raise AnnotationSchemaViolationError(str(exc)) from exc
 
 
-@dataclass(frozen=True)
+class RawMode(StrEnum):
+    OMIT = "omit"
+    INCLUDE = "include"
+
+
+@dataclass(frozen=True, slots=True)
+class RawSourceCall:
+    content: bytes
+    origin: SourceCallOrigin
+
+    def __post_init__(self) -> None:
+        if type(self.content) is not bytes:
+            raise TypeError("content must be bytes")
+        if not isinstance(self.origin, SourceCallOrigin):
+            raise TypeError("origin must be SourceCallOrigin")
+
+
+@dataclass(frozen=True, slots=True)
 class RawPayload:
     provider_id: ProviderId
-    content_type: str | None = None
-    content: bytes | str | None = None
-    metadata: str | None = None
+    entries: tuple[RawSourceCall, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.entries, tuple) or not all(isinstance(entry, RawSourceCall) for entry in self.entries):
+            raise TypeError("entries must be a tuple of RawSourceCall values")
 
 
 class ObservationResult(BaseModel):
@@ -209,7 +231,7 @@ class ObservationResult(BaseModel):
     series_annotations: AnnotationTable
     provenance: ObservationProvenance
     issues: tuple[Issue, ...] = ()
-    raw: RawPayload | None = None
+    raw: RawPayload
 
     @model_validator(mode="before")
     @classmethod

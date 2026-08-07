@@ -23,7 +23,7 @@ from rivretrieve._internal.observations import (
     AnnotationTable,
     ObservationProvenance,
     ObservationResult,
-    RawPayload,
+    RawMode,
     RowAnnotationTableSchema,
     SeriesAnnotationTableSchema,
     validate_annotation_names,
@@ -115,6 +115,7 @@ class _ProviderHandle:
         start: object,
         end: object,
         on_issue: OnIssue = "warn",
+        raw: RawMode = RawMode.OMIT,
     ) -> ObservationResult:
         if self._module is None:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
@@ -130,7 +131,7 @@ class _ProviderHandle:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
         if self._observation_source is None:
             raise FatalContractError(f"Provider {self.provider_id} has engine stages without an observation source")
-        result = self._drive_engine(request, self._stages, self._observation_source)
+        result = self._drive_engine(request, self._stages, self._observation_source, raw=raw)
         apply_on_issue(result.issues, on_issue)
 
         row_schemas = self._module.row_annotation_schema()
@@ -144,6 +145,8 @@ class _ProviderHandle:
         request: LegacyObservationRequest,
         stages: ProviderStages,
         observation_source: str,
+        *,
+        raw: RawMode = RawMode.OMIT,
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -170,7 +173,7 @@ class _ProviderHandle:
                     "end": request.end.isoformat(),
                 },
             ),
-            raw=RawPayload(provider_id=self.provider_id),
+            raw=raw,
         )
         return ObservationResult(
             data=assembled.canonical_rows.select("time", "station_id", "product_id", "value"),

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
 
 import polars as pl
 import polars.testing as pl_testing
 import pytest
+from pydantic import BaseModel
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
@@ -45,6 +47,7 @@ from rivretrieve._internal.issues import (
 )
 from rivretrieve._internal.observations import (
     AnnotationSchema,
+    ObservationResult,
     RawPayload,
     RowAnnotationTableSchema,
     SeriesAnnotationTableSchema,
@@ -55,6 +58,30 @@ from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderErro
 from rivretrieve._internal.results import CatalogProvenance
 from tests._stubs import stub_provider
 from tests.conftest import RegisteredStub
+
+
+def _instance_values(value: object) -> Iterator[object]:
+    if isinstance(value, BaseModel):
+        for name in type(value).model_fields:
+            yield from _instance_values(getattr(value, name))
+    elif is_dataclass(value) and not isinstance(value, type):
+        for field in fields(value):
+            yield from _instance_values(getattr(value, field.name))
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            yield from _instance_values(item)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            yield from _instance_values(item)
+    elif isinstance(value, pl.DataFrame):
+        for row in value.iter_rows():
+            yield from _instance_values(row)
+    else:
+        yield value
+
+
+def _assert_sentinel_unreachable(result: ObservationResult) -> None:
+    assert not any(value == b"test payload" for value in _instance_values(result))
 
 
 def _origin() -> SourceCallOrigin:
@@ -214,6 +241,7 @@ def test_registry_module_without_engine_stages_rejects_observation_dispatch(
 
 def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registry = ProviderRegistry()
     artifact = stub_packaged_catalogue_artifact("test_provider")
@@ -253,8 +281,21 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
     assert result.provenance.request is not None
     assert result.provenance.request["start"] == "2026-01-01T00:00:00"
     assert result.provenance.request["end"] == "2026-01-02T23:59:59.999999"
-    assert result.raw == RawPayload(provider_id=ProviderId("test_provider"))
+    assert result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
+    _assert_sentinel_unreachable(result)
     assert [issue.code for issue in result.issues] == ["test.engine.warning"]
+
+    monkeypatch.setattr(discovery, "_provider_lookup", lambda provider_id: handle)
+    wrapped_result = rr.observations(
+        provider="test_provider",
+        stations="station-1",
+        products="level",
+        start="2026-01-01",
+        end="2026-01-02",
+        on_issue="ignore",
+    )
+    assert wrapped_result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
+    _assert_sentinel_unreachable(wrapped_result)
 
 
 def test_registry_preserves_explicit_midnight_end(

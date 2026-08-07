@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError, fields
 from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -10,6 +11,7 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
+from rivretrieve._internal.engine import SourceCallOrigin, UnknownOriginFact
 from rivretrieve._internal.issues import (
     AnnotationSchemaViolationError,
     InvalidObservationRequestError,
@@ -24,7 +26,9 @@ from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationRequest,
     ObservationResult,
+    RawMode,
     RawPayload,
+    RawSourceCall,
     RowAnnotationTableSchema,
     SeriesAnnotationTableSchema,
     validate_annotation_names,
@@ -103,6 +107,7 @@ def _result(data: pl.DataFrame | None = None) -> ObservationResult:
         row_annotations=_row_annotations(),
         series_annotations=_series_annotations(),
         provenance=_provenance(),
+        raw=RawPayload(provider_id=ProviderId("provider-a")),
     )
 
 
@@ -503,16 +508,50 @@ def test_validate_annotation_names_accepts_multiple_provider_schemas() -> None:
     )
 
 
-def test_raw_payload_constructs_minimal_payload() -> None:
-    payload = RawPayload(
-        provider_id=ProviderId("provider-a"),
+def _raw_origin() -> SourceCallOrigin:
+    return SourceCallOrigin(
+        url="https://example.invalid/observations",
+        request_parameters={"station": "station-1"},
+        status_code=200,
+        retrieved_at=datetime(2026, 8, 7, 12, 30, tzinfo=UTC),
         content_type="application/json",
-        content='{"ok": true}',
-        metadata='{"response": "small"}',
+        source_path=UnknownOriginFact(),
+        query=UnknownOriginFact(),
     )
 
+
+def test_raw_carriers_and_mode_are_exact_frozen_domain_types() -> None:
+    content = b'{"ok":true}'
+    origin = _raw_origin()
+    call = RawSourceCall(content=content, origin=origin)
+    payload = RawPayload(provider_id=ProviderId("provider-a"), entries=(call,))
+
+    assert tuple(RawMode) == (RawMode.OMIT, RawMode.INCLUDE)
+    assert RawMode.OMIT.value == "omit"
+    assert RawMode.INCLUDE.value == "include"
+    assert tuple(field.name for field in fields(RawSourceCall)) == ("content", "origin")
+    assert tuple(field.name for field in fields(RawPayload)) == ("provider_id", "entries")
     assert payload.provider_id == ProviderId("provider-a")
-    assert payload.content == '{"ok": true}'
+    assert payload.entries == (call,)
+    assert payload.entries[0].content is content
+    assert payload.entries[0].origin is origin
+    with pytest.raises(FrozenInstanceError):
+        call.content = b"changed"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        payload.entries = ()  # type: ignore[misc]
+
+
+def test_raw_carriers_reject_mutable_entries_and_non_bytes_content() -> None:
+    origin = _raw_origin()
+    call = RawSourceCall(content=b'{"ok":true}', origin=origin)
+
+    with pytest.raises(TypeError):
+        RawPayload(provider_id=ProviderId("provider-a"), entries=[call])  # type: ignore[arg-type]
+    for content in ('{"ok":true}', bytearray(b'{"ok":true}')):
+        with pytest.raises(TypeError):
+            RawSourceCall(content=content, origin=origin)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        RawSourceCall(content=b'{"ok":true}', origin={})  # type: ignore[arg-type]
 
 
 def test_observation_data_schema_accepts_canonical_long_table() -> None:
@@ -611,7 +650,24 @@ def test_observation_result_constructs_with_exact_field_set() -> None:
         "raw",
     )
     assert result.issues == ()
-    assert result.raw is None
+    assert result.raw == RawPayload(provider_id=ProviderId("provider-a"))
+
+
+def test_observation_result_requires_non_null_raw_payload() -> None:
+    values = {
+        "data": _observation_df(),
+        "row_annotations": _row_annotations(),
+        "series_annotations": _series_annotations(),
+        "provenance": _provenance(),
+    }
+
+    with pytest.raises(ValueError):
+        ObservationResult(**values)
+    with pytest.raises(ValueError):
+        ObservationResult(**values, raw=None)
+
+    result = ObservationResult(**values, raw=RawPayload(provider_id=ProviderId("provider-a")))
+    assert result.raw.entries == ()
 
 
 def test_observation_result_to_polars_returns_data_identity() -> None:
