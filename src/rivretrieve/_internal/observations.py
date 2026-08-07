@@ -105,6 +105,8 @@ class ObservationProvenance(BaseModel):
     provider_id: ProviderId
     rivretrieve_version: str | None = None
     catalogue_version: str | None = None
+    license: str | None = None
+    citation: str | None = None
     requested_at: datetime | None = None
     retrieved_at: datetime | None = None
     request: dict[str, object] | None = None
