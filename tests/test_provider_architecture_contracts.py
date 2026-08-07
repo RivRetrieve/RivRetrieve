@@ -89,10 +89,28 @@ def _direct_http_imports(path: Path) -> set[str]:
     return imports & {"httpx", "requests", "urllib"}
 
 
-def _engine_owned_operations(path: Path) -> list[str]:
+def _engine_owned_operations_in_tree(tree: ast.Module, relative_path: Path) -> list[str]:
     violations = []
-    for node in ast.walk(_tree(path)):
-        if isinstance(node, ast.Call):
+    fetch_window_factory_names = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and (
+            node.module == "rivretrieve._internal.engine"
+            or (node.level > 0 and node.module is not None and node.module.split(".")[-1] == "engine")
+        )
+        for alias in node.names
+        if alias.name == "_make_fetch_window"
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (
+            node.module == "rivretrieve._internal.engine"
+            or (node.level > 0 and node.module is not None and node.module.split(".")[-1] == "engine")
+        ):
+            for alias in node.names:
+                if alias.name == "_make_fetch_window":
+                    violations.append(f"{relative_path}:{node.lineno}:_make_fetch_window import")
+        elif isinstance(node, ast.Call):
             name = (
                 node.func.attr
                 if isinstance(node.func, ast.Attribute)
@@ -112,10 +130,13 @@ def _engine_owned_operations(path: Path) -> list[str]:
                 "sleep",
                 "backoff",
                 "retry",
+                "_make_fetch_window",
+                *fetch_window_factory_names,
             }:
-                violations.append(f"{path.relative_to(PROVIDERS_ROOT)}:{node.lineno}:{name}")
+                operation = "_make_fetch_window" if name in fetch_window_factory_names else name
+                violations.append(f"{relative_path}:{node.lineno}:{operation}")
             if name == "replace" and any(keyword.arg == "tzinfo" for keyword in node.keywords):
-                violations.append(f"{path.relative_to(PROVIDERS_ROOT)}:{node.lineno}:replace(tzinfo=...)")
+                violations.append(f"{relative_path}:{node.lineno}:replace(tzinfo=...)")
         elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
             numeric_literals = {
                 value
@@ -123,7 +144,7 @@ def _engine_owned_operations(path: Path) -> list[str]:
                 if isinstance(operand, ast.Constant) and isinstance((value := operand.value), (int, float))
             }
             if numeric_literals & {1000, 0.001}:
-                violations.append(f"{path.relative_to(PROVIDERS_ROOT)}:{node.lineno}:unit arithmetic")
+                violations.append(f"{relative_path}:{node.lineno}:unit arithmetic")
         elif isinstance(node, ast.Compare):
             window_boundaries = {
                 child.attr
@@ -134,12 +155,31 @@ def _engine_owned_operations(path: Path) -> list[str]:
                 and any(marker in child.value.id.lower() for marker in ("request", "window"))
             }
             if window_boundaries:
-                violations.append(f"{path.relative_to(PROVIDERS_ROOT)}:{node.lineno}:requested-window comparison")
+                violations.append(f"{relative_path}:{node.lineno}:requested-window comparison")
         elif isinstance(node, (ast.For, ast.AsyncFor)):
             target_names = {child.id.lower() for child in ast.walk(node.target) if isinstance(child, ast.Name)}
             if target_names & {"attempt", "attempts", "retry", "retries"}:
-                violations.append(f"{path.relative_to(PROVIDERS_ROOT)}:{node.lineno}:retry loop")
+                violations.append(f"{relative_path}:{node.lineno}:retry loop")
     return violations
+
+
+def _engine_owned_operations(path: Path) -> list[str]:
+    return _engine_owned_operations_in_tree(_tree(path), path.relative_to(PROVIDERS_ROOT))
+
+
+def test_engine_owned_operations_rejects_fetch_window_factory_imports_and_calls() -> None:
+    source = """from rivretrieve._internal.engine import _make_fetch_window
+from rivretrieve._internal import engine
+
+_make_fetch_window(start, end)
+engine._make_fetch_window(start, end)
+"""
+
+    assert _engine_owned_operations_in_tree(ast.parse(source), Path("adversarial/fetch.py")) == [
+        "adversarial/fetch.py:1:_make_fetch_window import",
+        "adversarial/fetch.py:4:_make_fetch_window",
+        "adversarial/fetch.py:5:_make_fetch_window",
+    ]
 
 
 def test_runtime_provider_inventory_has_only_ratified_roles() -> None:
