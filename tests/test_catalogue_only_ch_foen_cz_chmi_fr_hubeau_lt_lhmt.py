@@ -12,14 +12,11 @@ CATALOGUE_ONLY_PROVIDERS = (
     (
         "ch_foen",
         246,
-        6,
-        1476,
+        3,
+        738,
         {
-            "discharge_daily_mean",
             "discharge_instantaneous",
-            "stage_daily_mean",
             "stage_instantaneous",
-            "water_temperature_daily_mean",
             "water_temperature_instantaneous",
         },
         "Swiss Federal Office for the Environment FOEN / BAFU",

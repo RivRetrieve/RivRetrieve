@@ -178,16 +178,6 @@ class ProductDefinition:
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        product_id="stage_daily_mean",
-        observed_property="stage",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m",
-        native_field="value",
-    ),
-    ProductDefinition(
         product_id="stage_instantaneous",
         observed_property="stage",
         frequency="irregular",
@@ -196,16 +186,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="instant",
         canonical_unit="m",
         native_field="value",
-    ),
-    ProductDefinition(
-        product_id="discharge_daily_mean",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
-        native_field="discharge",
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
