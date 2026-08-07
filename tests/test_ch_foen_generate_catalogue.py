@@ -353,12 +353,41 @@ def test_native_build_has_exact_projection_counts_dates_and_schemas() -> None:
 
     catalogue = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
 
+    retained_product_ids = {
+        "discharge_instantaneous",
+        "stage_instantaneous",
+        "water_temperature_instantaneous",
+    }
+    withdrawn_product_ids = {
+        "discharge_daily_mean",
+        "stage_daily_mean",
+        "water_temperature_daily_mean",
+    }
+
     assert catalogue.stations.height == 246
-    assert catalogue.products.height == 6
-    assert catalogue.station_products.height == 1476
+    assert catalogue.products.height == 3
+    assert set(catalogue.products["product_id"]) == retained_product_ids
+    assert set(catalogue.products["product_id"]).isdisjoint(withdrawn_product_ids)
+    assert catalogue.station_products.height == 738
+    assert set(catalogue.station_products["product_id"]) == retained_product_ids
+    assert set(catalogue.station_products["product_id"]).isdisjoint(withdrawn_product_ids)
+    assert catalogue.station_products.group_by("product_id").len().sort("product_id").rows() == [
+        ("discharge_instantaneous", 246),
+        ("stage_instantaneous", 246),
+        ("water_temperature_instantaneous", 246),
+    ]
     assert set(catalogue.stations["crs"]) == {"unknown"}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
     assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
+    assert set(catalogue.station_products["provider_id"]) == {"ch_foen"}
+    assert set(catalogue.station_products["availability"].cast(str)) == {"unknown"}
+    assert set(catalogue.station_products["availability_reason"]) == {
+        "Existenz.ch locations catalogue does not expose per-variable station availability"
+    }
+    assert catalogue.station_products["start_date"].null_count() == 738
+    assert catalogue.station_products["end_date"].null_count() == 738
+    assert set(catalogue.station_products["station_id"]) == set(catalogue.stations["station_id"])
+    assert catalogue.station_products.group_by("station_id").len()["len"].unique().to_list() == [3]
     provider_frame = pl.DataFrame([catalogue.provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_frame, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(catalogue.products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
