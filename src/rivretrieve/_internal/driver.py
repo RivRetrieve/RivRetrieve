@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import Protocol, assert_never
 
 import polars as pl
 
@@ -11,21 +11,78 @@ from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.conversion import convert
 from rivretrieve._internal.engine import (
+    CanonicalRows,
     CanonicalRowsSchema,
+    Daily,
     FetchWindow,
+    Instant,
     ObservationRequest,
     Payload,
     ProviderConfig,
+    RequestedWindow,
     Rows,
     RowsSchema,
     WindowEndpoint,
     WithIssues,
     _make_fetch_window,
 )
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, RawPayload
 from rivretrieve._internal.primitives import ProductId
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
+
+
+def _require_fetch_window_contains_requested(
+    fetch_window: FetchWindow,
+    requested_window: RequestedWindow,
+) -> None:
+    if fetch_window.start <= requested_window.start and fetch_window.end >= requested_window.end:
+        return
+    raise FatalContractError(
+        "Engine-created FetchWindow does not contain RequestedWindow: "
+        f"fetch_start={fetch_window.start.isoformat()}, fetch_end={fetch_window.end.isoformat()}, "
+        f"requested_start={requested_window.start.isoformat()}, "
+        f"requested_end={requested_window.end.isoformat()}. This is an internal engine contract "
+        "breach before provider fetch; please report it with these four endpoints."
+    )
+
+
+def _require_canonical_rows_within_requested(
+    rows: CanonicalRows,
+    config: ProviderConfig,
+    requested_window: RequestedWindow,
+) -> None:
+    requested_start = datetime.fromisoformat(requested_window.start.isoformat())
+    requested_end = datetime.fromisoformat(requested_window.end.isoformat())
+    requested_start_date = requested_window.start.date
+    requested_end_date = requested_window.end.date
+    for index, row in enumerate(rows.iter_rows(named=True)):
+        product_id = ProductId(row["product_id"])
+        semantics = config.products[product_id].semantics
+        timestamp = row["time"]
+        if isinstance(semantics, Daily):
+            if requested_start_date <= timestamp.date().isoformat() <= requested_end_date:
+                continue
+            raise FatalContractError(
+                f"CanonicalRows zero-based row index {index} is outside RequestedWindow on the Daily "
+                f"date axis: timestamp={timestamp.isoformat()}, time_zone={row['time_zone']!r}, "
+                f"station_id={row['station_id']!r}, product_id={row['product_id']!r}, "
+                f"requested_start_date={requested_start_date}, requested_end_date={requested_end_date}. "
+                "This is a convert-stage contract breach; please report this row and request window."
+            )
+        elif isinstance(semantics, Instant):
+            if requested_start <= timestamp <= requested_end:
+                continue
+            raise FatalContractError(
+                f"CanonicalRows zero-based row index {index} is outside RequestedWindow on the Instant "
+                f"timestamp axis: timestamp={timestamp.isoformat()}, time_zone={row['time_zone']!r}, "
+                f"station_id={row['station_id']!r}, product_id={row['product_id']!r}, "
+                f"requested_start={requested_start.isoformat()}, requested_end={requested_end.isoformat()}. "
+                "This is a convert-stage contract breach; please report this row and request window."
+            )
+        else:
+            assert_never(semantics)
 
 
 class ProviderStages(Protocol):
@@ -82,6 +139,7 @@ def drive(
             + _FETCH_WINDOW_PADDING
         ),
     )
+    _require_fetch_window_contains_requested(fetch_window, request.window)
     fetched = provider.fetch(request.stations, request.products, fetch_window, config)
     parsed: list[WithIssues[Rows]] = []
     for payload in fetched.value:
@@ -91,5 +149,6 @@ def drive(
     rows = pl.concat([result.value for result in parsed] + [pl.DataFrame(schema=RowsSchema.polars_schema)])
     converted = convert(rows, config, request.window)
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
+    _require_canonical_rows_within_requested(converted.value, config, request.window)
     issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
     return assemble(converted.value, provenance, issues, raw)
