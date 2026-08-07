@@ -158,8 +158,6 @@ def build_products() -> ProductCatalog:
             "period_anchor": defn.period_anchor,
             "unit": defn.canonical_unit,
             "native_id": defn.native_field,
-            "derived": False,
-            "derivation_method": None,
         }
         for defn in PRODUCT_DEFINITIONS
     ]

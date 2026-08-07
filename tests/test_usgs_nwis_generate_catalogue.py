@@ -977,7 +977,7 @@ def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
     assert (
         hashlib.sha256(provider_bytes).hexdigest() == "825bce9e3b4e9d204e1c58f9587f9b0b651c12a6bca8ef264032d27a2793d2bc"
     )
-    assert _frame_content_sha256(products) == "13053ee6547748e8e8d5bc11cc7bb9225e8c57bf59a669a3f66cad58b3ea8bf5"
+    assert _frame_content_sha256(products) == "0bb5ae6f406f5258119a9c0d198a8db1a5e77a211d0d693186bb18d01cacbccc"
     assert _frame_content_sha256(stations) == "27b3dfc6d71445798eda982d6f9d11de4839be1f6adbb30faed8052cefdc26c7"
     assert _frame_content_sha256(station_products) == (
         "a8ac1cc876ef1b2aac04fc09141eb9b0e5e59df3c767f7bddfdcb27fc59152d8"

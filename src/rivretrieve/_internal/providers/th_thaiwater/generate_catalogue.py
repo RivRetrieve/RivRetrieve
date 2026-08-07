@@ -446,8 +446,6 @@ def build_products(
             "period_anchor": d.period_anchor,
             "unit": d.canonical_unit,
             "native_id": d.native_field,
-            "derived": False,
-            "derivation_method": None,
         }
         for d in product_definitions
     ]
