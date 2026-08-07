@@ -8,18 +8,27 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
+import rivretrieve._internal.discovery as discovery
+import rivretrieve._internal.driver as driver_module
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.engine import (
+    CanonicalRows,
+    CanonicalRowsSchema,
     FetchWindow,
     Instant,
     Payload,
     ProductConfig,
     ProviderConfig,
+    RenderedWindow,
     Rows,
     RowsSchema,
     SourceCoordinates,
+    StopConvention,
     Unit,
+    WindowDeclaration,
     WindowEndpoint,
+    WindowGranularity,
+    WindowRenderingVocabulary,
     WithIssues,
     ZoneValue,
 )
@@ -38,8 +47,9 @@ from rivretrieve._internal.observations import (
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
-from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle
+from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle, _registry
 from rivretrieve._internal.results import CatalogProvenance
+from rivretrieve._internal.window_planning import plan_windows
 from tests._stubs import stub_provider
 from tests.conftest import RegisteredStub
 
@@ -250,6 +260,285 @@ def test_registry_preserves_explicit_midnight_end(
     assert _EngineModule.fetched_window.end.isoformat() == "2026-01-04T00:00:00"
     assert result.provenance.request is not None
     assert result.provenance.request["end"] == "2026-01-02T00:00:00"
+
+
+def test_public_observations_converter_leak_raises_fatal_contract_error_naming_row(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(discovery, "_DEFAULT_PROVIDER_REGISTRATION_ENABLED", False)
+    _EngineModule.events = []
+    _registry.register(
+        "test_provider",
+        stub_packaged_catalogue_artifact("test_provider"),
+        engine_provider_module=_EngineModule,
+    )
+
+    def faulty_convert(
+        rows: Rows,
+        config: ProviderConfig,
+        window: object,
+    ) -> WithIssues[CanonicalRows]:
+        return WithIssues(
+            value=pl.DataFrame(
+                {
+                    "time": [datetime(2026, 1, 3)],
+                    "time_zone": ["+00:00"],
+                    "station_id": ["station-1"],
+                    "product_id": ["level"],
+                    "value": [1.5],
+                },
+                schema=CanonicalRowsSchema.polars_schema,
+            )
+        )
+
+    monkeypatch.setattr(driver_module, "convert", faulty_convert)
+
+    with pytest.raises(FatalContractError) as exc_info:
+        rr.provider("test_provider").observations(
+            stations="station-1",
+            products="level",
+            start="2026-01-01T00:00:00",
+            end="2026-01-02T23:59:59.999999",
+            on_issue="ignore",
+        )
+
+    assert not isinstance(exc_info.value, IssuePolicyError)
+    assert exc_info.value.issues == ()
+    assert str(exc_info.value) == (
+        "CanonicalRows zero-based row index 0 is outside RequestedWindow on the Instant timestamp axis: "
+        "timestamp=2026-01-03T00:00:00, time_zone='+00:00', station_id='station-1', "
+        "product_id='level', requested_start=2026-01-01T00:00:00, "
+        "requested_end=2026-01-02T23:59:59.999999. This is a convert-stage contract breach; please "
+        "report this row and request window."
+    )
+    assert _EngineModule.events == ["fetch", "parse"]
+
+
+def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_requested_end(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(discovery, "_DEFAULT_PROVIDER_REGISTRATION_ENABLED", False)
+
+    class _ExclusiveStopModule:
+        observation_source = "exclusive-stop-test"
+        coordinates = SourceCoordinates({"field": "value"})
+        config = ProviderConfig(
+            zone=ZoneValue("+00:00"),
+            products={
+                ProductId("level"): ProductConfig(
+                    coordinates=coordinates,
+                    unit=Unit.M,
+                    semantics=Instant(),
+                )
+            },
+        )
+        events: list[str] = []
+        renderings: tuple[RenderedWindow, ...] = ()
+
+        @staticmethod
+        def fetch(
+            stations: tuple[str, ...],
+            products: tuple[ProductId, ...],
+            window: FetchWindow,
+            config: ProviderConfig,
+        ) -> WithIssues[tuple[Payload, ...]]:
+            _ExclusiveStopModule.events.append("fetch")
+            declaration = WindowDeclaration(
+                WindowGranularity("iso-instant"),
+                WindowRenderingVocabulary.ISO_INSTANT,
+                StopConvention.EXCLUSIVE,
+            )
+            _ExclusiveStopModule.renderings = plan_windows(window, declaration)
+            rendered = _ExclusiveStopModule.renderings[0]
+            rendered_start = datetime.fromisoformat(rendered.start.removesuffix("Z"))
+            assert rendered.stop is not None
+            rendered_stop = datetime.fromisoformat(rendered.stop.removesuffix("Z"))
+            reading = datetime(2026, 1, 2, 12)
+            selected = (reading,) if rendered_start <= reading < rendered_stop else ()
+            return WithIssues(
+                value=(
+                    Payload(
+                        source_coordinates=_ExclusiveStopModule.coordinates,
+                        station_products=((stations[0], products[0]),),
+                        fetch_window=window,
+                        content=selected,
+                    ),
+                )
+            )
+
+        @staticmethod
+        def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+            _ExclusiveStopModule.events.append("parse")
+            readings = payload.content
+            assert isinstance(readings, tuple)
+            return WithIssues(
+                value=pl.DataFrame(
+                    {
+                        "station_id": ["station-1" for _ in readings],
+                        "product_id": ["level" for _ in readings],
+                        "time": list(readings),
+                        "value": [1.5 for _ in readings],
+                        "time_zone": ["+00:00" for _ in readings],
+                    },
+                    schema=RowsSchema.polars_schema,
+                )
+            )
+
+        @staticmethod
+        def row_annotation_schema() -> list[AnnotationSchema]:
+            return []
+
+        @staticmethod
+        def series_annotation_schema() -> list[AnnotationSchema]:
+            return []
+
+    _registry.register(
+        "exclusive_stop_provider",
+        stub_packaged_catalogue_artifact("exclusive_stop_provider"),
+        engine_provider_module=_ExclusiveStopModule,
+    )
+
+    result = rr.provider("exclusive_stop_provider").observations(
+        stations="station-1",
+        products="level",
+        start="2026-01-02T12:00:00",
+        end="2026-01-02T12:00:00",
+        on_issue="ignore",
+    )
+
+    assert _ExclusiveStopModule.renderings == (
+        RenderedWindow(
+            start="2025-12-31T12:00:00Z",
+            stop="2026-01-04T12:00:00.000001Z",
+        ),
+    )
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2026, 1, 2, 12)],
+            "station_id": ["station-1"],
+            "product_id": ["level"],
+            "value": [1.5],
+        }
+    )
+    pl_testing.assert_frame_equal(result.data, expected)
+    assert result.issues == ()
+    assert _ExclusiveStopModule.events == ["fetch", "parse"]
+
+
+def test_public_observations_parameterless_fixed_span_returns_rows_and_undercoverage_issue(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(discovery, "_DEFAULT_PROVIDER_REGISTRATION_ENABLED", False)
+    undercoverage_issue = Issue(
+        severity="warning",
+        code="fetch.source_under_coverage",
+        message="ba_fhmzbih-shaped fixed-span source covers less than the requested window",
+        details={
+            "available_start": "2026-01-01T00:00:00",
+            "available_end": "2026-01-02T00:00:00",
+        },
+        provider_id=ProviderId("fixed_span_provider"),
+    )
+
+    class _FixedSpanModule:
+        observation_source = "fixed-span-test"
+        coordinates = SourceCoordinates({"field": "value"})
+        config = ProviderConfig(
+            zone=ZoneValue("+00:00"),
+            products={
+                ProductId("level"): ProductConfig(
+                    coordinates=coordinates,
+                    unit=Unit.M,
+                    semantics=Instant(),
+                )
+            },
+        )
+        events: list[str] = []
+        renderings: tuple[RenderedWindow, ...] | None = None
+
+        @staticmethod
+        def fetch(
+            stations: tuple[str, ...],
+            products: tuple[ProductId, ...],
+            window: FetchWindow,
+            config: ProviderConfig,
+        ) -> WithIssues[tuple[Payload, ...]]:
+            _FixedSpanModule.events.append("fetch")
+            declaration = WindowDeclaration(
+                WindowGranularity("none"),
+                WindowRenderingVocabulary.NONE,
+                StopConvention.INCLUSIVE,
+            )
+            _FixedSpanModule.renderings = plan_windows(window, declaration)
+            assert _FixedSpanModule.renderings == ()
+            return WithIssues(
+                value=(
+                    Payload(
+                        source_coordinates=_FixedSpanModule.coordinates,
+                        station_products=((stations[0], products[0]),),
+                        fetch_window=window,
+                        content=(datetime(2026, 1, 1), datetime(2026, 1, 2)),
+                    ),
+                ),
+                issues=(undercoverage_issue,),
+            )
+
+        @staticmethod
+        def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+            _FixedSpanModule.events.append("parse")
+            readings = payload.content
+            assert isinstance(readings, tuple)
+            return WithIssues(
+                value=pl.DataFrame(
+                    {
+                        "station_id": ["station-1", "station-1"],
+                        "product_id": ["level", "level"],
+                        "time": list(readings),
+                        "value": [1.0, 2.0],
+                        "time_zone": ["+00:00", "+00:00"],
+                    },
+                    schema=RowsSchema.polars_schema,
+                )
+            )
+
+        @staticmethod
+        def row_annotation_schema() -> list[AnnotationSchema]:
+            return []
+
+        @staticmethod
+        def series_annotation_schema() -> list[AnnotationSchema]:
+            return []
+
+    _registry.register(
+        "fixed_span_provider",
+        stub_packaged_catalogue_artifact("fixed_span_provider"),
+        engine_provider_module=_FixedSpanModule,
+    )
+
+    result = rr.provider("fixed_span_provider").observations(
+        stations="station-1",
+        products="level",
+        start="2025-01-01T00:00:00",
+        end="2026-01-03T00:00:00",
+        on_issue="ignore",
+    )
+
+    assert _FixedSpanModule.renderings == ()
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2026, 1, 1), datetime(2026, 1, 2)],
+            "station_id": ["station-1", "station-1"],
+            "product_id": ["level", "level"],
+            "value": [1.0, 2.0],
+        }
+    )
+    pl_testing.assert_frame_equal(result.data, expected)
+    assert result.issues == (undercoverage_issue,)
+    assert isinstance(result.issues[0], Issue)
+    assert _FixedSpanModule.events == ["fetch", "parse"]
 
 
 @pytest.mark.parametrize(

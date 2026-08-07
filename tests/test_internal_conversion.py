@@ -288,7 +288,7 @@ def test_convert_instant_window_is_closed_at_both_endpoints() -> None:
     assert result.value["station_id"].to_list() == ["station-start", "station-end"]
 
 
-def test_convert_aligns_known_instant_rows_before_clipping() -> None:
+def test_convert_compares_known_instant_rows_on_the_source_wall_clock_axis() -> None:
     from rivretrieve._internal.conversion import convert
 
     result = convert(
@@ -314,10 +314,11 @@ def test_convert_aligns_known_instant_rows_before_clipping() -> None:
         _window(datetime(2020, 5, 31, 15), datetime(2020, 5, 31, 16)),
     )
 
-    assert result.value["time"].to_list() == [datetime(2020, 6, 1, 0, 30)]
+    assert result.value["time"].to_list() == [datetime(2020, 5, 31, 15, 30)]
+    assert result.value["station_id"].to_list() == ["wrong"]
 
 
-def test_convert_binds_naive_instant_endpoints_to_the_utc_calendar() -> None:
+def test_convert_binds_naive_instant_endpoints_to_the_source_wall_clock_calendar() -> None:
     from rivretrieve._internal.conversion import convert
 
     result = convert(
@@ -336,33 +337,10 @@ def test_convert_binds_naive_instant_endpoints_to_the_utc_calendar() -> None:
         _window(datetime(2020, 6, 1), datetime(2020, 6, 1, 1)),
     )
 
-    assert result.value.is_empty()
+    assert result.value["time"].to_list() == [datetime(2020, 6, 1, 0, 30)]
 
 
-def test_convert_adapts_concrete_instant_endpoints_to_utc_comparison() -> None:
-    from rivretrieve._internal.conversion import convert
-
-    endpoint = datetime(2023, 2, 1, 2)
-    result = convert(
-        _rows(
-            [
-                {
-                    "station_id": "station-1",
-                    "product_id": "level",
-                    "time": datetime(2023, 2, 1, 2),
-                    "value": 1.0,
-                    "time_zone": "+00:00",
-                }
-            ]
-        ),
-        _config({"level": _product()}),
-        _window(endpoint, endpoint),
-    )
-
-    assert result.value.height == 1
-
-
-def test_convert_mixed_known_and_unknown_instants_clip_only_known_rows_and_warn() -> None:
+def test_convert_mixed_known_and_unknown_instants_clip_all_rows_on_wall_clock_axis_without_warning() -> None:
     from rivretrieve._internal.conversion import convert
 
     result = convert(
@@ -398,19 +376,9 @@ def test_convert_mixed_known_and_unknown_instants_clip_only_known_rows_and_warn(
         ),
     )
 
-    assert result.value["station_id"].to_list() == ["known-inside", "unknown-outside"]
-    assert result.value["time_zone"].to_list() == ["+00:00", "unknown"]
-    assert len(result.issues) == 1
-    issue = result.issues[0]
-    assert issue.severity == "warning"
-    assert issue.code == "convert.unknown_time_zone"
-    assert issue.message == ("Retained 1 instantaneous row(s) without window clipping because time_zone is unknown")
-    assert issue.details is not None
-    assert issue.details == {
-        "row_count": 1,
-        "station_products": [{"station_id": "unknown-outside", "product_id": "level"}],
-    }
-    assert issue.provider_id is None
+    assert result.value["station_id"].to_list() == ["known-inside"]
+    assert result.value["time_zone"].to_list() == ["+00:00"]
+    assert result.issues == ()
 
 
 def test_convert_daily_positive_offset_uses_zone_free_date_comparison() -> None:
@@ -560,7 +528,7 @@ def test_convert_returns_exact_canonical_column_order_and_native_time_dtype() ->
             ]
         ),
         _config({"level": _product(Unit.CM)}),
-        _window(datetime(2023, 1, 15, 16), datetime(2023, 1, 15, 18)),
+        _window(datetime(2023, 1, 15, 11), datetime(2023, 1, 15, 13)),
     )
     expected = pl.DataFrame(
         {

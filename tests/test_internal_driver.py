@@ -13,6 +13,8 @@ from rivretrieve._internal.conversion import convert as real_convert
 from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
+    Daily,
+    DayDefinition,
     FetchWindow,
     Instant,
     ObservationRequest,
@@ -364,7 +366,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
             "parse.station-1.first",
             "parse.station-1.second",
             "parse.station-2",
-            "convert.unknown_time_zone",
         )
         assert supplied_raw is raw
         return real_assemble(canonical_rows, supplied_provenance, issues, supplied_raw)
@@ -400,7 +401,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         "parse.station-1.first",
         "parse.station-1.second",
         "parse.station-2",
-        "convert.unknown_time_zone",
     )
     assert result.raw is raw
     assert events == [
@@ -410,6 +410,79 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         "convert",
         "assemble",
     ]
+
+
+def test_drive_clips_unknown_zone_instants_at_both_closed_edges_without_warning() -> None:
+    events: list[str] = []
+    requested_window = RequestedWindow(
+        start=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 12)),
+        end=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 13)),
+    )
+    fetch_window = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2025, 12, 31, 12)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 4, 13)),
+    )
+    request = _request(requested_window)
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = _config(coordinates)
+    timestamps = (
+        datetime(2026, 1, 2, 11, 59, 59, 999999),
+        datetime(2026, 1, 2, 12),
+        datetime(2026, 1, 2, 12, 30),
+        datetime(2026, 1, 2, 13),
+        datetime(2026, 1, 2, 13, 0, 0, 1),
+    )
+    payloads = tuple(_payload(station_id, coordinates, fetch_window) for station_id in _STATIONS)
+    rows_by_station = {
+        station_id: pl.DataFrame(
+            {
+                "station_id": [station_id],
+                "product_id": ["level"],
+                "time": [timestamp],
+                "value": [value],
+                "time_zone": ["unknown"],
+            },
+            schema=RowsSchema.polars_schema,
+        )
+        for station_id, timestamp, value in zip(
+            _STATIONS,
+            timestamps,
+            (100.0, 200.0, 300.0, 400.0, 500.0),
+            strict=True,
+        )
+    }
+    provider = _ThrowawayProvider(
+        config,
+        payloads,
+        rows_by_station,
+        dict.fromkeys(_STATIONS, ()),
+        (),
+        events,
+    )
+
+    result = driver_module.drive(
+        request,
+        provider,
+        provenance=_provenance(request),
+        raw=_raw(request),
+    )
+
+    expected = pl.DataFrame(
+        {
+            "time": [
+                datetime(2026, 1, 2, 12),
+                datetime(2026, 1, 2, 12, 30),
+                datetime(2026, 1, 2, 13),
+            ],
+            "time_zone": ["unknown", "unknown", "unknown"],
+            "station_id": ["station-2", "station-3", "station-4"],
+            "product_id": ["level", "level", "level"],
+            "value": [2.0, 3.0, 4.0],
+        },
+        schema=CanonicalRowsSchema.polars_schema,
+    )
+    pl_testing.assert_frame_equal(result.canonical_rows, expected)
+    assert result.issues == ()
 
 
 def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> None:
@@ -828,3 +901,243 @@ def test_drive_accepts_well_formed_empty_rows_at_both_boundaries(
         ("CanonicalRows", 0, "raise"),
     ]
     assert events == ["fetch", "parse-1"]
+
+
+def test_drive_rejects_engine_created_fetch_window_that_does_not_contain_request_before_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 1, 2, 0)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23)),
+    )
+    request = _request(requested)
+    config = _config(SourceCoordinates({"parameter": "height"}))
+
+    class _ForbiddenProvider:
+        def __init__(self) -> None:
+            self.config = config
+
+        def fetch(
+            self,
+            stations: tuple[str, ...],
+            products: tuple[ProductId, ...],
+            window: FetchWindow,
+            supplied_config: ProviderConfig,
+        ) -> WithIssues[tuple[Payload, ...]]:
+            events.append("fetch")
+            raise AssertionError("fetch must not run for a narrowed engine window")
+
+        def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
+            events.append("parse")
+            raise AssertionError("parse must not run for a narrowed engine window")
+
+    def forbidden_convert(
+        rows: Rows,
+        supplied_config: ProviderConfig,
+        window: RequestedWindow,
+    ) -> WithIssues[CanonicalRows]:
+        events.append("convert")
+        raise AssertionError("convert must not run for a narrowed engine window")
+
+    def forbidden_assemble(
+        canonical_rows: CanonicalRows,
+        provenance: ObservationProvenance,
+        issues: tuple[Issue, ...],
+        raw: RawPayload,
+    ) -> _AssemblyResult:
+        events.append("assemble")
+        raise AssertionError("assemble must not run for a narrowed engine window")
+
+    monkeypatch.setattr(driver_module, "_FETCH_WINDOW_PADDING", timedelta(microseconds=-1))
+    monkeypatch.setattr(driver_module, "convert", forbidden_convert)
+    monkeypatch.setattr(driver_module, "assemble", forbidden_assemble)
+
+    with pytest.raises(FatalContractError) as exc_info:
+        driver_module.drive(
+            request,
+            _ForbiddenProvider(),
+            provenance=_provenance(request),
+            raw=_raw(request),
+        )
+
+    assert exc_info.value.issues == ()
+    assert str(exc_info.value) == (
+        "Engine-created FetchWindow does not contain RequestedWindow: "
+        "fetch_start=2026-01-02T00:00:00.000001, fetch_end=2026-01-02T22:59:59.999999, "
+        "requested_start=2026-01-02T00:00:00, requested_end=2026-01-02T23:00:00. This is an "
+        "internal engine contract breach before provider fetch; please report it with these four endpoints."
+    )
+    assert events == []
+
+
+@pytest.mark.parametrize(
+    ("semantics", "requested_start", "requested_end", "row_time", "expected_message"),
+    [
+        (
+            Instant(),
+            datetime(2026, 1, 2, 0),
+            datetime(2026, 1, 2, 23),
+            datetime(2026, 1, 2, 23, 0, 0, 1),
+            "CanonicalRows zero-based row index 0 is outside RequestedWindow on the Instant timestamp "
+            "axis: timestamp=2026-01-02T23:00:00.000001, time_zone='+00:00', station_id='station-1', "
+            "product_id='level', requested_start=2026-01-02T00:00:00, "
+            "requested_end=2026-01-02T23:00:00. This is a convert-stage contract breach; please report "
+            "this row and request window.",
+        ),
+        (
+            Daily(DayDefinition("00:00")),
+            datetime(2026, 1, 2, 12),
+            datetime(2026, 1, 2, 18),
+            datetime(2026, 1, 3, 0),
+            "CanonicalRows zero-based row index 0 is outside RequestedWindow on the Daily date axis: "
+            "timestamp=2026-01-03T00:00:00, time_zone='+00:00', station_id='station-1', "
+            "product_id='level', requested_start_date=2026-01-02, requested_end_date=2026-01-02. "
+            "This is a convert-stage contract breach; please report this row and request window.",
+        ),
+    ],
+)
+def test_drive_rejects_post_convert_row_outside_product_semantic_axis_before_assembly(
+    semantics: Instant | Daily,
+    requested_start: datetime,
+    requested_end: datetime,
+    row_time: datetime,
+    expected_message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(requested_start),
+        WindowEndpoint.from_datetime(requested_end),
+    )
+    request = _request(requested)
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            ProductId("level"): ProductConfig(
+                coordinates=coordinates,
+                unit=Unit.CM,
+                semantics=semantics,
+            )
+        },
+    )
+
+    class _EmptyProvider:
+        def __init__(self) -> None:
+            self.config = config
+
+        def fetch(
+            self,
+            stations: tuple[str, ...],
+            products: tuple[ProductId, ...],
+            window: FetchWindow,
+            supplied_config: ProviderConfig,
+        ) -> WithIssues[tuple[Payload, ...]]:
+            events.append("fetch")
+            return WithIssues(value=())
+
+        def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
+            raise AssertionError("parse must not run without payloads")
+
+    def faulty_convert(
+        rows: Rows,
+        supplied_config: ProviderConfig,
+        window: RequestedWindow,
+    ) -> WithIssues[CanonicalRows]:
+        events.append("convert")
+        return WithIssues(
+            value=pl.DataFrame(
+                {
+                    "time": [row_time],
+                    "time_zone": ["+00:00"],
+                    "station_id": ["station-1"],
+                    "product_id": ["level"],
+                    "value": [2.5],
+                },
+                schema=CanonicalRowsSchema.polars_schema,
+            )
+        )
+
+    def forbidden_assemble(
+        canonical_rows: CanonicalRows,
+        provenance: ObservationProvenance,
+        issues: tuple[Issue, ...],
+        raw: RawPayload,
+    ) -> _AssemblyResult:
+        events.append("assemble")
+        raise AssertionError("assemble must not run after a converter row leak")
+
+    monkeypatch.setattr(driver_module, "convert", faulty_convert)
+    monkeypatch.setattr(driver_module, "assemble", forbidden_assemble)
+
+    with pytest.raises(FatalContractError) as exc_info:
+        driver_module.drive(
+            request,
+            _EmptyProvider(),
+            provenance=_provenance(request),
+            raw=_raw(request),
+        )
+
+    assert exc_info.value.issues == ()
+    assert str(exc_info.value) == expected_message
+    assert events == ["fetch", "convert"]
+
+
+def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -> None:
+    events: list[str] = []
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 1, 2, 12)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 2, 18)),
+    )
+    request = _request(requested)
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            ProductId("level"): ProductConfig(
+                coordinates=coordinates,
+                unit=Unit.CM,
+                semantics=Daily(DayDefinition("00:00")),
+            )
+        },
+    )
+
+    class _DailyProvider:
+        def __init__(self) -> None:
+            self.config = config
+
+        def fetch(
+            self,
+            stations: tuple[str, ...],
+            products: tuple[ProductId, ...],
+            window: FetchWindow,
+            supplied_config: ProviderConfig,
+        ) -> WithIssues[tuple[Payload, ...]]:
+            events.append("fetch")
+            return WithIssues(value=(_payload("station-1", coordinates, window),))
+
+        def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
+            events.append("parse:station-1")
+            return WithIssues(value=_rows("station-1", 0, 250.0))
+
+    result = driver_module.drive(
+        request,
+        _DailyProvider(),
+        provenance=_provenance(request),
+        raw=_raw(request),
+    )
+
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2026, 1, 2, 0)],
+            "time_zone": ["+00:00"],
+            "station_id": ["station-1"],
+            "product_id": ["level"],
+            "value": [2.5],
+        },
+        schema=CanonicalRowsSchema.polars_schema,
+    )
+    pl_testing.assert_frame_equal(result.canonical_rows, expected)
+    assert result.issues == ()
+    assert events == ["fetch", "parse:station-1"]
