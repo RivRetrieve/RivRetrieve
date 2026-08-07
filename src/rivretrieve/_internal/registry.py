@@ -12,7 +12,7 @@ from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.driver import ProviderStages, drive
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
-from rivretrieve._internal.engine import RequestedWindow
+from rivretrieve._internal.engine import ProductWindowDeclarations, RequestedWindow
 from rivretrieve._internal.issues import (
     FatalContractError,
     ObservationsUnavailableError,
@@ -38,6 +38,7 @@ _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class EngineProviderModule(ProviderModule, ProviderStages, Protocol):
+    window_declarations: ProductWindowDeclarations
     observation_source: str
 
 

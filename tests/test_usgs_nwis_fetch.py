@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import get_type_hints
 
 import polars as pl
@@ -15,6 +17,7 @@ from rivretrieve._internal.engine import (
     Instant,
     ProductConfig,
     ProviderConfig,
+    RenderedWindow,
     SourceCoordinates,
     Unit,
     WindowEndpoint,
@@ -62,6 +65,17 @@ def _window() -> FetchWindow:
     return _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
         WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
+    )
+
+
+def _renderings(
+    *products: ProductId,
+    windows: dict[ProductId, tuple[RenderedWindow, ...]] | None = None,
+) -> Mapping[ProductId, tuple[RenderedWindow, ...]]:
+    return MappingProxyType(
+        dict(windows)
+        if windows is not None
+        else {product: (RenderedWindow("2023-01-01", "2023-01-10"),) for product in products}
     )
 
 
@@ -121,9 +135,10 @@ def _failure(secret: str, status_code: int | None) -> TransportFailure:
     )
 
 
-def test_fetch_signature_accepts_only_fetch_window() -> None:
+def test_fetch_signature_accepts_engine_renderings_and_fetch_window_tag() -> None:
     hints = get_type_hints(fetch)
 
+    assert hints["rendered_windows"] == Mapping[ProductId, tuple[RenderedWindow, ...]]
     assert hints["fetch_window"] is FetchWindow
     assert "RequestedWindow" not in repr(hints)
 
@@ -143,6 +158,12 @@ def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
     result = fetch(
         ("01234567",),
         (daily, instant),
+        _renderings(
+            windows={
+                daily: (RenderedWindow("1999-02-03", "1999-02-04"),),
+                instant: (RenderedWindow("2001-06-07", "2001-06-08"),),
+            }
+        ),
         window,
         provider_config,
     )
@@ -154,8 +175,8 @@ def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
             params={
                 "format": "json",
                 "sites": "01234567",
-                "startDT": "2023-01-01",
-                "endDT": "2023-01-10",
+                "startDT": "1999-02-03",
+                "endDT": "1999-02-04",
                 "parameterCd": "12345",
                 "statCd": "54321",
             },
@@ -167,8 +188,8 @@ def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
             params={
                 "format": "json",
                 "sites": "01234567",
-                "startDT": "2023-01-01",
-                "endDT": "2023-01-10",
+                "startDT": "2001-06-07",
+                "endDT": "2001-06-08",
                 "parameterCd": "67890",
             },
             headers={"Accept": "application/json"},
@@ -205,7 +226,7 @@ def test_five_stations_one_404_preserves_four_parsed_station_results_and_one_iss
     product = ProductId("discharge_daily_mean")
     provider_config = config()
 
-    fetched = fetch(stations, (product,), _window(), provider_config)
+    fetched = fetch(stations, (product,), _renderings(product), _window(), provider_config)
     parsed = tuple(parse(payload, provider_config) for payload in fetched.value)
     rows = pl.concat([result.value for result in parsed], how="vertical")
     all_issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues)
@@ -253,6 +274,7 @@ def test_404_does_not_skip_remaining_products_for_station(
     result = fetch(
         ("station-1",),
         (daily, instant),
+        _renderings(daily, instant),
         _window(),
         _custom_config(),
     )
@@ -280,6 +302,7 @@ def test_retry_exhaustion_does_not_skip_remaining_products_for_station(
     result = fetch(
         ("station-1",),
         (daily, instant),
+        _renderings(daily, instant),
         _window(),
         _custom_config(),
     )
@@ -304,7 +327,7 @@ def test_all_404_returns_empty_payload_tuple_with_every_issue_and_call_tag(
     )
     product = ProductId("stage_instantaneous")
 
-    result = fetch(stations, (product,), _window(), config())
+    result = fetch(stations, (product,), _renderings(product), _window(), config())
 
     assert len(client.requests) == 5
     assert result.value == ()
@@ -340,7 +363,7 @@ def test_retry_exhausted_timeout_dns_and_rate_limit_are_sanitized_issues(
     stations = ("timeout-station", "dns-station", "rate-station")
     product = ProductId("discharge_instantaneous")
 
-    result = fetch(stations, (product,), _window(), config())
+    result = fetch(stations, (product,), _renderings(product), _window(), config())
 
     assert len(client.requests) == 3
     assert result.value == ()
@@ -399,6 +422,7 @@ def test_terminal_sender_failure_is_a_broken_seam(
         fetch(
             ("station-1",),
             (ProductId("discharge_instantaneous"),),
+            _renderings(ProductId("discharge_instantaneous")),
             _window(),
             config(),
         )
@@ -418,6 +442,7 @@ def test_unexpected_terminal_http_status_is_a_broken_seam(
         fetch(
             ("station-1",),
             (ProductId("discharge_instantaneous"),),
+            _renderings(ProductId("discharge_instantaneous")),
             _window(),
             config(),
         )
@@ -434,6 +459,7 @@ def test_successful_malformed_body_stays_opaque_until_parse(
     fetched = fetch(
         ("station-1",),
         (ProductId("discharge_instantaneous"),),
+        _renderings(ProductId("discharge_instantaneous")),
         _window(),
         provider_config,
     )
@@ -445,7 +471,9 @@ def test_successful_malformed_body_stays_opaque_until_parse(
         parse(fetched.value[0], provider_config)
 
 
-def test_usgs_fetch_renders_legal_wall_clock_endpoint_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_usgs_fetch_uses_engine_rendered_dates_without_reading_fetch_window_endpoints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _patch_client(monkeypatch, [_response(b"{}")])
     window = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2023, 1, 1, 12, 34, 56, 123456)),
@@ -455,12 +483,13 @@ def test_usgs_fetch_renders_legal_wall_clock_endpoint_dates(monkeypatch: pytest.
     result = fetch(
         ("station-1",),
         (ProductId("discharge_instantaneous"),),
+        _renderings(windows={ProductId("discharge_instantaneous"): (RenderedWindow("1984-03-04", "1984-03-05"),)}),
         window,
         config(),
     )
 
-    assert client.requests[0].params["startDT"] == "2023-01-01"
-    assert client.requests[0].params["endDT"] == "2023-01-10"
+    assert client.requests[0].params["startDT"] == "1984-03-04"
+    assert client.requests[0].params["endDT"] == "1984-03-05"
     assert result.value[0].fetch_window is window
     assert result.issues == ()
 
@@ -487,6 +516,7 @@ def test_fetch_fails_loudly_for_missing_or_wrong_coordinate_declaration(
         fetch(
             ("station-1",),
             (ProductId("absent"),),
+            _renderings(ProductId("absent")),
             _window(),
             wrong_coordinates,
         )
@@ -494,6 +524,7 @@ def test_fetch_fails_loudly_for_missing_or_wrong_coordinate_declaration(
         fetch(
             ("station-1",),
             (ProductId("wrong"),),
+            _renderings(ProductId("wrong")),
             _window(),
             wrong_coordinates,
         )

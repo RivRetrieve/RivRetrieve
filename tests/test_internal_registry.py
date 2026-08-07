@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 
 import polars as pl
@@ -18,6 +18,7 @@ from rivretrieve._internal.engine import (
     Instant,
     Payload,
     ProductConfig,
+    ProductWindowDeclarations,
     ProviderConfig,
     RenderedWindow,
     Rows,
@@ -49,7 +50,6 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle, _registry
 from rivretrieve._internal.results import CatalogProvenance
-from rivretrieve._internal.window_planning import plan_windows
 from tests._stubs import stub_provider
 from tests.conftest import RegisteredStub
 
@@ -67,19 +67,29 @@ class _EngineModule:
             )
         },
     )
+    window_declarations = ProductWindowDeclarations(
+        {
+            ProductId("level"): WindowDeclaration(
+                WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE
+            )
+        }
+    )
     events: list[str] = []
     emitted_payload: Payload | None = None
     fetched_window: FetchWindow | None = None
+    rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]] | None = None
 
     @staticmethod
     def fetch(
         stations: tuple[str, ...],
         products: tuple[ProductId, ...],
+        rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         window: FetchWindow,
         config: ProviderConfig,
     ) -> WithIssues[tuple[Payload, ...]]:
         _EngineModule.events.append("fetch")
         _EngineModule.fetched_window = window
+        _EngineModule.rendered_windows = rendered_windows
         payload = Payload(
             source_coordinates=_EngineModule.coordinates,
             station_products=((stations[0], products[0]),),
@@ -218,6 +228,7 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
     assert isinstance(_EngineModule.fetched_window.start, WindowEndpoint)
     assert _EngineModule.fetched_window.start.isoformat() == "2025-12-30T00:00:00"
     assert _EngineModule.fetched_window.end.isoformat() == "2026-01-04T23:59:59.999999"
+    assert _EngineModule.rendered_windows == {ProductId("level"): (RenderedWindow("2025-12-30", "2026-01-04"),)}
     assert set(result.data.columns) == {"time", "station_id", "product_id", "value"}
     pl_testing.assert_frame_equal(
         result.row_annotations.data,
@@ -334,6 +345,15 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
                 )
             },
         )
+        window_declarations = ProductWindowDeclarations(
+            {
+                ProductId("level"): WindowDeclaration(
+                    WindowGranularity("iso-instant"),
+                    WindowRenderingVocabulary.ISO_INSTANT,
+                    StopConvention.EXCLUSIVE,
+                )
+            }
+        )
         events: list[str] = []
         renderings: tuple[RenderedWindow, ...] = ()
 
@@ -341,16 +361,12 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
         def fetch(
             stations: tuple[str, ...],
             products: tuple[ProductId, ...],
+            rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             config: ProviderConfig,
         ) -> WithIssues[tuple[Payload, ...]]:
             _ExclusiveStopModule.events.append("fetch")
-            declaration = WindowDeclaration(
-                WindowGranularity("iso-instant"),
-                WindowRenderingVocabulary.ISO_INSTANT,
-                StopConvention.EXCLUSIVE,
-            )
-            _ExclusiveStopModule.renderings = plan_windows(window, declaration)
+            _ExclusiveStopModule.renderings = rendered_windows[ProductId("level")]
             rendered = _ExclusiveStopModule.renderings[0]
             rendered_start = datetime.fromisoformat(rendered.start.removesuffix("Z"))
             assert rendered.stop is not None
@@ -456,6 +472,13 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
                 )
             },
         )
+        window_declarations = ProductWindowDeclarations(
+            {
+                ProductId("level"): WindowDeclaration(
+                    WindowGranularity("none"), WindowRenderingVocabulary.NONE, StopConvention.INCLUSIVE
+                )
+            }
+        )
         events: list[str] = []
         renderings: tuple[RenderedWindow, ...] | None = None
 
@@ -463,16 +486,12 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
         def fetch(
             stations: tuple[str, ...],
             products: tuple[ProductId, ...],
+            rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             config: ProviderConfig,
         ) -> WithIssues[tuple[Payload, ...]]:
             _FixedSpanModule.events.append("fetch")
-            declaration = WindowDeclaration(
-                WindowGranularity("none"),
-                WindowRenderingVocabulary.NONE,
-                StopConvention.INCLUSIVE,
-            )
-            _FixedSpanModule.renderings = plan_windows(window, declaration)
+            _FixedSpanModule.renderings = rendered_windows[ProductId("level")]
             assert _FixedSpanModule.renderings == ()
             return WithIssues(
                 value=(

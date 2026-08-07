@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 
 import polars as pl
@@ -20,13 +21,19 @@ from rivretrieve._internal.engine import (
     ObservationRequest,
     Payload,
     ProductConfig,
+    ProductWindowDeclarations,
     ProviderConfig,
+    RenderedWindow,
     RequestedWindow,
     Rows,
     RowsSchema,
     SourceCoordinates,
+    StopConvention,
     Unit,
+    WindowDeclaration,
     WindowEndpoint,
+    WindowGranularity,
+    WindowRenderingVocabulary,
     WithIssues,
     ZoneValue,
     _make_fetch_window,
@@ -43,6 +50,13 @@ _STATIONS = (
     "station-5",
 )
 _PRODUCTS = (ProductId("level"),)
+_LEVEL_WINDOW_DECLARATIONS = ProductWindowDeclarations(
+    {
+        ProductId("level"): WindowDeclaration(
+            WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE
+        )
+    }
+)
 
 
 class _ThrowawayProvider:
@@ -56,6 +70,7 @@ class _ThrowawayProvider:
         events: list[str],
     ) -> None:
         self.config = config
+        self.window_declarations = _LEVEL_WINDOW_DECLARATIONS
         self._payloads = payloads
         self._rows_by_station = rows_by_station
         self._parse_issues_by_station = parse_issues_by_station
@@ -66,12 +81,14 @@ class _ThrowawayProvider:
         self,
         stations: tuple[str, ...],
         products: tuple[ProductId, ...],
+        rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         window: FetchWindow,
         config: ProviderConfig,
     ) -> WithIssues[tuple[Payload, ...]]:
         self._events.append("fetch")
         assert stations == _STATIONS
         assert products == _PRODUCTS
+        assert rendered_windows == {ProductId("level"): (RenderedWindow(window.start.date, window.end.date),)}
         assert all(payload.fetch_window == window for payload in self._payloads)
         assert isinstance(window, FetchWindow)
         assert not isinstance(window, RequestedWindow)
@@ -128,6 +145,116 @@ def _config(coordinates: SourceCoordinates) -> ProviderConfig:
             )
         },
     )
+
+
+def test_drive_plans_each_requested_product_and_passes_immutable_keyed_renderings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    products = (ProductId("date_product"), ProductId("year_product"))
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23, 59, 59, 999999)),
+    )
+    request = ObservationRequest(ProviderId("throwaway"), ("station-1",), products, requested)
+    product_config = ProductConfig(SourceCoordinates({"field": "value"}), Unit.M, Instant())
+    config = ProviderConfig(ZoneValue("+00:00"), dict.fromkeys(products, product_config))
+    declarations = ProductWindowDeclarations(
+        {
+            products[0]: WindowDeclaration(
+                WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE
+            ),
+            products[1]: WindowDeclaration(
+                WindowGranularity("year"), WindowRenderingVocabulary.YEAR, StopConvention.INCLUSIVE
+            ),
+        }
+    )
+    received: list[tuple[Mapping[ProductId, tuple[RenderedWindow, ...]], FetchWindow]] = []
+    planned_with: list[FetchWindow] = []
+    real_plan_windows = driver_module.plan_windows
+
+    def recording_plan_windows(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
+        planned_with.append(fetch_window)
+        return real_plan_windows(fetch_window, declaration)
+
+    monkeypatch.setattr(driver_module, "plan_windows", recording_plan_windows)
+
+    class _CapturingProvider:
+        window_declarations = declarations
+
+        def __init__(self) -> None:
+            self.config = config
+
+        def fetch(
+            self,
+            stations: tuple[str, ...],
+            supplied_products: tuple[ProductId, ...],
+            rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
+            fetch_window: FetchWindow,
+            supplied_config: ProviderConfig,
+        ) -> WithIssues[tuple[Payload, ...]]:
+            assert stations == ("station-1",)
+            assert supplied_products == products
+            assert supplied_config is config
+            received.append((rendered_windows, fetch_window))
+            return WithIssues(())
+
+        def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
+            raise AssertionError("parse must not run")
+
+    result = driver_module.drive(request, _CapturingProvider(), provenance=_provenance(request), raw=_raw(request))
+
+    assert result.canonical_rows.is_empty()
+    assert len(received) == 1
+    rendered_windows, fetch_window = received[0]
+    assert list(rendered_windows) == list(products)
+    assert rendered_windows == {
+        ProductId("date_product"): (RenderedWindow("2025-12-30", "2026-01-04"),),
+        ProductId("year_product"): (RenderedWindow("2025", None), RenderedWindow("2026", None)),
+    }
+    with pytest.raises(TypeError):
+        rendered_windows[ProductId("date_product")] = ()  # type: ignore[index]
+    assert fetch_window == _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2025, 12, 30)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 4, 23, 59, 59, 999999)),
+    )
+    assert len(planned_with) == 2
+    assert all(planned_window is fetch_window for planned_window in planned_with)
+
+
+def test_drive_rejects_missing_product_window_declaration_before_fetch() -> None:
+    events: list[str] = []
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 2)),
+    )
+    request = ObservationRequest(ProviderId("throwaway"), ("station-1",), (ProductId("missing"),), requested)
+    config = ProviderConfig(
+        ZoneValue("+00:00"),
+        {ProductId("missing"): ProductConfig(SourceCoordinates({}), Unit.M, Instant())},
+    )
+
+    class _MissingDeclarationProvider:
+        window_declarations = ProductWindowDeclarations({})
+
+        def __init__(self) -> None:
+            self.config = config
+
+        def fetch(self, *args: object) -> WithIssues[tuple[Payload, ...]]:
+            events.append("fetch")
+            return WithIssues(())
+
+        def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
+            raise AssertionError("parse must not run")
+
+    with pytest.raises(FatalContractError) as caught:
+        driver_module.drive(request, _MissingDeclarationProvider(), provenance=_provenance(request), raw=_raw(request))
+
+    assert str(caught.value) == (
+        "Provider throwaway has no window declaration for requested product missing; "
+        "this is an internal provider contract breach before fetch."
+    )
+    assert caught.value.issues == ()
+    assert events == []
 
 
 def _payload(
@@ -233,11 +360,13 @@ def test_drive_widens_fetch_window_by_exactly_two_calendar_days_across_month_and
     class _CapturingProvider:
         def __init__(self) -> None:
             self.config = config
+            self.window_declarations = _LEVEL_WINDOW_DECLARATIONS
 
         def fetch(
             self,
             stations: tuple[str, ...],
             products: tuple[ProductId, ...],
+            rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
         ) -> WithIssues[tuple[Payload, ...]]:
@@ -628,6 +757,7 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
         "config",
         "fetch",
         "parse",
+        "window_declarations",
     }
 
 
@@ -640,6 +770,7 @@ class _BoundaryProvider:
         events: list[str],
     ) -> None:
         self.config = config
+        self.window_declarations = _LEVEL_WINDOW_DECLARATIONS
         self._payloads = payloads
         self._rows_by_payload = rows_by_payload
         self._events = events
@@ -648,6 +779,7 @@ class _BoundaryProvider:
         self,
         stations: tuple[str, ...],
         products: tuple[ProductId, ...],
+        rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         window: FetchWindow,
         config: ProviderConfig,
     ) -> WithIssues[tuple[Payload, ...]]:
@@ -917,11 +1049,13 @@ def test_drive_rejects_engine_created_fetch_window_that_does_not_contain_request
     class _ForbiddenProvider:
         def __init__(self) -> None:
             self.config = config
+            self.window_declarations = _LEVEL_WINDOW_DECLARATIONS
 
         def fetch(
             self,
             stations: tuple[str, ...],
             products: tuple[ProductId, ...],
+            rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
         ) -> WithIssues[tuple[Payload, ...]]:
@@ -1026,11 +1160,13 @@ def test_drive_rejects_post_convert_row_outside_product_semantic_axis_before_ass
     class _EmptyProvider:
         def __init__(self) -> None:
             self.config = config
+            self.window_declarations = _LEVEL_WINDOW_DECLARATIONS
 
         def fetch(
             self,
             stations: tuple[str, ...],
             products: tuple[ProductId, ...],
+            rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
         ) -> WithIssues[tuple[Payload, ...]]:
@@ -1106,11 +1242,13 @@ def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -
     class _DailyProvider:
         def __init__(self) -> None:
             self.config = config
+            self.window_declarations = _LEVEL_WINDOW_DECLARATIONS
 
         def fetch(
             self,
             stations: tuple[str, ...],
             products: tuple[ProductId, ...],
+            rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
             window: FetchWindow,
             supplied_config: ProviderConfig,
         ) -> WithIssues[tuple[Payload, ...]]:
