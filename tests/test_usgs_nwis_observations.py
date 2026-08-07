@@ -28,13 +28,21 @@ ARIZONA_INSTANT_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_09380000_iv_00060
 
 
 class RecordingHttpClient:
-    def __init__(self, response: TransportResponse) -> None:
-        self.response = response
+    def __init__(self, content: bytes, status_code: int) -> None:
+        self.content = content
+        self.status_code = status_code
         self.requests: list[TransportRequest] = []
 
     def send(self, request: TransportRequest) -> TransportResponse:
         self.requests.append(request)
-        return self.response
+        return TransportResponse(
+            content=self.content,
+            status_code=self.status_code,
+            retrieved_at=datetime(2026, 7, 29, 12, 0, tzinfo=UTC),
+            content_type=("text/plain" if self.status_code == 404 else "application/json; charset=utf-8"),
+            url=request.url,
+            request_parameters={} if request.params is None else request.params,
+        )
 
 
 def _patch_client(
@@ -42,13 +50,7 @@ def _patch_client(
     content: bytes,
     status_code: int = 200,
 ) -> RecordingHttpClient:
-    client = RecordingHttpClient(
-        TransportResponse(
-            content=content,
-            status_code=status_code,
-            retrieved_at=datetime(2026, 7, 29, 12, 0, tzinfo=UTC),
-        )
-    )
+    client = RecordingHttpClient(content, status_code)
     monkeypatch.setattr(fetch_module, "HttpClient", lambda: client)
     return client
 

@@ -1,4 +1,4 @@
-"""fetch : tuple[str, ...] × tuple[ProductId, ...] × Mapping[ProductId, tuple[RenderedWindow, ...]] × FetchWindow × ProviderConfig → WithIssues[tuple[Payload, ...]]."""
+"""usgs_nwis fetch : stations × products × rendered windows × FetchWindow × ProviderConfig → WithIssues[Payload[]]."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from rivretrieve._internal.engine import (
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceCallOrigin,
     SourceCoordinates,
+    UnknownOriginFact,
     WithIssues,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
@@ -148,6 +150,15 @@ def _payload(
         station_products=((station_id, product_id),),
         fetch_window=fetch_window,
         content=response.content,
+        origin=SourceCallOrigin(
+            url=response.url,
+            request_parameters=response.request_parameters,
+            status_code=response.status_code,
+            retrieved_at=response.retrieved_at,
+            content_type=(response.content_type if response.content_type is not None else UnknownOriginFact()),
+            source_path=UnknownOriginFact(),
+            query=UnknownOriginFact(),
+        ),
     )
 
 

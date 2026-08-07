@@ -9,6 +9,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
+from rivretrieve._internal.engine import SourceQuery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
@@ -18,6 +19,7 @@ from rivretrieve._internal.observations import (
 )
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
+from rivretrieve._internal.providers.ca_eccc.config import HydatSourceCoordinates
 from rivretrieve._internal.providers.ca_eccc.issue_codes import CaEcccObservationIssueCodes
 
 
@@ -71,7 +73,13 @@ def test_ca_eccc_registry_dispatch_uses_engine_driver(
     calls: list[tuple[str, str]] = []
     real_query = fetch_module._query_station_product
 
-    def recording_query(connection, coordinates, station_id, start_year: str, end_year: str):
+    def recording_query(
+        connection: sqlite3.Connection,
+        coordinates: HydatSourceCoordinates,
+        station_id: str,
+        start_year: str,
+        end_year: str,
+    ) -> tuple[list[dict[str, object]], SourceQuery]:
         calls.append((start_year, end_year))
         return real_query(connection, coordinates, station_id, start_year, end_year)
 

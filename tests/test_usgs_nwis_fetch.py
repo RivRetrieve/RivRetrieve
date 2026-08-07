@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
@@ -18,8 +19,10 @@ from rivretrieve._internal.engine import (
     ProductConfig,
     ProviderConfig,
     RenderedWindow,
+    SourceCallOrigin,
     SourceCoordinates,
     Unit,
+    UnknownOriginFact,
     WindowEndpoint,
     ZoneValue,
     _make_fetch_window,
@@ -34,6 +37,7 @@ from rivretrieve._internal.providers.usgs_nwis.config import (
 from rivretrieve._internal.providers.usgs_nwis.fetch import fetch
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
 from rivretrieve._internal.transport import (
+    HttpClient,
     HttpMethod,
     TransportFailure,
     TransportFailureReason,
@@ -47,6 +51,14 @@ RETRIEVED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
 Action = TransportResponse | TransportFailure
 
 
+class FixedClock:
+    def monotonic(self) -> float:
+        return 0.0
+
+    def utcnow(self) -> datetime:
+        return RETRIEVED_AT
+
+
 class RecordingHttpClient:
     def __init__(self, actions: list[Action]) -> None:
         self.actions = actions
@@ -58,7 +70,14 @@ class RecordingHttpClient:
         action = self.actions[len(self.requests) - 1]
         if isinstance(action, TransportFailure):
             raise action
-        return action
+        return TransportResponse(
+            content=action.content,
+            status_code=action.status_code,
+            retrieved_at=action.retrieved_at,
+            content_type=action.content_type,
+            url=request.url,
+            request_parameters={} if request.params is None else request.params,
+        )
 
 
 def _window() -> FetchWindow:
@@ -79,11 +98,16 @@ def _renderings(
     )
 
 
-def _response(content: bytes, status_code: int = 200) -> TransportResponse:
+def _response(
+    content: bytes, status_code: int = 200, content_type: str | None = "application/json; charset=utf-8"
+) -> TransportResponse:
     return TransportResponse(
         content=content,
         status_code=status_code,
         retrieved_at=RETRIEVED_AT,
+        content_type=content_type,
+        url="https://source.example/data",
+        request_parameters={},
     )
 
 
@@ -146,9 +170,11 @@ def test_fetch_signature_accepts_engine_renderings_and_fetch_window_tag() -> Non
 def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    daily_bytes = b"daily-bytes"
+    instant_bytes = b"instant-bytes"
     client = _patch_client(
         monkeypatch,
-        [_response(b"daily-bytes"), _response(b"instant-bytes")],
+        [_response(daily_bytes), _response(instant_bytes)],
     )
     provider_config = _custom_config()
     window = _window()
@@ -201,11 +227,127 @@ def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
     assert result.value[0].source_coordinates is provider_config.products[daily].coordinates
     assert result.value[0].station_products == (("01234567", daily),)
     assert result.value[0].fetch_window is window
-    assert result.value[0].content == b"daily-bytes"
+    assert result.value[0].content is daily_bytes
+    assert result.value[0].origin == SourceCallOrigin(
+        url="https://waterservices.usgs.gov/nwis/dv/",
+        request_parameters={
+            "format": "json",
+            "sites": "01234567",
+            "startDT": "1999-02-03",
+            "endDT": "1999-02-04",
+            "parameterCd": "12345",
+            "statCd": "54321",
+        },
+        status_code=200,
+        retrieved_at=RETRIEVED_AT,
+        content_type="application/json; charset=utf-8",
+        source_path=UnknownOriginFact(),
+        query=UnknownOriginFact(),
+    )
     assert result.value[1].source_coordinates is provider_config.products[instant].coordinates
     assert result.value[1].station_products == (("01234567", instant),)
     assert result.value[1].fetch_window is window
-    assert result.value[1].content == b"instant-bytes"
+    assert result.value[1].content is instant_bytes
+    assert result.value[1].origin == SourceCallOrigin(
+        url="https://waterservices.usgs.gov/nwis/iv/",
+        request_parameters={
+            "format": "json",
+            "sites": "01234567",
+            "startDT": "2001-06-07",
+            "endDT": "2001-06-08",
+            "parameterCd": "67890",
+        },
+        status_code=200,
+        retrieved_at=RETRIEVED_AT,
+        content_type="application/json; charset=utf-8",
+        source_path=UnknownOriginFact(),
+        query=UnknownOriginFact(),
+    )
+    for payload in result.value:
+        assert "headers" not in {field.name for field in fields(payload.origin)}
+        scanned = tuple(str(getattr(payload.origin, field.name)) for field in fields(payload.origin))
+        for forbidden in (
+            "Accept",
+            "Authorization",
+            "X-API-Key",
+            "Bearer transport-secret",
+            "api-key-secret",
+        ):
+            assert all(forbidden not in candidate for candidate in scanned)
+
+
+def test_missing_response_media_type_becomes_unknown_origin_fact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_client(monkeypatch, [_response(b"{}", content_type=None)])
+
+    result = fetch(
+        ("station-1",),
+        (ProductId("discharge_instantaneous"),),
+        _renderings(ProductId("discharge_instantaneous")),
+        _window(),
+        config(),
+    )
+
+    assert isinstance(result.value[0].origin.content_type, UnknownOriginFact)
+
+
+def test_transport_credentials_do_not_reach_final_payload_origin() -> None:
+    source_request = TransportRequest(
+        method=HttpMethod.GET,
+        url="https://waterservices.usgs.gov/nwis/dv/",
+        params={"format": "json", "sites": "01234567"},
+        headers={
+            "Accept": "application/json",
+            "Authorization": "Bearer transport-secret",
+            "X-API-Key": "api-key-secret",
+        },
+    )
+    sent_requests: list[TransportRequest] = []
+
+    def sender(request: TransportRequest, _timeout_seconds: float) -> tuple[bytes, int, str | None]:
+        sent_requests.append(request)
+        return b"daily-bytes", 200, "application/json; charset=utf-8"
+
+    response = HttpClient(sender=sender, clock=FixedClock()).send(source_request)
+    product = ProductId("custom_daily")
+    provider_config = _custom_config()
+    payload = fetch_module._payload(
+        provider_config.products[product].coordinates,
+        "01234567",
+        product,
+        _window(),
+        response,
+    )
+
+    assert sent_requests == [
+        TransportRequest(
+            method=HttpMethod.GET,
+            url="https://waterservices.usgs.gov/nwis/dv/",
+            params={"format": "json", "sites": "01234567"},
+            headers={
+                "Accept": "application/json",
+                "Authorization": "Bearer transport-secret",
+                "X-API-Key": "api-key-secret",
+                "User-Agent": "RivRetrieve",
+            },
+        )
+    ]
+    forbidden = (
+        "Authorization",
+        "Bearer transport-secret",
+        "X-API-Key",
+        "api-key-secret",
+    )
+    request_scan = tuple(str(value) for value in fields(TransportRequest))
+    request_scan += tuple(str(getattr(source_request, field.name)) for field in fields(source_request))
+    for value in forbidden:
+        assert any(value in candidate for candidate in request_scan)
+
+    assert "headers" not in {field.name for field in fields(payload.origin)}
+    origin_scan = tuple(str(getattr(payload.origin, field.name)) for field in fields(payload.origin))
+    for value in forbidden:
+        assert all(value not in candidate for candidate in origin_scan)
 
 
 def test_five_stations_one_404_preserves_four_parsed_station_results_and_one_issue(

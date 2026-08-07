@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol
 
 import requests
@@ -32,6 +33,12 @@ class TransportResponse:
     content: bytes
     status_code: int
     retrieved_at: datetime
+    content_type: str | None
+    url: str
+    request_parameters: Mapping[str, RequestParameter]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "request_parameters", MappingProxyType(dict(self.request_parameters)))
 
 
 class TransportFailureReason(StrEnum):
@@ -65,7 +72,7 @@ class Sender(Protocol):
         self,
         request: TransportRequest,
         timeout_seconds: float,
-    ) -> tuple[bytes, int]: ...
+    ) -> tuple[bytes, int, str | None]: ...
 
 
 class Clock(Protocol):
@@ -107,7 +114,7 @@ class _SystemClock:
         return datetime.now(UTC)
 
 
-def _send_with_requests(request: TransportRequest, timeout_seconds: float) -> tuple[bytes, int]:
+def _send_with_requests(request: TransportRequest, timeout_seconds: float) -> tuple[bytes, int, str | None]:
     params = dict(request.params) if request.params is not None else None
     headers = dict(request.headers)
     if request.method is HttpMethod.GET:
@@ -126,7 +133,7 @@ def _send_with_requests(request: TransportRequest, timeout_seconds: float) -> tu
             data=request.body,
             timeout=timeout_seconds,
         )
-    return response.content, response.status_code
+    return response.content, response.status_code, response.headers.get("Content-Type")
 
 
 def _is_retryable_sender_exception(exception: BaseException) -> bool:
@@ -154,7 +161,7 @@ class HttpClient:
             self._wait_for_rate_limit()
 
             try:
-                content, status_code = self._sender(prepared_request, TRANSPORT_POLICY.timeout_seconds)
+                content, status_code, content_type = self._sender(prepared_request, TRANSPORT_POLICY.timeout_seconds)
             except (requests.RequestException, TimeoutError, ConnectionError) as exception:
                 if not _is_retryable_sender_exception(exception):
                     raise TransportFailure(
@@ -171,7 +178,14 @@ class HttpClient:
                 continue
 
             if status_code not in TRANSPORT_POLICY.retryable_status_codes:
-                return TransportResponse(content, status_code, self._clock.utcnow())
+                return TransportResponse(
+                    content=content,
+                    status_code=status_code,
+                    retrieved_at=self._clock.utcnow(),
+                    content_type=content_type,
+                    url=request.url,
+                    request_parameters={} if request.params is None else request.params,
+                )
             if attempt == TRANSPORT_POLICY.max_attempts:
                 raise TransportFailure(
                     request,
