@@ -203,8 +203,6 @@ def build_products(product_definitions: Sequence[ProductDefinition] = PRODUCT_DE
             "period_anchor": definition.period_anchor,
             "unit": definition.unit,
             "native_id": definition.preferred_parameter,
-            "derived": False,
-            "derivation_method": None,
         }
         for definition in product_definitions
     ]

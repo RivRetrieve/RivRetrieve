@@ -9,11 +9,15 @@ Project-specific domain language for RivRetrieve. Glossary only.
 **Unknown**:
 A representable state meaning the source does not tell us. Distinct from zero, from
 empty, and from a default. Never resolved by assumption, and never filled by computing
-a value the source did not publish.
+a value the source did not publish. A license or citation RivRetrieve has not yet
+established is absent, not [[unknown]]: that is RivRetrieve's pre-research state, not
+source silence.
 _Avoid_: missing, N/A, not available, default
 
 **Raw**:
-The untouched provider payload, kept alongside the returned data.
+The exact bytes handed to a [[provider]]'s parse [[stage]], retained alongside the
+returned result only when the caller requests them. When they are not requested, the
+result's raw slot is empty.
 
 **Native table**:
 One [[provider]]'s station metadata in the source's own vocabulary: its column names,
@@ -23,7 +27,8 @@ become one thing. The canonical station catalogue is built from it rather than b
 it, which is why the source's own columns are a table to be read rather than a blob to
 be parsed.
 _Avoid_: metadata (the opaque per-row JSON string it replaces), raw table (collides with
-[[raw]], the untouched observation payload), source table
+[[raw]], the exact bytes handed to a [[provider]]'s parse [[stage]] and retained only when
+requested), source table
 
 **Origin**:
 How one [[provider]] fills one catalogue column. Declared per provider rather than per
@@ -144,14 +149,16 @@ publication)
 ### Time
 
 **Native time**:
-A timestamp exactly as the provider published it. It is returned as a naive `time`
-column holding the source's own wall-clock value, paired with a `time_zone` column
-stating that row's zone, or `unknown` where the source does not establish one. The two
-columns travel together and neither is meaningful alone. The pairing exists because one
-dataframe timestamp column carries a single zone for all its rows, while one result may
-span stations in different zones.
-_Avoid_: raw time (collides with [[raw]], the untouched payload), local time
-(ambiguous between the gauge's own zone and a provider-wide national zone)
+A timestamp exactly as the provider published it. The complete returned observation
+frame is `time | time_zone | station_id | product_id | value`, in that order. Its `time`
+column holds the source's naive wall-clock value, paired on every row with the
+source-published `time_zone`, or `unknown` only where the source establishes no zone.
+All five columns travel together as the observation frame; `time` and `time_zone` are
+not meaningful alone. The pairing exists because one dataframe timestamp column carries
+a single zone for all its rows, while one result may span stations in different zones.
+_Avoid_: raw time (collides with [[raw]], the exact bytes handed to a [[provider]]'s parse
+[[stage]] and retained only when requested), local time (ambiguous between the gauge's
+own zone and a provider-wide national zone)
 
 **Best-effort UTC**:
 Conversion of [[native-time]] to UTC, offered where the source zone is documented and
@@ -241,9 +248,15 @@ _Avoid_: reference level, zero point
 
 **License**:
 A source's own terms, surfaced as a link and, where the source publishes one, its
-verbatim text. RivRetrieve never classifies, summarises or interprets what a licence
-permits.
+verbatim text. RivRetrieve never classifies, summarises or interprets what a license
+permits. A license RivRetrieve has not yet established is absent, not [[unknown]];
+[[unknown]] would mean the source does not tell us.
 _Avoid_: license status, redistribution status, open/attribution/restricted
+
+**Citation**:
+The credit a source requests for its data, surfaced verbatim rather than rewritten or
+inferred. A citation RivRetrieve has not yet established is absent, not [[unknown]];
+[[unknown]] would mean the source does not tell us.
 
 ### Stored data
 

@@ -78,13 +78,14 @@ def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.Monk
     expected = pl.DataFrame(
         {
             "time": [datetime(2023, 1, 1)],
+            "time_zone": ["-06:00"],
             "station_id": ["07374000"],
             "product_id": ["discharge_daily_mean"],
             "value": [10562.183778816001],
         },
         schema=ObservationDataSchema.polars_schema,
     )
-    pl_testing.assert_frame_equal(result.data, expected)
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.provenance.source == "live"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
     assert result.raw == RawPayload(provider_id=ProviderId("usgs_nwis"))
@@ -112,13 +113,19 @@ def test_usgs_nwis_bare_date_returns_full_local_day_for_instant_product(
         on_issue="ignore",
     )
 
-    expected_times = [datetime(2023, 1, 1) + timedelta(minutes=15 * index) for index in range(96)]
-    assert result.data.height == 96
-    assert result.data["time"].to_list() == expected_times
-    assert result.data["time"][0] == datetime(2023, 1, 1, 0, 0)
-    assert result.data["time"][-1] == datetime(2023, 1, 1, 23, 45)
-    assert result.data["station_id"].unique(maintain_order=True).to_list() == ["07374000"]
-    assert result.data["product_id"].unique(maintain_order=True).to_list() == ["discharge_instantaneous"]
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2023, 1, 1) + timedelta(minutes=15 * index) for index in range(96)],
+            "time_zone": ["-06:00"] * 96,
+            "station_id": ["07374000"] * 96,
+            "product_id": ["discharge_instantaneous"] * 96,
+            "value": [source_value * 0.028316846592 for source_value in range(373000, 382501, 100)],
+        },
+        schema=ObservationDataSchema.polars_schema,
+    )
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
+    assert result.data["time_zone"].null_count() == 0
+    assert "unknown" not in result.data["time_zone"].to_list()
     assert result.issues == ()
     assert result.provenance.source == "live"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
@@ -184,7 +191,11 @@ def test_usgs_nwis_all_missing_preserves_issue_policy(monkeypatch: pytest.Monkey
         on_issue="ignore",
     )
 
-    pl_testing.assert_frame_equal(result.data, pl.DataFrame(schema=ObservationDataSchema.polars_schema))
+    pl_testing.assert_frame_equal(
+        result.data,
+        pl.DataFrame(schema=ObservationDataSchema.polars_schema),
+        check_exact=True,
+    )
     assert [issue.code for issue in result.issues] == [str(UsgsNwisObservationIssueCodes.HTTP_NOT_FOUND)]
     _assert_empty_annotations(result)
 

@@ -264,7 +264,7 @@ def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
         "3efd4c91d854ba512710870527a10420e9ed6ece3f815f18f2be49b3aba8dfc9"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
-        "3f0f7433e8423207cf04b52eea724860413b759f13f18d0ce0f02ff1f39dd788"
+        "7bdef973654f395a4d2e6d148ec7004f1e259563e5dfaa10a93ae148aba2affb"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
         "761a93315a093b1cad5a4ce1e0480a6e36430a32d28467c9fe689f0257c053a4"

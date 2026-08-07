@@ -83,8 +83,6 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "period_anchor",
         "unit",
         "native_id",
-        "derived",
-        "derivation_method",
     )
     assert tuple(STATION_PRODUCT_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
@@ -117,7 +115,6 @@ def test_catalogue_schema_objects_define_polars_dtypes() -> None:
             "crs": pl.Utf8,
         }
     )
-    assert PRODUCT_CATALOG_SCHEMA.polars_schema["derived"] == pl.Boolean
     assert PRODUCT_CATALOG_SCHEMA.polars_schema["native_id"] == pl.Utf8
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["availability"] == AvailabilityDtype
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["start_date"] == pl.Date

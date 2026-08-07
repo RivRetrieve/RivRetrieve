@@ -42,8 +42,6 @@ def products_df(**overrides: object) -> pl.DataFrame:
         "period_anchor": ["UTC"],
         "unit": ["m"],
         "native_id": ["WATER_LEVEL"],
-        "derived": [False],
-        "derivation_method": [None],
     }
     data.update(overrides)
     return pl.DataFrame(
@@ -58,8 +56,6 @@ def products_df(**overrides: object) -> pl.DataFrame:
             "period_anchor": pl.Utf8,
             "unit": pl.Utf8,
             "native_id": pl.Utf8,
-            "derived": pl.Boolean,
-            "derivation_method": pl.Utf8,
         },
     )
 
@@ -280,8 +276,6 @@ def test_packaged_artifact_duplicate_product_key_raises_corrupt() -> None:
                 period_anchor=["UTC", "UTC"],
                 unit=["m", "m"],
                 native_id=["WATER_LEVEL", "WATER_LEVEL"],
-                derived=[False, False],
-                derivation_method=[None, None],
             ),
             stations_df(),
             station_products_df(),

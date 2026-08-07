@@ -28,6 +28,7 @@ ObservationDataSchema = CatalogueSchema(
     name="ObservationData",
     columns=(
         CatalogueColumn("time", pl.Datetime()),
+        CatalogueColumn("time_zone", pl.Utf8),
         CatalogueColumn("station_id", pl.Utf8),
         CatalogueColumn("product_id", pl.Utf8),
         CatalogueColumn("value", pl.Float64, nullable=True),
