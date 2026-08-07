@@ -88,13 +88,14 @@ def test_ca_eccc_registry_dispatch_uses_engine_driver(
     expected = pl.DataFrame(
         {
             "time": [datetime(2010, 1, 1), datetime(2010, 1, 2)],
+            "time_zone": ["unknown", "unknown"],
             "station_id": ["02GA010", "02GA010"],
             "product_id": ["discharge_daily_mean", "discharge_daily_mean"],
             "value": [16.0, 17.0],
         },
         schema=ObservationDataSchema.polars_schema,
     )
-    pl_testing.assert_frame_equal(result.data, expected)
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.provenance.source == "local"
     assert result.provenance.provider_id == ProviderId("ca_eccc")
     assert result.raw == RawPayload(provider_id=ProviderId("ca_eccc"))
@@ -116,7 +117,11 @@ def test_ca_eccc_all_missing_preserves_issue_policy(
         on_issue="ignore",
     )
 
-    pl_testing.assert_frame_equal(result.data, pl.DataFrame(schema=ObservationDataSchema.polars_schema))
+    pl_testing.assert_frame_equal(
+        result.data,
+        pl.DataFrame(schema=ObservationDataSchema.polars_schema),
+        check_exact=True,
+    )
     assert [issue.code for issue in result.issues] == [str(CaEcccObservationIssueCodes.MISSING_DATA)]
     _assert_empty_annotations(result)
 

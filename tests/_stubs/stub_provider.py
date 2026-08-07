@@ -118,6 +118,7 @@ def observations(
                 rows.append(
                     {
                         "time": observed_at,
+                        "time_zone": "unknown",
                         "station_id": station_id,
                         "product_id": product_id,
                         "value": value,
