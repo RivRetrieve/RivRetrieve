@@ -364,7 +364,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
             "parse.station-1.first",
             "parse.station-1.second",
             "parse.station-2",
-            "convert.unknown_time_zone",
         )
         assert supplied_raw is raw
         return real_assemble(canonical_rows, supplied_provenance, issues, supplied_raw)
@@ -400,7 +399,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         "parse.station-1.first",
         "parse.station-1.second",
         "parse.station-2",
-        "convert.unknown_time_zone",
     )
     assert result.raw is raw
     assert events == [
@@ -410,6 +408,79 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         "convert",
         "assemble",
     ]
+
+
+def test_drive_clips_unknown_zone_instants_at_both_closed_edges_without_warning() -> None:
+    events: list[str] = []
+    requested_window = RequestedWindow(
+        start=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 12)),
+        end=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 13)),
+    )
+    fetch_window = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2025, 12, 31, 12)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 4, 13)),
+    )
+    request = _request(requested_window)
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = _config(coordinates)
+    timestamps = (
+        datetime(2026, 1, 2, 11, 59, 59, 999999),
+        datetime(2026, 1, 2, 12),
+        datetime(2026, 1, 2, 12, 30),
+        datetime(2026, 1, 2, 13),
+        datetime(2026, 1, 2, 13, 0, 0, 1),
+    )
+    payloads = tuple(_payload(station_id, coordinates, fetch_window) for station_id in _STATIONS)
+    rows_by_station = {
+        station_id: pl.DataFrame(
+            {
+                "station_id": [station_id],
+                "product_id": ["level"],
+                "time": [timestamp],
+                "value": [value],
+                "time_zone": ["unknown"],
+            },
+            schema=RowsSchema.polars_schema,
+        )
+        for station_id, timestamp, value in zip(
+            _STATIONS,
+            timestamps,
+            (100.0, 200.0, 300.0, 400.0, 500.0),
+            strict=True,
+        )
+    }
+    provider = _ThrowawayProvider(
+        config,
+        payloads,
+        rows_by_station,
+        dict.fromkeys(_STATIONS, ()),
+        (),
+        events,
+    )
+
+    result = driver_module.drive(
+        request,
+        provider,
+        provenance=_provenance(request),
+        raw=_raw(request),
+    )
+
+    expected = pl.DataFrame(
+        {
+            "time": [
+                datetime(2026, 1, 2, 12),
+                datetime(2026, 1, 2, 12, 30),
+                datetime(2026, 1, 2, 13),
+            ],
+            "time_zone": ["unknown", "unknown", "unknown"],
+            "station_id": ["station-2", "station-3", "station-4"],
+            "product_id": ["level", "level", "level"],
+            "value": [2.0, 3.0, 4.0],
+        },
+        schema=CanonicalRowsSchema.polars_schema,
+    )
+    pl_testing.assert_frame_equal(result.canonical_rows, expected)
+    assert result.issues == ()
 
 
 def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> None:
