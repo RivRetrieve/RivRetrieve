@@ -40,7 +40,10 @@ from rivretrieve._internal.issues import (
     IssuePolicyError,
     ObservationsUnavailableError,
 )
-from rivretrieve._internal.observations import RawPayload
+from rivretrieve._internal.observations import (
+    ObservationDataSchema,
+    RawPayload,
+)
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle, _registry
@@ -215,7 +218,20 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
     assert _EngineModule.fetched_window.start.isoformat() == "2025-12-30T00:00:00"
     assert _EngineModule.fetched_window.end.isoformat() == "2026-01-04T23:59:59.999999"
     assert _EngineModule.rendered_windows == {ProductId("level"): (RenderedWindow("2025-12-30", "2026-01-04"),)}
-    assert set(result.data.columns) == {"time", "station_id", "product_id", "value"}
+    pl_testing.assert_frame_equal(
+        result.data,
+        pl.DataFrame(
+            {
+                "time": [datetime(2026, 1, 1)],
+                "time_zone": ["+00:00"],
+                "station_id": ["station-1"],
+                "product_id": ["level"],
+                "value": [1.5],
+            },
+            schema=ObservationDataSchema.polars_schema,
+        ),
+        check_exact=True,
+    )
     assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
     assert result.provenance.source == "test-engine"
     assert result.provenance.request is not None
@@ -402,12 +418,14 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
     expected = pl.DataFrame(
         {
             "time": [datetime(2026, 1, 2, 12)],
+            "time_zone": ["+00:00"],
             "station_id": ["station-1"],
             "product_id": ["level"],
             "value": [1.5],
-        }
+        },
+        schema=ObservationDataSchema.polars_schema,
     )
-    pl_testing.assert_frame_equal(result.data, expected)
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.issues == ()
     assert _ExclusiveStopModule.events == ["fetch", "parse"]
 
@@ -510,12 +528,14 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
     expected = pl.DataFrame(
         {
             "time": [datetime(2026, 1, 1), datetime(2026, 1, 2)],
+            "time_zone": ["+00:00", "+00:00"],
             "station_id": ["station-1", "station-1"],
             "product_id": ["level", "level"],
             "value": [1.0, 2.0],
-        }
+        },
+        schema=ObservationDataSchema.polars_schema,
     )
-    pl_testing.assert_frame_equal(result.data, expected)
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.issues == (undercoverage_issue,)
     assert isinstance(result.issues[0], Issue)
     assert _FixedSpanModule.events == ["fetch", "parse"]

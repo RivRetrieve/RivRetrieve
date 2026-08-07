@@ -52,8 +52,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "period_anchor": "UTC",
             "unit": "m",
             "native_id": "WATER_LEVEL",
-            "derived": False,
-            "derivation_method": None,
         }
     ]
     if rich:
@@ -69,8 +67,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "period_anchor": "UTC",
                     "unit": "m3/s",
                     "native_id": "FLOW",
-                    "derived": False,
-                    "derivation_method": None,
                 },
                 {
                     "provider_id": provider_id,
@@ -82,8 +78,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "period_anchor": "UTC",
                     "unit": "m",
                     "native_id": "WATER_LEVEL_HOURLY",
-                    "derived": False,
-                    "derivation_method": None,
                 },
                 {
                     "provider_id": provider_id,
@@ -95,8 +89,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "period_anchor": "UTC",
                     "unit": "m",
                     "native_id": "WATER_LEVEL_MAX",
-                    "derived": True,
-                    "derivation_method": "daily_max",
                 },
             ]
         )
@@ -113,8 +105,6 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "period_anchor": pl.Utf8,
             "unit": pl.Utf8,
             "native_id": pl.Utf8,
-            "derived": pl.Boolean,
-            "derivation_method": pl.Utf8,
         },
     )
 

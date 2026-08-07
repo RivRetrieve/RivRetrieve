@@ -153,7 +153,13 @@ class _ProviderHandle:
             raw=RawPayload(provider_id=self.provider_id),
         )
         return ObservationResult(
-            data=assembled.canonical_rows.select("time", "station_id", "product_id", "value"),
+            data=assembled.canonical_rows.select(
+                "time",
+                "time_zone",
+                "station_id",
+                "product_id",
+                "value",
+            ),
             provenance=assembled.provenance,
             issues=assembled.issues,
             raw=assembled.raw,

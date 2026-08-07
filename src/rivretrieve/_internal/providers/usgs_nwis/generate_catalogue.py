@@ -717,8 +717,6 @@ def build_products() -> ProductCatalog:
             "period_anchor": defn.period_anchor,
             "unit": defn.canonical_unit,
             "native_id": (f"{defn.param_code}:{defn.stat_code}" if defn.stat_code else defn.param_code),
-            "derived": False,
-            "derivation_method": None,
         }
         for defn in PRODUCT_DEFINITIONS
     ]

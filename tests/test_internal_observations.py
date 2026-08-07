@@ -45,6 +45,7 @@ def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
 def _observation_df(**overrides: object) -> pl.DataFrame:
     data: dict[str, object] = {
         "time": [datetime(2026, 1, 1), datetime(2026, 1, 2)],
+        "time_zone": ["+00:00", "+00:00"],
         "station_id": ["station-1", "station-1"],
         "product_id": ["flow", "flow"],
         "value": [1.2, None],
@@ -386,6 +387,15 @@ def test_observation_data_schema_accepts_canonical_long_table() -> None:
     data = _observation_df()
 
     validate_observation_data(data)
+    assert ObservationDataSchema.polars_schema == pl.Schema(
+        {
+            "time": pl.Datetime(),
+            "time_zone": pl.Utf8,
+            "station_id": pl.Utf8,
+            "product_id": pl.Utf8,
+            "value": pl.Float64,
+        }
+    )
 
 
 def test_observation_data_schema_accepts_native_datetime_without_utc_mandate() -> None:
@@ -396,6 +406,7 @@ def test_observation_data_schema_accepts_native_datetime_without_utc_mandate() -
                 [datetime(2026, 1, 1), datetime(2026, 1, 2)],
                 dtype=pl.Datetime(time_zone="Europe/Zurich"),
             ),
+            "time_zone": ["Europe/Zurich", "Europe/Zurich"],
             "station_id": ["station-1", "station-1"],
             "product_id": ["flow", "flow"],
             "value": [1.2, 1.3],
@@ -417,9 +428,10 @@ def test_observation_data_schema_rejects_provider_id_column_as_extra_under_raise
 
 
 @pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_data_schema_rejects_missing_column(on_issue: str) -> None:
+@pytest.mark.parametrize("missing_column", ["time", "time_zone", "station_id", "product_id", "value"])
+def test_observation_data_schema_rejects_missing_column(on_issue: str, missing_column: str) -> None:
     with pytest.raises(ObservationDataSchemaError) as exc_info:
-        validate_observation_data(_observation_df().drop("station_id"))
+        validate_observation_data(_observation_df().drop(missing_column))
 
     assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
@@ -429,6 +441,7 @@ def test_observation_data_schema_rejects_missing_column(on_issue: str) -> None:
     "data",
     [
         _observation_df().with_columns(pl.col("time").cast(pl.Utf8)),
+        _observation_df().with_columns(pl.Series("time_zone", [1, 2], dtype=pl.Int64)),
         _observation_df().with_columns(pl.Series("station_id", [1, 2], dtype=pl.Int64)),
         _observation_df().with_columns(pl.Series("product_id", [1, 2], dtype=pl.Int64)),
         _observation_df().with_columns(pl.Series("value", ["1.2", "1.3"], dtype=pl.Utf8)),
@@ -447,12 +460,13 @@ def test_observation_data_schema_rejects_wrong_dtype(data: pl.DataFrame, on_issu
     "data",
     [
         _observation_df(time=[None, datetime(2026, 1, 2)]),
+        _observation_df(time_zone=[None, "+00:00"]),
         _observation_df(station_id=[None, "station-1"]),
         _observation_df(product_id=[None, "flow"]),
     ],
 )
 @pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_data_schema_rejects_null_identity_columns(data: pl.DataFrame, on_issue: str) -> None:
+def test_observation_data_schema_rejects_null_required_columns(data: pl.DataFrame, on_issue: str) -> None:
     with pytest.raises(ObservationDataSchemaError) as exc_info:
         validate_observation_data(data)
 
