@@ -7,12 +7,9 @@ import polars.testing as pl_testing
 
 import rivretrieve as rr
 from rivretrieve._internal.observations import (
-    AnnotationTable,
     ObservationDataSchema,
     ObservationProvenance,
     ObservationResult,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
 )
 from rivretrieve._internal.primitives import ProviderId
 
@@ -29,14 +26,6 @@ def test_v1_deferred_wide_form_helpers_remain_absent() -> None:
     )
     result = ObservationResult(
         data=data,
-        row_annotations=AnnotationTable(
-            pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
-            RowAnnotationTableSchema,
-        ),
-        series_annotations=AnnotationTable(
-            pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-            SeriesAnnotationTableSchema,
-        ),
         provenance=ObservationProvenance(source="live", provider_id=ProviderId("ch_foen")),
     )
 

@@ -23,8 +23,6 @@ def test_stub_provider_module_satisfies_expanded_provider_module_protocol() -> N
         "products",
         "stations",
         "station_products",
-        "row_annotation_schema",
-        "series_annotation_schema",
         "observations",
     }
 
@@ -40,8 +38,6 @@ def test_provider_module_protocol_does_not_own_observation_dispatch() -> None:
             "products",
             "stations",
             "station_products",
-            "row_annotation_schema",
-            "series_annotation_schema",
         }
     )
 

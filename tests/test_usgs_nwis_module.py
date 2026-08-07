@@ -54,26 +54,6 @@ def test_usgs_nwis_info() -> None:
     assert info.catalogue_version == "2026-08-02"
 
 
-def test_usgs_nwis_row_annotation_schema_declared() -> None:
-    schemas = rr.provider("usgs_nwis").row_annotation_schema()
-    ids = {s.annotation_id for s in schemas}
-    assert "native_field" in ids
-    assert "native_unit" in ids
-    assert "converted_unit" in ids
-    assert "raw_value" in ids
-    assert "qualifier" in ids
-
-
-def test_usgs_nwis_series_annotation_schema_declared() -> None:
-    schemas = rr.provider("usgs_nwis").series_annotation_schema()
-    ids = {s.annotation_id for s in schemas}
-    assert "resolved_timezone" in ids
-    assert "timezone_source" in ids
-    assert "returned_time_range_start" in ids
-    assert "returned_time_range_end" in ids
-    assert "endpoint_type" in ids
-
-
 def test_usgs_nwis_module_catalogue_path_exists() -> None:
     assert usgs_nwis_module._CATALOGUE_PATH.exists()
     assert (usgs_nwis_module._CATALOGUE_PATH / "provider.json").exists()

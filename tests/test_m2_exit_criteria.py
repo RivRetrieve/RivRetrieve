@@ -35,8 +35,6 @@ def test_m2_exit_criteria_public_surface_sweep(
         "products",
         "stations",
         "station_products",
-        "row_annotation_schema",
-        "series_annotation_schema",
         "observations",
     }
 

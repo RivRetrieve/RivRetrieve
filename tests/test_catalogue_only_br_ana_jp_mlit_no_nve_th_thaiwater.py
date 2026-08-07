@@ -195,8 +195,6 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
     assert not hasattr(module, "observations")
-    assert not hasattr(module, "row_annotation_schema")
-    assert not hasattr(module, "series_annotation_schema")
     provider_directory = Path(module.__file__).parent
     assert set(ENROLLED_CATALOGUE_MODULE_FILES) == {row[0] for row in CATALOGUE_ONLY_PROVIDERS}
     expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES[provider_id]
@@ -212,15 +210,6 @@ def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str)
         ObservationsUnavailableError, match=f"Provider {provider_id} has no observation module registered"
     ):
         rr.provider(provider_id).observations(stations="unused", products="unused", start=None, end=None)
-
-
-@pytest.mark.parametrize("provider_id", [row[0] for row in CATALOGUE_ONLY_PROVIDERS])
-@pytest.mark.parametrize("method_name", ("row_annotation_schema", "series_annotation_schema"))
-def test_catalogue_only_provider_rejects_annotation_schema_requests(provider_id: str, method_name: str) -> None:
-    with pytest.raises(
-        ObservationsUnavailableError, match=f"Provider {provider_id} has no observation module registered"
-    ):
-        getattr(rr.provider(provider_id), method_name)()
 
 
 def test_catalogue_only_live_catalogue_behaviour_is_retained() -> None:
