@@ -1,4 +1,4 @@
-"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × ObservationRequest × SourceCoordinates × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig."""
+"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × WindowGranularity × WindowRenderingVocabulary × StopConvention × WindowDeclaration × ProductWindowDeclarations × RenderedWindow × ObservationRequest × SourceCoordinates × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Self
+from typing import NewType, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import polars as pl
@@ -120,6 +120,67 @@ def _make_fetch_window(start: WindowEndpoint, end: WindowEndpoint) -> FetchWindo
     object.__setattr__(window, "start", start)
     object.__setattr__(window, "end", end)
     return window
+
+
+WindowGranularity = NewType("WindowGranularity", str)
+
+
+class WindowRenderingVocabulary(StrEnum):
+    ISO_INSTANT = "iso-instant"
+    DATE = "date"
+    YEAR = "year"
+    YEAR_MONTH = "year-month"
+    NONE = "none"
+
+
+class StopConvention(StrEnum):
+    INCLUSIVE = "inclusive"
+    EXCLUSIVE = "exclusive"
+
+
+@dataclass(frozen=True, slots=True)
+class WindowDeclaration:
+    granularity: WindowGranularity
+    rendering: WindowRenderingVocabulary
+    stop_convention: StopConvention
+    size: int | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.granularity, str) or not self.granularity:
+            raise TypeError("window granularity must be a non-empty string")
+        if not isinstance(self.rendering, WindowRenderingVocabulary):
+            raise TypeError("window rendering must be WindowRenderingVocabulary")
+        if not isinstance(self.stop_convention, StopConvention):
+            raise TypeError("window stop convention must be StopConvention")
+        if self.size is not None and (type(self.size) is not int or self.size <= 0):
+            raise TypeError("window granularity size must be a positive integer or None")
+
+
+@dataclass(frozen=True, slots=True)
+class ProductWindowDeclarations:
+    products: Mapping[ProductId, WindowDeclaration]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.products, Mapping):
+            raise TypeError("product window declarations must be a mapping")
+        for product_id, declaration in self.products.items():
+            if not isinstance(product_id, str) or not product_id:
+                raise TypeError("product window declaration keys must be non-empty ProductId values")
+            if not isinstance(declaration, WindowDeclaration):
+                raise TypeError("product window declaration values must be WindowDeclaration values")
+        object.__setattr__(self, "products", MappingProxyType(dict(self.products)))
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedWindow:
+    start: str
+    stop: str | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.start, str) or not self.start:
+            raise TypeError("rendered window start must be a non-empty string")
+        if self.stop is not None and (not isinstance(self.stop, str) or not self.stop):
+            raise TypeError("rendered window stop must be a non-empty string or None")
 
 
 @dataclass(frozen=True, slots=True)

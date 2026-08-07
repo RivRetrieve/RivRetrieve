@@ -193,22 +193,32 @@ _Avoid_: query window, padded window, over-fetch window
 
 **Sub-window**:
 One piece of a [[fetch-window]] a [[provider]] can actually ask its source for, computed
-by the [[engine]] from a granularity the provider declares — one file per year, one per
-year-month, a chunk of N years, a capped span, or the whole window unsplit. Six of the
+by the [[engine]] from the [[window-granularity]] a provider-product declares. Six of the
 thirteen sources cannot answer an arbitrary window in one request, and each expressed
-that with its own private splitting code; the granularity is a fact about the source, the
-splitting is arithmetic, and the two are separated so that only the engine performs the
-arithmetic.
+that with its own private splitting code; the granularity is a fact about the source,
+the splitting is arithmetic, and the two are separated so that only the engine performs
+the arithmetic.
 _Avoid_: chunk, window split, decomposition (which names the act, not the piece)
 
+**Window granularity**:
+The provider-product declaration that tells the [[engine]] whether a [[fetch-window]] is
+unsplit as an ISO instant or date pair, split by year, split by year-month, split into
+N-year chunks, split into capped inclusive-date spans, or has no requested-window
+parameters. It names source request boundaries; post-hoc result filtering is not a
+granularity.
+
+**Stop convention**:
+Whether a rendered source-request stop includes its displayed boundary or excludes it.
+The [[requested-window]] remains closed; the [[engine]] advances an exclusive rendered
+stop by the rendering's smallest boundary unit, and a [[provider]] performs no arithmetic
+to obtain it.
+
 **Window rendering**:
-Turning a [[fetch-window]] or [[sub-window]] into the vocabulary one source's request
-uses: an ISO instant, a date, a year, a year-month, or nothing at all where the source
-accepts no date parameter. It is the whole of what a [[provider]] does with a window, and
-it is [[source-coordinates]]-shaped — a fact about how the source names things rather
-than behaviour. A window carries no arithmetic a provider can reach: it cannot be added
-to, shifted, or split outside the [[engine]], which is what keeps thirteen ports from
-each inventing their own calendar handling.
+The immutable source-vocabulary strings the [[engine]] produces from a [[fetch-window]]
+or [[sub-window]] according to its [[window-granularity]] and [[stop-convention]]: an ISO
+instant, a date, a year, a year-month, or nothing where the source accepts no date
+parameter. A [[provider]] may place these strings into a request but cannot add to, shift,
+or split them, which keeps all calendar arithmetic in the engine.
 _Avoid_: window formatting, window translation, window conversion
 
 **Day definition**:

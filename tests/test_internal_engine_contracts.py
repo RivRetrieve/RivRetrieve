@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import subprocess
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +12,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve._internal.driver as driver_module
+from rivretrieve._internal import engine
 from rivretrieve._internal.catalogues.schemas import CatalogueSchema, validate_catalogue
 from rivretrieve._internal.engine import (
     CanonicalRowsSchema,
@@ -150,6 +151,82 @@ def test_source_coordinates_are_opaque_and_immutable() -> None:
     value_attribute = "value"
     with pytest.raises(FrozenInstanceError):
         setattr(coordinates, value_attribute, sentinel)
+
+
+def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -> None:
+    assert tuple((member.name, member.value) for member in engine.WindowRenderingVocabulary) == (
+        ("ISO_INSTANT", "iso-instant"),
+        ("DATE", "date"),
+        ("YEAR", "year"),
+        ("YEAR_MONTH", "year-month"),
+        ("NONE", "none"),
+    )
+    assert tuple((member.name, member.value) for member in engine.StopConvention) == (
+        ("INCLUSIVE", "inclusive"),
+        ("EXCLUSIVE", "exclusive"),
+    )
+    declaration = engine.WindowDeclaration(
+        engine.WindowGranularity("date"),
+        engine.WindowRenderingVocabulary.DATE,
+        engine.StopConvention.INCLUSIVE,
+    )
+    original = {ProductId("flow"): declaration}
+    declarations = engine.ProductWindowDeclarations(original)
+    rendered = engine.RenderedWindow("2020-01-01", "2020-01-02")
+    original[ProductId("level")] = declaration
+
+    assert tuple(field.name for field in fields(declaration)) == (
+        "granularity",
+        "rendering",
+        "stop_convention",
+        "size",
+    )
+    assert dict(declarations.products) == {ProductId("flow"): declaration}
+    assert isinstance(rendered.start, str)
+    assert isinstance(rendered.stop, str)
+    with pytest.raises(FrozenInstanceError):
+        declaration.size = 2
+    with pytest.raises(FrozenInstanceError):
+        declarations.products = {}
+    with pytest.raises(FrozenInstanceError):
+        rendered.start = "2021-01-01"
+    with pytest.raises(TypeError):
+        rendered.start + timedelta(days=1)  # type: ignore[operator]
+    with pytest.raises(TypeError):
+        timedelta(days=1) + rendered.start  # type: ignore[operator]
+    with pytest.raises(TypeError):
+        rendered.start - timedelta(days=1)  # type: ignore[operator]
+
+
+def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic() -> None:
+    providers = Path(__file__).parents[1] / "src" / "rivretrieve" / "_internal" / "providers"
+    violations: list[str] = []
+    exempt = {"_query_years", "_endpoint_year", "_window_parameter"}
+    for path in providers.glob("*/*.py"):
+        if path.name == "generate_catalogue.py":
+            continue
+        module_source = path.read_text()
+        tree = ast.parse(module_source)
+        for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
+            source = ast.get_source_segment(module_source, function) or ""
+            if function.name in exempt or ("window" not in function.name.lower() and "FetchWindow" not in source):
+                continue
+            for node in ast.walk(function):
+                if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+                    violations.append(f"{path}:{function.name}:binary arithmetic")
+                if isinstance(node, ast.Call):
+                    called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+                    if called in {"timedelta", "monthrange", "relativedelta"}:
+                        violations.append(f"{path}:{function.name}:{called}")
+                    if called == "replace" and any(
+                        keyword.arg in {"year", "month", "day", "hour", "minute", "second"} for keyword in node.keywords
+                    ):
+                        violations.append(f"{path}:{function.name}:boundary replace")
+                if isinstance(node, (ast.For, ast.While)):
+                    loop_source = (ast.get_source_segment(module_source, node) or "").lower()
+                    if any(name in loop_source for name in ("cursor", "window_start", "window_end", "next_date")):
+                        violations.append(f"{path}:{function.name}:window cursor loop")
+    assert violations == []
 
 
 @pytest.mark.parametrize("content", [b"payload", "payload", object()])
