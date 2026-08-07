@@ -41,11 +41,8 @@ from rivretrieve._internal.issues import (
     ObservationsUnavailableError,
 )
 from rivretrieve._internal.observations import (
-    AnnotationSchema,
     ObservationDataSchema,
     RawPayload,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
@@ -143,14 +140,6 @@ class _EngineModule:
     def station_products():
         raise NotImplementedError
 
-    @staticmethod
-    def row_annotation_schema() -> list[AnnotationSchema]:
-        return [AnnotationSchema("declared_row", "declared row", "string")]
-
-    @staticmethod
-    def series_annotation_schema() -> list[AnnotationSchema]:
-        return [AnnotationSchema("declared_series", "declared series", "string")]
-
 
 def test_registry_initially_empty() -> None:
     registry = ProviderRegistry()
@@ -190,7 +179,6 @@ def test_registry_module_without_engine_stages_rejects_observation_dispatch(
 
     assert handle._module is stub_provider
     assert registry.get("stub_provider") is handle
-    assert handle.row_annotation_schema() == stub_provider.row_annotation_schema()
     with pytest.raises(
         ObservationsUnavailableError,
         match="Provider stub_provider has no observation stages registered",
@@ -244,16 +232,7 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
         ),
         check_exact=True,
     )
-    pl_testing.assert_frame_equal(
-        result.row_annotations.data,
-        pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
-        check_exact=True,
-    )
-    pl_testing.assert_frame_equal(
-        result.series_annotations.data,
-        pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-        check_exact=True,
-    )
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
     assert result.provenance.source == "test-engine"
     assert result.provenance.request is not None
     assert result.provenance.request["start"] == "2026-01-01T00:00:00"
@@ -416,14 +395,6 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
                 )
             )
 
-        @staticmethod
-        def row_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
-        @staticmethod
-        def series_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
     _registry.register(
         "exclusive_stop_provider",
         stub_packaged_catalogue_artifact("exclusive_stop_provider"),
@@ -539,14 +510,6 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
                 )
             )
 
-        @staticmethod
-        def row_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
-        @staticmethod
-        def series_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
     _registry.register(
         "fixed_span_provider",
         stub_packaged_catalogue_artifact("fixed_span_provider"),
@@ -655,14 +618,6 @@ def test_registry_engine_module_raises_for_accumulated_issue(
             end="2026-01-02",
             on_issue="raise",
         )
-
-
-def test_minimal_engine_module_declares_nonempty_row_schema() -> None:
-    assert [schema.annotation_id for schema in _EngineModule.row_annotation_schema()] == ["declared_row"]
-
-
-def test_minimal_engine_module_declares_nonempty_series_schema() -> None:
-    assert [schema.annotation_id for schema in _EngineModule.series_annotation_schema()] == ["declared_series"]
 
 
 def test_registry_rejects_both_module_registration_modes(

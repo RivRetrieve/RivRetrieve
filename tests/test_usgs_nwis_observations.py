@@ -13,8 +13,6 @@ from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
     RawPayload,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis import fetch as fetch_module
@@ -53,15 +51,8 @@ def _patch_client(
     return client
 
 
-def _assert_empty_annotations(result) -> None:
-    pl_testing.assert_frame_equal(
-        result.row_annotations.data,
-        pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
-    )
-    pl_testing.assert_frame_equal(
-        result.series_annotations.data,
-        pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-    )
+def _assert_result_shape(result) -> None:
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
 
 
 def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,7 +80,7 @@ def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.Monk
     assert result.provenance.source == "live"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
     assert result.raw == RawPayload(provider_id=ProviderId("usgs_nwis"))
-    _assert_empty_annotations(result)
+    _assert_result_shape(result)
     params = client.requests[0].params
     assert params is not None
     assert params["startDT"] == "2022-12-30"
@@ -130,7 +121,7 @@ def test_usgs_nwis_bare_date_returns_full_local_day_for_instant_product(
     assert result.provenance.source == "live"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
     assert result.raw == RawPayload(provider_id=ProviderId("usgs_nwis"))
-    _assert_empty_annotations(result)
+    _assert_result_shape(result)
 
     assert len(client.requests) == 1
     request = client.requests[0]
@@ -197,7 +188,7 @@ def test_usgs_nwis_all_missing_preserves_issue_policy(monkeypatch: pytest.Monkey
         check_exact=True,
     )
     assert [issue.code for issue in result.issues] == [str(UsgsNwisObservationIssueCodes.HTTP_NOT_FOUND)]
-    _assert_empty_annotations(result)
+    _assert_result_shape(result)
 
     with pytest.raises(IssuePolicyError):
         rr.provider("usgs_nwis").observations(

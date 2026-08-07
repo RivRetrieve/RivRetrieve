@@ -58,15 +58,6 @@ def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
     assert rr.provider("pl_imgw").info().bulk_observations == BULK_OBSERVATIONS
 
 
-@pytest.mark.parametrize("method", ["row_annotation_schema", "series_annotation_schema"])
-def test_pl_imgw_observation_schemas_unavailable(method: str) -> None:
-    with pytest.raises(
-        ObservationsUnavailableError,
-        match="Provider pl_imgw has no observation module registered",
-    ):
-        getattr(rr.provider("pl_imgw"), method)()
-
-
 def test_pl_imgw_observations_unavailable() -> None:
     with pytest.raises(
         ObservationsUnavailableError,

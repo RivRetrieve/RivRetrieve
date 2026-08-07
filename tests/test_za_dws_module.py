@@ -47,15 +47,6 @@ def test_za_dws_info() -> None:
     assert "South Africa" in info.name or "DWS" in info.name or "Water" in info.name
 
 
-@pytest.mark.parametrize("method", ["row_annotation_schema", "series_annotation_schema"])
-def test_za_dws_observation_schemas_unavailable(method: str) -> None:
-    with pytest.raises(
-        ObservationsUnavailableError,
-        match="Provider za_dws has no observation module registered",
-    ):
-        getattr(rr.provider("za_dws"), method)()
-
-
 def test_za_dws_observations_unavailable() -> None:
     with pytest.raises(
         ObservationsUnavailableError,
