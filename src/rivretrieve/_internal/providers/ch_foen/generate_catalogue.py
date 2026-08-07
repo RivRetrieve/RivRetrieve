@@ -90,18 +90,6 @@ class ProductDefinition:
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        legacy_variable="DISCHARGE_DAILY_MEAN",
-        product_id="discharge_daily_mean",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        unit="m3/s",
-        parameters=("flow", "flow_ls"),
-        preferred_parameter="flow",
-    ),
-    ProductDefinition(
         legacy_variable="DISCHARGE_INSTANT",
         product_id="discharge_instantaneous",
         observed_property="discharge",
@@ -114,18 +102,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         preferred_parameter="flow",
     ),
     ProductDefinition(
-        legacy_variable="STAGE_DAILY_MEAN",
-        product_id="stage_daily_mean",
-        observed_property="stage",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        unit="m",
-        parameters=("height_abs", "height"),
-        preferred_parameter="height_abs",
-    ),
-    ProductDefinition(
         legacy_variable="STAGE_INSTANT",
         product_id="stage_instantaneous",
         observed_property="stage",
@@ -136,18 +112,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         unit="m",
         parameters=("height_abs", "height"),
         preferred_parameter="height_abs",
-    ),
-    ProductDefinition(
-        legacy_variable="WATER_TEMPERATURE_DAILY_MEAN",
-        product_id="water_temperature_daily_mean",
-        observed_property="water_temperature",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        unit="degC",
-        parameters=("temperature",),
-        preferred_parameter="temperature",
     ),
     ProductDefinition(
         legacy_variable="WATER_TEMPERATURE_INSTANT",
@@ -239,8 +203,6 @@ def build_products(product_definitions: Sequence[ProductDefinition] = PRODUCT_DE
             "period_anchor": definition.period_anchor,
             "unit": definition.unit,
             "native_id": definition.preferred_parameter,
-            "derived": False,
-            "derivation_method": None,
         }
         for definition in product_definitions
     ]
@@ -301,6 +263,8 @@ def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str
             "as recoverable issues"
         ),
         "catalogue_version": catalogue_version_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

@@ -357,8 +357,6 @@ def build_products() -> ProductCatalog:
             "period_anchor": definition.period_anchor,
             "unit": definition.canonical_unit,
             "native_id": definition.ogc_field,
-            "derived": False,
-            "derivation_method": None,
         }
         for definition in PRODUCT_DEFINITIONS
     ]
@@ -483,6 +481,8 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
             "recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

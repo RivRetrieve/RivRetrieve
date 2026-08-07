@@ -73,10 +73,6 @@ class ObservationDataSchemaError(FatalContractError):
     pass
 
 
-class AnnotationSchemaViolationError(FatalContractError):
-    pass
-
-
 def apply_on_issue(issues: Sequence[Issue], on_issue: OnIssue) -> None:
     actionable_issues = tuple(issue for issue in issues if issue.severity in {"warning", "error"})
 

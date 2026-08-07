@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from rivretrieve._internal.catalogues.schemas import ProductCatalog, StationCatalog, StationProductCatalog
-from rivretrieve._internal.observations import AnnotationSchema, ObservationResult, RawMode
+from rivretrieve._internal.observations import ObservationResult, RawMode
 from rivretrieve._internal.primitives import CatalogSource, OnIssue
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.results import CatalogResult
@@ -38,10 +38,6 @@ class ProviderHandle(Protocol):
         source: CatalogSource = "packaged",
         on_issue: OnIssue = "warn",
     ) -> CatalogResult[StationProductCatalog]: ...
-
-    def row_annotation_schema(self) -> list[AnnotationSchema]: ...
-
-    def series_annotation_schema(self) -> list[AnnotationSchema]: ...
 
     def observations(
         self,

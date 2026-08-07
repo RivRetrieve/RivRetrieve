@@ -76,17 +76,6 @@ def test_ca_eccc_global_stations_includes_provider() -> None:
     assert "ca_eccc" in provider_ids
 
 
-def test_ca_eccc_annotation_schemas_non_empty() -> None:
-    assert len(ca_eccc_module.row_annotation_schema()) > 0
-    assert len(ca_eccc_module.series_annotation_schema()) > 0
-
-
-def test_ca_eccc_annotation_schema_ids_are_strings() -> None:
-    for schema in ca_eccc_module.row_annotation_schema() + ca_eccc_module.series_annotation_schema():
-        assert isinstance(schema.annotation_id, str)
-        assert schema.annotation_id
-
-
 def test_ca_eccc_live_catalogue_returns_warning_issue() -> None:
     result = rr.provider("ca_eccc").stations(source="live", on_issue="ignore")
     assert len(result.issues) > 0

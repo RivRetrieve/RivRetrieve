@@ -15,18 +15,14 @@ from rivretrieve._internal.engine import ObservationRequest as EngineObservation
 from rivretrieve._internal.engine import ProductWindowDeclarations, RequestedWindow
 from rivretrieve._internal.issues import (
     FatalContractError,
+    Issue,
     ObservationsUnavailableError,
     apply_on_issue,
 )
 from rivretrieve._internal.observations import (
-    AnnotationSchema,
-    AnnotationTable,
     ObservationProvenance,
     ObservationResult,
     RawMode,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
-    validate_annotation_names,
 )
 from rivretrieve._internal.observations import ObservationRequest as LegacyObservationRequest
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProductId, ProviderId
@@ -97,16 +93,6 @@ class _ProviderHandle:
             on_issue=on_issue,
         )
 
-    def row_annotation_schema(self) -> list[AnnotationSchema]:
-        if self._module is None:
-            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
-        return self._module.row_annotation_schema()
-
-    def series_annotation_schema(self) -> list[AnnotationSchema]:
-        if self._module is None:
-            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
-        return self._module.series_annotation_schema()
-
     def observations(
         self,
         *,
@@ -133,11 +119,6 @@ class _ProviderHandle:
             raise FatalContractError(f"Provider {self.provider_id} has engine stages without an observation source")
         result = self._drive_engine(request, self._stages, self._observation_source, raw=raw)
         apply_on_issue(result.issues, on_issue)
-
-        row_schemas = self._module.row_annotation_schema()
-        validate_annotation_names(result.row_annotations, row_schemas)
-        series_schemas = self._module.series_annotation_schema()
-        validate_annotation_names(result.series_annotations, series_schemas)
         return result
 
     def _drive_engine(
@@ -158,13 +139,44 @@ class _ProviderHandle:
             ),
         )
         requested_at = datetime.now(UTC)
+        provider_info = self.info()
+        provenance_issues: tuple[Issue, ...] = (
+            *(
+                (
+                    Issue(
+                        severity="info",
+                        code="provenance.license_not_established",
+                        message=f"RivRetrieve has not yet established the license for provider {self.provider_id}.",
+                        details={"field": "license"},
+                        provider_id=self.provider_id,
+                    ),
+                )
+                if provider_info.license is None
+                else ()
+            ),
+            *(
+                (
+                    Issue(
+                        severity="info",
+                        code="provenance.citation_not_established",
+                        message=f"RivRetrieve has not yet established the citation for provider {self.provider_id}.",
+                        details={"field": "citation"},
+                        provider_id=self.provider_id,
+                    ),
+                )
+                if provider_info.citation is None
+                else ()
+            ),
+        )
         assembled = drive(
             engine_request,
             stages,
             provenance=ObservationProvenance(
                 source=observation_source,
                 provider_id=self.provider_id,
-                catalogue_version=self.info().catalogue_version,
+                catalogue_version=provider_info.catalogue_version,
+                license=provider_info.license,
+                citation=provider_info.citation,
                 requested_at=requested_at,
                 request={
                     "stations": list(request.stations),
@@ -176,17 +188,15 @@ class _ProviderHandle:
             raw=raw,
         )
         return ObservationResult(
-            data=assembled.canonical_rows.select("time", "station_id", "product_id", "value"),
-            row_annotations=AnnotationTable(
-                data=pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
-                schema=RowAnnotationTableSchema,
-            ),
-            series_annotations=AnnotationTable(
-                data=pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-                schema=SeriesAnnotationTableSchema,
+            data=assembled.canonical_rows.select(
+                "time",
+                "time_zone",
+                "station_id",
+                "product_id",
+                "value",
             ),
             provenance=assembled.provenance,
-            issues=assembled.issues,
+            issues=(*assembled.issues, *provenance_issues),
             raw=assembled.raw,
         )
 

@@ -342,8 +342,6 @@ def build_products() -> ProductCatalog:
             "period_anchor": defn.period_anchor,
             "unit": defn.canonical_unit,
             "native_id": defn.native_column,
-            "derived": False,
-            "derivation_method": None,
         }
         for defn in PRODUCT_DEFINITIONS
     ]
@@ -430,6 +428,8 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
             "catalogue-only provider exposes neither observation retrieval nor cache controls"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

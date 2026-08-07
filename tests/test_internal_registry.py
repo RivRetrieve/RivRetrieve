@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
@@ -46,11 +47,9 @@ from rivretrieve._internal.issues import (
     ObservationsUnavailableError,
 )
 from rivretrieve._internal.observations import (
-    AnnotationSchema,
+    ObservationDataSchema,
     ObservationResult,
     RawPayload,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
@@ -178,13 +177,18 @@ class _EngineModule:
     def station_products():
         raise NotImplementedError
 
-    @staticmethod
-    def row_annotation_schema() -> list[AnnotationSchema]:
-        return [AnnotationSchema("declared_row", "declared row", "string")]
 
+class _InfoOnlyEngineModule(_EngineModule):
     @staticmethod
-    def series_annotation_schema() -> list[AnnotationSchema]:
-        return [AnnotationSchema("declared_series", "declared series", "string")]
+    def fetch(
+        stations: tuple[str, ...],
+        products: tuple[ProductId, ...],
+        rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
+        window: FetchWindow,
+        config: ProviderConfig,
+    ) -> WithIssues[tuple[Payload, ...]]:
+        fetched = _EngineModule.fetch(stations, products, rendered_windows, window, config)
+        return WithIssues(value=fetched.value)
 
 
 def test_registry_initially_empty() -> None:
@@ -225,7 +229,6 @@ def test_registry_module_without_engine_stages_rejects_observation_dispatch(
 
     assert handle._module is stub_provider
     assert registry.get("stub_provider") is handle
-    assert handle.row_annotation_schema() == stub_provider.row_annotation_schema()
     with pytest.raises(
         ObservationsUnavailableError,
         match="Provider stub_provider has no observation stages registered",
@@ -266,24 +269,32 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
     assert _EngineModule.fetched_window.start.isoformat() == "2025-12-30T00:00:00"
     assert _EngineModule.fetched_window.end.isoformat() == "2026-01-04T23:59:59.999999"
     assert _EngineModule.rendered_windows == {ProductId("level"): (RenderedWindow("2025-12-30", "2026-01-04"),)}
-    assert set(result.data.columns) == {"time", "station_id", "product_id", "value"}
     pl_testing.assert_frame_equal(
-        result.row_annotations.data,
-        pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
+        result.data,
+        pl.DataFrame(
+            {
+                "time": [datetime(2026, 1, 1)],
+                "time_zone": ["+00:00"],
+                "station_id": ["station-1"],
+                "product_id": ["level"],
+                "value": [1.5],
+            },
+            schema=ObservationDataSchema.polars_schema,
+        ),
         check_exact=True,
     )
-    pl_testing.assert_frame_equal(
-        result.series_annotations.data,
-        pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-        check_exact=True,
-    )
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
     assert result.provenance.source == "test-engine"
     assert result.provenance.request is not None
     assert result.provenance.request["start"] == "2026-01-01T00:00:00"
     assert result.provenance.request["end"] == "2026-01-02T23:59:59.999999"
     assert result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
     _assert_sentinel_unreachable(result)
-    assert [issue.code for issue in result.issues] == ["test.engine.warning"]
+    assert [issue.code for issue in result.issues] == [
+        "test.engine.warning",
+        "provenance.license_not_established",
+        "provenance.citation_not_established",
+    ]
 
     monkeypatch.setattr(discovery, "_provider_lookup", lambda provider_id: handle)
     wrapped_result = rr.observations(
@@ -296,6 +307,110 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
     )
     assert wrapped_result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
     _assert_sentinel_unreachable(wrapped_result)
+
+
+def test_registry_reads_packaged_license_and_citation_into_observation_provenance(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    registry = ProviderRegistry()
+    stub_artifact = stub_packaged_catalogue_artifact("test_provider")
+    artifact = PackagedCatalogArtifact(
+        provider_info={
+            "provider_id": "test_provider",
+            "name": "test_provider Provider",
+            "live_stations": False,
+            "live_products": False,
+            "live_station_products": False,
+            "bulk_observations": "none",
+            "catalogue_version": "2026.01",
+            "license": "https://terms.example.test/provider-license",
+            "citation": "Example Hydrology Agency (2026), Gauge observations.",
+        },
+        products=stub_artifact.products,
+        stations=stub_artifact.stations,
+        station_products=stub_artifact.station_products,
+    )
+    handle = registry.register(
+        "test_provider",
+        artifact,
+        engine_provider_module=_InfoOnlyEngineModule,
+    )
+
+    result = handle.observations(
+        stations="station-1",
+        products="level",
+        start="2026-01-01",
+        end="2026-01-02",
+        on_issue="ignore",
+    )
+
+    assert result.provenance.license == "https://terms.example.test/provider-license"
+    assert result.provenance.citation == "Example Hydrology Agency (2026), Gauge observations."
+    assert result.issues == ()
+
+
+@pytest.mark.parametrize("on_issue", ("warn", "raise"))
+def test_registry_null_license_and_citation_are_silent_info_issues(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    capsys: pytest.CaptureFixture[str],
+    on_issue: str,
+) -> None:
+    registry = ProviderRegistry()
+    stub_artifact = stub_packaged_catalogue_artifact("test_provider")
+    artifact = PackagedCatalogArtifact(
+        provider_info={
+            "provider_id": "test_provider",
+            "name": "test_provider Provider",
+            "live_stations": False,
+            "live_products": False,
+            "live_station_products": False,
+            "bulk_observations": "none",
+            "catalogue_version": "2026.01",
+            "license": None,
+            "citation": None,
+        },
+        products=stub_artifact.products,
+        stations=stub_artifact.stations,
+        station_products=stub_artifact.station_products,
+    )
+    handle = registry.register(
+        "test_provider",
+        artifact,
+        engine_provider_module=_InfoOnlyEngineModule,
+    )
+
+    with warnings.catch_warnings(record=True) as recorded_warnings:
+        warnings.simplefilter("always")
+        result = handle.observations(
+            stations="station-1",
+            products="level",
+            start="2026-01-01",
+            end="2026-01-02",
+            on_issue=on_issue,
+        )
+    captured = capsys.readouterr()
+
+    assert result.provenance.license is None
+    assert result.provenance.citation is None
+    assert result.issues == (
+        Issue(
+            severity="info",
+            code="provenance.license_not_established",
+            message="RivRetrieve has not yet established the license for provider test_provider.",
+            details={"field": "license"},
+            provider_id=ProviderId("test_provider"),
+        ),
+        Issue(
+            severity="info",
+            code="provenance.citation_not_established",
+            message="RivRetrieve has not yet established the citation for provider test_provider.",
+            details={"field": "citation"},
+            provider_id=ProviderId("test_provider"),
+        ),
+    )
+    assert recorded_warnings == []
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_registry_preserves_explicit_midnight_end(
@@ -452,14 +567,6 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
                 )
             )
 
-        @staticmethod
-        def row_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
-        @staticmethod
-        def series_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
     _registry.register(
         "exclusive_stop_provider",
         stub_packaged_catalogue_artifact("exclusive_stop_provider"),
@@ -483,13 +590,30 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
     expected = pl.DataFrame(
         {
             "time": [datetime(2026, 1, 2, 12)],
+            "time_zone": ["+00:00"],
             "station_id": ["station-1"],
             "product_id": ["level"],
             "value": [1.5],
-        }
+        },
+        schema=ObservationDataSchema.polars_schema,
     )
-    pl_testing.assert_frame_equal(result.data, expected)
-    assert result.issues == ()
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
+    assert result.issues == (
+        Issue(
+            severity="info",
+            code="provenance.license_not_established",
+            message="RivRetrieve has not yet established the license for provider exclusive_stop_provider.",
+            details={"field": "license"},
+            provider_id=ProviderId("exclusive_stop_provider"),
+        ),
+        Issue(
+            severity="info",
+            code="provenance.citation_not_established",
+            message="RivRetrieve has not yet established the citation for provider exclusive_stop_provider.",
+            details={"field": "citation"},
+            provider_id=ProviderId("exclusive_stop_provider"),
+        ),
+    )
     assert _ExclusiveStopModule.events == ["fetch", "parse"]
 
 
@@ -573,14 +697,6 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
                 )
             )
 
-        @staticmethod
-        def row_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
-        @staticmethod
-        def series_annotation_schema() -> list[AnnotationSchema]:
-            return []
-
     _registry.register(
         "fixed_span_provider",
         stub_packaged_catalogue_artifact("fixed_span_provider"),
@@ -599,13 +715,31 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
     expected = pl.DataFrame(
         {
             "time": [datetime(2026, 1, 1), datetime(2026, 1, 2)],
+            "time_zone": ["+00:00", "+00:00"],
             "station_id": ["station-1", "station-1"],
             "product_id": ["level", "level"],
             "value": [1.0, 2.0],
-        }
+        },
+        schema=ObservationDataSchema.polars_schema,
     )
-    pl_testing.assert_frame_equal(result.data, expected)
-    assert result.issues == (undercoverage_issue,)
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
+    assert result.issues == (
+        undercoverage_issue,
+        Issue(
+            severity="info",
+            code="provenance.license_not_established",
+            message="RivRetrieve has not yet established the license for provider fixed_span_provider.",
+            details={"field": "license"},
+            provider_id=ProviderId("fixed_span_provider"),
+        ),
+        Issue(
+            severity="info",
+            code="provenance.citation_not_established",
+            message="RivRetrieve has not yet established the citation for provider fixed_span_provider.",
+            details={"field": "citation"},
+            provider_id=ProviderId("fixed_span_provider"),
+        ),
+    )
     assert isinstance(result.issues[0], Issue)
     assert _FixedSpanModule.events == ["fetch", "parse"]
 
@@ -687,14 +821,6 @@ def test_registry_engine_module_raises_for_accumulated_issue(
             end="2026-01-02",
             on_issue="raise",
         )
-
-
-def test_minimal_engine_module_declares_nonempty_row_schema() -> None:
-    assert [schema.annotation_id for schema in _EngineModule.row_annotation_schema()] == ["declared_row"]
-
-
-def test_minimal_engine_module_declares_nonempty_series_schema() -> None:
-    assert [schema.annotation_id for schema in _EngineModule.series_annotation_schema()] == ["declared_series"]
 
 
 def test_registry_rejects_both_module_registration_modes(

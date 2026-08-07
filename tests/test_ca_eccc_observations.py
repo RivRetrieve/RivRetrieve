@@ -15,8 +15,6 @@ from rivretrieve._internal.observations import (
     ObservationDataSchema,
     RawMode,
     RawPayload,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
 )
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
@@ -60,15 +58,8 @@ def _patch_cache(monkeypatch: pytest.MonkeyPatch, hydat_db: Path) -> None:
     monkeypatch.setattr(fetch_module, "_find_sqlite", lambda _: hydat_db)
 
 
-def _assert_empty_annotations(result) -> None:
-    pl_testing.assert_frame_equal(
-        result.row_annotations.data,
-        pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
-    )
-    pl_testing.assert_frame_equal(
-        result.series_annotations.data,
-        pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-    )
+def _assert_result_shape(result) -> None:
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
 
 
 def test_ca_eccc_registry_dispatch_uses_engine_driver(
@@ -102,18 +93,19 @@ def test_ca_eccc_registry_dispatch_uses_engine_driver(
     expected = pl.DataFrame(
         {
             "time": [datetime(2010, 1, 1), datetime(2010, 1, 2)],
+            "time_zone": ["unknown", "unknown"],
             "station_id": ["02GA010", "02GA010"],
             "product_id": ["discharge_daily_mean", "discharge_daily_mean"],
             "value": [16.0, 17.0],
         },
         schema=ObservationDataSchema.polars_schema,
     )
-    pl_testing.assert_frame_equal(result.data, expected)
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.provenance.source == "local"
     assert result.provenance.provider_id == ProviderId("ca_eccc")
     assert result.raw == RawPayload(provider_id=ProviderId("ca_eccc"), entries=())
     assert calls == [("2009", "2010")]
-    _assert_empty_annotations(result)
+    _assert_result_shape(result)
 
 
 def test_ca_eccc_include_retains_exact_ordered_parse_inputs_and_query_origins(
@@ -177,9 +169,17 @@ def test_ca_eccc_all_missing_preserves_issue_policy(
         on_issue="ignore",
     )
 
-    pl_testing.assert_frame_equal(result.data, pl.DataFrame(schema=ObservationDataSchema.polars_schema))
-    assert [issue.code for issue in result.issues] == [str(CaEcccObservationIssueCodes.MISSING_DATA)]
-    _assert_empty_annotations(result)
+    pl_testing.assert_frame_equal(
+        result.data,
+        pl.DataFrame(schema=ObservationDataSchema.polars_schema),
+        check_exact=True,
+    )
+    assert [issue.code for issue in result.issues] == [
+        str(CaEcccObservationIssueCodes.MISSING_DATA),
+        "provenance.license_not_established",
+        "provenance.citation_not_established",
+    ]
+    _assert_result_shape(result)
 
     with pytest.raises(IssuePolicyError):
         rr.provider("ca_eccc").observations(

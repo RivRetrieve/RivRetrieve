@@ -147,16 +147,6 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         parameter_code="Q",
     ),
     ProductDefinition(
-        product_id="discharge_daily_mean",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
-        parameter_code="Q",
-    ),
-    ProductDefinition(
         product_id="stage_instantaneous",
         observed_property="stage",
         frequency="hourly",
@@ -167,32 +157,12 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         parameter_code="H",
     ),
     ProductDefinition(
-        product_id="stage_daily_mean",
-        observed_property="stage",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m",
-        parameter_code="H",
-    ),
-    ProductDefinition(
         product_id="water_temperature_instantaneous",
         observed_property="water_temperature",
         frequency="hourly",
         statistic="instantaneous",
         period_type="instant",
         period_anchor="instant",
-        canonical_unit="degC",
-        parameter_code="WT",
-    ),
-    ProductDefinition(
-        product_id="water_temperature_daily_mean",
-        observed_property="water_temperature",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
         canonical_unit="degC",
         parameter_code="WT",
     ),
@@ -333,8 +303,6 @@ def build_products() -> ProductCatalog:
             "period_anchor": d.period_anchor,
             "unit": d.canonical_unit,
             "native_id": d.parameter_code,
-            "derived": False,
-            "derivation_method": None,
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -389,11 +357,12 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: per (station, parameter) workbook fetch shared across instantaneous/daily-mean "
-            "variants; partial failures reported as recoverable issues; only a rolling ~1-year "
-            "window of history is available from the source"
+            "true: per (station, parameter) workbook fetch; partial failures reported as "
+            "recoverable issues; only a rolling ~1-year window of history is available from the source"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

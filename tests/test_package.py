@@ -1,3 +1,5 @@
+import json
+from importlib import import_module
 from importlib.metadata import version
 from pathlib import Path
 
@@ -43,8 +45,6 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         "ObservationResult",
         "ObservationRequest",
         "ObservationProvenance",
-        "AnnotationSchema",
-        "AnnotationTable",
         "RawPayload",
         "RawSourceCall",
         "Issue",
@@ -58,18 +58,42 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         "LiveCatalogueUnsupportedIssue",
         "LiveCatalogueRoutingNotImplementedError",
         "ObservationDataSchema",
-        "RowAnnotationTableSchema",
-        "SeriesAnnotationTableSchema",
-        "AnnotationSchemaDeclaration",
         "InvalidObservationRequestError",
         "ObservationsUnavailableError",
         "ObservationDataSchemaError",
-        "AnnotationSchemaViolationError",
         "MissingOptionalDependencyError",
         "StationMap",
     ]
     for name in deferred_names:
         assert not hasattr(rivretrieve, name)
+
+    removed_contract_names = (
+        "Row" + "Annotation" + "TableSchema",
+        "Series" + "Annotation" + "TableSchema",
+        "Annotation" + "Table",
+        "Annotation" + "Schema",
+        "Annotation" + "SchemaDeclaration",
+        "validate_" + "annotation_names",
+        "Annotation" + "SchemaViolationError",
+        "row_" + "annotation_schema",
+        "series_" + "annotation_schema",
+        "row_" + "annotations",
+        "series_" + "annotations",
+    )
+    affected_modules = (
+        rivretrieve,
+        import_module("rivretrieve._internal"),
+        import_module("rivretrieve._internal.observations"),
+        import_module("rivretrieve._internal.issues"),
+        import_module("rivretrieve._internal.handle"),
+        import_module("rivretrieve._internal.provider_module"),
+        import_module("rivretrieve._internal.registry"),
+        import_module("rivretrieve._internal.providers.ca_eccc.module"),
+        import_module("rivretrieve._internal.providers.usgs_nwis.module"),
+    )
+    for module in affected_modules:
+        for name in removed_contract_names:
+            assert name not in vars(module)
 
 
 def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
@@ -90,9 +114,17 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "za_dws",
     )
     for provider_id in provider_ids:
-        artifact = load_packaged_catalogue_artifact(providers_root / provider_id / "catalogue", on_issue="raise")
+        catalogue_path = providers_root / provider_id / "catalogue"
+        raw_provider_info = json.loads((catalogue_path / "provider.json").read_text())
+        assert set(raw_provider_info) == set(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
+        assert raw_provider_info["license"] is None
+        assert raw_provider_info["citation"] is None
+
+        artifact = load_packaged_catalogue_artifact(catalogue_path, on_issue="raise")
         assert artifact.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
         assert artifact.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
         assert artifact.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
         assert tuple(artifact.provider_info) == tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
+        assert artifact.provider_info["license"] is None
+        assert artifact.provider_info["citation"] is None
         assert "metadata" not in artifact.provider_info

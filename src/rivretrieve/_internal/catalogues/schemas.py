@@ -57,8 +57,6 @@ PRODUCT_CATALOG_SCHEMA = CatalogueSchema(
         CatalogueColumn("period_anchor", pl.Utf8),
         CatalogueColumn("unit", pl.Utf8),
         CatalogueColumn("native_id", pl.Utf8, nullable=True),
-        CatalogueColumn("derived", pl.Boolean),
-        CatalogueColumn("derivation_method", pl.Utf8, nullable=True),
     ),
     unique_keys=(("provider_id", "product_id"),),
 )
@@ -89,6 +87,8 @@ PROVIDER_INFO_CATALOG_SCHEMA = CatalogueSchema(
         CatalogueColumn("live_station_products", pl.Boolean),
         CatalogueColumn("bulk_observations", pl.Utf8),
         CatalogueColumn("catalogue_version", pl.Utf8, nullable=True),
+        CatalogueColumn("license", pl.Utf8, nullable=True),
+        CatalogueColumn("citation", pl.Utf8, nullable=True),
     ),
     unique_keys=(("provider_id",),),
 )

@@ -636,8 +636,6 @@ def build_products() -> ProductCatalog:
             "period_anchor": d.period_anchor,
             "unit": d.canonical_unit,
             "native_id": d.grandeur_code or d.api_type,
-            "derived": False,
-            "derivation_method": None,
         }
         for d in PRODUCT_DEFINITIONS
     ]
@@ -769,6 +767,8 @@ def build_provider_info(
             "and temperature/chronique requests; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

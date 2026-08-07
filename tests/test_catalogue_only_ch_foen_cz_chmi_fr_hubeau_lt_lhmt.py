@@ -12,14 +12,11 @@ CATALOGUE_ONLY_PROVIDERS = (
     (
         "ch_foen",
         246,
-        6,
-        1476,
+        3,
+        738,
         {
-            "discharge_daily_mean",
             "discharge_instantaneous",
-            "stage_daily_mean",
             "stage_instantaneous",
-            "water_temperature_daily_mean",
             "water_temperature_instantaneous",
         },
         "Swiss Federal Office for the Environment FOEN / BAFU",
@@ -82,7 +79,6 @@ ENROLLED_CATALOGUE_MODULE_FILES = {
         "origins.py",
     },
 }
-UNAVAILABLE_METHODS = ("row_annotation_schema", "series_annotation_schema")
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
 
 
@@ -178,8 +174,6 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
     assert not hasattr(module, "observations")
-    assert not hasattr(module, "row_annotation_schema")
-    assert not hasattr(module, "series_annotation_schema")
 
     provider_directory = Path(module.__file__).parent
     assert set(ENROLLED_CATALOGUE_MODULE_FILES) == {row[0] for row in CATALOGUE_ONLY_PROVIDERS}
@@ -230,21 +224,6 @@ def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str)
             start=None,
             end="2020-01-02",
         )
-
-
-@pytest.mark.parametrize("provider_id", [row[0] for row in CATALOGUE_ONLY_PROVIDERS])
-@pytest.mark.parametrize("method_name", UNAVAILABLE_METHODS)
-def test_catalogue_only_provider_rejects_annotation_schema_requests(
-    provider_id: str,
-    method_name: str,
-) -> None:
-    method = getattr(rr.provider(provider_id), method_name)
-
-    with pytest.raises(
-        ObservationsUnavailableError,
-        match=rf"Provider {provider_id} has no observation module registered",
-    ):
-        method()
 
 
 def test_ch_foen_has_origins_and_no_metadata_module() -> None:

@@ -70,14 +70,12 @@ def test_public_provider_unknown_still_raises_unknown_provider_error() -> None:
         rr.provider("missing")
 
 
-def test_provider_handle_protocol_declares_exactly_seven_public_methods() -> None:
+def test_provider_handle_protocol_declares_exactly_five_public_methods() -> None:
     expected = {
         "info",
         "products",
         "stations",
         "station_products",
-        "row_annotation_schema",
-        "series_annotation_schema",
         "observations",
     }
     protocol_attrs = getattr(ProviderHandle, "__protocol_attrs__", None)
@@ -134,18 +132,6 @@ def test_provider_handle_protocol_method_signatures_match_tracker() -> None:
         "CatalogResult[StationProductCatalog]",
     )
     _assert_signature(
-        "row_annotation_schema",
-        [],
-        {},
-        "list[AnnotationSchema]",
-    )
-    _assert_signature(
-        "series_annotation_schema",
-        [],
-        {},
-        "list[AnnotationSchema]",
-    )
-    _assert_signature(
         "observations",
         [
             ("stations", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
@@ -165,6 +151,18 @@ def test_provider_handle_protocol_method_signatures_match_tracker() -> None:
         },
         "ObservationResult",
     )
+
+
+def test_private_provider_handle_has_no_removed_declaration_methods(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    handle = _ProviderHandle(
+        provider_id=ProviderId("stub_provider"),
+        _artifact=stub_packaged_catalogue_artifact("stub_provider"),
+    )
+
+    assert not hasattr(handle, "row_" + "annotation_schema")
+    assert not hasattr(handle, "series_" + "annotation_schema")
 
 
 def _assert_signature(

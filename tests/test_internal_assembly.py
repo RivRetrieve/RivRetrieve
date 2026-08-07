@@ -163,8 +163,8 @@ def test_assemble_body_is_constructor_only_and_has_no_conversion_or_provider_dep
     assert not {
         "ObservationResult",
         "apply_on_issue",
-        "AnnotationSchema",
-        "AnnotationTable",
+        "Annotation" + "Schema",
+        "Annotation" + "Table",
         "CanonicalRowsSchema",
         "validate_catalogue",
     }.intersection(imported_names)
