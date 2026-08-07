@@ -8,6 +8,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
+from rivretrieve._internal.engine import StopConvention, WindowDeclaration, WindowGranularity, WindowRenderingVocabulary
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
@@ -15,8 +16,9 @@ from rivretrieve._internal.observations import (
     RowAnnotationTableSchema,
     SeriesAnnotationTableSchema,
 )
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis import fetch as fetch_module
+from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis_module
 from rivretrieve._internal.providers.usgs_nwis.issue_codes import UsgsNwisObservationIssueCodes
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
@@ -90,6 +92,9 @@ def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.Monk
     assert params is not None
     assert params["startDT"] == "2022-12-30"
     assert params["endDT"] == "2023-01-03"
+    assert usgs_nwis_module.window_declarations.products[ProductId("discharge_daily_mean")] == WindowDeclaration(
+        WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE
+    )
 
 
 def test_usgs_nwis_bare_date_returns_full_local_day_for_instant_product(

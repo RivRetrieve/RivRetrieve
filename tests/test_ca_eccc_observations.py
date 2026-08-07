@@ -68,6 +68,14 @@ def test_ca_eccc_registry_dispatch_uses_engine_driver(
     hydat_db: Path,
 ) -> None:
     _patch_cache(monkeypatch, hydat_db)
+    calls: list[tuple[str, str]] = []
+    real_query = fetch_module._query_station_product
+
+    def recording_query(connection, coordinates, station_id, start_year: str, end_year: str):
+        calls.append((start_year, end_year))
+        return real_query(connection, coordinates, station_id, start_year, end_year)
+
+    monkeypatch.setattr(fetch_module, "_query_station_product", recording_query)
 
     result = rr.provider("ca_eccc").observations(
         stations="02GA010",
@@ -90,6 +98,7 @@ def test_ca_eccc_registry_dispatch_uses_engine_driver(
     assert result.provenance.source == "local"
     assert result.provenance.provider_id == ProviderId("ca_eccc")
     assert result.raw == RawPayload(provider_id=ProviderId("ca_eccc"))
+    assert calls == [("2009", "2010")]
     _assert_empty_annotations(result)
 
 

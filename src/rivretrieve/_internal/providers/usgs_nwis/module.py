@@ -12,6 +12,7 @@ from rivretrieve._internal.observations import AnnotationSchema
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.providers.usgs_nwis.config import config as _config
+from rivretrieve._internal.providers.usgs_nwis.config import window_declarations as _window_declarations
 from rivretrieve._internal.providers.usgs_nwis.fetch import fetch as fetch
 from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse
 from rivretrieve._internal.results import CatalogResult
@@ -19,6 +20,7 @@ from rivretrieve._internal.results import CatalogResult
 PROVIDER_ID = ProviderId("usgs_nwis")
 _CATALOGUE_PATH = Path(__file__).with_name("catalogue")
 config = _config()
+window_declarations = _window_declarations()
 observation_source: str = "live"
 
 

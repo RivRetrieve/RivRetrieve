@@ -201,24 +201,26 @@ the arithmetic.
 _Avoid_: chunk, window split, decomposition (which names the act, not the piece)
 
 **Window granularity**:
-The provider-product declaration that tells the [[engine]] whether a [[fetch-window]] is
-unsplit as an ISO instant or date pair, split by year, split by year-month, split into
-N-year chunks, split into capped inclusive-date spans, or has no requested-window
-parameters. It names source request boundaries; post-hoc result filtering is not a
-granularity.
+The declaration keyed by provider-product that tells the [[engine]] whether a
+[[fetch-window]] is unsplit as an ISO instant or date pair, split by year, split by
+year-month, split into N-year chunks, split into capped inclusive-date spans, or has no
+requested-window parameters. Drive selects one declaration for each requested `ProductId`
+before planning the authoritative fetch window. It names source request boundaries;
+post-hoc result filtering is not a granularity.
 
 **Stop convention**:
 Whether a rendered source-request stop includes its displayed boundary or excludes it.
 The [[requested-window]] remains closed; the [[engine]] advances an exclusive rendered
-stop by the rendering's smallest boundary unit, and a [[provider]] performs no arithmetic
-to obtain it.
+stop by the rendering's smallest boundary unit. The provider receives the already-adjusted
+rendering for its requested `ProductId` and performs no stop arithmetic.
 
 **Window rendering**:
-The immutable source-vocabulary strings the [[engine]] produces from a [[fetch-window]]
-or [[sub-window]] according to its [[window-granularity]] and [[stop-convention]]: an ISO
-instant, a date, a year, a year-month, or nothing where the source accepts no date
-parameter. A [[provider]] may place these strings into a request but cannot add to, shift,
-or split them, which keeps all calendar arithmetic in the engine.
+The immutable product-keyed mapping of source-vocabulary string tuples the [[engine]]
+produces from a [[fetch-window]] or [[sub-window]] according to each
+[[window-granularity]] and [[stop-convention]]: an ISO instant, a date, a year, a
+year-month, or nothing where the source accepts no date parameter. A [[provider]] consumes
+only the tuple for the requested `ProductId` as source-request bounds and cannot add to,
+shift, or split it. The separate `FetchWindow` is only the payload tag.
 _Avoid_: window formatting, window translation, window conversion
 
 **Day definition**:
