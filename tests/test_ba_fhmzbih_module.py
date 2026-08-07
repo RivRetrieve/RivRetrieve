@@ -19,23 +19,27 @@ def test_ba_fhmzbih_stations_offline() -> None:
 
 def test_ba_fhmzbih_products_offline() -> None:
     result = rr.provider("ba_fhmzbih").products()
-    assert result.data.height == 6
+    assert result.data.height == 3
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
         "discharge_instantaneous",
-        "discharge_daily_mean",
         "stage_instantaneous",
-        "stage_daily_mean",
         "water_temperature_instantaneous",
-        "water_temperature_daily_mean",
     }
+    assert product_ids.isdisjoint(
+        {
+            "discharge_daily_mean",
+            "stage_daily_mean",
+            "water_temperature_daily_mean",
+        }
+    )
 
 
 def test_ba_fhmzbih_station_products_offline() -> None:
     stations = rr.provider("ba_fhmzbih").stations()
     products = rr.provider("ba_fhmzbih").products()
     result = rr.provider("ba_fhmzbih").station_products()
-    assert result.data.height == 360 == stations.data.height * products.data.height
+    assert result.data.height == 180 == stations.data.height * products.data.height
 
 
 def test_ba_fhmzbih_info() -> None:
@@ -45,15 +49,6 @@ def test_ba_fhmzbih_info() -> None:
     assert info.catalogue_version == "2026-08-02"
 
 
-@pytest.mark.parametrize("method", ["row_annotation_schema", "series_annotation_schema"])
-def test_ba_fhmzbih_observation_schemas_unavailable(method: str) -> None:
-    with pytest.raises(
-        ObservationsUnavailableError,
-        match="Provider ba_fhmzbih has no observation module registered",
-    ):
-        getattr(rr.provider("ba_fhmzbih"), method)()
-
-
 def test_ba_fhmzbih_observations_unavailable() -> None:
     with pytest.raises(
         ObservationsUnavailableError,
@@ -61,7 +56,7 @@ def test_ba_fhmzbih_observations_unavailable() -> None:
     ):
         rr.provider("ba_fhmzbih").observations(
             stations=["4510"],
-            products=["discharge_daily_mean"],
+            products=["discharge_instantaneous"],
             start="2020-01-01",
             end="2020-01-02",
         )

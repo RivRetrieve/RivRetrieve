@@ -28,6 +28,8 @@ ATTESTED_DATETIME = datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 FIXTURE_DIGEST = "afb6481ab844d39fb08874b0eaec310401f1a601afe0155a5311b52193cad827"
 NATIVE_FRAME_DIGEST = "3e2085ce51e3714d35feb053973c5074a0994278943b51c620c862be1f281cfd"
+RETAINED_PRODUCT_IDS = {"discharge_instantaneous", "stage_instantaneous"}
+WITHDRAWN_PRODUCT_IDS = {"discharge_daily_mean", "stage_daily_mean"}
 
 ADDITIONS = {
     "3",
@@ -627,8 +629,16 @@ def test_native_build_counts_and_identity_station_fields() -> None:
     station = catalogue.stations.filter(pl.col("station_id") == source_id)
 
     assert catalogue.stations.height == 825
-    assert catalogue.products.height == 4
-    assert catalogue.station_products.height == 825 * 4 == 3_300
+    assert catalogue.products.height == 2
+    assert catalogue.station_products.height == 825 * 2 == 1_650
+    assert set(catalogue.products["product_id"]) == RETAINED_PRODUCT_IDS
+    assert set(catalogue.station_products["product_id"]) == RETAINED_PRODUCT_IDS
+    assert catalogue.station_products.group_by("product_id").len().sort("product_id").to_dicts() == [
+        {"product_id": "discharge_instantaneous", "len": 825},
+        {"product_id": "stage_instantaneous", "len": 825},
+    ]
+    assert set(catalogue.products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
+    assert set(catalogue.station_products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
     assert station.height == 1
     assert station["station_id"].dtype == committed["station.id"].dtype == pl.String
     assert station["station_id"].item() == source_id

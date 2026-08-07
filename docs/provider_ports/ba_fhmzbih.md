@@ -16,7 +16,7 @@ Both endpoints were exercised live during this port (not just against fixtures):
 **The portal does not support arbitrary date-range queries.** Each `<code>_1Y.xlsx` workbook always contains a fixed rolling window of hourly observations (~8600 rows, ~1 year) ending at the most recent reading — there is no query parameter to request historical periods outside this window. This mirrors a constraint also present in `pl_imgw` and `ca_eccc` (data-coverage limits), but here it applies to *every* request, not just historical gaps.
 
 Consequences for the port:
-- `retrieve_observations()` fetches the workbook once per `(station_id, parameter_code)` — shared across the instantaneous and daily-mean variants of the same product — then filters/aggregates to the requested window.
+- The archived legacy retrieval path fetched the workbook once per `(station_id, parameter_code)` and then filtered or aggregated it. The shipped provider is catalogue-only, and its catalogue advertises only source-published instantaneous products.
 - Requests whose window does not overlap the available data emit a recoverable `requested_range_beyond_window` warning issue (with `available_local_start`/`available_local_end` details) and return an empty series for that station/product.
 - `bulk_observations` capability metadata documents this constraint explicitly so callers do not assume historical queries work.
 
@@ -41,15 +41,15 @@ declared `NotPublished` origin emits canonical `crs = "unknown"` without inferen
 
 ## Products
 
-All six V1 canonical products are mapped — three observed properties (`discharge`, `stage`, `water_temperature`) each with `instantaneous` and `daily_mean` variants. Each pair shares one workbook file.
+The packaged catalogue advertises exactly three source-published hourly instantaneous products, one for each observed property. It does not advertise computed daily means.
 
 | Product ID | Parameter code | Workbook file | Native unit | Canonical unit | Conversion |
 |---|---|---|---|---|---|
-| `discharge_instantaneous` / `discharge_daily_mean` | `Q` | `Q_1Y.xlsx` | m³/s | m³/s | none |
-| `stage_instantaneous` / `stage_daily_mean` | `H` | `H_1Y.xlsx` | cm | m | ÷100 |
-| `water_temperature_instantaneous` / `water_temperature_daily_mean` | `WT` | `Tvode_1Y.xlsx` | °C | °C | none |
+| `discharge_instantaneous` | `Q` | `Q_1Y.xlsx` | m³/s | m³/s | none |
+| `stage_instantaneous` | `H` | `H_1Y.xlsx` | cm | m | ÷100 |
+| `water_temperature_instantaneous` | `WT` | `Tvode_1Y.xlsx` | °C | °C | none |
 
-`derived` is `False` and `derivation_method` is `None` for all six products in the packaged catalogue, matching the convention used by `br_ana`/`no_nve`/`pl_imgw` (the daily-mean variants are products in their own right, not flagged as harness-derived).
+`discharge_daily_mean`, `stage_daily_mean`, and `water_temperature_daily_mean` are deliberately absent. The source publishes hourly workbook values; RivRetrieve does not aggregate them into catalogue products.
 
 ## Workbook Format
 
@@ -69,9 +69,9 @@ Because this is an inference rather than a documented fact, the port follows the
 - Series annotations record `resolved_timezone = "UTC"`, `timezone_source = "local_to_utc_conversion"`, and `source_timezone = "Europe/Sarajevo"` so downstream consumers can see exactly what was assumed.
 - Conversion uses `pl.col("time_local").dt.replace_time_zone("Europe/Sarajevo", ambiguous="earliest", non_existent="null").dt.convert_time_zone("UTC")`. DST spring-forward gap times become `null` and are dropped (verified live: `2025-03-30 02:30:00` localizes to `null`); `ambiguous="earliest"` resolves the autumn fall-back overlap deterministically.
 
-## Daily-Mean Aggregation
+## Withdrawn Daily-Mean Aggregation
 
-`*_daily_mean` products are derived in `transform_series()` by grouping the localized hourly rows by **local** (`Europe/Sarajevo`) calendar day — not UTC day — averaging `raw_value`, then re-anchoring the result at local midnight before converting to UTC. This avoids the date-shift bug that the `no_nve` port found and fixed in the legacy `NorwayFetcher` (aggregating by UTC day shifts the reported date near midnight local time). The `aggregation` series annotation records `"local_calendar_day_mean"` vs `"instantaneous_hourly"` so the method is visible to callers.
+The inert legacy reference records how the pre-engine implementation computed local-calendar-day means from hourly rows. That code remains historical evidence only: it is excluded from the shipped package and test collection, and none of those computed products is advertised in the packaged catalogue. Do not restore the aggregation path.
 
 ## Unit Conversion
 
@@ -87,7 +87,7 @@ Per the project convention of confirming downloads "really work" before declarin
 
 - The attested `layers/20/index.json` response produced the committed 60-row native table. Packaged canonical artifacts are subsequently rebuilt only from that table and the origin declarations.
 - `BaFhmzbihObservationClient.fetch_workbook("4510", "Q", "Q_1Y.xlsx")` resolved to group `4`, returned HTTP 200 and 124,674 bytes, and parsed into 8,631 valid hourly rows spanning 2025-06-08 through 2026-06-07.
-- A full `retrieve_observations()` call against live data for station 4510 (discharge, stage, water-temperature, May–June 2026) returned 1,666 rows, three `timezone_local_to_utc` info issues, one `missing_data` warning for the empty water-temperature workbook, and correctly UTC-converted/aggregated daily-mean values (e.g. `2026-04-29 22:00:00 UTC` anchors `2026-04-30` local midnight in CEST).
+- A historical live-verification run of the archived legacy retrieval path returned 1,666 rows for station 4510 (discharge, stage, water temperature, May–June 2026). This remains source-behavior evidence and does not make its computed daily means shipped catalogue products.
 
 ## Live Catalogue
 

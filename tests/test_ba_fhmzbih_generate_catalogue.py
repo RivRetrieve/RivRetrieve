@@ -142,7 +142,21 @@ def _frame_content_digest(frame: pl.DataFrame) -> str:
 def test_native_build_has_exact_counts_dates_and_schemas() -> None:
     catalogue = _catalogue()
 
-    assert (catalogue.stations.height, catalogue.products.height, catalogue.station_products.height) == (60, 6, 360)
+    assert (catalogue.stations.height, catalogue.products.height, catalogue.station_products.height) == (60, 3, 180)
+    retained_product_ids = {
+        "discharge_instantaneous",
+        "stage_instantaneous",
+        "water_temperature_instantaneous",
+    }
+    withdrawn_product_ids = {
+        "discharge_daily_mean",
+        "stage_daily_mean",
+        "water_temperature_daily_mean",
+    }
+    assert set(catalogue.products["product_id"]) == retained_product_ids
+    assert set(catalogue.station_products["product_id"]) == retained_product_ids
+    assert set(catalogue.products["product_id"]).isdisjoint(withdrawn_product_ids)
+    assert set(catalogue.station_products["product_id"]).isdisjoint(withdrawn_product_ids)
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
     assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
     assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
@@ -247,16 +261,16 @@ def test_publisher_capture_and_attestation_support_not_published_crs() -> None:
 
 def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
     assert hashlib.sha256((_CATALOGUE_DIR / "provider.json").read_bytes()).hexdigest() == (
-        "bd4681111fe19c66ff6b9d0d94f2a603d67ac0f0ba3cd215f181d92d444c9a66"
+        "125a679c7be9f8c731fa205a2c6146d0ff1803f163caee678430569316b9ba92"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
-        "2eecd24289a487bf97b9906027fc49c6549c81047e3b32cce94760900be8ede0"
+        "7bdef973654f395a4d2e6d148ec7004f1e259563e5dfaa10a93ae148aba2affb"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
         "761a93315a093b1cad5a4ce1e0480a6e36430a32d28467c9fe689f0257c053a4"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
-        "7c8dd139521881263af34048dfe10482e221fb91888189ddfd3965ceb8658342"
+        "19248f1a4c3aca4196955a7da1f4fc01d00eec18555900829b5c626bd2a93ed7"
     )
 
 
