@@ -366,6 +366,8 @@ def build_provider_info(
             "for the same station/window; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

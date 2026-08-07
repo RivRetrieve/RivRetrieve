@@ -261,7 +261,7 @@ def test_publisher_capture_and_attestation_support_not_published_crs() -> None:
 
 def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
     assert hashlib.sha256((_CATALOGUE_DIR / "provider.json").read_bytes()).hexdigest() == (
-        "3efd4c91d854ba512710870527a10420e9ed6ece3f815f18f2be49b3aba8dfc9"
+        "125a679c7be9f8c731fa205a2c6146d0ff1803f163caee678430569316b9ba92"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
         "7bdef973654f395a4d2e6d148ec7004f1e259563e5dfaa10a93ae148aba2affb"

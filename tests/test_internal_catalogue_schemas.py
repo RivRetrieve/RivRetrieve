@@ -102,6 +102,8 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "live_station_products",
         "bulk_observations",
         "catalogue_version",
+        "license",
+        "citation",
     )
 
 
@@ -120,6 +122,10 @@ def test_catalogue_schema_objects_define_polars_dtypes() -> None:
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["start_date"] == pl.Date
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["end_date"] == pl.Date
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["last_catalogue_check"] == pl.Date
+    assert PROVIDER_INFO_CATALOG_SCHEMA.polars_schema["license"] == pl.Utf8
+    assert PROVIDER_INFO_CATALOG_SCHEMA.polars_schema["citation"] == pl.Utf8
+    assert PROVIDER_INFO_CATALOG_SCHEMA.columns[-2].nullable is True
+    assert PROVIDER_INFO_CATALOG_SCHEMA.columns[-1].nullable is True
 
 
 def test_station_catalog_validates_five_column_row() -> None:
@@ -213,6 +219,8 @@ def test_provider_info_catalog_validates_row_shape() -> None:
                 "reported as recoverable issues"
             ],
             "catalogue_version": ["2026.01"],
+            "license": [None],
+            "citation": [None],
         },
         schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema,
     )

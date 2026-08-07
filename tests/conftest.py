@@ -37,6 +37,8 @@ def _provider_info(
         "live_station_products": live_station_products,
         "bulk_observations": "none",
         "catalogue_version": catalogue_version,
+        "license": None,
+        "citation": None,
     }
 
 

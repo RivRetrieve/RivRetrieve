@@ -634,6 +634,8 @@ def _expected_provider_info(native: NativeTable) -> dict[str, object]:
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": maximum.date().isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 
@@ -680,7 +682,7 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     station_products = pl.read_parquet(CATALOGUE_PATH / "station_products.parquet")
     generated = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
 
-    provider_digest = "3ebe10bb1479e7f70bd97354bdc18eaae7f32c93766d844d200ff8e592ded258"
+    provider_digest = "b951c0f0cf2eaff8f1ca09767fdfe96ff40178055a2e90f3ea3b11f6133d4206"
     products_digest = "ac641caa1ed8b4a351b7060b7e5269328242279de0e5d96a56d9b1416184275f"
     stations_digest = "362736b7f95535b309118c51eb5c21e8f0d0b52b06858f295fc7b44ecff2c562"
     station_products_digest = "e840b2c83275616e9a10d0350e51ba2219a33bd716e250091bce36964ae7da94"

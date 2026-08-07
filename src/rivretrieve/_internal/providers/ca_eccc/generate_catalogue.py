@@ -481,6 +481,8 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
             "recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

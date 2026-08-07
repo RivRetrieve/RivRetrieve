@@ -113,7 +113,11 @@ def test_ca_eccc_all_missing_preserves_issue_policy(
         pl.DataFrame(schema=ObservationDataSchema.polars_schema),
         check_exact=True,
     )
-    assert [issue.code for issue in result.issues] == [str(CaEcccObservationIssueCodes.MISSING_DATA)]
+    assert [issue.code for issue in result.issues] == [
+        str(CaEcccObservationIssueCodes.MISSING_DATA),
+        "provenance.license_not_established",
+        "provenance.citation_not_established",
+    ]
     _assert_result_shape(result)
 
     with pytest.raises(IssuePolicyError):

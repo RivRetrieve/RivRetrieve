@@ -975,7 +975,7 @@ def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert (
-        hashlib.sha256(provider_bytes).hexdigest() == "825bce9e3b4e9d204e1c58f9587f9b0b651c12a6bca8ef264032d27a2793d2bc"
+        hashlib.sha256(provider_bytes).hexdigest() == "c0a4074f979ac2670695b08c325a55b9be548591a18db53ae7011fd054b02f59"
     )
     assert _frame_content_sha256(products) == "0bb5ae6f406f5258119a9c0d198a8db1a5e77a211d0d693186bb18d01cacbccc"
     assert _frame_content_sha256(stations) == "27b3dfc6d71445798eda982d6f9d11de4839be1f6adbb30faed8052cefdc26c7"
