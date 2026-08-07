@@ -9,15 +9,14 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
     Payload,
     ProviderConfig,
-    RequestedWindow,
     RowsSchema,
     SourceCoordinates,
     WindowEndpoint,
     ZoneValue,
+    _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
@@ -33,11 +32,9 @@ def _payload(
     return Payload(
         SourceCoordinates(object()),
         station_products,
-        identity_window(
-            RequestedWindow(
-                WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
-                WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
-            )
+        _make_fetch_window(
+            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
         ),
         content,
     )

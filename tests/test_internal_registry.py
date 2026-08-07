@@ -183,7 +183,7 @@ def test_registry_module_without_engine_stages_rejects_observation_dispatch(
     assert called is False
 
 
-def test_registry_passes_normalized_window_to_engine_once(
+def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     registry = ProviderRegistry()
@@ -206,8 +206,8 @@ def test_registry_passes_normalized_window_to_engine_once(
     assert _EngineModule.events == ["fetch", "parse"]
     assert isinstance(_EngineModule.fetched_window, FetchWindow)
     assert isinstance(_EngineModule.fetched_window.start, WindowEndpoint)
-    assert _EngineModule.fetched_window.start.isoformat() == "2026-01-01T00:00:00"
-    assert _EngineModule.fetched_window.end.isoformat() == "2026-01-02T23:59:59.999999"
+    assert _EngineModule.fetched_window.start.isoformat() == "2025-12-30T00:00:00"
+    assert _EngineModule.fetched_window.end.isoformat() == "2026-01-04T23:59:59.999999"
     assert set(result.data.columns) == {"time", "station_id", "product_id", "value"}
     pl_testing.assert_frame_equal(
         result.row_annotations.data,
@@ -247,7 +247,7 @@ def test_registry_preserves_explicit_midnight_end(
     )
 
     assert _EngineModule.fetched_window is not None
-    assert _EngineModule.fetched_window.end.isoformat() == "2026-01-02T00:00:00"
+    assert _EngineModule.fetched_window.end.isoformat() == "2026-01-04T00:00:00"
     assert result.provenance.request is not None
     assert result.provenance.request["end"] == "2026-01-02T00:00:00"
 

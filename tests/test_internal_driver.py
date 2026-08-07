@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import polars as pl
 import polars.testing as pl_testing
@@ -27,6 +27,7 @@ from rivretrieve._internal.engine import (
     WindowEndpoint,
     WithIssues,
     ZoneValue,
+    _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.observations import ObservationProvenance, RawPayload
@@ -69,7 +70,7 @@ class _ThrowawayProvider:
         self._events.append("fetch")
         assert stations == _STATIONS
         assert products == _PRODUCTS
-        assert all(payload.fetch_window is window for payload in self._payloads)
+        assert all(payload.fetch_window == window for payload in self._payloads)
         assert isinstance(window, FetchWindow)
         assert not isinstance(window, RequestedWindow)
         assert config is self.config
@@ -184,19 +185,113 @@ def _windows() -> tuple[RequestedWindow, FetchWindow]:
         start=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 0)),
         end=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23)),
     )
-    return requested, driver_module.identity_window(requested)
+    fetched = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2025, 12, 31, 0)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 4, 23)),
+    )
+    return requested, fetched
 
 
-def test_identity_window_changes_only_the_nominal_type() -> None:
-    start = WindowEndpoint.from_datetime(datetime(2026, 1, 2))
-    end = WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23))
-    requested = RequestedWindow(start=start, end=end)
+@pytest.mark.parametrize(
+    ("case", "requested_start", "requested_end", "expected_start", "expected_end"),
+    [
+        (
+            "month-seam",
+            datetime(2026, 3, 1, 1, 2, 3, 456789),
+            datetime(2026, 3, 30, 21, 22, 23, 654321),
+            "2026-02-27T01:02:03.456789",
+            "2026-04-01T21:22:23.654321",
+        ),
+        (
+            "year-seam",
+            datetime(2025, 12, 31, 12, 34, 56, 123456),
+            datetime(2026, 1, 1, 23, 59, 59, 999999),
+            "2025-12-29T12:34:56.123456",
+            "2026-01-03T23:59:59.999999",
+        ),
+    ],
+)
+def test_drive_widens_fetch_window_by_exactly_two_calendar_days_across_month_and_year_seams(
+    case: str,
+    requested_start: datetime,
+    requested_end: datetime,
+    expected_start: str,
+    expected_end: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(requested_start),
+        WindowEndpoint.from_datetime(requested_end),
+    )
+    request = _request(requested)
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = _config(coordinates)
+    received: list[FetchWindow] = []
 
-    fetched = driver_module.identity_window(requested)
+    class _CapturingProvider:
+        def __init__(self) -> None:
+            self.config = config
 
+        def fetch(
+            self,
+            stations: tuple[str, ...],
+            products: tuple[ProductId, ...],
+            window: FetchWindow,
+            supplied_config: ProviderConfig,
+        ) -> WithIssues[tuple[Payload, ...]]:
+            assert stations == _STATIONS
+            assert products == _PRODUCTS
+            assert supplied_config is config
+            received.append(window)
+            return WithIssues(value=())
+
+        def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
+            raise AssertionError("parse must not run without payloads")
+
+    def recording_convert(
+        rows: Rows,
+        supplied_config: ProviderConfig,
+        window: RequestedWindow,
+    ) -> WithIssues[CanonicalRows]:
+        assert supplied_config is config
+        assert window is requested
+        return real_convert(rows, supplied_config, window)
+
+    monkeypatch.setattr(driver_module, "convert", recording_convert)
+    driver_module.drive(
+        request,
+        _CapturingProvider(),
+        provenance=_provenance(request),
+        raw=_raw(request),
+    )
+
+    assert case in {"month-seam", "year-seam"}
+    assert len(received) == 1
+    fetched = received[0]
     assert isinstance(fetched, FetchWindow)
-    assert fetched.start is start
-    assert fetched.end is end
+    assert not isinstance(fetched, RequestedWindow)
+    assert fetched.start.isoformat() == expected_start
+    assert fetched.end.isoformat() == expected_end
+    fetch_start = datetime(
+        fetched.start.year,
+        fetched.start.month,
+        fetched.start.day,
+        fetched.start.hour,
+        fetched.start.minute,
+        fetched.start.second,
+        fetched.start.microsecond,
+    )
+    fetch_end = datetime(
+        fetched.end.year,
+        fetched.end.month,
+        fetched.end.day,
+        fetched.end.hour,
+        fetched.end.minute,
+        fetched.end.second,
+        fetched.end.microsecond,
+    )
+    assert requested_start - fetch_start == timedelta(days=2)
+    assert fetch_end - requested_end == timedelta(days=2)
 
 
 def test_drive_accumulates_every_stage_issue_in_encounter_order(
@@ -236,11 +331,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
     )
     provenance = _provenance(request)
     raw = _raw(request)
-
-    def pad_window(window: RequestedWindow) -> FetchWindow:
-        events.append("pad")
-        assert window is requested_window
-        return fetch_window
 
     def recording_convert(
         supplied_rows: Rows,
@@ -285,7 +375,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
     result = driver_module.drive(
         request,
         provider,
-        pad_window,
         provenance=provenance,
         raw=raw,
     )
@@ -315,7 +404,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
     )
     assert result.raw is raw
     assert events == [
-        "pad",
         "fetch",
         "parse:station-1",
         "parse:station-2",
@@ -354,15 +442,9 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
     provenance = _provenance(request)
     raw = _raw(request)
 
-    def pad_window(window: RequestedWindow) -> FetchWindow:
-        events.append("pad")
-        assert window is requested_window
-        return fetch_window
-
     result = driver_module.drive(
         request,
         provider,
-        pad_window,
         provenance=provenance,
         raw=raw,
     )
@@ -392,7 +474,6 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
     assert result.provenance is provenance
     assert result.raw is raw
     assert events == [
-        "pad",
         "fetch",
         "parse:station-1",
         "parse:station-2",
@@ -405,7 +486,7 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[str] = []
-    requested_window, fetch_window = _windows()
+    requested_window, _ = _windows()
     request = _request(requested_window)
     coordinates = SourceCoordinates({"parameter": "height"})
     config = _config(coordinates)
@@ -427,11 +508,6 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
     )
     provenance = _provenance(request)
     raw = _raw(request)
-
-    def pad_window(window: RequestedWindow) -> FetchWindow:
-        events.append("pad")
-        assert window is requested_window
-        return fetch_window
 
     def recording_convert(
         supplied_rows: Rows,
@@ -465,7 +541,6 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
     result = driver_module.drive(
         request,
         provider,
-        pad_window,
         provenance=provenance,
         raw=raw,
     )
@@ -475,7 +550,7 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
     assert result.issues == fetch_issues
     assert result.provenance is provenance
     assert result.raw is raw
-    assert events == ["pad", "fetch", "convert", "assemble"]
+    assert events == ["fetch", "convert", "assemble"]
     assert {name for name in dir(provider) if not name.startswith("_")} == {
         "config",
         "fetch",
@@ -506,7 +581,7 @@ class _BoundaryProvider:
         self._events.append("fetch")
         assert stations == tuple(f"station-{index}" for index in range(1, len(self._payloads) + 1))
         assert products == (ProductId("level"),)
-        assert window is self._payloads[0].fetch_window
+        assert window == self._payloads[0].fetch_window
         assert config is self.config
         return WithIssues(value=self._payloads)
 
@@ -535,7 +610,10 @@ def _drive_boundary_rows(
         products=(ProductId("level"),),
         window=requested_window,
     )
-    fetch_window = driver_module.identity_window(requested_window)
+    fetch_window = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2025, 12, 31, 0)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 4, 23)),
+    )
     coordinates = SourceCoordinates({"parameter": "height"})
     config = ProviderConfig(
         zone=ZoneValue("+00:00"),
@@ -569,15 +647,9 @@ def _drive_boundary_rows(
         metadata="boundary payloads",
     )
 
-    def pad_window(window: RequestedWindow) -> FetchWindow:
-        events.append("pad")
-        assert window is requested_window
-        return fetch_window
-
     return driver_module.drive(
         request,
         provider,
-        pad_window,
         provenance=provenance,
         raw=raw,
     )
@@ -625,7 +697,7 @@ def test_drive_rejects_each_malformed_parse_result_before_later_parse_or_convert
     with pytest.raises(FatalContractError, match="Rows is missing required columns: time_zone"):
         _drive_boundary_rows((malformed_rows, later_rows), events)
 
-    assert events == ["pad", "fetch", "parse-1"]
+    assert events == ["fetch", "parse-1"]
 
 
 def test_drive_rejects_malformed_second_parse_result(
@@ -670,7 +742,7 @@ def test_drive_rejects_malformed_second_parse_result(
     with pytest.raises(FatalContractError, match="Rows is missing required columns: time_zone"):
         _drive_boundary_rows((first_rows, malformed_rows), events)
 
-    assert events == ["pad", "fetch", "parse-1", "parse-2"]
+    assert events == ["fetch", "parse-1", "parse-2"]
 
 
 def test_drive_rejects_malformed_canonical_rows_before_assemble(
@@ -725,7 +797,7 @@ def test_drive_rejects_malformed_canonical_rows_before_assemble(
     with pytest.raises(FatalContractError, match="CanonicalRows is missing required columns: time_zone"):
         _drive_boundary_rows((parsed_rows,), events)
 
-    assert events == ["pad", "fetch", "parse-1", "convert"]
+    assert events == ["fetch", "parse-1", "convert"]
 
 
 def test_drive_accepts_well_formed_empty_rows_at_both_boundaries(
@@ -755,4 +827,4 @@ def test_drive_accepts_well_formed_empty_rows_at_both_boundaries(
         ("Rows", 0, "raise"),
         ("CanonicalRows", 0, "raise"),
     ]
-    assert events == ["pad", "fetch", "parse-1"]
+    assert events == ["fetch", "parse-1"]

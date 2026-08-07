@@ -8,8 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from rivretrieve._internal.driver import identity_window
-from rivretrieve._internal.engine import FetchWindow, RequestedWindow, WindowEndpoint
+from rivretrieve._internal.engine import FetchWindow, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
@@ -72,7 +71,7 @@ def _window(
     start: datetime = datetime(2010, 1, 2),
     end: datetime = datetime(2010, 1, 2),
 ) -> FetchWindow:
-    return identity_window(RequestedWindow(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end)))
+    return _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
 
 
 def _point_fetch_at(

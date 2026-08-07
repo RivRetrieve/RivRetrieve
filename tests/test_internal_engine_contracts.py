@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import inspect
 import subprocess
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timedelta
@@ -9,8 +11,8 @@ import polars as pl
 import polars.testing as pl_testing
 import pytest
 
+import rivretrieve._internal.driver as driver_module
 from rivretrieve._internal.catalogues.schemas import CatalogueSchema, validate_catalogue
-from rivretrieve._internal.driver import identity_window
 from rivretrieve._internal.engine import (
     CanonicalRowsSchema,
     FetchWindow,
@@ -22,6 +24,7 @@ from rivretrieve._internal.engine import (
     SourceCoordinates,
     WindowEndpoint,
     WithIssues,
+    _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
@@ -53,7 +56,7 @@ def test_requested_and_fetch_windows_remain_nominally_distinct_and_immutable() -
     start = WindowEndpoint.from_datetime(datetime(2020, 7, 31))
     end = WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999))
     requested = RequestedWindow(start=start, end=end)
-    fetch = identity_window(requested)
+    fetch = _make_fetch_window(start, end)
 
     assert requested.start is start
     assert requested.end is end
@@ -78,6 +81,41 @@ def test_direct_fetch_window_construction_raises_for_provider_code() -> None:
         match="^FetchWindow is engine-owned and cannot be constructed by providers$",
     ):
         FetchWindow(start=start, end=end)
+
+
+def test_requested_to_fetch_construction_is_driver_owned_and_not_injectable() -> None:
+    assert not hasattr(driver_module, "identity" + "_window")
+    assert not hasattr(driver_module, "Window" + "Padder")
+    signature = inspect.signature(driver_module.drive)
+    assert tuple(signature.parameters) == (
+        "request",
+        "provider",
+        "provenance",
+        "raw",
+    )
+    assert signature.parameters["request"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert signature.parameters["provider"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert signature.parameters["provenance"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["raw"].kind is inspect.Parameter.KEYWORD_ONLY
+
+    source_root = Path(__file__).parents[1] / "src" / "rivretrieve"
+    requested_to_fetch: list[str] = []
+    for source_path in source_root.rglob("*.py"):
+        tree = ast.parse(source_path.read_text(), filename=str(source_path))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            parameter_annotations = [
+                argument.annotation
+                for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+                if argument.annotation is not None
+            ]
+            takes_requested = any("RequestedWindow" in ast.unparse(annotation) for annotation in parameter_annotations)
+            returns_fetch = node.returns is not None and "FetchWindow" in ast.unparse(node.returns)
+            if takes_requested and returns_fetch:
+                requested_to_fetch.append(f"{source_path.relative_to(source_root)}:{node.name}")
+
+    assert requested_to_fetch == []
 
 
 def test_engine_observation_request_preserves_requested_window_and_ids() -> None:
@@ -121,11 +159,9 @@ def test_payload_accepts_opaque_content_and_preserves_complete_tag(content: obje
         ("station-1", ProductId("flow")),
         ("station-2", ProductId("level")),
     )
-    window = identity_window(
-        RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2020, 7, 31)),
-            WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999)),
-        )
+    window = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2020, 7, 31)),
+        WindowEndpoint.from_datetime(datetime(2020, 7, 31, 23, 59, 59, 999999)),
     )
     payload = Payload(
         source_coordinates=coordinates,
