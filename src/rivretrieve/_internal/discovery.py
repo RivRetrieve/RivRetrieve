@@ -15,6 +15,7 @@ from rivretrieve._internal.catalogues.schemas import (
     validate_catalogue,
 )
 from rivretrieve._internal.handle import ProviderHandle
+from rivretrieve._internal.observations import RawMode
 from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 from rivretrieve._internal.station_map import StationMap, _filter_stations
@@ -49,6 +50,7 @@ def observations(
     start: object,
     end: object,
     on_issue: OnIssue = "warn",
+    raw: RawMode = RawMode.OMIT,
 ) -> ObservationResult:
     provider_handle = _provider_lookup(provider)
     return provider_handle.observations(
@@ -57,6 +59,7 @@ def observations(
         start=start,
         end=end,
         on_issue=on_issue,
+        raw=raw,
     )
 
 

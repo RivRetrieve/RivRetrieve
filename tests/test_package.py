@@ -2,7 +2,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 import rivretrieve
-from rivretrieve import __version__
+from rivretrieve import RawMode, __version__
 from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
@@ -22,6 +22,7 @@ def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == {
         "ProviderHandle",
+        "RawMode",
         "map_stations",
         "observations",
         "product_info",
@@ -31,6 +32,7 @@ def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
         "providers",
         "stations",
     }
+    assert rivretrieve.RawMode is RawMode
 
 
 def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -> None:
@@ -44,6 +46,7 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         "AnnotationSchema",
         "AnnotationTable",
         "RawPayload",
+        "RawSourceCall",
         "Issue",
         "CatalogResult",
         "StationCatalog",
