@@ -193,8 +193,6 @@ def _expected_products() -> pl.DataFrame:
                 "period_anchor": definition.period_anchor,
                 "unit": definition.canonical_unit,
                 "native_id": definition.native_column,
-                "derived": False,
-                "derivation_method": None,
             }
         )
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -790,7 +788,7 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     assert (
         hashlib.sha256(provider_bytes).hexdigest() == "20edf013c5da42e986cf6f04c30f510adf09c75264caf2dde49c3a463792d448"
     )
-    assert _frame_content_sha256(products) == "1b776aa29f2cb2adcaeb065a723ad9555ce7a5de611ecde5656de19956eafcd5"
+    assert _frame_content_sha256(products) == "cd9158f219a403584ef28a1d3fe6fad80b7768b2e0440beda1a48614790addd5"
     assert _frame_content_sha256(stations) == "738b3a71030b3ef7dfe6763a2780cabae6e00cffd2bad9e1f7b1222238de71f9"
     assert _frame_content_sha256(station_products) == (
         "474447afadda12b2ed70c4e27a127f804c1b376e5b88e0e92563fb92feb295c8"

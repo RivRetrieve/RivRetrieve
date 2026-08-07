@@ -46,11 +46,11 @@ def test_v1_deferred_wide_form_helpers_remain_absent() -> None:
         assert not hasattr(result, helper_name)
 
 
-def test_v1_products_are_not_rivretrieve_derived() -> None:
+def test_v1_products_have_no_derivation_fields() -> None:
     products = rr.products().data
 
-    assert products["derived"].to_list() == [False] * products.height
-    assert products["derivation_method"].null_count() == products.height
+    assert "derived" not in products.columns
+    assert "derivation_method" not in products.columns
 
 
 def test_v1_observed_property_vocabulary_remains_river_gauge_scope() -> None:
