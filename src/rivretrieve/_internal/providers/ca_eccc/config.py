@@ -1,4 +1,4 @@
-"""CA ECCC declaration : ProviderConfig."""
+"""CA ECCC declaration : ProviderConfig × ProductWindowDeclarations."""
 
 from dataclasses import dataclass
 from typing import Final
@@ -8,9 +8,14 @@ from rivretrieve._internal.engine import (
     Daily,
     DayDefinition,
     ProductConfig,
+    ProductWindowDeclarations,
     ProviderConfig,
     SourceCoordinates,
+    StopConvention,
     Unit,
+    WindowDeclaration,
+    WindowGranularity,
+    WindowRenderingVocabulary,
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
@@ -50,4 +55,13 @@ config: Final[ProviderConfig] = ProviderConfig(
         ),
     },
     cache=CacheConfig(),
+)
+
+_YEAR_WINDOW = WindowDeclaration(
+    granularity=WindowGranularity("year"),
+    rendering=WindowRenderingVocabulary.YEAR,
+    stop_convention=StopConvention.INCLUSIVE,
+)
+window_declarations: Final[ProductWindowDeclarations] = ProductWindowDeclarations(
+    products=dict.fromkeys(config.products, _YEAR_WINDOW)
 )

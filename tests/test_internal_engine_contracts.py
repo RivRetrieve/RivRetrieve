@@ -201,7 +201,6 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
 def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic() -> None:
     providers = Path(__file__).parents[1] / "src" / "rivretrieve" / "_internal" / "providers"
     violations: list[str] = []
-    exempt = {"_query_years", "_endpoint_year", "_window_parameter"}
     for path in providers.glob("*/*.py"):
         if path.name == "generate_catalogue.py":
             continue
@@ -209,7 +208,7 @@ def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic
         tree = ast.parse(module_source)
         for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
             source = ast.get_source_segment(module_source, function) or ""
-            if function.name in exempt or ("window" not in function.name.lower() and "FetchWindow" not in source):
+            if "window" not in function.name.lower() and "FetchWindow" not in source:
                 continue
             for node in ast.walk(function):
                 if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
@@ -227,6 +226,34 @@ def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic
                     if any(name in loop_source for name in ("cursor", "window_start", "window_end", "next_date")):
                         violations.append(f"{path}:{function.name}:window cursor loop")
     assert violations == []
+
+
+def test_obsolete_window_symbols_are_absent_from_tracked_source() -> None:
+    obsolete = {"identity_window", "WindowPadder", "_window_parameter", "_endpoint_year", "_query_years"}
+    tracked = subprocess.run(
+        ["git", "ls-files", "--", ":(glob)src/**/*.py"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    occurrences: list[str] = []
+    for source_path in tracked:
+        tree = ast.parse(Path(source_path).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            names: tuple[str | None, ...] = ()
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names = (node.name,)
+            elif isinstance(node, ast.alias):
+                names = (node.name, node.asname)
+            elif isinstance(node, ast.arg):
+                names = (node.arg,)
+            elif isinstance(node, ast.Name):
+                names = (node.id,)
+            for name in names:
+                if name in obsolete:
+                    occurrences.append(f"{source_path}:{getattr(node, 'lineno', 0)}:{name}")
+
+    assert occurrences == []
 
 
 @pytest.mark.parametrize("content", [b"payload", "payload", object()])

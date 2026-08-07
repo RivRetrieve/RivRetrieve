@@ -1,11 +1,12 @@
-"""fetch : tuple[str, ...] × tuple[ProductId, ...] × FetchWindow × ProviderConfig → WithIssues[tuple[Payload, ...]]."""
+"""fetch : tuple[str, ...] × tuple[ProductId, ...] × Mapping[ProductId, tuple[RenderedWindow, ...]] × FetchWindow × ProviderConfig → WithIssues[tuple[Payload, ...]]."""
 
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
 
-from rivretrieve._internal.engine import FetchWindow, Payload, ProviderConfig, WindowEndpoint, WithIssues
+from rivretrieve._internal.engine import FetchWindow, Payload, ProviderConfig, RenderedWindow, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.ca_eccc.config import HydatSourceCoordinates
@@ -18,10 +19,10 @@ PROVIDER_ID = ProviderId("ca_eccc")
 def fetch(
     stations: tuple[str, ...],
     products: tuple[ProductId, ...],
+    rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
     fetch_window: FetchWindow,
     config: ProviderConfig,
 ) -> WithIssues[tuple[Payload, ...]]:
-    start_year, end_year = _query_years(fetch_window)
     cache_dir = default_cache_dir()
     sqlite_path = _find_sqlite(cache_dir)
     if sqlite_path is None or not sqlite_path.is_file():
@@ -61,6 +62,9 @@ def fetch(
     issues: list[Issue] = []
     try:
         for product_id in products:
+            product_windows = rendered_windows[product_id]
+            start_year = product_windows[0].start
+            end_year = product_windows[-1].start
             product = config.products[product_id]
             coordinates = product.coordinates.value
             if not isinstance(coordinates, HydatSourceCoordinates):
@@ -107,18 +111,6 @@ def fetch(
     return WithIssues(value=tuple(payloads), issues=tuple(issues))
 
 
-def _query_years(fetch_window: FetchWindow) -> tuple[int, int]:
-    start_year = _endpoint_year(fetch_window.start)
-    end_year = _endpoint_year(fetch_window.end)
-    if start_year > end_year:
-        raise ValueError("fetch window start year must not follow its end year")
-    return start_year, end_year
-
-
-def _endpoint_year(endpoint: WindowEndpoint) -> int:
-    return endpoint.year
-
-
 def _open_read_only(sqlite_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(
         f"{sqlite_path.resolve().as_uri()}?mode=ro",
@@ -155,8 +147,8 @@ def _query_station_product(
     connection: sqlite3.Connection,
     coordinates: HydatSourceCoordinates,
     station_id: str,
-    start_year: int,
-    end_year: int,
+    start_year: str,
+    end_year: str,
 ) -> list[dict[str, object]]:
     table_identifier = _quote_identifier(coordinates.table_name)
     cursor = connection.execute(

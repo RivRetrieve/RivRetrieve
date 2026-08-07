@@ -1,4 +1,4 @@
-"""config : () → ProviderConfig."""
+"""config/window_declarations : () → ProviderConfig × ProductWindowDeclarations."""
 
 from __future__ import annotations
 
@@ -11,9 +11,14 @@ from rivretrieve._internal.engine import (
     DayDefinition,
     Instant,
     ProductConfig,
+    ProductWindowDeclarations,
     ProviderConfig,
     SourceCoordinates,
+    StopConvention,
     Unit,
+    WindowDeclaration,
+    WindowGranularity,
+    WindowRenderingVocabulary,
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
@@ -80,6 +85,17 @@ _CONFIG = ProviderConfig(
     cache=None,
 )
 
+_DATE_WINDOW = WindowDeclaration(
+    granularity=WindowGranularity("date"),
+    rendering=WindowRenderingVocabulary.DATE,
+    stop_convention=StopConvention.INCLUSIVE,
+)
+_WINDOW_DECLARATIONS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _DATE_WINDOW))
+
 
 def config() -> ProviderConfig:
     return _CONFIG
+
+
+def window_declarations() -> ProductWindowDeclarations:
+    return _WINDOW_DECLARATIONS

@@ -8,7 +8,11 @@ from rivretrieve._internal.engine import (
     Daily,
     DayDefinition,
     SourceCoordinates,
+    StopConvention,
     Unit,
+    WindowDeclaration,
+    WindowGranularity,
+    WindowRenderingVocabulary,
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
@@ -16,6 +20,7 @@ from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
 from rivretrieve._internal.providers.ca_eccc.config import (
     HydatSourceCoordinates,
     config,
+    window_declarations,
 )
 from rivretrieve._internal.providers.ca_eccc.fetch import fetch
 from rivretrieve._internal.providers.ca_eccc.parse import parse
@@ -45,6 +50,16 @@ def test_ca_eccc_config_declares_both_hydat_products() -> None:
     assert ca_eccc_module.config is config
     assert ca_eccc_module.fetch is fetch
     assert ca_eccc_module.parse is parse
+
+
+def test_ca_eccc_window_declarations_cover_every_configured_product_with_year_inclusive_rendering() -> None:
+    expected = WindowDeclaration(WindowGranularity("year"), WindowRenderingVocabulary.YEAR, StopConvention.INCLUSIVE)
+
+    assert set(window_declarations.products) == set(config.products)
+    assert all(
+        declaration == expected and declaration.size is None for declaration in window_declarations.products.values()
+    )
+    assert ca_eccc_module.window_declarations is window_declarations
 
 
 def test_ca_eccc_source_coordinates_are_named_and_immutable() -> None:

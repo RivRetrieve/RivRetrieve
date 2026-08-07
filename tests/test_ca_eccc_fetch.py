@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import ast
 import sqlite3
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, cast
 
 import pytest
 
-from rivretrieve._internal.engine import FetchWindow, WindowEndpoint, _make_fetch_window
+from rivretrieve._internal.engine import FetchWindow, RenderedWindow, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
@@ -74,6 +76,10 @@ def _window(
     return _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
 
 
+def _renderings(*products: ProductId) -> Mapping[ProductId, tuple[RenderedWindow, ...]]:
+    return MappingProxyType({product: (RenderedWindow("2010", None),) for product in products})
+
+
 def _point_fetch_at(
     monkeypatch: pytest.MonkeyPatch,
     sqlite_path: Path | None,
@@ -95,6 +101,7 @@ def test_fetch_returns_tagged_non_http_hydat_payloads_for_both_products(
             ProductId("discharge_daily_mean"),
             ProductId("stage_daily_mean"),
         ),
+        _renderings(ProductId("discharge_daily_mean"), ProductId("stage_daily_mean")),
         fetch_window,
         config,
     )
@@ -141,6 +148,7 @@ def test_fetch_opens_sqlite_once_per_request(
             ProductId("discharge_daily_mean"),
             ProductId("stage_daily_mean"),
         ),
+        _renderings(ProductId("discharge_daily_mean"), ProductId("stage_daily_mean")),
         _window(),
         config,
     )
@@ -160,6 +168,7 @@ def test_fetch_year_selection_is_not_clipped_to_fetch_window(
     result = fetch(
         ("02GA010",),
         (ProductId("discharge_daily_mean"),),
+        _renderings(ProductId("discharge_daily_mean")),
         _window(datetime(2010, 1, 2), datetime(2010, 1, 2)),
         config,
     )
@@ -181,6 +190,7 @@ def test_fetch_absent_station_is_an_issue_and_other_stations_survive(
     result = fetch(
         ("ABSENT", "02GA010"),
         (ProductId("discharge_daily_mean"),),
+        _renderings(ProductId("discharge_daily_mean")),
         _window(),
         config,
     )
@@ -191,8 +201,8 @@ def test_fetch_absent_station_is_an_issue_and_other_stations_survive(
         "station_id": "ABSENT",
         "product_id": "discharge_daily_mean",
         "table_name": "DLY_FLOWS",
-        "start_year": 2010,
-        "end_year": 2010,
+        "start_year": "2010",
+        "end_year": "2010",
     }
 
 
@@ -205,6 +215,7 @@ def test_fetch_all_absent_stations_return_empty_payloads_with_issues(
     result = fetch(
         ("ABSENT-1", "ABSENT-2"),
         (ProductId("discharge_daily_mean"),),
+        _renderings(ProductId("discharge_daily_mean")),
         _window(),
         config,
     )
@@ -224,6 +235,7 @@ def test_fetch_missing_hydat_returns_error_issue_without_raising(
     result = fetch(
         ("02GA010",),
         (ProductId("discharge_daily_mean"),),
+        _renderings(ProductId("discharge_daily_mean")),
         _window(),
         config,
     )
@@ -245,6 +257,7 @@ def test_fetch_unreadable_hydat_returns_distinct_error_issue(
     result = fetch(
         ("02GA010",),
         (ProductId("discharge_daily_mean"),),
+        _renderings(ProductId("discharge_daily_mean")),
         _window(),
         config,
     )
@@ -272,6 +285,7 @@ def test_fetch_malformed_hydat_table_raises(
         fetch(
             ("02GA010",),
             (ProductId("discharge_daily_mean"),),
+            _renderings(ProductId("discharge_daily_mean")),
             _window(),
             config,
         )
@@ -295,12 +309,13 @@ def test_fetch_missing_hydat_day_columns_raises(
         fetch(
             ("02GA010",),
             (ProductId("discharge_daily_mean"),),
+            _renderings(ProductId("discharge_daily_mean")),
             _window(),
             config,
         )
 
 
-def test_ca_eccc_fetch_reads_years_from_legal_wall_clock_endpoints(
+def test_ca_eccc_fetch_uses_first_and_last_engine_rendered_year_tokens(
     hydat_db: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -309,16 +324,68 @@ def test_ca_eccc_fetch_reads_years_from_legal_wall_clock_endpoints(
         datetime(2010, 1, 2, 12, 34, 56, 123456),
         datetime(2010, 12, 31, 23, 59, 59, 999999),
     )
+    calls: list[tuple[str, str]] = []
+    real_query = fetch_module._query_station_product
+
+    def recording_query(*args: Any) -> list[dict[str, object]]:
+        calls.append((cast(str, args[-2]), cast(str, args[-1])))
+        return real_query(*args)
+
+    monkeypatch.setattr(fetch_module, "_query_station_product", recording_query)
 
     result = fetch(
         ("02GA010",),
         (ProductId("discharge_daily_mean"),),
+        MappingProxyType(
+            {
+                ProductId("discharge_daily_mean"): (
+                    RenderedWindow("2009", None),
+                    RenderedWindow("2010", None),
+                    RenderedWindow("2011", None),
+                )
+            }
+        ),
         window,
         config,
     )
 
     assert [(row["YEAR"], row["MONTH"]) for row in result.value[0].content] == [(2010, 1), (2010, 12)]
+    assert calls == [("2009", "2011")]
     assert result.value[0].fetch_window is window
+    assert result.issues == ()
+
+
+def test_ca_eccc_fetch_selects_renderings_by_product_id(
+    hydat_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _point_fetch_at(monkeypatch, hydat_db)
+    calls: list[tuple[str, str, str]] = []
+
+    def recording_query(
+        connection: sqlite3.Connection,
+        coordinates: object,
+        station_id: str,
+        start_year: str,
+        end_year: str,
+    ) -> list[dict[str, object]]:
+        calls.append((cast(Any, coordinates).table_name, start_year, end_year))
+        return [{"STATION_NUMBER": station_id, "YEAR": 2010, "MONTH": 1, "NO_DAYS": 1}]
+
+    monkeypatch.setattr(fetch_module, "_query_station_product", recording_query)
+    discharge = ProductId("discharge_daily_mean")
+    stage = ProductId("stage_daily_mean")
+    renderings = MappingProxyType(
+        {
+            discharge: (RenderedWindow("2008", None), RenderedWindow("2009", None)),
+            stage: (RenderedWindow("2011", None), RenderedWindow("2012", None)),
+        }
+    )
+
+    result = fetch(("02GA010",), (discharge, stage), renderings, _window(), config)
+
+    assert calls == [("DLY_FLOWS", "2008", "2009"), ("DLY_LEVELS", "2011", "2012")]
+    assert len(result.value) == 2
     assert result.issues == ()
 
 
@@ -336,6 +403,7 @@ def test_fetch_never_calls_hydat_acquisition(
     result = fetch(
         ("02GA010",),
         (ProductId("discharge_daily_mean"),),
+        _renderings(ProductId("discharge_daily_mean")),
         _window(),
         config,
     )

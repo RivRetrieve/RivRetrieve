@@ -1,8 +1,10 @@
-"""drive : concrete ObservationRequest × ProviderStages × ObservationProvenance × RawPayload → _AssemblyResult."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × RawPayload → _AssemblyResult."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Protocol, assert_never
 
 import polars as pl
@@ -18,7 +20,9 @@ from rivretrieve._internal.engine import (
     Instant,
     ObservationRequest,
     Payload,
+    ProductWindowDeclarations,
     ProviderConfig,
+    RenderedWindow,
     RequestedWindow,
     Rows,
     RowsSchema,
@@ -29,6 +33,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, RawPayload
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
 
@@ -87,12 +92,14 @@ def _require_canonical_rows_within_requested(
 
 class ProviderStages(Protocol):
     config: ProviderConfig
+    window_declarations: ProductWindowDeclarations
 
     @staticmethod
     def fetch(
         stations: tuple[str, ...],
         products: tuple[ProductId, ...],
-        window: FetchWindow,
+        rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
+        fetch_window: FetchWindow,
         config: ProviderConfig,
     ) -> WithIssues[tuple[Payload, ...]]: ...
 
@@ -140,7 +147,18 @@ def drive(
         ),
     )
     _require_fetch_window_contains_requested(fetch_window, request.window)
-    fetched = provider.fetch(request.stations, request.products, fetch_window, config)
+    planned: dict[ProductId, tuple[RenderedWindow, ...]] = {}
+    for product_id in request.products:
+        try:
+            declaration = provider.window_declarations.products[product_id]
+        except KeyError as error:
+            raise FatalContractError(
+                f"Provider {request.provider_id} has no window declaration for requested product {product_id}; "
+                "this is an internal provider contract breach before fetch."
+            ) from error
+        planned[product_id] = plan_windows(fetch_window, declaration)
+    rendered_windows = MappingProxyType(dict(planned))
+    fetched = provider.fetch(request.stations, request.products, rendered_windows, fetch_window, config)
     parsed: list[WithIssues[Rows]] = []
     for payload in fetched.value:
         result = provider.parse(payload, config)

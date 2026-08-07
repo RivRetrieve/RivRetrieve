@@ -12,13 +12,19 @@ from rivretrieve._internal.engine import (
     ProductConfig,
     ProviderConfig,
     SourceCoordinates,
+    StopConvention,
     Unit,
+    WindowDeclaration,
+    WindowGranularity,
+    WindowRenderingVocabulary,
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis_module
 from rivretrieve._internal.providers.usgs_nwis.config import (
     UsgsNwisSourceCoordinates,
     config,
+    window_declarations,
 )
 
 
@@ -49,6 +55,15 @@ def test_config_declares_all_six_usgs_products() -> None:
             assert product.semantics.day_definition == DayDefinition("unknown")
 
     assert declared.cache is None
+
+
+def test_usgs_window_declarations_cover_every_configured_product_with_date_inclusive_rendering() -> None:
+    declarations = window_declarations()
+    expected = WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE)
+
+    assert set(declarations.products) == set(config().products)
+    assert all(declaration == expected and declaration.size is None for declaration in declarations.products.values())
+    assert usgs_nwis_module.window_declarations is declarations
 
 
 def test_usgs_source_coordinates_are_named_immutable_and_slotted() -> None:

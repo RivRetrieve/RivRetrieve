@@ -1,13 +1,15 @@
-"""fetch : (stations, products, FetchWindow, ProviderConfig) → WithIssues[tuple[Payload, ...]]"""
+"""fetch : tuple[str, ...] × tuple[ProductId, ...] × Mapping[ProductId, tuple[RenderedWindow, ...]] × FetchWindow × ProviderConfig → WithIssues[tuple[Payload, ...]]."""
 
 from __future__ import annotations
+
+from collections.abc import Mapping
 
 from rivretrieve._internal.engine import (
     FetchWindow,
     Payload,
     ProviderConfig,
+    RenderedWindow,
     SourceCoordinates,
-    WindowEndpoint,
     WithIssues,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
@@ -30,24 +32,27 @@ _BASE_URL = "https://waterservices.usgs.gov/nwis/"
 def fetch(
     stations: tuple[str, ...],
     products: tuple[ProductId, ...],
+    rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
     fetch_window: FetchWindow,
-    provider_config: ProviderConfig,
+    config: ProviderConfig,
 ) -> WithIssues[tuple[Payload, ...]]:
-    start = _window_parameter(fetch_window.start, "start")
-    end = _window_parameter(fetch_window.end, "end")
-    resolved_products: list[tuple[ProductId, SourceCoordinates, UsgsNwisSourceCoordinates]] = []
+    resolved_products: list[tuple[ProductId, SourceCoordinates, UsgsNwisSourceCoordinates, str, str]] = []
     for product_id in products:
         source_coordinates, coordinates = _resolve_coordinates(
             product_id,
-            provider_config,
+            config,
         )
-        resolved_products.append((product_id, source_coordinates, coordinates))
+        (rendered_window,) = rendered_windows[product_id]
+        assert rendered_window.stop is not None
+        resolved_products.append(
+            (product_id, source_coordinates, coordinates, rendered_window.start, rendered_window.stop)
+        )
     client = HttpClient()
     payloads: list[Payload] = []
     issues: list[Issue] = []
 
     for station_id in stations:
-        for product_id, source_coordinates, coordinates in resolved_products:
+        for product_id, source_coordinates, coordinates, start, end in resolved_products:
             request = _request(station_id, coordinates, start, end)
             try:
                 response = client.send(request)
@@ -106,10 +111,6 @@ def _resolve_coordinates(
     if not isinstance(coordinates, UsgsNwisSourceCoordinates):
         raise FatalContractError(f"usgs_nwis product has invalid source coordinates: {product_id}")
     return source_coordinates, coordinates
-
-
-def _window_parameter(value: WindowEndpoint, name: str) -> str:
-    return value.date
 
 
 def _request(
