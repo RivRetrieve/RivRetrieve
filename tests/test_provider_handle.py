@@ -7,7 +7,7 @@ from typing import Any, get_type_hints
 import pytest
 
 import rivretrieve as rr
-from rivretrieve import ProviderHandle
+from rivretrieve import ProviderHandle, RawMode
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.handle import ProviderHandle as InternalProviderHandle
 from rivretrieve._internal.primitives import ProviderId
@@ -139,6 +139,7 @@ def test_provider_handle_protocol_method_signatures_match_tracker() -> None:
             ("start", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
             ("end", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
             ("on_issue", inspect.Parameter.KEYWORD_ONLY, "warn"),
+            ("raw", inspect.Parameter.KEYWORD_ONLY, RawMode.OMIT),
         ],
         {
             "stations": "str | Sequence[str]",
@@ -146,6 +147,7 @@ def test_provider_handle_protocol_method_signatures_match_tracker() -> None:
             "start": "object",
             "end": "object",
             "on_issue": "OnIssue",
+            "raw": "RawMode",
         },
         "ObservationResult",
     )

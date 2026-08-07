@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from rivretrieve._internal.catalogues.schemas import ProductCatalog, StationCatalog, StationProductCatalog
-from rivretrieve._internal.observations import ObservationResult
+from rivretrieve._internal.observations import ObservationResult, RawMode
 from rivretrieve._internal.primitives import CatalogSource, OnIssue
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.results import CatalogResult
@@ -47,4 +47,5 @@ class ProviderHandle(Protocol):
         start: object,
         end: object,
         on_issue: OnIssue = "warn",
+        raw: RawMode = RawMode.OMIT,
     ) -> ObservationResult: ...

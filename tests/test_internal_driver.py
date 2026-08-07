@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from typing import cast
 
 import polars as pl
 import polars.testing as pl_testing
@@ -27,9 +28,11 @@ from rivretrieve._internal.engine import (
     RequestedWindow,
     Rows,
     RowsSchema,
+    SourceCallOrigin,
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownOriginFact,
     WindowDeclaration,
     WindowEndpoint,
     WindowGranularity,
@@ -39,7 +42,7 @@ from rivretrieve._internal.engine import (
     _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.observations import ObservationProvenance, RawPayload
+from rivretrieve._internal.observations import ObservationProvenance, RawMode, RawPayload, RawSourceCall
 from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProductId, ProviderId
 
 _STATIONS = (
@@ -102,7 +105,12 @@ class _ThrowawayProvider:
     ) -> WithIssues[Rows]:
         station_id = payload.station_products[0][0]
         self._events.append(f"parse:{station_id}")
-        assert payload in self._payloads
+        expected_payload = next(
+            candidate for candidate in self._payloads if candidate.station_products == payload.station_products
+        )
+        assert payload is expected_payload
+        assert payload.content is expected_payload.content
+        assert payload.origin is expected_payload.origin
         assert config is self.config
         return WithIssues(
             value=self._rows_by_station[station_id],
@@ -201,7 +209,7 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
         def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
             raise AssertionError("parse must not run")
 
-    result = driver_module.drive(request, _CapturingProvider(), provenance=_provenance(request), raw=_raw(request))
+    result = driver_module.drive(request, _CapturingProvider(), provenance=_provenance(request), raw=RawMode.OMIT)
 
     assert result.canonical_rows.is_empty()
     assert len(received) == 1
@@ -247,7 +255,7 @@ def test_drive_rejects_missing_product_window_declaration_before_fetch() -> None
             raise AssertionError("parse must not run")
 
     with pytest.raises(FatalContractError) as caught:
-        driver_module.drive(request, _MissingDeclarationProvider(), provenance=_provenance(request), raw=_raw(request))
+        driver_module.drive(request, _MissingDeclarationProvider(), provenance=_provenance(request), raw=RawMode.OMIT)
 
     assert str(caught.value) == (
         "Provider throwaway has no window declaration for requested product missing; "
@@ -266,8 +274,14 @@ def _payload(
         source_coordinates=coordinates,
         station_products=((station_id, ProductId("level")),),
         fetch_window=fetch_window,
-        content={"station_id": station_id},
+        content=(f'{{"station_id":"{station_id}"}}').encode(),
+        origin=_origin(),
     )
+
+
+def _origin() -> SourceCallOrigin:
+    unknown = UnknownOriginFact()
+    return SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)
 
 
 def _rows(
@@ -300,15 +314,6 @@ def _provenance(request: ObservationRequest) -> ObservationProvenance:
     )
 
 
-def _raw(request: ObservationRequest) -> RawPayload:
-    return RawPayload(
-        provider_id=request.provider_id,
-        content_type="application/json",
-        content=b'{"provider":"throwaway"}',
-        metadata="throwaway payloads",
-    )
-
-
 def _windows() -> tuple[RequestedWindow, FetchWindow]:
     requested = RequestedWindow(
         start=WindowEndpoint.from_datetime(datetime(2026, 1, 2, 0)),
@@ -319,6 +324,43 @@ def _windows() -> tuple[RequestedWindow, FetchWindow]:
         WindowEndpoint.from_datetime(datetime(2026, 1, 4, 23)),
     )
     return requested, fetched
+
+
+@pytest.mark.parametrize("invalid_raw", [False, True, "include", None])
+def test_drive_rejects_invalid_raw_modes_before_provider_work(invalid_raw: object) -> None:
+    request = _request(_windows()[0])
+
+    with pytest.raises(TypeError, match="^raw must be RawMode.OMIT or RawMode.INCLUDE$"):
+        driver_module.drive(
+            request,
+            cast("driver_module.ProviderStages", object()),
+            provenance=_provenance(request),
+            raw=cast("RawMode", invalid_raw),
+        )
+
+
+def test_drive_default_omit_never_constructs_raw_source_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    requested_window, fetch_window = _windows()
+    request = _request(requested_window)
+    coordinates = SourceCoordinates({"parameter": "height"})
+    payload = _payload("station-1", coordinates, fetch_window)
+    provider = _ThrowawayProvider(
+        _config(coordinates),
+        (payload,),
+        {"station-1": _rows("station-1", 12, 250.0)},
+        {"station-1": ()},
+        (),
+        [],
+    )
+
+    def forbidden_raw_source_call(*args: object, **kwargs: object) -> RawSourceCall:
+        raise AssertionError("RawSourceCall must not be constructed under OMIT")
+
+    monkeypatch.setattr(driver_module, "RawSourceCall", forbidden_raw_source_call)
+
+    result = driver_module.drive(request, provider, provenance=_provenance(request))
+
+    assert result.raw == RawPayload(provider_id=request.provider_id, entries=())
 
 
 @pytest.mark.parametrize(
@@ -393,7 +435,7 @@ def test_drive_widens_fetch_window_by_exactly_two_calendar_days_across_month_and
         request,
         _CapturingProvider(),
         provenance=_provenance(request),
-        raw=_raw(request),
+        raw=RawMode.OMIT,
     )
 
     assert case in {"month-seam", "year-seam"}
@@ -461,7 +503,6 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         events,
     )
     provenance = _provenance(request)
-    raw = _raw(request)
 
     def recording_convert(
         supplied_rows: Rows,
@@ -496,7 +537,11 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
             "parse.station-1.second",
             "parse.station-2",
         )
-        assert supplied_raw is raw
+        assert supplied_raw.provider_id == request.provider_id
+        assert len(supplied_raw.entries) == 2
+        for entry, payload in zip(supplied_raw.entries, payloads, strict=True):
+            assert entry.content is payload.content
+            assert entry.origin is payload.origin
         return real_assemble(canonical_rows, supplied_provenance, issues, supplied_raw)
 
     monkeypatch.setattr(driver_module, "convert", recording_convert)
@@ -506,7 +551,7 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         request,
         provider,
         provenance=provenance,
-        raw=raw,
+        raw=RawMode.INCLUDE,
     )
 
     expected = pl.DataFrame(
@@ -531,7 +576,11 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         "parse.station-1.second",
         "parse.station-2",
     )
-    assert result.raw is raw
+    assert result.raw.provider_id == request.provider_id
+    assert len(result.raw.entries) == 2
+    for entry, payload in zip(result.raw.entries, payloads, strict=True):
+        assert entry.content is payload.content
+        assert entry.origin is payload.origin
     assert events == [
         "fetch",
         "parse:station-1",
@@ -593,7 +642,7 @@ def test_drive_clips_unknown_zone_instants_at_both_closed_edges_without_warning(
         request,
         provider,
         provenance=_provenance(request),
-        raw=_raw(request),
+        raw=RawMode.OMIT,
     )
 
     expected = pl.DataFrame(
@@ -642,13 +691,12 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
         events,
     )
     provenance = _provenance(request)
-    raw = _raw(request)
 
     result = driver_module.drive(
         request,
         provider,
         provenance=provenance,
-        raw=raw,
+        raw=RawMode.OMIT,
     )
 
     expected = pl.DataFrame(
@@ -674,7 +722,7 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
     assert tuple(issue.code for issue in result.issues) == ("fetch.station-3-not-found",)
     assert result.provenance is provenance
-    assert result.raw is raw
+    assert result.raw == RawPayload(provider_id=request.provider_id, entries=())
     assert events == [
         "fetch",
         "parse:station-1",
@@ -709,7 +757,6 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
         events,
     )
     provenance = _provenance(request)
-    raw = _raw(request)
 
     def recording_convert(
         supplied_rows: Rows,
@@ -734,7 +781,7 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
         pl_testing.assert_frame_equal(canonical_rows, expected_canonical)
         assert supplied_provenance is provenance
         assert issues == fetch_issues
-        assert supplied_raw is raw
+        assert supplied_raw == RawPayload(provider_id=request.provider_id, entries=())
         return real_assemble(canonical_rows, supplied_provenance, issues, supplied_raw)
 
     monkeypatch.setattr(driver_module, "convert", recording_convert)
@@ -744,14 +791,14 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
         request,
         provider,
         provenance=provenance,
-        raw=raw,
+        raw=RawMode.OMIT,
     )
 
     expected = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
     assert result.issues == fetch_issues
     assert result.provenance is provenance
-    assert result.raw is raw
+    assert result.raw == RawPayload(provider_id=request.provider_id, entries=())
     assert events == ["fetch", "convert", "assemble"]
     assert {name for name in dir(provider) if not name.startswith("_")} == {
         "config",
@@ -835,7 +882,8 @@ def _drive_boundary_rows(
             source_coordinates=coordinates,
             station_products=((station_id, ProductId("level")),),
             fetch_window=fetch_window,
-            content={"payload_index": index},
+            content=(f'{{"payload_index":{index}}}').encode(),
+            origin=_origin(),
         )
         for index, station_id in enumerate(request.stations, start=1)
     )
@@ -845,18 +893,11 @@ def _drive_boundary_rows(
         provider_id=request.provider_id,
         request={"stations": list(request.stations), "products": ["level"]},
     )
-    raw = RawPayload(
-        provider_id=request.provider_id,
-        content_type="application/json",
-        content=b"{}",
-        metadata="boundary payloads",
-    )
-
     return driver_module.drive(
         request,
         provider,
         provenance=provenance,
-        raw=raw,
+        raw=RawMode.OMIT,
     )
 
 
@@ -1092,7 +1133,7 @@ def test_drive_rejects_engine_created_fetch_window_that_does_not_contain_request
             request,
             _ForbiddenProvider(),
             provenance=_provenance(request),
-            raw=_raw(request),
+            raw=RawMode.OMIT,
         )
 
     assert exc_info.value.issues == ()
@@ -1212,7 +1253,7 @@ def test_drive_rejects_post_convert_row_outside_product_semantic_axis_before_ass
             request,
             _EmptyProvider(),
             provenance=_provenance(request),
-            raw=_raw(request),
+            raw=RawMode.OMIT,
         )
 
     assert exc_info.value.issues == ()
@@ -1263,7 +1304,7 @@ def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -
         request,
         _DailyProvider(),
         provenance=_provenance(request),
-        raw=_raw(request),
+        raw=RawMode.OMIT,
     )
 
     expected = pl.DataFrame(

@@ -1,7 +1,7 @@
 import ast
 import inspect
 from dataclasses import fields
-from datetime import datetime
+from datetime import UTC, datetime
 
 import polars as pl
 import polars.testing as pl_testing
@@ -10,9 +10,9 @@ import rivretrieve
 import rivretrieve._internal
 import rivretrieve._internal.assembly as assembly_module
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
-from rivretrieve._internal.engine import CanonicalRowsSchema
+from rivretrieve._internal.engine import CanonicalRowsSchema, SourceCallOrigin, UnknownOriginFact
 from rivretrieve._internal.issues import Issue
-from rivretrieve._internal.observations import ObservationProvenance, RawPayload
+from rivretrieve._internal.observations import ObservationProvenance, RawPayload, RawSourceCall
 from rivretrieve._internal.primitives import ProviderId
 
 
@@ -55,12 +55,17 @@ def test_assemble_packages_populated_inputs_unchanged() -> None:
         message="Source unit was converted",
     )
     issues = (first_issue, second_issue)
-    raw = RawPayload(
-        provider_id=ProviderId("provider-a"),
-        content_type="application/octet-stream",
-        content=b"\x00raw-provider-bytes\xff",
-        metadata="raw metadata",
+    content = b"\x00raw-provider-bytes\xff"
+    origin = SourceCallOrigin(
+        url="https://example.invalid/observations",
+        request_parameters={"station": "station-1"},
+        status_code=200,
+        retrieved_at=datetime(2026, 8, 7, 12, 30, tzinfo=UTC),
+        content_type="application/json",
+        source_path=UnknownOriginFact(),
+        query=UnknownOriginFact(),
     )
+    raw = RawPayload(provider_id=ProviderId("provider-a"), entries=(RawSourceCall(content, origin),))
 
     result = assemble(rows, provenance, issues, raw)
 
@@ -70,7 +75,9 @@ def test_assemble_packages_populated_inputs_unchanged() -> None:
     assert result.issues is issues
     assert result.issues == (first_issue, second_issue)
     assert result.raw is raw
-    assert result.raw.content is raw.content
+    assert result.raw.entries is raw.entries
+    assert result.raw.entries[0].content is content
+    assert result.raw.entries[0].origin is origin
     pl_testing.assert_frame_equal(rows, expected_rows)
 
 
@@ -87,12 +94,7 @@ def test_assemble_packages_empty_inputs_unchanged() -> None:
         message="No observations were returned",
     )
     issues = (issue,)
-    raw = RawPayload(
-        provider_id=ProviderId("provider-empty"),
-        content_type="text/plain",
-        content="",
-        metadata="empty response",
-    )
+    raw = RawPayload(provider_id=ProviderId("provider-empty"))
 
     result = assemble(rows, provenance, issues, raw)
 
@@ -104,7 +106,7 @@ def test_assemble_packages_empty_inputs_unchanged() -> None:
     assert result.issues is issues
     assert result.issues == (issue,)
     assert result.raw is raw
-    assert result.raw.content == ""
+    assert result.raw.entries == ()
 
 
 def test_assemble_return_construction_is_private_and_exactly_four_input_packaging() -> None:

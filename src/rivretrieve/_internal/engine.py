@@ -1,11 +1,14 @@
-"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × WindowGranularity × WindowRenderingVocabulary × StopConvention × WindowDeclaration × ProductWindowDeclarations × RenderedWindow × ObservationRequest × SourceCoordinates × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig."""
+"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × WindowGranularity × WindowRenderingVocabulary × StopConvention × WindowDeclaration × ProductWindowDeclarations × RenderedWindow × ObservationRequest × SourceCoordinates × SourceCallParameter × UnknownOriginFact × SourceQuery × SourceCallOrigin × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig.
+
+Payload ≔ SourceCoordinates × station-product tags × FetchWindow × bytes × SourceCallOrigin.
+"""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
 from typing import NewType, Self
@@ -196,12 +199,87 @@ class SourceCoordinates:
     value: object
 
 
+type SourceCallParameter = str | int | float | bytes | None
+
+
+@dataclass(frozen=True, slots=True)
+class UnknownOriginFact:
+    pass
+
+
+def _is_source_call_parameter(value: object) -> bool:
+    return value is None or isinstance(value, str | int | float | bytes)
+
+
+@dataclass(frozen=True, slots=True)
+class SourceQuery:
+    statement: str
+    parameters: tuple[SourceCallParameter, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.statement, str) or not self.statement:
+            raise TypeError("source query statement must be a non-empty string")
+        if not isinstance(self.parameters, tuple):
+            raise TypeError("source query parameters must be a tuple")
+        if any(not _is_source_call_parameter(value) for value in self.parameters):
+            raise TypeError("source query parameters contain an unsupported value")
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCallOrigin:
+    url: str | UnknownOriginFact
+    request_parameters: Mapping[str, SourceCallParameter] | UnknownOriginFact
+    status_code: int | UnknownOriginFact
+    retrieved_at: datetime | UnknownOriginFact
+    content_type: str | UnknownOriginFact
+    source_path: str | UnknownOriginFact
+    query: SourceQuery | UnknownOriginFact
+
+    def __post_init__(self) -> None:
+        for name in ("url", "content_type", "source_path"):
+            value = getattr(self, name)
+            if not isinstance(value, UnknownOriginFact) and (not isinstance(value, str) or not value):
+                raise TypeError(f"known source-call {name} must be a non-empty string")
+
+        parameters = self.request_parameters
+        if isinstance(parameters, UnknownOriginFact):
+            pass
+        elif isinstance(parameters, Mapping):
+            if any(not isinstance(key, str) for key in parameters):
+                raise TypeError("source-call request parameter names must be strings")
+            if any(not _is_source_call_parameter(value) for value in parameters.values()):
+                raise TypeError("source-call request parameters contain an unsupported value")
+            object.__setattr__(self, "request_parameters", MappingProxyType(dict(parameters)))
+        else:
+            raise TypeError("source-call request parameters must be a mapping or UnknownOriginFact")
+
+        if not isinstance(self.status_code, UnknownOriginFact) and (type(self.status_code) is not int):
+            raise TypeError("known source-call status code must be an integer")
+
+        retrieved_at = self.retrieved_at
+        if not isinstance(retrieved_at, UnknownOriginFact):
+            if not isinstance(retrieved_at, datetime):
+                raise TypeError("source-call retrieval instant must be a datetime or UnknownOriginFact")
+            if retrieved_at.tzinfo is None or retrieved_at.utcoffset() != timedelta(0):
+                raise ValueError("known source-call retrieval instant must be timezone-aware UTC")
+
+        if not isinstance(self.query, SourceQuery | UnknownOriginFact):
+            raise TypeError("source-call query must be SourceQuery or UnknownOriginFact")
+
+
 @dataclass(frozen=True, slots=True)
 class Payload:
     source_coordinates: SourceCoordinates
     station_products: tuple[tuple[str, ProductId], ...]
     fetch_window: FetchWindow
-    content: object
+    content: bytes
+    origin: SourceCallOrigin
+
+    def __post_init__(self) -> None:
+        if type(self.content) is not bytes:
+            raise TypeError("payload content must be bytes")
+        if not isinstance(self.origin, SourceCallOrigin):
+            raise TypeError("payload origin must be SourceCallOrigin")
 
 
 @dataclass(frozen=True, slots=True)

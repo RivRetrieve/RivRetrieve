@@ -13,7 +13,9 @@ from rivretrieve._internal.engine import (
     Payload,
     ProviderConfig,
     RowsSchema,
+    SourceCallOrigin,
     SourceCoordinates,
+    UnknownOriginFact,
     WindowEndpoint,
     ZoneValue,
     _make_fetch_window,
@@ -26,7 +28,7 @@ FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json
 
 
 def _payload(
-    content: object,
+    content: bytes,
     station_products: tuple[tuple[str, ProductId], ...] = (("payload-station", ProductId("payload-product")),),
 ) -> Payload:
     return Payload(
@@ -37,7 +39,13 @@ def _payload(
             WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
         ),
         content,
+        _origin(),
     )
+
+
+def _origin() -> SourceCallOrigin:
+    unknown = UnknownOriginFact()
+    return SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)
 
 
 def _provider_config() -> ProviderConfig:
@@ -70,7 +78,10 @@ def _content(
 
 
 def test_parse_fixture_emits_exact_native_rows_from_payload_identity() -> None:
-    result = parse(_payload(FIXTURE_PATH.read_bytes()), _provider_config())
+    content = FIXTURE_PATH.read_bytes()
+    payload = _payload(content)
+    assert payload.content is content
+    result = parse(payload, _provider_config())
     expected = pl.DataFrame(
         {
             "station_id": ["payload-station"] * 10,
@@ -193,14 +204,12 @@ def test_parse_fails_loudly_on_unrepresentable_timestamp(timestamp: str) -> None
 @pytest.mark.parametrize(
     "content",
     [
-        "{}",
-        object(),
         b"{",
         b"[]",
         bytes([0xFF]),
     ],
 )
-def test_parse_rejects_broken_opaque_content(content: object) -> None:
+def test_parse_rejects_broken_opaque_content(content: bytes) -> None:
     with pytest.raises(FatalContractError):
         parse(_payload(content), _provider_config())
 

@@ -1,4 +1,4 @@
-"""drive : ObservationRequest × ProviderStages × ObservationProvenance × RawPayload → _AssemblyResult."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × RawMode → _AssemblyResult."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from rivretrieve._internal.engine import (
     _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.observations import ObservationProvenance, RawPayload
+from rivretrieve._internal.observations import ObservationProvenance, RawMode, RawPayload, RawSourceCall
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.window_planning import plan_windows
 
@@ -91,6 +91,8 @@ def _require_canonical_rows_within_requested(
 
 
 class ProviderStages(Protocol):
+    """Fetch returns ordered source calls; parse receives each exact Payload without transformation."""
+
     config: ProviderConfig
     window_declarations: ProductWindowDeclarations
 
@@ -115,8 +117,10 @@ def drive(
     provider: ProviderStages,
     *,
     provenance: ObservationProvenance,
-    raw: RawPayload,
+    raw: RawMode = RawMode.OMIT,
 ) -> _AssemblyResult:
+    if raw not in (RawMode.OMIT, RawMode.INCLUDE) or not isinstance(raw, RawMode):
+        raise TypeError("raw must be RawMode.OMIT or RawMode.INCLUDE")
     config = provider.config
     requested_start = request.window.start
     requested_end = request.window.end
@@ -160,13 +164,17 @@ def drive(
     rendered_windows = MappingProxyType(dict(planned))
     fetched = provider.fetch(request.stations, request.products, rendered_windows, fetch_window, config)
     parsed: list[WithIssues[Rows]] = []
+    raw_entries: list[RawSourceCall] = []
     for payload in fetched.value:
-        result = provider.parse(payload, config)
-        validate_catalogue(result.value, RowsSchema, on_issue="raise")
-        parsed.append(result)
+        if raw is RawMode.INCLUDE:
+            raw_entries.append(RawSourceCall(content=payload.content, origin=payload.origin))
+        parsed_payload = provider.parse(payload, config)
+        validate_catalogue(parsed_payload.value, RowsSchema, on_issue="raise")
+        parsed.append(parsed_payload)
     rows = pl.concat([result.value for result in parsed] + [pl.DataFrame(schema=RowsSchema.polars_schema)])
     converted = convert(rows, config, request.window)
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
     _require_canonical_rows_within_requested(converted.value, config, request.window)
     issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
-    return assemble(converted.value, provenance, issues, raw)
+    raw_payload = RawPayload(provider_id=request.provider_id, entries=tuple(raw_entries))
+    return assemble(converted.value, provenance, issues, raw_payload)

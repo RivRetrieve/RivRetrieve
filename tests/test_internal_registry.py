@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
 
 import polars as pl
 import polars.testing as pl_testing
 import pytest
+from pydantic import BaseModel
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
@@ -24,9 +27,11 @@ from rivretrieve._internal.engine import (
     RenderedWindow,
     Rows,
     RowsSchema,
+    SourceCallOrigin,
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownOriginFact,
     WindowDeclaration,
     WindowEndpoint,
     WindowGranularity,
@@ -43,6 +48,7 @@ from rivretrieve._internal.issues import (
 )
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
+    ObservationResult,
     RawPayload,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
@@ -51,6 +57,35 @@ from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderErro
 from rivretrieve._internal.results import CatalogProvenance
 from tests._stubs import stub_provider
 from tests.conftest import RegisteredStub
+
+
+def _instance_values(value: object) -> Iterator[object]:
+    if isinstance(value, BaseModel):
+        for name in type(value).model_fields:
+            yield from _instance_values(getattr(value, name))
+    elif is_dataclass(value) and not isinstance(value, type):
+        for field in fields(value):
+            yield from _instance_values(getattr(value, field.name))
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            yield from _instance_values(item)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            yield from _instance_values(item)
+    elif isinstance(value, pl.DataFrame):
+        for row in value.iter_rows():
+            yield from _instance_values(row)
+    else:
+        yield value
+
+
+def _assert_sentinel_unreachable(result: ObservationResult) -> None:
+    assert not any(value == b"test payload" for value in _instance_values(result))
+
+
+def _origin() -> SourceCallOrigin:
+    unknown = UnknownOriginFact()
+    return SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)
 
 
 class _EngineModule:
@@ -94,6 +129,7 @@ class _EngineModule:
             station_products=((stations[0], products[0]),),
             fetch_window=window,
             content=b"test payload",
+            origin=_origin(),
         )
         _EngineModule.emitted_payload = payload
         return WithIssues(
@@ -208,6 +244,7 @@ def test_registry_module_without_engine_stages_rejects_observation_dispatch(
 
 def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registry = ProviderRegistry()
     artifact = stub_packaged_catalogue_artifact("test_provider")
@@ -251,12 +288,25 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
     assert result.provenance.request is not None
     assert result.provenance.request["start"] == "2026-01-01T00:00:00"
     assert result.provenance.request["end"] == "2026-01-02T23:59:59.999999"
-    assert result.raw == RawPayload(provider_id=ProviderId("test_provider"))
+    assert result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
+    _assert_sentinel_unreachable(result)
     assert [issue.code for issue in result.issues] == [
         "test.engine.warning",
         "provenance.license_not_established",
         "provenance.citation_not_established",
     ]
+
+    monkeypatch.setattr(discovery, "_provider_lookup", lambda provider_id: handle)
+    wrapped_result = rr.observations(
+        provider="test_provider",
+        stations="station-1",
+        products="level",
+        start="2026-01-01",
+        end="2026-01-02",
+        on_issue="ignore",
+    )
+    assert wrapped_result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
+    _assert_sentinel_unreachable(wrapped_result)
 
 
 def test_registry_reads_packaged_license_and_citation_into_observation_provenance(
@@ -494,7 +544,8 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
                         source_coordinates=_ExclusiveStopModule.coordinates,
                         station_products=((stations[0], products[0]),),
                         fetch_window=window,
-                        content=selected,
+                        content=json.dumps([value.isoformat() for value in selected]).encode(),
+                        origin=_origin(),
                     ),
                 )
             )
@@ -502,8 +553,7 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
         @staticmethod
         def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
             _ExclusiveStopModule.events.append("parse")
-            readings = payload.content
-            assert isinstance(readings, tuple)
+            readings = tuple(datetime.fromisoformat(value) for value in json.loads(payload.content))
             return WithIssues(
                 value=pl.DataFrame(
                     {
@@ -623,7 +673,8 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
                         source_coordinates=_FixedSpanModule.coordinates,
                         station_products=((stations[0], products[0]),),
                         fetch_window=window,
-                        content=(datetime(2026, 1, 1), datetime(2026, 1, 2)),
+                        content=b'["2026-01-01T00:00:00","2026-01-02T00:00:00"]',
+                        origin=_origin(),
                     ),
                 ),
                 issues=(undercoverage_issue,),
@@ -632,8 +683,7 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
         @staticmethod
         def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
             _FixedSpanModule.events.append("parse")
-            readings = payload.content
-            assert isinstance(readings, tuple)
+            readings = tuple(datetime.fromisoformat(value) for value in json.loads(payload.content))
             return WithIssues(
                 value=pl.DataFrame(
                     {

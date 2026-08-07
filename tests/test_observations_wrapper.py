@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 import rivretrieve as rr
+from rivretrieve import RawMode
 from rivretrieve._internal import discovery
 
 
@@ -30,6 +31,7 @@ def test_observations_wrapper_delegates_to_provider_handle(monkeypatch: pytest.M
         start="2025-01-01",
         end="2025-01-01",
         on_issue="ignore",
+        raw=RawMode.INCLUDE,
     )
 
     assert returned is result
@@ -43,6 +45,7 @@ def test_observations_wrapper_delegates_to_provider_handle(monkeypatch: pytest.M
                 "start": "2025-01-01",
                 "end": "2025-01-01",
                 "on_issue": "ignore",
+                "raw": RawMode.INCLUDE,
             },
         ),
     ]
@@ -67,6 +70,7 @@ def test_observations_wrapper_forwards_default_on_issue(monkeypatch: pytest.Monk
     )
 
     assert observed_kwargs["on_issue"] == "warn"
+    assert observed_kwargs["raw"] is RawMode.OMIT
 
 
 @pytest.mark.parametrize("missing_kwarg", ["provider", "stations", "products", "start", "end"])

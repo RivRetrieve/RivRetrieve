@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 import polars as pl
@@ -16,8 +17,11 @@ from rivretrieve._internal.engine import (
     ProductConfig,
     ProviderConfig,
     RowsSchema,
+    SourceCallOrigin,
     SourceCoordinates,
+    SourceQuery,
     Unit,
+    UnknownOriginFact,
     WindowEndpoint,
     ZoneValue,
     _make_fetch_window,
@@ -67,7 +71,37 @@ def _payload(
         source_coordinates=SourceCoordinates(coordinates),
         station_products=pairs,
         fetch_window=_fetch_window(),
-        content=content,
+        content=json.dumps(
+            content,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8"),
+        origin=_origin(),
+    )
+
+
+def _payload_bytes(content: bytes) -> Payload:
+    return Payload(
+        SourceCoordinates(FLOW),
+        (("02GA010", DISCHARGE),),
+        _fetch_window(),
+        content,
+        _origin(),
+    )
+
+
+def _origin() -> SourceCallOrigin:
+    unknown = UnknownOriginFact()
+    return SourceCallOrigin(
+        unknown,
+        unknown,
+        unknown,
+        unknown,
+        "application/json",
+        "/test/Hydat.sqlite3",
+        SourceQuery("SELECT test", ()),
     )
 
 
@@ -172,7 +206,7 @@ def test_parse_malformed_month_keeps_valid_rows_and_concatenates_issues() -> Non
     result = parse(
         _payload(
             [
-                object(),
+                "malformed-row",
                 malformed_calendar,
                 _monthly_row(values={1: 2.0}),
                 _monthly_row(no_days=2, values={1: "not-numeric", 2: 3.0}),
@@ -204,8 +238,8 @@ def test_parse_invalid_day_index_is_an_issue_and_valid_days_survive() -> None:
     ("content", "expected_codes"),
     [
         ([], ["missing_data"]),
-        (object(), ["parse_error", "missing_data"]),
-        ([object()], ["parse_error", "missing_data"]),
+        ({}, ["parse_error", "missing_data"]),
+        (["malformed-row"], ["parse_error", "missing_data"]),
     ],
 )
 def test_parse_empty_or_entirely_unparseable_payload_returns_issues(
@@ -216,6 +250,12 @@ def test_parse_empty_or_entirely_unparseable_payload_returns_issues(
 
     pl_testing.assert_frame_equal(result.value, pl.DataFrame(schema=RowsSchema.polars_schema))
     assert [issue.code for issue in result.issues] == expected_codes
+
+
+@pytest.mark.parametrize("content", [bytes([0xFF]), b"["])
+def test_parse_invalid_utf8_or_json_is_fatal(content: bytes) -> None:
+    with pytest.raises(FatalContractError, match="invalid CA ECCC payload JSON"):
+        parse(_payload_bytes(content), config)
 
 
 def test_parse_unknown_product_is_dropped_with_issues() -> None:
@@ -297,7 +337,8 @@ def test_parse_rejects_coordinate_and_declaration_seam_breaks() -> None:
                 SourceCoordinates(object()),
                 (("02GA010", ProductId("discharge_daily_mean")),),
                 _fetch_window(),
-                [],
+                b"[]",
+                _origin(),
             ),
             config,
         )

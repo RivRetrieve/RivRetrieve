@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import ast
+import json
 import sqlite3
 from collections.abc import Mapping
+from dataclasses import fields
 from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
@@ -10,7 +12,14 @@ from typing import Any, cast
 
 import pytest
 
-from rivretrieve._internal.engine import FetchWindow, RenderedWindow, WindowEndpoint, _make_fetch_window
+from rivretrieve._internal.engine import (
+    FetchWindow,
+    RenderedWindow,
+    SourceQuery,
+    UnknownOriginFact,
+    WindowEndpoint,
+    _make_fetch_window,
+)
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
@@ -112,20 +121,71 @@ def test_fetch_returns_tagged_non_http_hydat_payloads_for_both_products(
     assert discharge.source_coordinates is config.products[ProductId("discharge_daily_mean")].coordinates
     assert discharge.station_products == (("02GA010", ProductId("discharge_daily_mean")),)
     assert discharge.fetch_window is fetch_window
-    assert type(discharge.content) is list
-    assert not isinstance(discharge.content, (bytes, str))
-    discharge_rows = cast(list[dict[str, object]], discharge.content)
+    assert type(discharge.content) is bytes
+    discharge_rows = cast(list[dict[str, object]], json.loads(discharge.content.decode("utf-8")))
     assert all(type(row) is dict for row in discharge_rows)
     assert [row["MONTH"] for row in discharge_rows] == [1, 12]
+    assert discharge.content == json.dumps(
+        discharge_rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
+    assert discharge.origin.source_path == str(hydat_db.resolve())
+    assert discharge.origin.content_type == "application/json"
+    assert discharge.origin.query == SourceQuery(
+        'SELECT * FROM "DLY_FLOWS" WHERE STATION_NUMBER = ? AND YEAR BETWEEN ? AND ? ORDER BY YEAR, MONTH',
+        ("02GA010", "2010", "2010"),
+    )
+    for fact in (
+        discharge.origin.url,
+        discharge.origin.request_parameters,
+        discharge.origin.status_code,
+        discharge.origin.retrieved_at,
+    ):
+        assert isinstance(fact, UnknownOriginFact)
+    assert "headers" not in {field.name for field in fields(discharge.origin)}
 
     assert stage.source_coordinates is config.products[ProductId("stage_daily_mean")].coordinates
     assert stage.station_products == (("02GA010", ProductId("stage_daily_mean")),)
     assert stage.fetch_window is fetch_window
-    assert type(stage.content) is list
-    assert not isinstance(stage.content, (bytes, str))
-    stage_rows = cast(list[dict[str, object]], stage.content)
+    assert type(stage.content) is bytes
+    stage_rows = cast(list[dict[str, object]], json.loads(stage.content.decode("utf-8")))
     assert all(type(row) is dict for row in stage_rows)
     assert [row["MONTH"] for row in stage_rows] == [1]
+    assert stage.content == json.dumps(
+        stage_rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
+    assert stage.origin.source_path == str(hydat_db.resolve())
+    assert stage.origin.content_type == "application/json"
+    assert stage.origin.query == SourceQuery(
+        'SELECT * FROM "DLY_LEVELS" WHERE STATION_NUMBER = ? AND YEAR BETWEEN ? AND ? ORDER BY YEAR, MONTH',
+        ("02GA010", "2010", "2010"),
+    )
+    for fact in (
+        stage.origin.url,
+        stage.origin.request_parameters,
+        stage.origin.status_code,
+        stage.origin.retrieved_at,
+    ):
+        assert isinstance(fact, UnknownOriginFact)
+    assert "headers" not in {field.name for field in fields(stage.origin)}
+
+    http_only_facts = (
+        "https://source.example/data",
+        "Authorization",
+        "Bearer transport-secret",
+        "X-API-Key",
+        "api-key-secret",
+    )
+    known_http_call = (
+        "https://source.example/data",
+        "Authorization: Bearer transport-secret",
+        "X-API-Key: api-key-secret",
+    )
+    for forbidden in http_only_facts:
+        assert any(forbidden in candidate for candidate in known_http_call)
+    for origin in (discharge.origin, stage.origin):
+        scanned = tuple(str(getattr(origin, field.name)) for field in fields(origin))
+        for forbidden in http_only_facts:
+            assert all(forbidden not in candidate for candidate in scanned)
 
 
 def test_fetch_opens_sqlite_once_per_request(
@@ -173,7 +233,7 @@ def test_fetch_year_selection_is_not_clipped_to_fetch_window(
         config,
     )
 
-    rows = cast(list[dict[str, object]], result.value[0].content)
+    rows = cast(list[dict[str, object]], json.loads(result.value[0].content.decode("utf-8")))
     assert isinstance(rows, list)
     assert [(row["YEAR"], row["MONTH"]) for row in rows] == [
         (2010, 1),
@@ -327,7 +387,7 @@ def test_ca_eccc_fetch_uses_first_and_last_engine_rendered_year_tokens(
     calls: list[tuple[str, str]] = []
     real_query = fetch_module._query_station_product
 
-    def recording_query(*args: Any) -> list[dict[str, object]]:
+    def recording_query(*args: Any) -> tuple[list[dict[str, object]], SourceQuery]:
         calls.append((cast(str, args[-2]), cast(str, args[-1])))
         return real_query(*args)
 
@@ -349,7 +409,8 @@ def test_ca_eccc_fetch_uses_first_and_last_engine_rendered_year_tokens(
         config,
     )
 
-    assert [(row["YEAR"], row["MONTH"]) for row in result.value[0].content] == [(2010, 1), (2010, 12)]
+    rows = json.loads(result.value[0].content.decode("utf-8"))
+    assert [(row["YEAR"], row["MONTH"]) for row in rows] == [(2010, 1), (2010, 12)]
     assert calls == [("2009", "2011")]
     assert result.value[0].fetch_window is window
     assert result.issues == ()
@@ -368,9 +429,10 @@ def test_ca_eccc_fetch_selects_renderings_by_product_id(
         station_id: str,
         start_year: str,
         end_year: str,
-    ) -> list[dict[str, object]]:
+    ) -> tuple[list[dict[str, object]], SourceQuery]:
         calls.append((cast(Any, coordinates).table_name, start_year, end_year))
-        return [{"STATION_NUMBER": station_id, "YEAR": 2010, "MONTH": 1, "NO_DAYS": 1}]
+        query = SourceQuery("SELECT test", (station_id, start_year, end_year))
+        return [{"STATION_NUMBER": station_id, "YEAR": 2010, "MONTH": 1, "NO_DAYS": 1}], query
 
     monkeypatch.setattr(fetch_module, "_query_station_product", recording_query)
     discharge = ProductId("discharge_daily_mean")
