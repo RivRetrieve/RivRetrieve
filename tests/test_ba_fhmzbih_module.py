@@ -45,15 +45,6 @@ def test_ba_fhmzbih_info() -> None:
     assert info.catalogue_version == "2026-08-02"
 
 
-@pytest.mark.parametrize("method", ["row_annotation_schema", "series_annotation_schema"])
-def test_ba_fhmzbih_observation_schemas_unavailable(method: str) -> None:
-    with pytest.raises(
-        ObservationsUnavailableError,
-        match="Provider ba_fhmzbih has no observation module registered",
-    ):
-        getattr(rr.provider("ba_fhmzbih"), method)()
-
-
 def test_ba_fhmzbih_observations_unavailable() -> None:
     with pytest.raises(
         ObservationsUnavailableError,

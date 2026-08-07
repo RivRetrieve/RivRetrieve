@@ -8,7 +8,6 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
-from rivretrieve._internal.observations import AnnotationSchema
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.providers.ca_eccc.config import config as config
@@ -59,107 +58,6 @@ def station_products(
     on_issue: OnIssue = "warn",
 ) -> CatalogResult[pl.DataFrame]:
     return _reader().read_station_products(stations, source=source, on_issue=on_issue)
-
-
-def row_annotation_schema() -> list[AnnotationSchema]:
-    return [
-        AnnotationSchema(
-            annotation_id="native_unit",
-            description="Provider-native unit for this observation (m or m3/s; no conversion applied).",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="raw_value",
-            description="Value as stored in HYDAT (identical to value; no unit conversion needed).",
-            value_type="float",
-            source_field="FLOW or LEVEL day column",
-        ),
-        AnnotationSchema(
-            annotation_id="quality_flag",
-            description=(
-                "HYDAT quality symbol code from FLOW_SYMBOL or LEVEL_SYMBOL column. "
-                "Empty string means no flag. Known codes: A=Estimated, B=Ice conditions, "
-                "D=Dry, E=Estimated (ice-affected), R=Revised, S=Sample."
-            ),
-            value_type="string",
-            source_field="FLOW_SYMBOL or LEVEL_SYMBOL day column",
-        ),
-        AnnotationSchema(
-            annotation_id="quality_description",
-            description="English description of the quality flag from HYDAT DATA_SYMBOLS table.",
-            value_type="string",
-            source_field="DATA_SYMBOLS.SYMBOL_EN",
-        ),
-    ]
-
-
-def series_annotation_schema() -> list[AnnotationSchema]:
-    return [
-        AnnotationSchema(
-            annotation_id="hydat_table",
-            description="HYDAT table queried for this product (DLY_FLOWS or DLY_LEVELS).",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="hydat_value_prefix",
-            description="Column prefix used in the HYDAT table (FLOW or LEVEL).",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="hydat_source",
-            description="Filename of the HYDAT SQLite database used (date-stamped, e.g. Hydat_sqlite3_20240101.sqlite3).",
-            value_type="string",
-            source_field="SQLite filename",
-        ),
-        AnnotationSchema(
-            annotation_id="query_years",
-            description="[start_year, end_year] range passed to the HYDAT SQL query.",
-            value_type="json",
-            source_field="request decomposition",
-        ),
-        AnnotationSchema(
-            annotation_id="native_unit_returned",
-            description="Native unit in HYDAT for this product.",
-            value_type="string",
-            source_field="product policy",
-        ),
-        AnnotationSchema(
-            annotation_id="returned_time_range_start",
-            description="First UTC timestamp returned for the station-product series.",
-            value_type="datetime",
-            source_field="time column",
-        ),
-        AnnotationSchema(
-            annotation_id="returned_time_range_end",
-            description="Last UTC timestamp returned for the station-product series.",
-            value_type="datetime",
-            source_field="time column",
-        ),
-        AnnotationSchema(
-            annotation_id="resolved_timezone",
-            description="Output timezone (always UTC for ca_eccc).",
-            value_type="string",
-            source_field="time column",
-        ),
-        AnnotationSchema(
-            annotation_id="timezone_source",
-            description=(
-                "Always 'date_only_utc_midnight': HYDAT stores YEAR, MONTH, DAY integers; "
-                "interpreted as UTC midnight (T00:00:00Z)."
-            ),
-            value_type="string",
-            source_field="YEAR/MONTH/DAY columns",
-        ),
-        AnnotationSchema(
-            annotation_id="date_only_timestamp_flag",
-            description="Always 'true': HYDAT timestamps are date-only integers, interpreted as UTC midnight.",
-            value_type="boolean",
-            source_field="YEAR/MONTH/DAY columns",
-        ),
-    ]
 
 
 def cache_status() -> CacheStatus:

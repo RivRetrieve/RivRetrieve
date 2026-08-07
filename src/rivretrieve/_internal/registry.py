@@ -19,14 +19,9 @@ from rivretrieve._internal.issues import (
     apply_on_issue,
 )
 from rivretrieve._internal.observations import (
-    AnnotationSchema,
-    AnnotationTable,
     ObservationProvenance,
     ObservationResult,
     RawPayload,
-    RowAnnotationTableSchema,
-    SeriesAnnotationTableSchema,
-    validate_annotation_names,
 )
 from rivretrieve._internal.observations import ObservationRequest as LegacyObservationRequest
 from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProductId, ProviderId
@@ -97,16 +92,6 @@ class _ProviderHandle:
             on_issue=on_issue,
         )
 
-    def row_annotation_schema(self) -> list[AnnotationSchema]:
-        if self._module is None:
-            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
-        return self._module.row_annotation_schema()
-
-    def series_annotation_schema(self) -> list[AnnotationSchema]:
-        if self._module is None:
-            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
-        return self._module.series_annotation_schema()
-
     def observations(
         self,
         *,
@@ -132,11 +117,6 @@ class _ProviderHandle:
             raise FatalContractError(f"Provider {self.provider_id} has engine stages without an observation source")
         result = self._drive_engine(request, self._stages, self._observation_source)
         apply_on_issue(result.issues, on_issue)
-
-        row_schemas = self._module.row_annotation_schema()
-        validate_annotation_names(result.row_annotations, row_schemas)
-        series_schemas = self._module.series_annotation_schema()
-        validate_annotation_names(result.series_annotations, series_schemas)
         return result
 
     def _drive_engine(
@@ -174,14 +154,6 @@ class _ProviderHandle:
         )
         return ObservationResult(
             data=assembled.canonical_rows.select("time", "station_id", "product_id", "value"),
-            row_annotations=AnnotationTable(
-                data=pl.DataFrame(schema=RowAnnotationTableSchema.polars_schema),
-                schema=RowAnnotationTableSchema,
-            ),
-            series_annotations=AnnotationTable(
-                data=pl.DataFrame(schema=SeriesAnnotationTableSchema.polars_schema),
-                schema=SeriesAnnotationTableSchema,
-            ),
             provenance=assembled.provenance,
             issues=assembled.issues,
             raw=assembled.raw,
