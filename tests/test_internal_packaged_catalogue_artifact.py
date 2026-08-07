@@ -26,6 +26,8 @@ def provider_info_dict(**overrides: object) -> dict[str, object]:
         "live_station_products": False,
         "bulk_observations": "none",
         "catalogue_version": "2026.01",
+        "license": None,
+        "citation": None,
     }
     data.update(overrides)
     return data
@@ -318,6 +320,8 @@ def test_packaged_artifact_duplicate_provider_info_key_raises_corrupt() -> None:
                 "live_station_products": [False, False],
                 "bulk_observations": ["none", "none"],
                 "catalogue_version": ["2026.01", "2026.01"],
+                "license": [None, None],
+                "citation": [None, None],
             },
             products_df(),
             stations_df(),

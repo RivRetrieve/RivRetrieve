@@ -150,7 +150,7 @@ def _frame_content_sha256(frame: pl.DataFrame) -> str:
 def test_projected_national_artifacts_have_pinned_complete_content() -> None:
     catalogue = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/no_nve/catalogue"
     assert hashlib.sha256((catalogue / "provider.json").read_bytes()).hexdigest() == (
-        "19ea7b5e39b30806bcdd1bbe150b7c0dfad1383bb8af064473b6a2fc21ae05ad"
+        "c316ccfe57e9ad431a76a82537af38dffa2ac6111633c3cbe6d47b8243626483"
     )
     assert _frame_content_sha256(pl.read_parquet(catalogue / "products.parquet")) == (
         "54955f245e2cb59508f0b4585c39fa884d540d7371c7b5bed41d398774b243a5"

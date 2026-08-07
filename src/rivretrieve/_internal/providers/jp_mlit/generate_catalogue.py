@@ -273,6 +273,8 @@ def build_provider_info(
             "HTML scrape + Shift-JIS .dat download; partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

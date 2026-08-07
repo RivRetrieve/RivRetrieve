@@ -15,6 +15,8 @@ def valid_provider_info_row() -> dict[str, object]:
         "live_station_products": False,
         "bulk_observations": "none",
         "catalogue_version": "2026.01",
+        "license": "https://example.test/license",
+        "citation": "Synthetic Provider (2026)",
     }
 
 
@@ -29,11 +31,21 @@ def test_provider_info_from_row_matches_provider_info_catalog_contract() -> None
         live_station_products=False,
         bulk_observations="none",
         catalogue_version="2026.01",
+        license="https://example.test/license",
+        citation="Synthetic Provider (2026)",
     )
 
 
 def test_provider_info_to_row_round_trips_catalogue_row() -> None:
     row = valid_provider_info_row()
+
+    assert ProviderInfo.from_row(row).to_row() == row
+
+
+def test_provider_info_nullable_fields_round_trip() -> None:
+    row = valid_provider_info_row()
+    row["license"] = None
+    row["citation"] = None
 
     assert ProviderInfo.from_row(row).to_row() == row
 
@@ -57,6 +69,8 @@ def test_provider_info_rejects_missing_required_field(field_name: str) -> None:
         ("live_station_products", None),
         ("bulk_observations", False),
         ("catalogue_version", 123),
+        ("license", 123),
+        ("citation", 123),
     ],
 )
 def test_provider_info_rejects_wrong_field_type(field_name: str, bad_value: object) -> None:

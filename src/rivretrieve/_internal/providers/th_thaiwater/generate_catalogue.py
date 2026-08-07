@@ -503,6 +503,8 @@ def build_provider_info(
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 
