@@ -54,6 +54,8 @@ def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
         "live_station_products",
         "bulk_observations",
         "catalogue_version",
+        "license",
+        "citation",
     )
     assert rr.provider("pl_imgw").info().bulk_observations == BULK_OBSERVATIONS
 

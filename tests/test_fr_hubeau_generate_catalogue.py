@@ -1096,7 +1096,7 @@ def _frame_digest(frame: pl.DataFrame) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-_PINNED_PROVIDER_JSON_SHA256 = "2b208cdb76a812fd2cdd6173f0a46d5d27dbd00ced5869e8cf7c3fc8c044c255"
+_PINNED_PROVIDER_JSON_SHA256 = "f9c38afc3e79476b329a9ebcb0df90f9fce0d7917e7fc193068672c60d62f634"
 _PINNED_PRODUCTS_FRAME_SHA256 = "73d03559a3f2552b66f5161f0d09d7cd892f58c57dfa1232fd68739b3ac64608"
 _PINNED_STATIONS_FRAME_SHA256 = "0958c6dfe6fa44d0a66e105c51b7d3ae3ac675337fe0fa07f98e02017726c1c1"
 _PINNED_STATION_PRODUCTS_FRAME_SHA256 = "f94fdf6418e4b27d7dec305eb382a7fef480e2efa6cb7071cbdf0f83e12ee424"
@@ -1199,6 +1199,8 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
             "and temperature/chronique requests; partial failures reported as recoverable issues"
         ),
         "catalogue_version": "2026-08-02",
+        "license": None,
+        "citation": None,
     }
     assert committed_provider == expected_provider
     assert hashlib.sha256((catalogue_dir / "provider.json").read_bytes()).hexdigest() == _PINNED_PROVIDER_JSON_SHA256

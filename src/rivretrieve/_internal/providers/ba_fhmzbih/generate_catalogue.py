@@ -394,6 +394,8 @@ def build_provider_info(
             "window of history is available from the source"
         ),
         "catalogue_version": catalogue_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 

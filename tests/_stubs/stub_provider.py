@@ -27,6 +27,8 @@ _PROVIDER_INFO_ROW = {
     "live_station_products": False,
     "bulk_observations": "none",
     "catalogue_version": "2026.01",
+    "license": None,
+    "citation": None,
 }
 
 

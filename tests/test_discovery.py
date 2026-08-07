@@ -140,6 +140,8 @@ def test_provider_info_aggregates_registered_provider_rows(
                 "live_station_products": False,
                 "bulk_observations": "none",
                 "catalogue_version": "2026.02",
+                "license": None,
+                "citation": None,
             },
             {
                 "provider_id": "z_provider",
@@ -149,6 +151,8 @@ def test_provider_info_aggregates_registered_provider_rows(
                 "live_station_products": False,
                 "bulk_observations": "none",
                 "catalogue_version": None,
+                "license": None,
+                "citation": None,
             },
         ],
         schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema,

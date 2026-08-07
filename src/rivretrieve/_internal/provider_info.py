@@ -25,6 +25,8 @@ class ProviderInfo:
     live_station_products: bool
     bulk_observations: str
     catalogue_version: str | None
+    license: str | None
+    citation: str | None
 
     @classmethod
     def from_row(cls, row: Mapping[str, object]) -> ProviderInfo:
@@ -59,6 +61,8 @@ class ProviderInfo:
             live_station_products=validated_row["live_station_products"],
             bulk_observations=validated_row["bulk_observations"],
             catalogue_version=validated_row["catalogue_version"],
+            license=validated_row["license"],
+            citation=validated_row["citation"],
         )
 
     def to_row(self) -> dict[str, object]:
@@ -70,4 +74,6 @@ class ProviderInfo:
             "live_station_products": self.live_station_products,
             "bulk_observations": self.bulk_observations,
             "catalogue_version": self.catalogue_version,
+            "license": self.license,
+            "citation": self.citation,
         }

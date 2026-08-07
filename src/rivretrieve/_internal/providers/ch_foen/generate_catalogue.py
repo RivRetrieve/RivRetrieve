@@ -301,6 +301,8 @@ def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str
             "as recoverable issues"
         ),
         "catalogue_version": catalogue_version_date.isoformat(),
+        "license": None,
+        "citation": None,
     }
 
 
