@@ -96,5 +96,5 @@ def test_projected_national_artifacts_have_pinned_complete_content() -> None:
         "aa9428890df6b35f13e80a9de5e1de44e0c01dbd298f10ab9f057c511c898666"
     )
     assert _frame_content_sha256(pl.read_parquet(catalogue / "station_products.parquet")) == (
-        "d6352179f8e2d88e20a5366e9243db608a778560249f1de2e364d6bf5e7aa321"
+        "3e221ca0c924b3423906675ae1851b8d6930be9224b9a42022184fbf3ded8674"
     )

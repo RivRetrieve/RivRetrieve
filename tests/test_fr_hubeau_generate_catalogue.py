@@ -1099,7 +1099,7 @@ def _frame_digest(frame: pl.DataFrame) -> str:
 _PINNED_PROVIDER_JSON_SHA256 = "f9c38afc3e79476b329a9ebcb0df90f9fce0d7917e7fc193068672c60d62f634"
 _PINNED_PRODUCTS_FRAME_SHA256 = "40e4009a1df0e7b638d0f25e1920101bb737db6c1f7e16488e6bef1292639776"
 _PINNED_STATIONS_FRAME_SHA256 = "0958c6dfe6fa44d0a66e105c51b7d3ae3ac675337fe0fa07f98e02017726c1c1"
-_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "f94fdf6418e4b27d7dec305eb382a7fef480e2efa6cb7071cbdf0f83e12ee424"
+_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "456d072fe8310c8a00095da8dc053c8dc612e234e15d575bc3a57925503ddca3"
 
 
 def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
@@ -1174,8 +1174,8 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
                         "product_id": definition.product_id,
                         "availability": "unknown",
                         "availability_reason": "Hubeau catalogue does not expose per-variable station availability",
-                        "start_date": None,
-                        "end_date": None,
+                        "published_record_start_date": None,
+                        "published_record_end_date": None,
                         "last_catalogue_check": retrieved_at.date(),
                     }
                 )

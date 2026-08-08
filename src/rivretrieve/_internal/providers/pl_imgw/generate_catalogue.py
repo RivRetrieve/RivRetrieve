@@ -406,8 +406,8 @@ def build_station_products(stations: StationCatalog, catalogue_date: date) -> St
                     "product_id": defn.product_id,
                     "availability": "unknown",
                     "availability_reason": AVAILABILITY_REASON,
-                    "start_date": None,
-                    "end_date": None,
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
                     "last_catalogue_check": catalogue_date,
                 }
             )

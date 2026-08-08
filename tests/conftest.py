@@ -152,8 +152,8 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "product_id": "level",
             "availability": "available",
             "availability_reason": None,
-            "start_date": date(2020, 1, 1),
-            "end_date": None,
+            "published_record_start_date": date(2020, 1, 1),
+            "published_record_end_date": None,
             "last_catalogue_check": date(2026, 1, 1),
         }
     ]
@@ -166,8 +166,8 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "product_id": "flow",
                     "availability": "unknown",
                     "availability_reason": "not_catalogued",
-                    "start_date": None,
-                    "end_date": None,
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
                     "last_catalogue_check": date(2026, 1, 1),
                 },
                 {
@@ -176,8 +176,8 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "product_id": "level_hourly",
                     "availability": "available",
                     "availability_reason": None,
-                    "start_date": date(2021, 1, 1),
-                    "end_date": None,
+                    "published_record_start_date": date(2021, 1, 1),
+                    "published_record_end_date": None,
                     "last_catalogue_check": date(2026, 1, 1),
                 },
                 {
@@ -186,8 +186,8 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "product_id": "level_max",
                     "availability": "unavailable",
                     "availability_reason": "derived_not_supported",
-                    "start_date": None,
-                    "end_date": None,
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
                     "last_catalogue_check": date(2026, 1, 1),
                 },
             ]
@@ -201,8 +201,8 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "product_id": pl.Utf8,
             "availability": AvailabilityDtype,
             "availability_reason": pl.Utf8,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
+            "published_record_start_date": pl.Date,
+            "published_record_end_date": pl.Date,
             "last_catalogue_check": pl.Date,
         },
     )

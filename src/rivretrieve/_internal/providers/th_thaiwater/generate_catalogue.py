@@ -457,8 +457,8 @@ def build_station_products(
                     "product_id": definition.product_id,
                     "availability": "unknown",
                     "availability_reason": AVAILABILITY_REASON,
-                    "start_date": None,
-                    "end_date": None,
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
                     "last_catalogue_check": retrieved_date,
                 }
             )

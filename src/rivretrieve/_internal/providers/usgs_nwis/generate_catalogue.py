@@ -780,8 +780,8 @@ def build_station_products(
                     "product_id": defn.product_id,
                     "availability": availability,
                     "availability_reason": reason,
-                    "start_date": start_date,
-                    "end_date": end_date,
+                    "published_record_start_date": start_date,
+                    "published_record_end_date": end_date,
                     "last_catalogue_check": retrieved_at.date(),
                 }
             )
