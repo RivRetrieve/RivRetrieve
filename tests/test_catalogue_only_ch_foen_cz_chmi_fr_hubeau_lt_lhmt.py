@@ -122,15 +122,14 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
     global_stations = rr.stations().data
-    global_products = rr.products().data
+    global_products = rr.products(provider=provider_id)
     global_provider_info = rr.provider_info().data
     station_rows = global_stations.filter(global_stations["provider_id"] == provider_id)
-    product_rows = global_products.filter(global_products["provider_id"] == provider_id)
     provider_rows = global_provider_info.filter(global_provider_info["provider_id"] == provider_id)
     assert station_rows.height == station_count
     assert set(station_rows["crs"].to_list()) == expected_crs
-    assert product_rows.height == product_count
-    assert set(product_rows["product_id"].to_list()) == product_ids
+    assert len(global_products) == product_count
+    assert set(global_products) == product_ids
     assert provider_rows.height == 1
     assert provider_rows.select("name").item() == provider_name
 
