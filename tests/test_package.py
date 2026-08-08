@@ -34,6 +34,7 @@ def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
         "providers",
         "stations",
     }
+    assert not hasattr(rivretrieve, "source_metadata")
     assert rivretrieve.RawMode is RawMode
 
 
