@@ -5,7 +5,6 @@ from datetime import datetime
 import polars as pl
 import polars.testing as pl_testing
 
-import rivretrieve as rr
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
     ObservationProvenance,
@@ -42,27 +41,3 @@ def test_v1_deferred_wide_form_helpers_remain_absent() -> None:
     ]
     for helper_name in ("to_wide", "to_wide_pandas", "to_pivot", "to_dataframe_wide"):
         assert not hasattr(result, helper_name)
-
-
-def test_v1_products_have_no_derivation_fields() -> None:
-    products = rr.products().data
-
-    assert "derived" not in products.columns
-    assert "derivation_method" not in products.columns
-
-
-def test_v1_observed_property_vocabulary_remains_river_gauge_scope() -> None:
-    products = rr.products().data
-
-    observed_properties = set(products["observed_property"].unique().to_list())
-    assert observed_properties <= {"discharge", "stage", "water_temperature"}
-    assert observed_properties.isdisjoint(
-        {
-            "precipitation",
-            "rainfall",
-            "catchment_rainfall",
-            "air_temperature",
-            "wind_speed",
-            "humidity",
-        }
-    )

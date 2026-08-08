@@ -1,0 +1,75 @@
+{
+  "name": "ns1:timeSeriesResponseType",
+  "value": {
+    "queryInfo": {
+      "queryURL": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=07374000&startDT=2023-03-12&endDT=2023-03-12&parameterCd=00060",
+      "criteria": {
+        "locationParam": "ALL:07374000",
+        "variableParam": "00060",
+        "timeParam": {
+          "beginDateTime": "2023-03-12T00:00:00.000",
+          "endDateTime": "2023-03-12T23:59:59.999"
+        },
+        "parameter": []
+      },
+      "note": []
+    },
+    "timeSeries": [
+      {
+        "sourceInfo": {
+          "siteName": "Mississippi River at Baton Rouge, LA",
+          "siteCode": [
+            {
+              "value": "07374000",
+              "network": "NWIS",
+              "agencyCode": "USGS"
+            }
+          ],
+          "timeZoneInfo": {
+            "defaultTimeZone": {
+              "zoneOffset": "-06:00",
+              "zoneAbbreviation": "CST"
+            },
+            "daylightSavingsTimeZone": {
+              "zoneOffset": "-05:00",
+              "zoneAbbreviation": "CDT"
+            },
+            "siteUsesDaylightSavingsTime": true
+          }
+        },
+        "variable": {
+          "variableCode": [
+            {
+              "value": "00060",
+              "network": "NWIS",
+              "vocabulary": "NWIS:UnitValues"
+            }
+          ],
+          "variableName": "Streamflow, ft3/s",
+          "noDataValue": -999999.0
+        },
+        "values": [
+          {
+            "value": [
+              {
+                "value": "100.0",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2023-03-12T01:30:00.000-06:00"
+              },
+              {
+                "value": "101.0",
+                "qualifiers": [
+                  "P"
+                ],
+                "dateTime": "2023-03-12T03:30:00.000-05:00"
+              }
+            ]
+          }
+        ],
+        "name": "USGS:07374000:00060:"
+      }
+    ]
+  }
+}

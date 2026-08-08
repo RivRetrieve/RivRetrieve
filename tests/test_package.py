@@ -6,7 +6,7 @@ from pathlib import Path
 import polars as pl
 
 import rivretrieve
-from rivretrieve import RawMode, __version__
+from rivretrieve import RawMode, __version__, to_utc
 from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
@@ -39,8 +39,11 @@ def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
         "provider_info",
         "providers",
         "stations",
+        "to_utc",
     }
+    assert not hasattr(rivretrieve, "source_metadata")
     assert rivretrieve.RawMode is RawMode
+    assert rivretrieve.to_utc is to_utc
 
 
 def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -> None:

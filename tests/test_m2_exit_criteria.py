@@ -40,7 +40,6 @@ def test_m2_exit_criteria_public_surface_sweep(
 
     packaged_results = [
         rr.provider_info(),
-        rr.products(),
         rr.product_info(),
         rr.stations(),
         handle.products(),
@@ -51,6 +50,9 @@ def test_m2_exit_criteria_public_surface_sweep(
     assert all(isinstance(result, CatalogResult) for result in packaged_results)
     assert all(isinstance(result.data, pl.DataFrame) for result in packaged_results)
     assert all(result.provenance.source == "packaged" for result in packaged_results)
+    assert rr.products() == ["flow", "level", "level_hourly", "level_max"]
+    assert type(rr.products()) is list
+    assert not isinstance(rr.products(), CatalogResult)
     assert handle.products().data["product_id"].to_list() == ["level", "flow", "level_hourly", "level_max"]
     assert handle.stations().data["station_id"].to_list() == ["station-1", "station-2"]
     assert handle.station_products().data["product_id"].to_list() == [
