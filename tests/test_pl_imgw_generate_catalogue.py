@@ -209,8 +209,8 @@ def _expected_station_products(native: NativeTable) -> pl.DataFrame:
                     "product_id": definition.product_id,
                     "availability": "unknown",
                     "availability_reason": generate_catalogue.AVAILABILITY_REASON,
-                    "start_date": None,
-                    "end_date": None,
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
                     "last_catalogue_check": date(2025, 10, 10),
                 }
             )
@@ -793,5 +793,5 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     assert _frame_content_sha256(products) == "cd9158f219a403584ef28a1d3fe6fad80b7768b2e0440beda1a48614790addd5"
     assert _frame_content_sha256(stations) == "738b3a71030b3ef7dfe6763a2780cabae6e00cffd2bad9e1f7b1222238de71f9"
     assert _frame_content_sha256(station_products) == (
-        "474447afadda12b2ed70c4e27a127f804c1b376e5b88e0e92563fb92feb295c8"
+        "b03363ee1104062b8cc3a166873ac5c4ab54b19bb4abd49f20a74427f67ba865"
     )

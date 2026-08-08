@@ -511,14 +511,14 @@ def test_station_product_matching_covers_absent_unique_duplicate_agreeing_blank_
         | {
             "availability": "available",
             "availability_reason": None,
-            "start_date": date(2001, 1, 2),
-            "end_date": date(2025, 3, 4),
+            "published_record_start_date": date(2001, 1, 2),
+            "published_record_end_date": date(2025, 3, 4),
         }
         == rows["discharge_daily_mean"]
     )
     assert rows["discharge_instantaneous"]["availability"] == "available"
-    assert rows["discharge_instantaneous"]["start_date"] == date(2001, 1, 2)
-    assert rows["discharge_instantaneous"]["end_date"] == date(2025, 3, 4)
+    assert rows["discharge_instantaneous"]["published_record_start_date"] == date(2001, 1, 2)
+    assert rows["discharge_instantaneous"]["published_record_end_date"] == date(2025, 3, 4)
     assert rows["stage_daily_mean"]["availability_reason"] == "Matching USGS source series states blank coverage dates"
     assert (
         rows["stage_daily_max"]["availability_reason"]
@@ -529,8 +529,8 @@ def test_station_product_matching_covers_absent_unique_duplicate_agreeing_blank_
         rows["stage_daily_min"]["availability_reason"]
         == "No matching USGS source series was published for this station-product"
     )
-    assert rows["stage_daily_min"]["start_date"] is None
-    assert rows["stage_daily_min"]["end_date"] is None
+    assert rows["stage_daily_min"]["published_record_start_date"] is None
+    assert rows["stage_daily_min"]["published_record_end_date"] is None
 
 
 @pytest.mark.parametrize("omitted", PRODUCT_DEFINITIONS, ids=lambda definition: definition.product_id)

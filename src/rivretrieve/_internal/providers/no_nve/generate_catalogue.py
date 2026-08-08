@@ -321,8 +321,8 @@ def build_station_products(
                     "product_id": d.product_id,
                     "availability": availability,
                     "availability_reason": availability_reason,
-                    "start_date": None,
-                    "end_date": None,
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
                     "last_catalogue_check": catalogue_date,
                 }
             )

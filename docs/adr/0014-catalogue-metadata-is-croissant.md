@@ -21,7 +21,7 @@ indistinguishable from carelessness, and there is no place to attach evidence. T
 our extension and it is one property:
 
 ```json
-{ "@type": "Field", "name": "start_date",
+{ "@type": "Field", "name": "published_record_start_date",
   "rr:notPublished": {"evidence": "https://waterservices.usgs.gov/docs/site-service/"} }
 ```
 
