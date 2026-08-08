@@ -14,7 +14,7 @@ source is silent; the constant and its evidence therefore travel together in the
 
 The decision exists because a null in the shipped catalogue means two incompatible things
 and nothing can tell them apart. `usgs_nwis` ships `begin_date` as a key on all 26,231
-station metadata blobs and every one is `None`, so `start_date` is null for the whole
+station metadata blobs and every one is `None`, so `published_record_start_date` is null for the whole
 provider. USGS publishes period of record; the site service returns it under
 `seriesCatalogOutput=true` and our generator calls the default output. The catalogue
 therefore states, indistinguishably from fact, that USGS has no start dates. `br_ana` is

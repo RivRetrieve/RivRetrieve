@@ -55,7 +55,7 @@ NATIVE_FRAME_DIGEST = "f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268
 CANONICAL_CONTENT_DIGESTS = {
     "products.parquet": "cc2ea7d78754646f01661a65273f24f7dda5622be039b3a9990f316b7d2a28e4",
     "stations.parquet": "43f0369f650ec971fa49d507998f3e4e6104e4644a21204c43cef85e2227f1cb",
-    "station_products.parquet": "9f0da43465de653becc5ee76946fc5526269894103a0183b16700a46a0751deb",
+    "station_products.parquet": "5390d653ae806e5dfe182fe484ba78c8b5b66d44eb1a6195f44737865cd5ab8c",
     "provider.json": "6fb87e27a8dfb0d21c36218978bbad45c437be6cd83bf993fcc54ea44a343094",
 }
 NATIVE_SCHEMA = generate_catalogue.NATIVE_SCHEMA

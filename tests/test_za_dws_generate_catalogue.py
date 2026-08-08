@@ -609,8 +609,8 @@ def _expected_station_products(native: NativeTable) -> pl.DataFrame:
                     "product_id": product_id,
                     "availability": "unknown",
                     "availability_reason": "DWS station catalogue does not expose per-variable availability",
-                    "start_date": None,
-                    "end_date": None,
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
                     "last_catalogue_check": catalogue_date,
                 }
             )
@@ -685,7 +685,7 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     provider_digest = "b951c0f0cf2eaff8f1ca09767fdfe96ff40178055a2e90f3ea3b11f6133d4206"
     products_digest = "ac641caa1ed8b4a351b7060b7e5269328242279de0e5d96a56d9b1416184275f"
     stations_digest = "362736b7f95535b309118c51eb5c21e8f0d0b52b06858f295fc7b44ecff2c562"
-    station_products_digest = "e840b2c83275616e9a10d0350e51ba2219a33bd716e250091bce36964ae7da94"
+    station_products_digest = "8b481dfdb358de66749239f622b567a4386423cd2849651735f1d54b1482a02f"
     assert _provider_content_sha256(provider_info) == provider_digest
     assert _frame_content_sha256(products) == products_digest
     assert _frame_content_sha256(stations) == stations_digest
