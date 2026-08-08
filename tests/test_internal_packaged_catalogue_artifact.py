@@ -94,8 +94,8 @@ def station_products_df(
         "product_id": ["level"],
         "availability": ["available"],
         "availability_reason": [None],
-        "start_date": [date(2020, 1, 1)],
-        "end_date": [None],
+        "published_record_start_date": [date(2020, 1, 1)],
+        "published_record_end_date": [None],
         "last_catalogue_check": [date(2026, 1, 1)],
     }
     data.update(overrides)
@@ -107,8 +107,8 @@ def station_products_df(
             "product_id": pl.Utf8,
             "availability": availability_dtype,
             "availability_reason": pl.Utf8,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
+            "published_record_start_date": pl.Date,
+            "published_record_end_date": pl.Date,
             "last_catalogue_check": pl.Date,
         },
     )
@@ -296,8 +296,8 @@ def test_packaged_artifact_duplicate_station_product_key_raises_corrupt() -> Non
                 product_id=["level", "level"],
                 availability=["available", "available"],
                 availability_reason=[None, None],
-                start_date=[date(2020, 1, 1), date(2020, 1, 1)],
-                end_date=[None, None],
+                published_record_start_date=[date(2020, 1, 1), date(2020, 1, 1)],
+                published_record_end_date=[None, None],
                 last_catalogue_check=[date(2026, 1, 1), date(2026, 1, 1)],
             ),
         )

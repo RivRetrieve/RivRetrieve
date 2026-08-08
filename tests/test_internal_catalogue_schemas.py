@@ -45,8 +45,8 @@ def station_product_catalog_df(**overrides: object) -> pl.DataFrame:
         "product_id": ["level", "flow", "temp"],
         "availability": ["available", "unavailable", "unknown"],
         "availability_reason": [None, "source gap", "unchecked"],
-        "start_date": [date(2020, 1, 1), None, None],
-        "end_date": [None, None, None],
+        "published_record_start_date": [date(2020, 1, 1), None, None],
+        "published_record_end_date": [None, None, None],
         "last_catalogue_check": [date(2026, 1, 1), date(2026, 1, 1), date(2026, 1, 1)],
     }
     data.update(overrides)
@@ -58,8 +58,8 @@ def station_product_catalog_df(**overrides: object) -> pl.DataFrame:
             "product_id": pl.Utf8,
             "availability": AvailabilityDtype,
             "availability_reason": pl.Utf8,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
+            "published_record_start_date": pl.Date,
+            "published_record_end_date": pl.Date,
             "last_catalogue_check": pl.Date,
         },
     )
@@ -90,10 +90,12 @@ def test_catalogue_schema_objects_define_expected_columns() -> None:
         "product_id",
         "availability",
         "availability_reason",
-        "start_date",
-        "end_date",
+        "published_record_start_date",
+        "published_record_end_date",
         "last_catalogue_check",
     )
+    assert "start_date" not in STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
+    assert "end_date" not in STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema.keys()) == (
         "provider_id",
         "name",
@@ -119,8 +121,8 @@ def test_catalogue_schema_objects_define_polars_dtypes() -> None:
     )
     assert PRODUCT_CATALOG_SCHEMA.polars_schema["native_id"] == pl.Utf8
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["availability"] == AvailabilityDtype
-    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["start_date"] == pl.Date
-    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["end_date"] == pl.Date
+    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["published_record_start_date"] == pl.Date
+    assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["published_record_end_date"] == pl.Date
     assert STATION_PRODUCT_CATALOG_SCHEMA.polars_schema["last_catalogue_check"] == pl.Date
     assert PROVIDER_INFO_CATALOG_SCHEMA.polars_schema["license"] == pl.Utf8
     assert PROVIDER_INFO_CATALOG_SCHEMA.polars_schema["citation"] == pl.Utf8
@@ -186,8 +188,8 @@ def test_availability_rejects_invalid_value() -> None:
             "product_id": ["level"],
             "availability": pl.Series("availability", ["retired"], dtype=invalid_availability_dtype),
             "availability_reason": [None],
-            "start_date": [None],
-            "end_date": [None],
+            "published_record_start_date": [None],
+            "published_record_end_date": [None],
             "last_catalogue_check": [date(2026, 1, 1)],
         },
         schema={
@@ -196,8 +198,8 @@ def test_availability_rejects_invalid_value() -> None:
             "product_id": pl.Utf8,
             "availability": invalid_availability_dtype,
             "availability_reason": pl.Utf8,
-            "start_date": pl.Date,
-            "end_date": pl.Date,
+            "published_record_start_date": pl.Date,
+            "published_record_end_date": pl.Date,
             "last_catalogue_check": pl.Date,
         },
     )
