@@ -27,8 +27,12 @@ def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
     assert module_defined_names == {
         "ProviderHandle",
         "RawMode",
+        "as_frame",
+        "find",
+        "from_frame",
         "map_stations",
         "observations",
+        "pick",
         "product_info",
         "products",
         "provider",

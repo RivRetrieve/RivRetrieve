@@ -18,6 +18,11 @@ from rivretrieve._internal.handle import ProviderHandle
 from rivretrieve._internal.observations import RawMode
 from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
+from rivretrieve._internal.selection import _as_frame as _selection_as_frame
+from rivretrieve._internal.selection import _find as _selection_find
+from rivretrieve._internal.selection import _from_frame as _selection_from_frame
+from rivretrieve._internal.selection import _pick as _selection_pick
+from rivretrieve._internal.selection import _Selection
 from rivretrieve._internal.station_map import StationMap, _filter_stations
 
 if TYPE_CHECKING:
@@ -32,6 +37,36 @@ _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 def providers() -> list[str]:
     _ensure_default_providers_registered()
     return _registry.list_provider_ids()
+
+
+def find(
+    *,
+    provider: str | None = None,
+    station: str | None = None,
+    product: str | None = None,
+) -> _Selection:
+    _ensure_default_providers_registered()
+    return _selection_find(_registry.iter_records(), provider=provider, station=station, product=product)
+
+
+def pick(
+    selection: _Selection,
+    *,
+    provider: str | Sequence[str] | None = None,
+    station: str | Sequence[str] | None = None,
+    product: str | Sequence[str] | None = None,
+) -> _Selection:
+    _ensure_default_providers_registered()
+    return _selection_pick(_registry.iter_records(), selection, provider=provider, station=station, product=product)
+
+
+def as_frame(selection: _Selection) -> pl.DataFrame:
+    return _selection_as_frame(selection)
+
+
+def from_frame(frame: pl.DataFrame) -> _Selection:
+    _ensure_default_providers_registered()
+    return _selection_from_frame(_registry.iter_records(), frame)
 
 
 def provider(provider_id: str) -> ProviderHandle:
