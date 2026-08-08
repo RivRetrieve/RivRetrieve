@@ -33,8 +33,8 @@ SELECTION_FRAME_SCHEMA = pl.Schema(
         "native_id": pl.Utf8,
         "availability": pl.Enum(["available", "unknown"]),
         "availability_reason": pl.Utf8,
-        "start_date": pl.Date,
-        "end_date": pl.Date,
+        "published_record_start_date": pl.Date,
+        "published_record_end_date": pl.Date,
         "last_catalogue_check": pl.Date,
     }
 )
@@ -90,8 +90,8 @@ class _Series:
     native_id: str | None
     availability: Literal["available", "unknown"]
     availability_reason: str | None
-    start_date: date | None
-    end_date: date | None
+    published_record_start_date: date | None
+    published_record_end_date: date | None
     last_catalogue_check: date
 
 

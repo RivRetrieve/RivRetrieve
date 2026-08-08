@@ -42,8 +42,8 @@ def _expected_one_row_frame() -> pl.DataFrame:
                 "native_id": "00060:00003",
                 "availability": "available",
                 "availability_reason": None,
-                "start_date": date(1930, 3, 1),
-                "end_date": date(2026, 7, 31),
+                "published_record_start_date": date(1930, 3, 1),
+                "published_record_end_date": date(2026, 7, 31),
                 "last_catalogue_check": date(2026, 8, 2),
             }
         ],
