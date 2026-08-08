@@ -16,7 +16,7 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.handle import ProviderHandle
 from rivretrieve._internal.observations import RawMode
-from rivretrieve._internal.registry import _registry
+from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 from rivretrieve._internal.station_map import StationMap, _filter_stations
 
@@ -117,8 +117,24 @@ def map_stations(
     return StationMap(filtered).render()
 
 
-def products() -> CatalogResult[ProductCatalog]:
-    return _global_products()
+def products(provider: str | None = None) -> list[str]:
+    """products : PackagedProductCatalogues × (ProviderId ∪ {None}) → list[ProductId]."""
+    _ensure_default_providers_registered()
+    provider_ids = _registry.list_provider_ids()
+    if provider is not None and provider not in provider_ids:
+        raise UnknownProviderError(provider)
+    selected_provider_ids = set(provider_ids if provider is None else [provider])
+    return sorted(
+        {
+            product_id
+            for record in _registry.iter_records()
+            if record.provider_id in selected_provider_ids
+            for product_id in CatalogueReader(record.artifact, record.provider_id)
+            .read_products()
+            .data["product_id"]
+            .to_list()
+        }
+    )
 
 
 def product_info() -> CatalogResult[ProductCatalog]:
