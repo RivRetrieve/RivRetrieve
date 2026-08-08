@@ -384,8 +384,8 @@ def test_native_build_has_exact_projection_counts_dates_and_schemas() -> None:
     assert set(catalogue.station_products["availability_reason"]) == {
         "Existenz.ch locations catalogue does not expose per-variable station availability"
     }
-    assert catalogue.station_products["start_date"].null_count() == 738
-    assert catalogue.station_products["end_date"].null_count() == 738
+    assert catalogue.station_products["published_record_start_date"].null_count() == 738
+    assert catalogue.station_products["published_record_end_date"].null_count() == 738
     assert set(catalogue.station_products["station_id"]) == set(catalogue.stations["station_id"])
     assert catalogue.station_products.group_by("station_id").len()["len"].unique().to_list() == [3]
     provider_frame = pl.DataFrame([catalogue.provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
