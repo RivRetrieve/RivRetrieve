@@ -19,6 +19,8 @@ from rivretrieve._internal.station_map import StationMap
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from rivretrieve._internal.primitives import OnIssue
+
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 
 
@@ -84,7 +86,14 @@ class MultiProviderSelectionError(FatalContractError):
         )
 
 
-def fetch(selection: _Selection, *, start: object, end: object) -> ObservationResult:
+def fetch(
+    selection: _Selection,
+    *,
+    start: object,
+    end: object,
+    raw: bool = False,
+    on_issue: OnIssue = "warn",
+) -> ObservationResult:
     _require_selection(selection)
     if not selection.series:
         reason = selection.empty_reason
@@ -98,7 +107,15 @@ def fetch(selection: _Selection, *, start: object, end: object) -> ObservationRe
         raise MultiProviderSelectionError(provider_ids)
 
     provider_id = provider_ids[0]
-    return _fetch_provider_series(provider_id, partitions[provider_id], start=start, end=end)
+    raw_mode = RawMode.INCLUDE if raw else RawMode.OMIT
+    return _fetch_provider_series(
+        provider_id,
+        partitions[provider_id],
+        start=start,
+        end=end,
+        raw=raw_mode,
+        on_issue=on_issue,
+    )
 
 
 def fetch_by_provider(
@@ -106,11 +123,21 @@ def fetch_by_provider(
     *,
     start: object,
     end: object,
+    raw: bool = False,
+    on_issue: OnIssue = "warn",
 ) -> dict[str, ObservationResult]:
     _require_selection(selection)
     partitions = _partition_by_provider(selection.series)
+    raw_mode = RawMode.INCLUDE if raw else RawMode.OMIT
     return {
-        provider_id: _fetch_provider_series(provider_id, series, start=start, end=end)
+        provider_id: _fetch_provider_series(
+            provider_id,
+            series,
+            start=start,
+            end=end,
+            raw=raw_mode,
+            on_issue=on_issue,
+        )
         for provider_id, series in partitions.items()
     }
 
@@ -128,6 +155,8 @@ def _fetch_provider_series(
     *,
     start: object,
     end: object,
+    raw: RawMode,
+    on_issue: OnIssue,
 ) -> ObservationResult:
     handle = _provider_lookup(provider_id)
     results = tuple(
@@ -137,12 +166,12 @@ def _fetch_provider_series(
             start=start,
             end=end,
             on_issue="ignore",
-            raw=RawMode.OMIT,
+            raw=raw,
         )
         for selected_series in series
     )
     result = _merge_provider_results(results, series)
-    apply_on_issue(result.issues, "warn")
+    apply_on_issue(result.issues, on_issue)
     return result
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import polars as pl
 
 import rivretrieve
-from rivretrieve import RawMode, __version__, to_utc
+from rivretrieve import __version__, to_utc
 from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
@@ -14,6 +14,7 @@ from rivretrieve._internal.catalogues.schemas import (
     STATION_CATALOG_SCHEMA,
     STATION_PRODUCT_CATALOG_SCHEMA,
 )
+from rivretrieve._internal.observations import RawMode
 
 
 def test_version() -> None:
@@ -25,7 +26,6 @@ def test_init_public_surface_exports_m9_function_surface() -> None:
 
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == [
-        "RawMode",
         "as_frame",
         "fetch",
         "fetch_by_provider",
@@ -49,7 +49,9 @@ def test_init_public_surface_exports_m9_function_surface() -> None:
     )
     assert all(not hasattr(rivretrieve, name) for name in removed)
     assert not hasattr(rivretrieve, "source_metadata")
-    assert rivretrieve.RawMode is RawMode
+    assert not hasattr(rivretrieve, "RawMode")
+    assert RawMode.OMIT.value == "omit"
+    assert RawMode.INCLUDE.value == "include"
     assert rivretrieve.to_utc is to_utc
 
 
