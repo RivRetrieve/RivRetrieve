@@ -25,7 +25,7 @@ from rivretrieve._internal.observations import (
     RawMode,
 )
 from rivretrieve._internal.observations import ObservationRequest as LegacyObservationRequest
-from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProductId, ProviderId
+from rivretrieve._internal.primitives import OnIssue, ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
@@ -58,14 +58,12 @@ class _ProviderHandle:
     def products(
         self,
         *,
-        source: CatalogSource = "packaged",
         observed_property: str | None = None,
         frequency: str | None = None,
         statistic: str | None = None,
         on_issue: OnIssue = "warn",
     ) -> CatalogResult[pl.DataFrame]:
         return CatalogueReader(self._artifact, self.provider_id).read_products(
-            source=source,
             observed_property=observed_property,
             frequency=frequency,
             statistic=statistic,
@@ -75,21 +73,18 @@ class _ProviderHandle:
     def stations(
         self,
         *,
-        source: CatalogSource = "packaged",
         on_issue: OnIssue = "warn",
     ) -> CatalogResult[pl.DataFrame]:
-        return CatalogueReader(self._artifact, self.provider_id).read_stations(source=source, on_issue=on_issue)
+        return CatalogueReader(self._artifact, self.provider_id).read_stations(on_issue=on_issue)
 
     def station_products(
         self,
         stations: Sequence[str] | None = None,
         *,
-        source: CatalogSource = "packaged",
         on_issue: OnIssue = "warn",
     ) -> CatalogResult[pl.DataFrame]:
         return CatalogueReader(self._artifact, self.provider_id).read_station_products(
             stations,
-            source=source,
             on_issue=on_issue,
         )
 

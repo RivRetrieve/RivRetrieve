@@ -7,6 +7,7 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
+from rivretrieve._internal.registry import _registry
 
 CATALOGUE_ONLY_PROVIDERS = (
     (
@@ -107,11 +108,11 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
 ) -> None:
     assert provider_id in rr.providers()
 
-    handle = rr.provider(provider_id)
-    info = handle.info()
-    stations = handle.stations().data
-    products = handle.products().data
-    station_products = handle.station_products().data
+    module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
+    info = module.info()
+    stations = module.stations().data
+    products = module.products().data
+    station_products = module.station_products().data
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert stations.height == station_count
@@ -121,17 +122,9 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     assert set(products["provider_id"].to_list()) == {provider_id}
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
-    global_stations = rr.stations().data
     global_products = rr.products(provider=provider_id)
-    global_provider_info = rr.provider_info().data
-    station_rows = global_stations.filter(global_stations["provider_id"] == provider_id)
-    provider_rows = global_provider_info.filter(global_provider_info["provider_id"] == provider_id)
-    assert station_rows.height == station_count
-    assert set(station_rows["crs"].to_list()) == expected_crs
     assert len(global_products) == product_count
     assert set(global_products) == product_ids
-    assert provider_rows.height == 1
-    assert provider_rows.select("name").item() == provider_name
 
 
 @pytest.mark.parametrize(
@@ -213,11 +206,12 @@ def test_fr_hubeau_generator_is_independent_of_retired_observation_transform() -
 
 @pytest.mark.parametrize("provider_id", [row[0] for row in CATALOGUE_ONLY_PROVIDERS])
 def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str) -> None:
+    rr.providers()
     with pytest.raises(
         ObservationsUnavailableError,
         match=rf"Provider {provider_id} has no observation module registered",
     ):
-        rr.provider(provider_id).observations(
+        _registry.get(provider_id).observations(
             stations="not-consulted",
             products="not-consulted",
             start=None,

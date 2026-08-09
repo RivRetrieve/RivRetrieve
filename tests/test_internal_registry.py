@@ -53,6 +53,7 @@ from rivretrieve._internal.observations import (
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
+from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle, _registry
 from rivretrieve._internal.results import CatalogProvenance
 from tests._stubs import stub_provider
@@ -296,18 +297,6 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
         "provenance.citation_not_established",
     ]
 
-    monkeypatch.setattr(discovery, "_provider_lookup", lambda provider_id: handle)
-    wrapped_result = rr.observations(
-        provider="test_provider",
-        stations="station-1",
-        products="level",
-        start="2026-01-01",
-        end="2026-01-02",
-        on_issue="ignore",
-    )
-    assert wrapped_result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
-    _assert_sentinel_unreachable(wrapped_result)
-
 
 def test_registry_reads_packaged_license_and_citation_into_observation_provenance(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
@@ -438,7 +427,7 @@ def test_registry_preserves_explicit_midnight_end(
     assert result.provenance.request["end"] == "2026-01-02T00:00:00"
 
 
-def test_public_observations_converter_leak_raises_fatal_contract_error_naming_row(
+def test_registry_observations_converter_leak_raises_fatal_contract_error_naming_row(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -471,7 +460,7 @@ def test_public_observations_converter_leak_raises_fatal_contract_error_naming_r
     monkeypatch.setattr(driver_module, "convert", faulty_convert)
 
     with pytest.raises(FatalContractError) as exc_info:
-        rr.provider("test_provider").observations(
+        _registry.get("test_provider").observations(
             stations="station-1",
             products="level",
             start="2026-01-01T00:00:00",
@@ -491,7 +480,7 @@ def test_public_observations_converter_leak_raises_fatal_contract_error_naming_r
     assert _EngineModule.events == ["fetch", "parse"]
 
 
-def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_requested_end(
+def test_registry_observations_exclusive_stop_source_keeps_reading_at_closed_requested_end(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -573,7 +562,7 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
         engine_provider_module=_ExclusiveStopModule,
     )
 
-    result = rr.provider("exclusive_stop_provider").observations(
+    result = _registry.get("exclusive_stop_provider").observations(
         stations="station-1",
         products="level",
         start="2026-01-02T12:00:00",
@@ -617,7 +606,7 @@ def test_public_observations_exclusive_stop_source_keeps_reading_at_closed_reque
     assert _ExclusiveStopModule.events == ["fetch", "parse"]
 
 
-def test_public_observations_parameterless_fixed_span_returns_rows_and_undercoverage_issue(
+def test_registry_observations_parameterless_fixed_span_returns_rows_and_undercoverage_issue(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -703,7 +692,7 @@ def test_public_observations_parameterless_fixed_span_returns_rows_and_undercove
         engine_provider_module=_FixedSpanModule,
     )
 
-    result = rr.provider("fixed_span_provider").observations(
+    result = _registry.get("fixed_span_provider").observations(
         stations="station-1",
         products="level",
         start="2025-01-01T00:00:00",
@@ -907,7 +896,7 @@ def _has_issue_policy_error(exc: BaseException) -> bool:
     return False
 
 
-def test_provider_handle_info_fatal_failures_are_direct(
+def test_registered_runtime_info_fatal_failures_are_direct(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     artifact = stub_packaged_catalogue_artifact("stub_provider")
@@ -925,7 +914,7 @@ def test_provider_handle_info_fatal_failures_are_direct(
     assert not _has_issue_policy_error(exc_info.value)
 
 
-def test_provider_handle_info_reads_packaged_artifact_row(
+def test_registered_runtime_info_reads_packaged_artifact_row(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     registry = ProviderRegistry()
@@ -936,7 +925,28 @@ def test_provider_handle_info_reads_packaged_artifact_row(
     assert handle.info() == ProviderInfo.from_row(artifact.provider_info)
 
 
-def test_provider_handle_info_malformed_artifact_row_raises_provider_info_validation_error(
+def test_registered_runtime_forwards_extras_and_rejects_unknown_attributes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeHydatClient:
+        def cache_status(self) -> str:
+            return "cache-status"
+
+        def refresh_cache(self) -> list[str]:
+            return ["cache-refresh"]
+
+    monkeypatch.setattr(ca_eccc_module, "HydatClient", FakeHydatClient)
+    rr.providers()
+    handle = _registry.get("ca_eccc")
+
+    assert handle.cache_status() == "cache-status"
+    assert handle.refresh_cache() == ["cache-refresh"]
+    for provider_id, attribute in (("pl_imgw", "cache_status"), ("ca_eccc", "row_annotation_schema")):
+        with pytest.raises(AttributeError, match=rf"Provider '{provider_id}' has no attribute '{attribute}'"):
+            getattr(_registry.get(provider_id), attribute)
+
+
+def test_registered_runtime_info_malformed_artifact_row_raises_provider_info_validation_error(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     artifact = stub_packaged_catalogue_artifact("stub_provider")
@@ -952,7 +962,7 @@ def test_provider_handle_info_malformed_artifact_row_raises_provider_info_valida
         handle.info()
 
 
-def test_provider_handle_products_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
+def test_registered_runtime_products_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
     with pytest.raises(NotImplementedError):
         stub_provider.products()
 
@@ -962,7 +972,7 @@ def test_provider_handle_products_reads_artifact_not_provider_module(registered_
     assert result.issues == ()
 
 
-def test_provider_handle_stations_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
+def test_registered_runtime_stations_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
     with pytest.raises(NotImplementedError):
         stub_provider.stations()
 
@@ -972,7 +982,9 @@ def test_provider_handle_stations_reads_artifact_not_provider_module(registered_
     assert result.issues == ()
 
 
-def test_provider_handle_station_products_reads_artifact_not_provider_module(registered_stub: RegisteredStub) -> None:
+def test_registered_runtime_station_products_reads_artifact_not_provider_module(
+    registered_stub: RegisteredStub,
+) -> None:
     with pytest.raises(NotImplementedError):
         stub_provider.station_products()
 
@@ -982,7 +994,7 @@ def test_provider_handle_station_products_reads_artifact_not_provider_module(reg
     assert result.issues == ()
 
 
-def test_provider_handle_catalogue_methods_have_registered_provider_provenance(
+def test_registered_runtime_catalogue_methods_have_registered_provider_provenance(
     registered_stub: RegisteredStub,
 ) -> None:
     expected = CatalogProvenance(

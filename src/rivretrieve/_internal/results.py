@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
 from rivretrieve._internal.issues import Issue
-from rivretrieve._internal.primitives import CatalogSource, ProviderId
+from rivretrieve._internal.primitives import ProviderId
 
 T = TypeVar("T")
 
@@ -12,7 +12,7 @@ T = TypeVar("T")
 class CatalogProvenance(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    source: CatalogSource
+    source: Literal["packaged"]
     provider_id: ProviderId | None = None
     rivretrieve_version: str | None = None
     catalogue_version: str | None = None

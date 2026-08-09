@@ -22,13 +22,13 @@ def test_usgs_nwis_exposes_only_the_engine_stage_contract() -> None:
 
 
 def test_usgs_nwis_stations_offline() -> None:
-    result = rr.provider("usgs_nwis").stations()
+    result = usgs_nwis_module.stations()
     assert result.data.height == 26_258
     assert result.data["crs"].unique().to_list() == ["EPSG:4269"]
 
 
 def test_usgs_nwis_products_offline() -> None:
-    result = rr.provider("usgs_nwis").products()
+    result = usgs_nwis_module.products()
     assert result.data.height == 6
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
@@ -42,13 +42,13 @@ def test_usgs_nwis_products_offline() -> None:
 
 
 def test_usgs_nwis_station_products_offline() -> None:
-    result = rr.provider("usgs_nwis").station_products()
+    result = usgs_nwis_module.station_products()
     assert result.data.height == 157_548
     assert "unknown" not in set(result.data["availability"].cast(str))
 
 
 def test_usgs_nwis_info() -> None:
-    info = rr.provider("usgs_nwis").info()
+    info = usgs_nwis_module.info()
     assert info.provider_id == "usgs_nwis"
     assert "USGS" in info.name or "Geological Survey" in info.name
     assert info.catalogue_version == "2026-08-02"
@@ -63,7 +63,7 @@ def test_usgs_nwis_module_catalogue_path_exists() -> None:
 
 
 def test_usgs_nwis_station_fields() -> None:
-    result = rr.provider("usgs_nwis").stations()
+    result = usgs_nwis_module.stations()
     df = result.data
     assert "station_id" in df.columns
     assert "latitude" in df.columns
