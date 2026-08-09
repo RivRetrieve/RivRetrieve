@@ -21,29 +21,33 @@ def test_version() -> None:
     assert __version__ == version("rivretrieve")
 
 
-def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
-    module_defined_names = {name for name in vars(rivretrieve) if not name.startswith("_")}
+def test_init_public_surface_exports_m9_function_surface() -> None:
+    module_defined_names = [name for name in dir(rivretrieve) if not name.startswith("_")]
 
     assert "__version__" in vars(rivretrieve)
-    assert module_defined_names == {
-        "ProviderHandle",
+    assert module_defined_names == [
         "as_frame",
         "fetch",
         "fetch_by_provider",
         "find",
         "from_frame",
         "map",
+        "pick",
+        "products",
+        "providers",
+        "to_utc",
+    ]
+    removed = (
+        "ProviderHandle",
+        "CatalogSource",
         "map_stations",
         "observations",
-        "pick",
         "product_info",
-        "products",
         "provider",
         "provider_info",
-        "providers",
         "stations",
-        "to_utc",
-    }
+    )
+    assert all(not hasattr(rivretrieve, name) for name in removed)
     assert not hasattr(rivretrieve, "source_metadata")
     assert not hasattr(rivretrieve, "RawMode")
     assert RawMode.OMIT.value == "omit"
@@ -99,7 +103,6 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         import_module("rivretrieve._internal"),
         import_module("rivretrieve._internal.observations"),
         import_module("rivretrieve._internal.issues"),
-        import_module("rivretrieve._internal.handle"),
         import_module("rivretrieve._internal.provider_module"),
         import_module("rivretrieve._internal.registry"),
         import_module("rivretrieve._internal.providers.ca_eccc.module"),

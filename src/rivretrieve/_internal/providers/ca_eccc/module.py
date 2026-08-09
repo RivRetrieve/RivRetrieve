@@ -8,7 +8,7 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
-from rivretrieve._internal.primitives import CatalogSource, OnIssue, ProviderId
+from rivretrieve._internal.primitives import OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.providers.ca_eccc.config import config as config
 from rivretrieve._internal.providers.ca_eccc.config import window_declarations as window_declarations
@@ -28,14 +28,12 @@ def info() -> ProviderInfo:
 
 def products(
     *,
-    source: CatalogSource = "packaged",
     observed_property: str | None = None,
     frequency: str | None = None,
     statistic: str | None = None,
     on_issue: OnIssue = "warn",
 ) -> CatalogResult[pl.DataFrame]:
     return _reader().read_products(
-        source=source,
         observed_property=observed_property,
         frequency=frequency,
         statistic=statistic,
@@ -45,19 +43,17 @@ def products(
 
 def stations(
     *,
-    source: CatalogSource = "packaged",
     on_issue: OnIssue = "warn",
 ) -> CatalogResult[pl.DataFrame]:
-    return _reader().read_stations(source=source, on_issue=on_issue)
+    return _reader().read_stations(on_issue=on_issue)
 
 
 def station_products(
     stations: Sequence[str] | None = None,
     *,
-    source: CatalogSource = "packaged",
     on_issue: OnIssue = "warn",
 ) -> CatalogResult[pl.DataFrame]:
-    return _reader().read_station_products(stations, source=source, on_issue=on_issue)
+    return _reader().read_station_products(stations, on_issue=on_issue)
 
 
 def cache_status() -> CacheStatus:
@@ -66,11 +62,6 @@ def cache_status() -> CacheStatus:
     Does not trigger a download. Safe to call before making any observation
     request to check whether the database is present and how old it is.
 
-    Examples
-    --------
-    >>> import rivretrieve as rr
-    >>> status = rr.provider("ca_eccc").cache_status()
-    >>> print(status.exists, status.age_days, status.size_mb, status.stale)
     """
     return HydatClient().cache_status()
 
@@ -84,12 +75,6 @@ def refresh_cache() -> list:
     Returns a list of structured ``Issue`` objects describing what happened
     (download started, complete, or failed).
 
-    Examples
-    --------
-    >>> import rivretrieve as rr
-    >>> issues = rr.provider("ca_eccc").refresh_cache()
-    >>> for i in issues:
-    ...     print(f"[{i.severity}] {i.code}: {i.message}")
     """
     return HydatClient().refresh_cache()
 

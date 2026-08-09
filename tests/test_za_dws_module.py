@@ -5,6 +5,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.providers.za_dws import module as za_dws_module
+from rivretrieve._internal.registry import _registry
 
 
 def test_za_dws_in_providers_list() -> None:
@@ -12,18 +13,18 @@ def test_za_dws_in_providers_list() -> None:
 
 
 def test_za_dws_stations_offline() -> None:
-    result = rr.provider("za_dws").stations()
+    result = za_dws_module.stations()
     assert result.data.height > 0
     assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
 def test_za_dws_station_count_reasonable() -> None:
-    result = rr.provider("za_dws").stations()
+    result = za_dws_module.stations()
     assert result.data.height == 2905
 
 
 def test_za_dws_products_offline() -> None:
-    result = rr.provider("za_dws").products()
+    result = za_dws_module.products()
     assert result.data.height == 3
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
@@ -34,15 +35,15 @@ def test_za_dws_products_offline() -> None:
 
 
 def test_za_dws_station_products_offline() -> None:
-    stations = rr.provider("za_dws").stations()
-    products = rr.provider("za_dws").products()
-    result = rr.provider("za_dws").station_products()
+    stations = za_dws_module.stations()
+    products = za_dws_module.products()
+    result = za_dws_module.station_products()
     assert result.data.height == 8715
     assert result.data.height == stations.data.height * products.data.height
 
 
 def test_za_dws_info() -> None:
-    info = rr.provider("za_dws").info()
+    info = za_dws_module.info()
     assert info.provider_id == "za_dws"
     assert "South Africa" in info.name or "DWS" in info.name or "Water" in info.name
 
@@ -52,7 +53,8 @@ def test_za_dws_observations_unavailable() -> None:
         ObservationsUnavailableError,
         match="Provider za_dws has no observation module registered",
     ):
-        rr.provider("za_dws").observations(
+        rr.providers()
+        _registry.get("za_dws").observations(
             stations=["X3H001"],
             products=["discharge_daily_mean"],
             start="2020-01-01",
@@ -73,7 +75,7 @@ def test_za_dws_module_catalogue_path_exists() -> None:
 
 
 def test_za_dws_station_x3h001_present() -> None:
-    result = rr.provider("za_dws").stations()
+    result = za_dws_module.stations()
     row = result.data.filter(result.data["station_id"] == "X3H001")
     assert row.height == 1
     lat = row["latitude"][0]
@@ -83,7 +85,7 @@ def test_za_dws_station_x3h001_present() -> None:
 
 
 def test_za_dws_station_coordinates_in_south_africa_range() -> None:
-    result = rr.provider("za_dws").stations()
+    result = za_dws_module.stations()
     assert result.data["latitude"].null_count() == 0
     assert result.data["longitude"].null_count() == 0
     lats = result.data["latitude"].to_list()

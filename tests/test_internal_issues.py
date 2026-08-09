@@ -8,8 +8,6 @@ from rivretrieve._internal.issues import (
     FatalContractError,
     Issue,
     IssuePolicyError,
-    LiveCatalogueRoutingNotImplementedError,
-    LiveCatalogueUnsupportedIssue,
     apply_on_issue,
 )
 from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProviderId
@@ -59,49 +57,6 @@ def test_issue_construction_roundtrip() -> None:
     assert issue.message == "Partial live response"
     assert issue.details == details
     assert issue.provider_id == provider_id
-
-
-def test_live_catalogue_unsupported_issue_constructs_provider_issue() -> None:
-    provider_id = ProviderId("ch_foen")
-
-    issue = LiveCatalogueUnsupportedIssue(
-        provider_id=provider_id,
-        method="read_products",
-        capability="live_products",
-    )
-
-    assert isinstance(issue, Issue)
-    assert issue.severity == "warning"
-    assert issue.code == "live_catalogue_unsupported"
-    assert issue.provider_id == provider_id
-    assert issue.message == "Provider ch_foen does not support live catalogue method read_products"
-    assert issue.details == {
-        "method": "read_products",
-        "capability": "live_products",
-        "source": "live",
-    }
-
-
-def test_live_catalogue_unsupported_issue_constructs_global_issue() -> None:
-    issue = LiveCatalogueUnsupportedIssue(
-        provider_id=None,
-        method="read_stations",
-        capability="live_stations",
-    )
-
-    assert issue.severity == "warning"
-    assert issue.code == "live_catalogue_unsupported"
-    assert issue.provider_id is None
-    assert issue.message == "Provider <global> does not support live catalogue method read_stations"
-    assert issue.details == {
-        "method": "read_stations",
-        "capability": "live_stations",
-        "source": "live",
-    }
-
-
-def test_live_catalogue_routing_not_implemented_error_is_fatal_contract_error() -> None:
-    assert issubclass(LiveCatalogueRoutingNotImplementedError, FatalContractError)
 
 
 @pytest.mark.parametrize("on_issue", ["ignore", "warn", "raise"])

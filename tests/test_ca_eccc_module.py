@@ -14,86 +14,70 @@ def test_ca_eccc_in_providers_list() -> None:
     assert "ca_eccc" in rr.providers()
 
 
-def test_ca_eccc_provider_handle_returns() -> None:
-    handle = rr.provider("ca_eccc")
-    assert handle is not None
-
-
 def test_ca_eccc_info_name() -> None:
-    info = rr.provider("ca_eccc").info()
+    info = ca_eccc_module.info()
     assert "Canada" in info.name or "ECCC" in info.name
 
 
 def test_ca_eccc_catalogue_version() -> None:
-    info = rr.provider("ca_eccc").info()
+    info = ca_eccc_module.info()
     assert info.catalogue_version == "2026-08-02"
 
 
 def test_ca_eccc_live_stations_capability() -> None:
-    info = rr.provider("ca_eccc").info()
+    info = ca_eccc_module.info()
     assert info.live_stations is False
 
 
 def test_ca_eccc_stations_returns_catalog_result() -> None:
-    result = rr.provider("ca_eccc").stations()
+    result = ca_eccc_module.stations()
     assert hasattr(result, "data")
     assert hasattr(result, "provenance")
     assert hasattr(result, "issues")
 
 
 def test_ca_eccc_stations_count() -> None:
-    result = rr.provider("ca_eccc").stations()
+    result = ca_eccc_module.stations()
     assert len(result.data) == 8057
 
 
 def test_ca_eccc_products_count() -> None:
-    result = rr.provider("ca_eccc").products()
+    result = ca_eccc_module.products()
     assert len(result.data) == 2
 
 
 def test_ca_eccc_products_include_canonical() -> None:
-    result = rr.provider("ca_eccc").products()
+    result = ca_eccc_module.products()
     product_ids = set(result.data["product_id"].to_list())
     assert "discharge_daily_mean" in product_ids
     assert "stage_daily_mean" in product_ids
 
 
 def test_ca_eccc_station_products_count() -> None:
-    result = rr.provider("ca_eccc").station_products()
+    result = ca_eccc_module.station_products()
     assert len(result.data) == 16114
 
 
 def test_ca_eccc_station_products_availability_unknown() -> None:
     """OGC endpoint does not expose per-variable availability → all unknown."""
-    result = rr.provider("ca_eccc").station_products()
+    result = ca_eccc_module.station_products()
     availabilities = set(result.data["availability"].cast(str).to_list())
     assert availabilities == {"unknown"}
 
 
-def test_ca_eccc_global_stations_includes_provider() -> None:
-    result = rr.stations()
-    provider_ids = result.data["provider_id"].unique().to_list()
-    assert "ca_eccc" in provider_ids
-
-
-def test_ca_eccc_live_catalogue_returns_warning_issue() -> None:
-    result = rr.provider("ca_eccc").stations(source="live", on_issue="ignore")
-    assert len(result.issues) > 0
-
-
 def test_ca_eccc_stations_schema_has_expected_columns() -> None:
-    result = rr.provider("ca_eccc").stations()
+    result = ca_eccc_module.stations()
     assert result.data.columns == ["provider_id", "station_id", "latitude", "longitude", "crs"]
 
 
 def test_ca_eccc_station_grand_river_present() -> None:
-    result = rr.provider("ca_eccc").stations()
+    result = ca_eccc_module.stations()
     ids = result.data["station_id"].to_list()
     assert "02GA010" in ids
 
 
 def test_ca_eccc_station_crs_is_documented_wgs84() -> None:
-    result = rr.provider("ca_eccc").stations()
+    result = ca_eccc_module.stations()
     assert result.data["crs"].null_count() == 0
     assert result.data["crs"].unique().to_list() == ["EPSG:4326"]
 
@@ -117,5 +101,5 @@ def test_ca_eccc_cache_lifecycle_remains_reachable(monkeypatch) -> None:
 
     monkeypatch.setattr(ca_eccc_module, "HydatClient", FakeHydatClient)
 
-    assert rr.provider("ca_eccc").cache_status() == "cache-status"
-    assert rr.provider("ca_eccc").refresh_cache() == ["cache-refresh"]
+    assert ca_eccc_module.cache_status() == "cache-status"
+    assert ca_eccc_module.refresh_cache() == ["cache-refresh"]

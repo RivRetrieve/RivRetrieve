@@ -7,9 +7,10 @@ import tomllib
 from collections import Counter
 from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
 
 import rivretrieve as rr
+from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
+from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
 from rivretrieve._internal.registry import _registry
 
 ROOT = Path(__file__).parents[1]
@@ -233,13 +234,11 @@ def test_registry_uses_engine_stages_or_catalogue_only_registration() -> None:
         assert records[provider_id]._stages is None
 
 
-def test_cache_carve_out_handle_contracts_are_explicit() -> None:
-    ca_eccc = rr.provider("ca_eccc")
-    pl_imgw = rr.provider("pl_imgw")
-    assert callable(cast(Any, ca_eccc).cache_status)
-    assert callable(cast(Any, ca_eccc).refresh_cache)
-    assert not hasattr(pl_imgw, "cache_status")
-    assert not hasattr(pl_imgw, "refresh_cache")
+def test_cache_carve_out_module_contracts_are_explicit() -> None:
+    assert callable(ca_eccc_module.cache_status)
+    assert callable(ca_eccc_module.refresh_cache)
+    assert not hasattr(pl_imgw_module, "cache_status")
+    assert not hasattr(pl_imgw_module, "refresh_cache")
 
 
 def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:

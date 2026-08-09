@@ -12,7 +12,7 @@ from rivretrieve._internal.observations import (
     ObservationResult,
     RawPayload,
 )
-from rivretrieve._internal.primitives import CatalogSource, OnIssue
+from rivretrieve._internal.primitives import OnIssue
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.results import CatalogResult
 
@@ -35,7 +35,6 @@ def info() -> ProviderInfo:
 
 def products(
     *,
-    source: CatalogSource = "packaged",
     observed_property: str | None = None,
     frequency: str | None = None,
     statistic: str | None = None,
@@ -46,7 +45,6 @@ def products(
 
 def stations(
     *,
-    source: CatalogSource = "packaged",
     on_issue: OnIssue = "warn",
 ) -> CatalogResult[pl.DataFrame]:
     raise NotImplementedError("deferred to M2 step 02")
@@ -55,7 +53,6 @@ def stations(
 def station_products(
     stations: Sequence[str] | None = None,
     *,
-    source: CatalogSource = "packaged",
     on_issue: OnIssue = "warn",
 ) -> CatalogResult[pl.DataFrame]:
     raise NotImplementedError("deferred to M2 step 02")

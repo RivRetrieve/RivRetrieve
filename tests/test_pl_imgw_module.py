@@ -6,6 +6,7 @@ import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
 from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_provider_info
+from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.results import CatalogResult
 
 BULK_OBSERVATIONS = (
@@ -16,13 +17,13 @@ BULK_OBSERVATIONS = (
 
 def test_pl_imgw_registered_with_packaged_stations() -> None:
     assert "pl_imgw" in rr.providers()
-    result = rr.provider("pl_imgw").stations()
+    result = pl_imgw_module.stations()
     assert isinstance(result, CatalogResult)
     assert result.data.height == 1301
 
 
 def test_pl_imgw_products_offline() -> None:
-    result = rr.provider("pl_imgw").products()
+    result = pl_imgw_module.products()
     assert result.data.height == 3
     assert set(result.data["product_id"].to_list()) == {
         "discharge_daily_mean",
@@ -32,7 +33,7 @@ def test_pl_imgw_products_offline() -> None:
 
 
 def test_pl_imgw_station_products_and_artifacts() -> None:
-    assert rr.provider("pl_imgw").station_products().data.height > 0
+    assert pl_imgw_module.station_products().data.height > 0
     assert {path.name for path in pl_imgw_module._CATALOGUE_PATH.iterdir()} == {
         "native.parquet",
         "provider.json",
@@ -57,7 +58,7 @@ def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
         "license",
         "citation",
     )
-    assert rr.provider("pl_imgw").info().bulk_observations == BULK_OBSERVATIONS
+    assert pl_imgw_module.info().bulk_observations == BULK_OBSERVATIONS
 
 
 def test_pl_imgw_observations_unavailable() -> None:
@@ -65,18 +66,13 @@ def test_pl_imgw_observations_unavailable() -> None:
         ObservationsUnavailableError,
         match="Provider pl_imgw has no observation module registered",
     ):
-        rr.provider("pl_imgw").observations(
+        rr.providers()
+        _registry.get("pl_imgw").observations(
             stations=["151140030"],
             products=["discharge_daily_mean"],
             start="2023-01-01",
             end="2023-01-02",
         )
-
-
-@pytest.mark.parametrize("method", ["cache_status", "refresh_cache"])
-def test_pl_imgw_handle_has_no_cache_controls(method: str) -> None:
-    with pytest.raises(AttributeError, match=rf"Provider 'pl_imgw' has no attribute '{method}'"):
-        getattr(rr.provider("pl_imgw"), method)
 
 
 def test_pl_imgw_module_has_no_observation_or_cache_surface() -> None:

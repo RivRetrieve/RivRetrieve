@@ -5,6 +5,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.providers.ba_fhmzbih import module as ba_fhmzbih_module
+from rivretrieve._internal.registry import _registry
 
 
 def test_ba_fhmzbih_in_providers_list() -> None:
@@ -12,13 +13,13 @@ def test_ba_fhmzbih_in_providers_list() -> None:
 
 
 def test_ba_fhmzbih_stations_offline() -> None:
-    result = rr.provider("ba_fhmzbih").stations()
+    result = ba_fhmzbih_module.stations()
     assert result.data.height == 60
     assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
 def test_ba_fhmzbih_products_offline() -> None:
-    result = rr.provider("ba_fhmzbih").products()
+    result = ba_fhmzbih_module.products()
     assert result.data.height == 3
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
@@ -36,14 +37,14 @@ def test_ba_fhmzbih_products_offline() -> None:
 
 
 def test_ba_fhmzbih_station_products_offline() -> None:
-    stations = rr.provider("ba_fhmzbih").stations()
-    products = rr.provider("ba_fhmzbih").products()
-    result = rr.provider("ba_fhmzbih").station_products()
+    stations = ba_fhmzbih_module.stations()
+    products = ba_fhmzbih_module.products()
+    result = ba_fhmzbih_module.station_products()
     assert result.data.height == 180 == stations.data.height * products.data.height
 
 
 def test_ba_fhmzbih_info() -> None:
-    info = rr.provider("ba_fhmzbih").info()
+    info = ba_fhmzbih_module.info()
     assert info.provider_id == "ba_fhmzbih"
     assert "FHMZBiH" in info.name or "Bosnia" in info.name
     assert info.catalogue_version == "2026-08-02"
@@ -54,7 +55,8 @@ def test_ba_fhmzbih_observations_unavailable() -> None:
         ObservationsUnavailableError,
         match="Provider ba_fhmzbih has no observation module registered",
     ):
-        rr.provider("ba_fhmzbih").observations(
+        rr.providers()
+        _registry.get("ba_fhmzbih").observations(
             stations=["4510"],
             products=["discharge_instantaneous"],
             start="2020-01-01",
@@ -75,7 +77,7 @@ def test_ba_fhmzbih_module_catalogue_path_exists() -> None:
 
 
 def test_ba_fhmzbih_station_fields() -> None:
-    result = rr.provider("ba_fhmzbih").stations()
+    result = ba_fhmzbih_module.stations()
     row = result.data.filter(result.data["station_id"] == "4510")
     assert row.height == 1
     assert row["latitude"][0] == 44.64680728070949
