@@ -4,6 +4,7 @@ import inspect
 from typing import Any, cast
 
 import polars as pl
+import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
@@ -22,11 +23,24 @@ class FakeMap:
         self.markers: list[FakeMarker] = []
 
 
+class FakeIcon:
+    def __init__(self, *, color: str) -> None:
+        self.color = color
+
+
 class FakeMarker:
-    def __init__(self, *, location: list[float], tooltip: str, popup: str) -> None:
+    def __init__(
+        self,
+        *,
+        location: list[float],
+        tooltip: str,
+        popup: str,
+        icon: FakeIcon,
+    ) -> None:
         self.location = location
         self.tooltip = tooltip
         self.popup = popup
+        self.icon = icon
 
     def add_to(self, station_map: FakeMap) -> None:
         station_map.markers.append(self)
@@ -35,6 +49,91 @@ class FakeMarker:
 class FakeFolium:
     Map = FakeMap
     Marker = FakeMarker
+    Icon = FakeIcon
+
+
+def test_map_signature_accepts_only_required_selection_without_narrowing() -> None:
+    parameters = inspect.signature(rr.map).parameters
+
+    assert tuple(parameters) == ("selection",)
+    assert parameters["selection"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert parameters["selection"].default is inspect.Parameter.empty
+    assert {"provider", "providers", "bbox", "bounding_box"}.isdisjoint(parameters)
+
+
+def test_map_rejects_non_rivretrieve_selection() -> None:
+    with pytest.raises(TypeError, match="^selection must be a RivRetrieve selection$"):
+        rr.map(object())  # type: ignore[arg-type]
+
+
+def test_map_empty_selection_has_no_markers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
+    selection = rr.find(
+        provider="usgs_nwis",
+        station="01646500",
+        product="stage_daily_mean",
+    )
+
+    station_map = rr.map(selection)
+
+    assert selection.empty_reason is not None
+    assert selection.empty_reason.code == "no_catalogue_edge"
+    assert isinstance(station_map, FakeMap)
+    assert station_map.location == [0.0, 0.0]
+    assert station_map.markers == []
+
+
+def test_map_ch_foen_selection_renders_unique_unknown_crs_stations_without_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
+    selection = rr.find(provider="ch_foen")
+    before = rr.as_frame(selection)
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
+
+    stations_before = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise").stations
+
+    assert before.height == 738
+    assert before.select("provider_id", "station_id").unique().height == 246
+    assert before.get_column("crs").unique().sort().to_list() == ["unknown"]
+
+    station_map = rr.map(selection)
+
+    assert isinstance(station_map, FakeMap)
+    assert len(station_map.markers) == 246
+    assert all(marker.popup.endswith("<br>crs: unknown") for marker in station_map.markers)
+    assert all(marker.icon.color == "orange" for marker in station_map.markers)
+    pl_testing.assert_frame_equal(rr.as_frame(selection), before, check_exact=True)
+    stations_after = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise").stations
+    pl_testing.assert_frame_equal(stations_after, stations_before, check_exact=True)
+    assert stations_after.get_column("crs").unique().sort().to_list() == ["unknown"]
+
+
+def test_map_established_crs_uses_distinct_marker_colour_and_exact_popup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
+    selection = rr.find(
+        provider="usgs_nwis",
+        station="01646500",
+        product="discharge_daily_mean",
+    )
+
+    station_map = rr.map(selection)
+
+    assert isinstance(station_map, FakeMap)
+    assert len(station_map.markers) == 1
+    marker = station_map.markers[0]
+    assert marker.location == [38.94977778, -77.12763889]
+    assert marker.tooltip == "usgs_nwis (01646500)"
+    assert marker.popup == (
+        "<strong>usgs_nwis</strong><br>Station: 01646500"
+        "<br>Latitude: 38.94977778<br>Longitude: -77.12763889"
+        "<br>crs: EPSG:4269"
+    )
+    assert marker.icon.color == "blue"
+    assert marker.icon.color != "orange"
 
 
 def test_map_stations_signature_has_no_retired_parameters() -> None:
@@ -126,9 +225,10 @@ def test_map_stations_fake_backend_receives_filtered_station_frame(monkeypatch: 
     assert len(station_map.markers) == 1
     assert station_map.markers[0].tooltip == "ch_foen (2016)"
     assert station_map.markers[0].popup == (
-        "<strong>ch_foen</strong><br>Station: 2016<br>Latitude: 47.4825<br>Longitude: 8.1949"
+        "<strong>ch_foen</strong><br>Station: 2016<br>Latitude: 47.4825<br>Longitude: 8.1949<br>crs: unknown"
     )
     assert station_map.markers[0].location == [47.4825, 8.1949]
+    assert station_map.markers[0].icon.color == "orange"
 
 
 def test_map_stations_uses_packaged_station_catalogue_only(monkeypatch: pytest.MonkeyPatch) -> None:

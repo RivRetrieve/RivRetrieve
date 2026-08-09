@@ -32,6 +32,7 @@ def test_init_public_surface_exports_m2_provider_handle_surface() -> None:
         "fetch_by_provider",
         "find",
         "from_frame",
+        "map",
         "map_stations",
         "observations",
         "pick",
