@@ -23,3 +23,10 @@ Thumbs.db
 # Scratchpad (keep folder, ignore contents)
 scratchpad/*
 !scratchpad/.gitkeep
+
+# PCE planning artifacts: keep only the audit record of a delivered vision.
+# The immutable *.executions.json gate sidecars are raw evidence, large, and
+# regenerable from the verdicts they back, so they stay local.
+planning/*
+!planning/2026-08-08-the-surface-is-three-verbs-and-a-selection/
+planning/**/*.executions.json
