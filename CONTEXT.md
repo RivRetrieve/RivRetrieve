@@ -100,6 +100,18 @@ intended: a best-effort column still carries an [[origin]] for every [[provider]
 `ORIGIN_GATE_ENROLLED_PROVIDERS`, so being empty is a declared claim and not permission to
 leave it unfilled.
 
+**Published record**:
+The period a source itself states a series covers, carried as
+`published_record_start_date` and `published_record_end_date`. It is a nominal envelope and
+nothing more: it does not establish continuity, absence of gaps, quality, or that the data is
+still retrievable. Twelve of the thirteen sources publish none, so it is [[unknown]] for most
+of the catalogue and is never used to prevent a fetch. The name carries `published` because a
+bound RivRetrieve established by asking rather than by reading is a weaker and different claim
+— bounded by how we asked — and would need its own column and its own [[origin]] form rather
+than this one.
+_Avoid_: start_date, end_date (bare, they invite an observed value into a published column),
+period of record (does not say who established it), coverage (implies continuity)
+
 **Issue**:
 A fact about the data, returned rather than raised. A station answering 404, a window
 holding no observations, a zone that could not be established are all issues: non-fatal,
@@ -156,6 +168,26 @@ both distributions, and is deleted per provider as that provider is ported. It i
 evidence, not runtime code and not a live test suite.
 _Avoid_: dead code, backup, vendored, archive (which is a collection prepared for
 publication)
+
+**Selection**:
+The set of series a caller has settled on, at the grain of one
+`(provider_id, station_id, product_id)` triple, produced by `find` or narrowed by `pick` and
+handed to `fetch`. It is a value rather than an object: immutable, printable as a table, and
+carrying no methods, no chaining and no query language, so every capability enters through a
+function rather than by growing the thing a user is holding. An empty selection is an ordinary
+answer and retains a machine-readable reason for being empty, which `fetch` reports when it
+refuses to retrieve nothing.
+_Avoid_: query, queryset, handle (which named the deleted per-provider object), result (which
+is what `fetch` returns), filter
+
+**Shows rather than decides**:
+The test that admits a capability the catalogue cannot fully support. A capability that decides
+on the caller's behalf and does not record what it dropped turns an [[unknown]] into a silent
+exclusion, so it does not ship — this is what removed the bounding box, `record_covers` and the
+live catalogue argument. A capability that displays every row and leaves the judgement to a
+person makes the same [[unknown]] visible rather than operative, which is why a map renders
+unstated-frame coordinates while a bounding box may not compare them.
+_Avoid_: best-effort filtering, graceful degradation, partial support
 
 ### Time
 
