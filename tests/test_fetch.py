@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import inspect
+import warnings
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 
 import polars as pl
 import polars.testing as pl_testing
@@ -33,7 +34,7 @@ from rivretrieve._internal.engine import (
     WithIssues,
     ZoneValue,
 )
-from rivretrieve._internal.issues import InvalidObservationRequestError
+from rivretrieve._internal.issues import InvalidObservationRequestError, Issue, IssuePolicyError
 from rivretrieve._internal.observations import ObservationDataSchema, RawPayload
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.registry import _registry
@@ -89,6 +90,7 @@ class _RecordingStages:
         self.provider_id = provider_id
         self.observation_source = f"recording://{provider_id}"
         self.calls: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+        self.issues_by_series: dict[tuple[str, str], tuple[Issue, ...]] = {}
 
     def fetch(
         self,
@@ -106,16 +108,22 @@ class _RecordingStages:
             fetch_window=fetch_window,
             content=f"{self.provider_id}|{stations[0]}|{products[0]}".encode(),
             origin=SourceCallOrigin(
-                UnknownOriginFact(),
-                UnknownOriginFact(),
-                UnknownOriginFact(),
-                UnknownOriginFact(),
-                UnknownOriginFact(),
-                UnknownOriginFact(),
-                UnknownOriginFact(),
+                url=f"https://data.test/{self.provider_id}/{stations[0]}/{products[0]}",
+                request_parameters={
+                    "station_id": stations[0],
+                    "product_id": str(products[0]),
+                },
+                status_code=200,
+                retrieved_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+                content_type="application/octet-stream",
+                source_path=UnknownOriginFact(),
+                query=UnknownOriginFact(),
             ),
         )
-        return WithIssues(value=(payload,), issues=())
+        return WithIssues(
+            value=(payload,),
+            issues=self.issues_by_series.get((stations[0], str(products[0])), ()),
+        )
 
     @staticmethod
     def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
@@ -330,7 +338,254 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
         assert "provider_id" not in result.data.columns
 
 
-def test_fetch_functions_require_rivretrieve_selection_and_defer_request_controls(
+def test_fetch_raw_true_retains_every_selected_series_parse_input_and_origin(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    sparse = rr.pick(
+        rr.find(provider="usgs_nwis"),
+        station=["station-1", "station-2"],
+        product=["level", "level_hourly"],
+    )
+
+    result = rr.fetch(sparse, start="2026-01-01", end="2026-01-01", raw=True)
+
+    assert result.raw.provider_id == ProviderId("usgs_nwis")
+    assert tuple(entry.content for entry in result.raw.entries) == (
+        b"usgs_nwis|station-1|level",
+        b"usgs_nwis|station-2|level_hourly",
+    )
+    assert tuple(entry.origin for entry in result.raw.entries) == (
+        SourceCallOrigin(
+            url="https://data.test/usgs_nwis/station-1/level",
+            request_parameters={"station_id": "station-1", "product_id": "level"},
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            content_type="application/octet-stream",
+            source_path=UnknownOriginFact(),
+            query=UnknownOriginFact(),
+        ),
+        SourceCallOrigin(
+            url="https://data.test/usgs_nwis/station-2/level_hourly",
+            request_parameters={"station_id": "station-2", "product_id": "level_hourly"},
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            content_type="application/octet-stream",
+            source_path=UnknownOriginFact(),
+            query=UnknownOriginFact(),
+        ),
+    )
+    assert recording_stages.usgs_nwis.calls == [
+        (("station-1",), ("level",)),
+        (("station-2",), ("level_hourly",)),
+    ]
+
+
+def test_fetch_by_provider_raw_true_retains_provider_scoped_parse_inputs_and_origins(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    results = rr.fetch_by_provider(
+        rr.find(product="level"),
+        start="2026-01-01",
+        end="2026-01-01",
+        raw=True,
+    )
+
+    assert tuple(results) == ("ca_eccc", "usgs_nwis")
+    assert {
+        provider_id: tuple(entry.content for entry in result.raw.entries) for provider_id, result in results.items()
+    } == {
+        "ca_eccc": (b"ca_eccc|station-1|level",),
+        "usgs_nwis": (b"usgs_nwis|station-1|level",),
+    }
+    assert {
+        provider_id: tuple(entry.origin for entry in result.raw.entries) for provider_id, result in results.items()
+    } == {
+        "ca_eccc": (
+            SourceCallOrigin(
+                url="https://data.test/ca_eccc/station-1/level",
+                request_parameters={"station_id": "station-1", "product_id": "level"},
+                status_code=200,
+                retrieved_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+                content_type="application/octet-stream",
+                source_path=UnknownOriginFact(),
+                query=UnknownOriginFact(),
+            ),
+        ),
+        "usgs_nwis": (
+            SourceCallOrigin(
+                url="https://data.test/usgs_nwis/station-1/level",
+                request_parameters={"station_id": "station-1", "product_id": "level"},
+                status_code=200,
+                retrieved_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+                content_type="application/octet-stream",
+                source_path=UnknownOriginFact(),
+                query=UnknownOriginFact(),
+            ),
+        ),
+    }
+    assert all(result.raw.provider_id == ProviderId(provider_id) for provider_id, result in results.items())
+
+
+def test_fetch_default_warns_once_per_actionable_merged_issue(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    sparse = rr.pick(
+        rr.find(provider="usgs_nwis"),
+        station=["station-1", "station-2"],
+        product=["level", "level_hourly"],
+    )
+    first_issue = Issue(
+        severity="warning",
+        code="station_1_provisional",
+        message="station-1 level is provisional",
+        details={"station_id": "station-1", "product_id": "level"},
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    second_issue = Issue(
+        severity="error",
+        code="station_2_partial",
+        message="station-2 level_hourly is partial",
+        details={"station_id": "station-2", "product_id": "level_hourly"},
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    recording_stages.usgs_nwis.issues_by_series = {
+        ("station-1", "level"): (first_issue,),
+        ("station-2", "level_hourly"): (second_issue,),
+    }
+
+    with pytest.warns(RuntimeWarning) as captured_warnings:
+        result = rr.fetch(sparse, start="2026-01-01", end="2026-01-01")
+
+    assert [str(warning.message) for warning in captured_warnings] == [
+        "station-1 level is provisional",
+        "station-2 level_hourly is partial",
+    ]
+    assert result.issues == (first_issue, second_issue)
+
+
+def test_fetch_on_issue_ignore_returns_all_merged_issues_without_warnings(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    sparse = rr.pick(
+        rr.find(provider="usgs_nwis"),
+        station=["station-1", "station-2"],
+        product=["level", "level_hourly"],
+    )
+    first_issue = Issue(
+        severity="warning",
+        code="station_1_provisional",
+        message="station-1 level is provisional",
+        details={"station_id": "station-1", "product_id": "level"},
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    second_issue = Issue(
+        severity="error",
+        code="station_2_partial",
+        message="station-2 level_hourly is partial",
+        details={"station_id": "station-2", "product_id": "level_hourly"},
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    recording_stages.usgs_nwis.issues_by_series = {
+        ("station-1", "level"): (first_issue,),
+        ("station-2", "level_hourly"): (second_issue,),
+    }
+
+    with warnings.catch_warnings(record=True) as captured_warnings:
+        result = rr.fetch(
+            sparse,
+            start="2026-01-01",
+            end="2026-01-01",
+            on_issue="ignore",
+        )
+
+    assert captured_warnings == []
+    assert result.issues == (first_issue, second_issue)
+
+
+def test_fetch_on_issue_raise_fetches_all_series_then_raises_for_merged_issues(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    sparse = rr.pick(
+        rr.find(provider="usgs_nwis"),
+        station=["station-1", "station-2"],
+        product=["level", "level_hourly"],
+    )
+    first_issue = Issue(
+        severity="warning",
+        code="station_1_provisional",
+        message="station-1 level is provisional",
+        details={"station_id": "station-1", "product_id": "level"},
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    second_issue = Issue(
+        severity="error",
+        code="station_2_partial",
+        message="station-2 level_hourly is partial",
+        details={"station_id": "station-2", "product_id": "level_hourly"},
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    recording_stages.usgs_nwis.issues_by_series = {
+        ("station-1", "level"): (first_issue,),
+        ("station-2", "level_hourly"): (second_issue,),
+    }
+
+    with pytest.raises(
+        IssuePolicyError,
+        match="^Recoverable issue policy requested an exception$",
+    ) as raised:
+        rr.fetch(
+            sparse,
+            start="2026-01-01",
+            end="2026-01-01",
+            on_issue="raise",
+        )
+
+    assert raised.value.issues == (first_issue, second_issue)
+    assert recording_stages.usgs_nwis.calls == [
+        (("station-1",), ("level",)),
+        (("station-2",), ("level_hourly",)),
+    ]
+
+
+def test_fetch_by_provider_applies_issue_policy_once_to_each_completed_provider_result(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    first_issue = Issue(
+        severity="warning",
+        code="ca_eccc_provisional",
+        message="ca_eccc station-1 level is provisional",
+        details={"station_id": "station-1", "product_id": "level"},
+        provider_id=ProviderId("ca_eccc"),
+    )
+    second_issue = Issue(
+        severity="error",
+        code="usgs_nwis_partial",
+        message="usgs_nwis station-1 level is partial",
+        details={"station_id": "station-1", "product_id": "level"},
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    recording_stages.ca_eccc.issues_by_series = {
+        ("station-1", "level"): (first_issue,),
+    }
+    recording_stages.usgs_nwis.issues_by_series = {
+        ("station-1", "level"): (second_issue,),
+    }
+
+    with warnings.catch_warnings(record=True) as captured_warnings:
+        results = rr.fetch_by_provider(
+            rr.find(product="level"),
+            start="2026-01-01",
+            end="2026-01-01",
+            on_issue="ignore",
+        )
+
+    assert captured_warnings == []
+    assert tuple(results) == ("ca_eccc", "usgs_nwis")
+    assert results["ca_eccc"].issues == (first_issue,)
+    assert results["usgs_nwis"].issues == (second_issue,)
+
+
+def test_fetch_functions_require_rivretrieve_selection_and_expose_request_controls(
     monkeypatch: pytest.MonkeyPatch,
     recording_stages: _RegisteredRecorders,
 ) -> None:
@@ -340,14 +595,24 @@ def test_fetch_functions_require_rivretrieve_selection_and_defer_request_control
         with pytest.raises(TypeError, match="^selection must be a RivRetrieve selection$"):
             function(object(), start="2026-01-01", end="2026-01-01")
         signature = inspect.signature(function)
-        assert tuple(signature.parameters) == ("selection", "start", "end")
+        assert tuple(signature.parameters) == ("selection", "start", "end", "raw", "on_issue")
         assert signature.parameters["selection"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
         assert signature.parameters["selection"].default is inspect.Parameter.empty
         for name in ("start", "end"):
             assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
             assert signature.parameters[name].default is inspect.Parameter.empty
-        assert "raw" not in signature.parameters
-        assert "on_issue" not in signature.parameters
+        assert signature.parameters["raw"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert signature.parameters["raw"].default is False
+        assert signature.parameters["on_issue"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert signature.parameters["on_issue"].default == "warn"
+        assert inspect.get_annotations(function, eval_str=False) == {
+            "selection": "_Selection",
+            "start": "object",
+            "end": "object",
+            "raw": "bool",
+            "on_issue": "OnIssue",
+            "return": ("ObservationResult" if function is rr.fetch else "dict[str, ObservationResult]"),
+        }
     assert provider_lookups == []
 
 
