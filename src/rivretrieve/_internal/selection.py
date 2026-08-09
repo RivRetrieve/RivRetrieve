@@ -1,4 +1,4 @@
-"""selection discovery : PackagedCatalogue × Query → Selection[Series]."""
+"""selection discovery : PackagedCatalogue × Query → Selection[Series]; Selection[Series] → StationCatalog."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.registry import UnknownProviderError
@@ -222,6 +223,19 @@ def _as_frame(selection: _Selection) -> pl.DataFrame:
     if not selection.series:
         return pl.DataFrame(schema=SELECTION_FRAME_SCHEMA)
     return pl.DataFrame([asdict(row) for row in selection.series], schema=SELECTION_FRAME_SCHEMA)
+
+
+def _station_frame(selection: _Selection) -> StationCatalog:
+    _require_selection(selection)
+    return (
+        _as_frame(selection)
+        .select(STATION_CATALOG_SCHEMA.polars_schema.names())
+        .unique(
+            subset=["provider_id", "station_id"],
+            keep="first",
+            maintain_order=True,
+        )
+    )
 
 
 def _from_frame(records: Sequence[_CatalogueRecord], frame: pl.DataFrame) -> _Selection:

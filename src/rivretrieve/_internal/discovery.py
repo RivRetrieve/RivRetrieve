@@ -23,6 +23,7 @@ from rivretrieve._internal.selection import _find as _selection_find
 from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _Selection
+from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.station_map import StationMap, _filter_stations
 
 if TYPE_CHECKING:
@@ -67,6 +68,10 @@ def as_frame(selection: _Selection) -> pl.DataFrame:
 def from_frame(frame: pl.DataFrame) -> _Selection:
     _ensure_default_providers_registered()
     return _selection_from_frame(_registry.iter_records(), frame)
+
+
+def map(selection: _Selection) -> object:
+    return StationMap(_selection_station_frame(selection)).render()
 
 
 def provider(provider_id: str) -> ProviderHandle:

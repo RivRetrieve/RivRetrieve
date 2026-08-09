@@ -29,6 +29,7 @@ class StationMap:
                 location=[latitude, longitude],
                 tooltip=_station_label(station),
                 popup=_station_popup(station),
+                icon=folium.Icon(color="orange" if station["crs"] == "unknown" else "blue"),
             )
             marker.add_to(station_map)
 
@@ -127,5 +128,6 @@ def _station_popup(station: dict[str, object]) -> str:
         f"Station: {station['station_id']}",
         f"Latitude: {station['latitude']}",
         f"Longitude: {station['longitude']}",
+        f"crs: {station['crs']}",
     ]
     return "<br>".join(lines)
