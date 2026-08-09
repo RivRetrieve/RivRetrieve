@@ -15,21 +15,21 @@ from rivretrieve._internal.catalogues.schemas import (
     validate_catalogue,
 )
 from rivretrieve._internal.handle import ProviderHandle
-from rivretrieve._internal.observations import RawMode
+from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_issue
+from rivretrieve._internal.observations import ObservationResult, RawMode, RawPayload
 from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 from rivretrieve._internal.selection import _as_frame as _selection_as_frame
+from rivretrieve._internal.selection import _EmptyReason, _require_selection, _Selection, _Series
 from rivretrieve._internal.selection import _find as _selection_find
 from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
-from rivretrieve._internal.selection import _Selection
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.station_map import StationMap, _filter_stations
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from rivretrieve._internal.observations import ObservationResult
     from rivretrieve._internal.primitives import OnIssue
 
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
@@ -80,6 +80,132 @@ def provider(provider_id: str) -> ProviderHandle:
 
 
 _provider_lookup = provider
+
+
+class EmptySelectionError(FatalContractError):
+    def __init__(self, reason: _EmptyReason) -> None:
+        self.reason = reason
+        super().__init__(
+            "fetch() cannot retrieve an empty selection: "
+            f"code={reason.code!r}, provider_ids={reason.provider_ids!r}, "
+            f"station_ids={reason.station_ids!r}, product_ids={reason.product_ids!r}, "
+            f"published_products={reason.published_products!r}"
+        )
+
+
+class MultiProviderSelectionError(FatalContractError):
+    def __init__(self, provider_ids: tuple[str, ...]) -> None:
+        self.provider_ids = provider_ids
+        super().__init__(
+            f"fetch() requires one provider; selection contains providers {provider_ids!r}. "
+            "Use fetch_by_provider() for multi-provider selections."
+        )
+
+
+def fetch(selection: _Selection, *, start: object, end: object) -> ObservationResult:
+    _require_selection(selection)
+    if not selection.series:
+        reason = selection.empty_reason
+        if reason is None:
+            raise FatalContractError("Empty selection has no retained reason")
+        raise EmptySelectionError(reason)
+
+    partitions = _partition_by_provider(selection.series)
+    provider_ids = tuple(partitions)
+    if len(provider_ids) != 1:
+        raise MultiProviderSelectionError(provider_ids)
+
+    provider_id = provider_ids[0]
+    return _fetch_provider_series(provider_id, partitions[provider_id], start=start, end=end)
+
+
+def fetch_by_provider(
+    selection: _Selection,
+    *,
+    start: object,
+    end: object,
+) -> dict[str, ObservationResult]:
+    _require_selection(selection)
+    partitions = _partition_by_provider(selection.series)
+    return {
+        provider_id: _fetch_provider_series(provider_id, series, start=start, end=end)
+        for provider_id, series in partitions.items()
+    }
+
+
+def _partition_by_provider(series: tuple[_Series, ...]) -> dict[str, tuple[_Series, ...]]:
+    partitions: dict[str, list[_Series]] = {}
+    for selected_series in series:
+        partitions.setdefault(selected_series.provider_id, []).append(selected_series)
+    return {provider_id: tuple(rows) for provider_id, rows in partitions.items()}
+
+
+def _fetch_provider_series(
+    provider_id: str,
+    series: tuple[_Series, ...],
+    *,
+    start: object,
+    end: object,
+) -> ObservationResult:
+    handle = _provider_lookup(provider_id)
+    results = tuple(
+        handle.observations(
+            stations=selected_series.station_id,
+            products=selected_series.product_id,
+            start=start,
+            end=end,
+            on_issue="ignore",
+            raw=RawMode.OMIT,
+        )
+        for selected_series in series
+    )
+    result = _merge_provider_results(results, series)
+    apply_on_issue(result.issues, "warn")
+    return result
+
+
+def _merge_provider_results(
+    results: tuple[ObservationResult, ...],
+    series: tuple[_Series, ...],
+) -> ObservationResult:
+    """provider result merge : NonEmptyTuple[ObservationResult] × SelectedSeries → ObservationResult"""
+    if not results:
+        raise FatalContractError("Provider result merge requires at least one result")
+
+    first = results[0]
+    request = first.provenance.request
+    if request is None or "start" not in request or "end" not in request:
+        raise FatalContractError("Observation provenance must retain the normalized requested window")
+    merged_request = {
+        "series": [
+            {"station_id": selected_series.station_id, "product_id": selected_series.product_id}
+            for selected_series in series
+        ],
+        "start": request["start"],
+        "end": request["end"],
+    }
+    issues = _merge_provider_issues(results)
+    raw_entries = tuple(entry for result in results for entry in result.raw.entries)
+    return ObservationResult(
+        data=pl.concat([result.data for result in results]),
+        provenance=first.provenance.model_copy(update={"request": merged_request}),
+        issues=issues,
+        raw=RawPayload(provider_id=first.provenance.provider_id, entries=raw_entries),
+    )
+
+
+def _merge_provider_issues(results: tuple[ObservationResult, ...]) -> tuple[Issue, ...]:
+    merged: list[Issue] = []
+    provider_provenance_issues: list[Issue] = []
+    for result in results:
+        for issue in result.issues:
+            if issue.code.startswith("provenance."):
+                if issue not in provider_provenance_issues:
+                    provider_provenance_issues.append(issue)
+                    merged.append(issue)
+            else:
+                merged.append(issue)
+    return tuple(merged)
 
 
 def observations(
