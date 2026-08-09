@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 
 import rivretrieve as rr
-from rivretrieve import RawMode
 from rivretrieve._internal import discovery
+from rivretrieve._internal.observations import RawMode
 
 
 def test_observations_wrapper_delegates_to_provider_handle(monkeypatch: pytest.MonkeyPatch) -> None:
