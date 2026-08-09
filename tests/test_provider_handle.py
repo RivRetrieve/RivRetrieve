@@ -7,9 +7,10 @@ from typing import Any, get_type_hints
 import pytest
 
 import rivretrieve as rr
-from rivretrieve import ProviderHandle, RawMode
+from rivretrieve import ProviderHandle
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.handle import ProviderHandle as InternalProviderHandle
+from rivretrieve._internal.observations import RawMode
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.registry import UnknownProviderError, _ProviderHandle, _registry
 from tests._stubs import stub_provider
