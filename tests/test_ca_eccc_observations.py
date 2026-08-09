@@ -21,6 +21,7 @@ from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
 from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
 from rivretrieve._internal.providers.ca_eccc.config import HydatSourceCoordinates
 from rivretrieve._internal.providers.ca_eccc.issue_codes import CaEcccObservationIssueCodes
+from rivretrieve._internal.registry import _registry
 
 
 def _create_hydat(path: Path) -> None:
@@ -82,7 +83,8 @@ def test_ca_eccc_registry_dispatch_uses_engine_driver(
 
     monkeypatch.setattr(fetch_module, "_query_station_product", recording_query)
 
-    result = rr.provider("ca_eccc").observations(
+    rr.providers()
+    result = _registry.get("ca_eccc").observations(
         stations="02GA010",
         products="discharge_daily_mean",
         start="2010-01-01",
@@ -122,7 +124,8 @@ def test_ca_eccc_include_retains_exact_ordered_parse_inputs_and_query_origins(
 
     monkeypatch.setattr(ca_eccc_module, "parse", recording_parse)
 
-    result = rr.provider("ca_eccc").observations(
+    rr.providers()
+    result = _registry.get("ca_eccc").observations(
         stations=["02GA011", "02GA010"],
         products="discharge_daily_mean",
         start="2010-01-01",
@@ -161,7 +164,8 @@ def test_ca_eccc_all_missing_preserves_issue_policy(
 ) -> None:
     _patch_cache(monkeypatch, hydat_db)
 
-    result = rr.provider("ca_eccc").observations(
+    rr.providers()
+    result = _registry.get("ca_eccc").observations(
         stations="missing-station",
         products="discharge_daily_mean",
         start="2010-01-01",
@@ -182,7 +186,8 @@ def test_ca_eccc_all_missing_preserves_issue_policy(
     _assert_result_shape(result)
 
     with pytest.raises(IssuePolicyError):
-        rr.provider("ca_eccc").observations(
+        rr.providers()
+        _registry.get("ca_eccc").observations(
             stations="missing-station",
             products="discharge_daily_mean",
             start="2010-01-01",

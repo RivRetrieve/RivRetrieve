@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib import import_module
 from types import ModuleType
@@ -10,7 +9,7 @@ from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.issues import FatalContractError, MissingOptionalDependencyError
+from rivretrieve._internal.issues import MissingOptionalDependencyError
 
 
 @dataclass(frozen=True)
@@ -36,33 +35,6 @@ class StationMap:
         return station_map
 
 
-def _filter_stations(
-    stations: pl.DataFrame,
-    *,
-    providers: str | Sequence[str] | None = None,
-    bbox: tuple[float, float, float, float] | None = None,
-) -> pl.DataFrame:
-    expressions: list[pl.Expr] = []
-
-    provider_values = _normalize_string_filter(providers, label="providers")
-    if provider_values is not None:
-        expressions.append(pl.col("provider_id").is_in(provider_values))
-
-    if bbox is not None:
-        min_lon, min_lat, max_lon, max_lat = _validate_bbox(bbox)
-        expressions.append(
-            (pl.col("longitude") >= min_lon)
-            & (pl.col("longitude") <= max_lon)
-            & (pl.col("latitude") >= min_lat)
-            & (pl.col("latitude") <= max_lat)
-        )
-
-    if not expressions:
-        return stations
-
-    return stations.filter(*expressions)
-
-
 def _load_folium() -> ModuleType:
     try:
         folium = import_module("folium")
@@ -72,38 +44,6 @@ def _load_folium() -> ModuleType:
         ) from exc
 
     return folium
-
-
-def _normalize_string_filter(value: str | Sequence[str] | None, *, label: str) -> tuple[str, ...] | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return (value,)
-    if not isinstance(value, Sequence):
-        raise FatalContractError(f"{label} must be a string, a sequence of strings, or None")
-
-    values = tuple(value)
-    if not all(isinstance(item, str) for item in values):
-        raise FatalContractError(f"{label} must contain only strings")
-    return values
-
-
-def _validate_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    if len(bbox) != 4:
-        raise FatalContractError("bbox must be a 4-item tuple in (min_lon, min_lat, max_lon, max_lat) order")
-
-    try:
-        min_lon, min_lat, max_lon, max_lat = (float(value) for value in bbox)
-    except (TypeError, ValueError) as exc:
-        raise FatalContractError("bbox values must be numeric in (min_lon, min_lat, max_lon, max_lat) order") from exc
-
-    if min_lon > max_lon or min_lat > max_lat:
-        raise FatalContractError(
-            "bbox bounds must satisfy min_lon <= max_lon and min_lat <= max_lat "
-            "in (min_lon, min_lat, max_lon, max_lat) order"
-        )
-
-    return min_lon, min_lat, max_lon, max_lat
 
 
 def _map_center(stations: pl.DataFrame) -> list[float]:

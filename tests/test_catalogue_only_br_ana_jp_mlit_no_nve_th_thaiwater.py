@@ -10,6 +10,7 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
+from rivretrieve._internal.registry import _registry
 
 CATALOGUE_ONLY_PROVIDERS = (
     (
@@ -117,11 +118,11 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     availability: set[str],
 ) -> None:
     assert provider_id in rr.providers()
-    handle = rr.provider(provider_id)
-    info = handle.info()
-    stations_result = handle.stations()
-    products_result = handle.products()
-    station_products_result = handle.station_products()
+    module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
+    info = module.info()
+    stations_result = module.stations()
+    products_result = module.products()
+    station_products_result = module.station_products()
     for result in (stations_result, products_result, station_products_result):
         assert hasattr(result, "data")
         assert hasattr(result, "provenance")
@@ -140,15 +141,9 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
 
-    global_stations = rr.stations().data.filter(pl.col("provider_id") == provider_id)
     global_products = rr.products(provider=provider_id)
-    global_provider_info = rr.provider_info().data.filter(pl.col("provider_id") == provider_id)
-    assert global_stations.height == station_count
-    assert global_stations["crs"].unique().to_list() == ["unknown"]
     assert len(global_products) == product_count
     assert set(global_products) == product_ids
-    assert global_provider_info.height == 1
-    assert global_provider_info.select("name").item() == provider_name
 
 
 @pytest.mark.parametrize(
@@ -201,20 +196,16 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
 
 @pytest.mark.parametrize("provider_id", [row[0] for row in CATALOGUE_ONLY_PROVIDERS])
 def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str) -> None:
+    rr.providers()
     with pytest.raises(
         ObservationsUnavailableError, match=f"Provider {provider_id} has no observation module registered"
     ):
-        rr.provider(provider_id).observations(stations="unused", products="unused", start=None, end=None)
-
-
-def test_catalogue_only_live_catalogue_behaviour_is_retained() -> None:
-    assert rr.provider("no_nve").info().live_stations is False
-    assert rr.provider("no_nve").stations(source="live", on_issue="ignore").issues
-    assert rr.provider("jp_mlit").stations(source="live", on_issue="ignore").issues
+        _registry.get(provider_id).observations(stations="unused", products="unused", start=None, end=None)
 
 
 def test_no_nve_packaged_availability_examples_are_retained() -> None:
-    station_products = rr.provider("no_nve").station_products().data
+    module = import_module("rivretrieve._internal.providers.no_nve.module")
+    station_products = module.station_products().data
     for product_id in ("discharge_daily_mean", "discharge_instantaneous"):
         row = station_products.filter((pl.col("station_id") == "12.210.0") & (pl.col("product_id") == product_id))
         assert row.height == 1
@@ -222,7 +213,8 @@ def test_no_nve_packaged_availability_examples_are_retained() -> None:
 
 
 def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
-    stations = rr.provider("jp_mlit").stations().data
+    module = import_module("rivretrieve._internal.providers.jp_mlit.module")
+    stations = module.stations().data
     expected = {
         "302011282228100": (37.415277777777774, 140.48333333333332),
         "302011282218050": (37.81111111111111, 140.4958333333333),

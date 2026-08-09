@@ -30,6 +30,7 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis import fetch as fetch_module
 from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis_module
 from rivretrieve._internal.providers.usgs_nwis.issue_codes import UsgsNwisObservationIssueCodes
+from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
 FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json")
@@ -117,7 +118,8 @@ def _assert_result_shape(result) -> None:
 def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _patch_client(monkeypatch, FIXTURE_PATH.read_bytes())
 
-    result = rr.provider("usgs_nwis").observations(
+    rr.providers()
+    result = _registry.get("usgs_nwis").observations(
         stations="07374000",
         products="discharge_daily_mean",
         start="2023-01-01",
@@ -155,7 +157,8 @@ def test_usgs_nwis_bare_date_returns_full_local_day_for_instant_product(
     """Use a constructed, source-shaped fixture with synthetic queryURL, criteria, station metadata, and values—not a captured USGS response."""
     client = _patch_client(monkeypatch, INSTANT_FIXTURE_PATH.read_bytes())
 
-    result = rr.provider("usgs_nwis").observations(
+    rr.providers()
+    result = _registry.get("usgs_nwis").observations(
         stations="07374000",
         products="discharge_instantaneous",
         start="2023-01-01",
@@ -204,7 +207,8 @@ def test_usgs_nwis_arizona_explicit_local_day_returns_24_hourly_rows(
     """Use a constructed, source-shaped fixture with synthetic queryURL, criteria, station metadata, and values—not a captured USGS response."""
     client = _patch_client(monkeypatch, ARIZONA_INSTANT_FIXTURE_PATH.read_bytes())
 
-    result = rr.provider("usgs_nwis").observations(
+    rr.providers()
+    result = _registry.get("usgs_nwis").observations(
         stations="09380000",
         products="discharge_instantaneous",
         start="2020-07-01 00:00",
@@ -265,7 +269,8 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
     monkeypatch.setattr(fetch_module, "_request", authenticated_request)
     monkeypatch.setattr(usgs_nwis_module, "parse", recording_parse)
 
-    result = rr.provider("usgs_nwis").observations(
+    rr.providers()
+    result = _registry.get("usgs_nwis").observations(
         stations=["07374000", "07374000"],
         products="discharge_daily_mean",
         start="2023-01-01",
@@ -344,7 +349,8 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
 def test_usgs_nwis_all_missing_preserves_issue_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_client(monkeypatch, b"not found", status_code=404)
 
-    result = rr.provider("usgs_nwis").observations(
+    rr.providers()
+    result = _registry.get("usgs_nwis").observations(
         stations="07374000",
         products="discharge_daily_mean",
         start="2023-01-01",
@@ -365,7 +371,8 @@ def test_usgs_nwis_all_missing_preserves_issue_policy(monkeypatch: pytest.Monkey
     _assert_result_shape(result)
 
     with pytest.raises(IssuePolicyError):
-        rr.provider("usgs_nwis").observations(
+        rr.providers()
+        _registry.get("usgs_nwis").observations(
             stations="07374000",
             products="discharge_daily_mean",
             start="2023-01-01",
