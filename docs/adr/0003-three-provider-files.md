@@ -1,16 +1,19 @@
-# A provider is three files over a shared engine
+# A provider's file count is determined by its kind
 
-Each provider contributes `fetch.py`, `parse.py` and `config.py`, and nothing else.
-Fetch and parse are genuine per-source code, because how bytes are obtained and how a
-format is decoded differ irreducibly between sources. Config is a typed declaration
-rather than code, because once parse has produced rows the only remaining differences
-between providers are facts, not behaviour. Convert and assemble have no provider file
-at all, since the engine performs them for everyone.
+An HTTP provider contributes `fetch.py`, `parse.py` and `config.py`. A bulk provider
+contributes `config.py` and `bulk.py`. Fetch and parse are genuine per-source code for an
+HTTP provider, because how bytes are obtained and how a format is decoded differ
+irreducibly between sources. Downloading a publisher artifact and compiling it into the
+store are genuine per-source code for a bulk provider. Config is a typed declaration
+rather than code, because the remaining differences between providers are facts, not
+behaviour. Convert and assemble have no provider file at all, since the engine performs
+them for everyone.
 
-That gives a naming rule worth stating: a provider file is named for a stage only when
-the provider writes code for that stage. The file is therefore `config.py`, not
-`convert.py`, which removes a real collision where two filenames named stages the
-provider implements and a third named a stage the engine owns.
+That gives a naming rule worth stating: a provider file is named for the work the
+provider writes code for. An HTTP provider therefore has `fetch.py` and `parse.py`; a
+bulk provider has `bulk.py`; and both have `config.py`, not `convert.py`. This removes a
+real collision between filenames for work the provider performs and work the engine
+owns.
 
 Three alternatives were considered and rejected. A single file per provider was argued
 for on contributor ownership; the counter that carried was that contributors do not own
