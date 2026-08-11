@@ -14,20 +14,23 @@ established is absent, not [[unknown]]: that is RivRetrieve's pre-research state
 source silence.
 _Avoid_: missing, N/A, not available, default
 
-**Raw**:
+**Receipt**:
 What a [[provider]]'s parse [[stage]] was handed, kept alongside the returned result so a
 user can audit a value against what the source actually said, and only when the caller
 asks for it — unasked, the slot exists and is empty and no response bytes are reachable
 from the result. It is bytes and stays bytes: thirteen sources answer in JSON, CSV, HTML
 and spreadsheets, and modelling that would be parsing. Each entry carries a uniform
-envelope naming where the bytes came from — for eleven providers an HTTP call, for
-`ca_eccc` a query against the local [[cache]], for `pl_imgw` a member of a downloaded
-zip — with the fields that do not apply left [[unknown]], and request headers excluded
-entirely so a credential has no route in. It is deliberately what parse read rather than
-what came off the wire: a zip explains no value, and `ca_eccc` never touches the network,
-so the wire would hand back an empty box for the one provider where a stale cache is the
-likeliest cause of a wrong number.
-_Avoid_: untouched payload (one unzipping step removes it from what the server sent),
+envelope naming where the bytes came from, with the fields that do not apply left
+[[unknown]] and request headers excluded entirely so a credential has no route in. It is
+deliberately what parse read rather than what came off the wire: a zip explains no value,
+and a bulk provider never touches the network on a request. Every receipt declares its
+authorship, because the two are not the same kind of thing and only the reader can tell
+which matters: a **publisher payload** is untouched bytes the source itself served, and a
+**store excerpt** is bytes RivRetrieve produced by encoding rows read out of its own
+[[store]]. A store excerpt is exactly as complete as [[compile]] made the store and never
+reconstructs a value the store does not hold.
+_Avoid_: raw (the former name; it presented RivRetrieve's own encoding as the source's own
+words), untouched payload (one unzipping step removes it from what the server sent),
 response, blob
 
 **Native table**:
@@ -38,7 +41,7 @@ become one thing. The canonical station catalogue is built from it rather than b
 it, which is why the source's own columns are a table to be read rather than a blob to
 be parsed.
 _Avoid_: metadata (the opaque per-row JSON string it replaces), raw table (collides with
-[[raw]], the exact bytes handed to a [[provider]]'s parse [[stage]] and retained only when
+[[receipt]], the exact bytes handed to a [[provider]]'s parse [[stage]] and retained only when
 requested), source table
 
 **Origin**:
@@ -131,13 +134,16 @@ _Avoid_: core, framework, base
 
 **Provider**:
 An adapter over the [[engine]] for one national source. It contributes only what is
-true about that source, as three files: `fetch.py`, `parse.py`, and `config.py`.
+true about that source. An HTTP provider contributes `fetch.py`, `parse.py`, and
+`config.py`; a bulk provider contributes `config.py` and `bulk.py`.
 _Avoid_: source, backend, plugin
 
 **Stage**:
-One of the four steps every retrieval passes through: fetch, parse, convert, assemble.
-A provider file is named for a stage only when the provider writes code for that
-stage, which is why convert and assemble have no provider file.
+One of fetch, parse, convert, and assemble. An HTTP retrieval passes through all four.
+A bulk retrieval queries the [[store]] and then passes through convert and assemble; it
+passes through neither provider fetch nor provider parse, and no provider code executes
+on its retrieval path. A provider file is named for a stage only when the provider writes
+code for that stage, which is why convert and assemble have no provider file.
 _Avoid_: step, phase
 
 **Source coordinates**:
@@ -199,7 +205,7 @@ source-published `time_zone`, or `unknown` only where the source establishes no 
 All five columns travel together as the observation frame; `time` and `time_zone` are
 not meaningful alone. The pairing exists because one dataframe timestamp column carries
 a single zone for all its rows, while one result may span stations in different zones.
-_Avoid_: raw time (collides with [[raw]], the exact bytes handed to a [[provider]]'s parse
+_Avoid_: raw time (collides with [[receipt]], the exact bytes handed to a [[provider]]'s parse
 [[stage]] and retained only when requested), local time (ambiguous between the gauge's
 own zone and a provider-wide national zone)
 
@@ -214,9 +220,14 @@ The zone a station's timestamps are counted in, taken only from what its source
 publishes. Where a source publishes none, the station timezone is [[unknown]] and is not
 derived from the station's coordinates: a coordinate lookup is a third party's assertion
 about a political boundary rather than the source's statement about its own data, and in
-a result it would be indistinguishable from a zone the source did establish.
+a result it would be indistinguishable from a zone the source did establish. Neither is
+one kind of zone promoted to the other: a published fixed offset stays an offset and is
+never upgraded to a named identifier, because several identifiers share any given offset
+and choosing among them is a derivation. Converting [[native-time]] to absolute time
+therefore reads each row's own published zone rather than one zone per station, which is
+what lets a station whose offset shifts across a daylight-saving boundary convert at all.
 _Avoid_: provider timezone (a zone is a per-station fact wherever a country spans
-several), inferred timezone
+several), inferred timezone, promoted timezone
 
 **Requested window**:
 The interval a caller asks for, closed at both ends, expressed as wall-clock time in the
@@ -324,3 +335,67 @@ The distinction from a [[user-cache]] is about distribution rights rather than a
 storage: a user keeping their own retrieved data on their own disk raises no such
 question, and both may sit in the same layout on disk.
 _Avoid_: user cache, cache, bundled dataset
+
+**Store**:
+Retrieved observations at rest in RivRetrieve's own layout, together with the
+[[manifest]] describing them. It is the single form ADR 0002 fixes for anything held on
+disk, so a [[cache]] and a [[user-cache]] are both stores. Revision `1` of the compiled-
+store manifest contract applies only to a store produced by compiling a
+[[publisher-artifact]]. Whether a user-cache store carries a reduced manifest under
+revision `1` or uses a distinct format revision remains undecided, so revision `1` does
+not yet promise that one reader serves both. A store holds the source's native values and
+native wall-clock timestamps; unit conversion and clipping happen on read through the
+same convert [[stage]] every provider uses, so standardising the container is not the
+same act as changing the numbers. The layout is authored by RivRetrieve rather than
+owned by a publisher, which is why it carries a format version and why reading one is a
+compatibility obligation rather than an implementation detail.
+_Avoid_: cache (one kind of store, not the category), database, local format
+
+**Publisher artifact**:
+The file a bulk source actually ships — a national database or a set of yearly archives —
+downloaded whole because that source offers no per-station access. It is the input to
+[[compile]] and not a queryable thing: it is deleted once compiling succeeds, so a
+[[store]] is the only surviving copy of the observations. What survives of it is its
+identity rather than its bytes, recorded in the [[manifest]] as the URL it came from, its
+source vintage and its checksum, which names precisely which release a value was compiled
+from and allows that exact release to be fetched again.
+_Avoid_: raw download, source file, bulk payload
+
+**Compile**:
+The step turning one [[publisher-artifact]] into a [[store]], run once per download rather
+than once per request. It is where a bulk provider's source-specific work lives, which is
+why a bulk provider contributes a download step and a compile step rather than the fetch
+and parse [[stage]]s an HTTP provider contributes. It preserves by default: every cell the
+source published about an observation is carried across, including values RivRetrieve never
+reads, because deleting the [[publisher-artifact]] makes any omission permanent. Whatever it
+does drop is declared and argued in the layout specification rather than left to what the
+library happens to consume.
+_Avoid_: ingest, import, transform, ETL
+
+**Value state**:
+Which of four distinct things a [[store]] says about one station-product-day: that the
+source published no record for it at all, that it published a record whose value is null,
+that it published a record whose value field is blank, or that it published a value. A
+typed numeric column collapses the first three into one, so the layout carries the state
+beside the value rather than encoding it in the value. The distinction is not decoration:
+"we hold no record" and "the source told us there is nothing here" are different claims
+about the world, and [[compile]] is the last moment either can be observed, because the
+[[publisher-artifact]] is gone afterwards.
+_Avoid_: null handling, missing value, sentinel
+
+**Source vintage**:
+Which release of a bulk source a [[store]] was compiled from, as the source itself dates
+it, recorded in the [[manifest]] and travelling in provenance on every result the store
+answers. It is a date stamp and never a verdict: RivRetrieve does not compute whether a
+store is old, because a threshold would be a number nobody derived and would replace a
+precise fact — this answer came from that release — with an opinion we invented. A user
+comparing two runs sees the release change; nothing nudges them, by design.
+_Avoid_: stale, freshness, age, cache expiry
+
+**Manifest**:
+The machine-readable record written beside a [[store]] stating the layout's format version,
+when the store was built, and the [[publisher-artifact]] it was compiled from. It exists so
+a store describes itself to a reader that did not build it, so a version mismatch is
+detected rather than misread, and so a value can be traced to a specific source release
+after the artifact itself is gone.
+_Avoid_: metadata, header, index
