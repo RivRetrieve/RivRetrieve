@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "compiler_version": "0.1.49",
+  "built_at": "2026-08-11T10:00:00.000000Z",
+  "source_vintage": "2024-01-02",
+  "publisher_artifact": {
+    "url": "https://example.invalid/provider-neutral/source.bin",
+    "sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "source_schema": {
+    "columns": [
+      {
+        "name": "station_id",
+        "type": "string"
+      },
+      {
+        "name": "time",
+        "type": "timestamp[us]"
+      },
+      {
+        "name": "time_zone",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "float64"
+      },
+      {
+        "name": "native_unit",
+        "type": "string"
+      },
+      {
+        "name": "source_quality",
+        "type": "string"
+      },
+      {
+        "name": "source_note",
+        "type": "string"
+      }
+    ],
+    "fingerprint": "sha256:fec7d282faad87c744bd83241c5be29a15b7a7254760b7a9aed0f4e27ba3ecca"
+  },
+  "source_column_dispositions": [
+    {
+      "source_column": "station_id",
+      "disposition": "retained"
+    },
+    {
+      "source_column": "time",
+      "disposition": "retained"
+    },
+    {
+      "source_column": "time_zone",
+      "disposition": "retained"
+    },
+    {
+      "source_column": "value",
+      "disposition": "retained"
+    },
+    {
+      "source_column": "native_unit",
+      "disposition": "retained"
+    },
+    {
+      "source_column": "source_quality",
+      "disposition": "retained"
+    }
+  ],
+  "partition_row_counts": {
+    "product=level/year=2024": 1
+  }
+}
