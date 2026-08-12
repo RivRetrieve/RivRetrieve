@@ -43,6 +43,12 @@ Parquet columns. A reader MUST treat the Hive partition values as columns. Addit
 provider-native columns are permitted and are governed by source-column disposition.
 The required physical names are exactly `station_id`, `time`, `time_zone`, `value`, and
 `value_state`; `source_time` and `native_value` are not format column names.
+
+Revision `1` fixes the physical encoding of the engine-facing columns: they MUST be the
+first five fields of the Parquet schema, in the order shown in the table above;
+`station_id`, `time_zone`, and `value_state` MUST be UTF-8 string fields; `time` MUST be a
+microsecond-precision timestamp without a time zone; and `value` MUST be a 64-bit binary
+floating-point field. Additional provider-native columns follow that prefix.
 Rows MUST be nondecreasing by `station_id` under bytewise UTF-8 ordering. Ordering among
 rows with the same `station_id` is not part of this format version. The pair of partition
 identifier and physical row position identifies a stored row. Duplicate source rows MUST
@@ -93,8 +99,8 @@ closure mechanically.
 
 Provider-native columns retain the source's vocabulary and values. When a native name
 collides with an engine-facing column or cannot be represented faithfully as a Parquet
-field name, the collision is an unresolved format question: record it for m2 and do not
-silently rename, overwrite, or drop the column.
+field name, revision `1` compilation MUST refuse the source schema, as decided under
+**Milestone 2 decisions**; it MUST NOT silently rename, overwrite, or drop the column.
 
 ## Native representation and the read boundary
 
@@ -130,6 +136,12 @@ property spelling. It MUST require exactly one value for each semantic field bel
 
 The source-schema fingerprint MUST cover both the ordered source column names and the
 source data types; hashing column names alone is nonconforming.
+
+Revision `1` fixes that canonical encoding: the ordered `columns` list is serialised as
+JSON with object keys sorted, no insignificant whitespace, and non-ASCII characters left
+unescaped, then encoded as UTF-8 and hashed with SHA-256; the manifest records the digest
+with the `sha256:` prefix. A reader MUST recompute the fingerprint under this encoding and
+MUST refuse a store whose recorded fingerprint disagrees.
 
 The partition-count object MUST contain exactly one key for every materialised partition
 and no other key. Each key MUST have the form
@@ -219,24 +231,26 @@ not certify that unknown future source shapes fit. The lack of an established Au
 source schema remains a future validation obligation and does not license a format
 change in this milestone.
 
-## Open questions for m2
+## Milestone 2 decisions
 
-Because the layout requires one Parquet file per partition and one IMGW calendar-year
-partition is fed by two hydrological-year archives, a per-archive streaming compile
-cannot finalise a partition file or its manifest row count until the following archive
-has been read. This falsifies the claim that compilation can always proceed source unit
-by source unit with bounded working memory. Evaluate either buffering each archive's
-November/December tail until the adjacent partition can be completed, or compiling in
-two passes over the archive set. Do not change revision `1` partitioning here.
+### IMGW partition finalisation
 
-A user-cache store is written from ordinary HTTP retrievals and has no publisher
-artifact. Whether it carries a reduced manifest under revision `1` or uses a distinct
-format revision is undecided. Revision `1` therefore makes no promise that the reader
-for stores compiled from publisher artifacts can also read a user-cache store.
+Revision `1` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
+every archive contribution and the final row count for each calendar `product`/`year` partition. The
+second pass streams contributing rows into the single file for that partition. A compiler MUST NOT
+finalise a partition file or its manifest count while an unread adjacent archive can still contribute.
+This decision does not change revision `1` partitioning.
 
-If implementation of the reader, or evidence from a concrete source schema, shows that a
-provider-native column collides with an engine-facing column or cannot be represented
-faithfully in Parquet, record the exact offending schema and evaluate a namespaced native
-struct as the proposed alternative. Do not change revision `1`, the product/year
-partitioning, the value-state tokens, or the disposition record shape without revising
-the schema and conformance stores together in a later format decision.
+### User-cache format revision
+
+Revision `1` is reserved for stores compiled from publisher artifacts. A future user-cache store MUST
+use a distinct later format revision; it MUST NOT use a reduced revision-`1` manifest. This decision
+defines no user-cache layout or reader.
+
+### Provider-native column collisions
+
+No exact provider-native collision with an engine-facing name, and no unfaithful Parquet field name, is
+evidenced by the committed revision-`1` schemas. If a future schema presents either condition, revision
+`1` compilation MUST refuse it. It MUST NOT silently rename, overwrite, or drop the column. A namespaced
+native struct MAY be considered only in a later coordinated revision of the format, schema, and
+conformance stores.
