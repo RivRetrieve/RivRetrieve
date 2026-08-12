@@ -201,8 +201,10 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
     if error.validator == "required" and not path:
         missing = next(property_name for property_name in error.validator_value if property_name not in error.instance)
         return missing
-    if path[:1] == ("source_column_dispositions",) and len(path) >= 2:
+    if path[:1] == ("source_column_dispositions",) and len(path) >= 2 and path[1].isdigit():
         item = raw["source_column_dispositions"][int(path[1])]
+        if not isinstance(item, dict):
+            return ".".join(path)
         subject = item.get("source_column")
         if item.get("disposition") == "reconstructible" and not item.get("reconstruction_rule"):
             return f"__disposition_reconstruction_rule__:{subject}"

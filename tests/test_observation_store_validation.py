@@ -315,6 +315,10 @@ def test_each_wrong_required_physical_type_is_refused(tmp_path: Path, column: st
             lambda frame: frame.with_columns(pl.col("time").dt.replace_time_zone("UTC")),
             "time-zone-aware time",
         ),
+        (
+            lambda frame: frame.select("station_id", "time", "time_zone"),
+            "prefix shorter than the five required fields",
+        ),
         (lambda frame: frame.with_columns(pl.col("value").cast(pl.Float32)), "float32 value"),
         (
             lambda frame: frame.select(
@@ -511,3 +515,30 @@ def test_fingerprint_canonical_encoding_sorts_keys_and_leaves_non_ascii_unescape
     source_schema["fingerprint"] = _fingerprint(columns)
     _write_manifest(non_ascii, manifest)
     assert isinstance(validate_store(StoreRoot(non_ascii), PROVIDER_ID), ValidatedStore)
+
+
+def test_missing_format_version_is_refused_as_a_missing_required_field(tmp_path: Path) -> None:
+    """A manifest without `format_version` is a missing required field, not a crash."""
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    del manifest["format_version"]
+    _write_manifest(store, manifest)
+    _assert_refusal(store, "manifest.required:format_version")
+
+
+def test_mistyped_format_version_is_malformed_not_incompatible(tmp_path: Path) -> None:
+    """A non-integer `format_version` is a mistyped required field, not an unknown revision."""
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    manifest["format_version"] = "1"
+    _write_manifest(store, manifest)
+    _assert_refusal(store, "manifest.type:format_version")
+
+
+def test_non_object_source_column_disposition_is_malformed(tmp_path: Path) -> None:
+    """A non-object disposition is malformed and never escapes the refusal boundary."""
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    manifest["source_column_dispositions"] = [42]
+    _write_manifest(store, manifest)
+    _assert_refusal(store, "manifest.not:source_column_dispositions.0")
