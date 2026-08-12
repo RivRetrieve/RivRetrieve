@@ -219,8 +219,12 @@ def inspect_store(path: Path, case_universe: tuple[Case, ...]) -> list[str]:
     universe = set(case_universe)
     for identifier, files in partitions.items():
         frame = pl.read_parquet(files[0])
-        if frame.schema != PHYSICAL_SCHEMA:
+        required_schema = list(PHYSICAL_SCHEMA.items())[:5]
+        if list(frame.schema.items())[:5] != required_schema:
             return [f"partition.schema:{identifier}"]
+        for column in ["native_unit", "source_quality", "source_note"]:
+            if column in frame.schema and frame.schema[column] != PHYSICAL_SCHEMA[column]:
+                return [f"partition.schema:{identifier}"]
         for column in [
             "station_id",
             "time",
@@ -228,7 +232,7 @@ def inspect_store(path: Path, case_universe: tuple[Case, ...]) -> list[str]:
             "value_state",
             "native_unit",
         ]:
-            if frame[column].null_count():
+            if column in frame.schema and frame[column].null_count():
                 return [f"partition.nullability:{identifier}:{column}"]
         if any(not station for station in frame["station_id"]):
             return [f"partition.station_id:{identifier}"]
@@ -751,3 +755,49 @@ def test_native_physics_time_zones_and_source_columns_survive() -> None:
     assert actual.schema["time"] == pl.Datetime("us")
     assert set(actual["native_unit"]) == {"m3/s", "m", "cm"}
     # Pin this shared source-column disposition record exactly: each record has `source_column`, a `disposition` drawn from exactly `retained`, `reconstructible`, and `deliberately_discarded`, `reconstruction_rule` containing the reconstruction rule and required when and only when the disposition is `reconstructible`, and `rationale` required when and only when the disposition is `deliberately_discarded`; completeness means every source column of the declared source schema appears exactly once.
+
+
+def test_store_accepts_additional_provider_native_column(tmp_path: Path) -> None:
+    store = _copy_fixture("valid_future_austria", tmp_path)
+    part = _part(store)
+    pl.read_parquet(part).with_columns(pl.lit("AB").alias("source_flag")).write_parquet(
+        part, compression="zstd", statistics=True
+    )
+    manifest = _load_json(store / "manifest.json")
+    manifest["source_schema"]["columns"].append({"name": "source_flag", "type": "string"})
+    manifest["source_schema"]["fingerprint"] = _fingerprint(manifest["source_schema"]["columns"])
+    manifest["source_column_dispositions"].append({"source_column": "source_flag", "disposition": "retained"})
+    _write_json(store / "manifest.json", manifest)
+
+    assert inspect_store(store, FUTURE_UNIVERSE) == []
+
+
+def test_store_accepts_only_required_physical_columns(tmp_path: Path) -> None:
+    store = _copy_fixture("valid_future_austria", tmp_path)
+    part = _part(store)
+    required_names = ["station_id", "time", "time_zone", "value", "value_state"]
+    pl.read_parquet(part).select(required_names).write_parquet(part, compression="zstd", statistics=True)
+    manifest = _load_json(store / "manifest.json")
+    source_names = {"station_id", "time", "time_zone", "value"}
+    manifest["source_schema"]["columns"] = [
+        column for column in manifest["source_schema"]["columns"] if column["name"] in source_names
+    ]
+    manifest["source_schema"]["fingerprint"] = _fingerprint(manifest["source_schema"]["columns"])
+    manifest["source_column_dispositions"] = [
+        disposition
+        for disposition in manifest["source_column_dispositions"]
+        if disposition["source_column"] in source_names
+    ]
+    _write_json(store / "manifest.json", manifest)
+
+    assert inspect_store(store, FUTURE_UNIVERSE) == []
+
+
+def test_retyped_required_column_is_partition_schema_defect(tmp_path: Path) -> None:
+    store = _copy_fixture("valid_future_austria", tmp_path)
+    part = _part(store)
+    pl.read_parquet(part).with_columns(pl.col("value").cast(pl.Float32)).write_parquet(
+        part, compression="zstd", statistics=True
+    )
+
+    assert inspect_store(store, FUTURE_UNIVERSE) == ["partition.schema:product=level/year=2024"]
