@@ -57,10 +57,9 @@ STORE_ENTRY = """**Store**:
 Retrieved observations at rest in RivRetrieve's own layout, together with the
 [[manifest]] describing them. It is the single form ADR 0002 fixes for anything held on
 disk, so a [[cache]] and a [[user-cache]] are both stores. Revision `1` of the compiled-
-store manifest contract applies only to a store produced by compiling a
-[[publisher-artifact]]. Whether a user-cache store carries a reduced manifest under
-revision `1` or uses a distinct format revision remains undecided, so revision `1` does
-not yet promise that one reader serves both. A store holds the source's native values and
+store manifest contract is reserved for a store produced by compiling a
+[[publisher-artifact]]. A user-cache store uses a distinct later format revision and does
+not use a reduced revision-`1` manifest. A store holds the source's native values and
 native wall-clock timestamps; unit conversion and clipping happen on read through the
 same convert [[stage]] every provider uses, so standardising the container is not the
 same act as changing the numbers. The layout is authored by RivRetrieve rather than
@@ -122,7 +121,7 @@ def test_bulk_retrieval_skips_provider_fetch_and_parse() -> None:
     assert STAGE_ENTRY in _context()
 
 
-def test_store_revision_one_does_not_promise_a_user_cache_reader() -> None:
+def test_store_revision_one_is_reserved_for_publisher_artifact_stores() -> None:
     assert STORE_ENTRY in _context()
 
 

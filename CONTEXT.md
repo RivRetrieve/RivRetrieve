@@ -340,10 +340,9 @@ _Avoid_: user cache, cache, bundled dataset
 Retrieved observations at rest in RivRetrieve's own layout, together with the
 [[manifest]] describing them. It is the single form ADR 0002 fixes for anything held on
 disk, so a [[cache]] and a [[user-cache]] are both stores. Revision `1` of the compiled-
-store manifest contract applies only to a store produced by compiling a
-[[publisher-artifact]]. Whether a user-cache store carries a reduced manifest under
-revision `1` or uses a distinct format revision remains undecided, so revision `1` does
-not yet promise that one reader serves both. A store holds the source's native values and
+store manifest contract is reserved for a store produced by compiling a
+[[publisher-artifact]]. A user-cache store uses a distinct later format revision and does
+not use a reduced revision-`1` manifest. A store holds the source's native values and
 native wall-clock timestamps; unit conversion and clipping happen on read through the
 same convert [[stage]] every provider uses, so standardising the container is not the
 same act as changing the numbers. The layout is authored by RivRetrieve rather than
