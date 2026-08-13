@@ -2,7 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-from rivretrieve._internal.observations import RawMode
+from rivretrieve._internal.observations import ReceiptMode
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ca_eccc import module as ca_module
 from rivretrieve._internal.providers.ca_eccc.config import config
@@ -30,7 +30,7 @@ def test_absent_store_fetch_returns_download_issue_without_creating_cache(
         start="2020-01-01",
         end="2020-01-02",
         on_issue="ignore",
-        raw=RawMode.OMIT,
+        receipts=ReceiptMode.OMIT,
     )
 
     assert result.data.is_empty()
