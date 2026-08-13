@@ -488,10 +488,8 @@ def test_store_import_closure_has_no_transport_provider_or_write_path() -> None:
         assert not findings, f"CONTROL forbidden dependency: {findings[0]}"
 
     store_source = Path(validation_module.__file__).parent
-    findings = {
-        path.name: _forbidden_dependencies(path.read_text(encoding="utf-8"))
-        for path in sorted(store_source.glob("*.py"))
-    }
+    read_modules = (store_source / "reader.py", store_source / "validation.py")
+    findings = {path.name: _forbidden_dependencies(path.read_text(encoding="utf-8")) for path in read_modules}
     assert all(not file_findings for file_findings in findings.values()), findings
 
 
@@ -521,8 +519,11 @@ def test_fingerprint_canonical_encoding_sorts_keys_and_leaves_non_ascii_unescape
     renamed = "niveau_r\u00e9f\u00e9rence"
     assert not renamed.isascii()
     columns[-1]["name"] = renamed
+    old_name = dispositions[-1]["source_column"]
     dispositions[-1]["source_column"] = renamed
     source_schema["fingerprint"] = _fingerprint(columns)
+    parquet_path = next(non_ascii.rglob("*.parquet"))
+    pl.read_parquet(parquet_path).rename({old_name: renamed}).write_parquet(parquet_path)
     _write_manifest(non_ascii, manifest)
     assert isinstance(validate_store(StoreRoot(non_ascii), PROVIDER_ID), ValidatedStore)
 

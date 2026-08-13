@@ -1,5 +1,13 @@
 """StoreQuery → StoreReadResult ⊎ StoreRefusal; StoreRoot → StoreStatus."""
 
+from rivretrieve._internal.store.compiler import (
+    CompileStoreRequest,
+    NativeStoreRows,
+    StoreCompileRequest,
+    ValueState,
+    compile_store,
+    source_schema_fingerprint,
+)
 from rivretrieve._internal.store.reader import (
     ExecutedStoreQuery,
     StorePresence,
@@ -30,8 +38,10 @@ from rivretrieve._internal.store.validation import (
 
 __all__ = [
     "ArtifactChecksum",
+    "CompileStoreRequest",
     "Disposition",
     "ExecutedStoreQuery",
+    "NativeStoreRows",
     "ObservationStoreRefusedError",
     "PartitionIdentifier",
     "PublisherArtifact",
@@ -39,6 +49,7 @@ __all__ = [
     "SourceColumnDisposition",
     "SourceSchema",
     "SourceSchemaFingerprint",
+    "StoreCompileRequest",
     "StoreManifest",
     "StorePresence",
     "StoreQuery",
@@ -49,7 +60,10 @@ __all__ = [
     "StoreRoot",
     "StoreStatus",
     "ValidatedStore",
+    "ValueState",
+    "compile_store",
     "read_store",
+    "source_schema_fingerprint",
     "store_status",
     "validate_store",
 ]
