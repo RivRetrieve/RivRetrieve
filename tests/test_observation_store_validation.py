@@ -278,6 +278,16 @@ def test_arbitrary_parquet_basename_and_native_columns_are_accepted(tmp_path: Pa
     assert frame.columns[5:] == ["native_unit", "source_quality", "source_note"]
 
 
+def test_missing_retained_native_column_is_refused(tmp_path: Path) -> None:
+    """A store cannot omit a source column whose manifest promises retention."""
+    store = _copy_fixture(tmp_path)
+    _validate_then_rewrite(store, lambda frame: frame.drop("source_quality"))
+    _assert_refusal(
+        store,
+        "partition.retained_column:product=level/year=2024:source_quality",
+    )
+
+
 @pytest.mark.parametrize("column", ["station_id", "time", "time_zone", "value_state"])
 def test_null_required_fields_are_refused(tmp_path: Path, column: str) -> None:
     store = _copy_fixture(tmp_path)
