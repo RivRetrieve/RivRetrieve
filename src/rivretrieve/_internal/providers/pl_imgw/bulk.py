@@ -61,9 +61,9 @@ IMGW_SOURCE_DISPOSITIONS: Final = tuple(
 _RETAINED_NAMES: Final = tuple(column.name for column in IMGW_SOURCE_COLUMNS)
 
 _PRODUCT_COLUMNS: Final = (
-    (ProductId("stage_daily_mean"), 6),
-    (ProductId("discharge_daily_mean"), 7),
-    (ProductId("water_temperature_daily_mean"), 8),
+    (ProductId("stage_daily_mean"), 6, frozenset({9999.0})),
+    (ProductId("discharge_daily_mean"), 7, frozenset({99999.999, 999.0})),
+    (ProductId("water_temperature_daily_mean"), 8, frozenset({99.9})),
 )
 
 
@@ -256,8 +256,10 @@ def _emit_source_row(
     except ValueError as error:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has an invalid calendar date") from error
     retained = dict(zip(_RETAINED_NAMES, source, strict=True))
-    for product, value_index in _PRODUCT_COLUMNS:
-        value, state = _native_value(source[value_index], member, ordinal, _SOURCE_FIELDS[value_index])
+    for product, value_index, null_sentinels in _PRODUCT_COLUMNS:
+        value, state = _native_value(
+            source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels
+        )
         output.append(
             {
                 "product": str(product),
@@ -278,7 +280,13 @@ def _integer(raw: str, member: str, ordinal: int, field: str) -> int:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has invalid {field}") from error
 
 
-def _native_value(raw: str, member: str, ordinal: int, field: str) -> tuple[float | None, str]:
+def _native_value(
+    raw: str,
+    member: str,
+    ordinal: int,
+    field: str,
+    null_sentinels: frozenset[float],
+) -> tuple[float | None, str]:
     stripped = raw.strip()
     if stripped == "":
         return None, "published_blank"
@@ -286,6 +294,8 @@ def _native_value(raw: str, member: str, ordinal: int, field: str) -> tuple[floa
         value = float(stripped)
     except ValueError as error:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has non-numeric {field}") from error
+    if round(value, 3) in null_sentinels:
+        return None, "published_null"
     return value, "published_value"
 
 
