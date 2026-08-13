@@ -23,8 +23,8 @@ from rivretrieve._internal.issues import (
 from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationResult,
-    RawMode,
-    RawPayload,
+    ReceiptMode,
+    Receipts,
 )
 from rivretrieve._internal.observations import ObservationRequest as LegacyObservationRequest
 from rivretrieve._internal.primitives import OnIssue, ProductId, ProviderId
@@ -101,7 +101,7 @@ class _ProviderHandle:
         start: object,
         end: object,
         on_issue: OnIssue = "warn",
-        raw: RawMode = RawMode.OMIT,
+        receipts: ReceiptMode = ReceiptMode.OMIT,
     ) -> ObservationResult:
         if self._module is None and self._store_config is None:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
@@ -115,9 +115,9 @@ class _ProviderHandle:
         if self._stages is not None:
             if self._observation_source is None:
                 raise FatalContractError(f"Provider {self.provider_id} has engine stages without an observation source")
-            result = self._drive_engine(request, self._stages, self._observation_source, raw=raw)
+            result = self._drive_engine(request, self._stages, self._observation_source, receipts=receipts)
         elif self._store_config is not None and self._store_root is not None:
-            result = self._drive_store(request, self._store_config, self._store_root, raw=raw)
+            result = self._drive_store(request, self._store_config, self._store_root, receipts=receipts)
         else:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
         apply_on_issue(result.issues, on_issue)
@@ -129,7 +129,7 @@ class _ProviderHandle:
         stages: ProviderStages,
         observation_source: str,
         *,
-        raw: RawMode = RawMode.OMIT,
+        receipts: ReceiptMode = ReceiptMode.OMIT,
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -187,7 +187,7 @@ class _ProviderHandle:
                     "end": request.end.isoformat(),
                 },
             ),
-            raw=raw,
+            receipts=receipts,
         )
         return ObservationResult(
             data=assembled.canonical_rows.select(
@@ -199,7 +199,7 @@ class _ProviderHandle:
             ),
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),
-            raw=assembled.raw,
+            receipts=assembled.receipts,
         )
 
     def _drive_store(
@@ -208,7 +208,7 @@ class _ProviderHandle:
         config: ProviderConfig,
         store: StoreRoot,
         *,
-        raw: RawMode = RawMode.OMIT,
+        receipts: ReceiptMode = ReceiptMode.OMIT,
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -251,7 +251,7 @@ class _ProviderHandle:
                     },
                 ),
                 issues=(issue,),
-                raw=RawPayload(provider_id=self.provider_id, entries=()),
+                receipts=Receipts(provider_id=self.provider_id, entries=()),
             )
         assembled = drive_store(
             engine_request,
@@ -271,7 +271,7 @@ class _ProviderHandle:
                     "end": request.end.isoformat(),
                 },
             ),
-            raw=raw,
+            receipts=receipts,
         )
         provenance_issues = (
             *(
@@ -305,7 +305,7 @@ class _ProviderHandle:
             data=assembled.canonical_rows.select("time", "time_zone", "station_id", "product_id", "value"),
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),
-            raw=assembled.raw,
+            receipts=assembled.receipts,
         )
 
     def __getattr__(self, name: str) -> object:

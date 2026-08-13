@@ -9,7 +9,7 @@ from rivretrieve._internal.observations import (
     ObservationDataSchema,
     ObservationProvenance,
     ObservationResult,
-    RawPayload,
+    Receipts,
 )
 from rivretrieve._internal.primitives import ProviderId
 
@@ -28,7 +28,7 @@ def test_v1_deferred_wide_form_helpers_remain_absent() -> None:
     result = ObservationResult(
         data=data,
         provenance=ObservationProvenance(source="live", provider_id=ProviderId("ch_foen")),
-        raw=RawPayload(provider_id=ProviderId("ch_foen")),
+        receipts=Receipts(provider_id=ProviderId("ch_foen")),
     )
 
     pl_testing.assert_frame_equal(result.to_polars(), data)

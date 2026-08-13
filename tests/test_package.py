@@ -14,7 +14,7 @@ from rivretrieve._internal.catalogues.schemas import (
     STATION_CATALOG_SCHEMA,
     STATION_PRODUCT_CATALOG_SCHEMA,
 )
-from rivretrieve._internal.observations import RawMode
+from rivretrieve._internal.observations import ReceiptMode
 
 
 def test_version() -> None:
@@ -52,9 +52,9 @@ def test_init_public_surface_exports_m9_function_surface() -> None:
     )
     assert all(not hasattr(rivretrieve, name) for name in removed)
     assert not hasattr(rivretrieve, "source_metadata")
-    assert not hasattr(rivretrieve, "RawMode")
-    assert RawMode.OMIT.value == "omit"
-    assert RawMode.INCLUDE.value == "include"
+    assert not hasattr(rivretrieve, "ReceiptMode")
+    assert ReceiptMode.OMIT.value == "omit"
+    assert ReceiptMode.INCLUDE.value == "include"
     assert rivretrieve.to_utc is to_utc
 
 
@@ -66,8 +66,9 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         "ObservationResult",
         "ObservationRequest",
         "ObservationProvenance",
-        "RawPayload",
-        "RawSourceCall",
+        "Receipts",
+        "ReceiptEntry",
+        "ReceiptAuthorship",
         "Issue",
         "CatalogResult",
         "StationCatalog",
