@@ -128,13 +128,14 @@ def _check_rows(
         raise ValueError(f"store row engine fields must be first and ordered as {_ENGINE_INPUT_COLUMNS!r}")
 
     expected_schema_names = [column.name for column in source_columns]
+    collisions = [name for name in expected_schema_names if name in _ENGINE_PHYSICAL_COLUMNS]
+    if collisions:
+        raise ValueError(f"source schema columns collide with engine fields: {collisions!r}")
     disposition_by_name = {item.source_column: item for item in dispositions}
     if len(disposition_by_name) != len(dispositions) or set(disposition_by_name) != set(expected_schema_names):
         raise ValueError("source-column dispositions must cover the declared source schema exactly once")
     retained = tuple(
-        name
-        for name in expected_schema_names
-        if disposition_by_name[name].disposition is Disposition.RETAINED and name not in _ENGINE_PHYSICAL_COLUMNS
+        name for name in expected_schema_names if disposition_by_name[name].disposition is Disposition.RETAINED
     )
     native_columns = tuple(frame.columns[len(_ENGINE_INPUT_COLUMNS) :])
     if native_columns != retained:
