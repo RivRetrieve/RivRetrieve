@@ -95,12 +95,12 @@ def test_requested_to_fetch_construction_is_driver_owned_and_not_injectable() ->
         "request",
         "provider",
         "provenance",
-        "raw",
+        "receipts",
     )
     assert signature.parameters["request"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert signature.parameters["provider"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert signature.parameters["provenance"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert signature.parameters["raw"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["receipts"].kind is inspect.Parameter.KEYWORD_ONLY
 
     source_root = Path(__file__).parents[1] / "src" / "rivretrieve"
     requested_to_fetch: list[str] = []

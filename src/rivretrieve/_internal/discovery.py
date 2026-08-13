@@ -8,7 +8,7 @@ from platformdirs import user_cache_dir
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_issue
-from rivretrieve._internal.observations import ObservationResult, RawMode, RawPayload
+from rivretrieve._internal.observations import ObservationResult, ReceiptMode, Receipts
 from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.selection import _as_frame as _selection_as_frame
 from rivretrieve._internal.selection import _EmptyReason, _require_selection, _Selection, _Series
@@ -93,7 +93,7 @@ def fetch(
     *,
     start: object,
     end: object,
-    raw: bool = False,
+    receipts: bool = False,
     on_issue: OnIssue = "warn",
 ) -> ObservationResult:
     _require_selection(selection)
@@ -109,13 +109,13 @@ def fetch(
         raise MultiProviderSelectionError(provider_ids)
 
     provider_id = provider_ids[0]
-    raw_mode = RawMode.INCLUDE if raw else RawMode.OMIT
+    receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
     return _fetch_provider_series(
         provider_id,
         partitions[provider_id],
         start=start,
         end=end,
-        raw=raw_mode,
+        receipts=receipt_mode,
         on_issue=on_issue,
     )
 
@@ -125,19 +125,19 @@ def fetch_by_provider(
     *,
     start: object,
     end: object,
-    raw: bool = False,
+    receipts: bool = False,
     on_issue: OnIssue = "warn",
 ) -> dict[str, ObservationResult]:
     _require_selection(selection)
     partitions = _partition_by_provider(selection.series)
-    raw_mode = RawMode.INCLUDE if raw else RawMode.OMIT
+    receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
     return {
         provider_id: _fetch_provider_series(
             provider_id,
             series,
             start=start,
             end=end,
-            raw=raw_mode,
+            receipts=receipt_mode,
             on_issue=on_issue,
         )
         for provider_id, series in partitions.items()
@@ -157,7 +157,7 @@ def _fetch_provider_series(
     *,
     start: object,
     end: object,
-    raw: RawMode,
+    receipts: ReceiptMode,
     on_issue: OnIssue,
 ) -> ObservationResult:
     handle = _provider_lookup(provider_id)
@@ -168,7 +168,7 @@ def _fetch_provider_series(
             start=start,
             end=end,
             on_issue="ignore",
-            raw=raw,
+            receipts=receipts,
         )
         for selected_series in series
     )
@@ -198,12 +198,12 @@ def _merge_provider_results(
         "end": request["end"],
     }
     issues = _merge_provider_issues(results)
-    raw_entries = tuple(entry for result in results for entry in result.raw.entries)
+    receipt_entries = tuple(entry for result in results for entry in result.receipts.entries)
     return ObservationResult(
         data=pl.concat([result.data for result in results]),
         provenance=first.provenance.model_copy(update={"request": merged_request}),
         issues=issues,
-        raw=RawPayload(provider_id=first.provenance.provider_id, entries=raw_entries),
+        receipts=Receipts(provider_id=first.provenance.provider_id, entries=receipt_entries),
     )
 
 

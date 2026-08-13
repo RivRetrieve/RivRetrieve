@@ -23,8 +23,9 @@ from rivretrieve._internal.observations import (
     ObservationDataSchema,
     ObservationProvenance,
     ObservationResult,
-    RawPayload,
-    RawSourceCall,
+    ReceiptAuthorship,
+    ReceiptEntry,
+    Receipts,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
@@ -58,11 +59,15 @@ def _result(data: pl.DataFrame, provider_id: ProviderId | None = None) -> Observ
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
     )
-    raw = RawPayload(
+    receipts = Receipts(
         provider_id=provider_id,
-        entries=(RawSourceCall(content=b'{"source":"fixture"}', origin=origin),),
+        entries=(
+            ReceiptEntry(
+                content=b'{"source":"fixture"}', origin=origin, authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD
+            ),
+        ),
     )
-    return ObservationResult(data=data, provenance=provenance, issues=issues, raw=raw)
+    return ObservationResult(data=data, provenance=provenance, issues=issues, receipts=receipts)
 
 
 def test_to_utc_fixed_offsets_converts_row_by_row_and_preserves_result_members() -> None:
@@ -97,8 +102,8 @@ def test_to_utc_fixed_offsets_converts_row_by_row_and_preserves_result_members()
     assert converted.data is not result.data
     assert converted.provenance is result.provenance
     assert converted.issues is result.issues
-    assert converted.raw is result.raw
-    assert tuple(type(converted).model_fields) == ("data", "provenance", "issues", "raw")
+    assert converted.receipts is result.receipts
+    assert tuple(type(converted).model_fields) == ("data", "provenance", "issues", "receipts")
     assert converted.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
     assert converted.data.schema == ObservationDataSchema.polars_schema
 
@@ -214,9 +219,11 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
         data=parsed.value.select(ObservationDataSchema.polars_schema.names()),
         provenance=ObservationProvenance(source="live", provider_id=ProviderId("usgs_nwis")),
         issues=(),
-        raw=RawPayload(
+        receipts=Receipts(
             provider_id=ProviderId("usgs_nwis"),
-            entries=(RawSourceCall(content=fixture_bytes, origin=origin),),
+            entries=(
+                ReceiptEntry(content=fixture_bytes, origin=origin, authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD),
+            ),
         ),
     )
     expected_native = pl.DataFrame(
@@ -259,4 +266,4 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
     assert converted.data["time_zone"].to_list() == ["+00:00", "+00:00"]
     assert converted.provenance is native.provenance
     assert converted.issues is native.issues
-    assert converted.raw is native.raw
+    assert converted.receipts is native.receipts

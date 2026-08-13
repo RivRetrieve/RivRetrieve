@@ -28,6 +28,7 @@ from rivretrieve._internal.store.reader import (
     read_store,
     store_status,
 )
+from rivretrieve._internal.store.receipts import encode_store_excerpt
 from rivretrieve._internal.store.validation import (
     ArtifactChecksum,
     Disposition,
@@ -80,6 +81,7 @@ __all__ = [
     "certify_compile",
     "certify_store",
     "compile_store",
+    "encode_store_excerpt",
     "read_store",
     "source_schema_fingerprint",
     "store_status",

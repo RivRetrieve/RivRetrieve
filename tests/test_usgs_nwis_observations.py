@@ -23,8 +23,9 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
-    RawMode,
-    RawPayload,
+    ReceiptAuthorship,
+    ReceiptMode,
+    Receipts,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis import fetch as fetch_module
@@ -112,7 +113,7 @@ def _patch_client(
 
 
 def _assert_result_shape(result) -> None:
-    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
 
 
 def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,7 +141,7 @@ def test_usgs_nwis_registry_dispatch_uses_engine_driver(monkeypatch: pytest.Monk
     pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.provenance.source == "live"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
-    assert result.raw == RawPayload(provider_id=ProviderId("usgs_nwis"), entries=())
+    assert result.receipts == Receipts(provider_id=ProviderId("usgs_nwis"), entries=())
     _assert_result_shape(result)
     params = client.requests[0].params
     assert params is not None
@@ -185,7 +186,7 @@ def test_usgs_nwis_bare_date_returns_full_local_day_for_instant_product(
     ]
     assert result.provenance.source == "live"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
-    assert result.raw == RawPayload(provider_id=ProviderId("usgs_nwis"), entries=())
+    assert result.receipts == Receipts(provider_id=ProviderId("usgs_nwis"), entries=())
     _assert_result_shape(result)
 
     assert len(client.requests) == 1
@@ -276,7 +277,7 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
         start="2023-01-01",
         end="2023-01-01",
         on_issue="ignore",
-        raw=RawMode.INCLUDE,
+        receipts=ReceiptMode.INCLUDE,
     )
 
     expected_parameters = {
@@ -287,11 +288,12 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
         "parameterCd": "00060",
         "statCd": "00003",
     }
-    assert len(result.raw.entries) == 2
-    assert tuple(entry.content for entry in result.raw.entries) == response_bodies
+    assert len(result.receipts.entries) == 2
+    assert tuple(entry.content for entry in result.receipts.entries) == response_bodies
     assert tuple(parse_contents) == response_bodies
-    for entry, parse_content in zip(result.raw.entries, parse_contents, strict=True):
+    for entry, parse_content in zip(result.receipts.entries, parse_contents, strict=True):
         assert entry.content is parse_content
+        assert entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
         assert entry.origin.url == "https://waterservices.usgs.gov/nwis/dv/"
         assert entry.origin.request_parameters == expected_parameters
         assert entry.origin.status_code == 200
@@ -309,8 +311,8 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
             "Authorization": "Bearer RIVRETRIEVE_TEST_SECRET_7A91",
         },
     ]
-    positive_raw = replace(result.raw.entries[0], content=token.encode("utf-8"))
-    assert _serialized_contains_token(positive_raw, token)
+    positive_receipt = replace(result.receipts.entries[0], content=token.encode("utf-8"))
+    assert _serialized_contains_token(positive_receipt, token)
     positive_calls_made = (
         {
             "url": "https://waterservices.usgs.gov/nwis/dv/",
@@ -319,7 +321,7 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
     )
     positive_provenance = result.provenance.model_copy(update={"calls_made": positive_calls_made})
     assert _serialized_contains_token(positive_provenance, token)
-    assert not _serialized_contains_token((result.raw.entries, result.provenance), token)
+    assert not _serialized_contains_token((result.receipts.entries, result.provenance), token)
     assert tuple(type(result.provenance).model_fields) == (
         "source",
         "provider_id",

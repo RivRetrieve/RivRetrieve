@@ -20,9 +20,10 @@ from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationRequest,
     ObservationResult,
-    RawMode,
-    RawPayload,
-    RawSourceCall,
+    ReceiptAuthorship,
+    ReceiptEntry,
+    ReceiptMode,
+    Receipts,
     validate_observation_data,
 )
 from rivretrieve._internal.primitives import ProviderId
@@ -66,7 +67,7 @@ def _result(data: pl.DataFrame | None = None) -> ObservationResult:
     return ObservationResult(
         data=_observation_df() if data is None else data,
         provenance=_provenance(),
-        raw=RawPayload(provider_id=ProviderId("provider-a")),
+        receipts=Receipts(provider_id=ProviderId("provider-a")),
     )
 
 
@@ -376,7 +377,7 @@ def test_observation_provenance_metadata_may_be_json_string() -> None:
     assert provenance.metadata == '{"trace": "kept"}'
 
 
-def _raw_origin() -> SourceCallOrigin:
+def _receipt_origin() -> SourceCallOrigin:
     return SourceCallOrigin(
         url="https://example.invalid/observations",
         request_parameters={"station": "station-1"},
@@ -388,38 +389,47 @@ def _raw_origin() -> SourceCallOrigin:
     )
 
 
-def test_raw_carriers_and_mode_are_exact_frozen_domain_types() -> None:
+def test_receipt_carriers_and_mode_are_exact_frozen_domain_types() -> None:
     content = b'{"ok":true}'
-    origin = _raw_origin()
-    call = RawSourceCall(content=content, origin=origin)
-    payload = RawPayload(provider_id=ProviderId("provider-a"), entries=(call,))
+    origin = _receipt_origin()
+    call = ReceiptEntry(content=content, origin=origin, authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD)
+    payload = Receipts(provider_id=ProviderId("provider-a"), entries=(call,))
 
-    assert tuple(RawMode) == (RawMode.OMIT, RawMode.INCLUDE)
-    assert RawMode.OMIT.value == "omit"
-    assert RawMode.INCLUDE.value == "include"
-    assert tuple(field.name for field in fields(RawSourceCall)) == ("content", "origin")
-    assert tuple(field.name for field in fields(RawPayload)) == ("provider_id", "entries")
+    assert tuple(ReceiptMode) == (ReceiptMode.OMIT, ReceiptMode.INCLUDE)
+    assert ReceiptMode.OMIT.value == "omit"
+    assert ReceiptMode.INCLUDE.value == "include"
+    assert tuple(ReceiptAuthorship) == (
+        ReceiptAuthorship.PUBLISHER_PAYLOAD,
+        ReceiptAuthorship.STORE_EXCERPT,
+    )
+    assert ReceiptAuthorship.PUBLISHER_PAYLOAD.value == "publisher_payload"
+    assert ReceiptAuthorship.STORE_EXCERPT.value == "store_excerpt"
+    assert tuple(field.name for field in fields(ReceiptEntry)) == ("content", "origin", "authorship")
+    assert tuple(field.name for field in fields(Receipts)) == ("provider_id", "entries")
     assert payload.provider_id == ProviderId("provider-a")
     assert payload.entries == (call,)
     assert payload.entries[0].content is content
     assert payload.entries[0].origin is origin
+    assert payload.entries[0].authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
     with pytest.raises(FrozenInstanceError):
         call.content = b"changed"  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         payload.entries = ()  # type: ignore[misc]
 
 
-def test_raw_carriers_reject_mutable_entries_and_non_bytes_content() -> None:
-    origin = _raw_origin()
-    call = RawSourceCall(content=b'{"ok":true}', origin=origin)
+def test_receipt_carriers_reject_mutable_entries_and_non_bytes_content() -> None:
+    origin = _receipt_origin()
+    call = ReceiptEntry(content=b'{"ok":true}', origin=origin, authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD)
 
     with pytest.raises(TypeError):
-        RawPayload(provider_id=ProviderId("provider-a"), entries=[call])  # type: ignore[arg-type]
+        Receipts(provider_id=ProviderId("provider-a"), entries=[call])  # type: ignore[arg-type]
     for content in ('{"ok":true}', bytearray(b'{"ok":true}')):
         with pytest.raises(TypeError):
-            RawSourceCall(content=content, origin=origin)  # type: ignore[arg-type]
+            ReceiptEntry(content=content, origin=origin, authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD)  # type: ignore[arg-type]
     with pytest.raises(TypeError):
-        RawSourceCall(content=b'{"ok":true}', origin={})  # type: ignore[arg-type]
+        ReceiptEntry(content=b'{"ok":true}', origin={}, authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="authorship must be ReceiptAuthorship"):
+        ReceiptEntry(content=b'{"ok":true}', origin=origin, authorship="publisher_payload")  # type: ignore[arg-type]
 
 
 def test_observation_data_schema_accepts_canonical_long_table() -> None:
@@ -526,10 +536,10 @@ def test_observation_result_constructs_with_exact_field_set() -> None:
         "data",
         "provenance",
         "issues",
-        "raw",
+        "receipts",
     )
     assert result.issues == ()
-    assert result.raw == RawPayload(provider_id=ProviderId("provider-a"), entries=())
+    assert result.receipts == Receipts(provider_id=ProviderId("provider-a"), entries=())
 
 
 def test_observation_result_to_polars_returns_data_identity() -> None:

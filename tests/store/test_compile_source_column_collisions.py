@@ -33,9 +33,7 @@ def test_compile_refuses_native_value_column_collision(tmp_path: Path) -> None:
             ArtifactChecksum("sha256:" + "1" * 64),
         ),
         source_columns=source_columns,
-        source_column_dispositions=(
-            SourceColumnDisposition("value", Disposition.RETAINED, None, None),
-        ),
+        source_column_dispositions=(SourceColumnDisposition("value", Disposition.RETAINED, None, None),),
     )
     rows = pl.DataFrame(
         {
