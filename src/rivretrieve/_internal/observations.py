@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -129,8 +130,6 @@ class StoreExcerptReceipt(ReceiptEntry):
 
     def __post_init__(self) -> None:
         ReceiptEntry.__post_init__(self)
-        from rivretrieve._internal.store.reader import ExecutedStoreQuery
-
         if self.authorship is not ReceiptAuthorship.STORE_EXCERPT:
             raise TypeError("store excerpt authorship must be ReceiptAuthorship.STORE_EXCERPT")
         if not isinstance(self.store_path, Path):
@@ -274,3 +273,8 @@ def _require_non_empty_string(value: object, name: str, error_type: type[FatalCo
 
 def _is_polars_datetime_dtype(dtype: pl.DataType) -> bool:
     return dtype == pl.Datetime() or isinstance(dtype, pl.Datetime)
+
+# Load the runtime names after the receipt classes exist so introspection can resolve
+# their domain annotations without cycling through store.receipts.
+ExecutedStoreQuery = importlib.import_module("rivretrieve._internal.store.reader").ExecutedStoreQuery
+StoreRoot = importlib.import_module("rivretrieve._internal.store.validation").StoreRoot
