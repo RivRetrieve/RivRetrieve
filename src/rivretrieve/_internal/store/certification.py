@@ -81,17 +81,22 @@ def certify_store(
     stage = destination.with_name(f".{destination.name}.staging-{uuid4().hex}")
     backup = destination.with_name(f".{destination.name}.previous-{uuid4().hex}")
     staged_request = replace(request, destination=StoreRoot(stage))
+    published = False
     try:
         writer(staged_request, decoded.rows)
         _verify_read_back(stage, request, pl.DataFrame(decoded.rows), reader or StoreReader())
         _publish(stage, destination, backup)
+        published = True
+        validated = validate_store(StoreRoot(destination), request.provider_id)
+        artifact.unlink()
     except Exception:
         _safe_remove_tree(stage)
-        _restore_previous(destination, backup)
+        if published:
+            _restore_previous(destination, backup)
         raise
 
-    artifact.unlink()
-    return validate_store(StoreRoot(destination), request.provider_id)
+    _safe_remove_tree(backup)
+    return validated
 
 
 # Spellings matching the writer keep provider bulk ports concise.
@@ -209,16 +214,13 @@ def _publish(stage: Path, destination: Path, backup: Path) -> None:
         if had_previous:
             os.replace(backup, destination)
         raise
-    if had_previous:
-        _remove_tree(backup)
 
 
 def _restore_previous(destination: Path, backup: Path) -> None:
-    if not backup.exists():
-        return
     if destination.exists():
         _remove_tree(destination)
-    os.replace(backup, destination)
+    if backup.exists():
+        os.replace(backup, destination)
 
 
 def _remove_tree(path: Path) -> None:
