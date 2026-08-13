@@ -4,6 +4,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Protocol
 
 import polars as pl
@@ -11,8 +12,8 @@ import polars as pl
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.driver import ProviderStages, drive, drive_store
+from rivretrieve._internal.engine import CanonicalRowsSchema, ProductWindowDeclarations, ProviderConfig, RequestedWindow
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
-from rivretrieve._internal.engine import ProductWindowDeclarations, ProviderConfig, RequestedWindow
 from rivretrieve._internal.issues import (
     FatalContractError,
     Issue,
@@ -23,6 +24,7 @@ from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationResult,
     RawMode,
+    RawPayload,
 )
 from rivretrieve._internal.observations import ObservationRequest as LegacyObservationRequest
 from rivretrieve._internal.primitives import OnIssue, ProductId, ProviderId
@@ -216,6 +218,41 @@ class _ProviderHandle:
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
+        if not Path(store).exists():
+            issue = Issue(
+                severity="warning",
+                code="bulk.store_missing",
+                message=(
+                    f"No compiled observation store exists for {self.provider_id}. "
+                    f'Run rivretrieve.download("{self.provider_id}") to download and compile it.'
+                ),
+                details={
+                    "command": f'rivretrieve.download("{self.provider_id}")',
+                    "store": str(store),
+                },
+                provider_id=self.provider_id,
+            )
+            return ObservationResult(
+                data=pl.DataFrame(schema=CanonicalRowsSchema.polars_schema).select(
+                    "time", "time_zone", "station_id", "product_id", "value"
+                ),
+                provenance=ObservationProvenance(
+                    source="local",
+                    provider_id=self.provider_id,
+                    catalogue_version=provider_info.catalogue_version,
+                    license=provider_info.license,
+                    citation=provider_info.citation,
+                    requested_at=requested_at,
+                    request={
+                        "stations": list(request.stations),
+                        "products": list(request.products),
+                        "start": request.start.isoformat(),
+                        "end": request.end.isoformat(),
+                    },
+                ),
+                issues=(issue,),
+                raw=RawPayload(provider_id=self.provider_id, entries=()),
+            )
         assembled = drive_store(
             engine_request,
             config,

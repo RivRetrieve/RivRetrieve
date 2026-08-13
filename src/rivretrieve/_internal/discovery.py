@@ -396,3 +396,24 @@ def _ensure_default_providers_registered() -> None:
             "za_dws",
             za_dws_artifact,
         )
+
+
+def download(provider: str):
+    """Download and compile observations for one bulk provider by explicit consent."""
+    from rivretrieve._internal.bulk import download as bulk_download
+
+    return bulk_download(provider)
+
+
+def cache_status(provider: str):
+    """Return the local compiled-store status for one bulk provider."""
+    from rivretrieve._internal.bulk import cache_status as bulk_cache_status
+
+    return bulk_cache_status(provider)
+
+
+def clear_cache(provider: str):
+    """Delete the compiled observation store for one bulk provider."""
+    from rivretrieve._internal.bulk import clear_cache as bulk_clear_cache
+
+    return bulk_clear_cache(provider)

@@ -382,13 +382,16 @@ class ZoneValue:
 
 @dataclass(frozen=True, slots=True)
 class ObservationStoreConfig:
-    """The on-disk observation-store revision a bulk provider compiles."""
+    """The revision and declared peak-space requirement of a compiled store."""
 
     format_version: int
+    required_free_bytes: int = 6_000_000_000
 
     def __post_init__(self) -> None:
         if type(self.format_version) is not int or self.format_version < 1:
             raise ValueError("observation store format version must be a positive integer")
+        if type(self.required_free_bytes) is not int or self.required_free_bytes < 1:
+            raise ValueError("observation store required free bytes must be a positive integer")
 
 
 @dataclass(frozen=True, slots=True)

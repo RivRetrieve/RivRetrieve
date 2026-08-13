@@ -27,6 +27,9 @@ def test_init_public_surface_exports_m9_function_surface() -> None:
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == [
         "as_frame",
+        "cache_status",
+        "clear_cache",
+        "download",
         "fetch",
         "fetch_by_provider",
         "find",
