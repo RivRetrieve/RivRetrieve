@@ -7,15 +7,11 @@ from rivretrieve._internal.engine import (
     CacheConfig,
     Daily,
     DayDefinition,
+    ObservationStoreConfig,
     ProductConfig,
-    ProductWindowDeclarations,
     ProviderConfig,
     SourceCoordinates,
-    StopConvention,
     Unit,
-    WindowDeclaration,
-    WindowGranularity,
-    WindowRenderingVocabulary,
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
@@ -54,14 +50,5 @@ config: Final[ProviderConfig] = ProviderConfig(
             semantics=Daily(DayDefinition("unknown")),
         ),
     },
-    cache=CacheConfig(),
-)
-
-_YEAR_WINDOW = WindowDeclaration(
-    granularity=WindowGranularity("year"),
-    rendering=WindowRenderingVocabulary.YEAR,
-    stop_convention=StopConvention.INCLUSIVE,
-)
-window_declarations: Final[ProductWindowDeclarations] = ProductWindowDeclarations(
-    products=dict.fromkeys(config.products, _YEAR_WINDOW)
+    cache=CacheConfig(store=ObservationStoreConfig(format_version=1)),
 )

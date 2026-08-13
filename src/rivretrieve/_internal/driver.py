@@ -33,6 +33,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, RawMode, RawPayload, RawSourceCall
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
@@ -178,3 +179,43 @@ def drive(
     issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
     raw_payload = RawPayload(provider_id=request.provider_id, entries=tuple(raw_entries))
     return assemble(converted.value, provenance, issues, raw_payload)
+
+
+def drive_store(
+    request: ObservationRequest,
+    config: ProviderConfig,
+    store: StoreRoot,
+    *,
+    provenance: ObservationProvenance,
+    raw: RawMode = RawMode.OMIT,
+    reader: StoreReader | None = None,
+) -> _AssemblyResult:
+    """Query a compiled store, then run the shared convert and assemble stages."""
+    if raw not in (RawMode.OMIT, RawMode.INCLUDE) or not isinstance(raw, RawMode):
+        raise TypeError("raw must be RawMode.OMIT or RawMode.INCLUDE")
+    requested_start = datetime.fromisoformat(request.window.start.isoformat())
+    requested_end = datetime.fromisoformat(request.window.end.isoformat())
+    read = (reader or StoreReader()).query(
+        StoreQuery(
+            store=store,
+            provider_id=request.provider_id,
+            stations=request.stations,
+            products=request.products,
+            start=requested_start - _FETCH_WINDOW_PADDING,
+            end=requested_end + _FETCH_WINDOW_PADDING,
+        )
+    )
+    validate_catalogue(read.rows, RowsSchema, on_issue="raise")
+    converted = convert(read.rows, config, request.window)
+    validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
+    _require_canonical_rows_within_requested(converted.value, config, request.window)
+    store_provenance = provenance.model_copy(
+        update={
+            "source_vintage": read.manifest.source_vintage,
+            "publisher_artifact_checksum": str(read.manifest.publisher_artifact.sha256),
+        }
+    )
+    # Store-excerpt receipts are RR8. RR4 deliberately returns an empty payload
+    # even when retention is requested rather than claiming publisher authorship.
+    raw_payload = RawPayload(provider_id=request.provider_id, entries=())
+    return assemble(converted.value, store_provenance, converted.issues, raw_payload)

@@ -381,8 +381,21 @@ class ZoneValue:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservationStoreConfig:
+    """The on-disk observation-store revision a bulk provider compiles."""
+
+    format_version: int
+
+    def __post_init__(self) -> None:
+        if type(self.format_version) is not int or self.format_version < 1:
+            raise ValueError("observation store format version must be a positive integer")
+
+
+@dataclass(frozen=True, slots=True)
 class CacheConfig:
-    pass
+    """A provider declaration that observations live in a compiled store."""
+
+    store: ObservationStoreConfig | None = None
 
 
 @dataclass(frozen=True, slots=True)

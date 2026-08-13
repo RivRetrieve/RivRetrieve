@@ -337,6 +337,8 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
         "query",
         "response_version",
         "metadata",
+        "source_vintage",
+        "publisher_artifact_checksum",
     )
     assert result.provenance.request == {
         "stations": ["07374000", "07374000"],

@@ -16,7 +16,8 @@ from rivretrieve._internal.registry import _registry
 ROOT = Path(__file__).parents[1]
 PROVIDERS_ROOT = ROOT / "src" / "rivretrieve" / "_internal" / "providers"
 REFERENCE_ROOT = ROOT / "reference" / "legacy_observations"
-PROOF_PROVIDERS = {"ca_eccc", "usgs_nwis"}
+PROOF_PROVIDERS = {"usgs_nwis"}
+BULK_PROVIDERS = {"ca_eccc"}
 CATALOGUE_ONLY_PROVIDERS = {
     "ba_fhmzbih",
     "br_ana",
@@ -30,22 +31,20 @@ CATALOGUE_ONLY_PROVIDERS = {
     "th_thaiwater",
     "za_dws",
 }
-CACHE_HTTP_CARVE_OUTS = {
-    "ca_eccc/observation_client.py": {"requests"},
-    "pl_imgw/observation_client.py": {"requests"},
-}
+CACHE_HTTP_CARVE_OUTS = {"pl_imgw/observation_client.py": {"requests"}}
 _BASE_RUNTIME_FILE_COUNTS = Counter(
     {
         "__init__.py": 13,
         "module.py": 13,
         "metadata.py": 9,
         "origins.py": 5,
-        "issue_codes.py": 11,
+        "issue_codes.py": 10,
         "config.py": 2,
-        "fetch.py": 2,
-        "parse.py": 2,
-        "observation_client.py": 2,
+        "fetch.py": 1,
+        "parse.py": 1,
+        "observation_client.py": 1,
         "parser.py": 1,
+        "bulk.py": 1,
     }
 )
 # Providers migrated to declared origins since the base inventory above. Each one adds an
@@ -224,19 +223,24 @@ def test_runtime_direct_http_imports_are_only_declared_cache_carve_outs() -> Non
 
 
 def test_registry_uses_engine_stages_or_catalogue_only_registration() -> None:
-    assert set(rr.providers()) == PROOF_PROVIDERS | CATALOGUE_ONLY_PROVIDERS
+    assert set(rr.providers()) == PROOF_PROVIDERS | BULK_PROVIDERS | CATALOGUE_ONLY_PROVIDERS
     records = {str(record.provider_id): record.handle for record in _registry.iter_records()}
     for provider_id in PROOF_PROVIDERS:
         assert records[provider_id]._module is not None
         assert records[provider_id]._stages is records[provider_id]._module
+    ca = records["ca_eccc"]
+    assert ca._module is ca_eccc_module
+    assert ca._stages is None
+    assert ca._store_config is ca_eccc_module.config
+    assert ca._store_root is not None
     for provider_id in CATALOGUE_ONLY_PROVIDERS:
         assert records[provider_id]._module is None
         assert records[provider_id]._stages is None
 
 
-def test_cache_carve_out_module_contracts_are_explicit() -> None:
-    assert callable(ca_eccc_module.cache_status)
-    assert callable(ca_eccc_module.refresh_cache)
+def test_legacy_cache_carve_out_is_only_poland() -> None:
+    assert not hasattr(ca_eccc_module, "cache_status")
+    assert not hasattr(ca_eccc_module, "refresh_cache")
     assert not hasattr(pl_imgw_module, "cache_status")
     assert not hasattr(pl_imgw_module, "refresh_cache")
 
@@ -252,7 +256,6 @@ def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
     assert ruff_lint["per-file-ignores"] == {
         "src/rivretrieve/_internal/transport.py": ["TID251"],
         "src/rivretrieve/_internal/providers/*/generate_catalogue.py": ["TID251"],
-        "src/rivretrieve/_internal/providers/ca_eccc/observation_client.py": ["TID251"],
         "src/rivretrieve/_internal/providers/pl_imgw/observation_client.py": ["TID251"],
         "tests/**": ["TID251"],
     }

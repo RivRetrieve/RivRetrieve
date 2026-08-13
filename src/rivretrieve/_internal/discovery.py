@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import polars as pl
+from platformdirs import user_cache_dir
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_issue
@@ -261,6 +263,7 @@ def _ensure_default_providers_registered() -> None:
         return
 
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.store import StoreRoot
 
     if "ch_foen" not in registered:
         from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
@@ -359,7 +362,9 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ca_eccc",
             ca_eccc_artifact,
-            engine_provider_module=ca_eccc_module,
+            provider_module=ca_eccc_module,
+            bulk_config=ca_eccc_module.config,
+            observation_store=StoreRoot(Path(user_cache_dir("rivretrieve")) / "ca_eccc" / "store"),
         )
 
     if "pl_imgw" not in registered:
