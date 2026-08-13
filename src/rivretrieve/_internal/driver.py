@@ -1,4 +1,4 @@
-"""drive : ObservationRequest × ProviderStages × ObservationProvenance × RawMode → _AssemblyResult."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode → _AssemblyResult."""
 
 from __future__ import annotations
 
@@ -31,8 +31,16 @@ from rivretrieve._internal.engine import (
     _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.observations import ObservationProvenance, RawMode, RawPayload, RawSourceCall
+from rivretrieve._internal.observations import (
+    ObservationProvenance,
+    ReceiptAuthorship,
+    ReceiptEntry,
+    ReceiptMode,
+    Receipts,
+)
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
+from rivretrieve._internal.store.receipts import encode_store_excerpt
 from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
@@ -117,10 +125,10 @@ def drive(
     provider: ProviderStages,
     *,
     provenance: ObservationProvenance,
-    raw: RawMode = RawMode.OMIT,
+    receipts: ReceiptMode = ReceiptMode.OMIT,
 ) -> _AssemblyResult:
-    if raw not in (RawMode.OMIT, RawMode.INCLUDE) or not isinstance(raw, RawMode):
-        raise TypeError("raw must be RawMode.OMIT or RawMode.INCLUDE")
+    if receipts not in (ReceiptMode.OMIT, ReceiptMode.INCLUDE) or not isinstance(receipts, ReceiptMode):
+        raise TypeError("receipts must be ReceiptMode.OMIT or ReceiptMode.INCLUDE")
     config = provider.config
     requested_start = request.window.start
     requested_end = request.window.end
@@ -164,10 +172,16 @@ def drive(
     rendered_windows = MappingProxyType(dict(planned))
     fetched = provider.fetch(request.stations, request.products, rendered_windows, fetch_window, config)
     parsed: list[WithIssues[Rows]] = []
-    raw_entries: list[RawSourceCall] = []
+    receipt_entries: list[ReceiptEntry] = []
     for payload in fetched.value:
-        if raw is RawMode.INCLUDE:
-            raw_entries.append(RawSourceCall(content=payload.content, origin=payload.origin))
+        if receipts is ReceiptMode.INCLUDE:
+            receipt_entries.append(
+                ReceiptEntry(
+                    content=payload.content,
+                    origin=payload.origin,
+                    authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD,
+                )
+            )
         parsed_payload = provider.parse(payload, config)
         validate_catalogue(parsed_payload.value, RowsSchema, on_issue="raise")
         parsed.append(parsed_payload)
@@ -176,5 +190,44 @@ def drive(
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
     _require_canonical_rows_within_requested(converted.value, config, request.window)
     issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
-    raw_payload = RawPayload(provider_id=request.provider_id, entries=tuple(raw_entries))
-    return assemble(converted.value, provenance, issues, raw_payload)
+    receipt_payload = Receipts(provider_id=request.provider_id, entries=tuple(receipt_entries))
+    return assemble(converted.value, provenance, issues, receipt_payload)
+
+
+def drive_store(
+    request: ObservationRequest,
+    config: ProviderConfig,
+    store: StoreRoot,
+    *,
+    provenance: ObservationProvenance,
+    receipts: ReceiptMode = ReceiptMode.OMIT,
+    reader: StoreReader | None = None,
+) -> _AssemblyResult:
+    """Query a compiled store, then run the shared convert and assemble stages."""
+    if receipts not in (ReceiptMode.OMIT, ReceiptMode.INCLUDE) or not isinstance(receipts, ReceiptMode):
+        raise TypeError("receipts must be ReceiptMode.OMIT or ReceiptMode.INCLUDE")
+    requested_start = datetime.fromisoformat(request.window.start.isoformat())
+    requested_end = datetime.fromisoformat(request.window.end.isoformat())
+    read = (reader or StoreReader()).query(
+        StoreQuery(
+            store=store,
+            provider_id=request.provider_id,
+            stations=request.stations,
+            products=request.products,
+            start=requested_start - _FETCH_WINDOW_PADDING,
+            end=requested_end + _FETCH_WINDOW_PADDING,
+        )
+    )
+    validate_catalogue(read.rows, RowsSchema, on_issue="raise")
+    converted = convert(read.rows, config, request.window)
+    validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
+    _require_canonical_rows_within_requested(converted.value, config, request.window)
+    store_provenance = provenance.model_copy(
+        update={
+            "source_vintage": read.manifest.source_vintage,
+            "publisher_artifact_checksum": str(read.manifest.publisher_artifact.sha256),
+        }
+    )
+    receipt_entries = () if receipts is ReceiptMode.OMIT else (encode_store_excerpt(read),)
+    receipt_payload = Receipts(provider_id=request.provider_id, entries=receipt_entries)
+    return assemble(converted.value, store_provenance, converted.issues, receipt_payload)

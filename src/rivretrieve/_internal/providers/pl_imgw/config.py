@@ -1,4 +1,4 @@
-"""CA ECCC declaration : ProviderConfig × ProductWindowDeclarations."""
+"""PL IMGW declaration : ProviderConfig."""
 
 from dataclasses import dataclass
 from typing import Final
@@ -18,35 +18,28 @@ from rivretrieve._internal.primitives import ProductId
 
 
 @dataclass(frozen=True, slots=True)
-class HydatSourceCoordinates:
-    table_name: str
-    value_prefix: str
-    symbol_prefix: str
+class ImgwSourceCoordinates:
+    """The publisher CSV value column compiled for one product."""
+
+    column: str
 
 
 config: Final[ProviderConfig] = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={
         ProductId("discharge_daily_mean"): ProductConfig(
-            coordinates=SourceCoordinates(
-                HydatSourceCoordinates(
-                    table_name="DLY_FLOWS",
-                    value_prefix="FLOW",
-                    symbol_prefix="FLOW_SYMBOL",
-                )
-            ),
+            coordinates=SourceCoordinates(ImgwSourceCoordinates("flow_m3s")),
             unit=Unit.M3_S,
             semantics=Daily(DayDefinition("unknown")),
         ),
         ProductId("stage_daily_mean"): ProductConfig(
-            coordinates=SourceCoordinates(
-                HydatSourceCoordinates(
-                    table_name="DLY_LEVELS",
-                    value_prefix="LEVEL",
-                    symbol_prefix="LEVEL_SYMBOL",
-                )
-            ),
-            unit=Unit.M,
+            coordinates=SourceCoordinates(ImgwSourceCoordinates("level_cm")),
+            unit=Unit.CM,
+            semantics=Daily(DayDefinition("unknown")),
+        ),
+        ProductId("water_temperature_daily_mean"): ProductConfig(
+            coordinates=SourceCoordinates(ImgwSourceCoordinates("temperature_c")),
+            unit=Unit.DEG_C,
             semantics=Daily(DayDefinition("unknown")),
         ),
     },

@@ -42,7 +42,13 @@ from rivretrieve._internal.engine import (
     _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.observations import ObservationProvenance, RawMode, RawPayload, RawSourceCall
+from rivretrieve._internal.observations import (
+    ObservationProvenance,
+    ReceiptAuthorship,
+    ReceiptEntry,
+    ReceiptMode,
+    Receipts,
+)
 from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProductId, ProviderId
 
 _STATIONS = (
@@ -209,7 +215,9 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
         def parse(self, payload: Payload, supplied_config: ProviderConfig) -> WithIssues[Rows]:
             raise AssertionError("parse must not run")
 
-    result = driver_module.drive(request, _CapturingProvider(), provenance=_provenance(request), raw=RawMode.OMIT)
+    result = driver_module.drive(
+        request, _CapturingProvider(), provenance=_provenance(request), receipts=ReceiptMode.OMIT
+    )
 
     assert result.canonical_rows.is_empty()
     assert len(received) == 1
@@ -255,7 +263,9 @@ def test_drive_rejects_missing_product_window_declaration_before_fetch() -> None
             raise AssertionError("parse must not run")
 
     with pytest.raises(FatalContractError) as caught:
-        driver_module.drive(request, _MissingDeclarationProvider(), provenance=_provenance(request), raw=RawMode.OMIT)
+        driver_module.drive(
+            request, _MissingDeclarationProvider(), provenance=_provenance(request), receipts=ReceiptMode.OMIT
+        )
 
     assert str(caught.value) == (
         "Provider throwaway has no window declaration for requested product missing; "
@@ -326,20 +336,20 @@ def _windows() -> tuple[RequestedWindow, FetchWindow]:
     return requested, fetched
 
 
-@pytest.mark.parametrize("invalid_raw", [False, True, "include", None])
-def test_drive_rejects_invalid_raw_modes_before_provider_work(invalid_raw: object) -> None:
+@pytest.mark.parametrize("invalid_receipts", [False, True, "include", None])
+def test_drive_rejects_invalid_receipts_modes_before_provider_work(invalid_receipts: object) -> None:
     request = _request(_windows()[0])
 
-    with pytest.raises(TypeError, match="^raw must be RawMode.OMIT or RawMode.INCLUDE$"):
+    with pytest.raises(TypeError, match="^receipts must be ReceiptMode.OMIT or ReceiptMode.INCLUDE$"):
         driver_module.drive(
             request,
             cast("driver_module.ProviderStages", object()),
             provenance=_provenance(request),
-            raw=cast("RawMode", invalid_raw),
+            receipts=cast("ReceiptMode", invalid_receipts),
         )
 
 
-def test_drive_default_omit_never_constructs_raw_source_call(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_drive_default_omit_never_constructs_receipt_entry(monkeypatch: pytest.MonkeyPatch) -> None:
     requested_window, fetch_window = _windows()
     request = _request(requested_window)
     coordinates = SourceCoordinates({"parameter": "height"})
@@ -353,14 +363,14 @@ def test_drive_default_omit_never_constructs_raw_source_call(monkeypatch: pytest
         [],
     )
 
-    def forbidden_raw_source_call(*args: object, **kwargs: object) -> RawSourceCall:
-        raise AssertionError("RawSourceCall must not be constructed under OMIT")
+    def forbidden_receipt_entry(*args: object, **kwargs: object) -> ReceiptEntry:
+        raise AssertionError("ReceiptEntry must not be constructed under OMIT")
 
-    monkeypatch.setattr(driver_module, "RawSourceCall", forbidden_raw_source_call)
+    monkeypatch.setattr(driver_module, "ReceiptEntry", forbidden_receipt_entry)
 
     result = driver_module.drive(request, provider, provenance=_provenance(request))
 
-    assert result.raw == RawPayload(provider_id=request.provider_id, entries=())
+    assert result.receipts == Receipts(provider_id=request.provider_id, entries=())
 
 
 @pytest.mark.parametrize(
@@ -435,7 +445,7 @@ def test_drive_widens_fetch_window_by_exactly_two_calendar_days_across_month_and
         request,
         _CapturingProvider(),
         provenance=_provenance(request),
-        raw=RawMode.OMIT,
+        receipts=ReceiptMode.OMIT,
     )
 
     assert case in {"month-seam", "year-seam"}
@@ -526,7 +536,7 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         canonical_rows: CanonicalRows,
         supplied_provenance: ObservationProvenance,
         issues: tuple[Issue, ...],
-        supplied_raw: RawPayload,
+        supplied_receipts: Receipts,
     ) -> _AssemblyResult:
         events.append("assemble")
         assert supplied_provenance is provenance
@@ -537,12 +547,13 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
             "parse.station-1.second",
             "parse.station-2",
         )
-        assert supplied_raw.provider_id == request.provider_id
-        assert len(supplied_raw.entries) == 2
-        for entry, payload in zip(supplied_raw.entries, payloads, strict=True):
+        assert supplied_receipts.provider_id == request.provider_id
+        assert len(supplied_receipts.entries) == 2
+        for entry, payload in zip(supplied_receipts.entries, payloads, strict=True):
             assert entry.content is payload.content
+            assert entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
             assert entry.origin is payload.origin
-        return real_assemble(canonical_rows, supplied_provenance, issues, supplied_raw)
+        return real_assemble(canonical_rows, supplied_provenance, issues, supplied_receipts)
 
     monkeypatch.setattr(driver_module, "convert", recording_convert)
     monkeypatch.setattr(driver_module, "assemble", recording_assemble)
@@ -551,7 +562,7 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         request,
         provider,
         provenance=provenance,
-        raw=RawMode.INCLUDE,
+        receipts=ReceiptMode.INCLUDE,
     )
 
     expected = pl.DataFrame(
@@ -576,9 +587,9 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         "parse.station-1.second",
         "parse.station-2",
     )
-    assert result.raw.provider_id == request.provider_id
-    assert len(result.raw.entries) == 2
-    for entry, payload in zip(result.raw.entries, payloads, strict=True):
+    assert result.receipts.provider_id == request.provider_id
+    assert len(result.receipts.entries) == 2
+    for entry, payload in zip(result.receipts.entries, payloads, strict=True):
         assert entry.content is payload.content
         assert entry.origin is payload.origin
     assert events == [
@@ -642,7 +653,7 @@ def test_drive_clips_unknown_zone_instants_at_both_closed_edges_without_warning(
         request,
         provider,
         provenance=_provenance(request),
-        raw=RawMode.OMIT,
+        receipts=ReceiptMode.OMIT,
     )
 
     expected = pl.DataFrame(
@@ -696,7 +707,7 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
         request,
         provider,
         provenance=provenance,
-        raw=RawMode.OMIT,
+        receipts=ReceiptMode.OMIT,
     )
 
     expected = pl.DataFrame(
@@ -722,7 +733,7 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
     assert tuple(issue.code for issue in result.issues) == ("fetch.station-3-not-found",)
     assert result.provenance is provenance
-    assert result.raw == RawPayload(provider_id=request.provider_id, entries=())
+    assert result.receipts == Receipts(provider_id=request.provider_id, entries=())
     assert events == [
         "fetch",
         "parse:station-1",
@@ -774,15 +785,15 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
         canonical_rows: CanonicalRows,
         supplied_provenance: ObservationProvenance,
         issues: tuple[Issue, ...],
-        supplied_raw: RawPayload,
+        supplied_receipts: Receipts,
     ) -> _AssemblyResult:
         events.append("assemble")
         expected_canonical = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
         pl_testing.assert_frame_equal(canonical_rows, expected_canonical)
         assert supplied_provenance is provenance
         assert issues == fetch_issues
-        assert supplied_raw == RawPayload(provider_id=request.provider_id, entries=())
-        return real_assemble(canonical_rows, supplied_provenance, issues, supplied_raw)
+        assert supplied_receipts == Receipts(provider_id=request.provider_id, entries=())
+        return real_assemble(canonical_rows, supplied_provenance, issues, supplied_receipts)
 
     monkeypatch.setattr(driver_module, "convert", recording_convert)
     monkeypatch.setattr(driver_module, "assemble", recording_assemble)
@@ -791,14 +802,14 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
         request,
         provider,
         provenance=provenance,
-        raw=RawMode.OMIT,
+        receipts=ReceiptMode.OMIT,
     )
 
     expected = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
     assert result.issues == fetch_issues
     assert result.provenance is provenance
-    assert result.raw == RawPayload(provider_id=request.provider_id, entries=())
+    assert result.receipts == Receipts(provider_id=request.provider_id, entries=())
     assert events == ["fetch", "convert", "assemble"]
     assert {name for name in dir(provider) if not name.startswith("_")} == {
         "config",
@@ -897,7 +908,7 @@ def _drive_boundary_rows(
         request,
         provider,
         provenance=provenance,
-        raw=RawMode.OMIT,
+        receipts=ReceiptMode.OMIT,
     )
 
 
@@ -1032,7 +1043,7 @@ def test_drive_rejects_malformed_canonical_rows_before_assemble(
         canonical_rows: CanonicalRows,
         provenance: ObservationProvenance,
         issues: tuple[Issue, ...],
-        raw: RawPayload,
+        receipts: Receipts,
     ) -> _AssemblyResult:
         events.append("assemble")
         raise AssertionError("assemble must not run after malformed canonical rows")
@@ -1119,7 +1130,7 @@ def test_drive_rejects_engine_created_fetch_window_that_does_not_contain_request
         canonical_rows: CanonicalRows,
         provenance: ObservationProvenance,
         issues: tuple[Issue, ...],
-        raw: RawPayload,
+        receipts: Receipts,
     ) -> _AssemblyResult:
         events.append("assemble")
         raise AssertionError("assemble must not run for a narrowed engine window")
@@ -1133,7 +1144,7 @@ def test_drive_rejects_engine_created_fetch_window_that_does_not_contain_request
             request,
             _ForbiddenProvider(),
             provenance=_provenance(request),
-            raw=RawMode.OMIT,
+            receipts=ReceiptMode.OMIT,
         )
 
     assert exc_info.value.issues == ()
@@ -1240,7 +1251,7 @@ def test_drive_rejects_post_convert_row_outside_product_semantic_axis_before_ass
         canonical_rows: CanonicalRows,
         provenance: ObservationProvenance,
         issues: tuple[Issue, ...],
-        raw: RawPayload,
+        receipts: Receipts,
     ) -> _AssemblyResult:
         events.append("assemble")
         raise AssertionError("assemble must not run after a converter row leak")
@@ -1253,7 +1264,7 @@ def test_drive_rejects_post_convert_row_outside_product_semantic_axis_before_ass
             request,
             _EmptyProvider(),
             provenance=_provenance(request),
-            raw=RawMode.OMIT,
+            receipts=ReceiptMode.OMIT,
         )
 
     assert exc_info.value.issues == ()
@@ -1304,7 +1315,7 @@ def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -
         request,
         _DailyProvider(),
         provenance=_provenance(request),
-        raw=RawMode.OMIT,
+        receipts=ReceiptMode.OMIT,
     )
 
     expected = pl.DataFrame(

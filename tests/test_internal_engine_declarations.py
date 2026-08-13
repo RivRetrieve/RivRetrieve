@@ -8,6 +8,7 @@ from rivretrieve._internal.engine import (
     Daily,
     DayDefinition,
     Instant,
+    ObservationStoreConfig,
     ProductConfig,
     ProviderConfig,
     SourceCoordinates,
@@ -97,10 +98,12 @@ def test_day_definition_rejects_null_empty_and_malformed_values(raw: str) -> Non
         daily_factory(day_definition="unknown")
 
 
-def test_cache_config_is_an_immutable_behavior_free_marker() -> None:
-    cache = CacheConfig()
-    assert fields(CacheConfig) == ()
-    for attribute in ("path", "layout", "expiry", "refresh", "lifecycle"):
+def test_cache_config_declares_only_the_compiled_store_revision() -> None:
+    store = ObservationStoreConfig(format_version=1)
+    cache = CacheConfig(store=store)
+    assert fields(CacheConfig)[0].name == "store"
+    assert cache.store is store
+    for attribute in ("path", "expiry", "refresh", "lifecycle"):
         assert not hasattr(cache, attribute)
 
 

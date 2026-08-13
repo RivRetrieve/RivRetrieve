@@ -14,11 +14,6 @@ EXPECTED = {
             "ba_fhmzbih_4510_Tvode_1Y.xlsx",
         },
     },
-    "pl_imgw": {
-        "source": {"module.py", "issue_codes.py", "observation_client.py", "parser.py", "retrieval.py", "transform.py"},
-        "tests": {"test_pl_imgw_observations.py"},
-        "fixtures": {"pl_imgw_metadata.csv", "pl_imgw_151140030_annual_2023.zip", "pl_imgw_cache_fixture.parquet"},
-    },
     "za_dws": {
         "source": {"module.py", "issue_codes.py", "observation_client.py", "parser.py", "retrieval.py", "transform.py"},
         "tests": {"test_za_dws_module.py", "test_za_dws_observations.py"},
@@ -68,29 +63,6 @@ def test_reference_tree_preserves_fetch_and_parse_evidence() -> None:
     assert "def parse_ba_fhmzbih_workbook(" in (ba_root / "parser.py").read_text()
     assert "def retrieve_observations(" in (ba_root / "retrieval.py").read_text()
 
-    pl_root = REFERENCE_ROOT / "pl_imgw" / "source"
-    pl_client = (pl_root / "observation_client.py").read_text()
-    assert (
-        'BASE_URL = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe"'
-        in pl_client
-    )
-    assert "requests.Session()" in pl_client
-    assert "session.get(url, timeout=120)" in pl_client
-    for method in (
-        "query",
-        "ensure_cache",
-        "cache_status",
-        "refresh_cache",
-        "_build_cache",
-        "_fetch_year_parts",
-        "_fetch_zip",
-    ):
-        assert f"def {method}(" in pl_client
-    pl_parser = (pl_root / "parser.py").read_text()
-    assert "def parse_imgw_zip(" in pl_parser
-    assert "def parse_imgw_csv_bytes(" in pl_parser
-    assert "def retrieve_observations(" in (pl_root / "retrieval.py").read_text()
-
     za_root = REFERENCE_ROOT / "za_dws" / "source"
     za_client = (za_root / "observation_client.py").read_text()
     assert 'BASE_URL = "https://www.dws.gov.za/Hydrology/Verified/HyData.aspx"' in za_client
@@ -107,13 +79,10 @@ def test_reference_tree_preserves_fetch_and_parse_evidence() -> None:
     assert "def retrieve_observations(" in (za_root / "retrieval.py").read_text()
 
 
-def test_pl_imgw_reference_client_is_complete_while_runtime_is_narrow() -> None:
-    runtime = (
-        Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/pl_imgw/observation_client.py"
-    ).read_text()
-    reference = (REFERENCE_ROOT / "pl_imgw" / "source" / "observation_client.py").read_text()
-    assert "def query(" not in runtime
-    assert "def query(" in reference
-    for method in ("ensure_cache", "cache_status", "refresh_cache", "_build_cache", "_fetch_year_parts", "_fetch_zip"):
-        assert f"def {method}(" in runtime
-        assert f"def {method}(" in reference
+def test_pl_imgw_port_retires_runtime_and_legacy_retrieval_paths() -> None:
+    runtime_root = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/pl_imgw"
+    assert not (REFERENCE_ROOT / "pl_imgw").exists()
+    assert not (runtime_root / "observation_client.py").exists()
+    assert not (runtime_root / "parser.py").exists()
+    assert (runtime_root / "config.py").is_file()
+    assert "def compile_imgw(" in (runtime_root / "bulk.py").read_text()

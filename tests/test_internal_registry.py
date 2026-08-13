@@ -49,7 +49,7 @@ from rivretrieve._internal.issues import (
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
     ObservationResult,
-    RawPayload,
+    Receipts,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
@@ -284,12 +284,12 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
         ),
         check_exact=True,
     )
-    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
     assert result.provenance.source == "test-engine"
     assert result.provenance.request is not None
     assert result.provenance.request["start"] == "2026-01-01T00:00:00"
     assert result.provenance.request["end"] == "2026-01-02T23:59:59.999999"
-    assert result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
+    assert result.receipts == Receipts(provider_id=ProviderId("test_provider"), entries=())
     _assert_sentinel_unreachable(result)
     assert [issue.code for issue in result.issues] == [
         "test.engine.warning",
@@ -925,25 +925,16 @@ def test_registered_runtime_info_reads_packaged_artifact_row(
     assert handle.info() == ProviderInfo.from_row(artifact.provider_info)
 
 
-def test_registered_runtime_forwards_extras_and_rejects_unknown_attributes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FakeHydatClient:
-        def cache_status(self) -> str:
-            return "cache-status"
-
-        def refresh_cache(self) -> list[str]:
-            return ["cache-refresh"]
-
-    monkeypatch.setattr(ca_eccc_module, "HydatClient", FakeHydatClient)
+def test_registered_ca_runtime_is_bulk_and_rejects_removed_extras() -> None:
     rr.providers()
     handle = _registry.get("ca_eccc")
 
-    assert handle.cache_status() == "cache-status"
-    assert handle.refresh_cache() == ["cache-refresh"]
-    for provider_id, attribute in (("pl_imgw", "cache_status"), ("ca_eccc", "row_annotation_schema")):
-        with pytest.raises(AttributeError, match=rf"Provider '{provider_id}' has no attribute '{attribute}'"):
-            getattr(_registry.get(provider_id), attribute)
+    assert handle._stages is None
+    assert handle._store_config is ca_eccc_module.config
+    assert handle._store_root is not None
+    for attribute in ("cache_status", "refresh_cache", "row_annotation_schema"):
+        with pytest.raises(AttributeError, match=rf"Provider 'ca_eccc' has no attribute '{attribute}'"):
+            getattr(handle, attribute)
 
 
 def test_registered_runtime_info_malformed_artifact_row_raises_provider_info_validation_error(

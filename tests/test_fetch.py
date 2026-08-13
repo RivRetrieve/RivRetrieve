@@ -35,7 +35,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.issues import InvalidObservationRequestError, Issue, IssuePolicyError
-from rivretrieve._internal.observations import ObservationDataSchema, RawPayload
+from rivretrieve._internal.observations import ObservationDataSchema, Receipts
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.registry import _registry
 
@@ -276,8 +276,8 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
         "end": "2026-01-01T23:59:59.999999",
     }
     assert result.issues == ()
-    assert result.raw == RawPayload(provider_id=ProviderId("usgs_nwis"), entries=())
-    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
+    assert result.receipts == Receipts(provider_id=ProviderId("usgs_nwis"), entries=())
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
 
 
 def test_fetch_by_provider_returns_one_singular_result_per_provider(
@@ -326,8 +326,8 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
             "end": "2026-01-01T23:59:59.999999",
         }
         assert result.issues == ()
-        assert result.raw == RawPayload(provider_id=ProviderId(provider_id), entries=())
-        assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
+        assert result.receipts == Receipts(provider_id=ProviderId(provider_id), entries=())
+        assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
         assert tuple(result.data.columns) == (
             "time",
             "time_zone",
@@ -338,7 +338,7 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
         assert "provider_id" not in result.data.columns
 
 
-def test_fetch_raw_true_retains_every_selected_series_parse_input_and_origin(
+def test_fetch_receipts_true_retains_every_selected_series_parse_input_and_origin(
     recording_stages: _RegisteredRecorders,
 ) -> None:
     sparse = rr.pick(
@@ -347,14 +347,14 @@ def test_fetch_raw_true_retains_every_selected_series_parse_input_and_origin(
         product=["level", "level_hourly"],
     )
 
-    result = rr.fetch(sparse, start="2026-01-01", end="2026-01-01", raw=True)
+    result = rr.fetch(sparse, start="2026-01-01", end="2026-01-01", receipts=True)
 
-    assert result.raw.provider_id == ProviderId("usgs_nwis")
-    assert tuple(entry.content for entry in result.raw.entries) == (
+    assert result.receipts.provider_id == ProviderId("usgs_nwis")
+    assert tuple(entry.content for entry in result.receipts.entries) == (
         b"usgs_nwis|station-1|level",
         b"usgs_nwis|station-2|level_hourly",
     )
-    assert tuple(entry.origin for entry in result.raw.entries) == (
+    assert tuple(entry.origin for entry in result.receipts.entries) == (
         SourceCallOrigin(
             url="https://data.test/usgs_nwis/station-1/level",
             request_parameters={"station_id": "station-1", "product_id": "level"},
@@ -380,25 +380,26 @@ def test_fetch_raw_true_retains_every_selected_series_parse_input_and_origin(
     ]
 
 
-def test_fetch_by_provider_raw_true_retains_provider_scoped_parse_inputs_and_origins(
+def test_fetch_by_provider_receipts_true_retains_provider_scoped_parse_inputs_and_origins(
     recording_stages: _RegisteredRecorders,
 ) -> None:
     results = rr.fetch_by_provider(
         rr.find(product="level"),
         start="2026-01-01",
         end="2026-01-01",
-        raw=True,
+        receipts=True,
     )
 
     assert tuple(results) == ("ca_eccc", "usgs_nwis")
     assert {
-        provider_id: tuple(entry.content for entry in result.raw.entries) for provider_id, result in results.items()
+        provider_id: tuple(entry.content for entry in result.receipts.entries)
+        for provider_id, result in results.items()
     } == {
         "ca_eccc": (b"ca_eccc|station-1|level",),
         "usgs_nwis": (b"usgs_nwis|station-1|level",),
     }
     assert {
-        provider_id: tuple(entry.origin for entry in result.raw.entries) for provider_id, result in results.items()
+        provider_id: tuple(entry.origin for entry in result.receipts.entries) for provider_id, result in results.items()
     } == {
         "ca_eccc": (
             SourceCallOrigin(
@@ -423,7 +424,7 @@ def test_fetch_by_provider_raw_true_retains_provider_scoped_parse_inputs_and_ori
             ),
         ),
     }
-    assert all(result.raw.provider_id == ProviderId(provider_id) for provider_id, result in results.items())
+    assert all(result.receipts.provider_id == ProviderId(provider_id) for provider_id, result in results.items())
 
 
 def test_fetch_default_warns_once_per_actionable_merged_issue(
@@ -595,21 +596,21 @@ def test_fetch_functions_require_rivretrieve_selection_and_expose_request_contro
         with pytest.raises(TypeError, match="^selection must be a RivRetrieve selection$"):
             function(object(), start="2026-01-01", end="2026-01-01")
         signature = inspect.signature(function)
-        assert tuple(signature.parameters) == ("selection", "start", "end", "raw", "on_issue")
+        assert tuple(signature.parameters) == ("selection", "start", "end", "receipts", "on_issue")
         assert signature.parameters["selection"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
         assert signature.parameters["selection"].default is inspect.Parameter.empty
         for name in ("start", "end"):
             assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
             assert signature.parameters[name].default is inspect.Parameter.empty
-        assert signature.parameters["raw"].kind is inspect.Parameter.KEYWORD_ONLY
-        assert signature.parameters["raw"].default is False
+        assert signature.parameters["receipts"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert signature.parameters["receipts"].default is False
         assert signature.parameters["on_issue"].kind is inspect.Parameter.KEYWORD_ONLY
         assert signature.parameters["on_issue"].default == "warn"
         assert inspect.get_annotations(function, eval_str=False) == {
             "selection": "_Selection",
             "start": "object",
             "end": "object",
-            "raw": "bool",
+            "receipts": "bool",
             "on_issue": "OnIssue",
             "return": ("ObservationResult" if function is rr.fetch else "dict[str, ObservationResult]"),
         }
