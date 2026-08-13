@@ -12,6 +12,7 @@ from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
 from rivretrieve._internal.primitives import OnIssue, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
+from rivretrieve._internal.providers.pl_imgw.config import config as config
 from rivretrieve._internal.results import CatalogResult
 
 PROVIDER_ID = ProviderId("pl_imgw")

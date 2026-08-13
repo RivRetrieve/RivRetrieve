@@ -17,7 +17,7 @@ ROOT = Path(__file__).parents[1]
 PROVIDERS_ROOT = ROOT / "src" / "rivretrieve" / "_internal" / "providers"
 REFERENCE_ROOT = ROOT / "reference" / "legacy_observations"
 PROOF_PROVIDERS = {"usgs_nwis"}
-BULK_PROVIDERS = {"ca_eccc"}
+BULK_PROVIDERS = {"ca_eccc", "pl_imgw"}
 CATALOGUE_ONLY_PROVIDERS = {
     "ba_fhmzbih",
     "br_ana",
@@ -27,24 +27,21 @@ CATALOGUE_ONLY_PROVIDERS = {
     "jp_mlit",
     "lt_lhmt",
     "no_nve",
-    "pl_imgw",
     "th_thaiwater",
     "za_dws",
 }
-CACHE_HTTP_CARVE_OUTS = {"pl_imgw/observation_client.py": {"requests"}}
+CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
 _BASE_RUNTIME_FILE_COUNTS = Counter(
     {
         "__init__.py": 13,
         "module.py": 13,
         "metadata.py": 9,
         "origins.py": 5,
-        "issue_codes.py": 10,
-        "config.py": 2,
+        "issue_codes.py": 9,
+        "config.py": 3,
         "fetch.py": 1,
         "parse.py": 1,
-        "observation_client.py": 1,
-        "parser.py": 1,
-        "bulk.py": 1,
+        "bulk.py": 2,
     }
 )
 # Providers migrated to declared origins since the base inventory above. Each one adds an
@@ -184,7 +181,7 @@ engine._make_fetch_window(start, end)
 
 def test_runtime_provider_inventory_has_only_ratified_roles() -> None:
     assert Counter(path.name for path in _runtime_provider_files()) == RUNTIME_FILE_COUNTS
-    assert {path.parent.name for path in _runtime_provider_files() if path.name == "parser.py"} == {"pl_imgw"}
+    assert {path.parent.name for path in _runtime_provider_files() if path.name == "parser.py"} == set()
 
 
 def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
@@ -228,11 +225,13 @@ def test_registry_uses_engine_stages_or_catalogue_only_registration() -> None:
     for provider_id in PROOF_PROVIDERS:
         assert records[provider_id]._module is not None
         assert records[provider_id]._stages is records[provider_id]._module
-    ca = records["ca_eccc"]
-    assert ca._module is ca_eccc_module
-    assert ca._stages is None
-    assert ca._store_config is ca_eccc_module.config
-    assert ca._store_root is not None
+    bulk_modules = {"ca_eccc": ca_eccc_module, "pl_imgw": pl_imgw_module}
+    for provider_id, module in bulk_modules.items():
+        handle = records[provider_id]
+        assert handle._module is module
+        assert handle._stages is None
+        assert handle._store_config is module.config
+        assert handle._store_root is not None
     for provider_id in CATALOGUE_ONLY_PROVIDERS:
         assert records[provider_id]._module is None
         assert records[provider_id]._stages is None
@@ -256,7 +255,6 @@ def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
     assert ruff_lint["per-file-ignores"] == {
         "src/rivretrieve/_internal/transport.py": ["TID251"],
         "src/rivretrieve/_internal/providers/*/generate_catalogue.py": ["TID251"],
-        "src/rivretrieve/_internal/providers/pl_imgw/observation_client.py": ["TID251"],
         "tests/**": ["TID251"],
     }
     assert config["tool"]["ty"]["src"]["exclude"] == [reference_path]

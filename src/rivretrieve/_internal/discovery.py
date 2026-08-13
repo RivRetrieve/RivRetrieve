@@ -374,6 +374,9 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "pl_imgw",
             pl_imgw_artifact,
+            provider_module=pl_imgw_module,
+            bulk_config=pl_imgw_module.config,
+            observation_store=StoreRoot(Path(user_cache_dir("rivretrieve")) / "pl_imgw" / "store"),
         )
 
     if "ba_fhmzbih" not in registered:
