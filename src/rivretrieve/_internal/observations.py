@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -22,6 +22,10 @@ from rivretrieve._internal.issues import (
     ObservationDataSchemaError,
 )
 from rivretrieve._internal.primitives import ProviderId
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.store.reader import ExecutedStoreQuery
+    from rivretrieve._internal.store.validation import StoreRoot
 
 ObservationDataSchema = CatalogueSchema(
     name="ObservationData",
@@ -118,8 +122,8 @@ class ReceiptEntry:
 class StoreExcerptReceipt(ReceiptEntry):
     """A faithful Parquet re-encoding of rows returned by a store query."""
 
-    store_path: Path
-    executed_query: object
+    store_path: StoreRoot
+    executed_query: ExecutedStoreQuery
     format_version: int
     source_vintage: date
 
