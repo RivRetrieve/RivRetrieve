@@ -16,7 +16,7 @@ def test_imgw_missing_value_sentinels_compile_as_published_null(tmp_path: Path) 
         archive.writestr("codz_2023.csv", csv_bytes)
 
     materialization = decode_imgw(artifact)
-    rows = {row["product"]: row for row in materialization.frame.to_dicts()}
+    rows = {row["product"]: row for row in materialization.rows.to_dicts()}
 
     assert set(rows) == {
         "stage_daily_mean",
