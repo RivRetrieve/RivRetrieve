@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import polars as pl
+from platformdirs import user_cache_dir
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_issue
@@ -261,6 +263,7 @@ def _ensure_default_providers_registered() -> None:
         return
 
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.store import StoreRoot
 
     if "ch_foen" not in registered:
         from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
@@ -359,7 +362,9 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "ca_eccc",
             ca_eccc_artifact,
-            engine_provider_module=ca_eccc_module,
+            provider_module=ca_eccc_module,
+            bulk_config=ca_eccc_module.config,
+            observation_store=StoreRoot(Path(user_cache_dir("rivretrieve")) / "ca_eccc" / "store"),
         )
 
     if "pl_imgw" not in registered:
@@ -369,6 +374,9 @@ def _ensure_default_providers_registered() -> None:
         _registry.register(
             "pl_imgw",
             pl_imgw_artifact,
+            provider_module=pl_imgw_module,
+            bulk_config=pl_imgw_module.config,
+            observation_store=StoreRoot(Path(user_cache_dir("rivretrieve")) / "pl_imgw" / "store"),
         )
 
     if "ba_fhmzbih" not in registered:
@@ -388,3 +396,24 @@ def _ensure_default_providers_registered() -> None:
             "za_dws",
             za_dws_artifact,
         )
+
+
+def download(provider: str):
+    """Download and compile observations for one bulk provider by explicit consent."""
+    from rivretrieve._internal.bulk import download as bulk_download
+
+    return bulk_download(provider)
+
+
+def cache_status(provider: str):
+    """Return the local compiled-store status for one bulk provider."""
+    from rivretrieve._internal.bulk import cache_status as bulk_cache_status
+
+    return bulk_cache_status(provider)
+
+
+def clear_cache(provider: str):
+    """Delete the compiled observation store for one bulk provider."""
+    from rivretrieve._internal.bulk import clear_cache as bulk_clear_cache
+
+    return bulk_clear_cache(provider)

@@ -63,8 +63,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "src/rivretrieve/_internal/transport.py" = ["TID251"]
 "src/rivretrieve/_internal/providers/*/generate_catalogue.py" = ["TID251"]
-"src/rivretrieve/_internal/providers/ca_eccc/observation_client.py" = ["TID251"]
-"src/rivretrieve/_internal/providers/pl_imgw/observation_client.py" = ["TID251"]
 "tests/**" = ["TID251"]
 
 [tool.ruff.format]

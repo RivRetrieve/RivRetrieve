@@ -278,6 +278,16 @@ def test_arbitrary_parquet_basename_and_native_columns_are_accepted(tmp_path: Pa
     assert frame.columns[5:] == ["native_unit", "source_quality", "source_note"]
 
 
+def test_missing_retained_native_column_is_refused(tmp_path: Path) -> None:
+    """A store cannot omit a source column whose manifest promises retention."""
+    store = _copy_fixture(tmp_path)
+    _validate_then_rewrite(store, lambda frame: frame.drop("source_quality"))
+    _assert_refusal(
+        store,
+        "partition.retained_column:product=level/year=2024:source_quality",
+    )
+
+
 @pytest.mark.parametrize("column", ["station_id", "time", "time_zone", "value_state"])
 def test_null_required_fields_are_refused(tmp_path: Path, column: str) -> None:
     store = _copy_fixture(tmp_path)
@@ -478,10 +488,8 @@ def test_store_import_closure_has_no_transport_provider_or_write_path() -> None:
         assert not findings, f"CONTROL forbidden dependency: {findings[0]}"
 
     store_source = Path(validation_module.__file__).parent
-    findings = {
-        path.name: _forbidden_dependencies(path.read_text(encoding="utf-8"))
-        for path in sorted(store_source.glob("*.py"))
-    }
+    read_modules = (store_source / "reader.py", store_source / "validation.py")
+    findings = {path.name: _forbidden_dependencies(path.read_text(encoding="utf-8")) for path in read_modules}
     assert all(not file_findings for file_findings in findings.values()), findings
 
 
@@ -511,8 +519,11 @@ def test_fingerprint_canonical_encoding_sorts_keys_and_leaves_non_ascii_unescape
     renamed = "niveau_r\u00e9f\u00e9rence"
     assert not renamed.isascii()
     columns[-1]["name"] = renamed
+    old_name = dispositions[-1]["source_column"]
     dispositions[-1]["source_column"] = renamed
     source_schema["fingerprint"] = _fingerprint(columns)
+    parquet_path = next(non_ascii.rglob("*.parquet"))
+    pl.read_parquet(parquet_path).rename({old_name: renamed}).write_parquet(parquet_path)
     _write_manifest(non_ascii, manifest)
     assert isinstance(validate_store(StoreRoot(non_ascii), PROVIDER_ID), ValidatedStore)
 

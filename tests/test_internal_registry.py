@@ -925,25 +925,16 @@ def test_registered_runtime_info_reads_packaged_artifact_row(
     assert handle.info() == ProviderInfo.from_row(artifact.provider_info)
 
 
-def test_registered_runtime_forwards_extras_and_rejects_unknown_attributes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FakeHydatClient:
-        def cache_status(self) -> str:
-            return "cache-status"
-
-        def refresh_cache(self) -> list[str]:
-            return ["cache-refresh"]
-
-    monkeypatch.setattr(ca_eccc_module, "HydatClient", FakeHydatClient)
+def test_registered_ca_runtime_is_bulk_and_rejects_removed_extras() -> None:
     rr.providers()
     handle = _registry.get("ca_eccc")
 
-    assert handle.cache_status() == "cache-status"
-    assert handle.refresh_cache() == ["cache-refresh"]
-    for provider_id, attribute in (("pl_imgw", "cache_status"), ("ca_eccc", "row_annotation_schema")):
-        with pytest.raises(AttributeError, match=rf"Provider '{provider_id}' has no attribute '{attribute}'"):
-            getattr(_registry.get(provider_id), attribute)
+    assert handle._stages is None
+    assert handle._store_config is ca_eccc_module.config
+    assert handle._store_root is not None
+    for attribute in ("cache_status", "refresh_cache", "row_annotation_schema"):
+        with pytest.raises(AttributeError, match=rf"Provider 'ca_eccc' has no attribute '{attribute}'"):
+            getattr(handle, attribute)
 
 
 def test_registered_runtime_info_malformed_artifact_row_raises_provider_info_validation_error(

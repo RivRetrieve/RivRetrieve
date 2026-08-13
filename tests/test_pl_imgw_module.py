@@ -1,12 +1,8 @@
 from datetime import date
 
-import pytest
-
 import rivretrieve as rr
-from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
 from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_provider_info
-from rivretrieve._internal.registry import _registry
 from rivretrieve._internal.results import CatalogResult
 
 BULK_OBSERVATIONS = (
@@ -59,20 +55,6 @@ def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
         "citation",
     )
     assert pl_imgw_module.info().bulk_observations == BULK_OBSERVATIONS
-
-
-def test_pl_imgw_observations_unavailable() -> None:
-    with pytest.raises(
-        ObservationsUnavailableError,
-        match="Provider pl_imgw has no observation module registered",
-    ):
-        rr.providers()
-        _registry.get("pl_imgw").observations(
-            stations=["151140030"],
-            products=["discharge_daily_mean"],
-            start="2023-01-01",
-            end="2023-01-02",
-        )
 
 
 def test_pl_imgw_module_has_no_observation_or_cache_surface() -> None:

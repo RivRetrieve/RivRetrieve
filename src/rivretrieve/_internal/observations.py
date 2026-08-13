@@ -84,6 +84,8 @@ class ObservationProvenance(BaseModel):
     query: dict[str, object] | None = None
     response_version: str | None = None
     metadata: str | None = None
+    source_vintage: date | None = None
+    publisher_artifact_checksum: str | None = None
 
 
 class RawMode(StrEnum):

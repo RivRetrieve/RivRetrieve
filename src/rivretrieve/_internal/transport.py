@@ -13,6 +13,7 @@ import requests
 
 class HttpMethod(StrEnum):
     GET = "GET"
+    HEAD = "HEAD"
     POST = "POST"
 
 
@@ -123,6 +124,13 @@ def _send_with_requests(request: TransportRequest, timeout_seconds: float) -> tu
             params=params,
             headers=headers,
             data=request.body,
+            timeout=timeout_seconds,
+        )
+    elif request.method is HttpMethod.HEAD:
+        response = requests.head(
+            request.url,
+            params=params,
+            headers=headers,
             timeout=timeout_seconds,
         )
     else:
