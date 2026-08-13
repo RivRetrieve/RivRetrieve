@@ -66,16 +66,16 @@ def _hydat_columns(table: HydatTable) -> tuple[tuple[str, str], ...]:
         [
             ("FULL_MONTH", "INTEGER"),
             ("NO_DAYS", "INTEGER"),
-            ("MONTHLY_MEAN", "REAL"),
-            ("MONTHLY_TOTAL", "REAL"),
+            ("MONTHLY_MEAN", "DOUBLE"),
+            ("MONTHLY_TOTAL", "DOUBLE"),
             ("FIRST_DAY_MIN", "INTEGER"),
-            ("MIN", "REAL"),
+            ("MIN", "DOUBLE"),
             ("FIRST_DAY_MAX", "INTEGER"),
-            ("MAX", "REAL"),
+            ("MAX", "DOUBLE"),
         ]
     )
     for day in range(1, 32):
-        monthly.extend(((f"{table.value_prefix}{day}", "REAL"), (f"{table.symbol_prefix}{day}", "TEXT")))
+        monthly.extend(((f"{table.value_prefix}{day}", "DOUBLE"), (f"{table.symbol_prefix}{day}", "TEXT")))
     return tuple(monthly)
 
 
