@@ -9,9 +9,7 @@ from rivretrieve._internal.providers.pl_imgw.bulk import decode_imgw
 def test_imgw_missing_value_sentinels_compile_as_published_null(tmp_path: Path) -> None:
     """IMGW's documented missing-value codes are not physical measurements."""
     artifact = tmp_path / "codz_2023.zip"
-    csv_bytes = (
-        "151140030;Przewożniki;Skroda;2023;03;01;9999;99999.999;99.9;1\r\n"
-    ).encode("cp1250")
+    csv_bytes = ("151140030;Przewożniki;Skroda;2023;03;01;9999;99999.999;99.9;1\r\n").encode("cp1250")
     with zipfile.ZipFile(artifact, "w") as archive:
         archive.writestr("codz_2023.csv", csv_bytes)
 

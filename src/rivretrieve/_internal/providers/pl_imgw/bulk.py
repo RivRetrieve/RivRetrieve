@@ -257,9 +257,7 @@ def _emit_source_row(
         raise ValueError(f"IMGW member {member!r} row {ordinal} has an invalid calendar date") from error
     retained = dict(zip(_RETAINED_NAMES, source, strict=True))
     for product, value_index, null_sentinels in _PRODUCT_COLUMNS:
-        value, state = _native_value(
-            source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels
-        )
+        value, state = _native_value(source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels)
         output.append(
             {
                 "product": str(product),

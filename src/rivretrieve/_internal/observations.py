@@ -274,6 +274,7 @@ def _require_non_empty_string(value: object, name: str, error_type: type[FatalCo
 def _is_polars_datetime_dtype(dtype: pl.DataType) -> bool:
     return dtype == pl.Datetime() or isinstance(dtype, pl.Datetime)
 
+
 # Load the runtime names after the receipt classes exist so introspection can resolve
 # their domain annotations without cycling through store.receipts.
 ExecutedStoreQuery = importlib.import_module("rivretrieve._internal.store.reader").ExecutedStoreQuery
