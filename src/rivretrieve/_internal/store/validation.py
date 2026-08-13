@@ -353,6 +353,7 @@ def _validate_partition(
     identifier: PartitionIdentifier,
     path: Path,
     expected_rows: int,
+    retained_columns: tuple[str, ...],
     store: StoreRoot,
     provider_id: ProviderId,
 ) -> None:
@@ -382,6 +383,14 @@ def _validate_partition(
     names_are_valid = tuple(schema.names[:5]) == _REQUIRED_FIELD_NAMES
     if not names_are_valid or not types_are_valid:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.schema:{identifier}")
+    for retained_column in retained_columns:
+        if retained_column not in schema.names:
+            _refuse(
+                StoreRefusalKind.MALFORMED,
+                store,
+                provider_id,
+                f"partition.retained_column:{identifier}:{retained_column}",
+            )
     try:
         table = parquet.read()
     except (OSError, ValueError, pa.ArrowException):
@@ -471,7 +480,19 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     _validate_manifest_schema(raw, store, provider_id)
     _validate_source_contract(raw, store, provider_id)
     partition_files = _discover_partitions(raw, store, provider_id)
+    retained_columns = tuple(
+        item["source_column"]
+        for item in raw["source_column_dispositions"]
+        if item["disposition"] == Disposition.RETAINED
+    )
     for identifier, path in partition_files.items():
-        _validate_partition(identifier, path, raw["partition_row_counts"][identifier], store, provider_id)
+        _validate_partition(
+            identifier,
+            path,
+            raw["partition_row_counts"][identifier],
+            retained_columns,
+            store,
+            provider_id,
+        )
     manifest = _parse_manifest(raw)
     return ValidatedStore(root=store, manifest=manifest, partition_files=partition_files)
