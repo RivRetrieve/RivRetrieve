@@ -1,5 +1,15 @@
-"""store validation surface : StoreRoot × ProviderId → ValidatedStore ⊎ StoreRefusal."""
+"""StoreQuery → StoreReadResult ⊎ StoreRefusal; StoreRoot → StoreStatus."""
 
+from rivretrieve._internal.store.reader import (
+    ExecutedStoreQuery,
+    StorePresence,
+    StoreQuery,
+    StoreReader,
+    StoreReadResult,
+    StoreStatus,
+    read_store,
+    store_status,
+)
 from rivretrieve._internal.store.validation import (
     ArtifactChecksum,
     Disposition,
@@ -21,6 +31,7 @@ from rivretrieve._internal.store.validation import (
 __all__ = [
     "ArtifactChecksum",
     "Disposition",
+    "ExecutedStoreQuery",
     "ObservationStoreRefusedError",
     "PartitionIdentifier",
     "PublisherArtifact",
@@ -29,9 +40,16 @@ __all__ = [
     "SourceSchema",
     "SourceSchemaFingerprint",
     "StoreManifest",
+    "StorePresence",
+    "StoreQuery",
+    "StoreReader",
+    "StoreReadResult",
     "StoreRefusal",
     "StoreRefusalKind",
     "StoreRoot",
+    "StoreStatus",
     "ValidatedStore",
+    "read_store",
+    "store_status",
     "validate_store",
 ]
