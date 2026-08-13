@@ -49,7 +49,7 @@ from rivretrieve._internal.issues import (
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
     ObservationResult,
-    RawPayload,
+    Receipts,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
@@ -284,12 +284,12 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
         ),
         check_exact=True,
     )
-    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
     assert result.provenance.source == "test-engine"
     assert result.provenance.request is not None
     assert result.provenance.request["start"] == "2026-01-01T00:00:00"
     assert result.provenance.request["end"] == "2026-01-02T23:59:59.999999"
-    assert result.raw == RawPayload(provider_id=ProviderId("test_provider"), entries=())
+    assert result.receipts == Receipts(provider_id=ProviderId("test_provider"), entries=())
     _assert_sentinel_unreachable(result)
     assert [issue.code for issue in result.issues] == [
         "test.engine.warning",

@@ -10,7 +10,7 @@ from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationRequest,
     ObservationResult,
-    RawPayload,
+    Receipts,
 )
 from rivretrieve._internal.primitives import OnIssue
 from rivretrieve._internal.provider_info import ProviderInfo
@@ -102,7 +102,7 @@ def observations(
             },
         ),
         issues=(),
-        raw=RawPayload(provider_id=request.provider_id),
+        receipts=Receipts(provider_id=request.provider_id),
     )
 
 

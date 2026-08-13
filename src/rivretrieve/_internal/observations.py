@@ -1,4 +1,4 @@
-"""ObservationResult : ObservationData × ObservationProvenance × tuple[Issue, ...] × RawPayload → immutable result."""
+"""ObservationResult : ObservationData × ObservationProvenance × tuple[Issue, ...] × Receipts → immutable result."""
 
 from __future__ import annotations
 
@@ -86,31 +86,39 @@ class ObservationProvenance(BaseModel):
     metadata: str | None = None
 
 
-class RawMode(StrEnum):
+class ReceiptMode(StrEnum):
     OMIT = "omit"
     INCLUDE = "include"
 
 
+class ReceiptAuthorship(StrEnum):
+    PUBLISHER_PAYLOAD = "publisher_payload"
+    STORE_EXCERPT = "store_excerpt"
+
+
 @dataclass(frozen=True, slots=True)
-class RawSourceCall:
+class ReceiptEntry:
     content: bytes
     origin: SourceCallOrigin
+    authorship: ReceiptAuthorship
 
     def __post_init__(self) -> None:
         if type(self.content) is not bytes:
             raise TypeError("content must be bytes")
         if not isinstance(self.origin, SourceCallOrigin):
             raise TypeError("origin must be SourceCallOrigin")
+        if not isinstance(self.authorship, ReceiptAuthorship):
+            raise TypeError("authorship must be ReceiptAuthorship.PUBLISHER_PAYLOAD or ReceiptAuthorship.STORE_EXCERPT")
 
 
 @dataclass(frozen=True, slots=True)
-class RawPayload:
+class Receipts:
     provider_id: ProviderId
-    entries: tuple[RawSourceCall, ...] = ()
+    entries: tuple[ReceiptEntry, ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.entries, tuple) or not all(isinstance(entry, RawSourceCall) for entry in self.entries):
-            raise TypeError("entries must be a tuple of RawSourceCall values")
+        if not isinstance(self.entries, tuple) or not all(isinstance(entry, ReceiptEntry) for entry in self.entries):
+            raise TypeError("entries must be a tuple of ReceiptEntry values")
 
 
 class ObservationResult(BaseModel):
@@ -119,7 +127,7 @@ class ObservationResult(BaseModel):
     data: pl.DataFrame
     provenance: ObservationProvenance
     issues: tuple[Issue, ...] = ()
-    raw: RawPayload
+    receipts: Receipts
 
     @model_validator(mode="before")
     @classmethod

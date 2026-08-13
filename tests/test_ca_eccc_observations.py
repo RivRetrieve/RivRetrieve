@@ -13,8 +13,8 @@ from rivretrieve._internal.engine import SourceQuery, UnknownOriginFact
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.observations import (
     ObservationDataSchema,
-    RawMode,
-    RawPayload,
+    ReceiptMode,
+    Receipts,
 )
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ca_eccc import fetch as fetch_module
@@ -60,7 +60,7 @@ def _patch_cache(monkeypatch: pytest.MonkeyPatch, hydat_db: Path) -> None:
 
 
 def _assert_result_shape(result) -> None:
-    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "raw")
+    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
 
 
 def test_ca_eccc_registry_dispatch_uses_engine_driver(
@@ -105,7 +105,7 @@ def test_ca_eccc_registry_dispatch_uses_engine_driver(
     pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.provenance.source == "local"
     assert result.provenance.provider_id == ProviderId("ca_eccc")
-    assert result.raw == RawPayload(provider_id=ProviderId("ca_eccc"), entries=())
+    assert result.receipts == Receipts(provider_id=ProviderId("ca_eccc"), entries=())
     assert calls == [("2009", "2010")]
     _assert_result_shape(result)
 
@@ -131,7 +131,7 @@ def test_ca_eccc_include_retains_exact_ordered_parse_inputs_and_query_origins(
         start="2010-01-01",
         end="2010-01-02",
         on_issue="ignore",
-        raw=RawMode.INCLUDE,
+        receipts=ReceiptMode.INCLUDE,
     )
 
     expected_queries = (
@@ -144,10 +144,12 @@ def test_ca_eccc_include_retains_exact_ordered_parse_inputs_and_query_origins(
             parameters=("02GA010", "2009", "2010"),
         ),
     )
-    assert result.raw.provider_id == ProviderId("ca_eccc")
-    assert len(result.raw.entries) == 2
-    assert tuple(entry.content for entry in result.raw.entries) == tuple(parse_contents)
-    for entry, parse_content, expected_query in zip(result.raw.entries, parse_contents, expected_queries, strict=True):
+    assert result.receipts.provider_id == ProviderId("ca_eccc")
+    assert len(result.receipts.entries) == 2
+    assert tuple(entry.content for entry in result.receipts.entries) == tuple(parse_contents)
+    for entry, parse_content, expected_query in zip(
+        result.receipts.entries, parse_contents, expected_queries, strict=True
+    ):
         assert entry.content is parse_content
         assert entry.origin.source_path == str(hydat_db.resolve())
         assert entry.origin.query == expected_query

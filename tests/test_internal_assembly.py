@@ -12,7 +12,7 @@ import rivretrieve._internal.assembly as assembly_module
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.engine import CanonicalRowsSchema, SourceCallOrigin, UnknownOriginFact
 from rivretrieve._internal.issues import Issue
-from rivretrieve._internal.observations import ObservationProvenance, RawPayload, RawSourceCall
+from rivretrieve._internal.observations import ObservationProvenance, ReceiptAuthorship, ReceiptEntry, Receipts
 from rivretrieve._internal.primitives import ProviderId
 
 
@@ -65,19 +65,22 @@ def test_assemble_packages_populated_inputs_unchanged() -> None:
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
     )
-    raw = RawPayload(provider_id=ProviderId("provider-a"), entries=(RawSourceCall(content, origin),))
+    receipts = Receipts(
+        provider_id=ProviderId("provider-a"),
+        entries=(ReceiptEntry(content, origin, ReceiptAuthorship.PUBLISHER_PAYLOAD),),
+    )
 
-    result = assemble(rows, provenance, issues, raw)
+    result = assemble(rows, provenance, issues, receipts)
 
     assert result.canonical_rows is rows
     pl_testing.assert_frame_equal(result.canonical_rows, rows)
     assert result.provenance is provenance
     assert result.issues is issues
     assert result.issues == (first_issue, second_issue)
-    assert result.raw is raw
-    assert result.raw.entries is raw.entries
-    assert result.raw.entries[0].content is content
-    assert result.raw.entries[0].origin is origin
+    assert result.receipts is receipts
+    assert result.receipts.entries is receipts.entries
+    assert result.receipts.entries[0].content is content
+    assert result.receipts.entries[0].origin is origin
     pl_testing.assert_frame_equal(rows, expected_rows)
 
 
@@ -94,9 +97,9 @@ def test_assemble_packages_empty_inputs_unchanged() -> None:
         message="No observations were returned",
     )
     issues = (issue,)
-    raw = RawPayload(provider_id=ProviderId("provider-empty"))
+    receipts = Receipts(provider_id=ProviderId("provider-empty"))
 
-    result = assemble(rows, provenance, issues, raw)
+    result = assemble(rows, provenance, issues, receipts)
 
     assert result.canonical_rows is rows
     pl_testing.assert_frame_equal(result.canonical_rows, rows)
@@ -105,8 +108,8 @@ def test_assemble_packages_empty_inputs_unchanged() -> None:
     assert result.provenance is provenance
     assert result.issues is issues
     assert result.issues == (issue,)
-    assert result.raw is raw
-    assert result.raw.entries == ()
+    assert result.receipts is receipts
+    assert result.receipts.entries == ()
 
 
 def test_assemble_return_construction_is_private_and_exactly_four_input_packaging() -> None:
@@ -114,7 +117,7 @@ def test_assemble_return_construction_is_private_and_exactly_four_input_packagin
         pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
         ObservationProvenance(source="live", provider_id=ProviderId("provider-a")),
         (),
-        RawPayload(provider_id=ProviderId("provider-a")),
+        Receipts(provider_id=ProviderId("provider-a")),
     )
 
     assert type(result) is _AssemblyResult
@@ -123,7 +126,7 @@ def test_assemble_return_construction_is_private_and_exactly_four_input_packagin
         "canonical_rows",
         "provenance",
         "issues",
-        "raw",
+        "receipts",
     )
     assert "_AssemblyResult" not in rivretrieve.__dict__
     assert "_AssemblyResult" not in rivretrieve._internal.__dict__
@@ -145,7 +148,7 @@ def test_assemble_body_is_constructor_only_and_has_no_conversion_or_provider_dep
         "canonical_rows",
         "provenance",
         "issues",
-        "raw",
+        "receipts",
     )
     for keyword in call.keywords:
         assert isinstance(keyword.value, ast.Name)
