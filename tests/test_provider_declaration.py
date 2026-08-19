@@ -9,6 +9,7 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers import registration
 from rivretrieve._internal.providers.registration import (
     CatalogueOnly,
@@ -86,7 +87,7 @@ def test_default_registration_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(registration, "register_manifest", counted_register_manifest)
 
-    assert len(rr.providers()) == 13
+    assert len(rr.providers()) == len(BUILTIN_PROVIDER_IDS)
     assert rr.find(product="discharge_daily_mean")
     assert rr.products()
     assert calls == 1
