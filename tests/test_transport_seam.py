@@ -16,7 +16,8 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis
+from rivretrieve._internal.providers.registration import LiveStages
+from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.recordings import (
     RecordedRequest,
     RecordingEnvelope,
@@ -24,6 +25,9 @@ from rivretrieve._internal.recordings import (
     UnmatchedRequestError,
 )
 from rivretrieve._internal.transport import HttpMethod
+
+assert isinstance(declaration.observations, LiveStages)
+usgs_nwis = declaration.observations.stages
 
 _FIXTURE = Path(__file__).parent / "test_data" / "usgs_nwis_07374000_dv_00060_2023-01-01.json"
 _PRODUCT = ProductId("discharge_daily_mean")

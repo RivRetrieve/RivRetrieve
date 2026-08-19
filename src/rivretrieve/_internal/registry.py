@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-class EngineProviderModule(ProviderModule, ProviderStages, Protocol):
+class EngineProviderModule(ProviderStages, Protocol):
     window_declarations: ProductWindowDeclarations
     observation_source: str
 
@@ -107,8 +107,12 @@ class _ProviderHandle:
         on_issue: OnIssue = "warn",
         receipts: ReceiptMode = ReceiptMode.OMIT,
     ) -> ObservationResult:
-        if self._module is None and self._store_config is None:
-            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation module registered")
+        if self._stages is None and self._store_config is None:
+            if self._module is not None:
+                raise ObservationsUnavailableError(
+                    f"Provider {self.provider_id} has no observation stages registered"
+                )
+            raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observations registered")
         request = LegacyObservationRequest.from_inputs(
             provider_id=self.provider_id,
             stations=stations,
@@ -383,7 +387,7 @@ class ProviderRegistry:
         stages: ProviderStages | None
         observation_source: str | None
         if engine_provider_module is not None:
-            registered_module = engine_provider_module
+            registered_module = None
             stages = engine_provider_module
             observation_source = engine_provider_module.observation_source
         else:

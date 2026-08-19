@@ -110,10 +110,9 @@ def test_map_ch_foen_selection_renders_unique_unknown_crs_stations_without_mutat
     monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
     selection = rr.find(provider="ch_foen")
     before = rr.as_frame(selection)
-    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
-    from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
+    from tests._catalogue import catalogue_reader
 
-    stations_before = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise").stations
+    stations_before = catalogue_reader("ch_foen").artifact.stations
 
     assert before.height == 738
     assert before.select("provider_id", "station_id").unique().height == 246
@@ -126,7 +125,7 @@ def test_map_ch_foen_selection_renders_unique_unknown_crs_stations_without_mutat
     assert all(marker.popup.endswith("<br>crs: unknown") for marker in station_map.markers)
     assert all(marker.icon.color == "orange" for marker in station_map.markers)
     pl_testing.assert_frame_equal(rr.as_frame(selection), before, check_exact=True)
-    stations_after = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise").stations
+    stations_after = catalogue_reader("ch_foen").artifact.stations
     pl_testing.assert_frame_equal(stations_after, stations_before, check_exact=True)
     assert stations_after.get_column("crs").unique().sort().to_list() == ["unknown"]
 

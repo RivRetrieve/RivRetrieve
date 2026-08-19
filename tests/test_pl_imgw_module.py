@@ -1,9 +1,9 @@
 from datetime import date
 
 import rivretrieve as rr
-from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
 from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_provider_info
 from rivretrieve._internal.results import CatalogResult
+from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 BULK_OBSERVATIONS = (
     "true: the source publishes all-station yearly ZIP files; RivRetrieve's "
@@ -13,13 +13,13 @@ BULK_OBSERVATIONS = (
 
 def test_pl_imgw_registered_with_packaged_stations() -> None:
     assert "pl_imgw" in rr.providers()
-    result = pl_imgw_module.stations()
+    result = catalogue_reader("pl_imgw").read_stations()
     assert isinstance(result, CatalogResult)
     assert result.data.height == 1301
 
 
 def test_pl_imgw_products_offline() -> None:
-    result = pl_imgw_module.products()
+    result = catalogue_reader("pl_imgw").read_products()
     assert result.data.height == 3
     assert set(result.data["product_id"].to_list()) == {
         "discharge_daily_mean",
@@ -29,8 +29,8 @@ def test_pl_imgw_products_offline() -> None:
 
 
 def test_pl_imgw_station_products_and_artifacts() -> None:
-    assert pl_imgw_module.station_products().data.height > 0
-    assert {path.name for path in pl_imgw_module._CATALOGUE_PATH.iterdir()} == {
+    assert catalogue_reader("pl_imgw").read_station_products().data.height > 0
+    assert {path.name for path in catalogue_path("pl_imgw").iterdir()} == {
         "native.parquet",
         "provider.json",
         "products.parquet",
@@ -54,10 +54,4 @@ def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
         "license",
         "citation",
     )
-    assert pl_imgw_module.info().bulk_observations == BULK_OBSERVATIONS
-
-
-def test_pl_imgw_module_has_no_observation_or_cache_surface() -> None:
-    assert not hasattr(pl_imgw_module, "observations")
-    assert not hasattr(pl_imgw_module, "cache_status")
-    assert not hasattr(pl_imgw_module, "refresh_cache")
+    assert provider_info("pl_imgw").bulk_observations == BULK_OBSERVATIONS

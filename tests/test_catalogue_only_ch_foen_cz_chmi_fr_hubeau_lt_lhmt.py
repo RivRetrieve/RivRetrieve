@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -8,6 +7,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.registry import _registry
+from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 CATALOGUE_ONLY_PROVIDERS = (
     (
@@ -69,14 +69,13 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
 )
 ENROLLED_CATALOGUE_MODULE_FILES = {
-    "ch_foen": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
-    "cz_chmi": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
-    "fr_hubeau": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"},
+    "ch_foen": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
+    "cz_chmi": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
+    "fr_hubeau": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
     "lt_lhmt": {
         "__init__.py",
         "generate_catalogue.py",
         "issue_codes.py",
-        "module.py",
         "origins.py",
     },
 }
@@ -108,11 +107,11 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
 ) -> None:
     assert provider_id in rr.providers()
 
-    module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
-    info = module.info()
-    stations = module.stations().data
-    products = module.products().data
-    station_products = module.station_products().data
+    reader = catalogue_reader(provider_id)
+    info = provider_info(provider_id)
+    stations = reader.read_stations().data
+    products = reader.read_products().data
+    station_products = reader.read_station_products().data
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert stations.height == station_count
@@ -140,7 +139,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     ),
     CATALOGUE_ONLY_PROVIDERS,
 )
-def test_catalogue_only_module_retains_only_catalogue_surface(
+def test_catalogue_only_provider_directory_retains_declared_surface(
     provider_id: str,
     station_count: int,
     product_count: int,
@@ -150,12 +149,12 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     availability: set[str],
     expected_crs: set[str],
 ) -> None:
-    module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
+    reader = catalogue_reader(provider_id)
 
-    info = module.info()
-    stations = module.stations().data
-    products = module.products().data
-    station_products = module.station_products().data
+    info = provider_info(provider_id)
+    stations = reader.read_stations().data
+    products = reader.read_products().data
+    station_products = reader.read_station_products().data
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert stations.height == station_count
@@ -165,20 +164,18 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert set(products["provider_id"].to_list()) == {provider_id}
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
-    assert not hasattr(module, "observations")
-
-    provider_directory = Path(module.__file__).parent
+    provider_directory = catalogue_path(provider_id).parent
     assert set(ENROLLED_CATALOGUE_MODULE_FILES) == {row[0] for row in CATALOGUE_ONLY_PROVIDERS}
     expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES[provider_id]
     assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files | {"declaration.py"}
-    assert module._CATALOGUE_PATH.exists()
+    assert catalogue_path(provider_id).exists()
     for artifact_name in (
         "provider.json",
         "stations.parquet",
         "products.parquet",
         "station_products.parquet",
     ):
-        assert (module._CATALOGUE_PATH / artifact_name).exists()
+        assert (catalogue_path(provider_id) / artifact_name).exists()
 
 
 def test_readme_presents_ch_foen_as_catalogue_only() -> None:
@@ -209,7 +206,7 @@ def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str)
     rr.providers()
     with pytest.raises(
         ObservationsUnavailableError,
-        match=rf"Provider {provider_id} has no observation module registered",
+        match=rf"Provider {provider_id} has no observations registered",
     ):
         _registry.get(provider_id).observations(
             stations="not-consulted",
@@ -220,7 +217,7 @@ def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str)
 
 
 def test_ch_foen_has_origins_and_no_metadata_module() -> None:
-    provider_directory = Path(import_module("rivretrieve._internal.providers.ch_foen.module").__file__).parent
+    provider_directory = catalogue_path("ch_foen").parent
 
     assert (provider_directory / "origins.py").is_file()
     assert not (provider_directory / "metadata.py").exists()

@@ -5,15 +5,14 @@ from __future__ import annotations
 import ast
 import tomllib
 from collections import Counter
-from importlib import import_module
 from pathlib import Path
 
 import rivretrieve as rr
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
 from rivretrieve._internal.providers.ca_eccc.declaration import declaration as ca_eccc_declaration
-from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
 from rivretrieve._internal.providers.pl_imgw.declaration import declaration as pl_imgw_declaration
+from rivretrieve._internal.providers.registration import BulkStore, LiveStages
+from rivretrieve._internal.providers.usgs_nwis.declaration import declaration as usgs_nwis_declaration
 from rivretrieve._internal.registry import _registry
 
 ROOT = Path(__file__).parents[1]
@@ -37,7 +36,6 @@ CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
 _BASE_RUNTIME_FILE_COUNTS = Counter(
     {
         "__init__.py": 13,
-        "module.py": 13,
         "metadata.py": 9,
         "origins.py": 5,
         "issue_codes.py": 9,
@@ -199,14 +197,9 @@ def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
     assert model_names == set()
 
 
-def test_provider_modules_do_not_expose_observations() -> None:
-    for module_path in sorted(PROVIDERS_ROOT.glob("*/module.py")):
-        module = import_module(f"rivretrieve._internal.providers.{module_path.parent.name}.module")
-        definitions = {
-            node.name for node in _tree(module_path).body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        assert "observations" not in definitions, module_path.relative_to(ROOT)
-        assert not hasattr(module, "observations"), module_path.relative_to(ROOT)
+def test_no_provider_module() -> None:
+    """Catalogue access belongs to the shared reader, not provider facades."""
+    assert list(PROVIDERS_ROOT.glob("*/module.py")) == []
 
 
 def test_runtime_provider_code_has_no_engine_owned_operations() -> None:
@@ -226,14 +219,16 @@ def test_runtime_direct_http_imports_are_only_declared_cache_carve_outs() -> Non
 def test_registry_uses_engine_stages_or_catalogue_only_registration() -> None:
     assert set(rr.providers()) == PROOF_PROVIDERS | BULK_PROVIDERS | CATALOGUE_ONLY_PROVIDERS
     records = {str(record.provider_id): record.handle for record in _registry.iter_records()}
+    assert isinstance(usgs_nwis_declaration.observations, LiveStages)
     for provider_id in PROOF_PROVIDERS:
-        assert records[provider_id]._module is not None
-        assert records[provider_id]._stages is records[provider_id]._module
+        assert records[provider_id]._module is None
+        assert records[provider_id]._stages is usgs_nwis_declaration.observations.stages
     bulk_declarations = {
         "ca_eccc": ca_eccc_declaration.observations,
         "pl_imgw": pl_imgw_declaration.observations,
     }
     for provider_id, operations in bulk_declarations.items():
+        assert isinstance(operations, BulkStore)
         handle = records[provider_id]
         assert handle._module is None
         assert handle._stages is None
@@ -243,13 +238,6 @@ def test_registry_uses_engine_stages_or_catalogue_only_registration() -> None:
     for provider_id in CATALOGUE_ONLY_PROVIDERS:
         assert records[provider_id]._module is None
         assert records[provider_id]._stages is None
-
-
-def test_legacy_cache_carve_out_is_only_poland() -> None:
-    assert not hasattr(ca_eccc_module, "cache_status")
-    assert not hasattr(ca_eccc_module, "refresh_cache")
-    assert not hasattr(pl_imgw_module, "cache_status")
-    assert not hasattr(pl_imgw_module, "refresh_cache")
 
 
 def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
