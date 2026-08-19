@@ -115,14 +115,8 @@ def _patch_client(
     monkeypatch: pytest.MonkeyPatch,
     actions: list[Action],
 ) -> RecordingHttpClient:
-    client = RecordingHttpClient(actions)
-
-    def client_factory() -> RecordingHttpClient:
-        client.constructor_calls += 1
-        return client
-
-    monkeypatch.setattr(fetch_module, "HttpClient", client_factory)
-    return client
+    del monkeypatch
+    return RecordingHttpClient(actions)
 
 
 def _custom_config() -> ProviderConfig:
@@ -192,6 +186,7 @@ def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
         ),
         window,
         provider_config,
+        client,
     )
 
     assert client.requests == [
@@ -221,7 +216,6 @@ def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
             headers={"Accept": "application/json"},
         ),
     ]
-    assert client.constructor_calls == 1
     assert result.issues == ()
     assert len(result.value) == 2
     assert result.value[0].source_coordinates is provider_config.products[daily].coordinates
@@ -279,7 +273,7 @@ def test_fetch_builds_dv_and_iv_requests_from_config_and_preserves_payload_tags(
 def test_missing_response_media_type_becomes_unknown_origin_fact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_client(monkeypatch, [_response(b"{}", content_type=None)])
+    client = _patch_client(monkeypatch, [_response(b"{}", content_type=None)])
 
     result = fetch(
         ("station-1",),
@@ -287,6 +281,7 @@ def test_missing_response_media_type_becomes_unknown_origin_fact(
         _renderings(ProductId("discharge_instantaneous")),
         _window(),
         config(),
+        client,
     )
 
     assert isinstance(result.value[0].origin.content_type, UnknownOriginFact)
@@ -368,12 +363,11 @@ def test_five_stations_one_404_preserves_four_parsed_station_results_and_one_iss
     product = ProductId("discharge_daily_mean")
     provider_config = config()
 
-    fetched = fetch(stations, (product,), _renderings(product), _window(), provider_config)
+    fetched = fetch(stations, (product,), _renderings(product), _window(), provider_config, client)
     parsed = tuple(parse(payload, provider_config) for payload in fetched.value)
     rows = pl.concat([result.value for result in parsed], how="vertical")
     all_issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues)
 
-    assert client.constructor_calls == 1
     assert len(client.requests) == 5
     assert [payload.station_products[0][0] for payload in fetched.value] == [
         "station-1",
@@ -419,6 +413,7 @@ def test_404_does_not_skip_remaining_products_for_station(
         _renderings(daily, instant),
         _window(),
         _custom_config(),
+        client,
     )
 
     assert len(client.requests) == 2
@@ -447,6 +442,7 @@ def test_retry_exhaustion_does_not_skip_remaining_products_for_station(
         _renderings(daily, instant),
         _window(),
         _custom_config(),
+        client,
     )
 
     assert len(client.requests) == 2
@@ -469,7 +465,7 @@ def test_all_404_returns_empty_payload_tuple_with_every_issue_and_call_tag(
     )
     product = ProductId("stage_instantaneous")
 
-    result = fetch(stations, (product,), _renderings(product), _window(), config())
+    result = fetch(stations, (product,), _renderings(product), _window(), config(), client)
 
     assert len(client.requests) == 5
     assert result.value == ()
@@ -505,7 +501,7 @@ def test_retry_exhausted_timeout_dns_and_rate_limit_are_sanitized_issues(
     stations = ("timeout-station", "dns-station", "rate-station")
     product = ProductId("discharge_instantaneous")
 
-    result = fetch(stations, (product,), _renderings(product), _window(), config())
+    result = fetch(stations, (product,), _renderings(product), _window(), config(), client)
 
     assert len(client.requests) == 3
     assert result.value == ()
@@ -567,6 +563,7 @@ def test_terminal_sender_failure_is_a_broken_seam(
             _renderings(ProductId("discharge_instantaneous")),
             _window(),
             config(),
+            client,
         )
 
     assert raised.value is failure
@@ -587,6 +584,7 @@ def test_unexpected_terminal_http_status_is_a_broken_seam(
             _renderings(ProductId("discharge_instantaneous")),
             _window(),
             config(),
+            client,
         )
 
     assert len(client.requests) == 1
@@ -595,7 +593,7 @@ def test_unexpected_terminal_http_status_is_a_broken_seam(
 def test_successful_malformed_body_stays_opaque_until_parse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_client(monkeypatch, [_response(b"not-json")])
+    client = _patch_client(monkeypatch, [_response(b"not-json")])
     provider_config = config()
 
     fetched = fetch(
@@ -604,6 +602,7 @@ def test_successful_malformed_body_stays_opaque_until_parse(
         _renderings(ProductId("discharge_instantaneous")),
         _window(),
         provider_config,
+        client,
     )
 
     assert len(fetched.value) == 1
@@ -628,6 +627,7 @@ def test_usgs_fetch_uses_engine_rendered_dates_without_reading_fetch_window_endp
         _renderings(windows={ProductId("discharge_instantaneous"): (RenderedWindow("1984-03-04", "1984-03-05"),)}),
         window,
         config(),
+        client,
     )
 
     assert client.requests[0].params["startDT"] == "1984-03-04"
@@ -639,10 +639,7 @@ def test_usgs_fetch_uses_engine_rendered_dates_without_reading_fetch_window_endp
 def test_fetch_fails_loudly_for_missing_or_wrong_coordinate_declaration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def forbidden_client() -> RecordingHttpClient:
-        raise AssertionError("HttpClient must not be constructed")
-
-    monkeypatch.setattr(fetch_module, "HttpClient", forbidden_client)
+    del monkeypatch
     wrong_coordinates = ProviderConfig(
         zone=ZoneValue("unknown"),
         products={
@@ -661,6 +658,7 @@ def test_fetch_fails_loudly_for_missing_or_wrong_coordinate_declaration(
             _renderings(ProductId("absent")),
             _window(),
             wrong_coordinates,
+            RecordingHttpClient([]),
         )
     with pytest.raises(FatalContractError, match="invalid source coordinates"):
         fetch(
@@ -669,4 +667,5 @@ def test_fetch_fails_loudly_for_missing_or_wrong_coordinate_declaration(
             _renderings(ProductId("wrong")),
             _window(),
             wrong_coordinates,
+            RecordingHttpClient([]),
         )

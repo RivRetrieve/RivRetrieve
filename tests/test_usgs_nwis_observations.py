@@ -13,6 +13,7 @@ import pytest
 from pydantic import BaseModel
 
 import rivretrieve as rr
+from rivretrieve._internal import driver as driver_module
 from rivretrieve._internal.engine import (
     StopConvention,
     UnknownOriginFact,
@@ -107,7 +108,7 @@ def _patch_client(
     status_code: int = 200,
 ) -> RecordingHttpClient:
     client = RecordingHttpClient(content, status_code)
-    monkeypatch.setattr(fetch_module, "HttpClient", lambda: client)
+    monkeypatch.setattr(driver_module, "HttpClient", lambda: client)
     return client
 
 
@@ -265,7 +266,7 @@ def test_usgs_nwis_include_retains_ordered_http_receipts_without_credentials(
         parse_contents.append(payload.content)
         return real_parse(payload, config)
 
-    monkeypatch.setattr(fetch_module, "HttpClient", lambda: client)
+    monkeypatch.setattr(driver_module, "HttpClient", lambda: client)
     monkeypatch.setattr(fetch_module, "_request", authenticated_request)
     monkeypatch.setattr(usgs_nwis_module, "parse", recording_parse)
 

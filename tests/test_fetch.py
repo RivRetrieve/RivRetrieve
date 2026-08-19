@@ -99,6 +99,7 @@ class _RecordingStages:
         rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         fetch_window: FetchWindow,
         config: ProviderConfig,
+        transport: object,
     ) -> WithIssues[tuple[Payload, ...]]:
         del rendered_windows
         self.calls.append((stations, tuple(str(product) for product in products)))

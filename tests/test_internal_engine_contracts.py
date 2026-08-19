@@ -87,7 +87,7 @@ def test_direct_fetch_window_construction_raises_for_provider_code() -> None:
         FetchWindow(start=start, end=end)
 
 
-def test_requested_to_fetch_construction_is_driver_owned_and_not_injectable() -> None:
+def test_requested_to_fetch_construction_is_driver_owned_with_injectable_transport() -> None:
     assert not hasattr(driver_module, "identity" + "_window")
     assert not hasattr(driver_module, "Window" + "Padder")
     signature = inspect.signature(driver_module.drive)
@@ -96,6 +96,7 @@ def test_requested_to_fetch_construction_is_driver_owned_and_not_injectable() ->
         "provider",
         "provenance",
         "raw",
+        "transport",
     )
     assert signature.parameters["request"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert signature.parameters["provider"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
