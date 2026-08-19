@@ -181,3 +181,17 @@ def test_ba_fhmzbih_daily_mean_absent_and_corrupting_request_refused_by_name() -
         "stage_instantaneous",
         "water_temperature_instantaneous",
     )
+
+
+def test_probe_that_does_not_replay_its_recording_is_refused() -> None:
+    def run_probe(_replay: object) -> pl.DataFrame:
+        return _frame()
+
+    harness = BoundaryProbeHarness(((_PROVIDER, _PRODUCT),))
+    harness.register(BoundaryProbe(_PROVIDER, _PRODUCT, (_recording(),), _ASSERTIONS, run_probe))
+
+    with pytest.raises(
+        BoundaryProbeContractError,
+        match="did not replay recorded request.*source.test/observations",
+    ):
+        harness.run()
