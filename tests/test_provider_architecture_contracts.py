@@ -238,3 +238,32 @@ def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
     }
     assert config["tool"]["ty"]["src"]["exclude"] == [reference_path]
     assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
+
+
+def test_provider_tests_have_no_literal_builtin_provider_census() -> None:
+    violations: list[str] = []
+    for test_path in sorted((ROOT / "tests").rglob("*.py")):
+        for node in ast.walk(_tree(test_path)):
+            if not isinstance(node, ast.Compare):
+                continue
+            expressions = (node.left, *node.comparators)
+            has_literal = any(
+                isinstance(expression, ast.Constant) and isinstance(expression.value, int)
+                for expression in expressions
+            )
+            has_provider_count = any(
+                isinstance(expression, ast.Call)
+                and isinstance(expression.func, ast.Name)
+                and expression.func.id == "len"
+                and len(expression.args) == 1
+                and isinstance(expression.args[0], ast.Call)
+                and isinstance(expression.args[0].func, ast.Attribute)
+                and isinstance(expression.args[0].func.value, ast.Name)
+                and expression.args[0].func.value.id == "rr"
+                and expression.args[0].func.attr == "providers"
+                for expression in expressions
+            )
+            if has_literal and has_provider_count:
+                violations.append(f"{test_path.relative_to(ROOT)}:{node.lineno}")
+
+    assert violations == []
