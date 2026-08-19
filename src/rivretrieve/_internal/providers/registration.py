@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import date, datetime
 from importlib import import_module
 from pathlib import Path
-from types import ModuleType
 
 from platformdirs import user_cache_dir
 
@@ -14,7 +14,7 @@ from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, l
 from rivretrieve._internal.engine import ProviderConfig
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.registry import EngineProviderModule, ProviderRegistry
-from rivretrieve._internal.store import StoreRoot
+from rivretrieve._internal.store import StoreRoot, ValidatedStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,14 +29,52 @@ class LiveStages:
     stages: EngineProviderModule
 
 
+BulkProbe = Callable[[str], int]
+BulkTransfer = Callable[[str, Path], None]
+
+
+@dataclass(frozen=True, slots=True)
+class BulkDownloadRequest:
+    """Engine-owned inputs for one provider-declared publisher download."""
+
+    destination: Path
+    today: date
+    probe: BulkProbe
+    transfer: BulkTransfer
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadedBulkArtifact:
+    """Publisher artifact identity returned by a bulk download operation."""
+
+    path: Path
+    url: str
+    source_vintage: date
+
+
+@dataclass(frozen=True, slots=True)
+class BulkCompileRequest:
+    """Engine-owned inputs for one provider-declared store compilation."""
+
+    publisher_artifact: Path
+    destination: StoreRoot
+    publisher_url: str
+    source_vintage: date
+    built_at: datetime
+    compiler_version: str
+
+
+BulkDownload = Callable[[BulkDownloadRequest], DownloadedBulkArtifact]
+BulkCompile = Callable[[BulkCompileRequest], ValidatedStore]
+
+
 @dataclass(frozen=True, slots=True)
 class BulkStore:
     """Declare a provider whose observations are read from a compiled local store."""
 
-    module: ModuleType
     config: ProviderConfig
-    download: Callable[..., object]
-    compile: Callable[..., object]
+    download: BulkDownload
+    compile: BulkCompile
 
 
 type ProviderKind = CatalogueOnly | LiveStages | BulkStore
@@ -185,9 +223,9 @@ def register_manifest(
             registry.register(
                 item.provider_id,
                 artifact,
-                provider_module=kind.module,
                 bulk_config=kind.config,
                 observation_store=StoreRoot(root / item.provider_id / "store"),
+                bulk_operations=kind,
             )
         else:  # load_manifest closes this union before any catalogue is loaded.
             raise AssertionError(f"unreachable provider kind for {item.provider_id}")

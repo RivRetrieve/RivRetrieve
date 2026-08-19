@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import polars as pl
 
@@ -33,6 +33,9 @@ from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
 from rivretrieve._internal.store import StoreRoot
 
+if TYPE_CHECKING:
+    from rivretrieve._internal.providers.registration import BulkStore
+
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -56,6 +59,7 @@ class _ProviderHandle:
     _observation_source: str | None = None
     _store_config: ProviderConfig | None = None
     _store_root: StoreRoot | None = None
+    _bulk_operations: BulkStore | None = None
 
     def info(self) -> ProviderInfo:
         return ProviderInfo.from_row(self._artifact.provider_info)
@@ -349,6 +353,7 @@ class ProviderRegistry:
         engine_provider_module: EngineProviderModule | None = None,
         bulk_config: ProviderConfig | None = None,
         observation_store: StoreRoot | None = None,
+        bulk_operations: BulkStore | None = None,
     ) -> _ProviderHandle:
         if not _PROVIDER_ID_PATTERN.fullmatch(provider_id):
             raise FatalContractError(f"Provider ID has invalid format: {provider_id}")
@@ -366,6 +371,8 @@ class ProviderRegistry:
             raise FatalContractError("Register either provider_module or engine_provider_module, not both")
         if (bulk_config is None) != (observation_store is None):
             raise FatalContractError("Bulk registration requires both config and observation store")
+        if bulk_operations is not None and bulk_config is None:
+            raise FatalContractError("Bulk operations require config and observation store")
         if engine_provider_module is not None and bulk_config is not None:
             raise FatalContractError("Register either provider stages or an observation store, not both")
         if bulk_config is not None and (bulk_config.cache is None or bulk_config.cache.store is None):
@@ -391,6 +398,7 @@ class ProviderRegistry:
             _observation_source=observation_source,
             _store_config=bulk_config,
             _store_root=observation_store,
+            _bulk_operations=bulk_operations,
         )
         self._providers[provider_id] = _ProviderRecord(
             provider_id=typed_provider_id,
