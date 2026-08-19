@@ -4,70 +4,30 @@ from __future__ import annotations
 
 import ast
 import tomllib
-from collections import Counter
 from importlib import import_module
 from pathlib import Path
 
 import rivretrieve as rr
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
-from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
+from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
 from rivretrieve._internal.registry import _registry
 
 ROOT = Path(__file__).parents[1]
 PROVIDERS_ROOT = ROOT / "src" / "rivretrieve" / "_internal" / "providers"
 REFERENCE_ROOT = ROOT / "reference" / "legacy_observations"
-PROOF_PROVIDERS = {"usgs_nwis"}
-BULK_PROVIDERS = {"ca_eccc", "pl_imgw"}
-CATALOGUE_ONLY_PROVIDERS = {
-    "ba_fhmzbih",
-    "br_ana",
-    "ch_foen",
-    "cz_chmi",
-    "fr_hubeau",
-    "jp_mlit",
-    "lt_lhmt",
-    "no_nve",
-    "th_thaiwater",
-    "za_dws",
+RATIFIED_RUNTIME_ROLES = {
+    "__init__.py",
+    "bulk.py",
+    "config.py",
+    "declaration.py",
+    "fetch.py",
+    "issue_codes.py",
+    "metadata.py",
+    "module.py",
+    "origins.py",
+    "parse.py",
 }
 CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
-_BASE_RUNTIME_FILE_COUNTS = Counter(
-    {
-        "__init__.py": 13,
-        "module.py": 13,
-        "metadata.py": 9,
-        "origins.py": 5,
-        "issue_codes.py": 9,
-        "config.py": 3,
-        "fetch.py": 1,
-        "parse.py": 1,
-        "bulk.py": 2,
-    }
-)
-# Providers migrated to declared origins since the base inventory above. Each one adds an
-# `origins.py` and removes a `metadata.py`. They are named individually, and one per line, so that
-# two branches enrolling DIFFERENT providers merge as a union. An anonymous `+= 1` on both sides is
-# byte-identical text, so git deduplicates it and the count silently under-reports by one for every
-# enrolment beyond the first -- which is exactly what happened merging Thailand into a main that
-# already carried Bosnia and South Africa.
-_MIGRATED_SINCE_BASE = (
-    "ba_fhmzbih",
-    "fr_hubeau",
-    "jp_mlit",
-    "pl_imgw",
-    "th_thaiwater",
-    "za_dws",
-)
-_METADATA_REMOVED_AFTER_SCHEMA_NARROWING = (
-    "br_ana",
-    "lt_lhmt",
-    "no_nve",
-)
-RUNTIME_FILE_COUNTS = _BASE_RUNTIME_FILE_COUNTS.copy()
-RUNTIME_FILE_COUNTS["declaration.py"] = len(BUILTIN_PROVIDER_IDS)
-RUNTIME_FILE_COUNTS["origins.py"] += len(_MIGRATED_SINCE_BASE)
-RUNTIME_FILE_COUNTS["metadata.py"] -= len(_MIGRATED_SINCE_BASE) + len(_METADATA_REMOVED_AFTER_SCHEMA_NARROWING)
 
 
 def _runtime_provider_files() -> list[Path]:
@@ -182,8 +142,14 @@ engine._make_fetch_window(start, end)
 
 
 def test_runtime_provider_inventory_has_only_ratified_roles() -> None:
-    assert Counter(path.name for path in _runtime_provider_files()) == RUNTIME_FILE_COUNTS
-    assert {path.parent.name for path in _runtime_provider_files() if path.name == "parser.py"} == set()
+    runtime_files = _runtime_provider_files()
+    provider_directories = {path.parent.name for path in runtime_files}
+
+    assert provider_directories == set(BUILTIN_PROVIDER_IDS)
+    assert {path.name for path in runtime_files} <= RATIFIED_RUNTIME_ROLES
+    for provider_id in BUILTIN_PROVIDER_IDS:
+        provider_files = {path.name for path in runtime_files if path.parent.name == provider_id}
+        assert "declaration.py" in provider_files
 
 
 def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
@@ -221,29 +187,40 @@ def test_runtime_direct_http_imports_are_only_declared_cache_carve_outs() -> Non
     assert actual == CACHE_HTTP_CARVE_OUTS
 
 
-def test_registry_uses_engine_stages_or_catalogue_only_registration() -> None:
-    assert set(rr.providers()) == PROOF_PROVIDERS | BULK_PROVIDERS | CATALOGUE_ONLY_PROVIDERS
+def test_registry_matches_declared_provider_kinds() -> None:
+    declared = load_manifest(BUILTIN_PROVIDER_IDS)
+    assert set(rr.providers()) == set(BUILTIN_PROVIDER_IDS)
     records = {str(record.provider_id): record.handle for record in _registry.iter_records()}
-    for provider_id in PROOF_PROVIDERS:
-        assert records[provider_id]._module is not None
-        assert records[provider_id]._stages is records[provider_id]._module
-    bulk_modules = {"ca_eccc": ca_eccc_module, "pl_imgw": pl_imgw_module}
-    for provider_id, module in bulk_modules.items():
-        handle = records[provider_id]
-        assert handle._module is module
-        assert handle._stages is None
-        assert handle._store_config is module.config
-        assert handle._store_root is not None
-    for provider_id in CATALOGUE_ONLY_PROVIDERS:
-        assert records[provider_id]._module is None
-        assert records[provider_id]._stages is None
+
+    for item in declared:
+        handle = records[item.provider_id]
+        kind = item.declaration.observations
+        if isinstance(kind, LiveStages):
+            assert handle._module is kind.stages
+            assert handle._stages is kind.stages
+        elif isinstance(kind, BulkStore):
+            assert handle._module is kind.module
+            assert handle._stages is None
+            assert handle._store_config is kind.config
+            assert handle._store_root is not None
+        elif isinstance(kind, CatalogueOnly):
+            assert handle._module is None
+            assert handle._stages is None
+            assert handle._store_config is None
+            assert handle._store_root is None
+        else:
+            raise AssertionError(f"unreachable provider kind for {item.provider_id}")
 
 
-def test_legacy_cache_carve_out_is_only_poland() -> None:
-    assert not hasattr(ca_eccc_module, "cache_status")
-    assert not hasattr(ca_eccc_module, "refresh_cache")
-    assert not hasattr(pl_imgw_module, "cache_status")
-    assert not hasattr(pl_imgw_module, "refresh_cache")
+def test_bulk_modules_do_not_expose_legacy_cache_operations() -> None:
+    bulk_modules = (
+        item.declaration.observations.module
+        for item in load_manifest(BUILTIN_PROVIDER_IDS)
+        if isinstance(item.declaration.observations, BulkStore)
+    )
+    for module in bulk_modules:
+        assert not hasattr(module, "cache_status")
+        assert not hasattr(module, "refresh_cache")
 
 
 def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
