@@ -646,3 +646,18 @@ when `--live` returns an implausibly small count, catching silent fetch failures
 fixture-backed invocations. The threshold is calibrated per provider (e.g. 10 000 for USGS which has
 26 000+ gauges; Lithuania has only 97 stations so no such guard is needed there). Do not copy a
 numeric threshold from one provider to another.
+
+## 5. Observation Recording Rule
+
+An observation payload used as source evidence must be a recording of a real source interaction. The
+recording must carry the exact non-secret request, the response bytes, and the UTC retrieval instant.
+Replay tests must resolve the request exactly through `ReplayTransport`; an unconditional fake transport
+is forbidden. Constructed payloads may test a parser in isolation, but they cannot ground an observation
+baseline or a boundary probe.
+
+A port baseline compares RivRetrieve with facts in the recorded source response. It must never compare
+current output with output from `reference/legacy_observations/` or another retired implementation.
+Archived implementations are historical evidence only and must not execute as part of the test suite.
+
+Write docstrings in NumPy style. In particular, document parameters, returns, and raised exceptions for
+public functions and for internal functions whose contract is not clear from their signature.
