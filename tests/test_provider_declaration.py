@@ -12,6 +12,7 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers import registration
 from rivretrieve._internal.providers.registration import (
     CatalogueOnly,
+    LiveStages,
     ProviderDeclaration,
     load_manifest,
     register_manifest,
@@ -50,6 +51,28 @@ def test_malformed_kind_names_provider_and_unrecognised_value(tmp_path: Path) ->
 
     with pytest.raises(FatalContractError, match="Provider xx_test.*unrecognised observation kind.*live"):
         load_manifest(("xx_test",), declaration_loader=lambda _provider_id: declaration)
+
+
+def test_live_stages_without_stage_contract_refuses_before_catalogue_loading(
+    stub_packaged_catalogue_artifact,
+    tmp_path: Path,
+) -> None:
+    declaration = ProviderDeclaration(tmp_path / "catalogue", LiveStages(stages=object()))  # type: ignore[arg-type]
+    registry = ProviderRegistry()
+    catalogue_loads: list[Path] = []
+
+    with pytest.raises(FatalContractError, match="Provider xx_test.*malformed LiveStages.*stages"):
+        register_manifest(
+            registry,
+            ("xx_test",),
+            declaration_loader=lambda _provider_id: declaration,
+            artifact_loader=lambda path: (
+                catalogue_loads.append(path) or stub_packaged_catalogue_artifact("xx_test")
+            ),
+        )
+
+    assert catalogue_loads == []
+    assert registry.list_provider_ids() == []
 
 
 def test_default_registration_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
