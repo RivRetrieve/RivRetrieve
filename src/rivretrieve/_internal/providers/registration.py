@@ -153,6 +153,18 @@ def load_manifest(
                     f"Provider {provider_id} has malformed LiveStages declaration: "
                     f"stages missing required members: {missing}"
                 )
+        if isinstance(value.observations, BulkStore):
+            non_callable_operations = tuple(
+                operation
+                for operation in ("download", "compile")
+                if not callable(getattr(value.observations, operation))
+            )
+            if non_callable_operations:
+                operations = ", ".join(non_callable_operations)
+                raise FatalContractError(
+                    f"Provider {provider_id} has malformed BulkStore declaration: "
+                    f"operations must be callable: {operations}"
+                )
         declared.append(DeclaredProvider(provider_id, value))
     return tuple(declared)
 
