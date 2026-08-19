@@ -28,8 +28,8 @@ from rivretrieve._internal.engine import (
     _make_fetch_window,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope
-from rivretrieve._internal.transport import HttpMethod
+from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope, ReplayTransport
+from rivretrieve._internal.transport import HttpMethod, TransportRequest
 
 _PROVIDER = ProviderId("provider")
 _PRODUCT = ProductId("flow_instantaneous")
@@ -151,8 +151,15 @@ def test_unprobed_provider_product_is_refused_by_name_without_running_other_prob
 
 def test_registered_probe_replays_and_checks_the_three_literals() -> None:
     def run_probe(replay: object) -> pl.DataFrame:
-        # The runner receives replay, not response bytes or an unconditional fake.
-        assert replay.__class__.__name__ == "ReplayTransport"
+        # The runner resolves the recorded interaction through replay.
+        assert isinstance(replay, ReplayTransport)
+        replay.send(
+            TransportRequest(
+                HttpMethod.GET,
+                "https://source.test/observations",
+                params={"start": "2026-01-01", "end": "2026-01-02"},
+            )
+        )
         return _frame()
 
     harness = BoundaryProbeHarness(((_PROVIDER, _PRODUCT),))

@@ -11,7 +11,8 @@ import polars as pl
 
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.recordings import RecordingEnvelope, ReplayTransport
+from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope, ReplayTransport
+from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
 READING_COUNT = "reading_count"
 FIRST_WALL_CLOCK_TIME = "first_wall_clock_time"
@@ -70,6 +71,28 @@ class BoundaryProbe:
         return self.provider_id, self.product_id
 
 
+class _AuditedReplayTransport(ReplayTransport):
+    """Replay transport that reports which declared recordings a probe resolved."""
+
+    def __init__(self, recordings: tuple[RecordingEnvelope, ...]) -> None:
+        super().__init__(recordings)
+        self._declared_requests = tuple(recording.request for recording in recordings)
+        self._replayed_requests: list[RecordedRequest] = []
+
+    def send(self, request: TransportRequest) -> TransportResponse:
+        response = super().send(request)
+        self._replayed_requests.append(RecordedRequest.from_transport_request(request))
+        return response
+
+    @property
+    def unreplayed_requests(self) -> tuple[RecordedRequest, ...]:
+        return tuple(
+            request
+            for request in self._declared_requests
+            if request not in self._replayed_requests
+        )
+
+
 class BoundaryProbeHarness:
     """Register and run exactly one audited boundary probe for every ported product."""
 
@@ -105,7 +128,13 @@ class BoundaryProbeHarness:
         results: list[pl.DataFrame] = []
         for key in sorted(self._probes):
             probe = self._probes[key]
-            frame = probe.run(ReplayTransport(probe.recordings))
+            replay = _AuditedReplayTransport(probe.recordings)
+            frame = probe.run(replay)
+            if replay.unreplayed_requests:
+                requests = "; ".join(request.describe() for request in replay.unreplayed_requests)
+                raise BoundaryProbeContractError(
+                    f"Boundary probe {_describe(key)} did not replay recorded request(s): {requests}"
+                )
             _check_result(probe, frame)
             results.append(frame)
         return tuple(results)
