@@ -10,7 +10,9 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers import registration
+from rivretrieve._internal.providers.ca_eccc.config import config as bulk_config
 from rivretrieve._internal.providers.registration import (
+    BulkStore,
     CatalogueOnly,
     LiveStages,
     ProviderDeclaration,
@@ -62,6 +64,41 @@ def test_live_stages_without_stage_contract_refuses_before_catalogue_loading(
     catalogue_loads: list[Path] = []
 
     with pytest.raises(FatalContractError, match="Provider xx_test.*malformed LiveStages.*stages"):
+        register_manifest(
+            registry,
+            ("xx_test",),
+            declaration_loader=lambda _provider_id: declaration,
+            artifact_loader=lambda path: (
+                catalogue_loads.append(path) or stub_packaged_catalogue_artifact("xx_test")
+            ),
+        )
+
+    assert catalogue_loads == []
+    assert registry.list_provider_ids() == []
+
+
+@pytest.mark.parametrize("operation", ["download", "compile"])
+def test_bulk_store_requires_callable_operations_before_catalogue_loading(
+    operation: str,
+    stub_packaged_catalogue_artifact,
+    tmp_path: Path,
+) -> None:
+    operations = {
+        "download": lambda request: request,
+        "compile": lambda request: request,
+    }
+    operations[operation] = None  # type: ignore[assignment]
+    declaration = ProviderDeclaration(
+        tmp_path / "catalogue",
+        BulkStore(config=bulk_config, **operations),  # type: ignore[arg-type]
+    )
+    registry = ProviderRegistry()
+    catalogue_loads: list[Path] = []
+
+    with pytest.raises(
+        FatalContractError,
+        match=rf"Provider xx_test.*malformed BulkStore.*{operation}",
+    ):
         register_manifest(
             registry,
             ("xx_test",),
