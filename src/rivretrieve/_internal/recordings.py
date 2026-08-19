@@ -171,7 +171,10 @@ def read_recording(path: str | Path) -> RecordingEnvelope:
     """Read and verify one recording envelope without consulting provider code."""
     source = Path(path)
     try:
-        value = json.loads(source.read_text(encoding="utf-8"))
+        value = json.loads(
+            source.read_text(encoding="utf-8"),
+            object_pairs_hook=lambda pairs: _unique_json_object(pairs, source),
+        )
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise InvalidRecordingError(f"cannot read recording {source}: {exc}") from exc
     return _recording_from_object(value, source)
@@ -309,6 +312,15 @@ def _recording_from_object(value: object, source: Path) -> RecordingEnvelope:
     except (TypeError, ValueError) as exc:
         raise InvalidRecordingError(f"recording {source} has an invalid response: {exc}") from exc
     return recording
+
+
+def _unique_json_object(pairs: list[tuple[str, object]], source: Path) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for name, value in pairs:
+        if name in result:
+            raise InvalidRecordingError(f"recording {source} contains duplicate field {name!r}")
+        result[name] = value
+    return result
 
 
 def _require_object(value: object, name: str, source: Path) -> dict[str, object]:
