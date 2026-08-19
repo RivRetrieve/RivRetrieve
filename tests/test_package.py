@@ -109,8 +109,8 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
         import_module("rivretrieve._internal.issues"),
         import_module("rivretrieve._internal.provider_module"),
         import_module("rivretrieve._internal.registry"),
-        import_module("rivretrieve._internal.providers.ca_eccc.module"),
-        import_module("rivretrieve._internal.providers.usgs_nwis.module"),
+        import_module("rivretrieve._internal.providers.ca_eccc.declaration"),
+        import_module("rivretrieve._internal.providers.usgs_nwis.declaration"),
     )
     for module in affected_modules:
         for name in removed_contract_names:

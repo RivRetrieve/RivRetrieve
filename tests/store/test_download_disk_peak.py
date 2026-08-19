@@ -1,4 +1,5 @@
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,7 +11,7 @@ def test_insufficient_space_refuses_before_http_client_or_cache_creation(tmp_pat
     monkeypatch.setattr(
         bulk,
         "_bulk_registration",
-        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(1, 1000), store),
+        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(1, 1000), store, SimpleNamespace()),
     )
     client_created = False
 
@@ -42,6 +43,7 @@ def test_bulk_verbs_refuse_non_bulk_provider(monkeypatch) -> None:
         provider_id = "usgs_nwis"
         _store_config = None
         _store_root = None
+        _bulk_operations = None
 
     monkeypatch.setattr(bulk._registry, "get", lambda provider: Handle())
     with pytest.raises(bulk.BulkOperationsUnavailableError, match="only for bulk providers"):
@@ -57,7 +59,7 @@ def test_clear_cache_is_idempotent_and_confined_to_store(tmp_path, monkeypatch) 
     monkeypatch.setattr(
         bulk,
         "_bulk_registration",
-        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(1, 1000), store),
+        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(1, 1000), store, SimpleNamespace()),
     )
 
     first = bulk.clear_cache("ca_eccc")

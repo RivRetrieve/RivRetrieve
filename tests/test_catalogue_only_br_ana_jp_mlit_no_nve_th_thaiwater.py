@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from pathlib import Path
 
 import polars as pl
@@ -11,6 +10,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.registry import _registry
+from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 CATALOGUE_ONLY_PROVIDERS = (
     (
@@ -80,10 +80,10 @@ CATALOGUE_ONLY_PROVIDERS = (
         {"unknown"},
     ),
 )
-DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py"}
-THAI_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"}
-DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "module.py", "origins.py"}
-JAPAN_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "module.py", "origins.py"}
+DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py"}
+THAI_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"}
+DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
+JAPAN_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "br_ana": DEFERRED_CATALOGUE_MODULE_FILES,
     "jp_mlit": JAPAN_CATALOGUE_MODULE_FILES,
@@ -118,11 +118,11 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     availability: set[str],
 ) -> None:
     assert provider_id in rr.providers()
-    module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
-    info = module.info()
-    stations_result = module.stations()
-    products_result = module.products()
-    station_products_result = module.station_products()
+    reader = catalogue_reader(provider_id)
+    info = provider_info(provider_id)
+    stations_result = reader.read_stations()
+    products_result = reader.read_products()
+    station_products_result = reader.read_station_products()
     for result in (stations_result, products_result, station_products_result):
         assert hasattr(result, "data")
         assert hasattr(result, "provenance")
@@ -159,7 +159,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     ),
     CATALOGUE_ONLY_PROVIDERS,
 )
-def test_catalogue_only_module_retains_only_catalogue_surface(
+def test_catalogue_only_provider_directory_retains_declared_surface(
     provider_id: str,
     station_count: int,
     product_count: int,
@@ -169,11 +169,11 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     catalogue_version: str,
     availability: set[str],
 ) -> None:
-    module = import_module(f"rivretrieve._internal.providers.{provider_id}.module")
-    info = module.info()
-    stations = module.stations().data
-    products = module.products().data
-    station_products = module.station_products().data
+    reader = catalogue_reader(provider_id)
+    info = provider_info(provider_id)
+    stations = reader.read_stations().data
+    products = reader.read_products().data
+    station_products = reader.read_station_products().data
     assert info.provider_id == provider_id
     assert info.name == provider_name
     assert str(info.catalogue_version) == catalogue_version
@@ -184,28 +184,24 @@ def test_catalogue_only_module_retains_only_catalogue_surface(
     assert set(products["provider_id"].to_list()) == {provider_id}
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
-    assert not hasattr(module, "observations")
-    provider_directory = Path(module.__file__).parent
+    provider_directory = catalogue_path(provider_id).parent
     assert set(ENROLLED_CATALOGUE_MODULE_FILES) == {row[0] for row in CATALOGUE_ONLY_PROVIDERS}
     expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES[provider_id]
-    assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files
-    assert module._CATALOGUE_PATH.exists()
+    assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files | {"declaration.py"}
+    assert catalogue_path(provider_id).exists()
     for artifact_name in ("provider.json", "stations.parquet", "products.parquet", "station_products.parquet"):
-        assert (module._CATALOGUE_PATH / artifact_name).exists()
+        assert (catalogue_path(provider_id) / artifact_name).exists()
 
 
 @pytest.mark.parametrize("provider_id", [row[0] for row in CATALOGUE_ONLY_PROVIDERS])
 def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str) -> None:
     rr.providers()
-    with pytest.raises(
-        ObservationsUnavailableError, match=f"Provider {provider_id} has no observation module registered"
-    ):
+    with pytest.raises(ObservationsUnavailableError, match=f"Provider {provider_id} has no observations registered"):
         _registry.get(provider_id).observations(stations="unused", products="unused", start=None, end=None)
 
 
 def test_no_nve_packaged_availability_examples_are_retained() -> None:
-    module = import_module("rivretrieve._internal.providers.no_nve.module")
-    station_products = module.station_products().data
+    station_products = catalogue_reader("no_nve").read_station_products().data
     for product_id in ("discharge_daily_mean", "discharge_instantaneous"):
         row = station_products.filter((pl.col("station_id") == "12.210.0") & (pl.col("product_id") == product_id))
         assert row.height == 1
@@ -213,8 +209,7 @@ def test_no_nve_packaged_availability_examples_are_retained() -> None:
 
 
 def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
-    module = import_module("rivretrieve._internal.providers.jp_mlit.module")
-    stations = module.stations().data
+    stations = catalogue_reader("jp_mlit").read_stations().data
     expected = {
         "302011282228100": (37.415277777777774, 140.48333333333332),
         "302011282218050": (37.81111111111111, 140.4958333333333),

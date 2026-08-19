@@ -4,8 +4,8 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
-from rivretrieve._internal.providers.ba_fhmzbih import module as ba_fhmzbih_module
 from rivretrieve._internal.registry import _registry
+from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 
 def test_ba_fhmzbih_in_providers_list() -> None:
@@ -13,13 +13,13 @@ def test_ba_fhmzbih_in_providers_list() -> None:
 
 
 def test_ba_fhmzbih_stations_offline() -> None:
-    result = ba_fhmzbih_module.stations()
+    result = catalogue_reader("ba_fhmzbih").read_stations()
     assert result.data.height == 60
     assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
 def test_ba_fhmzbih_products_offline() -> None:
-    result = ba_fhmzbih_module.products()
+    result = catalogue_reader("ba_fhmzbih").read_products()
     assert result.data.height == 3
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
@@ -37,14 +37,14 @@ def test_ba_fhmzbih_products_offline() -> None:
 
 
 def test_ba_fhmzbih_station_products_offline() -> None:
-    stations = ba_fhmzbih_module.stations()
-    products = ba_fhmzbih_module.products()
-    result = ba_fhmzbih_module.station_products()
+    stations = catalogue_reader("ba_fhmzbih").read_stations()
+    products = catalogue_reader("ba_fhmzbih").read_products()
+    result = catalogue_reader("ba_fhmzbih").read_station_products()
     assert result.data.height == 180 == stations.data.height * products.data.height
 
 
 def test_ba_fhmzbih_info() -> None:
-    info = ba_fhmzbih_module.info()
+    info = provider_info("ba_fhmzbih")
     assert info.provider_id == "ba_fhmzbih"
     assert "FHMZBiH" in info.name or "Bosnia" in info.name
     assert info.catalogue_version == "2026-08-02"
@@ -53,7 +53,7 @@ def test_ba_fhmzbih_info() -> None:
 def test_ba_fhmzbih_observations_unavailable() -> None:
     with pytest.raises(
         ObservationsUnavailableError,
-        match="Provider ba_fhmzbih has no observation module registered",
+        match="Provider ba_fhmzbih has no observations registered",
     ):
         rr.providers()
         _registry.get("ba_fhmzbih").observations(
@@ -64,20 +64,21 @@ def test_ba_fhmzbih_observations_unavailable() -> None:
         )
 
 
-def test_ba_fhmzbih_module_has_no_observations() -> None:
-    assert not hasattr(ba_fhmzbih_module, "observations")
+def test_ba_fhmzbih_catalogue_has_no_observations() -> None:
+    rr.providers()
+    assert _registry.get("ba_fhmzbih")._stages is None
 
 
-def test_ba_fhmzbih_module_catalogue_path_exists() -> None:
-    assert ba_fhmzbih_module._CATALOGUE_PATH.exists()
-    assert (ba_fhmzbih_module._CATALOGUE_PATH / "provider.json").exists()
-    assert (ba_fhmzbih_module._CATALOGUE_PATH / "stations.parquet").exists()
-    assert (ba_fhmzbih_module._CATALOGUE_PATH / "products.parquet").exists()
-    assert (ba_fhmzbih_module._CATALOGUE_PATH / "station_products.parquet").exists()
+def test_ba_fhmzbih_catalogue_catalogue_path_exists() -> None:
+    assert catalogue_path("ba_fhmzbih").exists()
+    assert (catalogue_path("ba_fhmzbih") / "provider.json").exists()
+    assert (catalogue_path("ba_fhmzbih") / "stations.parquet").exists()
+    assert (catalogue_path("ba_fhmzbih") / "products.parquet").exists()
+    assert (catalogue_path("ba_fhmzbih") / "station_products.parquet").exists()
 
 
 def test_ba_fhmzbih_station_fields() -> None:
-    result = ba_fhmzbih_module.stations()
+    result = catalogue_reader("ba_fhmzbih").read_stations()
     row = result.data.filter(result.data["station_id"] == "4510")
     assert row.height == 1
     assert row["latitude"][0] == 44.64680728070949

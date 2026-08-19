@@ -12,10 +12,11 @@ import polars as pl
 
 from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.observations import ReceiptAuthorship, ReceiptMode, StoreExcerptReceipt
-from rivretrieve._internal.providers.ca_eccc import module
 from rivretrieve._internal.providers.ca_eccc.bulk import HYDAT_SOURCE_SCHEMAS, HydatCompileRequest, compile_hydat
+from rivretrieve._internal.providers.ca_eccc.config import config
 from rivretrieve._internal.registry import ProviderRegistry
 from rivretrieve._internal.store import StoreRoot
+from tests._catalogue import catalogue_path
 
 
 def _hydat(path: Path) -> None:
@@ -56,9 +57,8 @@ def test_ca_eccc_fetch_retains_a_faithful_store_excerpt(tmp_path: Path) -> None:
     registry = ProviderRegistry()
     registry.register(
         "ca_eccc",
-        load_packaged_catalogue_artifact(module._CATALOGUE_PATH, on_issue="raise"),
-        provider_module=module,
-        bulk_config=module.config,
+        load_packaged_catalogue_artifact(catalogue_path("ca_eccc"), on_issue="raise"),
+        bulk_config=config,
         observation_store=store,
     )
 
