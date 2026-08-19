@@ -1,4 +1,4 @@
-"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode → _AssemblyResult."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode × Transport → _AssemblyResult."""
 
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ from rivretrieve._internal.observations import (
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.receipts import encode_store_excerpt
+from rivretrieve._internal.transport import HttpClient, Transport
 from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
@@ -111,6 +112,7 @@ class ProviderStages(Protocol):
         rendered_windows: Mapping[ProductId, tuple[RenderedWindow, ...]],
         fetch_window: FetchWindow,
         config: ProviderConfig,
+        transport: Transport,
     ) -> WithIssues[tuple[Payload, ...]]: ...
 
     @staticmethod
@@ -126,6 +128,7 @@ def drive(
     *,
     provenance: ObservationProvenance,
     receipts: ReceiptMode = ReceiptMode.OMIT,
+    transport: Transport | None = None,
 ) -> _AssemblyResult:
     if receipts not in (ReceiptMode.OMIT, ReceiptMode.INCLUDE) or not isinstance(receipts, ReceiptMode):
         raise TypeError("receipts must be ReceiptMode.OMIT or ReceiptMode.INCLUDE")
@@ -170,7 +173,15 @@ def drive(
             ) from error
         planned[product_id] = plan_windows(fetch_window, declaration)
     rendered_windows = MappingProxyType(dict(planned))
-    fetched = provider.fetch(request.stations, request.products, rendered_windows, fetch_window, config)
+    resolved_transport = HttpClient() if transport is None else transport
+    fetched = provider.fetch(
+        request.stations,
+        request.products,
+        rendered_windows,
+        fetch_window,
+        config,
+        resolved_transport,
+    )
     parsed: list[WithIssues[Rows]] = []
     receipt_entries: list[ReceiptEntry] = []
     for payload in fetched.value:
