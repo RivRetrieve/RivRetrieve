@@ -164,6 +164,29 @@ been written. Eleven of the thirteen are catalogue-only, so this is the ordinary
 a provider rather than an exceptional one.
 _Avoid_: unported, disabled, stub, broken
 
+**Provider declaration**:
+The single statement, living in a [[provider]]'s own directory, of everything the
+[[engine]] needs to make that source usable: where its packaged catalogue sits and which
+[[provider-kind]] it is. It is the only file a new source must write beyond its stage
+code, and it is read once, at registration. Everything else a provider used to state
+about itself — the catalogue-reading functions each of the thirteen copied verbatim — was
+never called, because the engine reads the catalogue from the artifact directly.
+_Avoid_: registration block, provider module (the pre-registry file, whose catalogue
+functions no runtime path reached), config (which declares [[source-coordinates]] per
+product, a different fact), plugin
+
+**Provider kind**:
+Which of exactly three shapes a [[provider]] takes, declared in its
+[[provider-declaration]] and dispatched on by the [[engine]] rather than inferred from its
+id: [[catalogue-only]], an HTTP source contributing fetch and parse [[stage]]s, or a bulk
+source contributing a download and a [[compile]]. The set is closed. A source fitting none
+of the three is an engine change argued once and applied to every provider, not a fourth
+architecture a single provider invents — which is the distinction between adding a
+provider, which touches one directory, and adding a kind of provider, which is a design
+decision. Dispatching on kind rather than on provider id is what removes the last
+hand-written per-provider branch.
+_Avoid_: provider type, capability, variant, strategy
+
 **Legacy reference**:
 The pre-engine implementation of a [[catalogue-only]] provider, kept readable under
 `reference/legacy_observations/<provider>/` with the tests and payload fixtures it was
@@ -398,3 +421,55 @@ a store describes itself to a reader that did not build it, so a version mismatc
 detected rather than misread, and so a value can be traced to a specific source release
 after the artifact itself is gone.
 _Avoid_: metadata, header, index
+
+### Proof
+
+**Recording**:
+A saved interaction with a real source: the exact request that was issued, the exact
+response bytes that came back, the instant it was made, and a digest. It is the only
+admissible observation fixture. Every [[provider]] already sends through one injectable
+transport seam, so there is exactly one point at which a recording is made and exactly one
+at which it is replayed, and replay resolves a request rather than answering
+unconditionally — a replay handed a request it holds no recording for fails instead of
+returning something. That is what makes a fake that ignores the [[requested-window]]
+unconstructible, and it is why a wrong [[window-rendering]] declaration is caught by a
+missed lookup rather than by a reviewer. A recording is repeatable by construction: it
+carries what to ask and when it was last asked, so drift is detectable later without being
+detected now. Distinct from a [[receipt]], which is the same bytes travelling out with a
+result for a user to audit; a recording is the same bytes travelling in, so a test can be
+about the source rather than about us.
+_Avoid_: fixture (the repository's nine invented observation payloads were also called
+fixtures, which is how a belief passed for an observation), mock, stub, cassette, sample
+
+**Invented payload**:
+An observation payload written by an author from what they believed a source returns. It
+proves a port reproduces its author's belief, which is how eleven providers held a
+boundary defect while their tests passed. It is never a [[recording]] and never grounds an
+expectation; the nine committed under `reference/legacy_observations/` remain as
+[[legacy-reference]] reading material, because what a previous author believed the shape
+was is worth reading, and are not promoted into a live fixture or a baseline.
+_Avoid_: synthetic fixture, toy fixture, minimal fixture (all three describe the size
+rather than the defect, and the defect is the authorship)
+
+**Boundary probe**:
+The one audited defect a single provider-product is shown not to have, converted from the
+charting audit's prose into an executable claim about what its source published. Its input
+is a [[recording]] whose readings straddle local midnight in the source's own calendar; its
+assertion is three literals — how many readings returned, the wall-clock time of the first,
+the wall-clock time of the last — chosen to be checkable by eye against the recorded bytes
+in under a minute, because an expectation nobody can audit is indistinguishable from one
+nobody wrote. Everything beyond those three is engine business already carried by the
+always-on window invariants. It does not re-run the retired implementation: the audit
+established that the old code was wrong, and the open question is whether the new code is
+right.
+_Avoid_: regression test (nothing regressed; the behaviour never worked), edge case test,
+timezone test
+
+**Independent expectation**:
+A [[boundary-probe]]'s three literals, authored from a [[recording]] and the source's own
+documentation by an author with no access to the port's code or its output. The separation
+is the entire content: an author who can run the port will write down what the port does,
+whichever answer that is. This is a rule about how the work is done rather than about what
+the code contains, so it lives in `AGENTS.md` and binds whoever reads it.
+_Avoid_: golden value, expected output, baseline (which named the retired practice of
+comparing two implementations over an [[invented-payload]])
