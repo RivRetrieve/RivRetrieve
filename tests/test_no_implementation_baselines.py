@@ -49,20 +49,21 @@ def _executes_retired_implementation(tree: ast.Module) -> list[int]:
     return violations
 
 
-def test_no_retired_implementation_baseline() -> None:
+def _retired_implementation_violations(tests_root: Path, root: Path) -> list[str]:
     violations = []
-    for path in sorted(TESTS_ROOT.glob("test_*.py")):
-        if path == Path(__file__):
-            continue
+    for path in sorted(tests_root.rglob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         if _imports_retired_implementation(tree):
-            violations.append(f"{path.relative_to(ROOT)}: imports retired implementation")
+            violations.append(f"{path.relative_to(root)}: imports retired implementation")
         violations.extend(
-            f"{path.relative_to(ROOT)}:{line}: executes retired implementation"
+            f"{path.relative_to(root)}:{line}: executes retired implementation"
             for line in _executes_retired_implementation(tree)
         )
+    return violations
 
-    assert violations == []
+
+def test_no_retired_implementation_baseline() -> None:
+    assert _retired_implementation_violations(TESTS_ROOT, ROOT) == []
 
 
 def test_nested_pytest_module_cannot_escape_policy(tmp_path: Path) -> None:
