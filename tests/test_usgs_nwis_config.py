@@ -20,12 +20,13 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis_module
+from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.providers.usgs_nwis.config import (
     UsgsNwisSourceCoordinates,
     config,
     window_declarations,
 )
+from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 
 
 def test_config_declares_all_six_usgs_products() -> None:
@@ -63,7 +64,8 @@ def test_usgs_window_declarations_cover_every_configured_product_with_date_inclu
 
     assert set(declarations.products) == set(config().products)
     assert all(declaration == expected and declaration.size is None for declaration in declarations.products.values())
-    assert usgs_nwis_module.window_declarations is declarations
+    assert isinstance(declaration.observations, LiveStages)
+    assert declaration.observations.stages.window_declarations is declarations
 
 
 def test_usgs_source_coordinates_are_named_immutable_and_slotted() -> None:

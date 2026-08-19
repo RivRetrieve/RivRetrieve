@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import tomllib
+from collections import Counter
 from importlib import import_module
 from pathlib import Path
 
@@ -28,6 +29,41 @@ RATIFIED_RUNTIME_ROLES = {
     "parse.py",
 }
 CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
+_BASE_RUNTIME_FILE_COUNTS = Counter(
+    {
+        "__init__.py": 13,
+        "metadata.py": 9,
+        "origins.py": 5,
+        "issue_codes.py": 9,
+        "config.py": 3,
+        "fetch.py": 1,
+        "parse.py": 1,
+        "bulk.py": 2,
+    }
+)
+# Providers migrated to declared origins since the base inventory above. Each one adds an
+# `origins.py` and removes a `metadata.py`. They are named individually, and one per line, so that
+# two branches enrolling DIFFERENT providers merge as a union. An anonymous `+= 1` on both sides is
+# byte-identical text, so git deduplicates it and the count silently under-reports by one for every
+# enrolment beyond the first -- which is exactly what happened merging Thailand into a main that
+# already carried Bosnia and South Africa.
+_MIGRATED_SINCE_BASE = (
+    "ba_fhmzbih",
+    "fr_hubeau",
+    "jp_mlit",
+    "pl_imgw",
+    "th_thaiwater",
+    "za_dws",
+)
+_METADATA_REMOVED_AFTER_SCHEMA_NARROWING = (
+    "br_ana",
+    "lt_lhmt",
+    "no_nve",
+)
+RUNTIME_FILE_COUNTS = _BASE_RUNTIME_FILE_COUNTS.copy()
+RUNTIME_FILE_COUNTS["declaration.py"] = len(BUILTIN_PROVIDER_IDS)
+RUNTIME_FILE_COUNTS["origins.py"] += len(_MIGRATED_SINCE_BASE)
+RUNTIME_FILE_COUNTS["metadata.py"] -= len(_MIGRATED_SINCE_BASE) + len(_METADATA_REMOVED_AFTER_SCHEMA_NARROWING)
 
 
 def _runtime_provider_files() -> list[Path]:
@@ -145,8 +181,10 @@ def test_runtime_provider_inventory_has_only_ratified_roles() -> None:
     runtime_files = _runtime_provider_files()
     provider_directories = {path.parent.name for path in runtime_files}
 
+    assert Counter(path.name for path in runtime_files) == RUNTIME_FILE_COUNTS
     assert provider_directories == set(BUILTIN_PROVIDER_IDS)
     assert {path.name for path in runtime_files} <= RATIFIED_RUNTIME_ROLES
+    assert {path.parent.name for path in runtime_files if path.name == "parser.py"} == set()
     for provider_id in BUILTIN_PROVIDER_IDS:
         provider_files = {path.name for path in runtime_files if path.parent.name == provider_id}
         assert "declaration.py" in provider_files
@@ -163,14 +201,9 @@ def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
     assert model_names == set()
 
 
-def test_provider_modules_do_not_expose_observations() -> None:
-    for module_path in sorted(PROVIDERS_ROOT.glob("*/module.py")):
-        module = import_module(f"rivretrieve._internal.providers.{module_path.parent.name}.module")
-        definitions = {
-            node.name for node in _tree(module_path).body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        assert "observations" not in definitions, module_path.relative_to(ROOT)
-        assert not hasattr(module, "observations"), module_path.relative_to(ROOT)
+def test_no_provider_module() -> None:
+    """Catalogue access belongs to the shared reader, not provider facades."""
+    assert list(PROVIDERS_ROOT.glob("*/module.py")) == []
 
 
 def test_runtime_provider_code_has_no_engine_owned_operations() -> None:
@@ -196,29 +229,33 @@ def test_registry_matches_declared_provider_kinds() -> None:
         handle = records[item.provider_id]
         kind = item.declaration.observations
         if isinstance(kind, LiveStages):
-            assert handle._module is kind.stages
+            assert handle._module is None
             assert handle._stages is kind.stages
+            assert handle._bulk_operations is None
         elif isinstance(kind, BulkStore):
-            assert handle._module is kind.module
+            assert handle._module is None
             assert handle._stages is None
             assert handle._store_config is kind.config
             assert handle._store_root is not None
+            assert handle._bulk_operations is kind
         elif isinstance(kind, CatalogueOnly):
             assert handle._module is None
             assert handle._stages is None
             assert handle._store_config is None
             assert handle._store_root is None
+            assert handle._bulk_operations is None
         else:
             raise AssertionError(f"unreachable provider kind for {item.provider_id}")
 
 
 def test_bulk_modules_do_not_expose_legacy_cache_operations() -> None:
-    bulk_modules = (
-        item.declaration.observations.module
+    bulk_provider_ids = (
+        item.provider_id
         for item in load_manifest(BUILTIN_PROVIDER_IDS)
         if isinstance(item.declaration.observations, BulkStore)
     )
-    for module in bulk_modules:
+    for provider_id in bulk_provider_ids:
+        module = import_module(f"rivretrieve._internal.providers.{provider_id}.bulk")
         assert not hasattr(module, "cache_status")
         assert not hasattr(module, "refresh_cache")
 
@@ -266,4 +303,26 @@ def test_provider_tests_have_no_literal_builtin_provider_census() -> None:
             if has_literal and has_provider_count:
                 violations.append(f"{test_path.relative_to(ROOT)}:{node.lineno}")
 
+    assert violations == []
+
+
+def test_runtime_engine_has_no_provider_id_switch() -> None:
+    """Runtime engine modules must dispatch on declarations, never provider ids."""
+    provider_ids = set(BUILTIN_PROVIDER_IDS)
+    violations: list[str] = []
+    runtime_root = ROOT / "src" / "rivretrieve"
+    for path in sorted(runtime_root.rglob("*.py")):
+        if path.is_relative_to(PROVIDERS_ROOT):
+            continue
+        for node in ast.walk(_tree(path)):
+            if not isinstance(node, ast.Compare):
+                continue
+            literals = {
+                child.value
+                for child in ast.walk(node)
+                if isinstance(child, ast.Constant) and isinstance(child.value, str)
+            }
+            switched = sorted(literals & provider_ids)
+            if switched:
+                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}:{','.join(switched)}")
     assert violations == []

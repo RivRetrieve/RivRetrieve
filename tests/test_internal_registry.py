@@ -53,7 +53,7 @@ from rivretrieve._internal.observations import (
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
-from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
+from rivretrieve._internal.providers.ca_eccc.config import config as ca_eccc_config
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle, _registry
 from rivretrieve._internal.results import CatalogProvenance
 from tests._stubs import stub_provider
@@ -934,7 +934,7 @@ def test_registered_ca_runtime_is_bulk_and_rejects_removed_extras() -> None:
     handle = _registry.get("ca_eccc")
 
     assert handle._stages is None
-    assert handle._store_config is ca_eccc_module.config
+    assert handle._store_config is ca_eccc_config
     assert handle._store_root is not None
     for attribute in ("cache_status", "refresh_cache", "row_annotation_schema"):
         with pytest.raises(AttributeError, match=rf"Provider 'ca_eccc' has no attribute '{attribute}'"):

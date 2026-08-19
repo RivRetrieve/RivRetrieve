@@ -4,8 +4,8 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
-from rivretrieve._internal.providers.za_dws import module as za_dws_module
 from rivretrieve._internal.registry import _registry
+from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 
 def test_za_dws_in_providers_list() -> None:
@@ -13,18 +13,18 @@ def test_za_dws_in_providers_list() -> None:
 
 
 def test_za_dws_stations_offline() -> None:
-    result = za_dws_module.stations()
+    result = catalogue_reader("za_dws").read_stations()
     assert result.data.height > 0
     assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
 def test_za_dws_station_count_reasonable() -> None:
-    result = za_dws_module.stations()
+    result = catalogue_reader("za_dws").read_stations()
     assert result.data.height == 2905
 
 
 def test_za_dws_products_offline() -> None:
-    result = za_dws_module.products()
+    result = catalogue_reader("za_dws").read_products()
     assert result.data.height == 3
     product_ids = set(result.data["product_id"].to_list())
     assert product_ids == {
@@ -35,15 +35,15 @@ def test_za_dws_products_offline() -> None:
 
 
 def test_za_dws_station_products_offline() -> None:
-    stations = za_dws_module.stations()
-    products = za_dws_module.products()
-    result = za_dws_module.station_products()
+    stations = catalogue_reader("za_dws").read_stations()
+    products = catalogue_reader("za_dws").read_products()
+    result = catalogue_reader("za_dws").read_station_products()
     assert result.data.height == 8715
     assert result.data.height == stations.data.height * products.data.height
 
 
 def test_za_dws_info() -> None:
-    info = za_dws_module.info()
+    info = provider_info("za_dws")
     assert info.provider_id == "za_dws"
     assert "South Africa" in info.name or "DWS" in info.name or "Water" in info.name
 
@@ -51,7 +51,7 @@ def test_za_dws_info() -> None:
 def test_za_dws_observations_unavailable() -> None:
     with pytest.raises(
         ObservationsUnavailableError,
-        match="Provider za_dws has no observation module registered",
+        match="Provider za_dws has no observations registered",
     ):
         rr.providers()
         _registry.get("za_dws").observations(
@@ -62,20 +62,21 @@ def test_za_dws_observations_unavailable() -> None:
         )
 
 
-def test_za_dws_module_has_no_observations() -> None:
-    assert not hasattr(za_dws_module, "observations")
+def test_za_dws_catalogue_has_no_observations() -> None:
+    rr.providers()
+    assert _registry.get("za_dws")._stages is None
 
 
-def test_za_dws_module_catalogue_path_exists() -> None:
-    assert za_dws_module._CATALOGUE_PATH.exists()
-    assert (za_dws_module._CATALOGUE_PATH / "provider.json").exists()
-    assert (za_dws_module._CATALOGUE_PATH / "stations.parquet").exists()
-    assert (za_dws_module._CATALOGUE_PATH / "products.parquet").exists()
-    assert (za_dws_module._CATALOGUE_PATH / "station_products.parquet").exists()
+def test_za_dws_catalogue_catalogue_path_exists() -> None:
+    assert catalogue_path("za_dws").exists()
+    assert (catalogue_path("za_dws") / "provider.json").exists()
+    assert (catalogue_path("za_dws") / "stations.parquet").exists()
+    assert (catalogue_path("za_dws") / "products.parquet").exists()
+    assert (catalogue_path("za_dws") / "station_products.parquet").exists()
 
 
 def test_za_dws_station_x3h001_present() -> None:
-    result = za_dws_module.stations()
+    result = catalogue_reader("za_dws").read_stations()
     row = result.data.filter(result.data["station_id"] == "X3H001")
     assert row.height == 1
     lat = row["latitude"][0]
@@ -85,7 +86,7 @@ def test_za_dws_station_x3h001_present() -> None:
 
 
 def test_za_dws_station_coordinates_in_south_africa_range() -> None:
-    result = za_dws_module.stations()
+    result = catalogue_reader("za_dws").read_stations()
     assert result.data["latitude"].null_count() == 0
     assert result.data["longitude"].null_count() == 0
     lats = result.data["latitude"].to_list()

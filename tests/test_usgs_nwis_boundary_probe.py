@@ -15,8 +15,12 @@ from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import ObservationRequest, RequestedWindow, WindowEndpoint
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis
+from rivretrieve._internal.providers.registration import LiveStages
+from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+
+assert isinstance(declaration.observations, LiveStages)
+usgs_nwis = declaration.observations.stages
 
 _PROVIDER = ProviderId("usgs_nwis")
 _PRODUCT = ProductId("discharge_instantaneous")
