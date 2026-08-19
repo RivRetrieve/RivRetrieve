@@ -61,6 +61,18 @@ def test_changed_payload_is_refused_by_digest(tmp_path: Path) -> None:
         read_recording(path)
 
 
+def test_duplicate_request_field_is_refused(tmp_path: Path) -> None:
+    ambiguous = _RECORDING.read_text(encoding="utf-8").replace(
+        '      "end": "2026-01-02",',
+        '      "end": "2026-01-02",\n      "end": "2026-01-03",',
+    )
+    path = tmp_path / "ambiguous.json"
+    path.write_text(ambiguous, encoding="utf-8")
+
+    with pytest.raises(InvalidRecordingError, match="duplicate field 'end'"):
+        read_recording(path)
+
+
 def test_rerecord_dry_run_uses_recording_facts_only(capsys: pytest.CaptureFixture[str]) -> None:
     dry_run_recordings([_RECORDING])
 
