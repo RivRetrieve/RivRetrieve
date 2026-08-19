@@ -63,3 +63,13 @@ def test_no_retired_implementation_baseline() -> None:
         )
 
     assert violations == []
+
+
+def test_nested_pytest_module_cannot_escape_policy(tmp_path: Path) -> None:
+    nested_test = tmp_path / "tests" / "provider" / "retired_oracle_test.py"
+    nested_test.parent.mkdir(parents=True)
+    nested_test.write_text("import reference.legacy_observations.cz_chmi.source.module\n")
+
+    assert _retired_implementation_violations(nested_test.parents[1], tmp_path) == [
+        "tests/provider/retired_oracle_test.py: imports retired implementation"
+    ]
