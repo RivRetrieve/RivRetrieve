@@ -1,0 +1,20 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://example.test/observations",
+    "parameters": {
+      "end": "2026-01-02",
+      "start": "2026-01-01",
+      "station": "REAL-1"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-01-03T04:05:06.000000Z",
+    "content_base64": "eyJ2YWx1ZXMiOlsxXX0K",
+    "sha256": "8d65761d93a2abb5e7ccc68676c41e53ecf788c48811ab63a6386d918b89e476"
+  }
+}

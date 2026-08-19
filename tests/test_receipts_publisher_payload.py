@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 import rivretrieve as rr
+import rivretrieve._internal.driver as driver_module
 from rivretrieve._internal.observations import ReceiptAuthorship
-from rivretrieve._internal.providers.usgs_nwis import fetch as fetch_module
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
 _FIXTURE = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json")
@@ -33,7 +33,7 @@ class _PublisherClient:
 def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     publisher_body = _FIXTURE.read_bytes() + b" "
     client = _PublisherClient(publisher_body)
-    monkeypatch.setattr(fetch_module, "HttpClient", lambda: client)
+    monkeypatch.setattr(driver_module, "HttpClient", lambda: client)
 
     selection = rr.find(
         provider="usgs_nwis",
