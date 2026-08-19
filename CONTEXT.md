@@ -47,14 +47,16 @@ requested), source table
 **Origin**:
 How one [[provider]] fills one catalogue column. Declared per provider rather than per
 column, so the same canonical column is filled one way by one source and left empty by
-another. It takes one of four forms: a column of that provider's [[native table]]; a
+another. It takes one of five forms: a column of that provider's [[native table]]; a
 [[documented]] constant; the statement that this source publishes nothing for that
-column, carrying [[evidence]]; or [[native-only]]. Every canonical column carries one for
+column, carrying [[evidence]]; [[native-only]]; or [[unsourced]], where we hold a value
+and cannot state how we came to hold it. Every canonical column carries one for
 every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled provider is explicitly
 outside origin certification rather than treated as compliant. The ways to breach it are
 an undeclared column, an origin naming a native column that was never fetched, a null where
 the native column held a value, a documented constant differing from the emitted value,
-and a documented or not-published claim carrying no evidence. Each fails the build rather
+a documented or not-published claim carrying no evidence, and a native-column origin whose
+table carries no [[acquisition-record]]. Each fails the build rather
 than shipping.
 _Avoid_: mapping, provenance (which names the receipt travelling with a result, not the
 per-column declaration), nullable
@@ -67,6 +69,31 @@ source's value remains readable in the [[native table]]. It names the decision t
 withheld it rather than restating the argument, so reversing that decision is one edit.
 _Avoid_: rejected, excluded (both read as a verdict on the source's data), unrepresentable
 (which implies a technical limit rather than a choice), withheld
+
+**Unsourced**:
+The [[origin]] for a value RivRetrieve holds and cannot say how it came to hold. It is not
+[[unknown]], which is the source declining to tell us, and not [[native-only]], which is our
+decision to withhold something we can trace. It is a statement about the limits of our own
+records, and it withholds the value from the packaged catalogue: a coordinate whose
+acquisition nobody can state is not shipped. The value stays in the repository and the
+declaration names what would resolve it, so restoring it is one edit. One exists:
+`pl_imgw`'s station geometry, added to a three-column file with no stated source and
+carrying a `retrieved_at` seven weeks earlier than the data it stamps.
+_Avoid_: unknown provenance, orphaned, legacy (which dates a value rather than describing
+what we cannot say about it), untrusted
+
+**Acquisition record**:
+How RivRetrieve came to hold something: what was requested, from where, and when, with the
+retrieved bytes and their digest. It is the admissible form for a fact about a source —
+its [[license]], its [[citation]], or the origin of an inherited file — on the same terms
+[[recording]] fixes for an observation. A quoted claim must occur in the recorded bytes,
+which is checkable by machine and is the check that matters, because a plausible address
+paired with a plausible quotation is exactly what a page that does not say the thing
+produces. Distinct from [[evidence]], which points at a source's own documentation and
+answers what the source says; an acquisition record answers how we came to hold this, and
+neither substitutes for the other.
+_Avoid_: provenance (which names the receipt travelling with a result), source link, bare
+URL (the failure it exists to prevent), attestation
 
 **Documented**:
 The [[origin]] for a constant the source states in its documentation rather than carrying
@@ -325,14 +352,16 @@ _Avoid_: reference level, zero point
 
 **License**:
 A source's own terms, surfaced as a link and, where the source publishes one, its
-verbatim text. RivRetrieve never classifies, summarises or interprets what a license
-permits. A license RivRetrieve has not yet established is absent, not [[unknown]];
+verbatim text, established through an [[acquisition-record]] rather than asserted — an
+agency overwrites its terms page in place, so a bare link proves only what its author
+believed. RivRetrieve never classifies, summarises or interprets what a license permits,
+and never gates what it ships on such a reading. A license RivRetrieve has not yet established is absent, not [[unknown]];
 [[unknown]] would mean the source does not tell us.
 _Avoid_: license status, redistribution status, open/attribution/restricted
 
 **Citation**:
 The credit a source requests for its data, surfaced verbatim rather than rewritten or
-inferred. A citation RivRetrieve has not yet established is absent, not [[unknown]];
+inferred, and established through an [[acquisition-record]] like a [[license]]. A citation RivRetrieve has not yet established is absent, not [[unknown]];
 [[unknown]] would mean the source does not tell us.
 
 ### Stored data
@@ -353,7 +382,9 @@ _Avoid_: archive, our cache
 
 **Archive**:
 A collection of retrieved river data assembled in order to publish or redistribute it.
-RivRetrieve cannot ship one, because we do not hold redistribution rights to the sources.
+RivRetrieve does not ship one. The reason is not that we have established we lack the
+rights — we do not read licences, and what we ship is gated on whether we can state a
+value's [[acquisition-record]], not on anyone's terms.
 The distinction from a [[user-cache]] is about distribution rights rather than about
 storage: a user keeping their own retrieved data on their own disk raises no such
 question, and both may sit in the same layout on disk.
