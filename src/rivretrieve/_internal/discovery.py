@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import polars as pl
-from platformdirs import user_cache_dir
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_issue
@@ -241,161 +239,23 @@ def products(provider: str | None = None) -> list[str]:
     )
 
 
+_DEFAULT_REGISTRATION_GENERATION: int | None = None
+
+
 def _ensure_default_providers_registered() -> None:
+    """Register the built-in manifest once for the registry's current lifetime."""
+    global _DEFAULT_REGISTRATION_GENERATION
+
     if not _DEFAULT_PROVIDER_REGISTRATION_ENABLED:
         return
-    registered = _registry.list_provider_ids()
-    if (
-        "ch_foen" in registered
-        and "lt_lhmt" in registered
-        and "usgs_nwis" in registered
-        and "cz_chmi" in registered
-        and "th_thaiwater" in registered
-        and "fr_hubeau" in registered
-        and "jp_mlit" in registered
-        and "br_ana" in registered
-        and "no_nve" in registered
-        and "ca_eccc" in registered
-        and "pl_imgw" in registered
-        and "ba_fhmzbih" in registered
-        and "za_dws" in registered
-    ):
+    if _registry.clear_generation == _DEFAULT_REGISTRATION_GENERATION:
         return
 
-    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
-    from rivretrieve._internal.store import StoreRoot
+    from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+    from rivretrieve._internal.providers.registration import register_manifest
 
-    if "ch_foen" not in registered:
-        from rivretrieve._internal.providers.ch_foen import module as ch_foen_module
-
-        packaged_artifact = load_packaged_catalogue_artifact(ch_foen_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "ch_foen",
-            packaged_artifact,
-            provider_module=None,
-        )
-
-    if "lt_lhmt" not in registered:
-        from rivretrieve._internal.providers.lt_lhmt import module as lt_lhmt_module
-
-        lt_lhmt_artifact = load_packaged_catalogue_artifact(lt_lhmt_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "lt_lhmt",
-            lt_lhmt_artifact,
-            provider_module=None,
-        )
-
-    if "usgs_nwis" not in registered:
-        from rivretrieve._internal.providers.usgs_nwis import module as usgs_nwis_module
-
-        usgs_nwis_artifact = load_packaged_catalogue_artifact(usgs_nwis_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "usgs_nwis",
-            usgs_nwis_artifact,
-            engine_provider_module=usgs_nwis_module,
-        )
-
-    if "cz_chmi" not in registered:
-        from rivretrieve._internal.providers.cz_chmi import module as cz_chmi_module
-
-        cz_chmi_artifact = load_packaged_catalogue_artifact(cz_chmi_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "cz_chmi",
-            cz_chmi_artifact,
-            provider_module=None,
-        )
-
-    if "th_thaiwater" not in registered:
-        from rivretrieve._internal.providers.th_thaiwater import module as th_thaiwater_module
-
-        th_thaiwater_artifact = load_packaged_catalogue_artifact(th_thaiwater_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "th_thaiwater",
-            th_thaiwater_artifact,
-            provider_module=None,
-        )
-
-    if "fr_hubeau" not in registered:
-        from rivretrieve._internal.providers.fr_hubeau import module as fr_hubeau_module
-
-        fr_hubeau_artifact = load_packaged_catalogue_artifact(fr_hubeau_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "fr_hubeau",
-            fr_hubeau_artifact,
-            provider_module=None,
-        )
-
-    if "jp_mlit" not in registered:
-        from rivretrieve._internal.providers.jp_mlit import module as jp_mlit_module
-
-        jp_mlit_artifact = load_packaged_catalogue_artifact(jp_mlit_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "jp_mlit",
-            jp_mlit_artifact,
-            provider_module=None,
-        )
-
-    if "br_ana" not in registered:
-        from rivretrieve._internal.providers.br_ana import module as br_ana_module
-
-        br_ana_artifact = load_packaged_catalogue_artifact(br_ana_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "br_ana",
-            br_ana_artifact,
-            provider_module=None,
-        )
-
-    if "no_nve" not in registered:
-        from rivretrieve._internal.providers.no_nve import module as no_nve_module
-
-        no_nve_artifact = load_packaged_catalogue_artifact(no_nve_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "no_nve",
-            no_nve_artifact,
-            provider_module=None,
-        )
-
-    if "ca_eccc" not in registered:
-        from rivretrieve._internal.providers.ca_eccc import module as ca_eccc_module
-
-        ca_eccc_artifact = load_packaged_catalogue_artifact(ca_eccc_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "ca_eccc",
-            ca_eccc_artifact,
-            provider_module=ca_eccc_module,
-            bulk_config=ca_eccc_module.config,
-            observation_store=StoreRoot(Path(user_cache_dir("rivretrieve")) / "ca_eccc" / "store"),
-        )
-
-    if "pl_imgw" not in registered:
-        from rivretrieve._internal.providers.pl_imgw import module as pl_imgw_module
-
-        pl_imgw_artifact = load_packaged_catalogue_artifact(pl_imgw_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "pl_imgw",
-            pl_imgw_artifact,
-            provider_module=pl_imgw_module,
-            bulk_config=pl_imgw_module.config,
-            observation_store=StoreRoot(Path(user_cache_dir("rivretrieve")) / "pl_imgw" / "store"),
-        )
-
-    if "ba_fhmzbih" not in registered:
-        from rivretrieve._internal.providers.ba_fhmzbih import module as ba_fhmzbih_module
-
-        ba_fhmzbih_artifact = load_packaged_catalogue_artifact(ba_fhmzbih_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "ba_fhmzbih",
-            ba_fhmzbih_artifact,
-        )
-
-    if "za_dws" not in registered:
-        from rivretrieve._internal.providers.za_dws import module as za_dws_module
-
-        za_dws_artifact = load_packaged_catalogue_artifact(za_dws_module._CATALOGUE_PATH, on_issue="raise")
-        _registry.register(
-            "za_dws",
-            za_dws_artifact,
-        )
+    register_manifest(_registry, BUILTIN_PROVIDER_IDS)
+    _DEFAULT_REGISTRATION_GENERATION = _registry.clear_generation
 
 
 def download(provider: str):
