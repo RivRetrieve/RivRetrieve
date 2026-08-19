@@ -67,6 +67,32 @@ returns about 913 stations and carries **no** geometry — so it is definitely n
 source, and it is why the coordinates matter: without them we lose about a third of the
 Polish network's positions.
 
+
+### Already ruled out — do not repeat this
+
+The IMGW **hydrological yearbook** is not the source. The full *Rocznik Hydrologiczny 2023*
+PDF was downloaded and its own description of the station-list annex ("Wykaz stacji w
+układzie hydrologicznym") read: the declared columns are ordinal, station code (CBDH), river
+name, station name, W measurement source, river-km, catchment area, and gauge-datum elevation
+(Normaal Amsterdams Peil). **No latitude or longitude in any form.**
+
+Yearbook directory, confirmed reachable, if you want to check another edition:
+`https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/Roczniki/Rocznik%20hydrologiczny/`
+
+### The better lead, untested
+
+IMGW publishes an **INSPIRE Environmental Monitoring Facilities** service covering its
+hydro-meteorological network. An EF service carries station *point geometry*, which is
+exactly what the public API lacks:
+
+`https://imgw.isok.gov.pl/wss/INSPIRE/INSPIRE_EF_SZS_WMS?service=WMS&request=GetCapabilities`
+
+Nobody has probed it for a WFS counterpart or checked how it encodes coordinates, so whether
+it emits DMS with three-decimal seconds is unknown. **Try this before emailing anyone.**
+
+Also unchecked: `danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/`
+may hold a station metadata file — only the parent directory was listed.
+
 ## The fallback: ask
 
 Frederik Kratzert made the change and is contactable through the GitHub repository

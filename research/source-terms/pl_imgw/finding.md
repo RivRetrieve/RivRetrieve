@@ -9,16 +9,17 @@ means. Every quote must be copied out of a page you recorded.
 
 ## Candidate pages (UNVERIFIED — leads only)
 
-_The lead-finder did not report for this provider, so these are thin. Expect to do more searching than the other folders — and that is fine._
-
-
 | URL | Title | Lang | Why a candidate |
 |---|---|---|---|
-| https://danepubliczne.imgw.pl/pl/apiinfo | IMGW API info | pl | The API documentation page. RivRetrieve already cites it as evidence elsewhere in the codebase, so it is known to exist and to be reachable |
-| https://danepubliczne.imgw.pl/ | Dane publiczne IMGW | pl | The open-data portal root — check the footer for regulations (*regulamin*) |
-| https://imgw.pl/ | IMGW-PIB | pl | Institutional site; look for *Polityka prywatności* / *Regulamin* / *Ponowne wykorzystanie informacji sektora publicznego* |
+| https://danepubliczne.imgw.pl/regulations | Regulamin Udostępniania Danych | pl | The open-data portal's own regulations page. **Confirmed reachable (HTTP 200). Start here** |
+| https://danepubliczne.imgw.pl/datastore | Dane publiczne | pl | Reachable; search surfaces it under the same regulations title — may be the same document by another route |
+| https://dane.imgw.pl/regulations | — | pl | Alias host, **not fetched**. Check whether it mirrors the above or is a distinct portal |
 
-**Also read `TRAIL.md` in this folder** — the second job, and the more important of the two.
+**No English version found. No separate citation page found** — the citation wording may sit
+inside the regulations document itself, so read it for both slots before concluding one is
+absent.
+
+**Also read `TRAIL.md` in this folder.** That is the more important of your two jobs here.
 
 ## licence
 

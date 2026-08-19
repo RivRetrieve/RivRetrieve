@@ -9,17 +9,24 @@ means. Every quote must be copied out of a page you recorded.
 
 ## Candidate pages (UNVERIFIED — leads only)
 
-_The lead-finder did not report for this provider, so these are thin. Expect to do more searching than the other folders — and that is fine._
+**NOT FOUND on the agency's own domain.** The likeliest statement is on a third party, which
+is itself a finding worth recording.
 
-
-| URL | Title | Lang | Why a candidate |
+| URL | Title | Lang | Note |
 |---|---|---|---|
-| https://www.thaiwater.net/ | ThaiWater | th | The public portal; check footer for terms (เงื่อนไขการใช้งาน) |
-| https://www.hii.or.th/ | Hydro-Informatics Institute (HII) | th/en | The operating institute — the agency-level statement is likelier here than on the portal |
-| https://data.go.th/ | Thailand Open Government Data | th/en | National open-data portal; if HII publishes there, per-dataset licence fields may appear |
+| https://data.go.th/dataset/set-of-water-level-by-station | — | th | **THIRD PARTY.** Thailand's national open-data portal, organisation `hii`. Portal dataset pages carry a licence field, so this may be the only place a licence is stated. Returned 403 to the lead-finder |
+| https://data.go.th/en/dataset?organization=hii | — | en/th | Same portal, HII's dataset listing. Also 403 |
+| https://www.thaiwater.net/ | คลังข้อมูลน้ำแห่งชาติ — National Hydroinformatics Data Center | th | **JS-only.** The served HTML has zero footer links; a terms link may appear only once the app boots. **Needs a real browser** |
+| https://www.hii.or.th/privacy-policy/ | นโยบายความเป็นส่วนตัว | th | A privacy policy, **not** a data licence. Listed only so it is not mistaken for the terms |
+| https://api-v3.thaiwater.net | — | — | API host referenced by the site; not probed |
 
-Expect Thai-language pages. Use AI to read them — but the quote you record must still be the
-Thai text, copied from the page, not a translation.
+Already searched and empty: thaiwater.net raw links, hii.or.th homepage links filtered for
+policy/terms/licence, hii.or.th/en/faq, standard.thaiwater.net, tiwrm.hii.or.th, and Thai
+searches for นโยบายการใช้งาน / ข้อตกลงการใช้บริการ / เงื่อนไขการให้บริการ.
+`api.thaiwater.net` and `data.hii.or.th` time out entirely.
+
+If the licence turns out to live only on `data.go.th`, record it there **and say clearly in
+Notes that it is a third-party portal, not HII's own statement.**
 
 ## licence
 

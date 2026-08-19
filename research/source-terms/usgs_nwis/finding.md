@@ -9,16 +9,19 @@ means. Every quote must be copied out of a page you recorded.
 
 ## Candidate pages (UNVERIFIED — leads only)
 
-_The lead-finder did not report for this provider, so these are thin. Expect to do more searching than the other folders — and that is fine._
-
+Two genuinely different documents. **Do not put the same recording in both slots.**
 
 | URL | Title | Lang | Why a candidate |
 |---|---|---|---|
-| https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits | Copyrights and Credits | en | USGS's own policy page on use and credit. **Verified reachable and saveable** — this is the page used in `_example/` |
-| https://www.usgs.gov/faqs/how-should-i-cite-usgs-datasets | How should I cite USGS datasets? | en | The citation ask, separate from the terms page — record both |
-| https://waterdata.usgs.gov/ | USGS Water Data for the Nation | en | The service RivRetrieve actually queries; check its footer for a service-specific statement |
+| https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits | Copyrights and Credits | en | The agency-wide copyright and credits policy. **Confirmed reachable** — this is the page used in `_example/` |
+| https://waterdata.usgs.gov/citation/ | How should I cite USGS Water Data for the Nation data? | en | **Confirmed reachable.** The water-data-specific citation convention — the one that matters for NWIS, not the general FAQ |
+| https://www.usgs.gov/data-management/data-citation | Data Citation | en | USGS data-management guidance; a possible third layer. Not fetched |
+| https://www.usgs.gov/faqs/how-should-i-cite-usgs-website | How should I cite a USGS website or publication? | en | General FAQ, broader than water data. **URL unconfirmed** — a direct fetch returned 403 |
 
-Terms and citation are **two different pages** here. Do not put the same recording in both slots.
+The DOI `10.5066/F7P55KJN` recurs as the Water Data for the Nation identifier. **Confirm it
+from the citation page itself**, not from this table.
+
+Access note: `www.usgs.gov` returns 403 to plain `curl` but serves normally to a browser.
 
 ## licence
 
