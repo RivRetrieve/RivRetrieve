@@ -104,6 +104,17 @@ def load_manifest(
             raise FatalContractError(
                 f"Provider {provider_id} has unrecognised observation kind: {value.observations!r}"
             )
+        if isinstance(value.observations, LiveStages):
+            required_stage_members = ("config", "window_declarations", "observation_source", "fetch", "parse")
+            missing_stage_members = tuple(
+                member for member in required_stage_members if not hasattr(value.observations.stages, member)
+            )
+            if missing_stage_members:
+                missing = ", ".join(missing_stage_members)
+                raise FatalContractError(
+                    f"Provider {provider_id} has malformed LiveStages declaration: "
+                    f"stages missing required members: {missing}"
+                )
         declared.append(DeclaredProvider(provider_id, value))
     return tuple(declared)
 
