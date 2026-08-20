@@ -1,0 +1,9 @@
+{
+  "requested_url": "https://waterdata.usgs.gov/citation/",
+  "final_url": "https://waterdata.usgs.gov/citation/",
+  "retrieved_at": "2026-08-20T15:56:47+00:00",
+  "content_type": "text/html;charset=utf-8",
+  "file": "citation-1.html",
+  "sha256": "11be7513f1f383b3db9856d55afd91324920c954ba9f00eb5032294b2cf81ce3",
+  "bytes": 180820
+}
