@@ -158,30 +158,31 @@ not answered by `finding.md`.
 | **2025-11-07 12:40 UTC** | **`Metadata_GRDC_30.10.2025.xlsx` received from GRDC by e-mail** |
 | 2025-11-29 | coordinates committed, seven columns (PR #83), 22 days later |
 
-## Three defects this uncovered
 
-None are fixed here. This is a research branch, and all three are library code.
+## What the source file holds, for the record
 
-### 1. The wrong `retrieved_at`, now repairable
+Facts about the attachment and how it maps onto the shipped table. The coordinates themselves
+are settled and in order; this is here so the next reader does not have to re-open the
+spreadsheet.
+
+### The `retrieved_at` stamp can now be corrected
 
 The shipped Polish native table stamps every row `retrieved_at = 2025-10-10 18:46:34 UTC`,
-which is PR #22's commit timestamp and precedes the coordinates by seven weeks. The correct
-instant for the coordinate columns is **2025-11-07 12:40:38 UTC**, the receipt of the e-mail.
-This was the defect that motivated the whole trail; it can now be corrected against a known
-source.
+which is PR #22's commit timestamp and precedes the coordinates by seven weeks. This was the
+discrepancy that motivated the trail in the first place. The instant the coordinates were
+actually obtained is now known: **2025-11-07 12:40:38 UTC**. Correcting the stamp is library
+work and is left for a separate change.
 
-### 2. The literal string `ND` sits in a numeric column
+### `ND` is GRDC's own no-data marker
 
-60 of the 1,301 shipped rows carry `ND` — GRDC's no-data marker — as the value of
-`gauge_altitude`, which is otherwise a float column. It passes through unconverted from the
-spreadsheet. Anyone loading that column with a numeric dtype gets a parse failure or an
-object column.
+60 of the 1,301 rows carry `ND` in `gauge_altitude`. This matches the source exactly — GRDC
+writes `ND` in those cells — and it is carried through unchanged rather than being invented or
+substituted. Recorded here only so that nobody later mistakes it for corruption on our side.
 
-### 3. Two different vertical datums are silently mixed
+### The source carries a vertical reference system we do not
 
-GRDC's altitude column is *"Height of gauge zero (m above sea level)"* and is accompanied by
-a *"Vertical reference system"* column which we do not carry. Its values across the 1,301
-rows are:
+GRDC's altitude column is *"Height of gauge zero (m above sea level)"* and comes with a
+companion *"Vertical reference system"* column:
 
 | Vertical reference system | Stations |
 |---|---|
@@ -189,16 +190,14 @@ rows are:
 | Kronsztadt | 390 |
 | ND | 60 |
 
-So `gauge_altitude` blends heights measured against two different vertical reference systems,
-with nothing recorded to say which applies to a given station. The datum is available in the
-source file and is simply dropped on ingest.
+That column exists in the attachment and is not carried into the shipped table. Noted as a
+fact about the mapping, for whoever needs the datum later.
 
-### A caution for whoever repairs this
+### Caution for anyone re-reading the spreadsheet
 
-**The attachment's own column headers are wrong twice over.** The column headed
+**The attachment's column headers are mislabelled.** The column headed
 `Latitude\n(decimal degree)` contains *longitude*, and the one headed
-`Longitude\n(decimal degree)` contains *latitude*; neither is in decimal degrees, both are
-DMS strings. The values are only unambiguous because each carries an `N`/`E` suffix. Our
-ingest resolved them correctly — the field-by-field match proves that — but anyone re-reading
-this spreadsheet by column position rather than by suffix will transpose Poland into the
-Indian Ocean.
+`Longitude\n(decimal degree)` contains *latitude*; neither is in decimal degrees, both are DMS
+strings. The values are unambiguous only because each carries an `N`/`E` suffix. Our ingest
+resolved them correctly — the exact field-by-field match proves that — but anyone re-reading
+this file by column position rather than by suffix will transpose Poland into the Indian Ocean.
