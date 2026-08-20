@@ -122,3 +122,70 @@ from a person, quote their reply verbatim and say where they said it.
 
 **"I asked and got no reply" is a real answer.** Write it down with the date you asked.
 Nobody will hold it against you, and it is what we act on.
+
+## Answer
+
+**Source: the Global Runoff Data Centre (GRDC). Obtained: 7 November 2025, by e-mail,
+directly from GRDC.**
+
+Established on 2026-08-20 by Thiago Nascimento, who received them. This is an attestation
+from the person who obtained the data, not a published page — see *Standing of this answer*
+below for exactly what is and is not evidenced.
+
+### What this settles
+
+The coordinates were **never taken from `danepubliczne.imgw.pl`**. They entered the project
+through a private transfer from GRDC, a third party that holds national hydrological metadata
+as supplied to it by national services. So the Polish rows in the packaged catalogue have two
+different origins: the *observations* come from IMGW's public API, and the *coordinates,
+catchment areas and altitudes* came from GRDC by e-mail. Anyone reading `finding.md` for
+IMGW's terms should know that those terms were not the route these particular numbers took.
+
+### The timeline now closes
+
+| When | What |
+|---|---|
+| 2025-10-10 | `poland_sites.csv` added, three columns, no coordinates (PR #22) |
+| **2025-11-07** | **coordinates received from GRDC by e-mail** |
+| 2025-11-29 | coordinates committed, seven columns (PR #83), 22 days later |
+
+The 22-day gap between receipt and commit is consistent with the attestation.
+
+### What the numbers say, re-checked independently
+
+The fingerprint recorded above was re-verified on 2026-08-20 against
+`tests/test_data/pl_imgw_stations.csv` (1,301 rows):
+
+- **All 2,602 coordinate values are exact multiples of 0.001 arc-seconds. Zero violations.**
+- 2,335 of them use all three sub-second decimal digits, so the precision is really present
+  and is not an artefact of rounding something coarser.
+- Altitudes carry three decimals in 1,077 rows; catchment areas carry two in 1,167.
+
+This is the signature of a degrees-minutes-seconds survey register, which is what a national
+service supplies to GRDC and is not what IMGW's public API emits. The numbers are therefore
+consistent with the attestation, and inconsistent with the public API as a source. That is
+corroboration, not proof.
+
+### Standing of this answer — read before relying on it
+
+- **Evidenced:** the date, the sender and the route, by the recollection of the person who
+  received the e-mail.
+- **Consistent with:** the commit timeline, and the DMS fingerprint of the data itself.
+- **Not established:** which GRDC product, extract or file this was; whether GRDC in turn
+  obtained it from IMGW or from another Polish body; and whether GRDC attaches conditions to
+  onward publication of station metadata.
+- **No artefact is recorded.** The e-mail and its attachment are the evidence and they are
+  not in this repository. If the original message can be saved into `pages/` — even just the
+  headers, the date, the sender and the attachment's filename and SHA-256 — this answer stops
+  resting on memory. Better still, if the attachment survives, its values can be compared
+  against the shipped 2,602 directly, which would settle the question outright.
+
+### Consequence for the wrong timestamp
+
+The defect recorded above is now actionable. The shipped Polish native table stamps every row
+`retrieved_at = 2025-10-10 18:46:34 UTC`, which is PR #22's commit timestamp and precedes the
+coordinates by seven weeks. On this answer the honest instant for the coordinate columns is
+**2025-11-07**, the date of receipt from GRDC.
+
+That fix belongs in the library, not in this survey branch, and is left for a separate change
+so this research PR stays reviewable as research.
