@@ -117,9 +117,64 @@ Two observations, recorded as facts and not as conclusions:
 
 | Recording | Page | Note |
 |---|---|---|
-| `licence-2` | *Liefer- und Nutzungsbedingungen hydrologische Daten BAFU* | **PDF**, 104,316 bytes, linked from the FAQ entry as the fuller conditions document. The checker cannot machine-verify a quote inside a PDF, so nothing from it is quoted — better an unquoted document in evidence than a transcription nobody can check |
+| `licence-2` / `licence-6` | *Allgemeine Bedingungen… des BAFU*, 16.09.2019 | **PDF.** Read and set out in its own section below |
 | `licence-3` | *Aktuelle hydrologische Daten beziehen* | The download page named by the FAQ |
 | `licence-5` | admin.ch *Rechtliches* | Federal legal page linked from the hydrodaten footer; redirects to `https://www.admin.ch/de/rechtliches` |
+
+### The BAFU conditions PDF, read — `licence-2`
+
+Title as printed: *Allgemeine Bedingungen für den Bezug, das Herunterladen und die Nutzung der
+aktuellen hydrologischen Rohdaten und der hydrologischen Vorhersagen des BAFU*, **Stand vom
+16.09.2019**. Two pages, 104,316 bytes.
+
+**This is not an HTML page, so the checker cannot machine-verify anything quoted from it.**
+That is why nothing from it sits in a slot. The text below was extracted programmatically with
+`pypdf` rather than retyped, and the PDF wraps words across lines with hyphens, so
+line-break hyphenation has been rejoined (`kommer-ziellen` → `kommerziellen`). No other change
+was made. Anyone relying on these clauses should open the recorded PDF.
+
+**§ 8, Umfang der Nutzung** — the operative permission:
+
+```text
+Der Leistungsbezüger darf die Daten zu kommerziellen und nicht kommerziellen Zwecken
+verwenden. Die Angabe der Quelle wird empfohlen.
+```
+
+**§ 6, Art des Herunterladens** — a rate condition:
+
+```text
+Der Leistungsbezüger ist berechtigt, die Daten entsprechend seinen Bedürfnissen in einem
+Rhythmus herunterzuladen, der nicht häufiger als alle 10 Minuten.
+```
+
+**§ 1, Geltungsbereich** — what the document governs:
+
+```text
+Diese Allgemeinen Bedingungen («AGB») regeln die Bereitstellung und die Nutzung aktueller
+hydrologischer Daten (ungeprüfte Rohdaten) und der hydrologischen Vorhersagedaten der
+Abteilung Hydrologie («Abteilung Hydrologie») des Bundesamtes für Umwelt («BAFU»).
+```
+
+**§ 4, Zugriff Datenserver** states that access to the data on the server happens by way of a
+private account set up by the Abteilung Hydrologie, and that passing those access details to
+third parties is prohibited. The remaining clauses cover delivery (§§ 2–3, 5), accuracy and
+completeness (§ 7), liability (§ 9), termination (§ 10) and administrative matters (§§ 11–15),
+all present in the recording.
+
+Three correspondences between this document and what we recorded elsewhere. They are recorded
+as facts; none of them is a conclusion about what governs our use:
+
+1. § 8 permits use **for commercial and non-commercial purposes**. The intermediary's page says
+   its APIs are **free for public and non-commercial use**. The two statements differ, and they
+   attach to different things — the data, and the service carrying it.
+2. § 6 permits downloading no more often than **every 10 minutes**. The intermediary's page
+   states its BAFU Hydrology API has **"Periodicity: 10 minutes"**.
+3. § 4 describes access through a **named account issued by the Abteilung Hydrologie**.
+   RivRetrieve holds no such account and never contacts BAFU; it reads the intermediary.
+
+**No English version of this PDF exists.** The `/dam/en/` path serves the byte-identical German
+document — recorded separately as `licence-6` and confirmed by digest: both 104,316 bytes,
+both sha256 `fa77c6afa3a19374088679cb…`. Only the URL differs.
 
 ### Access notes
 
