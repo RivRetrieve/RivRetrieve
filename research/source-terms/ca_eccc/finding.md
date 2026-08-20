@@ -68,6 +68,23 @@ ECCC data. The second is the **HYDAT** database distribution. Both are ECCC serv
 ECCC Data Servers End-use Licence is the document that names them; the Wateroffice pages are
 the same programme's public website.
 
+**The two sources are split by role, and the split matters here.** Read from the provider code:
+
+| Source | What it supplies | What it does not |
+|---|---|---|
+| `api.weather.gc.ca` — MSC GeoMet, `collections/hydrometric-stations/items` | The station registry: 8,057 rows, station number and name, province, status, contributor, vertical datum, coordinates. This is what the packaged catalogue ships | No observations of any kind |
+| `Hydat_sqlite3_<vintage>.zip` — HYDAT | Every observation. `DLY_FLOWS` → `discharge_daily_mean` (m³/s), `DLY_LEVELS` → `stage_daily_mean` (m). Downloaded on first use per `provider.json` (~1 GB), cached locally, queried with SQL | No station geometry used by the catalogue |
+
+So the metadata RivRetrieve redistributes comes from MSC GeoMet, and the observations a user
+downloads come from HYDAT — the Water Survey of Canada programme whose FAQ supplies the
+citation formats in the slot above. The two recorded document families therefore cover
+different halves of what the provider does. **Which document governs which route is still not
+decided here** — only the routing itself is recorded, and it is read from the code, not
+inferred.
+
+For completeness: the shipped `provider.json` currently carries `"license": null` and
+`"citation": null`. That is the gap this finding exists to close.
+
 Checked directly and worth recording: **the OGC API declares no licence of its own.** Neither
 `https://api.weather.gc.ca/?f=json` nor the `hydrometric-stations` collection carries a
 `license` field or any link with a licence/terms/rights relation. The only `about` link points
