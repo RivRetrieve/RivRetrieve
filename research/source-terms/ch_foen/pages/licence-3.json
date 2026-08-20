@@ -1,0 +1,9 @@
+{
+  "requested_url": "https://www.hydrodaten.admin.ch/de/aktuelle-hydrologische-daten-beziehen",
+  "final_url": "https://www.hydrodaten.admin.ch/de/aktuelle-hydrologische-daten-beziehen",
+  "retrieved_at": "2026-08-20T13:12:57+00:00",
+  "content_type": "text/html; charset=utf-8",
+  "file": "licence-3.html",
+  "sha256": "0f7630903e541cb35f4fb248321781672dbacae9fd9580ebfc432b00804aaaa0",
+  "bytes": 27756
+}
