@@ -29,10 +29,13 @@ turns up, a direct enquiry to the agency is the right next step — record the r
 - Recording: licence-1
 - Retrieved (UTC): 2026-08-20T09:31:25+00:00
 - Language: bs
-- Agency publishes nothing: no
+- Agency publishes nothing: yes
+
+No statement of terms of use or licence is published by either body. The recording is the
+service's only "about" document, saved as evidence that the statement is not there. The
+nearest things found are quoted in Notes, and neither is a licence.
 
 ```text
-Svi podaci koji se prikazuju i koji se dobiju kao rezultat pretrage su informativnog karaktera i ne mogu služiti kao zvanični podaci.
 ```
 
 ## citation
@@ -54,14 +57,23 @@ as a plain document at `https://vodostaji.voda.ba/data/html/impressum.html`, ins
 `record.py` fetched it directly — no hand-saving was needed. It was found by booting the app
 in a browser, opening the `Impressum` menu item and reading the iframe's `src`.
 
-**What the quoted sentence is and is not.** It is a statement about the standing of the data:
-informational in character, and not usable as official data. It is **not** a licence, not a
-grant or refusal of permission to reuse, and not a citation request. Nothing on this service
-or on `voda.ba` states terms of reuse. No reading of what it permits is offered here.
+**Neither body publishes terms of use.** Both slots are marked `Agency publishes nothing:
+yes` under BRIEF §4, with the pages recorded as evidence of absence. Two statements were found
+and neither is a licence; both are quoted here rather than in the slots, so that nobody later
+reads them as the terms.
 
-**Citation: nothing published.** No citation or attribution wording exists anywhere on either
-host. The `licence-1` recording is named in that slot as the page which would carry such a
-request if there were one — it is the service's only "about" document.
+The Impressum, on the exact host we fetch from, says this about the data:
+
+```text
+Svi podaci koji se prikazuju i koji se dobiju kao rezultat pretrage su informativnog karaktera i ne mogu služiti kao zvanični podaci.
+```
+
+That is a statement about the standing of the data — informational in character, not usable as
+official data. It is not a licence, not a grant or refusal of permission to reuse, and not a
+citation request. No reading of what it permits is offered here.
+
+**Citation: nothing published either.** No citation or attribution wording exists anywhere on
+either host.
 
 ### The operator is not the agency this folder is named after
 
@@ -122,3 +134,15 @@ Copyright © 2001-2020 - All rights reserved - Agencija za vodno područje rijek
 
 The Impressum carries no date and no version. The site footer reads `© 2001-2020` and
 `December 2019`.
+
+### The instructed next step, not yet taken
+
+This folder's own note says: *"If nothing turns up, a direct enquiry to the agency is the right
+next step — record the reply."* Nothing turned up, so an enquiry is the correct next action. As
+of the date of this recording **no enquiry had been sent**. When one is, the question, the date
+and any reply belong here verbatim — and "asked on <date>, no reply" is itself a result worth
+recording.
+
+Contact address, from the service's own Kontakt page
+(`https://vodostaji.voda.ba/data/html/kontakt.html`): Agencija za vodno područje rijeke Save,
+ul. Hamdije Čemerlića 39a, 71000 Sarajevo, e-mail `info[at]voda.ba`.
