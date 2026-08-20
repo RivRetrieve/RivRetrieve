@@ -135,14 +135,36 @@ Copyright © 2001-2020 - All rights reserved - Agencija za vodno područje rijek
 The Impressum carries no date and no version. The site footer reads `© 2001-2020` and
 `December 2019`.
 
-### The instructed next step, not yet taken
+### The instructed next step: enquiry sent 2026-08-20
 
 This folder's own note says: *"If nothing turns up, a direct enquiry to the agency is the right
-next step — record the reply."* Nothing turned up, so an enquiry is the correct next action. As
-of the date of this recording **no enquiry had been sent**. When one is, the question, the date
-and any reply belong here verbatim — and "asked on <date>, no reply" is itself a result worth
-recording.
+next step — record the reply."* Nothing turned up, so an enquiry was sent.
 
-Contact address, from the service's own Kontakt page
-(`https://vodostaji.voda.ba/data/html/kontakt.html`): Agencija za vodno područje rijeke Save,
-ul. Hamdije Čemerlića 39a, 71000 Sarajevo, e-mail `info[at]voda.ba`.
+| | |
+|---|---|
+| Sent | **2026-08-20** |
+| To | `info@voda.ba` — the address on the data service's own Kontakt page, `https://vodostaji.voda.ba/data/html/kontakt.html` |
+| By | Thiago Nascimento, Eawag |
+| Language | Bosnian |
+
+The two questions asked, verbatim:
+
+```text
+1. Postoje li objavljeni uslovi korištenja ili licenca za ponovno korištenje
+   podataka sa vodostaji.voda.ba?
+
+2. Na koji način želite da Vas navedemo kao izvor? Zanima nas tačna
+   formulacija koju preferirate.
+```
+
+In English: whether published terms of use or a licence exist for reuse of the data, and what
+exact wording the Agency wants to be credited with. The enquiry asked only what the Agency
+publishes. It did not ask permission, and no permission is implied by it having been sent.
+
+**No reply as of the date of this recording.** If one arrives it belongs here quoted verbatim
+with its date. If none arrives, "asked on 2026-08-20, no reply" is the result, and it is a real
+one — it distinguishes "we asked and heard nothing" from "nobody asked".
+
+Postal and telephone contact, from the same page: Agencija za vodno područje rijeke Save,
+ul. Hamdije Čemerlića 39a, 71000 Sarajevo, tel. +387 (0)33 726 400.
+
