@@ -86,5 +86,6 @@ than the two quoted provisions alone.
 **Scope note, established by the second job in this folder (`TRAIL.md`):** the terms quoted
 above are IMGW's, and they govern the route RivRetrieve takes for Polish *observations*. The
 1,301 Polish station *coordinates* in the packaged catalogue did not come through this portal
-— they were received from the Global Runoff Data Centre by e-mail on 7 November 2025. Whatever
+— they were received from the Global Runoff Data Centre by e-mail on 7 November 2025, which is
+proven by an exact field-by-field match against the original attachment. Whatever
 GRDC asks for that metadata is a separate question and is not answered by this page.

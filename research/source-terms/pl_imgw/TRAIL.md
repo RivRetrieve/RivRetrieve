@@ -123,69 +123,82 @@ from a person, quote their reply verbatim and say where they said it.
 **"I asked and got no reply" is a real answer.** Write it down with the date you asked.
 Nobody will hold it against you, and it is what we act on.
 
+
 ## Answer
 
-**Source: the Global Runoff Data Centre (GRDC). Obtained: 7 November 2025, by e-mail,
-directly from GRDC.**
+**Source: the Global Runoff Data Centre (GRDC), in the spreadsheet
+`Metadata_GRDC_30.10.2025.xlsx`. Obtained: 7 November 2025 12:40 UTC, by e-mail from the
+Bundesanstalt für Gewässerkunde (`bafg.de`), which hosts the GRDC.**
 
-Established on 2026-08-20 by Thiago Nascimento, who received them. This is an attestation
-from the person who obtained the data, not a published page — see *Standing of this answer*
-below for exactly what is and is not evidenced.
+**This is proven, not attested.** The attachment was produced, and every field of all 1,301
+shipped rows was compared against it: station ids, latitude, longitude, catchment area,
+altitude, station name and river all match exactly, with the largest coordinate deviation at
+7.1 × 10⁻¹⁵ degrees — float64 round-trip noise from the DMS conversion. Evidence, hashes and
+the full comparison are in `PROVENANCE-grdc-2025-11-07.md` alongside this file.
+
+The forensic inference recorded above was correct: the coordinates are a
+degrees-minutes-seconds register with three-decimal seconds, and the attachment gives them in
+exactly that form, e.g. `49° 59' 37,035" N` for the station whose shipped value is
+`49.99362083333333`.
 
 ### What this settles
 
-The coordinates were **never taken from `danepubliczne.imgw.pl`**. They entered the project
-through a private transfer from GRDC, a third party that holds national hydrological metadata
-as supplied to it by national services. So the Polish rows in the packaged catalogue have two
-different origins: the *observations* come from IMGW's public API, and the *coordinates,
-catchment areas and altitudes* came from GRDC by e-mail. Anyone reading `finding.md` for
-IMGW's terms should know that those terms were not the route these particular numbers took.
+The coordinates were **never taken from `danepubliczne.imgw.pl`**. The Polish rows in the
+packaged catalogue have two distinct origins: the *observations* come from IMGW's public API,
+and the *coordinates, catchment areas, altitudes, station names and river names* came from
+GRDC. Whatever GRDC asks for that metadata is a separate question from IMGW's terms, and is
+not answered by `finding.md`.
 
 ### The timeline now closes
 
 | When | What |
 |---|---|
 | 2025-10-10 | `poland_sites.csv` added, three columns, no coordinates (PR #22) |
-| **2025-11-07** | **coordinates received from GRDC by e-mail** |
+| 2025-10-30 | date carried in the attachment's own filename |
+| **2025-11-07 12:40 UTC** | **`Metadata_GRDC_30.10.2025.xlsx` received from GRDC by e-mail** |
 | 2025-11-29 | coordinates committed, seven columns (PR #83), 22 days later |
 
-The 22-day gap between receipt and commit is consistent with the attestation.
+## Three defects this uncovered
 
-### What the numbers say, re-checked independently
+None are fixed here. This is a research branch, and all three are library code.
 
-The fingerprint recorded above was re-verified on 2026-08-20 against
-`tests/test_data/pl_imgw_stations.csv` (1,301 rows):
+### 1. The wrong `retrieved_at`, now repairable
 
-- **All 2,602 coordinate values are exact multiples of 0.001 arc-seconds. Zero violations.**
-- 2,335 of them use all three sub-second decimal digits, so the precision is really present
-  and is not an artefact of rounding something coarser.
-- Altitudes carry three decimals in 1,077 rows; catchment areas carry two in 1,167.
+The shipped Polish native table stamps every row `retrieved_at = 2025-10-10 18:46:34 UTC`,
+which is PR #22's commit timestamp and precedes the coordinates by seven weeks. The correct
+instant for the coordinate columns is **2025-11-07 12:40:38 UTC**, the receipt of the e-mail.
+This was the defect that motivated the whole trail; it can now be corrected against a known
+source.
 
-This is the signature of a degrees-minutes-seconds survey register, which is what a national
-service supplies to GRDC and is not what IMGW's public API emits. The numbers are therefore
-consistent with the attestation, and inconsistent with the public API as a source. That is
-corroboration, not proof.
+### 2. The literal string `ND` sits in a numeric column
 
-### Standing of this answer — read before relying on it
+60 of the 1,301 shipped rows carry `ND` — GRDC's no-data marker — as the value of
+`gauge_altitude`, which is otherwise a float column. It passes through unconverted from the
+spreadsheet. Anyone loading that column with a numeric dtype gets a parse failure or an
+object column.
 
-- **Evidenced:** the date, the sender and the route, by the recollection of the person who
-  received the e-mail.
-- **Consistent with:** the commit timeline, and the DMS fingerprint of the data itself.
-- **Not established:** which GRDC product, extract or file this was; whether GRDC in turn
-  obtained it from IMGW or from another Polish body; and whether GRDC attaches conditions to
-  onward publication of station metadata.
-- **No artefact is recorded.** The e-mail and its attachment are the evidence and they are
-  not in this repository. If the original message can be saved into `pages/` — even just the
-  headers, the date, the sender and the attachment's filename and SHA-256 — this answer stops
-  resting on memory. Better still, if the attachment survives, its values can be compared
-  against the shipped 2,602 directly, which would settle the question outright.
+### 3. Two different vertical datums are silently mixed
 
-### Consequence for the wrong timestamp
+GRDC's altitude column is *"Height of gauge zero (m above sea level)"* and is accompanied by
+a *"Vertical reference system"* column which we do not carry. Its values across the 1,301
+rows are:
 
-The defect recorded above is now actionable. The shipped Polish native table stamps every row
-`retrieved_at = 2025-10-10 18:46:34 UTC`, which is PR #22's commit timestamp and precedes the
-coordinates by seven weeks. On this answer the honest instant for the coordinate columns is
-**2025-11-07**, the date of receipt from GRDC.
+| Vertical reference system | Stations |
+|---|---|
+| EVRF2007 | 851 |
+| Kronsztadt | 390 |
+| ND | 60 |
 
-That fix belongs in the library, not in this survey branch, and is left for a separate change
-so this research PR stays reviewable as research.
+So `gauge_altitude` blends heights measured against two different vertical reference systems,
+with nothing recorded to say which applies to a given station. The datum is available in the
+source file and is simply dropped on ingest.
+
+### A caution for whoever repairs this
+
+**The attachment's own column headers are wrong twice over.** The column headed
+`Latitude\n(decimal degree)` contains *longitude*, and the one headed
+`Longitude\n(decimal degree)` contains *latitude*; neither is in decimal degrees, both are
+DMS strings. The values are only unambiguous because each carries an `N`/`E` suffix. Our
+ingest resolved them correctly — the field-by-field match proves that — but anyone re-reading
+this spreadsheet by column position rather than by suffix will transpose Poland into the
+Indian Ocean.
