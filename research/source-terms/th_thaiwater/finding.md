@@ -2,7 +2,7 @@
 
 Agency: ThaiWater / Hydro-Informatics Institute HII
 Country: Thailand
-Status: not-started
+Status: complete
 
 Read `../BRIEF.md` first. The one rule: write down what the agency says, never what it
 means. Every quote must be copied out of a page you recorded.
@@ -30,31 +30,92 @@ Notes that it is a third-party portal, not HII's own statement.**
 
 ## licence
 
-- Page URL:
-- Recording:
-- Retrieved (UTC):
-- Language:
+- Page URL: https://standard.thaiwater.net/
+- Recording: licence-1
+- Retrieved (UTC): 2026-08-20T16:12:19+00:00
+- Language: th
 - Agency publishes nothing: no
 
-The exact sentence stating the terms, in its original language, copied not retyped:
-
 ```text
+Copyright © 2024 Hydro-Informatics Institute of Ministry of Higher Education, Science, Research and Innovation in Thailand, All rights reserved.
 ```
 
 ## citation
 
-- Page URL:
-- Recording:
-- Retrieved (UTC):
-- Language:
-- Agency publishes nothing: no
-
-The exact wording the agency asks to be credited with:
+- Page URL: https://standard.thaiwater.net/
+- Recording: licence-1
+- Retrieved (UTC): 2026-08-20T16:12:19+00:00
+- Language: th
+- Agency publishes nothing: yes
 
 ```text
 ```
 
 ## Notes
 
-Where you looked, what defeated you, anything the next reader needs. Say if a page was
-behind a login, needed a browser, or was only available through a third party.
+**HII publishes no terms of use and no citation request.** The only statement about rights
+anywhere on its web presence is the footer copyright line quoted in the licence slot. It is a
+copyright assertion, **not** a licence: it grants nothing, permits nothing and asks for no
+particular credit. It is quoted because it is what HII says, and it is labelled here so that
+nobody reads it as terms of reuse.
+
+The citation slot is marked as publishing nothing, under BRIEF § 4, with `licence-1` named as
+the page that would carry such a request if one existed.
+
+### What we actually fetch, and what it contains
+
+`th_thaiwater` reads two hosts:
+
+```
+https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load
+https://standard.thaiwater.net/docs/…/การระบุพิกัดตำแหน่ง/
+```
+
+The candidate table listed `api-v3.thaiwater.net` as **"not probed"**. It has now been probed.
+It returns **2,061,814 characters** of JSON across seven blocks — `waterlevel_data`,
+`waterlevel_manual_data`, `basin`, `agency`, `station`, `scale`, `province`. It was scanned for
+thirteen terms in English and Thai:
+
+`licen`, `Licen`, `LICEN`, `copyright`, `Copyright`, `terms`, `Terms`, `attribution`, `credit`,
+`สัญญาอนุญาต`, `ลิขสิทธิ์`, `เงื่อนไข`, `ข้อตกลง`
+
+**Every one returned zero matches.** The bytes RivRetrieve consumes carry no statement of terms,
+no copyright notice and no attribution field. The payload was not recorded: it is 2.4 MB of live
+water levels that changes every ten minutes, so a snapshot would be bulk rather than evidence.
+The URL above is public and unauthenticated, so the scan can be repeated by anyone.
+
+`standard.thaiwater.net` is recorded as `licence-1`. Its only rights statement is the footer
+line quoted above. Two occurrences of `เงื่อนไข` ("conditions") appear in its source; both are
+**JavaScript comments about table-sorting logic**, not terms. Checked rather than counted.
+
+### Where else was looked
+
+| Where | Result |
+|---|---|
+| `www.hii.or.th` (`licence-2`) | Same footer copyright line, identical wording. No terms page. Its only policy-shaped link is *นโยบายและยุทธศาสตร์* — institutional policy and strategy, not data terms |
+| `www.hii.or.th/privacy-policy/` (`licence-3`) | A privacy policy. **Not** a data licence. Recorded so it is not mistaken for one, as the candidate table warned |
+| `www.thaiwater.net` (`licence-4`) | **JS-only, confirmed.** The served bytes contain 77 characters of visible text — the page title alone. The in-app browser could not load the site at all, so the rendered DOM could not be inspected |
+| `data.go.th` | **Blocked, not merely 403 to a script.** A real browser receives an *"Access Denied — Your request has been blocked by our security systems"* interstitial with a Ray ID, on 2026-08-20. `record.py` gets HTTP 403. Nothing could be recorded |
+
+The `data.go.th` page was not saved: what the browser receives is a 2.6 MB block interstitial,
+not the dataset page, so committing it would preserve the blocker rather than the source.
+
+**This matters for the strength of the finding.** HII's own domains are fully reachable and
+carry nothing, so "HII publishes no terms" is established. The Thai national open-data portal
+could not be reached from here, so **whether a licence field exists on `data.go.th` is not
+established either way** — the candidate table's suspicion that it may be the only place a
+licence is stated remains untested. A reader in Thailand, or on a different network, may see
+something we cannot.
+
+### Suggested next step
+
+As with `ba_fhmzbih`, a direct enquiry to HII is the way to close this. No enquiry had been sent
+as of this recording.
+
+### Access notes
+
+- Four pages recorded with `record.py`. `standard.thaiwater.net` and `hii.or.th` need no key,
+  no login and no JavaScript for the footer.
+- The candidate table reported `api.thaiwater.net` and `data.hii.or.th` time out entirely; not
+  retested, since neither is an endpoint the provider uses.
+- The shipped `provider.json` carries `"license": null` and `"citation": null`.
