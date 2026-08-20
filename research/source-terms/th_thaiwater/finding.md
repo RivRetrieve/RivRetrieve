@@ -34,10 +34,13 @@ Notes that it is a third-party portal, not HII's own statement.**
 - Recording: licence-1
 - Retrieved (UTC): 2026-08-20T16:12:19+00:00
 - Language: th
-- Agency publishes nothing: no
+- Agency publishes nothing: yes
+
+No statement of terms of use or licence was found. The recordings are kept as evidence of
+absence. The one rights assertion that does exist is quoted in Notes, where it cannot be
+mistaken for terms.
 
 ```text
-Copyright © 2024 Hydro-Informatics Institute of Ministry of Higher Education, Science, Research and Innovation in Thailand, All rights reserved.
 ```
 
 ## citation
@@ -53,14 +56,22 @@ Copyright © 2024 Hydro-Informatics Institute of Ministry of Higher Education, S
 
 ## Notes
 
-**HII publishes no terms of use and no citation request.** The only statement about rights
-anywhere on its web presence is the footer copyright line quoted in the licence slot. It is a
-copyright assertion, **not** a licence: it grants nothing, permits nothing and asks for no
-particular credit. It is quoted because it is what HII says, and it is labelled here so that
-nobody reads it as terms of reuse.
+**No licence was found, and no citation request.** Both slots are therefore
+`Agency publishes nothing: yes` under BRIEF § 4, with the pages recorded as evidence of absence
+rather than a bare claim. `licence-1` is named in both as the page that would carry such a
+statement if one existed.
 
-The citation slot is marked as publishing nothing, under BRIEF § 4, with `licence-1` named as
-the page that would carry such a request if one existed.
+The only statement about rights anywhere on HII's web presence is a footer copyright line,
+identical on every host:
+
+```text
+Copyright © 2024 Hydro-Informatics Institute of Ministry of Higher Education, Science, Research and Innovation in Thailand, All rights reserved.
+```
+
+It is quoted here, not in a slot, because **it is a copyright assertion and not a licence**: it
+grants nothing, permits nothing, and asks for no particular credit. Putting it in a field
+labelled *licence* would invite the next reader to treat it as the terms, which is the reading
+the brief forbids. This follows the same call made for `ba_fhmzbih`.
 
 ### What we actually fetch, and what it contains
 
@@ -107,10 +118,36 @@ established either way** — the candidate table's suspicion that it may be the 
 licence is stated remains untested. A reader in Thailand, or on a different network, may see
 something we cannot.
 
-### Suggested next step
+### Enquiry sent 2026-08-20
 
-As with `ba_fhmzbih`, a direct enquiry to HII is the way to close this. No enquiry had been sent
-as of this recording.
+Nothing was found, so HII was asked directly.
+
+| | |
+|---|---|
+| Sent | **2026-08-20** |
+| To | `contact@hii.or.th`, the general enquiry address on `hii.or.th` |
+| By | Thiago Nascimento, Eawag |
+| Language | English |
+
+The two questions asked, verbatim:
+
+```text
+1. Are there published terms of use or a licence for the reuse of data from
+   the ThaiWater public API?
+
+2. How would you like HII to be credited as the source? We would like the exact
+   wording you prefer.
+```
+
+The enquiry asked only what the Institute publishes. It did not ask permission, and none is
+implied by it having been sent.
+
+**No reply as of the date of this recording.** A reply belongs here quoted verbatim with its
+date. If none comes, "asked on 2026-08-20, no reply" is the result, and it distinguishes having
+asked from nobody having asked.
+
+The registry address `saraban@hii.or.th` also appears on `hii.or.th` and is the formal
+correspondence inbox, if a follow-up is needed.
 
 ### Access notes
 
