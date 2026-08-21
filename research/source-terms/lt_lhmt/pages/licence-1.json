@@ -1,0 +1,9 @@
+{
+  "requested_url": "https://api.meteo.lt/",
+  "final_url": "https://api.meteo.lt/",
+  "retrieved_at": "2026-08-21T08:27:13+00:00",
+  "content_type": "text/html; charset=UTF-8",
+  "file": "licence-1.html",
+  "sha256": "bf8f893026a8c744136818d47da37e8c7b231b891c74c85e0f6192ac4a8d8645",
+  "bytes": 31675
+}

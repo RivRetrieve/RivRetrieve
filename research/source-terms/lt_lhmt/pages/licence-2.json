@@ -1,0 +1,9 @@
+{
+  "requested_url": "https://www.meteo.lt/istaiga/atviri-duomenys/",
+  "final_url": "https://www.meteo.lt/istaiga/atviri-duomenys/",
+  "retrieved_at": "2026-08-21T08:27:14+00:00",
+  "content_type": "text/html; charset=UTF-8",
+  "file": "licence-2.html",
+  "sha256": "82fc17266f6d7928f34e4e2730595e43fa5a36177d45e2e6d4e6056a17d3c537",
+  "bytes": 85481
+}
