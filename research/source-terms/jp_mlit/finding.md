@@ -74,6 +74,12 @@ normaliser, changing only the codec:
 Anyone can reproduce that against `pages/licence-1.html`. The failure is in the decoding step,
 not in the quote.
 
+**Raised for whoever maintains the survey tooling; deliberately not fixed here.** `check.py` is
+shared apparatus, and changing it inside a single agency's finding would mix two things a
+reviewer should judge separately. As written, no EUC-JP, Shift-JIS, GB18030 or Big5 source can
+ever be verified by this survey — Japan is simply the first one to hit it. The fix is to read
+the charset the page declares rather than assuming UTF-8, in `page_text()`.
+
 ### Why the citation slot cannot be machine-verified
 
 The citation wording exists only in the terms PDF. `check.py` refuses to check a quote inside a
