@@ -1,0 +1,9 @@
+{
+  "requested_url": "https://dadosabertos.ana.gov.br/api/feed/dcat-us/1.1.json",
+  "final_url": "https://dadosabertos.ana.gov.br/api/feed/dcat-us/1.1.json",
+  "retrieved_at": "2026-08-21T09:30:33+00:00",
+  "content_type": "application/json; charset=utf-8",
+  "file": "citation-1.body.json",
+  "sha256": "d595e81fc10219a404177e2acc5763bf4dae4a1ab8181588ca0bbaf71daf3ceb",
+  "bytes": 1167818
+}
