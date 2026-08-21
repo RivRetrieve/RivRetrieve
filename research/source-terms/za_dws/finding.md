@@ -166,6 +166,46 @@ Verified Hydrology surface-water data, and nothing found says that it does. Two 
 directorates, two different systems, neither of them ours. Whether it extends to the data
 RivRetrieve reads is exactly the judgement this survey does not make.
 
+### What this finding does and does not establish
+
+Stated plainly, because the block means this finding has a harder boundary than the others in
+this survey.
+
+**Established, from recordings anyone can re-open:**
+
+- `dws.gov.za` refuses this network at the application level. Reproduced 2026-08-20 from two
+  independent clients — urllib with a browser User-Agent, and a real Chrome browser — on four
+  paths. DNS resolves and the host answers, so it is a refusal and not a fault.
+- `ws.dws.gov.za` is refused from this network as well, so the whole DWS estate is closed to us,
+  not merely the main site.
+- On the snapshot of the Verified Hydrology landing page, there is no disclaimer, copyright,
+  terms or conditions link. Checked by scanning every anchor.
+- The two pages this provider actually scrapes carry no rights notice, and neither do two real
+  data payloads, one of them in the exact request shape the provider uses.
+- No terms page exists anywhere under `hydrology/Verified/` in 40,000 archived `dws.gov.za`
+  URLs.
+- DWS applies a per-subsystem `copyright.aspx` template — found at `/cdl/`, `/dwstkc/`,
+  `/mussa/`, `/ndrp/`, `/nkps/` and `/wsit/` — and a CHART *Data Disclaimer* whose own heading
+  scopes it to **GEOHYDROLOGICAL INFORMATION**, groundwater.
+
+**Not established:**
+
+- Whether the Verified Hydrology pages carry a terms or copyright link **when viewed from
+  inside South Africa, today**. Everything above rests on Internet Archive snapshots, the most
+  recent of the landing page dated 2024-11-29. The live pages cannot be seen from here at all.
+- Whether DWS has applied its `copyright.aspx` template to the hydrology system since those
+  snapshots were taken.
+- Whether the boilerplate recorded here is intended to reach surface-water data. Nothing found
+  says it does; nothing found says it does not. Two different sub-directorates and two
+  different databases separate it from ours.
+
+**Why this cannot be closed from here.** Any observation made through a VPN or by a person
+inside South Africa is not reproducible by a later reader, who will hit the same refusal. A
+screenshot or a PDF made that way records what one person saw on one day; it cannot be checked
+against the live site by anyone who cannot reach the live site. So no such artefact is included
+in this folder, and the boundary is written down instead. That is a deliberate choice, not an
+omission.
+
 ### What would settle it
 
 Someone who can load `dws.gov.za` — a South African colleague, or a VPN — should check whether
@@ -175,3 +215,6 @@ a written enquiry to the Director: Hydrological Services, whose postal address a
 use.
 
 No enquiry had been sent as of this recording.
+
+A reply from DWS would be the only route that produces something durable: it can be quoted
+verbatim with a date, and it does not depend on the reader's network.
