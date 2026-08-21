@@ -1,0 +1,9 @@
+{
+  "requested_url": "https://api.nve.no/doc/hydrologiske-data/",
+  "final_url": "https://api.nve.no/doc/hydrologiske-data/",
+  "retrieved_at": "2026-08-21T09:19:39+00:00",
+  "content_type": "text/html; charset=utf-8",
+  "file": "licence-2.html",
+  "sha256": "976ccad98777ae789731110f5a48b9fb2fdc77620bc8fc9fba087125b472cccc",
+  "bytes": 15751
+}
