@@ -1,0 +1,9 @@
+{
+  "requested_url": "http://web.archive.org/web/20230525074558id_/https://www.dws.gov.za/hydrology/Verified/HyData.aspx?Station=A2H023100.00&DataType=Monthly&StartDT=1965-10-23&EndDT=2022-02-09&SiteType=RIV&Format=Old",
+  "final_url": "http://web.archive.org/web/20230525074558id_/https://www.dws.gov.za/hydrology/Verified/HyData.aspx?Station=A2H023100.00&DataType=Monthly&StartDT=1965-10-23&EndDT=2022-02-09&SiteType=RIV&Format=Old",
+  "retrieved_at": "2026-08-21T11:33:37+00:00",
+  "content_type": "text/html; charset=utf-8",
+  "file": "licence-5.html",
+  "sha256": "5d10dfdb5c487c4884983cf71149a0533f35b9af0f7ad45f81a8f2e9540baf36",
+  "bytes": 8860
+}

@@ -101,6 +101,41 @@ A CDX search of the whole `dws.gov.za` domain — 40,000 archived URLs — was f
 `disclaim`, `copyright`, `terms`, `legal`, `conditions` and `policy`. No such page exists
 anywhere under `hydrology/Verified/`.
 
+**The two pages the provider actually scrapes were then checked directly, not just the landing
+page.** `za_dws` reads `HyCatalogue.aspx` for the station catalogue and `HyData.aspx` for
+observations:
+
+| Recording | Page | Content | Rights notice |
+|---|---|---|---|
+| `licence-4` | `HyCatalogue.aspx`, snapshot 2026-03-11 | 1,066 characters of visible text: the word *Home* and 30-odd WMA PDF filenames | **none** |
+| `licence-5` | `HyData.aspx?Station=A2H023100.00&DataType=Monthly&…&SiteType=RIV`, snapshot 2023-05-25 | A real river-data response in the exact request shape this provider uses: a fixed-format description, the monthly volumes, a `ZZZZZZZZZZ` terminator and the station id | **none** |
+
+A second data response was checked as well — `V1R005100.00`, daily, 183,672 bytes — with the
+same result. Scanned for `copyright`, `disclaim`, `licen`, `terms`, `conditions` and
+`all rights`: **zero occurrences in either.**
+
+So the absence is established at the level that matters. It is not merely that a landing page
+lacks a link — the catalogue page and the data payloads themselves carry no notice of any kind.
+
+### The system behind Verified Hydrology
+
+Established from the service's own output rather than from general knowledge. One archived
+`HyData.aspx` response is a backend error that names the vendor:
+
+```text
+ERROR [28000] [Kisters][ScriptServerODBC Driver]Client unable to establish connection. Can't connect to ScriptServer at cenwhyd101:8085.
+```
+
+**Kisters** is the vendor whose hydrological database product is Hydstra, and `cenwhyd101`
+reads as a hydrology server name. DWS's own `/Hydrology/` page describes the section we read as
+*"Verified Data — Data from the Hydrological Information System and Peak Flows"*, and archived
+internal paths take the form `Hydrology/Verified/CGI-BIN/HIS/…`.
+
+So the data we read is DWS's **Hydrological Information System (HIS)** — surface water — served
+from a Kisters backend. Recorded because it separates our source cleanly from the CHART system
+below, which is **geo**hydrological: groundwater, a different sub-directorate and a different
+database.
+
 ### DWS does publish data terms — but for other systems
 
 The same search found a recurring DWS data-terms boilerplate on two other systems. It is
