@@ -93,15 +93,27 @@ Užklausų kiekis iš vieno IP adreso ribojamas iki 180 užklausų per minutę. 
 That is 180 requests per minute per IP, and a request not to exceed 20,000 per day per IP, with
 IP blocking without warning above it.
 
-**`lt_lhmt` implements no throttling.** There is no sleep, delay, backoff or rate limit anywhere
-in the provider — checked across `config.py`, `origins.py`, `generate_catalogue.py` and
-`bulk.py`, and no engine-level throttle was found either. The packaged catalogue holds **97
-stations** and two products, and `provider.json` records the fetch strategy as *"monthly-chunk
-requests per station-product pair"*, so a long multi-station request decomposes into a large
-number of calls.
+**The provider itself sets no limit; the shared transport does.** `lt_lhmt` contains no sleep,
+delay, backoff or rate limit of its own — checked across `config.py`, `origins.py`,
+`generate_catalogue.py` and `bulk.py`. But RivRetrieve's shared transport
+(`src/rivretrieve/_internal/transport.py`) applies a global `TRANSPORT_POLICY` to every
+provider:
 
-Recorded as a fact about the provider against a limit the Service publishes. No conclusion is
-drawn here about whether any particular use would exceed it.
+- `minimum_interval_seconds = 1.0`, enforced by sleeping before an attempt that would otherwise
+  start sooner — so at most **one request per second**, about 60 per minute
+- `429` is among the retryable status codes, with backoff `(1.0, 2.0)` seconds and three
+  attempts
+
+Against LHMT's published figures, one request per second is **well inside** the 180-per-minute
+limit, and reaching 20,000 requests would take about five and a half hours of continuous
+requesting. The catalogue holds **97 stations** and two products, and `provider.json` records
+the strategy as *"monthly-chunk requests per station-product pair"*.
+
+Recorded as a fact about what the code does against what the Service publishes. No conclusion
+is drawn about whether any particular use would exceed the daily figure.
+
+Note that nothing reads LHMT's response headers, and LHMT does not document any; unlike
+`no_nve`, which publishes `x-rate-limit-*` headers, there is nothing here to read.
 
 ### The institutional page carries nothing further
 
