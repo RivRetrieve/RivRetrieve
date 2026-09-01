@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
+from pydantic import ValidationError
 
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -34,10 +36,13 @@ class CorruptCatalogArtifactError(FatalContractError):
 
 @dataclass(frozen=True)
 class PackagedCatalogArtifact:
+    """Validated canonical catalogue tables and shared acquisition provenance."""
+
     provider_info: dict[str, object]
     products: pl.DataFrame
     stations: pl.DataFrame
     station_products: pl.DataFrame
+    acquisition_provenance: AcquisitionProvenance | None = None
 
 
 def load_packaged_catalogue_artifact(
@@ -52,12 +57,14 @@ def load_packaged_catalogue_artifact(
     products = _read_parquet(artifact_path / "products.parquet")
     stations = _read_parquet(artifact_path / "stations.parquet")
     station_products = _read_parquet(artifact_path / "station_products.parquet")
+    acquisition_provenance = _read_provenance_json(artifact_path / "provenance.json")
 
     return packaged_catalogue_artifact_from_components(
         provider_info,
         products,
         stations,
         station_products,
+        acquisition_provenance=acquisition_provenance,
         on_issue=on_issue,
     )
 
@@ -68,6 +75,7 @@ def packaged_catalogue_artifact_from_components(
     stations: pl.DataFrame,
     station_products: pl.DataFrame,
     *,
+    acquisition_provenance: AcquisitionProvenance | None = None,
     on_issue: OnIssue = "warn",
 ) -> PackagedCatalogArtifact:
     try:
@@ -80,6 +88,10 @@ def packaged_catalogue_artifact_from_components(
         validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
         _validate_artifact_provider_ids(provider_info_df, products, stations, station_products)
         _validate_station_product_references(products, stations, station_products)
+        if acquisition_provenance is not None:
+            artifact_provider_id = provider_info_df["provider_id"].item()
+            if acquisition_provenance.provider_id != artifact_provider_id:
+                raise FatalContractError("provenance.json provider_id does not match provider.json provider_id")
     except FatalContractError as exc:
         raise CorruptCatalogArtifactError(str(exc)) from exc
     except pl.exceptions.PolarsError as exc:
@@ -90,7 +102,22 @@ def packaged_catalogue_artifact_from_components(
         products=products,
         stations=stations,
         station_products=station_products,
+        acquisition_provenance=acquisition_provenance,
     )
+
+
+def _read_provenance_json(path: Path) -> AcquisitionProvenance | None:
+    if not path.exists():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return AcquisitionProvenance.model_validate(value)
+    except OSError as exc:
+        raise CorruptCatalogArtifactError(f"Unable to read acquisition provenance file: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise CorruptCatalogArtifactError(f"Acquisition provenance file is not valid JSON: {path}") from exc
+    except ValidationError as exc:
+        raise CorruptCatalogArtifactError(f"Acquisition provenance file is invalid: {exc}") from exc
 
 
 def _ensure_artifact_path(path: Path) -> None:

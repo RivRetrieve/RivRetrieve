@@ -39,6 +39,10 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.jp_mlit.origins import (
+    NATIVE_TABLE_SHA256,
+    build_acquisition_provenance,
+)
 
 PROVIDER_ID = ProviderId("jp_mlit")
 PROVIDER_NAME = "MLIT Water Information System — Japan national hydrometric network"
@@ -292,6 +296,7 @@ def _validate(
         products,
         stations,
         station_products,
+        acquisition_provenance=build_acquisition_provenance(),
         on_issue="raise",
     )
 
@@ -305,6 +310,10 @@ def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) ->
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        build_acquisition_provenance().model_dump_json() + "\n",
+        encoding="utf-8",
+    )
 
 
 class _NativeTdParser(HTMLParser):
@@ -784,7 +793,13 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("jp_mlit native mode requires both --native and --out")
         from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
 
-        write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
+        write_catalogue(
+            build_catalogue(
+                read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256),
+                STATION_CATALOGUE_ORIGINS,
+            ),
+            args.out,
+        )
         return 0
     if capture_mode:
         if any(value is None for value in (args.station_catalogue, args.responses_dir, args.manifest, args.native_out)):

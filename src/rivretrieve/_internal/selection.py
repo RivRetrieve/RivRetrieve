@@ -9,6 +9,7 @@ from typing import Literal, Protocol
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
@@ -100,6 +101,7 @@ class _Series:
 class _Selection:
     series: tuple[_Series, ...]
     empty_reason: _EmptyReason | None = None
+    acquisition_provenance: tuple[AcquisitionProvenance, ...] = ()
 
     def __post_init__(self) -> None:
         keys = tuple(_series_key(row) for row in self.series)
@@ -154,7 +156,11 @@ def _find(
         if value is not None:
             filtered = filtered.filter(pl.col(column) == value)
     if filtered.height:
-        return _selection_from_edge_frame(filtered)
+        selected_provider_ids = tuple(filtered.get_column("provider_id").unique(maintain_order=True).to_list())
+        return _selection_from_edge_frame(
+            filtered,
+            acquisition_provenance=_acquisition_provenance(records, selected_provider_ids),
+        )
 
     published_products: tuple[str, ...] = ()
     if provider is not None and station is not None:
@@ -173,6 +179,7 @@ def _find(
             product_ids=product_ids,
             published_products=published_products,
         ),
+        acquisition_provenance=_acquisition_provenance(records, provider_ids),
     )
 
 
@@ -192,7 +199,11 @@ def _pick(
     _validate_vocabulary(vocabulary, provider_ids, product_ids, station_ids)
 
     if not selection.series:
-        return _Selection(series=(), empty_reason=selection.empty_reason)
+        return _Selection(
+            series=(),
+            empty_reason=selection.empty_reason,
+            acquisition_provenance=selection.acquisition_provenance,
+        )
 
     provider_set = set(provider_ids)
     station_set = set(station_ids)
@@ -205,7 +216,11 @@ def _pick(
         and (not product_set or row.product_id in product_set)
     )
     if rows:
-        return _Selection(series=rows)
+        retained_provider_ids = tuple(dict.fromkeys(row.provider_id for row in rows))
+        return _Selection(
+            series=rows,
+            acquisition_provenance=_acquisition_provenance(records, retained_provider_ids),
+        )
     return _Selection(
         series=(),
         empty_reason=_EmptyReason(
@@ -215,6 +230,7 @@ def _pick(
             product_ids=tuple(sorted(product_ids)),
             published_products=(),
         ),
+        acquisition_provenance=selection.acquisition_provenance,
     )
 
 
@@ -277,7 +293,11 @@ def _from_frame(records: Sequence[_CatalogueRecord], frame: pl.DataFrame) -> _Se
         if key not in edge_by_key:
             raise FatalContractError(f"Selection frame contains no catalogue edge: {key!r}")
     selected = pl.DataFrame([edge_by_key[key] for key in rows], schema=SELECTION_FRAME_SCHEMA)
-    return _selection_from_edge_frame(selected)
+    selected_provider_ids = tuple(dict.fromkeys(row[0] for row in rows))
+    return _selection_from_edge_frame(
+        selected,
+        acquisition_provenance=_acquisition_provenance(records, selected_provider_ids),
+    )
 
 
 def _materialize(records: Sequence[_CatalogueRecord]) -> tuple[pl.DataFrame, _Vocabulary]:
@@ -351,9 +371,29 @@ def _ordered_unique(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
 
 
-def _selection_from_edge_frame(frame: pl.DataFrame) -> _Selection:
+def _acquisition_provenance(
+    records: Sequence[_CatalogueRecord],
+    provider_ids: Sequence[str],
+) -> tuple[AcquisitionProvenance, ...]:
+    selected = set(provider_ids)
+    return tuple(
+        provenance
+        for record in records
+        if record.provider_id in selected
+        if (provenance := record.artifact.acquisition_provenance) is not None
+    )
+
+
+def _selection_from_edge_frame(
+    frame: pl.DataFrame,
+    *,
+    acquisition_provenance: tuple[AcquisitionProvenance, ...] = (),
+) -> _Selection:
     sorted_frame = frame.sort(*_IDENTITY_COLUMNS)
-    return _Selection(series=tuple(_Series(**row) for row in sorted_frame.iter_rows(named=True)))  # type: ignore[arg-type]
+    return _Selection(
+        series=tuple(_Series(**row) for row in sorted_frame.iter_rows(named=True)),  # type: ignore[arg-type]
+        acquisition_provenance=acquisition_provenance,
+    )
 
 
 def _series_key(row: _Series) -> tuple[str, str, str]:

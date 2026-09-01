@@ -956,7 +956,13 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
     before = NATIVE_PATH.read_bytes()
     assert generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)]) == 0
     assert calls == [] and NATIVE_PATH.read_bytes() == before
-    expected_names = {"provider.json", "products.parquet", "stations.parquet", "station_products.parquet"}
+    expected_names = {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "provenance.json",
+    }
     assert {item.name for item in tmp_path.iterdir()} == expected_names
     for name in expected_names:
         assert (tmp_path / name).read_bytes() == (CATALOGUE_PATH / name).read_bytes()

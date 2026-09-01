@@ -87,6 +87,7 @@ class CatalogueReader:
             endpoints=(),
             query=None,
             response_version=None,
+            acquisition_provenance=self.artifact.acquisition_provenance,
         )
 
 

@@ -44,10 +44,44 @@ def stamp_native_table(source_rows: SourceRows, retrieved_at: RetrievedAt) -> Na
     return NativeTable(data)
 
 
-def read_native_table(path: Path | str) -> NativeTable:
+def read_native_table(path: Path | str, *, expected_sha256: str | None = None) -> NativeTable:
+    """Read a native table after optional raw-byte identity verification.
+
+    Parameters
+    ----------
+    path
+        Repository or supplied native-table path.
+    expected_sha256
+        Exact expected SHA-256 of the file bytes. When supplied, verification
+        occurs before Parquet parsing.
+
+    Returns
+    -------
+    NativeTable
+        Parsed table satisfying the native-table invariants.
+
+    Raises
+    ------
+    FatalContractError
+        If the bytes do not have the expected identity or cannot be parsed.
+    """
+    import hashlib
+    import io
+
     source_path = Path(path)
+    verified_bytes: bytes | None = None
+    if expected_sha256 is not None:
+        try:
+            verified_bytes = source_path.read_bytes()
+        except OSError as exc:
+            raise FatalContractError(f"Unable to read native table: {source_path}") from exc
+        observed_sha256 = hashlib.sha256(verified_bytes).hexdigest()
+        if observed_sha256 != expected_sha256:
+            raise FatalContractError(
+                f"native table digest mismatch: expected {expected_sha256}, observed {observed_sha256}"
+            )
     try:
-        data = pl.read_parquet(source_path)
+        data = pl.read_parquet(io.BytesIO(verified_bytes) if verified_bytes is not None else source_path)
     except (OSError, pl.exceptions.PolarsError) as exc:
         raise FatalContractError(f"Unable to read native table: {source_path}") from exc
     return NativeTable(data)

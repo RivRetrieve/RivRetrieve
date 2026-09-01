@@ -109,9 +109,7 @@ class _ProviderHandle:
     ) -> ObservationResult:
         if self._stages is None and self._store_config is None:
             if self._module is not None:
-                raise ObservationsUnavailableError(
-                    f"Provider {self.provider_id} has no observation stages registered"
-                )
+                raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observations registered")
         request = LegacyObservationRequest.from_inputs(
             provider_id=self.provider_id,
@@ -185,6 +183,7 @@ class _ProviderHandle:
                 source=observation_source,
                 provider_id=self.provider_id,
                 catalogue_version=provider_info.catalogue_version,
+                acquisition_provenance=self._artifact.acquisition_provenance,
                 license=provider_info.license,
                 citation=provider_info.citation,
                 requested_at=requested_at,
@@ -248,6 +247,7 @@ class _ProviderHandle:
                     source="local",
                     provider_id=self.provider_id,
                     catalogue_version=provider_info.catalogue_version,
+                    acquisition_provenance=self._artifact.acquisition_provenance,
                     license=provider_info.license,
                     citation=provider_info.citation,
                     requested_at=requested_at,
@@ -269,6 +269,7 @@ class _ProviderHandle:
                 source="local",
                 provider_id=self.provider_id,
                 catalogue_version=provider_info.catalogue_version,
+                acquisition_provenance=self._artifact.acquisition_provenance,
                 license=provider_info.license,
                 citation=provider_info.citation,
                 requested_at=requested_at,

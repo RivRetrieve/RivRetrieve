@@ -642,11 +642,10 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         path.name for path in catalogue_dir.iterdir() if path.is_file() and path.name != "native.parquet"
     }
     rebuilt_names = {path.name for path in output.iterdir() if path.is_file()}
-    assert (
-        committed_names
-        == rebuilt_names
-        == {"provider.json", "products.parquet", "stations.parquet", "station_products.parquet"}
-    )
+    expected_names = {"provider.json", "products.parquet", "stations.parquet", "station_products.parquet"}
+    if adapter.provider_id == "jp_mlit":
+        expected_names.add("provenance.json")
+    assert committed_names == rebuilt_names == expected_names
     for name in committed_names:
         committed = (catalogue_dir / name).read_bytes()
         rebuilt = (output / name).read_bytes()
