@@ -9,8 +9,10 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from pydantic import ValidationError
 
 import rivretrieve as rr
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import (
     CATALOGUE_FACT_UNIVERSE,
     CorruptCatalogArtifactError,
@@ -149,3 +151,42 @@ def test_maintainer_withholding_operation_is_network_free_and_deterministic(
         "provenance.json",
     ):
         assert (tmp_path / artifact_name).read_bytes() == (catalogue_path(provider_id) / artifact_name).read_bytes()
+
+
+def test_acquisition_provenance_v2_is_the_only_accepted_packaged_schema(tmp_path: Path) -> None:
+    copied = tmp_path / "jp_mlit"
+    shutil.copytree(catalogue_path("jp_mlit"), copied)
+    payload = json.loads((copied / "provenance.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 2
+    payload["schema_version"] = 1
+    (copied / "provenance.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(CorruptCatalogArtifactError, match="Input should be 2"):
+        load_packaged_catalogue_artifact(copied, on_issue="raise")
+
+
+def test_acquisition_provenance_v2_rejects_legacy_and_mixed_withheld_shapes() -> None:
+    provenance = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise").acquisition_provenance
+    assert provenance is not None
+    payload = provenance.model_dump(mode="json")
+    assert payload["schema_version"] == 2
+    assert payload["withheld_facts"]
+    assert all("fact" not in item for item in payload["withheld_facts"])
+    assert all(item["reason"] == "no_acquisition_record_established" for item in payload["withheld_facts"])
+    assert AcquisitionProvenance.model_validate(payload) == provenance
+
+    legacy = dict(payload)
+    legacy["withheld_facts"] = [{"fact": "station.station_id", "reason": "acquisition_not_established"}]
+    with pytest.raises(ValidationError, match="fact_group"):
+        AcquisitionProvenance.model_validate(legacy)
+
+    mixed = dict(payload)
+    mixed["withheld_facts"] = [
+        {
+            "fact_group": "station_identity",
+            "facts": ["station.station_id"],
+            "reason": "acquisition_not_established",
+        }
+    ]
+    with pytest.raises(ValidationError, match="no_acquisition_record_established"):
+        AcquisitionProvenance.model_validate(mixed)

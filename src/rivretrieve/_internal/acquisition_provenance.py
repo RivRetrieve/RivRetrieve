@@ -126,7 +126,7 @@ class NativeTableIdentity(_ProvenanceModel):
 class AcquisitionProvenance(_ProvenanceModel):
     """Shared provider acquisition provenance stored once per catalogue."""
 
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     provider_id: str
     native_table: NativeTableIdentity | None = None
     fact_universe: tuple[str, ...]

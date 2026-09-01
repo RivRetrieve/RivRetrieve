@@ -35,7 +35,7 @@ def deferred_acquisition_provenance(provider_id: str) -> AcquisitionProvenance:
         ),
     }
     return AcquisitionProvenance(
-        schema_version=1,
+        schema_version=2,
         provider_id=provider_id,
         native_table=None,
         fact_universe=CATALOGUE_FACT_UNIVERSE,

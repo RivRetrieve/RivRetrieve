@@ -107,7 +107,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
         sha256="1fbe9cccc866b3f496b7be4fcb546124c24e0c89fc3e57ab0a3ceca97107d487",
     )
     return AcquisitionProvenance(
-        schema_version=1,
+        schema_version=2,
         provider_id="jp_mlit",
         native_table=NativeTableIdentity(
             repository_path=NATIVE_TABLE_REPOSITORY_PATH,
