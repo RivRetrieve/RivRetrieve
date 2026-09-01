@@ -95,10 +95,11 @@ class FactBinding(_ProvenanceModel):
 
 
 class WithheldFact(_ProvenanceModel):
-    """Name a fact excluded because no acquisition record was established."""
+    """Name a coherent fact group excluded for absent acquisition provenance."""
 
-    fact: str
-    reason: Literal["acquisition_not_established"]
+    fact_group: str
+    facts: tuple[str, ...]
+    reason: Literal["no_acquisition_record_established"]
 
 
 class SemanticDigest(_ProvenanceModel):
@@ -125,9 +126,9 @@ class NativeTableIdentity(_ProvenanceModel):
 class AcquisitionProvenance(_ProvenanceModel):
     """Shared provider acquisition provenance stored once per catalogue."""
 
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     provider_id: str
-    native_table: NativeTableIdentity
+    native_table: NativeTableIdentity | None = None
     fact_universe: tuple[str, ...]
     source_records: tuple[SourceRecord, ...]
     fact_bindings: tuple[FactBinding, ...]
@@ -169,7 +170,15 @@ class AcquisitionProvenance(_ProvenanceModel):
         if len(bound_fact_list) != len(set(bound_fact_list)):
             raise ValueError("each fact may be bound only once")
         bound_facts = set(bound_fact_list)
-        withheld_list = [item.fact for item in self.withheld_facts]
+        catalogue_prefixes = ("provider.", "product.", "station.", "station_product.")
+        if self.native_table is None and any(fact.startswith(catalogue_prefixes) for fact in bound_facts):
+            raise ValueError("catalogue facts cannot be bound without native-table identity")
+        withheld_groups = [item.fact_group for item in self.withheld_facts]
+        if len(withheld_groups) != len(set(withheld_groups)):
+            raise ValueError("withheld fact group ids must be unique")
+        if any(not item.facts for item in self.withheld_facts):
+            raise ValueError("withheld fact groups must contain at least one fact")
+        withheld_list = [fact for item in self.withheld_facts for fact in item.facts]
         if len(withheld_list) != len(set(withheld_list)):
             raise ValueError("each fact may be withheld only once")
         withheld = set(withheld_list)

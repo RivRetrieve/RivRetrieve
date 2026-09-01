@@ -121,14 +121,14 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     providers_root = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
     expected_station_products = {
         "ba_fhmzbih": (180, 0, 0),
-        "br_ana": (52_145, 0, 0),
+        "br_ana": (0, 0, 0),
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (738, 0, 0),
         "cz_chmi": (4_155, 0, 0),
         "fr_hubeau": (33_139, 0, 0),
         "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
-        "no_nve": (44_001, 0, 0),
+        "no_nve": (0, 0, 0),
         "pl_imgw": (3_903, 0, 0),
         "th_thaiwater": (1_650, 0, 0),
         "usgs_nwis": (157_548, 57_450, 57_450),

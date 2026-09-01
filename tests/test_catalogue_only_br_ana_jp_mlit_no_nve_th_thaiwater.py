@@ -15,19 +15,13 @@ from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 CATALOGUE_ONLY_PROVIDERS = (
     (
         "br_ana",
-        10429,
-        5,
-        52145,
-        {
-            "discharge_daily_mean",
-            "discharge_instantaneous",
-            "stage_daily_mean",
-            "stage_instantaneous",
-            "water_temperature_instantaneous",
-        },
+        0,
+        0,
+        0,
+        set(),
         "ANA Hidroweb — Brazilian National Water and Sanitation Agency",
-        "2026-06-11",
-        {"unknown"},
+        None,
+        set(),
     ),
     (
         "jp_mlit",
@@ -41,23 +35,13 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
     (
         "no_nve",
-        4889,
-        9,
-        44001,
-        {
-            "discharge_daily_mean",
-            "discharge_hourly_mean",
-            "discharge_instantaneous",
-            "stage_daily_mean",
-            "stage_hourly_mean",
-            "stage_instantaneous",
-            "water_temperature_daily_mean",
-            "water_temperature_hourly_mean",
-            "water_temperature_instantaneous",
-        },
+        0,
+        0,
+        0,
+        set(),
         "NVE HydAPI — Norwegian Water Resources and Energy Directorate",
-        "2026-06-03",
-        {"available", "unavailable"},
+        None,
+        set(),
     ),
     (
         "th_thaiwater",
@@ -114,7 +98,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     station_product_count: int,
     product_ids: set[str],
     provider_name: str,
-    catalogue_version: str,
+    catalogue_version: str | None,
     availability: set[str],
 ) -> None:
     assert provider_id in rr.providers()
@@ -132,12 +116,21 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     station_products = station_products_result.data
     assert info.provider_id == provider_id
     assert info.name == provider_name
-    assert str(info.catalogue_version) == catalogue_version
+    if catalogue_version is None:
+        assert info.catalogue_version is None
+    else:
+        assert str(info.catalogue_version) == catalogue_version
     assert stations.height == station_count
-    assert stations["crs"].unique().to_list() == ["unknown"]
+    if station_count:
+        assert stations["crs"].unique().to_list() == ["unknown"]
+    else:
+        assert stations.is_empty()
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
-    assert set(products["provider_id"].to_list()) == {provider_id}
+    if product_count:
+        assert set(products["provider_id"].to_list()) == {provider_id}
+    else:
+        assert products.is_empty()
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
 
@@ -166,7 +159,7 @@ def test_catalogue_only_provider_directory_retains_declared_surface(
     station_product_count: int,
     product_ids: set[str],
     provider_name: str,
-    catalogue_version: str,
+    catalogue_version: str | None,
     availability: set[str],
 ) -> None:
     reader = catalogue_reader(provider_id)
@@ -176,12 +169,21 @@ def test_catalogue_only_provider_directory_retains_declared_surface(
     station_products = reader.read_station_products().data
     assert info.provider_id == provider_id
     assert info.name == provider_name
-    assert str(info.catalogue_version) == catalogue_version
+    if catalogue_version is None:
+        assert info.catalogue_version is None
+    else:
+        assert str(info.catalogue_version) == catalogue_version
     assert stations.height == station_count
-    assert stations["crs"].unique().to_list() == ["unknown"]
+    if station_count:
+        assert stations["crs"].unique().to_list() == ["unknown"]
+    else:
+        assert stations.is_empty()
     assert products.height == product_count
     assert set(products["product_id"].to_list()) == product_ids
-    assert set(products["provider_id"].to_list()) == {provider_id}
+    if product_count:
+        assert set(products["provider_id"].to_list()) == {provider_id}
+    else:
+        assert products.is_empty()
     assert station_products.height == station_product_count
     assert set(station_products["availability"].cast(str).to_list()) == availability
     provider_directory = catalogue_path(provider_id).parent
@@ -189,7 +191,10 @@ def test_catalogue_only_provider_directory_retains_declared_surface(
     expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES[provider_id]
     assert {path.name for path in provider_directory.glob("*.py")} == expected_module_files | {"declaration.py"}
     assert catalogue_path(provider_id).exists()
-    for artifact_name in ("provider.json", "stations.parquet", "products.parquet", "station_products.parquet"):
+    artifact_names = {"provider.json", "stations.parquet", "products.parquet", "station_products.parquet"}
+    if provider_id in {"br_ana", "jp_mlit", "no_nve"}:
+        artifact_names.add("provenance.json")
+    for artifact_name in artifact_names:
         assert (catalogue_path(provider_id) / artifact_name).exists()
 
 
@@ -200,12 +205,9 @@ def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str)
         _registry.get(provider_id).observations(stations="unused", products="unused", start=None, end=None)
 
 
-def test_no_nve_packaged_availability_examples_are_retained() -> None:
+def test_no_nve_packaged_availability_is_withheld() -> None:
     station_products = catalogue_reader("no_nve").read_station_products().data
-    for product_id in ("discharge_daily_mean", "discharge_instantaneous"):
-        row = station_products.filter((pl.col("station_id") == "12.210.0") & (pl.col("product_id") == product_id))
-        assert row.height == 1
-        assert row.select(pl.col("availability").cast(str)).item() == "available"
+    assert station_products.is_empty()
 
 
 def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:

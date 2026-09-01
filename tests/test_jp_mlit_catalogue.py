@@ -1030,7 +1030,13 @@ def test_native_build_removes_withheld_fact_before_writing(tmp_path: Path) -> No
     payload = provenance.model_dump(mode="json")
     product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
     product_binding["facts"].remove("product.native_id")
-    payload["withheld_facts"].append({"fact": "product.native_id", "reason": "acquisition_not_established"})
+    payload["withheld_facts"].append(
+        {
+            "fact_group": "withheld_product_native_id",
+            "facts": ["product.native_id"],
+            "reason": "no_acquisition_record_established",
+        }
+    )
     withheld = type(provenance).model_validate(payload)
 
     catalogue = generate_catalogue.build_catalogue(
@@ -1044,5 +1050,9 @@ def test_native_build_removes_withheld_fact_before_writing(tmp_path: Path) -> No
     assert written["native_id"].null_count() == written.height
     written_provenance = json.loads((tmp_path / "provenance.json").read_text())
     assert written_provenance["withheld_facts"] == [
-        {"fact": "product.native_id", "reason": "acquisition_not_established"}
+        {
+            "fact_group": "withheld_product_native_id",
+            "facts": ["product.native_id"],
+            "reason": "no_acquisition_record_established",
+        }
     ]
