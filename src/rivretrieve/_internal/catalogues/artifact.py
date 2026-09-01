@@ -17,6 +17,7 @@ from rivretrieve._internal.catalogues.schemas import (
     STATION_CATALOG_SCHEMA,
     STATION_PRODUCT_CATALOG_SCHEMA,
     AvailabilityDtype,
+    CatalogueSchema,
     validate_catalogue,
 )
 from rivretrieve._internal.issues import FatalContractError
@@ -27,6 +28,18 @@ REQUIRED_ARTIFACT_FILES = (
     "products.parquet",
     "stations.parquet",
     "station_products.parquet",
+)
+
+ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset({"jp_mlit"})
+
+_CATALOGUE_FACT_SCHEMAS: tuple[tuple[str, CatalogueSchema], ...] = (
+    ("provider", PROVIDER_INFO_CATALOG_SCHEMA),
+    ("product", PRODUCT_CATALOG_SCHEMA),
+    ("station", STATION_CATALOG_SCHEMA),
+    ("station_product", STATION_PRODUCT_CATALOG_SCHEMA),
+)
+CATALOGUE_FACT_UNIVERSE = tuple(
+    f"{prefix}.{column.name}" for prefix, schema in _CATALOGUE_FACT_SCHEMAS for column in schema.columns
 )
 
 
@@ -80,6 +93,23 @@ def packaged_catalogue_artifact_from_components(
 ) -> PackagedCatalogArtifact:
     try:
         provider_info_df = _provider_info_to_df(provider_info)
+        if provider_info_df.height != 1:
+            raise FatalContractError("Provider info must contain exactly one row")
+        provider_id = provider_info_df["provider_id"].item()
+        if provider_id in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS and acquisition_provenance is None:
+            raise FatalContractError(f"{provider_id} acquisition provenance is required")
+        if acquisition_provenance is not None:
+            if acquisition_provenance.provider_id != provider_id:
+                raise FatalContractError("provenance.json provider_id does not match provider.json provider_id")
+            _validate_catalogue_fact_universe(acquisition_provenance)
+            provider_info, products, stations, station_products = _apply_withheld_facts(
+                provider_info_df.row(0, named=True),
+                products,
+                stations,
+                station_products,
+                acquisition_provenance,
+            )
+            provider_info_df = _provider_info_to_df(provider_info)
         station_products = _normalize_availability(station_products)
 
         validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue=on_issue)
@@ -88,10 +118,6 @@ def packaged_catalogue_artifact_from_components(
         validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
         _validate_artifact_provider_ids(provider_info_df, products, stations, station_products)
         _validate_station_product_references(products, stations, station_products)
-        if acquisition_provenance is not None:
-            artifact_provider_id = provider_info_df["provider_id"].item()
-            if acquisition_provenance.provider_id != artifact_provider_id:
-                raise FatalContractError("provenance.json provider_id does not match provider.json provider_id")
     except FatalContractError as exc:
         raise CorruptCatalogArtifactError(str(exc)) from exc
     except pl.exceptions.PolarsError as exc:
@@ -104,6 +130,71 @@ def packaged_catalogue_artifact_from_components(
         station_products=station_products,
         acquisition_provenance=acquisition_provenance,
     )
+
+
+def _validate_catalogue_fact_universe(provenance: AcquisitionProvenance) -> None:
+    expected = set(CATALOGUE_FACT_UNIVERSE)
+    declared = set(provenance.fact_universe)
+    missing = expected - declared
+    if missing:
+        raise FatalContractError(
+            f"{provenance.provider_id} acquisition provenance does not declare catalogue facts: {sorted(missing)!r}"
+        )
+    catalogue_prefixes = {prefix for prefix, _ in _CATALOGUE_FACT_SCHEMAS}
+    unsupported = {fact for fact in declared - expected if fact.partition(".")[0] in catalogue_prefixes}
+    if unsupported:
+        raise FatalContractError(
+            f"{provenance.provider_id} acquisition provenance declares unknown catalogue facts: {sorted(unsupported)!r}"
+        )
+
+
+def _apply_withheld_facts(
+    provider_info: Mapping[str, object],
+    products: pl.DataFrame,
+    stations: pl.DataFrame,
+    station_products: pl.DataFrame,
+    provenance: AcquisitionProvenance,
+) -> tuple[dict[str, object], pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    normalized_provider = dict(provider_info)
+    tables = {
+        "product": products,
+        "station": stations,
+        "station_product": station_products,
+    }
+    schemas = dict(_CATALOGUE_FACT_SCHEMAS)
+    for withheld in provenance.withheld_facts:
+        prefix, separator, column_name = withheld.fact.partition(".")
+        if not separator or prefix not in schemas:
+            continue
+        schema = schemas[prefix]
+        column = next(item for item in schema.columns if item.name == column_name)
+        if prefix == "provider":
+            if not column.nullable:
+                raise FatalContractError(
+                    f"{provenance.provider_id} withheld required fact {withheld.fact}; provider is unavailable"
+                )
+            normalized_provider[column_name] = None
+            continue
+        table = tables[prefix]
+        if column.nullable:
+            tables[prefix] = table.with_columns(pl.lit(None).cast(column.dtype).alias(column_name))
+        else:
+            tables[prefix] = table.head(0)
+
+    products = tables["product"]
+    stations = tables["station"]
+    station_products = tables["station_product"]
+    if station_products.height:
+        station_products = station_products.join(
+            stations.select("provider_id", "station_id"),
+            on=["provider_id", "station_id"],
+            how="semi",
+        ).join(
+            products.select("provider_id", "product_id"),
+            on=["provider_id", "product_id"],
+            how="semi",
+        )
+    return normalized_provider, products, stations, station_products
 
 
 def _read_provenance_json(path: Path) -> AcquisitionProvenance | None:
@@ -202,7 +293,7 @@ def _validate_artifact_provider_ids(
         ("station_products", station_products),
     ):
         table_provider_ids = _unique_values(table, "provider_id")
-        if table_provider_ids != {expected_provider_id}:
+        if table_provider_ids and table_provider_ids != {expected_provider_id}:
             raise FatalContractError(f"{table_name}.provider_id does not match provider.json provider_id")
 
 

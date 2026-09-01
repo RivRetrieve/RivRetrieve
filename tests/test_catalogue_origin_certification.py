@@ -633,7 +633,17 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
 
     native_before = adapter.native_path.read_bytes()
     output = tmp_path / str(adapter.provider_id)
-    assert adapter.main(["--native", str(adapter.native_path), "--out", str(output)]) == 0
+    arguments = ["--native", str(adapter.native_path), "--out", str(output)]
+    if adapter.provider_id == "jp_mlit":
+        arguments.extend(
+            (
+                "--license-recording",
+                "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+                "--citation-recording",
+                "tests/test_data/jp_mlit_terms_citation.pdf",
+            )
+        )
+    assert adapter.main(arguments) == 0
     assert calls == []
     assert adapter.native_path.read_bytes() == native_before
 

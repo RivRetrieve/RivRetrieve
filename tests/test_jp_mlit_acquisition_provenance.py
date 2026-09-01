@@ -60,8 +60,10 @@ def test_japan_source_and_fact_groups_are_externally_observable() -> None:
     assert source.operator == "MLIT Water Information System"
     assert {statement.kind for statement in source.statements} == {"license", "citation"}
     assert {binding.fact_group for binding in provenance.fact_bindings} == {
-        "station_identity_and_location",
-        "product_identity",
+        "provider_catalogue",
+        "product_catalogue",
+        "station_catalogue",
+        "station_product_catalogue",
         "observation_acquisition",
     }
     observation = next(
@@ -92,3 +94,62 @@ def test_packaged_catalogue_rejects_mismatched_provenance_provider(tmp_path: Pat
         match="provenance.json provider_id does not match provider.json provider_id",
     ):
         load_packaged_catalogue_artifact(tmp_path)
+
+
+def _copy_japan_catalogue(destination: Path, *, include_provenance: bool = True) -> None:
+    names = ["provider.json", "products.parquet", "stations.parquet", "station_products.parquet"]
+    if include_provenance:
+        names.append("provenance.json")
+    for name in names:
+        shutil.copy2(declaration.catalogue / name, destination / name)
+
+
+def test_enrolled_japan_catalogue_refuses_missing_provenance(tmp_path: Path) -> None:
+    _copy_japan_catalogue(tmp_path, include_provenance=False)
+
+    with pytest.raises(CorruptCatalogArtifactError, match="jp_mlit acquisition provenance is required"):
+        load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
+
+
+def test_withheld_japan_fact_is_removed_from_exposed_catalogue(tmp_path: Path) -> None:
+    _copy_japan_catalogue(tmp_path)
+    payload = json.loads((tmp_path / "provenance.json").read_text())
+    product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
+    product_binding["facts"].remove("product.native_id")
+    payload["withheld_facts"].append({"fact": "product.native_id", "reason": "acquisition_not_established"})
+    (tmp_path / "provenance.json").write_text(json.dumps(payload))
+
+    artifact = load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
+
+    assert artifact.products["native_id"].null_count() == artifact.products.height
+    assert artifact.acquisition_provenance is not None
+    assert {fact.fact for fact in artifact.acquisition_provenance.withheld_facts} == {"product.native_id"}
+
+
+def test_enrolled_japan_catalogue_refuses_unbound_declared_fact(tmp_path: Path) -> None:
+    _copy_japan_catalogue(tmp_path)
+    payload = json.loads((tmp_path / "provenance.json").read_text())
+    product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
+    product_binding["facts"].remove("product.unit")
+    (tmp_path / "provenance.json").write_text(json.dumps(payload))
+
+    with pytest.raises(
+        CorruptCatalogArtifactError,
+        match="fact universe contains unaccounted facts.*product.unit",
+    ):
+        load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
+
+
+def test_withheld_required_japan_fact_removes_affected_rows_and_edges(tmp_path: Path) -> None:
+    _copy_japan_catalogue(tmp_path)
+    payload = json.loads((tmp_path / "provenance.json").read_text())
+    product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
+    product_binding["facts"].remove("product.unit")
+    payload["withheld_facts"].append({"fact": "product.unit", "reason": "acquisition_not_established"})
+    (tmp_path / "provenance.json").write_text(json.dumps(payload))
+
+    artifact = load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
+
+    assert artifact.products.is_empty()
+    assert artifact.station_products.is_empty()
+    assert artifact.stations.height == 1023

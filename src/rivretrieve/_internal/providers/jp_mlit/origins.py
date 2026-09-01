@@ -28,6 +28,59 @@ NATIVE_TABLE_REVISION = "ebeee6673f183a2bd182e81ee2b4bff7d56ee009"
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet"
 NATIVE_TABLE_SEMANTIC_SHA256 = "f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268602aec0"
 
+PROVIDER_FACTS = (
+    "provider.provider_id",
+    "provider.name",
+    "provider.live_stations",
+    "provider.live_products",
+    "provider.live_station_products",
+    "provider.bulk_observations",
+    "provider.catalogue_version",
+    "provider.license",
+    "provider.citation",
+)
+PRODUCT_FACTS = (
+    "product.provider_id",
+    "product.product_id",
+    "product.observed_property",
+    "product.frequency",
+    "product.statistic",
+    "product.period_type",
+    "product.period_anchor",
+    "product.unit",
+    "product.native_id",
+)
+STATION_FACTS = (
+    "station.provider_id",
+    "station.station_id",
+    "station.latitude",
+    "station.longitude",
+    "station.crs",
+)
+STATION_PRODUCT_FACTS = (
+    "station_product.provider_id",
+    "station_product.station_id",
+    "station_product.product_id",
+    "station_product.availability",
+    "station_product.availability_reason",
+    "station_product.published_record_start_date",
+    "station_product.published_record_end_date",
+    "station_product.last_catalogue_check",
+)
+OBSERVATION_FACTS = (
+    "observation.request",
+    "observation.response",
+    "observation.value",
+    "observation.quality",
+)
+JAPAN_FACT_UNIVERSE = (
+    *PROVIDER_FACTS,
+    *PRODUCT_FACTS,
+    *STATION_FACTS,
+    *STATION_PRODUCT_FACTS,
+    *OBSERVATION_FACTS,
+)
+
 
 def build_acquisition_provenance() -> AcquisitionProvenance:
     """Build Japan's shared acquisition-provenance document.
@@ -65,6 +118,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                 sha256=NATIVE_TABLE_SEMANTIC_SHA256,
             ),
         ),
+        fact_universe=JAPAN_FACT_UNIVERSE,
         source_records=(
             SourceRecord(
                 source_id="jp_mlit",
@@ -130,30 +184,32 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
         ),
         fact_bindings=(
             FactBinding(
-                fact_group="station_identity_and_location",
-                facts=(
-                    "station.station_id",
-                    "station.latitude",
-                    "station.longitude",
-                    "station.crs_not_published",
-                ),
+                fact_group="provider_catalogue",
+                facts=PROVIDER_FACTS,
                 source_id="jp_mlit",
                 acquisition_id="station_register_capture_2026_08_02",
             ),
             FactBinding(
-                fact_group="product_identity",
-                facts=("product.native_id", "station_product.availability_not_published"),
+                fact_group="product_catalogue",
+                facts=PRODUCT_FACTS,
+                source_id="jp_mlit",
+                acquisition_id="station_register_capture_2026_08_02",
+            ),
+            FactBinding(
+                fact_group="station_catalogue",
+                facts=STATION_FACTS,
+                source_id="jp_mlit",
+                acquisition_id="station_register_capture_2026_08_02",
+            ),
+            FactBinding(
+                fact_group="station_product_catalogue",
+                facts=STATION_PRODUCT_FACTS,
                 source_id="jp_mlit",
                 acquisition_id="station_register_capture_2026_08_02",
             ),
             FactBinding(
                 fact_group="observation_acquisition",
-                facts=(
-                    "observation.request",
-                    "observation.response",
-                    "observation.value",
-                    "observation.quality",
-                ),
+                facts=OBSERVATION_FACTS,
                 source_id="jp_mlit",
                 acquisition_id="observation_request",
             ),

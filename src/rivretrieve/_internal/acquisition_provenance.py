@@ -11,6 +11,7 @@ import hashlib
 import io
 import re
 import unicodedata
+from collections.abc import Mapping
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
@@ -127,6 +128,7 @@ class AcquisitionProvenance(_ProvenanceModel):
     schema_version: Literal[1]
     provider_id: str
     native_table: NativeTableIdentity
+    fact_universe: tuple[str, ...]
     source_records: tuple[SourceRecord, ...]
     fact_bindings: tuple[FactBinding, ...]
     withheld_facts: tuple[WithheldFact, ...] = ()
@@ -156,15 +158,30 @@ class AcquisitionProvenance(_ProvenanceModel):
                     raise ValueError(f"source {record.source_id} statement references an unknown recording")
         if any(not record.acquisitions for record in self.source_records):
             raise ValueError("every source record must contain an acquisition")
+        if not self.fact_universe or len(self.fact_universe) != len(set(self.fact_universe)):
+            raise ValueError("fact universe must contain unique facts")
         if any(not binding.facts for binding in self.fact_bindings):
             raise ValueError("fact bindings must contain at least one fact")
         fact_groups = [binding.fact_group for binding in self.fact_bindings]
         if len(fact_groups) != len(set(fact_groups)):
             raise ValueError("fact group ids must be unique")
-        bound_facts = {fact for binding in self.fact_bindings for fact in binding.facts}
-        withheld = {item.fact for item in self.withheld_facts}
+        bound_fact_list = [fact for binding in self.fact_bindings for fact in binding.facts]
+        if len(bound_fact_list) != len(set(bound_fact_list)):
+            raise ValueError("each fact may be bound only once")
+        bound_facts = set(bound_fact_list)
+        withheld_list = [item.fact for item in self.withheld_facts]
+        if len(withheld_list) != len(set(withheld_list)):
+            raise ValueError("each fact may be withheld only once")
+        withheld = set(withheld_list)
         if overlap := bound_facts & withheld:
             raise ValueError(f"facts cannot be both bound and withheld: {sorted(overlap)!r}")
+        universe = set(self.fact_universe)
+        unknown_facts = (bound_facts | withheld) - universe
+        if unknown_facts:
+            raise ValueError(f"provenance accounts for undeclared facts: {sorted(unknown_facts)!r}")
+        unaccounted = universe - bound_facts - withheld
+        if unaccounted:
+            raise ValueError(f"fact universe contains unaccounted facts: {sorted(unaccounted)!r}")
         unknown_sources = {binding.source_id for binding in self.fact_bindings} - set(source_ids)
         if unknown_sources:
             raise ValueError(f"fact bindings reference unknown sources: {sorted(unknown_sources)!r}")
@@ -203,6 +220,45 @@ class _HtmlText(HTMLParser):
     def handle_data(self, data: str) -> None:
         if not self._skip_depth:
             self.parts.append(data)
+
+
+def verify_acquisition_provenance_statements(
+    provenance: AcquisitionProvenance,
+    recording_bytes: Mapping[str, bytes],
+) -> None:
+    """Verify every declared source statement against supplied recording bytes.
+
+    Parameters
+    ----------
+    provenance
+        Closed provenance document whose statements must be certified.
+    recording_bytes
+        Exact public recording bytes keyed by recording id.
+
+    Raises
+    ------
+    FatalContractError
+        If a statement recording is absent, changed, unreadable, or does not
+        contain the exact named statement.
+    """
+    for source in provenance.source_records:
+        references = {evidence.recording.recording_id: evidence.recording for evidence in source.evidence}
+        for statement in source.statements:
+            statement_name = f"{provenance.provider_id}.{statement.kind}"
+            try:
+                body = recording_bytes[statement.recording_id]
+            except KeyError as exc:
+                raise FatalContractError(
+                    f"{statement_name}: recording {statement.recording_id} bytes are absent"
+                ) from exc
+            recording = references[statement.recording_id]
+            verify_recorded_statement(
+                recording_name=statement_name,
+                body=body,
+                expected_sha256=recording.sha256,
+                media_type=recording.media_type,
+                exact_text=statement.exact_text,
+            )
 
 
 def verify_recorded_statement(
