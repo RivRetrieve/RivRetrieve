@@ -7,7 +7,7 @@ Effort: https://github.com/RivRetrieve/RivRetrieve/issues/51
 
 RivRetrieve makes a value available only when it can state from its own records how it obtained that value: what was obtained, from where, and when. Provenance identifies every issuing body responsible for each fact or coherent group of facts, so a user can trace and credit a value without assuming that every field under one provider came from that provider.
 
-This is an acquisition-provenance rule, not a legal judgement. RivRetrieve records a source's exact words about use, terms, and citation. It does not classify licences, decide whether rights are sufficient, or silently publish such a decision through what it includes or removes.
+This is an acquisition-provenance rule, not a legal judgement. For public sources, RivRetrieve records a source's exact words about use, terms, and citation. For private evidence, it checks the exact words locally and publishes only a redacted verification binding and digest together with the evidence limitation. It does not classify licences, decide whether rights are sufficient, or silently publish such a decision through what it includes or removes.
 
 ## Why this is needed
 
@@ -66,7 +66,7 @@ The exact type and attribute names are reversible design choices, but the public
 
 - separate source records for IMGW and GRDC;
 - the facts or coherent fact groups to which each source record applies;
-- each body's acquisition record, exact source statement, and established citation, if any;
+- each body's acquisition record and established citation, if any; public-source records expose the exact source statement, while private-evidence records expose a redacted verification binding and digest together with the evidence limitation, with the exact words checked locally but not published;
 - GRDC attached to the applicable Polish coordinates and station metadata, never IMGW by inheritance;
 - IMGW attached to facts it issued;
 - a named withheld fact and reason when acquisition provenance is missing;
@@ -84,7 +84,7 @@ The delivered system must make these outcomes externally observable:
 4. **Native-table identity travels.** An installed catalogue exposes the source table's repository path, pinned revision, and digest. The identity resolves to the exact committed table.
 5. **Substitution is refused.** Changing one byte of the identified table causes verification to fail with the expected and observed digests, rather than building from it.
 6. **The wheel remains clean.** No `native.parquet` occurs in a built wheel.
-7. **Source words are verified.** A finding whose quotation is absent from its recorded bytes is rejected by name, including non-UTF-8 HTML and PDF sources. For the private GRDC evidence, verification binds the forwarded outer-file digest, confirms the required redacted excerpt once in each decoded text part, and binds the attached workbook digest without claiming original `.eml` byte identity or publishing private correspondence.
+7. **Source words are verified.** A finding whose quotation is absent from its recorded bytes is rejected by name, including non-UTF-8 HTML and PDF sources. For the private GRDC evidence, local verification binds the forwarded outer-file digest, confirms the required redacted excerpt once in each decoded text part, and binds the attached workbook digest; the public record exposes only the redacted verification binding, digest, and evidence limitation, without claiming original `.eml` byte identity or publishing the exact words or private correspondence.
 8. **Unestablished terms do not block retrieval.** Where no licence or citation statement was found, the field remains absent and the existing informational issue behavior remains truthful. Missing terms do not by themselves make a traced value unsourced.
 9. **The result data shape remains stable.** Observation data retains the settled five columns; the richer provenance is carried outside the numerical frame.
 
