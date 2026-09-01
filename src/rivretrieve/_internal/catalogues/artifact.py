@@ -30,7 +30,7 @@ REQUIRED_ARTIFACT_FILES = (
     "station_products.parquet",
 )
 
-ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset({"jp_mlit"})
+ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset({"br_ana", "jp_mlit", "no_nve"})
 
 _CATALOGUE_FACT_SCHEMAS: tuple[tuple[str, CatalogueSchema], ...] = (
     ("provider", PROVIDER_INFO_CATALOG_SCHEMA),
@@ -162,24 +162,25 @@ def _apply_withheld_facts(
         "station_product": station_products,
     }
     schemas = dict(_CATALOGUE_FACT_SCHEMAS)
-    for withheld in provenance.withheld_facts:
-        prefix, separator, column_name = withheld.fact.partition(".")
-        if not separator or prefix not in schemas:
-            continue
-        schema = schemas[prefix]
-        column = next(item for item in schema.columns if item.name == column_name)
-        if prefix == "provider":
-            if not column.nullable:
-                raise FatalContractError(
-                    f"{provenance.provider_id} withheld required fact {withheld.fact}; provider is unavailable"
-                )
-            normalized_provider[column_name] = None
-            continue
-        table = tables[prefix]
-        if column.nullable:
-            tables[prefix] = table.with_columns(pl.lit(None).cast(column.dtype).alias(column_name))
-        else:
-            tables[prefix] = table.head(0)
+    for withheld_group in provenance.withheld_facts:
+        for withheld_fact in withheld_group.facts:
+            prefix, separator, column_name = withheld_fact.partition(".")
+            if not separator or prefix not in schemas:
+                continue
+            schema = schemas[prefix]
+            column = next(item for item in schema.columns if item.name == column_name)
+            if prefix == "provider":
+                if column.nullable:
+                    normalized_provider[column_name] = None
+                # provider.json is the packaged registration manifest. Required
+                # routing fields remain addressable, but provenance marks them
+                # unavailable as catalogue facts until acquisition is established.
+                continue
+            table = tables[prefix]
+            if column.nullable:
+                tables[prefix] = table.with_columns(pl.lit(None).cast(column.dtype).alias(column_name))
+            else:
+                tables[prefix] = table.head(0)
 
     products = tables["product"]
     stations = tables["station"]

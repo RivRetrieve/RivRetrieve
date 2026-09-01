@@ -72,6 +72,7 @@ def test_japan_source_and_fact_groups_are_externally_observable() -> None:
     assert observation.acquisition_id == "observation_request"
     assert "observation.value" in observation.facts
     assert provenance.withheld_facts == ()
+    assert provenance.native_table is not None
     assert provenance.native_table.revision == "ebeee6673f183a2bd182e81ee2b4bff7d56ee009"
     assert provenance.native_table.sha256 == "ec892e4bc5bee3e8d5435190f4163ecddd80d2d244a71c810b9cf666d06b5aad"
 
@@ -116,14 +117,22 @@ def test_withheld_japan_fact_is_removed_from_exposed_catalogue(tmp_path: Path) -
     payload = json.loads((tmp_path / "provenance.json").read_text())
     product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
     product_binding["facts"].remove("product.native_id")
-    payload["withheld_facts"].append({"fact": "product.native_id", "reason": "acquisition_not_established"})
+    payload["withheld_facts"].append(
+        {
+            "fact_group": "withheld_product_native_id",
+            "facts": ["product.native_id"],
+            "reason": "no_acquisition_record_established",
+        }
+    )
     (tmp_path / "provenance.json").write_text(json.dumps(payload))
 
     artifact = load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
 
     assert artifact.products["native_id"].null_count() == artifact.products.height
     assert artifact.acquisition_provenance is not None
-    assert {fact.fact for fact in artifact.acquisition_provenance.withheld_facts} == {"product.native_id"}
+    assert {fact for group in artifact.acquisition_provenance.withheld_facts for fact in group.facts} == {
+        "product.native_id"
+    }
 
 
 def test_enrolled_japan_catalogue_refuses_unbound_declared_fact(tmp_path: Path) -> None:
@@ -145,7 +154,13 @@ def test_withheld_required_japan_fact_removes_affected_rows_and_edges(tmp_path: 
     payload = json.loads((tmp_path / "provenance.json").read_text())
     product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
     product_binding["facts"].remove("product.unit")
-    payload["withheld_facts"].append({"fact": "product.unit", "reason": "acquisition_not_established"})
+    payload["withheld_facts"].append(
+        {
+            "fact_group": "withheld_product_unit",
+            "facts": ["product.unit"],
+            "reason": "no_acquisition_record_established",
+        }
+    )
     (tmp_path / "provenance.json").write_text(json.dumps(payload))
 
     artifact = load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
