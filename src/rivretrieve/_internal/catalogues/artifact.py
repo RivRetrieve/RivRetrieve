@@ -30,7 +30,7 @@ REQUIRED_ARTIFACT_FILES = (
     "station_products.parquet",
 )
 
-ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset({"br_ana", "jp_mlit", "no_nve"})
+ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset({"br_ana", "jp_mlit", "no_nve", "pl_imgw"})
 
 _CATALOGUE_FACT_SCHEMAS: tuple[tuple[str, CatalogueSchema], ...] = (
     ("provider", PROVIDER_INFO_CATALOG_SCHEMA),

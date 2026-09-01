@@ -31,6 +31,11 @@ from typing import Never
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    serialize_acquisition_provenance,
+    verify_acquisition_provenance_statements,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -87,6 +92,7 @@ class GeneratedPlImgwCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,7 +315,11 @@ def _read_live_roster(path: Path, retrieved_at: RetrievedAt) -> LiveImgwRoster:
     return LiveImgwRoster(identifiers=identifiers, retrieved_at=retrieved_at)
 
 
-def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> GeneratedPlImgwCatalogue:
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
+    acquisition_provenance: AcquisitionProvenance | None = None,
+) -> GeneratedPlImgwCatalogue:
     """Build all canonical artifacts from source-faithful native rows."""
     products = build_products()
     stations = build_stations(native_table)
@@ -321,12 +331,17 @@ def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> G
     station_products = build_station_products(stations, effective_date)
     provider_info = build_provider_info(effective_date)
 
-    _validate(provider_info, products, stations, station_products)
+    if acquisition_provenance is None:
+        from rivretrieve._internal.providers.pl_imgw.origins import build_acquisition_provenance
+
+        acquisition_provenance = build_acquisition_provenance()
+    _validate(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedPlImgwCatalogue(
         provider_info=provider_info,
         products=products,
         stations=stations,
         station_products=station_products,
+        acquisition_provenance=acquisition_provenance,
     )
 
 
@@ -442,6 +457,10 @@ def write_catalogue(catalogue: GeneratedPlImgwCatalogue, out_dir: Path | str) ->
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        serialize_acquisition_provenance(catalogue.acquisition_provenance) + "\n",
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -458,13 +477,21 @@ def _validate(
     products: ProductCatalog,
     stations: StationCatalog,
     station_products: StationProductCatalog,
+    acquisition_provenance: AcquisitionProvenance,
 ) -> None:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(provider_info, products, stations, station_products, on_issue="raise")
+    packaged_catalogue_artifact_from_components(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance=acquisition_provenance,
+        on_issue="raise",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -480,7 +507,58 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--roster-retrieved-at", help="Roster capture instant as RFC 3339 UTC.")
     parser.add_argument("--retrieved-at", help="Recovered payload provenance instant as RFC 3339 UTC.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
+    parser.add_argument(
+        "--terms-recording",
+        type=Path,
+        help="Exact public IMGW regulations recording required for canonical generation.",
+    )
+    parser.add_argument(
+        "--private-verification-record",
+        type=Path,
+        help="Optional redacted original-email verification record consumed by canonical generation.",
+    )
+    parser.add_argument(
+        "--verify-original-grdc-email",
+        type=Path,
+        help="Private original .eml to verify without retaining or printing its contents.",
+    )
+    parser.add_argument(
+        "--private-verification-out",
+        type=Path,
+        help="Destination for the redacted private-email verification record.",
+    )
     args = parser.parse_args(argv)
+
+    private_mode = args.verify_original_grdc_email is not None or args.private_verification_out is not None
+    if private_mode:
+        if args.verify_original_grdc_email is None or args.private_verification_out is None:
+            parser.error("private verification requires --verify-original-grdc-email and --private-verification-out")
+        other_values = (
+            args.fixture,
+            args.native,
+            args.out,
+            args.roster,
+            args.roster_retrieved_at,
+            args.retrieved_at,
+            args.native_out,
+            args.terms_recording,
+            args.private_verification_record,
+        )
+        if any(value is not None for value in other_values):
+            parser.error("private verification cannot be combined with catalogue generation")
+        from rivretrieve._internal.private_source_verification import (
+            serialize_private_email_verification,
+            verify_original_grdc_email,
+        )
+
+        try:
+            private_bytes = args.verify_original_grdc_email.read_bytes()
+        except OSError as exc:
+            raise FatalContractError("pl_imgw private original email cannot be read") from exc
+        record = verify_original_grdc_email(private_bytes)
+        args.private_verification_out.write_text(serialize_private_email_verification(record) + "\n", encoding="utf-8")
+        print(f"pl_imgw private statement {record.statement_id}: verified; redacted record written")
+        return 0
 
     native_values = {
         "--fixture": args.fixture,
@@ -494,6 +572,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         for flag in ("--roster", "--roster-retrieved-at", "--retrieved-at", "--native-out")
     )
     if native_mode:
+        if args.terms_recording is not None or args.private_verification_record is not None:
+            parser.error("terms and private verification records are only valid for canonical generation")
         missing = sorted(flag for flag, value in native_values.items() if value is None)
         if missing == ["--roster-retrieved-at"]:
             raise FatalContractError("pl_imgw --roster-retrieved-at is required for native refresh")
@@ -517,12 +597,38 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.fixture is not None:
         parser.error("--fixture is only valid for native refresh")
-    if args.out is None or args.native is None:
-        parser.error("canonical generation requires --native and --out")
+    if args.out is None or args.native is None or args.terms_recording is None:
+        parser.error("canonical generation requires --native, --out, and --terms-recording")
 
-    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.pl_imgw.origins import (
+        NATIVE_TABLE_SHA256,
+        STATION_CATALOGUE_ORIGINS,
+        build_acquisition_provenance,
+    )
 
-    catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
+    private_verification = None
+    if args.private_verification_record is not None:
+        from rivretrieve._internal.private_source_verification import parse_private_email_verification
+
+        try:
+            private_verification_bytes = args.private_verification_record.read_bytes()
+        except OSError as exc:
+            raise FatalContractError("pl_imgw redacted private verification record cannot be read") from exc
+        private_verification = parse_private_email_verification(private_verification_bytes)
+    provenance = build_acquisition_provenance(private_verification)
+    try:
+        terms_bytes = args.terms_recording.read_bytes()
+    except OSError as exc:
+        raise FatalContractError("pl_imgw source-statement recording cannot be read") from exc
+    verify_acquisition_provenance_statements(
+        provenance,
+        {"pl_imgw_terms_regulations": terms_bytes},
+    )
+    catalogue = build_catalogue(
+        read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256),
+        STATION_CATALOGUE_ORIGINS,
+        provenance,
+    )
     write_catalogue(catalogue, args.out)
     print(
         f"pl_imgw catalogue written to {args.out}: "

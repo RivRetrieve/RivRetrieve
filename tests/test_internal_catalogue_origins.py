@@ -18,6 +18,7 @@ from rivretrieve._internal.catalogue_origins import (
     Field,
     NativeColumn,
     NotPublished,
+    Withheld,
     enforce_catalogue_origins,
     validate_catalogue_origins,
 )
@@ -184,7 +185,7 @@ def test_documented_requires_named_carriers() -> None:
 
 
 def test_catalogue_origin_union_contains_exactly_the_implemented_forms() -> None:
-    assert typing.get_args(CatalogueOrigin.__value__) == (Field, NotPublished, Documented)
+    assert typing.get_args(CatalogueOrigin.__value__) == (Field, NotPublished, Documented, Withheld)
 
 
 def test_field_has_value_equality_and_hashing() -> None:
@@ -337,7 +338,7 @@ def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
         "station_id": Field(NativeColumn("gauge_id")),
         "latitude": Field(NativeColumn("latitude")),
         "longitude": Field(NativeColumn("longitude")),
-        "crs": NotPublished(Evidence("https://danepubliczne.imgw.pl/pl/apiinfo")),
+        "crs": Withheld(),
     } == STATION_CATALOGUE_ORIGINS
 
 

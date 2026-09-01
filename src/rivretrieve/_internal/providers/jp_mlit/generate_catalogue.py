@@ -24,6 +24,7 @@ import polars.testing as pl_testing
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
+    serialize_acquisition_provenance,
     verify_acquisition_provenance_statements,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -331,7 +332,7 @@ def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) ->
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
     (output_path / "provenance.json").write_text(
-        catalogue.acquisition_provenance.model_dump_json() + "\n",
+        serialize_acquisition_provenance(catalogue.acquisition_provenance) + "\n",
         encoding="utf-8",
     )
 

@@ -52,8 +52,9 @@ for provider_id in provider_ids:
     catalogue = provider_root.joinpath(provider_id, "catalogue")
     packaged_names = {{item.name for item in catalogue.iterdir()}}
     assert {_CANONICAL_CATALOGUE_FILES!r} <= packaged_names, (provider_id, packaged_names)
-    if provider_id == "jp_mlit":
+    if provider_id in {"jp_mlit", "pl_imgw"}:
         assert "provenance.json" in packaged_names
+    assert not any(name.endswith((".eml", ".xlsx")) for name in packaged_names)
 """
     clean_environment = os.environ.copy()
     clean_environment.pop("PYTHONPATH", None)
