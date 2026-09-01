@@ -29,6 +29,7 @@ from rivretrieve._internal.catalogue_origins import (
     Field,
     NativeColumn,
     NotPublished,
+    Withheld,
     enforce_catalogue_origins,
     validate_catalogue_origins,
 )
@@ -160,6 +161,9 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
     def documented(url: str) -> Documented:
         return Documented(DocumentedValue("EPSG:4326"), Evidence(url))
 
+    def withheld() -> Withheld:
+        return Withheld()
+
     return {
         (ProviderId("ba_fhmzbih"), "stations"): {
             "provider_id": field("metadata_station_no"),
@@ -224,7 +228,7 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "station_id": field("gauge_id"),
             "latitude": field("latitude"),
             "longitude": field("longitude"),
-            "crs": unpublished("https://danepubliczne.imgw.pl/pl/apiinfo"),
+            "crs": withheld(),
         },
         (ProviderId("th_thaiwater"), "stations"): {
             "provider_id": field("station.id"),
@@ -372,7 +376,8 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
     def sort_key(row: dict[str, object]) -> tuple[object, object, object, object]:
         return (row["provider_id"], row["declaration_map"], row["canonical_column"], row["evidence_url"])
 
-    assert keys == _not_published_keys()
+    retired_poland_geometry_evidence = {("pl_imgw", "stations", "crs", "https://danepubliczne.imgw.pl/pl/apiinfo")}
+    assert keys == _not_published_keys() | retired_poland_geometry_evidence
     assert receipts == sorted(receipts, key=sort_key)
     assert all(set(row) == RECEIPT_KEYS for row in receipts)
     assert all(isinstance(row["attestation_identity"], str) and row["attestation_identity"] for row in receipts)
@@ -515,6 +520,10 @@ def test_real_build_crs_semantics_are_complete_and_reviewed(adapter: ProviderAda
         assert expected_value == origin.value
         assert stations["crs"].unique().to_list() == [origin.value]
         assert "unknown" not in stations["crs"].unique().to_list()
+    elif isinstance(origin, Withheld):
+        assert adapter.provider_id == ProviderId("pl_imgw")
+        assert origin.reason == "acquisition_not_established"
+        assert stations["crs"].unique().to_list() == ["unknown"]
     else:
         assert adapter.provider_id == ProviderId("usgs_nwis")
         assert isinstance(origin, Field)
@@ -643,6 +652,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "tests/test_data/jp_mlit_terms_citation.pdf",
             )
         )
+    elif adapter.provider_id == "pl_imgw":
+        arguments.extend(("--terms-recording", "tests/test_data/pl_imgw_terms_regulations.html"))
     assert adapter.main(arguments) == 0
     assert calls == []
     assert adapter.native_path.read_bytes() == native_before
@@ -653,7 +664,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     }
     rebuilt_names = {path.name for path in output.iterdir() if path.is_file()}
     expected_names = {"provider.json", "products.parquet", "stations.parquet", "station_products.parquet"}
-    if adapter.provider_id == "jp_mlit":
+    if adapter.provider_id in {"jp_mlit", "pl_imgw"}:
         expected_names.add("provenance.json")
     assert committed_names == rebuilt_names == expected_names
     for name in committed_names:
