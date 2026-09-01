@@ -25,11 +25,11 @@ ADRs 0026 and 0027 on the research branch express the provenance gate and the de
 
 ## Established GRDC evidence
 
-The existing redacted provenance record establishes that GRDC/BfG sent Polish station metadata for inclusion. The supplied `Metadata_GRDC_30.10.2025.xlsx` is 116,301 bytes with SHA-256 `dfab6ea7de80fb1570f4a8dded8743ed7c7dcb4eb67fe75e2c0e02e9b964b7bf`, exactly matching the attachment recorded there. It contains the Polish station metadata compared in the research trail.
+The existing redacted provenance record establishes that GRDC/BfG sent Polish station metadata for inclusion. The only available private message evidence is a forwarded outer file of 228,628 bytes with SHA-256 `6ffc840e3a371cc7731fdd587e3d3a3918e47aa73c0e7e1c1251e54494054742`. It contains no embedded `message/rfc822` original. Its decoded `text/plain` and `text/html` parts each mechanically contain the required redacted excerpt exactly once. Its attached `Metadata_GRDC_30.10.2025.xlsx` is 116,301 bytes with SHA-256 `dfab6ea7de80fb1570f4a8dded8743ed7c7dcb4eb67fe75e2c0e02e9b964b7bf`, exactly matching the workbook used in the research trail.
 
 The source record must identify the issuing body as the Global Runoff Data Centre, operated by the Bundesanstalt für Gewässerkunde. The message states no citation instruction, so citation remains absent rather than being invented.
 
-The public repository must never expose the full correspondence or personal details. The existing record identifies the original `.eml` as 188,701 bytes with SHA-256 `5a12e0fd96d5f2b35e15cc75a76e6e9a62416a87d7d483e28be3d18c03a936e0`. Before any exact excerpt is treated as mechanically established or as public source evidence, the implementation must verify it against those exact private bytes while retaining only a redacted public record.
+Original `.eml` byte identity remains unestablished and must never be claimed. By operator authority, the forwarded evidence is sufficient to verify the redacted excerpt and the attachment. The public repository must retain only the redacted record and must never expose the excerpt, personal names, message headers, addresses, subject, receipt timestamp, or correspondence.
 
 ## Poland reconciliation constraint
 
@@ -84,7 +84,7 @@ The delivered system must make these outcomes externally observable:
 4. **Native-table identity travels.** An installed catalogue exposes the source table's repository path, pinned revision, and digest. The identity resolves to the exact committed table.
 5. **Substitution is refused.** Changing one byte of the identified table causes verification to fail with the expected and observed digests, rather than building from it.
 6. **The wheel remains clean.** No `native.parquet` occurs in a built wheel.
-7. **Source words are verified.** A finding whose quotation is absent from its recorded bytes is rejected by name, including non-UTF-8 HTML and PDF sources. Private email evidence receives equivalent byte verification without publishing personal correspondence.
+7. **Source words are verified.** A finding whose quotation is absent from its recorded bytes is rejected by name, including non-UTF-8 HTML and PDF sources. For the private GRDC evidence, verification binds the forwarded outer-file digest, confirms the required redacted excerpt once in each decoded text part, and binds the attached workbook digest without claiming original `.eml` byte identity or publishing private correspondence.
 8. **Unestablished terms do not block retrieval.** Where no licence or citation statement was found, the field remains absent and the existing informational issue behavior remains truthful. Missing terms do not by themselves make a traced value unsourced.
 9. **The result data shape remains stable.** Observation data retains the settled five columns; the richer provenance is carried outside the numerical frame.
 
