@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -402,16 +403,39 @@ def _payload_has_secret_field(
     *,
     content_type: str | None = None,
 ) -> bool:
+    media_type = _media_type(content_type)
+    opaque_signature_mismatch = False
     if isinstance(payload, str):
         text = payload
     else:
-        media_type = _media_type(content_type)
-        if _is_opaque_media_type(media_type) or (content_type is None and _has_opaque_magic(payload)):
+        signatures = _opaque_signatures(media_type)
+        if signatures is not None:
+            if payload.startswith(signatures):
+                return False
+            text = _decode_text_payload(payload, content_type=content_type, structured=True)
+            opaque_signature_mismatch = True
+        elif _is_generic_binary_media_type(media_type):
+            if _has_opaque_magic(payload):
+                return False
+            text = _decode_text_payload(payload, content_type=content_type, structured=False)
+            if text is None:
+                return False
+        elif content_type is None and _has_opaque_magic(payload):
             return False
-        text = _decode_text_payload(payload, content_type=content_type, structured=media_type is not None)
-        if text is None:
-            return False
-    return _text_has_secret_field(text, structured=_is_structured_media_type(_media_type(content_type)))
+        else:
+            text = _decode_text_payload(
+                payload,
+                content_type=content_type,
+                structured=_is_structured_media_type(media_type),
+            )
+            if text is None:
+                return False
+    if text is None:  # All nullable decode paths return above.
+        raise AssertionError("unreachable text decoding state")
+    has_secret = _text_has_secret_field(text, media_type=media_type)
+    if opaque_signature_mismatch and not has_secret:
+        raise ValueError("recording content type does not match its binary signature")
+    return has_secret
 
 
 def _media_type(content_type: str | None) -> str | None:
@@ -437,21 +461,40 @@ def _is_structured_media_type(media_type: str | None) -> bool:
     )
 
 
-def _is_opaque_media_type(media_type: str | None) -> bool:
-    if media_type is None:
-        return False
-    return media_type.startswith(("image/", "audio/", "video/")) or media_type in {
+def _opaque_signatures(media_type: str | None) -> tuple[bytes, ...] | None:
+    if media_type in {
         "application/zip",
         "application/x-zip-compressed",
-        "application/octet-stream",
-        "application/pdf",
-        "application/vnd.apache.parquet",
-        "application/gzip",
-    }
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }:
+        return (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+    if media_type == "application/pdf":
+        return (b"%PDF-",)
+    if media_type == "application/vnd.apache.parquet":
+        return (b"PAR1",)
+    if media_type == "application/gzip":
+        return (b"\x1f\x8b",)
+    return None
+
+
+def _is_generic_binary_media_type(media_type: str | None) -> bool:
+    return media_type == "application/octet-stream" or (
+        media_type is not None and media_type.startswith(("image/", "audio/", "video/"))
+    )
 
 
 def _has_opaque_magic(payload: bytes) -> bool:
-    return payload.startswith((b"PK\x03\x04", b"PAR1", b"%PDF-", b"\x1f\x8b"))
+    return payload.startswith(
+        (
+            b"PK\x03\x04",
+            b"PK\x05\x06",
+            b"PK\x07\x08",
+            b"PAR1",
+            b"%PDF-",
+            b"\x1f\x8b",
+            b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
+        )
+    )
 
 
 def _decode_text_payload(
@@ -479,14 +522,27 @@ def _decode_text_payload(
         return None
 
 
-def _text_has_secret_field(text: str, *, structured: bool) -> bool:
+def _text_has_secret_field(text: str, *, media_type: str | None) -> bool:
     stripped = text.lstrip("\ufeff \t\r\n")
     if stripped.startswith(("{", "[")):
         try:
             return _object_has_secret_field(json.loads(stripped))
         except json.JSONDecodeError as exc:
-            if structured:
+            if _is_structured_media_type(media_type):
                 raise ValueError("structured recording content is not valid JSON") from exc
+
+    if media_type == "application/xml" or (media_type is not None and media_type.endswith("+xml")):
+        try:
+            root = ET.fromstring(stripped)
+        except ET.ParseError as exc:
+            raise ValueError("structured recording content is not valid XML") from exc
+        if any(
+            _is_secret_field_name(_xml_local_name(name))
+            for element in root.iter()
+            for name in (element.tag, *element.attrib)
+            if isinstance(name, str)
+        ):
+            return True
 
     declared_names = re.findall(
         r"(?:content-disposition:[^\r\n;]*;[^\r\n]*?\bname|\bname)\s*=\s*[\"']?([^\"';\s\r\n]+)",
@@ -494,8 +550,13 @@ def _text_has_secret_field(text: str, *, structured: bool) -> bool:
         flags=re.I,
     )
     keyed_names = re.findall(r"[\"']?([A-Za-z][A-Za-z0-9_.-]*)[\"']?\s*[:=]", text)
-    names = [*_form_field_names(text), *declared_names, *keyed_names]
-    return any(_is_secret_field_name(name) for name in names)
+    element_names = re.findall(r"<\s*/?\s*([A-Za-z_][A-Za-z0-9_.:-]*)", text)
+    names = [*_form_field_names(text), *declared_names, *keyed_names, *element_names]
+    return any(_is_secret_field_name(_xml_local_name(name)) for name in names)
+
+
+def _xml_local_name(name: str) -> str:
+    return name.rsplit("}", 1)[-1].rsplit(":", 1)[-1]
 
 
 def _object_has_secret_field(value: object) -> bool:

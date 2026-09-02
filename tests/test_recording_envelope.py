@@ -147,3 +147,58 @@ def test_opaque_binary_zip_response_is_not_treated_as_structured_secret_data() -
     )
 
     assert recording.content.startswith(b"PK")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b'{"access_token":"secret"}',
+        b"access_token=secret",
+    ],
+)
+def test_textual_secret_mislabeled_as_zip_is_not_trusted(content: bytes) -> None:
+    with pytest.raises(ValueError, match="secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=content,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/zip",
+        )
+
+
+def test_xml_element_name_is_screened_for_secrets() -> None:
+    with pytest.raises(ValueError, match="secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=b"<response><access_token>secret</access_token></response>",
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/xml",
+        )
+
+
+@pytest.mark.parametrize(
+    ("content_type", "content"),
+    [
+        ("application/zip", b"PK\x03\x04\x00\xff"),
+        (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            b"PK\x03\x04\x00\xff",
+        ),
+        ("application/pdf", b"%PDF-1.7\x00\xff"),
+        ("application/vnd.apache.parquet", b"PAR1\x00\xff"),
+        ("application/gzip", b"\x1f\x8b\x00\xff"),
+        ("application/octet-stream", b"\x00\xff\x00\xff"),
+    ],
+)
+def test_coherent_opaque_binary_recordings_remain_supported(content_type: str, content: bytes) -> None:
+    recording = RecordingEnvelope(
+        request=RecordedRequest(HttpMethod.GET, "https://example.test/binary"),
+        content=content,
+        status_code=200,
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        content_type=content_type,
+    )
+
+    assert recording.content == content
