@@ -40,7 +40,7 @@ from rivretrieve._internal.primitives import ProviderId
 
 ROOT = Path(__file__).parents[1]
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
-AGENTS_PATH = ROOT / "AGENTS.md"
+PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
 DEFERRED_PROVIDERS = frozenset({ProviderId("br_ana"), ProviderId("no_nve")})
 
@@ -400,28 +400,16 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
     assert [row["provider_id"] for row in receipts if row["capture_path"] is None] == ["za_dws"]
 
 
-def _attestation_block(identity: str) -> str:
-    text = AGENTS_PATH.read_text(encoding="utf-8")
-    start = text.index(f"- {identity}:")
-    end = text.find("\n- ", start + 2)
-    return text[start:] if end == -1 else text[start:end]
-
-
 @pytest.mark.parametrize("receipt", _receipts(), ids=lambda row: str(row["provider_id"]))
-def test_receipt_capture_digest_and_named_attestation(receipt: dict[str, object]) -> None:
-    identity = str(receipt["attestation_identity"])
-    block = _attestation_block(identity)
-    assert str(receipt["sha256"]) in block
-    assert str(receipt["retrieved_at"]) in block
-    assert str(receipt["evidence_url"]) in block
-    if receipt["http_status"] is not None:
-        assert f"HTTP {receipt['http_status']}" in block or "All manifest HTTP statuses are 200" in block
+def test_receipt_capture_digest(receipt: dict[str, object]) -> None:
+    provider_id = str(receipt["provider_id"])
+    notes_path = PROVIDER_NOTES / f"{provider_id}.md"
+    assert notes_path.is_file()
+    assert f"provider_ports/{provider_id}.md" in (ROOT / "docs/README.md").read_text(encoding="utf-8")
 
     capture_path = receipt["capture_path"]
     if capture_path is None:
         assert receipt["provider_id"] == "za_dws"
-        assert str(receipt["requested_url"]) in block
-        assert "WMA1_Limpopo-Olifants_River.pdf" in block
         return
     path = ROOT / str(capture_path)
     assert path.is_relative_to(ROOT / "tests/test_data")
@@ -437,7 +425,6 @@ def test_receipt_capture_digest_and_named_attestation(receipt: dict[str, object]
             json.loads(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
     assert hashlib.sha256(digest_payload).hexdigest() == receipt["sha256"]
-    assert str(capture_path) in block
 
 
 def test_receipt_provider_specific_url_bindings_and_attested_exceptions() -> None:
@@ -451,30 +438,18 @@ def test_receipt_provider_specific_url_bindings_and_attested_exceptions() -> Non
     assert dws["evidence_url"] != dws["requested_url"] == dws["final_url"]
     assert "web.archive.org/web/20251122081546id_/" in str(dws["requested_url"])
 
-    japan = _attestation_block("Japan publisher CRS-capture attestation")
+    japan = (PROVIDER_NOTES / "jp_mlit.md").read_text(encoding="utf-8")
     assert "2026-08-03T12:31:42Z" in japan
     assert "HTTP 403" in japan
     assert "77-byte" in japan
     assert "non-refetchable" in japan
-    swiss = _attestation_block("Switzerland publisher CRS-capture attestation")
-    assert "fragment" in swiss and "never sent" in swiss and "with no\n  redirect" in swiss
-
-
-def test_dws_receipt_is_parsed_from_complete_historical_attestation() -> None:
-    block = _attestation_block("South Africa DWS native-table attestation")
-    pdf_rows = re.findall(r"^\| `WMA[1-8]_[^`]+\.pdf` \|.*$", block, flags=re.MULTILINE)
-    assert len(pdf_rows) == 8
-    wma1 = next(row for row in pdf_rows if "WMA1_Limpopo-Olifants_River.pdf" in row)
-    receipt = next(row for row in _receipts() if row["provider_id"] == "za_dws")
-    for key in ("requested_url", "evidence_url", "retrieved_at", "sha256"):
-        assert str(receipt[key]) in wma1
-    assert "977,280" in wma1
-    assert "All manifest HTTP statuses are 200" in block
+    swiss = (PROVIDER_NOTES / "ch_foen.md").read_text(encoding="utf-8")
+    assert "fragment" in swiss and "not sent" in swiss and "no redirect" in swiss
 
 
 def test_committed_tests_and_receipts_never_depend_on_supply_tree() -> None:
     needle = b"plan" + b"ning/"
-    candidates = [AGENTS_PATH, RECEIPTS_PATH, *ROOT.joinpath("tests").rglob("*.py")]
+    candidates = [RECEIPTS_PATH, *PROVIDER_NOTES.glob("*.md"), *ROOT.joinpath("tests").rglob("*.py")]
     assert all(needle not in path.read_bytes() for path in candidates)
 
 

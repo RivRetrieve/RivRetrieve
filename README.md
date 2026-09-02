@@ -29,6 +29,10 @@ station_map = rr.map_stations(providers="ch_foen")
 `ch_foen` currently provides catalogue data only. Observation retrieval is unavailable until its
 provider pipeline is ported to the engine stage contracts.
 
+## Documentation
+
+Developer documentation is indexed in [`docs/README.md`](docs/README.md).
+
 ## Development
 
 ```bash

@@ -1,6 +1,6 @@
 # cz_chmi Provider Port Notes
 
-These notes capture evidence and hand-off context from the `cz_chmi` Czech CHMI provider port. Promote only shared harness commitments to [architecture.md](../../architecture.md).
+These notes capture evidence and hand-off context from the `cz_chmi` Czech CHMI provider port. Promote only shared harness commitments to [ADRs](../adr/).
 
 ## Source Endpoints
 
@@ -33,6 +33,17 @@ The CHMI metadata endpoint returns a doubly-nested JSON object:
 
 Access path: `root["data"]["data"]["header"]` and `root["data"]["data"]["values"]`.
 
+## Native Catalogue Attestation
+
+The complete metadata response was retrieved at `2026-08-02T00:14:31Z` with 831 rows and 23 header
+columns. Canonicalizing the parsed JSON with sorted keys, compact separators, `ensure_ascii=False`,
+and UTF-8 produces SHA-256
+`a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The active three-row fixture
+is a verbatim parser subset, not the source of the committed native table. It replaced a source-incorrect
+fixture: `0-203-1-016000` and `0-203-1-020000` had wrong coordinates, and `0-204-1-001000` was not
+published by the source. The native-frame digest and source-correct coordinate witnesses are enforced
+by `catalogue/provenance.json` and the generator tests.
+
 ## Observation JSON Structure
 
 Each year file contains a `tsList` array. Each entry has a `tsConID` field and nested `tsData.data.header` / `tsData.data.values` for the actual observations:
@@ -57,15 +68,12 @@ The `Q` column is a quality flag. This port parses `DT` (timestamp) and `VAL` (v
 
 ## Catalogue Mapping
 
-| Legacy/source field | Canonical target | Provider metadata | Decision |
-| --- | --- | --- | --- |
-| `objID` | `StationCatalog.station_id` | `native_id` | Station IDs are hyphen-separated strings like `0-203-1-016000`. Preserved as-is. |
-| `STATION_NAME` | `StationCatalog.name` | `name` | Station display name. |
-| `STREAM_NAME` | No common station column | `water_body` | Retained as metadata. |
-| `GEOGR1` | `StationCatalog.latitude` | `latitude` | Numeric string coerced to float. |
-| `GEOGR2` | `StationCatalog.longitude` | `longitude` | Numeric string coerced to float. |
-| `PLO_STA` | `StationCatalog.drainage_area_km2` | `drainage_area_km2` | Available in km²; nullable when absent or non-numeric. |
-| Altitude | `StationCatalog.elevation_m` | `elevation_m` | Not provided by CHMI metadata. Always `None`. |
+| Native field | Canonical target | Decision |
+| --- | --- | --- |
+| `objID` | `provider_id`, `station_id` | Exact hyphen-separated source identity. |
+| `GEOGR1`, `GEOGR2` | `latitude`, `longitude` | Direct numeric coercion with no coordinate transformation. |
+| Horizontal CRS | `crs` | `unknown`; the captured publisher description does not publish a horizontal CRS. |
+| All other 20 source fields | Native only | Names, stream, drainage-area, elevation, and other source vocabulary remain in `native.parquet`. |
 
 ## Product Dictionary
 

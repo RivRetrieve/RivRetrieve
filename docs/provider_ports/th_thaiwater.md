@@ -1,6 +1,6 @@
 # th_thaiwater Provider Port Notes
 
-These notes capture evidence and handoff context from the `th_thaiwater` provider port. They are not user documentation and not an architecture contract; promote shared harness commitments to [architecture.md](../../architecture.md) only with concrete evidence.
+These notes capture evidence and handoff context from the `th_thaiwater` provider port. They are not user documentation and not an architecture contract; promote shared harness commitments to [ADRs](../adr/) only with concrete evidence.
 
 ## Source Endpoints
 
@@ -20,7 +20,23 @@ Port decision: parse with `datetime.strptime`, localize to `Asia/Bangkok` (`Zone
 
 This conversion is **known and documented** (not inferred), but per the timezone policy in the prompt, a structured `info`-severity issue (`timezone_local_to_utc`) is emitted per station-product series to record the conversion explicitly. Series annotations carry `timezone_source = "local_to_utc_conversion"` and `local_timezone = "Asia/Bangkok"`.
 
-The legacy `ThailandFetcher` drops timezone after localizing (`.dt.tz_localize(None)`), storing naive Bangkok-time datetimes. The new port instead converts to UTC, which is the required behaviour per architecture.md §16 and the deliverable prompt.
+The legacy `ThailandFetcher` drops timezone after localizing (`.dt.tz_localize(None)`), storing naive Bangkok-time datetimes. The new port instead converts to UTC as its provider-specific transform; shared time and zone representation is owned by [ADR 0006](../adr/0006-time-and-zone-are-two-columns.md) and [ADR 0007](../adr/0007-zone-values-are-iana-offset-or-unknown.md).
+
+## Native Catalogue Attestation
+
+The complete `waterlevel_load` response was retrieved at `2026-08-02T12:42:03Z` and contained 825
+rows with 825 unique integer `station.id` values. Canonicalizing the parsed response with sorted keys,
+compact separators, `ensure_ascii=False`, and UTF-8 produces SHA-256
+`d42fdac929ddf87f348ed8cd9a6732768fb9775a47fff2bc54f4e0e74ee8bdee`. The four-row fixture is a
+verbatim parser subset, not a native-table source. The native table preserves 61 lexicographically
+ordered dotted source columns and widens only values needed for a lossless scalar dtype. The source
+population has changed relative to the legacy catalogue: 87 new IDs are present and 16 legacy IDs are
+absent, so the 825-row result is source churn rather than a missing filter. The committed native-frame
+digest and semantic comparison are held by `catalogue/provenance.json`, origins, and generator tests.
+
+The publisher coordinate-standard page was captured at `2026-08-02T13:51:44Z` as
+`tests/test_data/th_thaiwater_coordinate_standard.html`. Its byte identity and SHA-256 are pinned by
+the origin-evidence receipt; it documents coordinate semantics and contributes no native rows.
 
 ## Catalogue Mapping
 
@@ -36,16 +52,15 @@ The legacy `ThailandFetcher` drops timezone after localizing (`.dt.tz_localize(N
 
 ## Product Dictionary
 
-All four ported products map to canonical V1 product IDs. No `th_thaiwater`-specific IDs were needed.
+The packaged catalogue advertises the two source-published instantaneous products. It does not
+advertise daily means; those were derived by the retired observation implementation.
 
-| Legacy variable | Native field | Aggregate | Canonical `product_id` |
-| --- | --- | --- | --- |
-| `STAGE_DAILY_MEAN` | `value` | True (Bangkok-day mean) | `stage_daily_mean` |
-| `STAGE_INSTANT` | `value` | False (deduplicate by time) | `stage_instantaneous` |
-| `DISCHARGE_DAILY_MEAN` | `discharge` | True (Bangkok-day mean) | `discharge_daily_mean` |
-| `DISCHARGE_INSTANT` | `discharge` | False (deduplicate by time) | `discharge_instantaneous` |
+| Native field | Canonical `product_id` | Unit |
+| --- | --- | --- |
+| `value` | `stage_instantaneous` | m |
+| `discharge` | `discharge_instantaneous` | m³/s |
 
-Both `value` (stage, m) and `discharge` (m³/s) are natively already in SI units. No unit conversion required.
+No unit conversion is required.
 
 ## Observation Retrieval
 
@@ -59,7 +74,11 @@ Both `value` (stage, m) and `discharge` (m³/s) are natively already in SI units
 
 825 stations at catalogue version `2026-08-02`, built offline from committed `native.parquet` plus the five station origins. Every native row is required to have `station_type == "tele_waterlevel"`, non-null latitude and longitude, and a unique String `station.id`; violations fail the build rather than being filtered, dropped, or deduplicated.
 
-## Architecture.md Impact
+The packaged station-product carrier is currently empty. Availability lacks row-level acquisition
+bindings, so the loader withholds all 1,650 candidate rows and records
+`no_acquisition_record_established` for each.
+
+## Shared Architecture Impact
 
 None. The Bangkok→UTC conversion is provider-specific. The structured `timezone_local_to_utc` info-issue is provider-specific. Daily Bangkok-day aggregation is provider-specific. No shared harness gap discovered.
 

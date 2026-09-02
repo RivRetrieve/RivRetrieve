@@ -27,6 +27,12 @@ native rows become canonical stations; any future offender produces named issues
 instead of being filtered. `DRAINAGE_AREA_EFFECT` contains 1,661 populated source floats and 6,396
 source nulls.
 
+The nine-page FeatureCollection was retrieved from `2026-08-02T01:09:10Z` through
+`2026-08-02T01:09:20Z`, assembled in attested page order, and canonicalized with sorted
+object keys, compact separators, `ensure_ascii=False`, and UTF-8. Its SHA-256 is
+`3613c17b3e1ad76e8490d6dcb659be251f2270e5568fb6ff1e05fe780037083d`. Native-table and sorted-id
+digests are enforced by `catalogue/provenance.json` and `tests/test_ca_eccc_catalogue.py`.
+
 | Source field | Canonical target | Notes |
 |---|---|---|
 | `properties.STATION_NUMBER` | `station_id` | Exact native station identity; no normalization. |

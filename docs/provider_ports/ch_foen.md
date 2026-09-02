@@ -1,6 +1,6 @@
 # ch_foen Provider Port Notes
 
-These notes capture evidence and hand-off context from the M3 `ch_foen` reference provider port. They are not user documentation and not a new architecture contract; promote only shared harness commitments to [architecture.md](../../architecture.md).
+These notes capture evidence and hand-off context from the `ch_foen` provider port. The current provider declaration is catalogue-only; observation sections below are historical implementation evidence, not a shipped capability. These notes are not an architecture contract; promote only shared commitments to [ADRs](../adr/).
 
 ## Source Endpoints
 
@@ -11,34 +11,44 @@ These notes capture evidence and hand-off context from the M3 `ch_foen` referenc
 | Existenz.ch Influx archive query API | M4 observation background only; M3 does not call it. | Upstream `origin/switzerland` HEAD `cd9b030` (`Restore public Switzerland token`) intentionally restores a literal `INFLUX_TOKEN`, classifying it as a public service credential. Target M3 carries no token because it is catalogue-only. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/execution.md:81`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:39-40, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:199-203 |
 | BAFU/Existenz documentation and terms | M4 observation background and provenance context. | None in M3. | thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:30-34, `src/rivretrieve/_internal/providers/ch_foen/catalogue/provider.json:1` |
 
+## Native Catalogue Attestation
+
+The complete `/apiv1/hydro/locations` response was retrieved at `2026-08-02T00:14:31Z`, contained 246
+stations under `payload`, and was verified byte-identical to
+`tests/test_data/switzerland_metadata_locations.json`. Canonical JSON has SHA-256
+`7471e85de4f4a6d1e0968a9fe35a962c98729a4bb3b244e0991818f3038ce24a`. The sole integer
+`details.id`, for station `2071`, is normalized to String so the native Parquet column has one scalar
+dtype. Canonical artefacts are built only from the committed native table plus origins.
+
+The publisher documentation evidence URL is `https://api.existenz.ch/#hydro`; the fragment is not sent
+to the server. The byte-identical capture `tests/test_data/ch_foen_api_docs.html` records a direct HTTP
+200 response from `https://api.existenz.ch/` at `2026-08-03T12:31:42Z` with no redirect. Its raw-byte digest and source
+binding are pinned by the origin-evidence receipt and catalogue tests.
+
 ## Catalogue Mapping
 
-| Legacy/source field | Canonical target | Provider metadata | Decision | Citation |
-| --- | --- | --- | --- | --- |
-| Payload station key and `details.id` | `StationCatalog.station_id` | `station_key`, `native_id` | Use `details.id` normalized to string, falling back to station key. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:62`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:151-157 |
-| `details.name` | `StationCatalog.name` | `name` | Preserve provider station name. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:64`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:157 |
-| `details["water-body-name"]` / `details["water_body_name"]` | No common station column | `water_body_name` | Retain as metadata because the common station schema has no river/water-body column. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:65`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:152-158 |
-| `details.lat`, `details.lon` | `StationCatalog.latitude`, `StationCatalog.longitude` | `latitude`, `longitude` | Use numeric latitude and longitude as required common fields. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:69`, `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:70`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:159-160 |
-| Legacy `COUNTRY`, `SOURCE` constants | `StationCatalog.country`; provider-info `name` | `country`, `source` | Preserve `"Switzerland"` and FOEN/BAFU source naming rather than introducing unscoped ISO or agency normalization. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:71`, `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:176-177`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:41-42, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:163-164 |
-| Legacy altitude and area placeholders | `StationCatalog.elevation_m`, `StationCatalog.drainage_area_km2` | `elevation_m`, `drainage_area_km2` | Store `None` in M3 because the locations endpoint does not provide these values; the canonical columns are nullable. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:77`, `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:78`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:161-162 |
-| Top-level fixture fields (`source`, `apiurl`, `opendata`, `license`) | No dedicated common columns | `api_source`, `api_url`, `open_data_url`, `license_url`; provider-info metadata JSON | Preserve as JSON metadata in packaged artifacts. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:73-76`, `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:183`, `src/rivretrieve/_internal/providers/ch_foen/catalogue/provider.json:1` |
-| Six legacy variables from `VARIABLE_MAP` | Canonical V1 `ProductCatalog.product_id` rows | `legacy_variable`, `native_id`, `parameters`, `preferred_parameter`, `fallback_parameter`, `aggregate_daily` | All six map to canonical products; no `ch_foen`-specific product IDs and no dropped legacy SwitzerlandFetcher variables. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:155-170`, thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:44-80 |
-| Locations catalogue station universe x product dictionary | `StationProductCatalog` rows | `native_parameters`, `availability_source`, `availability_note` | Materialize `246 * 6 = 1476` rows with `availability="unknown"` because the locations endpoint does not expose per-variable station availability. | `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:127-153`, `docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/execution.md:61` |
+| Native field | Canonical target | Decision |
+| --- | --- | --- |
+| top-level `name` | `provider_id`, `station_id` | Exact source station identity; no fallback identity is synthesized. |
+| `details.lat`, `details.lon` | `latitude`, `longitude` | Direct numeric coordinates with no transformation. |
+| Horizontal CRS | `crs` | `unknown`; the publisher documentation does not state a horizontal CRS. |
+| All other location fields | Native only | Preserved in source vocabulary, including names, water-body values, Swiss coordinates, and the normalized `details.id`. |
+
+The packaged catalogue contains three source-published instantaneous products and 738 station-product
+rows. Availability is `unknown` because the locations endpoint does not expose per-variable station
+availability.
 
 ## Product Dictionary
 
-M3 introduced no `ch_foen`-specific product IDs and dropped no legacy SwitzerlandFetcher variables. The six-product mapping follows step 02 plan section 3.4 (`docs/milestones/m3-ch-foen-catalogue-provider/steps/02-ch-foen-full-implementation/plan.md:155`).
+The packaged catalogue advertises three canonical instantaneous products. It does not advertise daily
+means because the source location catalogue publishes no daily aggregates and RivRetrieve does not
+harmonise judgement by deriving them.
 
-| Legacy variable | Native fields | Canonical product_id | M3 classification | M4 note |
-| --- | --- | --- | --- | --- |
-| `constants.DISCHARGE_DAILY_MEAN` | `flow`, fallback `flow_ls`; daily aggregation true | `discharge_daily_mean` | Canonical V1 | Confirm daily aggregation semantics when observation retrieval is implemented. |
-| `constants.DISCHARGE_INSTANT` | `flow`, fallback `flow_ls`; daily aggregation false | `discharge_instantaneous` | Canonical V1 | Preserve fallback handling in parser tests. |
-| `constants.STAGE_DAILY_MEAN` | `height_abs`, fallback `height`; daily aggregation true | `stage_daily_mean` | Canonical V1 | Confirm period anchoring and aggregation semantics. |
-| `constants.STAGE_INSTANT` | `height_abs`, fallback `height`; daily aggregation false | `stage_instantaneous` | Canonical V1 | Preserve fallback handling in parser tests. |
-| `constants.WATER_TEMPERATURE_DAILY_MEAN` | `temperature`; no fallback; daily aggregation true | `water_temperature_daily_mean` | Canonical V1 | Confirm daily aggregation semantics. |
-| `constants.WATER_TEMPERATURE_INSTANT` | `temperature`; no fallback; daily aggregation false | `water_temperature_instantaneous` | Canonical V1 | Use as the simplest observation parser case. |
-
-Legacy evidence: thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:22-29 and thirdparty/RivRetrieve-Python @ origin/switzerland:rivretrieve/switzerland.py:44-80.
+| Native field | Canonical product ID | Unit |
+| --- | --- | --- |
+| `flow`, fallback `flow_ls` | `discharge_instantaneous` | m³/s |
+| `height_abs`, fallback `height` | `stage_instantaneous` | m |
+| `temperature` | `water_temperature_instantaneous` | °C |
 
 ## Observation Retrieval
 
@@ -51,7 +61,7 @@ The implementation preserves the legacy SwitzerlandFetcher mechanics that matter
 
 | Behavior | M4 target behavior | Legacy evidence |
 | --- | --- | --- |
-| Product/native-field mapping | The six canonical products use `flow`, `flow_ls`, `height_abs`, `height`, and `temperature` according to the product dictionary above. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:22-29`, `:44-81` |
+| Historical product/native-field mapping | The retired observation work covered daily and instantaneous variants using `flow`, `flow_ls`, `height_abs`, `height`, and `temperature`; only the three instantaneous products are packaged now. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:22-29`, `:44-81` |
 | Windowing | Observation calls decompose request ranges into 366-day windows before querying. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:43`, `:97-110` |
 | Query shape | Flux queries target `existenzApi`, measurement `hydro`, one station, the configured native fields, and an exclusive stop date. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:175-188` |
 | Transport loop | The legacy fetcher posts each station/product/window query with CSV accept headers and token authorization. M4 keeps runtime calls transport-injectable for offline tests. | `/Users/nicolaslazaro/Desktop/thirdparty/RivRetrieve-Python` @ `cd9b030:rivretrieve/switzerland.py:190-218` |

@@ -1,6 +1,6 @@
 # no_nve Provider Port Notes
 
-These notes capture evidence and context from the `no_nve` port of the NVE HydAPI provider. They are not user documentation and not a new architecture contract; promote only shared harness commitments to [architecture.md](../../architecture.md).
+These notes capture evidence and context from the `no_nve` port of the NVE HydAPI provider. They are not user documentation and not a new architecture contract; promote only shared harness commitments to [ADRs](../adr/).
 
 ## Source
 
@@ -73,24 +73,18 @@ NVE provides all values in standard units with no conversion required:
 - Hourly (resTime=60): monthly windows, `YYYY-MM-01/YYYY-MM-DD`.
 - Instantaneous (resTime=0): monthly windows (same as hourly, since NVE allows arbitrary date ranges but monthly chunks avoid excessively large requests).
 
-## Live Catalogue
+## Packaged Catalogue Status
 
-`generate_catalogue.py` implements `generate_catalogue_from_live()` which calls the NVE `/Stations` endpoint (active and inactive) to build the station catalogue. This is a **maintainer-only** function requiring `NVE_API_KEY`. It is not a runtime live catalogue path — `provider_info["live_stations"] = False` because the catalogue reader has no routing to this function at runtime. The `generate_catalogue.py` mechanism is the standard RivRetrieve maintainer catalogue workflow.
+`no_nve` is withheld from certified catalogue generation pending the credentialed native acquisition
+owned by [issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90). The packaged catalogue keeps
+provider metadata but emits empty product, station, and station-product tables with structured
+`no_acquisition_record_established` provenance. `tests/test_data/no_nve_metadata.json` is a three-row
+parser fixture only and must not generate packaged values. See
+[`../catalogue-provenance.md`](../catalogue-provenance.md) for the maintenance command and certification
+boundary.
 
-## Fixture
-
-- `tests/test_data/no_nve_metadata.json`: 3 NVE stations with varied `seriesList` to test availability inference.
-  - `12.210.0` (Elverum): discharge+stage daily and discharge hourly.
-  - `2.32.0` (Haugland): discharge and temperature daily.
-  - `151.10.0` (Nygard): empty `seriesList` — all unavailable.
-- `tests/test_data/no_nve_12.210.0_discharge_daily_2023.json`: 5 daily discharge rows, one sentinel `-9999` to exercise filtering.
-- `tests/test_data/no_nve_12.210.0_discharge_hourly_202301.json`: 3 hourly discharge rows with CET offset.
-
-## Packaged Catalogue (2026-06-03 fixture)
-
-- Stations: 3 (fixture; regenerate with `--live` for production)
-- Products: 9
-- Station-products: 27
+A future authenticated `/Stations` response may refresh and attest a committed native table. It must
+not directly generate canonical artefacts, and the API key must not be recorded.
 
 ## Pain Points
 

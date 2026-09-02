@@ -46,6 +46,26 @@ Temperature evidence is the endpoint-local
 `tests/test_data/fr_hubeau_temperature_stations_full.json`. Every geometry carries CRS84; all 869
 geometry scalars differ from the consumed nine-decimal properties before rounding and agree after it.
 
+## Capture Attestation
+
+For each station capture, canonicalization sorts the response `data` rows by `code_station`, then uses
+`json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")`. For
+GeoJSON and OpenAPI, canonicalization uses the complete parsed response and
+`json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")`. This
+distinction is part of the digest contract.
+
+| Capture | Source request and response | SHA-256 |
+|---|---|---|
+| `tests/test_data/fr_hubeau_referentiel_stations_full.json` | Seven `GET https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page=<1..7>&format=json` requests at `2026-08-02T17:32:58Z`; every response was HTTP 206; 6,454 assembled rows | `fb3ea87f634554d4d679e5a422c1e5c5df80442f8f3c7a549e4d8bd0fa964c46` |
+| `tests/test_data/fr_hubeau_temperature_stations_full.json` | `GET https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json` at `2026-08-02T17:33:34Z`; HTTP 200; 1,381,753 bytes and 869 rows | `125e4dee1b6ccf3fd17c800f170fc9cd8dc25244091773bb36ff9b61bc89ac2a` |
+| `tests/test_data/fr_hubeau_geojson_crs_evidence.json` | `GET https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1011000101&format=geojson` at `2026-08-02T17:33:42Z`; HTTP 200; 1,924 bytes | `51f0259e182d2002c9a2352e2616d7ef20d5ffbdb830da725add3ecf8f52a7b7` |
+| `tests/test_data/fr_hubeau_openapi_v2.json` | `GET https://hubeau.eaufrance.fr/api/v2/hydrometrie/api-docs` at `2026-08-02T17:33:43Z`; HTTP 200; 117,460 bytes | `4e668183a03a674e9d12a7a4152781f05167eee43002da188738a173e09c5b02` |
+
+Each digest was independently reproduced by a fresh live fetch, and the staged bytes were reproduced
+exactly. The station captures supply native rows; GeoJSON and OpenAPI are documentation evidence only.
+The native-frame digest and exact semantic comparison are enforced by origins and
+`tests/test_fr_hubeau_generate_catalogue.py`.
+
 ## Narrow Coordinate Correction
 
 Exactly 54 hydrometry rows have integer `code_projection == 31` and the evidenced signature
@@ -58,10 +78,10 @@ value is substituted and no reprojection occurs.
 
 ## Products and Availability
 
-The six existing product identities and assignments are unchanged: five hydrometry products and one
-water-temperature product. All 33,139 station-product rows retain `availability = "unknown"` because
-the station endpoints do not publish per-variable availability. Product and station-product metadata
-is non-null compact JSON.
+The six source product identities remain described by the generator: five hydrometry products and one
+water-temperature product. The current acquisition provenance does not bind the required station and
+station-product facts, so the loader withholds all such rows rather than exposing unestablished
+values. It records 47,785 `no_acquisition_record_established` groups.
 
 ## Dates and Determinism
 
@@ -72,9 +92,9 @@ remains available solely to maintain the source-faithful native table.
 
 ## Station Count
 
-7,323 canonical stations: 6,454 hydrometry plus 869 disjoint temperature stations. No station is
-filtered. The former 6,420 hydrometry / 7,289 total was the superseded pre-m10-s3 shipping state; the
-truthful live-refresh safety floor remains 500.
+The committed native table contains 7,323 source stations: 6,454 hydrometry plus 869 disjoint
+temperature stations. The current packaged canonical station and station-product carriers are empty
+because their row-level acquisition facts are withheld. The live-refresh safety floor remains 500.
 
 ## Observation Notes
 

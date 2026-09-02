@@ -1,6 +1,6 @@
 # lt_lhmt Provider Port Notes
 
-These notes capture evidence and decisions from porting the Lithuanian Hydrometeorological Service (Meteo.lt) provider. They are not user documentation. Provider-specific pain stays here; shared harness changes require a concrete architecture.md update.
+These notes capture evidence and decisions from porting the Lithuanian Hydrometeorological Service (Meteo.lt) provider. They are not user documentation. Provider-specific pain stays here; shared architecture changes require a concrete ADR.
 
 ## Source Endpoints
 
@@ -11,17 +11,15 @@ These notes capture evidence and decisions from porting the Lithuanian Hydromete
 
 ## Catalogue Mapping
 
-| Source field | Canonical target | Provider metadata | Decision |
-| --- | --- | --- | --- |
-| `code` | `station_id` | `native_code` | Slug-style string identifiers (e.g. `anyksciu-vms`). Already unique. |
-| `name` | `name` | `name` | Station name, preserved verbatim including Unicode (Lithuanian diacritics). |
-| `waterBody` | No common column | `water_body` | River/water-body name; no canonical common-schema column for this. Preserved as provider metadata. |
-| `coordinates.latitude` | `latitude` | `latitude` | Numeric, direct. |
-| `coordinates.longitude` | `longitude` | `longitude` | Numeric, direct. |
-| — | `elevation_m` | `elevation_m` | Not provided by the API. Stored as `None`; canonical column is nullable. |
-| — | `drainage_area_km2` | `drainage_area_km2` | Not provided by the API. Stored as `None`; canonical column is nullable. |
-| `waterDischarge` | `discharge_daily_mean` → `value` | `native_field`, `native_unit` | Direct: already in m³/s, no conversion needed. |
-| `waterLevel` | `stage_daily_mean` → `value` | `native_field`, `native_unit`, `unit_conversion` | **Unit conversion required: cm → m (divide by 100).** This is the main numeric pain point. |
+| Native field | Canonical target | Decision |
+| --- | --- | --- |
+| `code` | `provider_id`, `station_id` | Exact slug-style source identity. |
+| `coordinates` latitude and longitude | `latitude`, `longitude` | Direct numeric coordinates. |
+| Publisher API documentation | `crs` | Documented constant `EPSG:4326`. |
+| `name`, `waterBody`, and other fields | Native only | Preserved in source vocabulary and not promoted into identity-and-geometry columns. |
+
+Observation mapping remains direct for `waterDischarge` in m³/s. `waterLevel` is converted from cm to
+canonical metres by division by 100.
 
 ## Product Dictionary
 
@@ -46,7 +44,7 @@ No V1 vocabulary expansion needed. The legacy Lithuania fetcher exposed exactly 
 
 **Series annotation `resolved_timezone` is always `"UTC"** for lt_lhmt. No timezone ambiguity because the source field name asserts UTC explicitly.
 
-This is a provider-specific fact and does not update architecture.md §16. The architecture already requires timezone facts in series annotations and structured issues for inferred or ambiguous timestamps.
+This is a provider-specific fact. Shared time and zone representation is owned by [ADR 0006](../adr/0006-time-and-zone-are-two-columns.md) and [ADR 0007](../adr/0007-zone-values-are-iana-offset-or-unknown.md).
 
 ## Observation Retrieval Design
 
@@ -70,14 +68,18 @@ The legacy fetcher enforced a rolling 180-requests/minute limit with a deque. Th
 
 Unlike ch_foen (which has `flow` / `flow_ls` fallback, `height_abs` / `height` fallback), Meteo.lt has exactly one field per product. The transform layer has no preferred/fallback selection logic.
 
-## Catalogue Generation
+## Native Catalogue Attestation
 
-The generator reads a JSON array fixture (or live endpoint) and materializes:
-- 97 stations (as of 2026-05-31 fixture)
-- 2 products
-- 97 × 2 = 194 station-product rows with `availability=unknown`
+The complete `/v1/hydro-stations` response was retrieved at `2026-08-01T18:31:08Z` and verified
+content-identical to `tests/test_data/lithuania_metadata_stations.json`. It contains 97 stations.
+Sorting by `code` and serializing with sorted object keys, compact separators, default
+`ensure_ascii=True`, and UTF-8 produces SHA-256
+`02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8` for both inputs.
 
-Station-product availability is `unknown` because the Meteo.lt hydro-stations catalogue does not indicate which stations have which variables. The actual availability must be probed by attempting observation requests.
+Canonical artefacts are built only from committed `catalogue/native.parquet` plus origins. They contain
+97 stations, two products, and 194 station-product rows with `availability=unknown` because the station
+endpoint does not publish variable availability. The digest and pure build are checked by
+`tests/test_lt_lhmt_generate_catalogue.py`.
 
 ## Pain Points
 
