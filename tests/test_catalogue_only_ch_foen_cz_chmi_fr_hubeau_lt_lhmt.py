@@ -25,22 +25,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         {"unknown"},
     ),
     (
-        "cz_chmi",
-        831,
-        5,
-        4155,
-        {
-            "discharge_daily_mean",
-            "discharge_instantaneous",
-            "stage_daily_mean",
-            "stage_instantaneous",
-            "water_temperature_daily_mean",
-        },
-        "Czech Hydrometeorological Institute (CHMI) Open Data",
-        {"unknown"},
-        {"unknown"},
-    ),
-    (
         "fr_hubeau",
         0,
         6,
@@ -70,7 +54,6 @@ CATALOGUE_ONLY_PROVIDERS = (
 )
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "ch_foen": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
-    "cz_chmi": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
     "fr_hubeau": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
     "lt_lhmt": {
         "__init__.py",
@@ -240,14 +223,6 @@ def test_reference_fixtures_are_colocated_and_active_catalogue_fixtures_remain()
             "retrieval.py",
             "transform.py",
         },
-        "cz_chmi": {
-            "issue_codes.py",
-            "module.py",
-            "observation_client.py",
-            "parser.py",
-            "retrieval.py",
-            "transform.py",
-        },
         "fr_hubeau": {
             "issue_codes.py",
             "module.py",
@@ -275,10 +250,6 @@ def test_reference_fixtures_are_colocated_and_active_catalogue_fixtures_remain()
             "switzerland_2206_discharge_20250101.csv",
             "switzerland_2282_stage_20250101.csv",
             "switzerland_2016_temperature_20200101.csv",
-        },
-        "cz_chmi": {
-            "cz_chmi_metadata.json",
-            "cz_chmi_0-203-1-016000_daily_2020.json",
         },
         "fr_hubeau": {
             "fr_hubeau_metadata.json",

@@ -39,6 +39,8 @@ _TERMS_FILE = "cz_chmi_terms_licence.html"
 _TERMS_SHA256 = "cec8e0a56984c0a59c439077ac5e58956f6199cbe82c39657ce86d262f6ae291"
 _LICENSE = "Produkty Českého hydrometeorologického ústavu dostupné na těchto webových stránkách podléhají licenci Creative Commons 4.0 CC-BY."
 _CITATION = "Dílo smíte sdílet a upravovat za podmínky uvedení původu (zdroje ČHMÚ)."
+_META2_FILE = "cz_meta2.json"
+_META2_SHA256 = "b72883dbaa8407b4a514ae4aeec807350222b67298da16a089ed6299d553fafc"
 
 
 def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
@@ -51,6 +53,14 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         media_type="text/html; charset=UTF-8",
         sha256=_TERMS_SHA256,
     )
+    semantics_recording = RecordingReference(
+        recording_id="cz_chmi_product_semantics",
+        repository_path=f"tests/test_data/{_META2_FILE}",
+        source_url="https://opendata.chmi.cz/hydrology/historical/metadata/meta2.json",
+        retrieved_at=datetime.fromisoformat("2026-09-02T14:47:26.717737Z"),
+        media_type="application/json",
+        sha256=_META2_SHA256,
+    )
     external = (
         "source.provider.service",
         "source.product.native_identity",
@@ -59,7 +69,8 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         "source.station.crs_not_published",
         "source.station_product.availability_not_published",
         "source.observation.native_value",
-        "source.observation.native_quality",
+        "source.product.hourly_mean_semantics",
+        "source.product.hourly_interval_anchor_not_established",
     )
     canonical = (
         "canonical.provider_id",
@@ -107,10 +118,19 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         recording_ids=(recording.recording_id,),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="product_semantics_capture_2026_09_02",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="CHMI product dictionary establishing HH and QH as hourly means",
+                        requested_from=(semantics_recording.source_url,),
+                        retrieved_at_start=semantics_recording.retrieved_at,
+                        recording_ids=(semantics_recording.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="observation_request",
                         method="runtime_http_request",
                         instant_type="runtime",
-                        description="Exact annual CHMI station-product response",
+                        description="Exact annual CHMI station-cadence response",
                         requested_from=("https://opendata.chmi.cz/hydrology/historical/",),
                     ),
                 ),
@@ -119,6 +139,11 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         evidence_id="cz_chmi_terms",
                         description="CHMI licensing and attribution page",
                         recording=recording,
+                    ),
+                    EvidenceReference(
+                        evidence_id="cz_chmi_product_semantics",
+                        description="CHMI native product dictionary",
+                        recording=semantics_recording,
                     ),
                 ),
                 statements=(
@@ -146,13 +171,19 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             ),
             FactBinding(
                 fact_group="catalogue_external",
-                facts=external[:-2],
+                facts=external[:6],
                 source_id="cz_chmi",
                 acquisition_id="catalogue_capture_2026_08_02",
             ),
             FactBinding(
+                fact_group="hourly_product_semantics",
+                facts=external[7:],
+                source_id="cz_chmi",
+                acquisition_id="product_semantics_capture_2026_09_02",
+            ),
+            FactBinding(
                 fact_group="observation_external",
-                facts=external[-2:],
+                facts=external[6:7],
                 source_id="cz_chmi",
                 acquisition_id="observation_request",
             ),
@@ -164,7 +195,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 transformation=Transformation(
                     name="rivretrieve_czech_catalogue_harmonisation",
                     external_inputs=tuple(
-                        ExternalFactReference(source_id="cz_chmi", fact=fact) for fact in external[:-2]
+                        ExternalFactReference(source_id="cz_chmi", fact=fact) for fact in (*external[:6], *external[7:])
                     ),
                 ),
             ),
@@ -175,9 +206,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 acquisition_id=None,
                 transformation=Transformation(
                     name="rivretrieve_czech_observation_harmonisation",
-                    external_inputs=tuple(
-                        ExternalFactReference(source_id="cz_chmi", fact=fact) for fact in external[-2:]
-                    ),
+                    external_inputs=(ExternalFactReference(source_id="cz_chmi", fact=external[6]),),
                 ),
             ),
         ),
@@ -198,6 +227,10 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
                 ExternalFactReference(source_id="cz_chmi", fact="source.station.native_location"),
                 ExternalFactReference(source_id="cz_chmi", fact="source.station.crs_not_published"),
                 ExternalFactReference(source_id="cz_chmi", fact="source.station_product.availability_not_published"),
+                ExternalFactReference(source_id="cz_chmi", fact="source.product.hourly_mean_semantics"),
+                ExternalFactReference(
+                    source_id="cz_chmi", fact="source.product.hourly_interval_anchor_not_established"
+                ),
             ),
         ),
     )

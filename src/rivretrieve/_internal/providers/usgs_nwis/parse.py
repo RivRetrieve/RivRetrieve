@@ -15,6 +15,7 @@ import polars as pl
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.engine import (
     Daily,
+    Hourly,
     Instant,
     Payload,
     ProviderConfig,
@@ -43,6 +44,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
         semantics = provider_config.products[product_id].semantics
     except KeyError as error:
         raise FatalContractError(f"usgs_nwis product is absent from provider config: {product_id}") from error
+    if isinstance(semantics, Hourly):
+        raise FatalContractError("usgs_nwis does not declare hourly interval product semantics")
 
     if not payload.content.strip():
         return _result(_empty_rows(), [_missing_data_issue(station_id)])

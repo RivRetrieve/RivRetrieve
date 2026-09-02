@@ -46,9 +46,9 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
     ],
     "cz_chmi": [
         "discharge_daily_mean",
-        "discharge_instantaneous",
+        "discharge_hourly_mean",
         "stage_daily_mean",
-        "stage_instantaneous",
+        "stage_hourly_mean",
         "water_temperature_daily_mean",
     ],
     "fr_hubeau": [

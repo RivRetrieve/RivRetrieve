@@ -356,6 +356,30 @@ class Daily:
 
 
 @dataclass(frozen=True, slots=True)
+class IntervalDefinition:
+    """How a source timestamp labels its reported interval."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, str):
+            raise TypeError("interval definition must be a string")
+        if self.value != "unknown":
+            raise ValueError("interval definition must be 'unknown'")
+
+
+@dataclass(frozen=True, slots=True)
+class Hourly:
+    """An hourly interval statistic whose label anchoring is explicit."""
+
+    interval_definition: IntervalDefinition
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.interval_definition, IntervalDefinition):
+            raise TypeError("hourly semantics require an IntervalDefinition")
+
+
+@dataclass(frozen=True, slots=True)
 class ZoneValue:
     value: str
 
@@ -405,15 +429,15 @@ class CacheConfig:
 class ProductConfig:
     coordinates: SourceCoordinates
     unit: Unit
-    semantics: Instant | Daily
+    semantics: Instant | Daily | Hourly
 
     def __post_init__(self) -> None:
         if not isinstance(self.coordinates, SourceCoordinates):
             raise TypeError("product coordinates must be SourceCoordinates")
         if not isinstance(self.unit, Unit):
             raise TypeError("product unit must be Unit")
-        if not isinstance(self.semantics, (Instant, Daily)):
-            raise TypeError("product semantics must be Instant or Daily")
+        if not isinstance(self.semantics, (Instant, Daily, Hourly)):
+            raise TypeError("product semantics must be Instant, Daily, or Hourly")
 
 
 @dataclass(frozen=True, slots=True)
