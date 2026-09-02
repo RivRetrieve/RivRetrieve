@@ -24,7 +24,7 @@ from rivretrieve._internal.observations import ObservationProvenance, ReceiptMod
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.jp_mlit.config import config
 from rivretrieve._internal.providers.jp_mlit.declaration import declaration
-from rivretrieve._internal.providers.jp_mlit.fetch import fetch
+from rivretrieve._internal.providers.jp_mlit.fetch import _page, fetch
 from rivretrieve._internal.providers.jp_mlit.parse import parse
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
@@ -56,6 +56,53 @@ def _window() -> FetchWindow:
 
 def _fetched():
     return fetch((_STATION,), _PRODUCTS, _WINDOWS, _window(), config(), ReplayTransport(_PATHS)).value
+
+
+def test_page_rejects_stage_html_when_exact_recorded_unit_is_mutated() -> None:
+    content = read_recording(_PATHS[0]).content
+    mutated = content.replace("単位：m".encode("euc-jp"), "単位：cm".encode("euc-jp"))
+
+    with pytest.raises(FatalContractError, match="unit"):
+        _page(mutated, 2, _STATION)
+
+
+@pytest.mark.parametrize(
+    ("path_index", "kind", "original", "replacement"),
+    [
+        (0, 2, "単位：m", ""),
+        (0, 2, "単位：m", "単位：m</TD></TR><TR><TD>単位：m"),
+        (4, 6, "単位：m<SUP>3</SUP>/s", "単位：m"),
+        (4, 6, "単位：m<SUP>3</SUP>/s", ""),
+        (4, 6, "単位：m<SUP>3</SUP>/s", "単位：m3/s"),
+        (4, 6, "単位：m<SUP>3</SUP>/s", "単位：m<SUP>3</SUP>/s</TD></TR><TR><TD>単位：m<SUP>3</SUP>/s"),
+    ],
+    ids=(
+        "stage-missing",
+        "stage-ambiguous",
+        "discharge-other-product-unit",
+        "discharge-missing",
+        "discharge-flattened-markup",
+        "discharge-ambiguous",
+    ),
+)
+def test_page_rejects_wrong_missing_ambiguous_or_unstructured_units(
+    path_index: int, kind: int, original: str, replacement: str
+) -> None:
+    content = read_recording(_PATHS[path_index]).content
+    source = original.encode("euc-jp")
+    assert content.count(source) == 1
+    mutated = content.replace(source, replacement.encode("euc-jp"))
+
+    with pytest.raises(FatalContractError, match="exact publisher unit"):
+        _page(mutated, kind, _STATION)
+
+
+def test_page_rejects_discharge_unit_when_title_is_mutated_to_stage_product() -> None:
+    content = read_recording(_PATHS[4]).content
+    mutated = content.replace("時刻流量月表検索結果".encode("euc-jp"), "時刻水位月表検索結果".encode("euc-jp"))
+
+    with pytest.raises(FatalContractError, match="exact publisher unit"):
+        _page(mutated, 2, _STATION)
 
 
 def test_fetch_returns_all_eight_untouched_payloads_in_caller_order() -> None:

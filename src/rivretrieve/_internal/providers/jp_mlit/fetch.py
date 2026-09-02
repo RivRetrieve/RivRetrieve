@@ -28,6 +28,15 @@ _BASE = "http://www1.river.go.jp"
 _DSP_URL = f"{_BASE}/cgi-bin/DspWaterData.exe"
 _TITLES = {2: "時刻水位月表検索結果", 3: "日水位年表検索結果", 6: "時刻流量月表検索結果", 7: "日流量年表検索結果"}
 _NO_DATA_MARKERS = ("該当するデータはありません", "該当するデータがありません")
+_STAGE_UNIT = (("text", "単位：m"),)
+_DISCHARGE_UNIT = (
+    ("text", "単位：m"),
+    ("start", "sup"),
+    ("text", "3"),
+    ("end", "sup"),
+    ("text", "/s"),
+)
+_UNIT_BY_KIND = {2: _STAGE_UNIT, 3: _STAGE_UNIT, 6: _DISCHARGE_UNIT, 7: _DISCHARGE_UNIT}
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,22 +51,43 @@ class _Page(HTMLParser):
         self.in_title = False
         self.title_parts: list[str] = []
         self.links: list[str] = []
+        self.unit_cells: list[tuple[tuple[str, str], ...]] = []
+        self._cell_tokens: list[tuple[str, str]] | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() == "title":
+        normalized = tag.lower()
+        if normalized == "title":
             self.in_title = True
-        if tag.lower() == "a":
+        if normalized == "td":
+            self._cell_tokens = []
+        elif self._cell_tokens is not None:
+            self._cell_tokens.append(("start", normalized))
+        if normalized == "a":
             for name, value in attrs:
                 if name.lower() == "href" and value and ".dat" in value.lower():
                     self.links.append(value)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.lower() == "title":
+        normalized = tag.lower()
+        if normalized == "title":
             self.in_title = False
+        if normalized == "td" and self._cell_tokens is not None:
+            if any(token == "text" and value.startswith("単位") for token, value in self._cell_tokens):
+                self.unit_cells.append(tuple(self._cell_tokens))
+            self._cell_tokens = None
+        elif self._cell_tokens is not None:
+            self._cell_tokens.append(("end", normalized))
 
     def handle_data(self, data: str) -> None:
         if self.in_title:
             self.title_parts.append(data)
+        value = data.strip()
+        if self._cell_tokens is not None and value:
+            if self._cell_tokens and self._cell_tokens[-1][0] == "text":
+                token, prior = self._cell_tokens[-1]
+                self._cell_tokens[-1] = (token, prior + value)
+            else:
+                self._cell_tokens.append(("text", value))
 
 
 def _page(content: bytes, kind: int, station_id: str) -> tuple[str, ...]:
@@ -77,6 +107,8 @@ def _page(content: bytes, kind: int, station_id: str) -> tuple[str, ...]:
         if any(marker in text for marker in _NO_DATA_MARKERS):
             return ()
         raise FatalContractError("jp_mlit HTML has no uniquely established data or no-data result")
+    if parser.unit_cells != [_UNIT_BY_KIND[kind]]:
+        raise FatalContractError("jp_mlit HTML unit differs from the exact publisher unit for requested KIND")
     if len(parser.links) != 1:
         raise FatalContractError("jp_mlit HTML must publish exactly one DAT link")
     path = parser.links[0]
