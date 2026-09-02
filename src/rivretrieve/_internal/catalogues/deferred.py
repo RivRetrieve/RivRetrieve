@@ -1,4 +1,4 @@
-"""deferred provenance : ProviderId × CatalogueFactUniverse → AcquisitionProvenance (pure)."""
+"""deferred provenance : ProviderId × SourceRecords × FactBindings × SourceFacts → AcquisitionProvenance (pure)."""
 
 from __future__ import annotations
 
@@ -25,12 +25,19 @@ def deferred_acquisition_provenance(
     ----------
     provider_id
         Packaged provider whose credentialed acquisition remains deferred.
+    source_records
+        Independently established non-catalogue source records to retain.
+    fact_bindings
+        Direct bindings for the independently established source facts.
+    source_facts
+        Source facts added to the otherwise canonical catalogue fact universe.
 
     Returns
     -------
     AcquisitionProvenance
-        A closed record withholding every catalogue fact without inventing an
-        acquisition, source, or native-table identity.
+        A closed record withholding every unestablished catalogue fact without
+        inventing a native-table identity. Independently established source
+        records and their direct fact bindings remain available.
     """
     authored_provider_facts = tuple(
         fact
