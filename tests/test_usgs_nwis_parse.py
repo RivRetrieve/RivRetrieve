@@ -96,6 +96,23 @@ def _content(
     ).encode()
 
 
+@pytest.mark.parametrize(
+    "content",
+    [
+        _content([{"value": "1.0", "dateTime": "2023-01-01T00:00:00-06:00"}]),
+        b"",
+        b"{}",
+    ],
+    ids=("offset-bearing", "empty", "missing-series"),
+)
+def test_parse_rejects_undeclared_product_before_reading_content(content: bytes) -> None:
+    with pytest.raises(FatalContractError, match="product is absent from provider config: undeclared"):
+        parse(
+            _payload(content, (("07374000", ProductId("undeclared")),)),
+            config(),
+        )
+
+
 def test_parse_current_daily_recording_preserves_naive_period_labels_as_unknown_zone() -> None:
     recording = read_recording(CURRENT_DV_RECORDING_PATH)
 

@@ -41,8 +41,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     station_id, product_id = payload.station_products[0]
     try:
         semantics = provider_config.products[product_id].semantics
-    except KeyError:
-        semantics = None
+    except KeyError as error:
+        raise FatalContractError(f"usgs_nwis product is absent from provider config: {product_id}") from error
 
     if not payload.content.strip():
         return _result(_empty_rows(), [_missing_data_issue(station_id)])
@@ -154,16 +154,12 @@ def _observation_entries(document: dict[str, object]) -> tuple[list[object], flo
     return entries, no_data_value
 
 
-def _parse_timestamp(raw_timestamp: str, semantics: Daily | Instant | None) -> tuple[datetime, ZoneValue]:
+def _parse_timestamp(raw_timestamp: str, semantics: Daily | Instant) -> tuple[datetime, ZoneValue]:
     match = _OFFSET_TIMESTAMP_PATTERN.fullmatch(raw_timestamp)
     try:
         if match is not None:
             normalized_offset = "+00:00" if match["offset"] == "Z" else match["offset"]
             zone = ZoneValue(normalized_offset)
-        elif semantics is None:
-            raise FatalContractError(
-                "usgs_nwis product must be declared before parsing a timestamp without an explicit offset"
-            )
         elif isinstance(semantics, Daily):
             match = _NAIVE_TIMESTAMP_PATTERN.fullmatch(raw_timestamp)
             if match is None:
