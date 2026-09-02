@@ -75,6 +75,21 @@ description: Daily mean discharge in cubic meters per second.
 notes: The provider must document period anchoring when known. A provider-native daily mean and a RivRetrieve-derived daily mean are different products unless derivation semantics are explicitly defined.
 ```
 
+### discharge_hourly_mean
+
+```text
+observed_property: discharge
+frequency: hourly
+statistic: mean
+period_type: interval
+period_anchor: start | end | midpoint | provider_defined | unknown
+unit: m3/s
+derived: false
+derivation_method: none
+description: Hourly mean discharge in cubic meters per second.
+notes: The source interval anchoring must remain unknown when the publisher does not establish it.
+```
+
 ### discharge_daily_min
 
 ```text
@@ -133,6 +148,21 @@ derived: false
 derivation_method: none
 description: Daily mean water level/stage in meters.
 notes: Provider datum or reference-level semantics must not be hidden.
+```
+
+### stage_hourly_mean
+
+```text
+observed_property: stage
+frequency: hourly
+statistic: mean
+period_type: interval
+period_anchor: start | end | midpoint | provider_defined | unknown
+unit: m
+derived: false
+derivation_method: none
+description: Hourly mean water level/stage in meters.
+notes: The source interval anchoring must remain unknown when the publisher does not establish it.
 ```
 
 ### stage_daily_min

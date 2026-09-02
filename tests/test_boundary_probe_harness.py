@@ -213,6 +213,11 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
     assert obligations == (
         (ProviderId("ca_eccc"), ProductId("discharge_daily_mean")),
         (ProviderId("ca_eccc"), ProductId("stage_daily_mean")),
+        (ProviderId("cz_chmi"), ProductId("discharge_daily_mean")),
+        (ProviderId("cz_chmi"), ProductId("discharge_hourly_mean")),
+        (ProviderId("cz_chmi"), ProductId("stage_daily_mean")),
+        (ProviderId("cz_chmi"), ProductId("stage_hourly_mean")),
+        (ProviderId("cz_chmi"), ProductId("water_temperature_daily_mean")),
         (ProviderId("pl_imgw"), ProductId("discharge_daily_mean")),
         (ProviderId("pl_imgw"), ProductId("stage_daily_mean")),
         (ProviderId("pl_imgw"), ProductId("water_temperature_daily_mean")),

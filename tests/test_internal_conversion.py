@@ -15,7 +15,9 @@ from rivretrieve._internal.engine import (
     CanonicalRowsSchema,
     Daily,
     DayDefinition,
+    Hourly,
     Instant,
+    IntervalDefinition,
     ProductConfig,
     ProviderConfig,
     RequestedWindow,
@@ -37,7 +39,7 @@ def _window(start: datetime, end: datetime) -> RequestedWindow:
     return RequestedWindow(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
 
 
-def _product(unit: Unit = Unit.M, semantics: Instant | Daily | None = None) -> ProductConfig:
+def _product(unit: Unit = Unit.M, semantics: Instant | Daily | Hourly | None = None) -> ProductConfig:
     return ProductConfig(
         coordinates=SourceCoordinates("unused"),
         unit=unit,
@@ -546,3 +548,48 @@ def test_convert_returns_exact_canonical_column_order_and_native_time_dtype() ->
     assert result.value.schema["time_zone"] == pl.Utf8
     assert result.value["time_zone"].null_count() == 0
     assert_frame_equal(result.value, expected)
+
+
+def test_hourly_interval_means_clip_on_source_label_axis_without_inferring_anchor() -> None:
+    from rivretrieve._internal.conversion import convert
+
+    rows = _rows(
+        [
+            {
+                "station_id": "s",
+                "product_id": "level",
+                "time": datetime(2023, 1, 1, hour),
+                "value": float(hour),
+                "time_zone": "+00:00",
+            }
+            for hour in (0, 1, 2)
+        ]
+    )
+    result = convert(
+        rows,
+        _config({"level": _product(semantics=Hourly(IntervalDefinition("unknown")))}),
+        _window(datetime(2023, 1, 1, 1), datetime(2023, 1, 1, 2)),
+    )
+    assert result.value["time"].to_list() == [datetime(2023, 1, 1, 1), datetime(2023, 1, 1, 2)]
+
+
+def test_hourly_interval_mean_requires_an_on_hour_source_label() -> None:
+    from rivretrieve._internal.conversion import convert
+
+    rows = _rows(
+        [
+            {
+                "station_id": "s",
+                "product_id": "level",
+                "time": datetime(2023, 1, 1, 1, 30),
+                "value": 1.0,
+                "time_zone": "+00:00",
+            }
+        ]
+    )
+    with pytest.raises(FatalContractError, match="on-hour label"):
+        convert(
+            rows,
+            _config({"level": _product(semantics=Hourly(IntervalDefinition("unknown")))}),
+            _window(datetime(2023, 1, 1), datetime(2023, 1, 2)),
+        )

@@ -142,22 +142,22 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         ts_con_id="TD",
     ),
     ProductDefinition(
-        product_id="discharge_instantaneous",
+        product_id="discharge_hourly_mean",
         observed_property="discharge",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="hourly",
+        statistic="mean",
+        period_type="interval",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         ts_con_id="QH",
     ),
     ProductDefinition(
-        product_id="stage_instantaneous",
+        product_id="stage_hourly_mean",
         observed_property="stage",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="hourly",
+        statistic="mean",
+        period_type="interval",
+        period_anchor="unknown",
         canonical_unit="m",
         ts_con_id="HH",
     ),
@@ -286,8 +286,8 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: annual-window requests per station-product pair; "
-            "404 years silently skipped; partial failures reported as recoverable issues"
+            "false: live annual JSON requests coalesced by station, year, and DQ/HQ file family; "
+            "non-success HTTP responses fail the source contract"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,

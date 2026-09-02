@@ -10,6 +10,7 @@ from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
     Daily,
+    Hourly,
     Instant,
     ProductConfig,
     ProviderConfig,
@@ -45,7 +46,7 @@ def convert(
     adapted_end = _endpoint_datetime(supplied_end)
 
     canonical_records: list[dict[str, object]] = []
-    semantics_by_row: list[Daily | Instant] = []
+    semantics_by_row: list[Daily | Hourly | Instant] = []
 
     for row in rows.iter_rows(named=True):
         station_id = row["station_id"]
@@ -65,6 +66,11 @@ def convert(
             ):
                 raise FatalContractError(
                     f"Daily row for station {station_id} and product {product_id} must have a midnight label"
+                )
+        elif isinstance(product.semantics, Hourly):
+            if native_time.minute != 0 or native_time.second != 0 or native_time.microsecond != 0:
+                raise FatalContractError(
+                    f"Hourly row for station {station_id} and product {product_id} must have an on-hour label"
                 )
         elif isinstance(product.semantics, Instant):
             pass
@@ -91,7 +97,9 @@ def convert(
     for native_time, semantics in zip(canonical_rows["time"], semantics_by_row, strict=True):
         if isinstance(semantics, Daily):
             keep_values.append(adapted_start.date() <= native_time.date() <= adapted_end.date())
-        elif isinstance(semantics, Instant):
+        elif isinstance(semantics, Hourly | Instant):
+            # Unknown interval anchoring cannot support inferred interval-overlap clipping.
+            # Preserve the source label and clip it on the timestamp axis.
             keep_values.append(adapted_start <= native_time <= adapted_end)
         else:
             assert_never(semantics)
