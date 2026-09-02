@@ -7,13 +7,22 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, time
 from typing import cast
 
 import polars as pl
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues, ZoneValue
+from rivretrieve._internal.engine import (
+    Daily,
+    Instant,
+    Payload,
+    ProviderConfig,
+    Rows,
+    RowsSchema,
+    WithIssues,
+    ZoneValue,
+)
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.usgs_nwis.issue_codes import UsgsNwisObservationIssueCodes
@@ -21,15 +30,19 @@ from rivretrieve._internal.providers.usgs_nwis.issue_codes import UsgsNwisObserv
 PROVIDER_ID = ProviderId("usgs_nwis")
 
 _NO_DATA_VALUE: float = -999999.0
-_TIMESTAMP_PATTERN = re.compile(
-    r"(?P<wall_clock>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?)(?P<offset>Z|[+-][0-9]{2}:[0-9]{2})"
-)
+_WALL_CLOCK_PATTERN = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
+_OFFSET_TIMESTAMP_PATTERN = re.compile(rf"(?P<wall_clock>{_WALL_CLOCK_PATTERN})(?P<offset>Z|[+-][0-9]{{2}}:[0-9]{{2}})")
+_NAIVE_TIMESTAMP_PATTERN = re.compile(rf"(?P<wall_clock>{_WALL_CLOCK_PATTERN})")
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
     if len(payload.station_products) != 1:
         raise FatalContractError("usgs_nwis payload must contain exactly one station-product pair")
     station_id, product_id = payload.station_products[0]
+    try:
+        semantics = provider_config.products[product_id].semantics
+    except KeyError as error:
+        raise FatalContractError(f"usgs_nwis product is absent from provider config: {product_id}") from error
 
     if not payload.content.strip():
         return _result(_empty_rows(), [_missing_data_issue(station_id)])
@@ -57,7 +70,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
         raw_timestamp = entry.get("dateTime")
         if not isinstance(raw_timestamp, str):
             raise FatalContractError("usgs_nwis observation dateTime must be a string")
-        wall_clock, zone = _parse_timestamp(raw_timestamp)
+        wall_clock, zone = _parse_timestamp(raw_timestamp, semantics)
 
         raw_value = entry.get("value")
         if not isinstance(raw_value, str | int | float) or isinstance(raw_value, bool):
@@ -141,15 +154,23 @@ def _observation_entries(document: dict[str, object]) -> tuple[list[object], flo
     return entries, no_data_value
 
 
-def _parse_timestamp(raw_timestamp: str) -> tuple[datetime, ZoneValue]:
-    match = _TIMESTAMP_PATTERN.fullmatch(raw_timestamp)
-    if match is None:
-        raise FatalContractError("usgs_nwis observation timestamp must contain a strict ISO offset")
-
-    normalized_offset = "+00:00" if match["offset"] == "Z" else match["offset"]
+def _parse_timestamp(raw_timestamp: str, semantics: Daily | Instant) -> tuple[datetime, ZoneValue]:
+    match = _OFFSET_TIMESTAMP_PATTERN.fullmatch(raw_timestamp)
     try:
-        zone = ZoneValue(normalized_offset)
+        if match is not None:
+            normalized_offset = "+00:00" if match["offset"] == "Z" else match["offset"]
+            zone = ZoneValue(normalized_offset)
+        elif isinstance(semantics, Daily):
+            match = _NAIVE_TIMESTAMP_PATTERN.fullmatch(raw_timestamp)
+            if match is None:
+                raise FatalContractError("usgs_nwis daily observation timestamp must be strict ISO wall-clock time")
+            zone = ZoneValue("unknown")
+        else:
+            raise FatalContractError("usgs_nwis instantaneous observation timestamp must contain a strict ISO offset")
+
         wall_clock = datetime.fromisoformat(match["wall_clock"])
+        if isinstance(semantics, Daily) and zone == ZoneValue("unknown") and wall_clock.time() != time.min:
+            raise FatalContractError("usgs_nwis naive daily observation timestamp must label midnight")
     except ValueError as error:
         raise FatalContractError("usgs_nwis observation timestamp is unrepresentable") from error
     return wall_clock, zone

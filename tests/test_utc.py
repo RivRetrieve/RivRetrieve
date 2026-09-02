@@ -10,12 +10,10 @@ import rivretrieve._internal.catalogues.artifact as artifact_module
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.engine import (
     Payload,
-    ProviderConfig,
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
     WindowEndpoint,
-    ZoneValue,
     _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
@@ -28,6 +26,7 @@ from rivretrieve._internal.observations import (
     Receipts,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.usgs_nwis.config import config as usgs_nwis_config
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
 
 FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12-dst.json")
@@ -214,7 +213,7 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
         fixture_bytes,
         origin,
     )
-    parsed = parse(payload, ProviderConfig(zone=ZoneValue("unknown"), products={}))
+    parsed = parse(payload, usgs_nwis_config())
     native = ObservationResult(
         data=parsed.value.select(ObservationDataSchema.polars_schema.names()),
         provenance=ObservationProvenance(source="live", provider_id=ProviderId("usgs_nwis")),
