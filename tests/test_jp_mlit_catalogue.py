@@ -55,10 +55,10 @@ PUBLISHED_ID_DIGEST = "9016935eea6c6c7b3c56ee280a1467f74b4d7b60f2fc10f17e1ed3baa
 TIMESTAMP_PAIR_DIGEST = "0f742e2f37bb9c6bfffb7e0d109f8025e5350e6416175c983e79bf8fb8b6fdd0"
 NATIVE_FRAME_DIGEST = "f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268602aec0"
 CANONICAL_CONTENT_DIGESTS = {
-    "products.parquet": "cc2ea7d78754646f01661a65273f24f7dda5622be039b3a9990f316b7d2a28e4",
+    "products.parquet": "2a9dda9d6686fd13d4aeb972cfe7eeb9c9b17478b6344309956922e88c8b613a",
     "stations.parquet": "43f0369f650ec971fa49d507998f3e4e6104e4644a21204c43cef85e2227f1cb",
-    "station_products.parquet": "5390d653ae806e5dfe182fe484ba78c8b5b66d44eb1a6195f44737865cd5ab8c",
-    "provider.json": "6fb87e27a8dfb0d21c36218978bbad45c437be6cd83bf993fcc54ea44a343094",
+    "station_products.parquet": "7bdc3c07ac4e79fabcdf131bc7d2a2122bd254f488f227f533f942f3aac3948f",
+    "provider.json": "104fe86853da0260c2556aff94253878cd51b60e5cacc8cdf5dee997e4d79fb9",
 }
 NATIVE_SCHEMA = generate_catalogue.NATIVE_SCHEMA
 
@@ -156,23 +156,23 @@ def test_products_count() -> None:
 
 def test_products_ids() -> None:
     assert set(_products()["product_id"]) == {
-        "stage_daily_mean",
-        "discharge_daily_mean",
-        "stage_hourly_mean",
-        "discharge_hourly_mean",
+        "stage_daily",
+        "discharge_daily",
+        "stage_hourly",
+        "discharge_hourly",
     }
 
 
 def test_canonical_products_have_correct_units() -> None:
     products = _products()
-    assert products.filter(pl.col("product_id") == "stage_daily_mean")["unit"][0] == "m"
-    assert products.filter(pl.col("product_id") == "discharge_daily_mean")["unit"][0] == "m3/s"
+    assert products.filter(pl.col("product_id") == "stage_daily")["unit"][0] == "m"
+    assert products.filter(pl.col("product_id") == "discharge_daily")["unit"][0] == "m3/s"
 
 
 def test_provider_specific_products_have_correct_frequency() -> None:
-    row = _products().filter(pl.col("product_id") == "stage_hourly_mean")
+    row = _products().filter(pl.col("product_id") == "stage_hourly")
     assert row["frequency"][0] == "hourly"
-    assert row["statistic"][0] == "mean"
+    assert row["statistic"][0] == "unknown"
 
 
 def test_product_native_ids_preserve_integer_kind_identity() -> None:
@@ -229,7 +229,7 @@ def test_provider_info_name_and_bulk_observation_description() -> None:
     assert provider["bulk_observations"] == (
         "true: monthly-window decomposition for hourly products (KINDs 2,6), "
         "yearly-window decomposition for daily products (KINDs 3,7); "
-        "HTML scrape + Shift-JIS .dat download; partial failures reported as recoverable issues"
+        "HTML request + one publisher-minted Shift-JIS DAT download per source window"
     )
 
 

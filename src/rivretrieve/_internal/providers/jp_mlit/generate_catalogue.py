@@ -121,42 +121,42 @@ class ProductDefinition:
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        product_id="stage_hourly_mean",
+        product_id="stage_hourly",
         observed_property="stage",
         frequency="hourly",
-        statistic="mean",
+        statistic="unknown",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m",
         kind=2,
     ),
     ProductDefinition(
-        product_id="stage_daily_mean",
+        product_id="stage_daily",
         observed_property="stage",
         frequency="daily",
-        statistic="mean",
+        statistic="unknown",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m",
         kind=3,
     ),
     ProductDefinition(
-        product_id="discharge_hourly_mean",
+        product_id="discharge_hourly",
         observed_property="discharge",
         frequency="hourly",
-        statistic="mean",
+        statistic="unknown",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         kind=6,
     ),
     ProductDefinition(
-        product_id="discharge_daily_mean",
+        product_id="discharge_daily",
         observed_property="discharge",
         frequency="daily",
-        statistic="mean",
+        statistic="unknown",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         kind=7,
     ),
@@ -292,7 +292,7 @@ def build_provider_info(
         "bulk_observations": (
             "true: monthly-window decomposition for hourly products (KINDs 2,6), "
             "yearly-window decomposition for daily products (KINDs 3,7); "
-            "HTML scrape + Shift-JIS .dat download; partial failures reported as recoverable issues"
+            "HTML request + one publisher-minted Shift-JIS DAT download per source window"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,

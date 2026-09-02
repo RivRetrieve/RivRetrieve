@@ -55,7 +55,7 @@ Both products read daily values from the cached HYDAT SQLite archive.
 
 ## Timestamps
 
-`DATE` field is date-only (`YYYY-MM-DD`). Follows the established `date_only_timestamp` pattern (same as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily):
+`DATE` field is date-only (`YYYY-MM-DD`). Follows the established `date_only_timestamp` pattern (same as `lt_lhmt`, `fr_hubeau`, `br_ana`):
 - Interpreted as UTC midnight `T00:00:00Z`
 - `warning`-severity `date_only_timestamp` issue emitted per parser call
 - Series annotation: `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`

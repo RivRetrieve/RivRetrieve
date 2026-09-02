@@ -227,6 +227,24 @@ description: Daily mean water temperature in degrees Celsius.
 notes: Use only when the native product is a daily mean over a defined daily period.
 ```
 
+## Provider-specific products
+
+### jp_mlit: stage_hourly, stage_daily, discharge_hourly, discharge_daily
+
+```text
+provider: jp_mlit
+observed_property: stage | discharge
+frequency: hourly | daily
+statistic: unknown
+period_type: interval
+period_anchor: unknown
+unit: m | m3/s
+derived: false
+derivation_method: none
+description: MLIT KIND 2/3/6/7 observations whose source tables establish cadence and quantity but not a mean statistic or interval anchor.
+notes: These IDs must not be replaced by the canonical *_mean products without new publisher evidence.
+```
+
 ## Proposed Changes
 
 Provider ports may propose additions or revisions here when a native product does not match the existing dictionary. Additions should include the full entry fields and a short note about which provider forced the addition.

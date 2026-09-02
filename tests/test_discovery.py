@@ -15,14 +15,18 @@ from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.results import CatalogProvenance, CatalogResult
 
 EXPECTED_PRODUCT_IDS = [
+    "discharge_daily",
     "discharge_daily_max",
     "discharge_daily_mean",
+    "discharge_hourly",
     "discharge_hourly_mean",
     "discharge_instantaneous",
     "discharge_reported",
+    "stage_daily",
     "stage_daily_max",
     "stage_daily_mean",
     "stage_daily_min",
+    "stage_hourly",
     "stage_hourly_mean",
     "stage_instantaneous",
     "stage_reported",
@@ -62,10 +66,10 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_instantaneous",
     ],
     "jp_mlit": [
-        "discharge_daily_mean",
-        "discharge_hourly_mean",
-        "stage_daily_mean",
-        "stage_hourly_mean",
+        "discharge_daily",
+        "discharge_hourly",
+        "stage_daily",
+        "stage_hourly",
     ],
     "lt_lhmt": [
         "discharge_daily_mean",

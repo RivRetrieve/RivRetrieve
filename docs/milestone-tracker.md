@@ -444,30 +444,14 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Fixtures:** `tests/test_data/fr_hubeau_metadata.json` (2 stations with coordinates + 1 without, fixture), `tests/test_data/fr_hubeau_O0050010_QmnJ_2020.json` (3 daily discharge observations for station `O0050010`).
 - **Architecture.md impact:** None. Date-only timestamp/UTC-midnight pattern is provider-specific (same as lt_lhmt). Pagination is provider-specific. Unit conversions (l/s, mm) are provider-specific. No shared harness gap discovered.
 
-## 14. `jp_mlit` — Japan / MLIT Water Information System provider port (post-V1)
+## 14. `jp_mlit` — Japan / MLIT Water Information System provider port
 
-- **Source:** `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/japan.py` (legacy `JapanFetcher`).
 - **Provider ID:** `jp_mlit`
-- **Status:** Shipped. Registered alongside all previous providers in `_ensure_default_providers_registered()`. All 673 tests pass (55 jp_mlit-specific).
-- **Products ported:** `stage_hourly_mean` (KIND 2, JST→UTC, m direct), `stage_daily_mean` (KIND 3, date-only UTC midnight, m direct), `discharge_hourly_mean` (KIND 6, JST→UTC, m³/s direct), `discharge_daily_mean` (KIND 7, date-only UTC midnight, m³/s direct).
-- **Stations:** 1029 (2026-06-03 fixture from cached `japan_sites.csv`; only `gauge_id`, `latitude`, `longitude` available).
-- **Key decisions:**
-  - HTML scrape + Shift-JIS `.dat` file download via regex link extraction (no BeautifulSoup). EUC-JP HTML decode to find `.dat` link; Shift-JIS `.dat` decode for data.
-  - **Windowing**: Monthly chunks for hourly KINDs (2,6); yearly chunks for daily KINDs (3,7). MLIT date params use `YYYYMMDD` format (no separators).
-  - **Hourly timezone**: `.dat` hour columns are JST (UTC+9). Parser constructs `datetime(..., tzinfo=ZoneInfo("Asia/Tokyo"))` and converts to UTC. `info`-severity `timezone_local_to_utc` issue always emitted. Series annotation `timezone_source = "local_to_utc_conversion"`, `local_timezone = "Asia/Tokyo"`.
-  - **Daily timezone**: Date-only timestamps representing JST calendar days; interpreted as UTC midnight (`T00:00:00Z`). Same pattern as `lt_lhmt`/`fr_hubeau`. `warning`-severity `date_only_timestamp` issue emitted. Series annotation `timezone_source = "date_only_utc_midnight"`.
-  - **No unit conversions**: MLIT values are already in m and m³/s.
-  - **Provider-specific hourly products**: `stage_hourly_mean` and `discharge_hourly_mean` use provider-specific IDs (no canonical hourly stage/discharge in the V1 product dictionary).
-  - **MLIT KIND mislabelling**: KINDs 2 and 6 are labelled "Daily" on the MLIT website but actually return hourly data. KINDs 3 and 7 return true daily data.
-  - **No live catalogue**: `JapanFetcher.get_metadata()` raises `NotImplementedError` in the legacy source. `generate_catalogue_from_live()` raises `FatalContractError`.
-  - **Leading-space values**: Real `.dat` files have values like `"    4.47"` with leading spaces. `.str.strip_chars()` required before `.cast(pl.Float64)`.
-  - **Year-marker line in daily files**: Real daily `.dat` files contain a standalone `"2023年"` line after the CSV header and before the month data rows. Filtered by `_YEAR_PATTERN` before CSV parsing.
-  - **Extra monthly-average columns**: Daily `.dat` files have trailing `月平均データ, 月平均フラグ` columns beyond the 31 day pairs. `truncate_ragged_lines=True` required.
-  - HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching established pattern.
-  - No auth token; public MLIT portal.
-- **Port notes:** `docs/provider_ports/jp_mlit.md`.
-- **Fixtures:** `tests/test_data/jp_mlit_metadata.json` (3 stations, JSON array fixture), `tests/test_data/jp_mlit_301011281104010_kind2_202301.dat` (2-day hourly stage fixture), `tests/test_data/jp_mlit_301011281104010_kind7_2023.dat` (1-month daily discharge fixture).
-- **Architecture.md impact:** None. JST→UTC hourly conversion is provider-specific. Date-only daily UTC-midnight pattern follows established provider convention. HTML-scrape + binary-format retrieval is provider-specific. No shared harness gap discovered.
+- **Products:** `stage_hourly` (KIND 2), `stage_daily` (KIND 3), `discharge_hourly` (KIND 6), `discharge_daily` (KIND 7). The statistic and period anchor are unknown.
+- **Runtime:** Shared-engine `config.py`, `fetch.py`, and `parse.py`. HTML and DAT calls are both retained in order.
+- **Time labels:** Hour 1 is same-day 01:00; hour 24 is following-day 00:00. Daily labels are source-date midnight. Source zone is unknown; no JST or UTC conversion is made.
+- **Flags:** Blank and tentative numeric values are usable. Missing, closed, and unregistered flags are distinct non-observations.
+- **Evidence and details:** `docs/provider_ports/jp_mlit.md`.
 
 ## 15. `br_ana` — Brazil / ANA Hidroweb provider port (post-V1)
 
@@ -518,7 +502,7 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Stations:** 8,057 canonical stations from 8,057 attested native OGC features retrieved at `2026-08-02T01:09:10Z`.
 - **Key decisions:**
   - **Source split**: Native catalogue refresh uses the ECCC OGC Features API; observation retrieval retains the complete HYDAT SQLite archive in the provider-managed cache.
-  - **Timestamps**: `DATE` field is date-only (`YYYY-MM-DD`). Interpreted as UTC midnight. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` emitted per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily.
+  - **Timestamps**: `DATE` field is date-only (`YYYY-MM-DD`). Interpreted as UTC midnight. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` emitted per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`.
   - **HYDAT cache**: The observation client downloads the date-stamped national SQLite archive on first use and queries it read-only; this catalogue migration does not change its lifecycle or queries.
   - **Native catalogue**: The committed 18-column `native.parquet` preserves all 8,057 features, all 13 source properties, geometry type and coordinate scalars, plus the attested retrieval instant. Rows are sorted by feature `id`.
   - **Coordinates and CRS**: Live OGC API returns longitude/latitude in `feature["geometry"]["coordinates"]` (CRS84, lon-first). Canonical columns map index 1 to latitude and index 0 to longitude and declare documented `EPSG:4326`; no transformation or reprojection occurs.
@@ -548,7 +532,7 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
   - **Two CSV format eras**: 2023+ is UTF-8 with BOM, semicolon-separated, unquoted. Pre-2023 is CP1250, comma-separated, quoted (station codes have leading spaces). Parser detects BOM for format dispatch.
   - **All-station ZIPs**: Each ZIP contains data for all ~900+ stations. Filtered to requested stations at parse time; memory usage peaks at ~20 MB per ZIP before filtering.
   - **Hydrological year calendar**: IMGW organises data by hydrological year (Nov–Oct). Calendar month comes from CSV column 10 directly. Calendar year = hydrological year − 1 for Nov/Dec, else hydrological year.
-  - **Timestamps**: Date-only UTC midnight pattern. IMGW provides year/month/day integers only. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily, `ca_eccc`.
+  - **Timestamps**: Date-only UTC midnight pattern. IMGW provides year/month/day integers only. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `ca_eccc`.
   - **Stage cm→m**: Raw cm value preserved in `raw_value` row annotation.
   - **Sentinel masking**: Water level 9999 → null; discharge 99999.999 or 999 → null; temperature 99.9 → null. Rounded to 3 decimal places before comparison.
   - **Recovered native facts**: `gauge_name`, `river`, `area`, and String `gauge_altitude` are preserved exactly in `catalogue/native.parquet`; the current canonical station shape continues to expose identity and geometry only.

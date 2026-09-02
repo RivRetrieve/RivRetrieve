@@ -117,7 +117,7 @@ Both formats are handled in `parse_br_ana_json`.
 
 ## Timezone
 
-The ANA API provides no explicit timezone for daily values. The source code constructs naive `datetime(year, month, day)` objects. This port interprets all timestamps as UTC midnight (`T00:00:00Z`) following the same pattern as `lt_lhmt`, `fr_hubeau`, and `jp_mlit` daily products.
+The ANA API provides no explicit timezone for daily values. The source code constructs naive `datetime(year, month, day)` objects. This port interprets all timestamps as UTC midnight (`T00:00:00Z`) following the same pattern as `lt_lhmt`, `fr_hubeau`.
 
 True local timezone is undocumented. Brazil uses multiple timezones (UTC-5 to UTC-2); the ANA agency operates in Brasília Standard Time (UTC-3). However, since the data is daily and the API provides no explicit timezone, UTC midnight is the safest and most consistent interpretation.
 
@@ -131,7 +131,7 @@ Two distinct windowing strategies, selected per-product by `is_telemetric_produc
 - **Daily columnar products** (`discharge_daily_mean`, `stage_daily_mean`): annual chunks (year-by-year), matching the legacy `BrazilFetcher._download_data` pattern. `_split_annual_windows` decomposes `[start, end]` into `[(YYYY-01-01, YYYY-12-31), ...]` aligned to calendar years, clipped to the request range.
 - **Telemetric/instantaneous products** (`discharge_instantaneous`, `stage_instantaneous`, `water_temperature_instantaneous`): ≤30-day chunks, matching the ANA API's documented per-request limit (`Range Intervalo de busca`, max `DIAS_30`). `_split_30day_windows` decomposes `[start, end]` into 30-day pieces; each is requested with `Range Intervalo de busca = DIAS_30` and `Data de Busca` anchored at the chunk's end date. `_filter_local_date_range` then clips the merged, parsed result back to the originally-requested range (on local calendar dates, prior to UTC conversion) — see "Open question" above regarding anchor-date semantics.
 
-HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching the established pattern from `lt_lhmt`, `usgs_nwis`, `cz_chmi`, `th_thaiwater`, `fr_hubeau`, `jp_mlit`.
+HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching the established pattern from `lt_lhmt`, `usgs_nwis`, `cz_chmi`, `th_thaiwater`, `fr_hubeau`.
 
 ## Packaged Catalogue Status
 
