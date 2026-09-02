@@ -1,6 +1,6 @@
 from dataclasses import fields
 from datetime import UTC, datetime
-from typing import Any, get_type_hints
+from typing import Any, cast, get_type_hints
 
 import pytest
 import requests
@@ -17,6 +17,8 @@ from rivretrieve._internal.transport import (
     TransportRequest,
     TransportResponse,
 )
+
+_TRACE_SENTINEL = "SENTINEL-TRACEBACK-SECRET"
 
 
 class FakeClock:
@@ -114,7 +116,7 @@ def test_successful_get_and_post_preserve_source_request_and_byte_response(
     params["station"] = "mutated"
     assert response.request_parameters["station"] == "123"
     with pytest.raises(TypeError):
-        response.request_parameters["station"] = "mutated"  # type: ignore[index]
+        cast("dict[str, object]", response.request_parameters)["station"] = "mutated"
     response_fields = fields(TransportResponse)
     scanned = (
         str(response),
@@ -321,6 +323,7 @@ def test_authenticated_transport_applies_sentinel_without_exposing_it() -> None:
     )
     original = TransportRequest(HttpMethod.POST, "https://example.test", headers={"Accept": "text/csv"})
     wrapped.send(original)
+    assert capture.request is not None
     assert capture.request.headers == {"Accept": "text/csv", "Authorization": f"Token {sentinel}"}
     assert original.headers == {"Accept": "text/csv"}
     assert sentinel not in repr(wrapped) and sentinel not in repr(wrapped.credentials)
@@ -423,6 +426,149 @@ def test_authenticated_transport_applies_only_to_exact_scoped_origin() -> None:
     assert all(wrapped.can_authenticate(url) is False for url in urls[1:])
     assert capture.requests[0].headers == {"Authorization": sentinel}
     assert all("Authorization" not in request.headers for request in capture.requests[1:])
-    for malformed in ("https://user@influx.konzept.space/data", "https://influx.konzept.space:443/data"):
-        with pytest.raises(ValueError):
-            wrapped.send(TransportRequest(HttpMethod.GET, malformed))
+    with pytest.raises(ValueError):
+        wrapped.send(TransportRequest(HttpMethod.GET, "https://user@influx.konzept.space/data"))
+
+
+def test_scoped_credentials_do_not_cross_real_requests_redirect() -> None:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    from rivretrieve._internal.transport import (
+        AuthenticatedTransport,
+        CredentialHeader,
+        HttpClient,
+        HttpMethod,
+        TransportFailure,
+        TransportRequest,
+    )
+
+    observed = []
+
+    class Target(BaseHTTPRequestHandler):
+        def do_GET(self):
+            observed.append(self.headers.get("X-API-Key"))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"target")
+
+        def log_message(self, format, *args):
+            pass
+
+    target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
+    target_thread = Thread(target=target.serve_forever, daemon=True)
+    target_thread.start()
+    target_url = f"http://127.0.0.1:{target.server_port}/target"
+
+    class Redirect(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", target_url)
+            self.end_headers()
+
+        def log_message(self, format, *args):
+            pass
+
+    source = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+    source_thread = Thread(target=source.serve_forever, daemon=True)
+    source_thread.start()
+    source_origin = f"http://127.0.0.1:{source.server_port}"
+    try:
+        transport = AuthenticatedTransport(HttpClient(), (CredentialHeader("X-API-Key", "SENTINEL", (source_origin,)),))
+        with pytest.raises(TransportFailure) as info:
+            transport.send(TransportRequest(HttpMethod.GET, f"{source_origin}/redirect"))
+        assert info.value.status_code == 302
+        assert info.value.reason is TransportFailureReason.REDIRECT_REFUSED
+        assert info.value.request.headers == {}
+        assert observed == []
+    finally:
+        source.shutdown()
+        target.shutdown()
+        source.server_close()
+        target.server_close()
+
+
+def test_same_credential_header_name_is_allowed_for_disjoint_origins() -> None:
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.transport import (
+        AuthenticatedTransport,
+        CredentialHeader,
+        HttpMethod,
+        TransportRequest,
+        TransportResponse,
+    )
+
+    class Capture:
+        def __init__(self):
+            self.requests = []
+
+        def send(self, request):
+            self.requests.append(request)
+            return TransportResponse(b"ok", 200, datetime(2026, 1, 1, tzinfo=UTC), None, request.url, {})
+
+    capture = Capture()
+    wrapped = AuthenticatedTransport(
+        capture,
+        (
+            CredentialHeader("Authorization", "Token CH", ("https://influx.konzept.space",)),
+            CredentialHeader("authorization", "Bearer OTHER", ("https://other.example",)),
+        ),
+    )
+    wrapped.send(TransportRequest(HttpMethod.GET, "https://influx.konzept.space/data"))
+    wrapped.send(TransportRequest(HttpMethod.GET, "https://other.example/data"))
+    assert capture.requests[0].headers == {"Authorization": "Token CH"}
+    assert capture.requests[1].headers == {"authorization": "Bearer OTHER"}
+
+
+def test_credential_origin_normalizes_scheme_defaults_and_ipv6() -> None:
+    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader
+
+    class Never:
+        def send(self, request):
+            raise AssertionError(request)
+
+    https_default = AuthenticatedTransport(
+        Never(), (CredentialHeader("X-Key", "value", ("https://EXAMPLE.test:443",)),)
+    )
+    assert https_default.can_authenticate("https://example.test/path")
+    assert not https_default.can_authenticate("https://example.test:80/path")
+    assert AuthenticatedTransport(
+        Never(), (CredentialHeader("X-Key", "value", ("https://example.test:80",)),)
+    ).can_authenticate("https://example.test:80/path")
+    ipv6 = AuthenticatedTransport(Never(), (CredentialHeader("X-Key", "value", ("https://[::1]:8443",)),))
+    assert ipv6.can_authenticate("https://[::1]:8443/path")
+
+
+def test_credential_failure_traceback_locals_never_expose_value() -> None:
+    import traceback
+
+    from rivretrieve._internal.transport import (
+        AuthenticatedTransport,
+        CredentialHeader,
+        HttpMethod,
+        TransportFailure,
+        TransportFailureReason,
+        TransportRequest,
+    )
+
+    class ExpectedFailure:
+        def send(self, request):
+            raise TransportFailure(request, TransportFailureReason.RETRY_EXHAUSTED, 2, status_code=503)
+
+    class UnexpectedFailure:
+        def send(self, request):
+            raise RuntimeError(f"upstream failed while handling {request!r}")
+
+    for underlying in (ExpectedFailure(), UnexpectedFailure()):
+        wrapped = AuthenticatedTransport(
+            underlying, (CredentialHeader("X-Key", _TRACE_SENTINEL, ("https://example.test",)),)
+        )
+        try:
+            wrapped.send(TransportRequest(HttpMethod.GET, "https://example.test/data"))
+        except TransportFailure as error:
+            rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+            assert _TRACE_SENTINEL not in rendered
+            assert error.__cause__ is None and error.__context__ is None
+        else:
+            raise AssertionError("credentialed failure was not sanitized")

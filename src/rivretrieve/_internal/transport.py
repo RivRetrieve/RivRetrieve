@@ -22,6 +22,11 @@ class HttpMethod(StrEnum):
 RequestParameter = str | int | float | None
 
 
+class RedirectPolicy(StrEnum):
+    METHOD_DEFAULT = "method_default"
+    REFUSE = "refuse"
+
+
 @dataclass(frozen=True)
 class TransportRequest:
     method: HttpMethod
@@ -29,6 +34,7 @@ class TransportRequest:
     params: Mapping[str, RequestParameter] | None = None
     headers: Mapping[str, str] = field(default_factory=dict)
     body: bytes | str | None = None
+    redirect_policy: RedirectPolicy = RedirectPolicy.METHOD_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -47,6 +53,7 @@ class TransportResponse:
 class TransportFailureReason(StrEnum):
     TERMINAL_SENDER_FAILURE = "terminal_sender_failure"
     RETRY_EXHAUSTED = "retry_exhausted"
+    REDIRECT_REFUSED = "redirect_refused"
 
 
 class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contract name
@@ -133,6 +140,7 @@ def _send_with_requests(request: TransportRequest, timeout_seconds: float) -> tu
             headers=headers,
             data=request.body,
             timeout=timeout_seconds,
+            allow_redirects=request.redirect_policy is not RedirectPolicy.REFUSE,
         )
     elif request.method is HttpMethod.HEAD:
         response = requests.head(
@@ -140,6 +148,7 @@ def _send_with_requests(request: TransportRequest, timeout_seconds: float) -> tu
             params=params,
             headers=headers,
             timeout=timeout_seconds,
+            allow_redirects=False,
         )
     else:
         response = requests.post(
@@ -148,6 +157,7 @@ def _send_with_requests(request: TransportRequest, timeout_seconds: float) -> tu
             headers=headers,
             data=request.body,
             timeout=timeout_seconds,
+            allow_redirects=request.redirect_policy is not RedirectPolicy.REFUSE,
         )
     return response.content, response.status_code, response.headers.get("Content-Type")
 
@@ -218,7 +228,14 @@ class HttpClient:
         if any(name.lower() == "user-agent" for name in headers):
             raise ValueError("Source request must not provide a User-Agent header")
         headers["User-Agent"] = TRANSPORT_POLICY.user_agent
-        return TransportRequest(request.method, request.url, request.params, headers, request.body)
+        return TransportRequest(
+            request.method,
+            request.url,
+            request.params,
+            headers,
+            request.body,
+            request.redirect_policy,
+        )
 
     def _wait_for_rate_limit(self) -> None:
         now = self._clock.monotonic()
@@ -262,6 +279,13 @@ class CredentialHeader:
         return f"CredentialHeader(name={self.name!r}, value=[REDACTED], origins={self.origins!r})"
 
 
+@dataclass(frozen=True, slots=True)
+class _CredentialSendFailure:
+    reason: TransportFailureReason
+    attempts: int
+    status_code: int | None
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class AuthenticatedTransport:
     """Apply credentials only to requests matching their exact origin scope."""
@@ -274,9 +298,10 @@ class AuthenticatedTransport:
             raise TypeError("credentials must be a non-empty tuple of CredentialHeader values")
         if not all(isinstance(value, CredentialHeader) for value in self.credentials):
             raise TypeError("credentials must contain only CredentialHeader values")
-        names = tuple(value.name.lower() for value in self.credentials)
-        if len(names) != len(set(names)):
-            raise ValueError("credential header names must be unique case-insensitively")
+        for index, credential in enumerate(self.credentials):
+            for other in self.credentials[index + 1 :]:
+                if credential.name.lower() == other.name.lower() and set(credential.origins) & set(other.origins):
+                    raise ValueError("credential header names must be unique within each origin scope")
 
     def __repr__(self) -> str:
         names = tuple(value.name for value in self.credentials)
@@ -298,16 +323,41 @@ class AuthenticatedTransport:
         collisions = tuple(value.name for value in applicable if value.name.lower() in existing)
         if collisions:
             raise ValueError(f"source request already provides credential header: {collisions[0]}")
-        headers = dict(request.headers)
-        headers.update((value.name, value._value) for value in applicable)
-        authenticated = TransportRequest(request.method, request.url, request.params, headers, request.body)
-        sanitized_failure: TransportFailure | None = None
-        try:
-            return self.transport.send(authenticated)
-        except TransportFailure as error:
-            sanitized_failure = TransportFailure(request, error.reason, error.attempts, status_code=error.status_code)
-        assert sanitized_failure is not None
-        raise sanitized_failure from None
+        result = _send_with_credentials(self.transport, request, applicable)
+        if isinstance(result, TransportResponse):
+            return result
+        raise TransportFailure(
+            request,
+            result.reason,
+            result.attempts,
+            status_code=result.status_code,
+        ) from None
+
+
+def _send_with_credentials(
+    transport: Transport,
+    request: TransportRequest,
+    credentials: tuple[CredentialHeader, ...],
+) -> TransportResponse | _CredentialSendFailure:
+    headers = dict(request.headers)
+    headers.update((value.name, value._value) for value in credentials)
+    authenticated = TransportRequest(
+        request.method,
+        request.url,
+        request.params,
+        headers,
+        request.body,
+        RedirectPolicy.REFUSE,
+    )
+    try:
+        response = transport.send(authenticated)
+        if 300 <= response.status_code < 400:
+            return _CredentialSendFailure(TransportFailureReason.REDIRECT_REFUSED, 1, response.status_code)
+        return response
+    except TransportFailure as error:
+        return _CredentialSendFailure(error.reason, error.attempts, error.status_code)
+    except Exception:
+        return _CredentialSendFailure(TransportFailureReason.TERMINAL_SENDER_FAILURE, 1, None)
 
 
 def _credential_origin(value: str) -> str:
@@ -328,10 +378,11 @@ def _credential_origin(value: str) -> str:
         port = split.port
     except ValueError as error:
         raise ValueError("credential origin has an invalid port") from error
-    if port in {80, 443}:
-        raise ValueError("credential origin must omit default ports")
-    authority = split.hostname.lower() if port is None else f"{split.hostname.lower()}:{port}"
-    return f"{split.scheme.lower()}://{authority}"
+    scheme = split.scheme.lower()
+    default_port = 80 if scheme == "http" else 443
+    normalized_port = None if port == default_port else port
+    authority = _serialize_authority(split.hostname.lower(), normalized_port)
+    return f"{scheme}://{authority}"
 
 
 def _request_origin(url: str) -> str:
@@ -342,7 +393,13 @@ def _request_origin(url: str) -> str:
         port = split.port
     except ValueError as error:
         raise ValueError("request URL has an invalid port") from error
-    if port in {80, 443}:
-        raise ValueError("request URL must omit explicit default ports")
-    authority = split.hostname.lower() if port is None else f"{split.hostname.lower()}:{port}"
-    return f"{split.scheme.lower()}://{authority}"
+    scheme = split.scheme.lower()
+    default_port = 80 if scheme == "http" else 443
+    normalized_port = None if port == default_port else port
+    authority = _serialize_authority(split.hostname.lower(), normalized_port)
+    return f"{scheme}://{authority}"
+
+
+def _serialize_authority(hostname: str, port: int | None) -> str:
+    host = f"[{hostname}]" if ":" in hostname else hostname
+    return host if port is None else f"{host}:{port}"

@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,8 @@ def test_public_selection_uses_anonymous_rest_and_returns_five_columns_with_raw_
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-02", receipts=True, on_issue="ignore")
     assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
     assert dict(result.data.group_by("product_id").len().iter_rows()) == {"discharge_instantaneous": 244}
-    assert result.data["time"].min().isoformat() == "2026-09-01T00:00:00"
-    assert result.data["time"].max().isoformat() == "2026-09-02T16:30:00"
+    assert result.data["time"].min() == datetime(2026, 9, 1)
+    assert result.data["time"].max() == datetime(2026, 9, 2, 16, 30)
     assert len(result.receipts.entries) == 1
     assert result.receipts.entries[0].content == _RECORDING.content
     assert result.receipts.entries[0].authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD

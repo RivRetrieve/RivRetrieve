@@ -1,11 +1,11 @@
-"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode × Transport → _AssemblyResult."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode × Transport → _AssemblyResult; route_window_declarations : ProviderStages × Transport → ProductWindowDeclarations."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Protocol, assert_never
+from typing import Protocol, assert_never, runtime_checkable
 
 import polars as pl
 
@@ -130,6 +130,14 @@ class ProviderStages(Protocol):
     ) -> WithIssues[Rows]: ...
 
 
+@runtime_checkable
+class TransportWindowDeclarationProvider(Protocol):
+    """Select source window semantics from an engine-supplied transport capability."""
+
+    @staticmethod
+    def window_declarations_for_transport(transport: Transport) -> ProductWindowDeclarations: ...
+
+
 def drive(
     request: ObservationRequest,
     provider: ProviderStages,
@@ -170,10 +178,16 @@ def drive(
         ),
     )
     _require_fetch_window_contains_requested(fetch_window, request.window)
+    resolved_transport = HttpClient() if transport is None else transport
+    declarations = (
+        provider.window_declarations_for_transport(resolved_transport)
+        if isinstance(provider, TransportWindowDeclarationProvider)
+        else provider.window_declarations
+    )
     planned: dict[ProductId, tuple[RenderedWindow, ...]] = {}
     for product_id in request.products:
         try:
-            declaration = provider.window_declarations.products[product_id]
+            declaration = declarations.products[product_id]
         except KeyError as error:
             raise FatalContractError(
                 f"Provider {request.provider_id} has no window declaration for requested product {product_id}; "
@@ -181,7 +195,6 @@ def drive(
             ) from error
         planned[product_id] = plan_windows(fetch_window, declaration)
     rendered_windows = MappingProxyType(dict(planned))
-    resolved_transport = HttpClient() if transport is None else transport
     fetched = provider.fetch(
         request.stations,
         request.products,

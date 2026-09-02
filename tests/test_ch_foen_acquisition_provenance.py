@@ -16,8 +16,11 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
     assert {source.source_id for source in provenance.source_records} == {"ch_bafu", "ch_existenz"}
     bindings = {item.fact_group: item.source_id for item in provenance.fact_bindings}
     assert {
-        "bafu_station_product_values": "ch_bafu",
-        "existenz_transport_and_absence": "ch_existenz",
+        "bafu_station_values": "ch_bafu",
+        "bafu_product_values": "ch_bafu",
+        "bafu_observation_values": "ch_bafu",
+        "existenz_absence": "ch_existenz",
+        "existenz_transport": "ch_existenz",
     }.items() <= bindings.items()
     assert {statement.kind for source in provenance.source_records for statement in source.statements} == {
         "license",
@@ -28,7 +31,13 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
 
 def test_swiss_terms_recordings_and_native_bytes_are_verified(tmp_path: Path) -> None:
     verify_provenance_recordings(build_acquisition_provenance(), Path.cwd())
-    for name in ("ch_foen_terms_bafu.html", "ch_foen_terms_existenz.html"):
+    for name in (
+        "ch_foen_terms_bafu.html",
+        "ch_foen_terms_existenz.html",
+        "ch_foen_parameters_2026-09-02.recording.json",
+        "ch_foen_2135_rest_2026-09-01.recording.json",
+        "ch_foen_2135_flux_2020-01-01.recording.json",
+    ):
         source = Path("tests/test_data") / name
         target = tmp_path / source
         target.parent.mkdir(parents=True, exist_ok=True)

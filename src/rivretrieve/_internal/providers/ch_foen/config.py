@@ -1,4 +1,4 @@
-"""ch_foen config : () → ProviderConfig × ProductWindowDeclarations.
+"""ch_foen config : () → ProviderConfig × RestWindowDeclarations × FluxWindowDeclarations.
 
 Contributed by: Nicolas Lazaro
 """
@@ -34,6 +34,11 @@ class ChFoenSourceCoordinates:
     fields: tuple[NativeField, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ChFoenRequestCoordinates:
+    fields: tuple[str, ...]
+
+
 _CONFIG = ProviderConfig(
     zone=ZoneValue("+00:00"),
     products={
@@ -56,6 +61,10 @@ _WINDOW = WindowDeclaration(
     WindowGranularity("iso-instant"), WindowRenderingVocabulary.ISO_INSTANT, StopConvention.INCLUSIVE
 )
 _WINDOWS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _WINDOW))
+_FLUX_WINDOW = WindowDeclaration(
+    WindowGranularity("iso-instant"), WindowRenderingVocabulary.ISO_INSTANT, StopConvention.EXCLUSIVE
+)
+_FLUX_WINDOWS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _FLUX_WINDOW))
 
 
 def config() -> ProviderConfig:
@@ -64,3 +73,7 @@ def config() -> ProviderConfig:
 
 def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
+
+
+def flux_window_declarations() -> ProductWindowDeclarations:
+    return _FLUX_WINDOWS

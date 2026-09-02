@@ -14,13 +14,14 @@ from rivretrieve._internal.engine import (
     ProviderConfig,
     RenderedWindow,
     SourceCallOrigin,
+    SourceCoordinates,
     SourceQuery,
     UnknownOriginFact,
     WithIssues,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.providers.ch_foen.config import ChFoenSourceCoordinates
+from rivretrieve._internal.providers.ch_foen.config import ChFoenRequestCoordinates, ChFoenSourceCoordinates
 from rivretrieve._internal.transport import AuthenticationCapability, HttpMethod, Transport, TransportRequest
 
 _REST = "https://api.existenz.ch/apiv1/hydro/daterange"
@@ -64,7 +65,7 @@ def fetch(
             _require_success(response.status_code)
             payloads.append(
                 _payload(
-                    config.products[products[0]].coordinates,
+                    SourceCoordinates(ChFoenRequestCoordinates(tuple(query_fields))),
                     tuple((station, product) for product in products),
                     fetch_window,
                     response,
@@ -86,7 +87,7 @@ def fetch(
     return WithIssues(
         (
             _payload(
-                config.products[products[0]].coordinates,
+                SourceCoordinates(ChFoenRequestCoordinates(tuple(query_fields))),
                 tuple((station, product) for station in stations for product in products),
                 fetch_window,
                 response,

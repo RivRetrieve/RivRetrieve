@@ -16,7 +16,7 @@ The source publishes explicit UTC. Neither exact observation response publishes 
 | `stage_instantaneous` | `height_abs`, or `height` when it is the sole returned alternative | `m` |
 | `water_temperature_instantaneous` | `temperature` | `°C` |
 
-The exact parameters response distinguishes `flow` (`m3/s`) from `flow_ls` (`l/s`). The exact evidenced source query requests all five documented fields; the parser ignores `flow_ls` and does not retain or map it. The adapter does not relabel `flow_ls` as the packaged `flow` product. It fails if `flow` is absent. It also fails when both stage alternatives are returned, rather than silently conflating them. No stale daily computed products are exposed.
+The complete exact parameters response is attested by `tests/test_data/ch_foen_parameters_2026-09-02.recording.json`. It distinguishes `flow` (`m3/s`) from `flow_ls` (`l/s`). The exact evidenced source query requests all five documented fields; the parser ignores `flow_ls` and does not retain or map it. The adapter does not relabel `flow_ls` as the packaged `flow` product. It fails if `flow` is absent. It also fails when both stage alternatives are returned, rather than silently conflating them. No stale daily computed products are exposed.
 
 ## Credentials
 

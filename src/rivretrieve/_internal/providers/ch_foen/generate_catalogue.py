@@ -264,10 +264,7 @@ def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": (
-            "true: 366-day window decomposition with stitched N x M station-product requests; partial failures reported "
-            "as recoverable issues"
-        ),
+        "bulk_observations": ("true: uncapped coalesced live requests; source and contract failures fail loud"),
         "catalogue_version": catalogue_version_date.isoformat(),
         "license": None,
         "citation": None,
