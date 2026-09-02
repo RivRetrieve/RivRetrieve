@@ -193,7 +193,7 @@ def test_generate_catalogue_hydro_station_products() -> None:
 def test_generate_catalogue_temp_station_products() -> None:
     cat = _catalogue()
     temp_sp = cat.station_products.filter(pl.col("station_id") == "01001336")
-    assert temp_sp["product_id"].to_list() == ["water_temperature_instantaneous"]
+    assert temp_sp["product_id"].to_list() == ["water_temperature_reported"]
 
 
 def _assert_fatal_issue(table: NativeTable, code: str, message: str) -> None:
@@ -1095,9 +1095,9 @@ def _frame_digest(frame: pl.DataFrame) -> str:
 
 
 _PINNED_PROVIDER_JSON_SHA256 = "f9c38afc3e79476b329a9ebcb0df90f9fce0d7917e7fc193068672c60d62f634"
-_PINNED_PRODUCTS_FRAME_SHA256 = "40e4009a1df0e7b638d0f25e1920101bb737db6c1f7e16488e6bef1292639776"
+_PINNED_PRODUCTS_FRAME_SHA256 = "1800401b4987adbb771dcd39dd9b303ec6e30e29c7ffec41ccb4dbc53e2bdbd5"
 _PINNED_STATIONS_FRAME_SHA256 = "c3d5b0f2e6b5bd39135a3bb1314fcdebf537f4c4b1d9b9f0fa823045c423acc2"
-_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "65b9dee25983d699568dbcb873f45ebd0072702ddc0c038b052ea38a28d4c2ee"
+_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "ef2af963f04438238fd05b7d38e2d6c900ae64d72b1a66ce1f949c09343c4806"
 
 
 def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
@@ -1161,7 +1161,7 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
     pl_testing.assert_frame_equal(committed_products, expected_products, check_exact=True)
 
     assert set(committed_station_products.select("station_id", "product_id").iter_rows()) == {
-        ("01001336", "water_temperature_instantaneous"),
+        ("01001336", "water_temperature_reported"),
         ("1011000101", "discharge_daily_mean"),
         ("1011000101", "discharge_daily_max"),
         ("1011000101", "stage_daily_max"),

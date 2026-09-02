@@ -190,7 +190,7 @@ def test_ba_fhmzbih_daily_mean_absent_and_corrupting_request_refused_by_name() -
         rr.fetch(selection, start="2025-03-23", end="2025-03-26")
 
     assert exc_info.value.reason.product_ids == (product_id,)
-    assert exc_info.value.reason.published_products == ("discharge_instantaneous", "stage_instantaneous")
+    assert exc_info.value.reason.published_products == ("discharge_reported", "stage_reported")
 
 
 def test_probe_that_does_not_replay_its_recording_is_refused() -> None:
@@ -210,9 +210,9 @@ def test_probe_that_does_not_replay_its_recording_is_refused() -> None:
 def test_manifest_declarations_define_every_observation_product_obligation() -> None:
     obligations = manifest_boundary_obligations(load_manifest(BUILTIN_PROVIDER_IDS))
     assert obligations == (
-        (ProviderId("ba_fhmzbih"), ProductId("discharge_instantaneous")),
-        (ProviderId("ba_fhmzbih"), ProductId("stage_instantaneous")),
-        (ProviderId("ba_fhmzbih"), ProductId("water_temperature_instantaneous")),
+        (ProviderId("ba_fhmzbih"), ProductId("discharge_reported")),
+        (ProviderId("ba_fhmzbih"), ProductId("stage_reported")),
+        (ProviderId("ba_fhmzbih"), ProductId("water_temperature_reported")),
         (ProviderId("ca_eccc"), ProductId("discharge_daily_mean")),
         (ProviderId("ca_eccc"), ProductId("stage_daily_mean")),
         (ProviderId("ch_foen"), ProductId("discharge_reported")),
@@ -228,7 +228,7 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
         (ProviderId("fr_hubeau"), ProductId("discharge_instantaneous")),
         (ProviderId("fr_hubeau"), ProductId("stage_daily_max")),
         (ProviderId("fr_hubeau"), ProductId("stage_instantaneous")),
-        (ProviderId("fr_hubeau"), ProductId("water_temperature_instantaneous")),
+        (ProviderId("fr_hubeau"), ProductId("water_temperature_reported")),
         (ProviderId("jp_mlit"), ProductId("discharge_daily")),
         (ProviderId("jp_mlit"), ProductId("discharge_hourly")),
         (ProviderId("jp_mlit"), ProductId("stage_daily")),

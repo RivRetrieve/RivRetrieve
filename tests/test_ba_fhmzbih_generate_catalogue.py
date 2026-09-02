@@ -144,9 +144,9 @@ def test_native_build_has_exact_counts_dates_and_schemas() -> None:
 
     assert (catalogue.stations.height, catalogue.products.height, catalogue.station_products.height) == (60, 3, 180)
     retained_product_ids = {
-        "discharge_instantaneous",
-        "stage_instantaneous",
-        "water_temperature_instantaneous",
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
     }
     withdrawn_product_ids = {
         "discharge_daily_mean",
@@ -257,13 +257,13 @@ def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
         "125a679c7be9f8c731fa205a2c6146d0ff1803f163caee678430569316b9ba92"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
-        "7bdef973654f395a4d2e6d148ec7004f1e259563e5dfaa10a93ae148aba2affb"
+        "6f4c7541f4bfd4bef499fb29e4ac83ca8c32196dba4dd92f812e850ea65a1a6b"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
         "4e62fd566f09c7e6f719a83895fbe310bcc8877a556f7376187a1537172e1798"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
-        "17a19a2e534ee264f93d0a8219acc31771119a566a6c8e026fa5becc9d2755bf"
+        "19322b1ba939fc51a82bd621a5f7bc54d64e65769b70b7e42cac8d1d95c68526"
     )
 
 

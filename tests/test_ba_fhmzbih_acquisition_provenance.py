@@ -25,9 +25,9 @@ def test_bosnia_provenance_withholds_unresolved_issuers_exactly() -> None:
     row_locators = [locator for group in provenance.withheld_facts for locator in group.catalogue_rows]
     assert len(row_locators) == 235
     assert {locator.product_id for locator in row_locators if locator.carrier == "station_product"} == {
-        "discharge_instantaneous",
-        "stage_instantaneous",
-        "water_temperature_instantaneous",
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
     }
     assert set(provenance.fact_universe) == bound | withheld
 

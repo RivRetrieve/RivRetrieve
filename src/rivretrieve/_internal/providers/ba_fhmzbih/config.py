@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from typing import Literal
 
 from rivretrieve._internal.engine import (
-    Instant,
     ProductConfig,
     ProductWindowDeclarations,
     ProviderConfig,
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownTemporalSupport,
     WindowDeclaration,
     WindowGranularity,
     WindowRenderingVocabulary,
@@ -33,16 +33,20 @@ class BaFhmzbihSourceCoordinates:
 _CONFIG = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={
-        ProductId("discharge_instantaneous"): ProductConfig(
-            SourceCoordinates(BaFhmzbihSourceCoordinates("Q", "Q_1Y.xlsx", "Proticaj", "m³/s")), Unit.M3_S, Instant()
+        ProductId("discharge_reported"): ProductConfig(
+            SourceCoordinates(BaFhmzbihSourceCoordinates("Q", "Q_1Y.xlsx", "Proticaj", "m³/s")),
+            Unit.M3_S,
+            UnknownTemporalSupport(),
         ),
-        ProductId("stage_instantaneous"): ProductConfig(
-            SourceCoordinates(BaFhmzbihSourceCoordinates("H", "H_1Y.xlsx", "Vodostaj", "cm")), Unit.CM, Instant()
+        ProductId("stage_reported"): ProductConfig(
+            SourceCoordinates(BaFhmzbihSourceCoordinates("H", "H_1Y.xlsx", "Vodostaj", "cm")),
+            Unit.CM,
+            UnknownTemporalSupport(),
         ),
-        ProductId("water_temperature_instantaneous"): ProductConfig(
+        ProductId("water_temperature_reported"): ProductConfig(
             SourceCoordinates(BaFhmzbihSourceCoordinates("WT", "Tvode_1Y.xlsx", "Temperatura vode", "°C")),
             Unit.DEG_C,
-            Instant(),
+            UnknownTemporalSupport(),
         ),
     },
 )

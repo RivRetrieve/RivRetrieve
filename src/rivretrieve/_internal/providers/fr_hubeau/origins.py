@@ -93,6 +93,14 @@ def _build_provider_acquisition_provenance(
         media_type="text/html; charset=UTF-8",
         sha256=_TERMS_SHA256,
     )
+    temperature_semantics_recording = RecordingReference(
+        recording_id="fr_hubeau_temperature_openapi",
+        repository_path="tests/test_data/fr_hubeau_temperature_openapi.json",
+        source_url="https://hubeau.eaufrance.fr/api/v1/temperature/api-docs",
+        retrieved_at=datetime.fromisoformat("2026-09-02T14:50:55.466790Z"),
+        media_type="application/json",
+        sha256="797506a9cf78fbba29fb82eca71ac278d7fe84bd90aa4552ac79a71752c059ef",
+    )
     identity_recordings = {
         "1011000101": RecordingReference(
             recording_id="fr_identity_1011000101",
@@ -143,7 +151,7 @@ def _build_provider_acquisition_provenance(
         ("1011000101", "stage_daily_max"),
         ("Y251002001", "discharge_instantaneous"),
         ("Y251002001", "stage_instantaneous"),
-        ("01001336", "water_temperature_instantaneous"),
+        ("01001336", "water_temperature_reported"),
     }
     producer_by_station = {
         "1011000101": "fr_deal_guadeloupe",
@@ -222,6 +230,15 @@ def _build_provider_acquisition_provenance(
                         retrieved_at_start=datetime.fromisoformat("2026-08-02T17:33:34Z"),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="temperature_semantics_openapi_2026_09_02",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Official temperature API contract naming timestamped results without defining their temporal support",
+                        requested_from=(temperature_semantics_recording.source_url,),
+                        retrieved_at_start=temperature_semantics_recording.retrieved_at,
+                        recording_ids=(temperature_semantics_recording.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="general_conditions_capture_2026_08_20",
                         method="http_request",
                         instant_type="retrieval",
@@ -243,6 +260,11 @@ def _build_provider_acquisition_provenance(
                         evidence_id="fr_hubeau_terms",
                         description="Hub'Eau general conditions section 5.1.3",
                         recording=recording,
+                    ),
+                    EvidenceReference(
+                        evidence_id="fr_hubeau_temperature_openapi",
+                        description="Official temperature API contract for chronique result fields",
+                        recording=temperature_semantics_recording,
                     ),
                 ),
                 statements=(
@@ -371,7 +393,7 @@ def _build_provider_acquisition_provenance(
                 fact_group="temperature_product_external",
                 facts=external[2:3],
                 source_id="fr_hubeau",
-                acquisition_id="temperature_catalogue_capture_2026_08_02",
+                acquisition_id="temperature_semantics_openapi_2026_09_02",
             ),
             FactBinding(
                 fact_group="observation_transport",

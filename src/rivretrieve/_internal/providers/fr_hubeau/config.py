@@ -16,6 +16,7 @@ from rivretrieve._internal.engine import (
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownTemporalSupport,
     WindowDeclaration,
     WindowGranularity,
     WindowRenderingVocabulary,
@@ -55,8 +56,10 @@ _CONFIG = ProviderConfig(
             Unit.MM,
             Daily(DayDefinition("unknown")),
         ),
-        ProductId("water_temperature_instantaneous"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("temperature", "resultat", "station")), Unit.DEG_C, Instant()
+        ProductId("water_temperature_reported"): ProductConfig(
+            SourceCoordinates(FrHubeauSourceCoordinates("temperature", "resultat", "station")),
+            Unit.DEG_C,
+            UnknownTemporalSupport(),
         ),
     },
 )

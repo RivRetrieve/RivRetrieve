@@ -137,44 +137,34 @@ class ProductDefinition:
     parameter_code: str
 
 
-_TIMEZONE_NOTE = (
-    "Timestamps are published as naive local time with no UTC offset; "
-    "interpreted as Europe/Sarajevo local time (CET/CEST, EU DST) and converted to UTC."
-)
-
-_ROLLING_WINDOW_NOTE = (
-    "The workbook always contains a rolling ~1-year window of hourly observations "
-    "ending at the most recent reading; arbitrary historical date ranges are not queryable."
-)
-
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        product_id="discharge_instantaneous",
+        product_id="discharge_reported",
         observed_property="discharge",
-        frequency="hourly",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         parameter_code="Q",
     ),
     ProductDefinition(
-        product_id="stage_instantaneous",
+        product_id="stage_reported",
         observed_property="stage",
-        frequency="hourly",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m",
         parameter_code="H",
     ),
     ProductDefinition(
-        product_id="water_temperature_instantaneous",
+        product_id="water_temperature_reported",
         observed_property="water_temperature",
-        frequency="hourly",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="degC",
         parameter_code="WT",
     ),
@@ -361,9 +351,9 @@ def build_station_products(
                         "available"
                         if (station_id, d.product_id)
                         in {
-                            ("4024", "discharge_instantaneous"),
-                            ("4024", "stage_instantaneous"),
-                            ("4110", "water_temperature_instantaneous"),
+                            ("4024", "discharge_reported"),
+                            ("4024", "stage_reported"),
+                            ("4110", "water_temperature_reported"),
                         }
                         else "unknown"
                     ),
@@ -371,9 +361,9 @@ def build_station_products(
                         "Non-empty source workbook recorded on 2026-09-02"
                         if (station_id, d.product_id)
                         in {
-                            ("4024", "discharge_instantaneous"),
-                            ("4024", "stage_instantaneous"),
-                            ("4110", "water_temperature_instantaneous"),
+                            ("4024", "discharge_reported"),
+                            ("4024", "stage_reported"),
+                            ("4110", "water_temperature_reported"),
                         }
                         else AVAILABILITY_REASON
                     ),
@@ -383,9 +373,9 @@ def build_station_products(
                         date(2026, 9, 2)
                         if (station_id, d.product_id)
                         in {
-                            ("4024", "discharge_instantaneous"),
-                            ("4024", "stage_instantaneous"),
-                            ("4110", "water_temperature_instantaneous"),
+                            ("4024", "discharge_reported"),
+                            ("4024", "stage_reported"),
+                            ("4110", "water_temperature_reported"),
                         }
                         else retrieved_date
                     ),

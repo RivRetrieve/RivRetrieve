@@ -39,10 +39,13 @@ def test_france_catalogue_capture_names_all_exact_recorded_requests() -> None:
     ]
     hydrometry = _acquisition("fr_hubeau", "hydrometry_catalogue_capture_2026_08_02")
     temperature = _acquisition("fr_hubeau", "temperature_catalogue_capture_2026_08_02")
+    temperature_semantics = _acquisition("fr_hubeau", "temperature_semantics_openapi_2026_09_02")
     assert hydrometry["requested_from"] == expected[:-1]
     assert hydrometry["retrieved_at_start"] == "2026-08-02T17:32:58Z"
     assert temperature["requested_from"] == expected[-1:]
     assert temperature["retrieved_at_start"] == "2026-08-02T17:33:34Z"
+    assert temperature_semantics["requested_from"] == ["https://hubeau.eaufrance.fr/api/v1/temperature/api-docs"]
+    assert temperature_semantics["retrieved_at_start"] == "2026-09-02T14:50:55.466790Z"
     path = Path("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance.json")
     bindings = {
         fact: item["acquisition_id"]
@@ -51,4 +54,4 @@ def test_france_catalogue_capture_names_all_exact_recorded_requests() -> None:
         if item.get("acquisition_id")
     }
     assert bindings["source.product.hydrometry_api_semantics"] == hydrometry["acquisition_id"]
-    assert bindings["source.product.temperature_api_semantics"] == temperature["acquisition_id"]
+    assert bindings["source.product.temperature_api_semantics"] == temperature_semantics["acquisition_id"]

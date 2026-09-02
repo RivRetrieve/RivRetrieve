@@ -26,7 +26,7 @@ def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(monkeypatch)
         monkeypatch,
         "ba_fhmzbih",
         "4024",
-        "stage_instantaneous",
+        "stage_reported",
         "2025-09-03",
         "2026-09-02T12:00:00",
         ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_4024_H_1Y.recording.json"),
@@ -52,7 +52,7 @@ def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(monkeyp
         ),
         (
             "01001336",
-            "water_temperature_instantaneous",
+            "water_temperature_reported",
             "2008-07-09",
             "2008-07-10T23:59:59",
             tuple(f"fr_hubeau_01001336_temp_padded_p{i}.recording.json" for i in range(1, 6)),
@@ -87,9 +87,9 @@ def test_sparse_catalogues_do_not_invent_cross_products():
     ba = rr.as_frame(rr.find(provider="ba_fhmzbih"))
     fr = rr.as_frame(rr.find(provider="fr_hubeau"))
     assert set(zip(ba["station_id"], ba["product_id"], strict=True)) == {
-        ("4024", "discharge_instantaneous"),
-        ("4024", "stage_instantaneous"),
-        ("4110", "water_temperature_instantaneous"),
+        ("4024", "discharge_reported"),
+        ("4024", "stage_reported"),
+        ("4110", "water_temperature_reported"),
     }
     assert fr.height == 6
     assert rr.as_frame(rr.find(provider="fr_hubeau", station="01001336", product="stage_instantaneous")).is_empty()

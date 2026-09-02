@@ -338,12 +338,12 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ),
     # --- temperature/chronique (historical archive) ---------------------------
     ProductDefinition(
-        product_id="water_temperature_instantaneous",
+        product_id="water_temperature_reported",
         observed_property="water_temperature",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="degC",
         api_type="temperature",
         grandeur_code=None,
@@ -752,7 +752,7 @@ def build_station_products(
                             ("1011000101", "stage_daily_max"),
                             ("Y251002001", "discharge_instantaneous"),
                             ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
                         }
                         else "unknown"
                     ),
@@ -765,7 +765,7 @@ def build_station_products(
                             ("1011000101", "stage_daily_max"),
                             ("Y251002001", "discharge_instantaneous"),
                             ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
                         }
                         else AVAILABILITY_REASON
                     ),
@@ -779,7 +779,7 @@ def build_station_products(
                         ("1011000101", "stage_daily_max"),
                         ("Y251002001", "discharge_instantaneous"),
                         ("Y251002001", "stage_instantaneous"),
-                        ("01001336", "water_temperature_instantaneous"),
+                        ("01001336", "water_temperature_reported"),
                     }
                     else catalogue_date,
                 }
@@ -803,7 +803,7 @@ def build_station_products(
                             ("1011000101", "stage_daily_max"),
                             ("Y251002001", "discharge_instantaneous"),
                             ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
                         }
                         else "unknown"
                     ),
@@ -816,7 +816,7 @@ def build_station_products(
                             ("1011000101", "stage_daily_max"),
                             ("Y251002001", "discharge_instantaneous"),
                             ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
                         }
                         else AVAILABILITY_REASON
                     ),
@@ -830,7 +830,7 @@ def build_station_products(
                         ("1011000101", "stage_daily_max"),
                         ("Y251002001", "discharge_instantaneous"),
                         ("Y251002001", "stage_instantaneous"),
-                        ("01001336", "water_temperature_instantaneous"),
+                        ("01001336", "water_temperature_reported"),
                     }
                     else catalogue_date,
                 }

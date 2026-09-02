@@ -13,7 +13,7 @@ from rivretrieve._internal.boundary_probes import (
     WallClockExpectation,
     run_boundary_probes,
 )
-from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
+from rivretrieve._internal.engine import RenderedWindow, UnknownTemporalSupport, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.ba_fhmzbih.declaration import declaration as ba_declaration
 from rivretrieve._internal.providers.fr_hubeau.declaration import declaration as fr_declaration
@@ -28,7 +28,9 @@ assert isinstance(fr_declaration.observations, LiveStages)
 def _probe(provider, station, product, start, stop, paths, expected):
     pid = ProviderId(provider)
     product_id = ProductId(product)
-    stages = (ba_declaration if provider == "ba_fhmzbih" else fr_declaration).observations.stages
+    observations = (ba_declaration if provider == "ba_fhmzbih" else fr_declaration).observations
+    assert isinstance(observations, LiveStages)
+    stages = observations.stages
     recordings = tuple(read_recording(DATA / path) for path in paths)
 
     def run(replay: ReplayTransport):
@@ -64,7 +66,7 @@ PROBES = (
     _probe(
         "ba_fhmzbih",
         "4024",
-        "discharge_instantaneous",
+        "discharge_reported",
         "2025-09-03",
         "2026-09-02T12:00:00",
         ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_4024_Q_1Y.recording.json"),
@@ -73,7 +75,7 @@ PROBES = (
     _probe(
         "ba_fhmzbih",
         "4024",
-        "stage_instantaneous",
+        "stage_reported",
         "2025-09-03",
         "2026-09-02T12:00:00",
         ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_4024_H_1Y.recording.json"),
@@ -82,7 +84,7 @@ PROBES = (
     _probe(
         "ba_fhmzbih",
         "4110",
-        "water_temperature_instantaneous",
+        "water_temperature_reported",
         "2025-09-03",
         "2025-11-30T01:00:00",
         ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_4110_Tvode_1Y.recording.json"),
@@ -118,7 +120,7 @@ PROBES = (
     _probe(
         "fr_hubeau",
         "01001336",
-        "water_temperature_instantaneous",
+        "water_temperature_reported",
         "2008-07-09",
         "2008-07-10",
         (
@@ -146,6 +148,13 @@ PROBES = (
         (576, "2020-01-01T00:00:00", "2020-01-02T23:55:00", "+00:00"),
     ),
 )
+
+
+def test_france_temperature_support_remains_unknown():
+    observations = fr_declaration.observations
+    assert isinstance(observations, LiveStages)
+    product = observations.stages.config.products[ProductId("water_temperature_reported")]
+    assert isinstance(product.semantics, UnknownTemporalSupport)
 
 
 def test_every_bosnia_and_france_product_has_exact_live_probe():

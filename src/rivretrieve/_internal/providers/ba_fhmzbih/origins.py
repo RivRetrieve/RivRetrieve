@@ -96,7 +96,7 @@ _STATION_IDS = (
     "9044",
     "9045",
 )
-_PRODUCT_IDS = ("discharge_instantaneous", "stage_instantaneous", "water_temperature_instantaneous")
+_PRODUCT_IDS = ("discharge_reported", "stage_reported", "water_temperature_reported")
 
 
 def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
@@ -113,9 +113,9 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
     bound_stations = ("source.station:4024.identity_location", "source.station:4110.identity_location")
     bound_observations = ("source.observation:4024.values_quality", "source.observation:4110.values_quality")
     established_availability = {
-        ("4024", "discharge_instantaneous"),
-        ("4024", "stage_instantaneous"),
-        ("4110", "water_temperature_instantaneous"),
+        ("4024", "discharge_reported"),
+        ("4024", "stage_reported"),
+        ("4110", "water_temperature_reported"),
     }
     withheld_stations = tuple(
         WithheldFact(

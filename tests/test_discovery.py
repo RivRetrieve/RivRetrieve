@@ -37,9 +37,9 @@ EXPECTED_PRODUCT_IDS = [
 
 EXPECTED_PRODUCTS_BY_PROVIDER = {
     "ba_fhmzbih": [
-        "discharge_instantaneous",
-        "stage_instantaneous",
-        "water_temperature_instantaneous",
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
     ],
     "br_ana": [],
     "ca_eccc": [
@@ -64,7 +64,7 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "discharge_instantaneous",
         "stage_daily_max",
         "stage_instantaneous",
-        "water_temperature_instantaneous",
+        "water_temperature_reported",
     ],
     "jp_mlit": [
         "discharge_daily",
