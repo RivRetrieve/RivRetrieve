@@ -630,12 +630,17 @@ def test_native_build_counts_and_identity_station_fields() -> None:
 
     assert catalogue.stations.height == 825
     assert catalogue.products.height == 2
-    assert catalogue.station_products.height == 825 * 2 == 1_650
+    assert catalogue.station_products.height == 2
     assert set(catalogue.products["product_id"]) == RETAINED_PRODUCT_IDS
     assert set(catalogue.station_products["product_id"]) == RETAINED_PRODUCT_IDS
+    assert catalogue.station_products["station_id"].unique().to_list() == ["1373273"]
+    assert catalogue.station_products["availability"].cast(str).unique().to_list() == ["available"]
+    assert catalogue.station_products["published_record_start_date"].null_count() == 2
+    assert catalogue.station_products["published_record_end_date"].null_count() == 2
+    assert catalogue.station_products["last_catalogue_check"].unique().to_list() == [date(2026, 9, 2)]
     assert catalogue.station_products.group_by("product_id").len().sort("product_id").to_dicts() == [
-        {"product_id": "discharge_instantaneous", "len": 825},
-        {"product_id": "stage_instantaneous", "len": 825},
+        {"product_id": "discharge_instantaneous", "len": 1},
+        {"product_id": "stage_instantaneous", "len": 1},
     ]
     assert set(catalogue.products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
     assert set(catalogue.station_products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
@@ -730,12 +735,12 @@ def test_origin_enforcement_is_part_of_native_build() -> None:
         generate_catalogue.build_catalogue(_committed_native_table(), declarations)
 
 
-def test_dates_come_only_from_each_native_row_and_maximum_retrieval_date() -> None:
+def test_station_product_check_uses_recording_date_and_provider_uses_native_date() -> None:
     data = (
         _committed_native_table()
         .data.head(2)
         .with_columns(
-            pl.Series("station.id", ["100", "200"], dtype=pl.String),
+            pl.Series("station.id", ["1373273", "200"], dtype=pl.String),
             pl.Series(
                 "retrieved_at",
                 [datetime(2026, 8, 1, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC)],
@@ -749,7 +754,7 @@ def test_dates_come_only_from_each_native_row_and_maximum_retrieval_date() -> No
         station_id: values["last_catalogue_check"].unique().to_list()
         for station_id, values in catalogue.station_products.group_by("station_id")
     }
-    assert dates == {("100",): [date(2026, 8, 1)], ("200",): [date(2026, 8, 2)]}
+    assert dates == {("1373273",): [date(2026, 9, 2)]}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 

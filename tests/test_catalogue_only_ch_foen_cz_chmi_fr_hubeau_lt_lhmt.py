@@ -41,26 +41,10 @@ CATALOGUE_ONLY_PROVIDERS = (
         set(),
         set(),
     ),
-    (
-        "lt_lhmt",
-        97,
-        2,
-        194,
-        {"discharge_daily_mean", "stage_daily_mean"},
-        "Lithuanian Hydrometeorological Service LHMT (Meteo.lt)",
-        {"unknown"},
-        {"EPSG:4326"},
-    ),
 )
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "ch_foen": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
     "fr_hubeau": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
-    "lt_lhmt": {
-        "__init__.py",
-        "generate_catalogue.py",
-        "issue_codes.py",
-        "origins.py",
-    },
 }
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
 
@@ -231,14 +215,6 @@ def test_reference_fixtures_are_colocated_and_active_catalogue_fixtures_remain()
             "retrieval.py",
             "transform.py",
         },
-        "lt_lhmt": {
-            "issue_codes.py",
-            "module.py",
-            "observation_client.py",
-            "parser.py",
-            "retrieval.py",
-            "transform.py",
-        },
     }
     for provider_id, source_names in expected_source_files.items():
         source_dir = REFERENCE_ROOT / provider_id / "source"
@@ -258,10 +234,6 @@ def test_reference_fixtures_are_colocated_and_active_catalogue_fixtures_remain()
             "fr_hubeau_O0050010_obs_tr_H.json",
             "fr_hubeau_T123456001_temperature.json",
         },
-        "lt_lhmt": {
-            "lithuania_metadata_stations.json",
-            "lithuania_anyksciu_vms_2023_06.json",
-        },
     }
     for provider_id, fixture_names in expected.items():
         fixture_dir = REFERENCE_ROOT / provider_id / "tests" / "test_data"
@@ -272,11 +244,6 @@ def test_reference_fixtures_are_colocated_and_active_catalogue_fixtures_remain()
                     fixture_path = fixture_dir / fixture_name
                     assert fixture_path.is_file()
                     assert fixture_path.stat().st_size > 0
-
-    lt_test_dir = REFERENCE_ROOT / "lt_lhmt" / "tests"
-    expected_fixture_line = 'FIXTURE_PATH = Path(__file__).parent / "test_data" / "lithuania_anyksciu_vms_2023_06.json"'
-    for test_name in ("test_lt_lhmt_observation_parser.py", "test_lt_lhmt_observations.py"):
-        assert expected_fixture_line in (lt_test_dir / test_name).read_text()
 
     active_fixture_dir = Path(__file__).parent / "test_data"
     for fixture_name in (

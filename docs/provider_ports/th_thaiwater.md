@@ -9,18 +9,13 @@ These notes capture evidence and handoff context from the `th_thaiwater` provide
 | `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load` | Maintainer-side native-table refresh input; returns all telemetered stations in one response. | None. Public ThaiWater Open API. | Canonical artefacts are built offline from committed `native.parquet` plus origins. |
 | `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph` | Runtime observation retrieval. Query params: `station_type=tele_waterlevel`, `station_id`, `start_date` (YYYY-MM-DD), `end_date` (YYYY-MM-DD). | None. | Returns a `data.graph_data` list with `datetime`, `value` (stage in m), and `discharge` (m³/s) fields per row. |
 
-## Timezone — Critical Quirk
+## Observation Time and Zone
 
-ThaiWater timestamps in `graph_data[].datetime` are **naive local Bangkok time** (format `"YYYY-MM-DD HH:MM:SS"`, no timezone suffix). They are NOT UTC.
-
-Port decision: parse with `datetime.strptime`, localize to `Asia/Bangkok` (`ZoneInfo("Asia/Bangkok")`), convert to UTC before storing. This means:
-
-- Instantaneous products: Bangkok time → UTC (offset -7h). Example: `"2023-06-01 01:00:00"` Bangkok → `2023-05-31T18:00:00Z`.
-- Daily products: group by Bangkok calendar date (after `dt.convert_time_zone("Asia/Bangkok").dt.truncate("1d")`), compute mean, store UTC of Bangkok midnight (= previous day 17:00Z).
-
-This conversion is **known and documented** (not inferred), but per the timezone policy in the prompt, a structured `info`-severity issue (`timezone_local_to_utc`) is emitted per station-product series to record the conversion explicitly. Series annotations carry `timezone_source = "local_to_utc_conversion"` and `local_timezone = "Asia/Bangkok"`.
-
-The legacy `ThailandFetcher` drops timezone after localizing (`.dt.tz_localize(None)`), storing naive Bangkok-time datetimes. The new port instead converts to UTC as its provider-specific transform; shared time and zone representation is owned by [ADR 0006](../adr/0006-time-and-zone-are-two-columns.md) and [ADR 0007](../adr/0007-zone-values-are-iana-offset-or-unknown.md).
+The recorded `graph_data[].datetime` values use `YYYY-MM-DD HH:MM` with no UTC designator,
+numeric offset, or timezone field. No captured official source establishes a zone. The parser therefore
+preserves each value as a naive source wall clock and sets `time_zone="unknown"`. It does not infer
+`Asia/Bangkok` from the country, station coordinates, or retired code. `to_utc` refuses these rows
+atomically.
 
 ## Native Catalogue Attestation
 
@@ -64,30 +59,36 @@ No unit conversion is required.
 
 ## Observation Retrieval
 
-- **Windowing**: 365-day windows per `MAX_WINDOW_DAYS = 365`. Each station-product request is decomposed into (start_date, end_date) pairs.
-- **Date filtering**: After parsing, records are filtered to the Bangkok-day range corresponding to the requested UTC start/end. This prevents off-by-one issues at window boundaries: the filter converts the requested UTC range to Bangkok calendar dates before clamping.
-- **Daily aggregation**: Group by Bangkok calendar day (`dt.convert_time_zone("Asia/Bangkok").dt.truncate("1d")`), compute mean, then convert Bangkok midnight → UTC for storage.
-- **Instantaneous deduplication**: `dedup.unique(subset=["time"], keep="last", maintain_order=True)` following the same intent as the legacy `drop_duplicates(keep="last")`.
-- **HTTP 404**: Emits `http_not_found` warning issue (not fatal), matching the lt_lhmt / usgs_nwis / cz_chmi pattern.
+- **Windowing**: the shared engine renders inclusive date windows capped at 365 days.
+- **Request**: `station_type=tele_waterlevel`, `station_id`, `start_date`, and `end_date` are sent to
+  `waterlevel_graph` through the shared `HttpClient` transport seam.
+- **Coalescing**: one graph response publishes both `value` and `discharge`, so a station-window
+  requested for both products produces one source call and one publisher receipt.
+- **Parsing**: `value` and `discharge` are projected directly into instantaneous source rows. Nulls
+  remain null. `value_out` remains uninterpreted. There is no provider clipping, aggregation, unit
+  conversion, retry loop, or result assembly.
 
 ## Station Count
 
 825 stations at catalogue version `2026-08-02`, built offline from committed `native.parquet` plus the five station origins. Every native row is required to have `station_type == "tele_waterlevel"`, non-null latitude and longitude, and a unique String `station.id`; violations fail the build rather than being filtered, dropped, or deduplicated.
 
-The packaged station-product carrier is currently empty. Availability lacks row-level acquisition
-bindings, so the loader withholds all 1,650 candidate rows and records
-`no_acquisition_record_established` for each.
+The packaged station-product carrier contains exactly the two edges established by the recorded
+station `1373273` response: `stage_instantaneous` and `discharge_instantaneous`. Their published record
+bounds remain null and `last_catalogue_check` is the recording date, `2026-09-02`. The other 1,648
+candidate availability facts remain explicitly withheld and do not become catalogue rows.
 
 ## Shared Architecture Impact
 
-None. The Bangkok→UTC conversion is provider-specific. The structured `timezone_local_to_utc` info-issue is provider-specific. Daily Bangkok-day aggregation is provider-specific. No shared harness gap discovered.
+The public selection path previously drove each selected station-product edge as a separate engine
+request. That prevented a provider from coalescing fields published by one response. The public path
+now groups the selected products for each station before it calls the engine; it does not invent a
+station-product Cartesian product.
 
 ## Pain Points
 
 | Issue | Status | Action |
 | --- | --- | --- |
-| Naive Bangkok timestamps | Documented; handled by zoneinfo conversion in parser. | Keep timezone annotation + issue; do not change. |
-| Daily aggregation on Bangkok calendar days | Implemented in transform layer via `convert_time_zone("Asia/Bangkok").dt.truncate("1d")`. | Bangkok midnight UTC timestamps (e.g., 17:00Z) may look surprising to users; the series annotation `local_timezone = "Asia/Bangkok"` documents this. |
-| No elevation or drainage area | `None` in both common columns; documented in metadata. | No action needed. |
-| Multilingual station names | Preserved as flattened native columns in `native.parquet`. | Keep source language values unchanged. |
-| Former station-type, null-coordinate, and duplicate-ID filters | Replaced by explicit fatal build contracts. | Never silently reject a native row during canonical generation. |
+| Naive graph timestamps | Source zone is not established. | Preserve wall clock with `time_zone="unknown"`; never infer UTC or Bangkok. |
+| Response publishes two products together | Expressed by one payload with two station-product pairs. | Keep one call and receipt per station-window. |
+| No elevation or drainage area | Null in the canonical station columns. | Do not infer values. |
+| Multilingual station names | Preserved in flattened native columns. | Keep source language values unchanged. |

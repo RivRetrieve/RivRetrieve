@@ -130,7 +130,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "lt_lhmt": (194, 0, 0),
         "no_nve": (0, 0, 0),
         "pl_imgw": (3_903, 0, 0),
-        "th_thaiwater": (0, 0, 0),
+        "th_thaiwater": (2, 0, 0),
         "usgs_nwis": (157_548, 57_450, 57_450),
         "za_dws": (8_715, 0, 0),
     }

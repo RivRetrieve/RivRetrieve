@@ -91,7 +91,7 @@ thailand = rivretrieve.find(
 )
 assert rivretrieve.as_frame(thailand).is_empty()
 groups = thailand.acquisition_provenance[0].withheld_facts
-assert len(groups) == 1_650
+assert len(groups) == 1_648
 assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
 """
     clean_environment = os.environ.copy()

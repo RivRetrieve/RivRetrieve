@@ -11,6 +11,7 @@ from rivretrieve._internal.acquisition_provenance import (
     EvidenceReference,
     ExternalFactReference,
     FactBinding,
+    MaterialIdentity,
     NativeTableIdentity,
     RecordingReference,
     SemanticDigest,
@@ -81,6 +82,31 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
         description="Exact ThaiWater API observation request and response retained at runtime through the HII-operated route",
         requested_from=("https://api-v3.thaiwater.net/api/v1/thaiwater30/public/<observation-route>",),
     )
+    availability_recording = RecordingReference(
+        recording_id="th_thaiwater_1373273_graph_2026_08_01_02",
+        repository_path="tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json",
+        source_url=(
+            "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph"
+            "?station_type=tele_waterlevel&station_id=1373273&start_date=2026-08-01&end_date=2026-08-02"
+        ),
+        retrieved_at=datetime.fromisoformat("2026-09-02T14:46:18.094257Z"),
+        media_type="application/vnd.rivretrieve.recording+json",
+        sha256="a15d4453f9f3ff3df93e1ebfcc7f8098a98982ab5768b222b0b6943881d5c8ec",
+    )
+    availability_acquisition = AcquisitionRecord(
+        acquisition_id="waterlevel_graph_1373273_2026_08_01_02",
+        method="http_request",
+        instant_type="retrieval",
+        description="Complete 288-row ThaiWater graph response for station 1373273 and both published fields",
+        requested_from=(availability_recording.source_url,),
+        retrieved_at_start=availability_recording.retrieved_at,
+        recording_ids=(availability_recording.recording_id,),
+        material=MaterialIdentity(
+            filename="waterlevel_graph_1373273_2026-08-01_2026-08-02_retrieval-1.json",
+            byte_count=24_353,
+            sha256="436593e32ccb99e2edff4ea87681679608f226efada8bc263fd706dfc7c20d01",
+        ),
+    )
     records = []
     for agency_id, issuer in _AGENCY_NAMES.items():
         records.append(
@@ -88,12 +114,21 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
                 source_id=f"th_agency_{agency_id}",
                 issuer=issuer,
                 operator="Hydro-Informatics Institute ThaiWater API" if agency_id != 9 else None,
-                acquisitions=(catalogue_acquisition, runtime),
+                acquisitions=(
+                    catalogue_acquisition,
+                    runtime,
+                    *((availability_acquisition,) if agency_id == 9 else ()),
+                ),
                 evidence=(
                     EvidenceReference(
                         evidence_id="th_thaiwater_terms_surface",
                         description="HII terms surface recorded as evidence that no applicable licence or citation statement was found",
                         recording=terms,
+                    ),
+                    EvidenceReference(
+                        evidence_id="th_thaiwater_1373273_product_availability",
+                        description="Exact official graph response establishing both station-product edges",
+                        recording=availability_recording,
                     ),
                 )
                 if agency_id == 9
@@ -127,6 +162,15 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
                 source_id="th_agency_9",
                 acquisition_id="waterlevel_load_2026_08_02",
             ),
+            *(
+                FactBinding(
+                    fact_group=f"station_product:1373273:{product}:availability",
+                    facts=(f"source.station_product:1373273:{product}.availability",),
+                    source_id="th_agency_9",
+                    acquisition_id="waterlevel_graph_1373273_2026_08_01_02",
+                )
+                for product in _PRODUCTS
+            ),
         )
     )
     withheld = tuple(
@@ -138,6 +182,7 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
         )
         for station_id, _ in station_agencies
         for product in _PRODUCTS
+        if station_id != "1373273"
     )
     facts = tuple(fact for binding in bindings for fact in binding.facts) + tuple(
         fact for item in withheld for fact in item.facts
@@ -183,6 +228,13 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
             name="ThaiWater platform facts to canonical provider and relation carriers",
             external_inputs=(
                 ExternalFactReference(source_id="th_agency_9", fact="source.provider.thaiwater_platform_identity"),
+                *(
+                    ExternalFactReference(
+                        source_id="th_agency_9",
+                        fact=f"source.station_product:1373273:{product}.availability",
+                    )
+                    for product in _PRODUCTS
+                ),
             ),
         ),
         fact_group="canonical_platform_carrier",

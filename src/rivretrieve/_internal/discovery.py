@@ -159,16 +159,19 @@ def _fetch_provider_series(
     on_issue: OnIssue,
 ) -> ObservationResult:
     handle = _provider_lookup(provider_id)
+    by_station: dict[str, list[str]] = {}
+    for selected_series in series:
+        by_station.setdefault(selected_series.station_id, []).append(selected_series.product_id)
     results = tuple(
         handle.observations(
-            stations=selected_series.station_id,
-            products=selected_series.product_id,
+            stations=station_id,
+            products=tuple(product_ids),
             start=start,
             end=end,
             on_issue="ignore",
             receipts=receipts,
         )
-        for selected_series in series
+        for station_id, product_ids in by_station.items()
     )
     result = _merge_provider_results(results, series)
     apply_on_issue(result.issues, on_issue)

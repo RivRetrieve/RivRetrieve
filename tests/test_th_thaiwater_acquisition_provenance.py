@@ -56,13 +56,49 @@ def test_thailand_canonical_product_definition_is_rivretrieve_owned() -> None:
 def test_thailand_withholds_each_station_product_availability_fact() -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
     assert provenance is not None
-    assert len(provenance.withheld_facts) == 1_650
+    assert len(provenance.withheld_facts) == 1_648
     assert {item.reason for item in provenance.withheld_facts} == {"no_acquisition_record_established"}
     assert all(
         fact.startswith("station_product:") and fact.endswith(":availability")
         for item in provenance.withheld_facts
         for fact in item.facts
     )
+    withheld_edges = {
+        (locator.station_id, locator.product_id)
+        for item in provenance.withheld_facts
+        for locator in item.catalogue_rows
+    }
+    assert ("1373273", "discharge_instantaneous") not in withheld_edges
+    assert ("1373273", "stage_instantaneous") not in withheld_edges
+    assert ("1373272", "discharge_instantaneous") in withheld_edges
+    assert ("1373272", "stage_instantaneous") in withheld_edges
+
+
+def test_recorded_graph_binds_only_the_two_established_edges_to_existing_issuer() -> None:
+    provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
+    assert provenance is not None
+    bindings = [
+        binding for binding in provenance.fact_bindings if binding.fact_group.startswith("station_product:1373273:")
+    ]
+    assert {(binding.fact_group, binding.source_id, binding.acquisition_id) for binding in bindings} == {
+        (
+            "station_product:1373273:discharge_instantaneous:availability",
+            "th_agency_9",
+            "waterlevel_graph_1373273_2026_08_01_02",
+        ),
+        (
+            "station_product:1373273:stage_instantaneous:availability",
+            "th_agency_9",
+            "waterlevel_graph_1373273_2026_08_01_02",
+        ),
+    }
+    issuer = next(source for source in provenance.source_records if source.source_id == "th_agency_9")
+    acquisition = next(
+        item for item in issuer.acquisitions if item.acquisition_id == "waterlevel_graph_1373273_2026_08_01_02"
+    )
+    assert acquisition.recording_ids == ("th_thaiwater_1373273_graph_2026_08_01_02",)
+    assert acquisition.material is not None
+    assert acquisition.material.sha256 == "436593e32ccb99e2edff4ea87681679608f226efada8bc263fd706dfc7c20d01"
 
 
 def test_thailand_cli_rejects_native_byte_substitution(tmp_path: Path) -> None:
