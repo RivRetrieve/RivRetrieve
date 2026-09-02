@@ -1,22 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-1.json",
-  "$comment": "Governed by docs/design/observation-store-layout.md. Revision 1 applies only to stores compiled from a publisher artifact. The source-schema fingerprint covers ordered source column names and source data types.",
+  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-2.json",
+  "$comment": "Governed by docs/design/observation-store-layout.md. Revision 2 applies only to stores compiled from one or more exact publisher artifacts. The source-schema fingerprint covers ordered source column names and source data types.",
   "title": "RivRetrieve observation-store manifest",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "format_version",
+    "provider_id",
     "compiler_version",
     "built_at",
     "source_vintage",
-    "publisher_artifact",
     "source_schema",
     "source_column_dispositions",
     "partition_row_counts"
   ],
   "properties": {
-    "format_version": {"const": 1},
+    "format_version": {
+      "const": 2
+    },
     "compiler_version": {
       "type": "string",
       "pattern": "^(?:[1-9][0-9]*!)?(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))*(?:(?:a|b|rc)(?:0|[1-9][0-9]*))?(?:\\.post(?:0|[1-9][0-9]*))?(?:\\.dev(?:0|[1-9][0-9]*))?(?:\\+[a-z0-9]+(?:[._-][a-z0-9]+)*)?$"
@@ -34,72 +36,220 @@
     "publisher_artifact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url", "sha256"],
+      "required": [
+        "url",
+        "sha256"
+      ],
       "properties": {
-        "url": {"type": "string", "format": "uri", "pattern": "^https://"},
-        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
       }
     },
     "source_schema": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["columns", "fingerprint"],
+      "required": [
+        "columns",
+        "fingerprint"
+      ],
       "properties": {
         "columns": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"$ref": "#/$defs/source_column"}
+          "items": {
+            "$ref": "#/$defs/source_column"
+          }
         },
-        "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
       }
     },
     "source_column_dispositions": {
       "type": "array",
       "minItems": 1,
-      "items": {"$ref": "#/$defs/source_column_disposition"}
+      "items": {
+        "$ref": "#/$defs/source_column_disposition"
+      }
     },
     "partition_row_counts": {
       "type": "object",
       "minProperties": 1,
-      "propertyNames": {"pattern": "^product=[^/=]+/year=[0-9]{4}$"},
-      "additionalProperties": {"type": "integer", "minimum": 1}
+      "propertyNames": {
+        "pattern": "^product=[^/=]+/year=[0-9]{4}$"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "publisher_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "url",
+          "sha256"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "$defs": {
     "source_column": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "type"],
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
-        "name": {"type": "string", "minLength": 1},
-        "type": {"type": "string", "minLength": 1}
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "source_column_disposition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source_column", "disposition"],
+      "required": [
+        "source_column",
+        "disposition"
+      ],
       "properties": {
-        "source_column": {"type": "string", "minLength": 1},
-        "disposition": {
-          "enum": ["retained", "reconstructible", "deliberately_discarded"]
+        "source_column": {
+          "type": "string",
+          "minLength": 1
         },
-        "reconstruction_rule": {"type": "string", "minLength": 1},
-        "rationale": {"type": "string", "minLength": 1}
+        "disposition": {
+          "enum": [
+            "retained",
+            "reconstructible",
+            "deliberately_discarded"
+          ]
+        },
+        "reconstruction_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "allOf": [
         {
-          "if": {"properties": {"disposition": {"const": "reconstructible"}}, "required": ["disposition"]},
-          "then": {"required": ["reconstruction_rule"], "not": {"required": ["rationale"]}},
-          "else": {"not": {"required": ["reconstruction_rule"]}}
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "reconstructible"
+              }
+            },
+            "required": [
+              "disposition"
+            ]
+          },
+          "then": {
+            "required": [
+              "reconstruction_rule"
+            ],
+            "not": {
+              "required": [
+                "rationale"
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "reconstruction_rule"
+              ]
+            }
+          }
         },
         {
-          "if": {"properties": {"disposition": {"const": "deliberately_discarded"}}, "required": ["disposition"]},
-          "then": {"required": ["rationale"], "not": {"required": ["reconstruction_rule"]}},
-          "else": {"not": {"required": ["rationale"]}}
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "deliberately_discarded"
+              }
+            },
+            "required": [
+              "disposition"
+            ]
+          },
+          "then": {
+            "required": [
+              "rationale"
+            ],
+            "not": {
+              "required": [
+                "reconstruction_rule"
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "rationale"
+              ]
+            }
+          }
         }
       ]
     }
-  }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "publisher_artifact"
+      ],
+      "not": {
+        "required": [
+          "publisher_artifacts"
+        ]
+      }
+    },
+    {
+      "required": [
+        "publisher_artifacts"
+      ],
+      "not": {
+        "required": [
+          "publisher_artifact"
+        ]
+      }
+    }
+  ]
 }

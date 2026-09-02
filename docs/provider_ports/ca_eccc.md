@@ -55,24 +55,11 @@ Both products read daily values from the cached HYDAT SQLite archive.
 
 ## Timestamps
 
-`DATE` field is date-only (`YYYY-MM-DD`). Follows the established `date_only_timestamp` pattern (same as `lt_lhmt`, `fr_hubeau`, `br_ana`):
-- Interpreted as UTC midnight `T00:00:00Z`
-- `warning`-severity `date_only_timestamp` issue emitted per parser call
-- Series annotation: `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`
-
-ECCC does not document the true period anchor (calendar day in what timezone — likely Eastern or local station time). UTC midnight is a safe convention consistent with all other daily-only providers.
+HYDAT publishes calendar dates without a source time-zone or day-definition declaration. Unlike the live adapters that use the established `date_only_timestamp` convention, the bulk store retains each date as a naive midnight wall-clock value with `time_zone = "unknown"`. RivRetrieve does not infer UTC or a Canadian zone.
 
 ## Quality Flags
 
-`DISCHARGE_SYMBOL` and `LEVEL_SYMBOL` carry ECCC quality codes:
-- `""` (empty) — no flag
-- `"A"` — Estimated
-- `"B"` — Ice conditions
-- `"D"` — Dry (no flow)
-- `"E"` — Estimated (ice affected)
-- `"R"` — Revised
-
-Preserved as `quality_flag` row annotation. Not harmonized across providers (V1 policy).
+`FLOW_SYMBOL1..31` and `LEVEL_SYMBOL1..31` remain exact native HYDAT cells in the compiled store and opt-in store-excerpt receipts. They are not interpreted, harmonised, or added to the five-column canonical result.
 
 ## Station-Product Availability
 

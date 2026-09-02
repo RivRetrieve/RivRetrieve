@@ -59,7 +59,7 @@ def test_decoder_accepts_publisher_declared_double_columns(tmp_path: Path) -> No
 
     materialized = decode_hydat(artifact)
 
-    assert materialized.rows.select("product", "value").rows() == [
+    assert materialized.rows.filter(materialized.rows["value"].is_not_null()).select("product", "value").rows() == [
         ("discharge_daily_mean", 12.4),
         ("stage_daily_mean", 1.2),
     ]

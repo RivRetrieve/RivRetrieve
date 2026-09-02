@@ -54,17 +54,31 @@ class DownloadedBulkArtifact:
 
 @dataclass(frozen=True, slots=True)
 class BulkCompileRequest:
-    """Engine-owned inputs for one provider-declared store compilation."""
+    """Engine-owned inputs for one atomic store compilation from downloaded artifacts."""
 
-    publisher_artifact: Path
+    publisher_artifacts: tuple[DownloadedBulkArtifact, ...]
     destination: StoreRoot
-    publisher_url: str
-    source_vintage: date
     built_at: datetime
     compiler_version: str
 
+    def __post_init__(self) -> None:
+        if not self.publisher_artifacts:
+            raise ValueError("bulk compile requires at least one publisher artifact")
 
-BulkDownload = Callable[[BulkDownloadRequest], DownloadedBulkArtifact]
+    @property
+    def publisher_artifact(self) -> Path:
+        return self.publisher_artifacts[0].path
+
+    @property
+    def publisher_url(self) -> str:
+        return self.publisher_artifacts[0].url
+
+    @property
+    def source_vintage(self) -> date:
+        return max(item.source_vintage for item in self.publisher_artifacts)
+
+
+BulkDownload = Callable[[BulkDownloadRequest], tuple[DownloadedBulkArtifact, ...]]
 BulkCompile = Callable[[BulkCompileRequest], ValidatedStore]
 
 

@@ -19,7 +19,7 @@ def test_truncated_earlier_member_prevents_later_valid_prefix_being_published(tm
             ),
         )
 
-    with pytest.raises(CertificationError, match="1997.csv"):
+    with pytest.raises(CertificationError, match="source-unit emitted rows differ"):
         certify_compile(request, artifact, decode)
 
     assert not Path(request.destination).exists()

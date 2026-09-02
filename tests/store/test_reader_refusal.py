@@ -26,7 +26,7 @@ FIXTURES = Path(__file__).parents[1] / "test_data" / "observation_store_conforma
 def _query(store: Path, *, station: str = "ca-001", product: str = "discharge") -> StoreQuery:
     return StoreQuery(
         store=StoreRoot(store.resolve()),
-        provider_id=ProviderId("fixture_provider"),
+        provider_id=ProviderId("fixture_bulk"),
         stations=(station,),
         products=(ProductId(product),),
         start=datetime(2023, 1, 1),
@@ -55,7 +55,7 @@ def test_unknown_revision_is_refused_before_a_partition_scan(tmp_path: Path, mon
 
     assert not parquet_opened
     assert raised.value.refusal.defect == "unsupported format revision 87"
-    assert 'rivretrieve.download("fixture_provider")' in str(raised.value)
+    assert 'rivretrieve.download("fixture_bulk")' in str(raised.value)
 
 
 def test_reader_projects_native_rows_and_keeps_physical_value_state() -> None:
@@ -77,7 +77,7 @@ def test_reader_preserves_duplicate_source_rows() -> None:
     result = StoreReader().query(
         StoreQuery(
             store=StoreRoot(store.resolve()),
-            provider_id=ProviderId("fixture_provider"),
+            provider_id=ProviderId("fixture_bulk"),
             stations=("at-001",),
             products=(ProductId("level"),),
             start=datetime(2024, 1, 1),
@@ -91,17 +91,17 @@ def test_reader_preserves_duplicate_source_rows() -> None:
 def test_status_reports_absence_or_validated_manifest_facts(tmp_path: Path) -> None:
     reader = StoreReader()
     missing = StoreRoot((tmp_path / "missing").resolve())
-    absent = reader.status(missing, ProviderId("fixture_provider"))
+    absent = reader.status(missing, ProviderId("fixture_bulk"))
     assert absent.presence is StorePresence.ABSENT
     assert not absent.exists
     assert absent.source_vintage is None
     assert absent.partition_row_counts == {}
 
     store = StoreRoot((FIXTURES / "valid_hydat_national").resolve())
-    present = reader.status(store, ProviderId("fixture_provider"))
+    present = reader.status(store, ProviderId("fixture_bulk"))
     assert present.presence is StorePresence.PRESENT
     assert present.exists
-    assert present.format_version == 1
+    assert present.format_version == 2
     assert present.manifest is not None
     assert present.compiler_version == present.manifest.compiler_version
     assert present.source_vintage is not None

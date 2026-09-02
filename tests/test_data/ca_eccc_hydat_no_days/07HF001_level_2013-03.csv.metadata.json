@@ -1,0 +1,32 @@
+{
+  "requested_url": "https://wateroffice.ec.gc.ca/services/daily_data/csv/inline?stations%5B%5D=07HF001&parameters%5B%5D=level&start_date=2013-03-01&end_date=2013-03-31",
+  "final_url": "https://wateroffice.ec.gc.ca/services/daily_data/csv/inline?stations%5B%5D=07HF001&parameters%5B%5D=level&start_date=2013-03-01&end_date=2013-03-31",
+  "retrieval_started_utc": "2026-09-02T18:07:06.672728Z",
+  "retrieval_completed_utc": "2026-09-02T18:07:07.251789Z",
+  "http_status": 200,
+  "content_type": "text/csv; charset=utf-8",
+  "content_encoding": "gzip",
+  "response_headers": {
+    "Date": "Wed, 02 Sep 2026 18:07:07 GMT",
+    "Server": "Apache",
+    "Strict-Transport-Security": "max-age=63072000; preload",
+    "Content-Disposition": "inline; filename=daily_data.csv",
+    "Pragma": "public",
+    "Cache-Control": "must-revalidate, post-check=0, pre-check=0",
+    "Vary": "Accept-Encoding",
+    "Content-Encoding": "gzip",
+    "Referrer-Policy": "no-referrer-when-downgrade",
+    "Content-Security-Policy": "frame-src 'self'; media-src 'self'; object-src 'self'; base-uri 'self'; form-action 'self' https://www.canada.ca https://canada.ca https://recherche-search.gc.ca https://weather.gc.ca https://meteo.gc.ca https://*.cmc.ec.gc.ca https://*.edc-mtl.ec.gc.ca",
+    "Content-Length": "236",
+    "Keep-Alive": "timeout=5, max=100",
+    "Connection": "Keep-Alive",
+    "Content-Type": "text/csv; charset=utf-8"
+  },
+  "redirect_chain": [],
+  "decoded_body_filename": "07HF001_level_2013-03.csv",
+  "decoded_body_bytes": 981,
+  "decoded_body_sha256": "b6d049e72a493e49d91fe10ac12cb314fbb481988fc1b26c47eb646f8fae3b87",
+  "wire_body_filename": "07HF001_level_2013-03.csv.http-wire.gz",
+  "wire_body_bytes": 236,
+  "wire_body_sha256": "0bca94ab6fd24a22d12933e187b2fc10b05a10ba8b2d29992ece8ee6791c7403"
+}

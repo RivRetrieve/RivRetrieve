@@ -108,7 +108,7 @@ def _download(
     work.mkdir(parents=True, exist_ok=True)
     artifact = work / "publisher-artifact.download"
     client = client_factory()
-    downloaded = operations.download(
+    downloaded_value = operations.download(
         BulkDownloadRequest(
             destination=artifact,
             today=today,
@@ -117,14 +117,14 @@ def _download(
         )
     )
 
+    downloaded = downloaded_value if isinstance(downloaded_value, tuple) else (downloaded_value,)
+
     from rivretrieve import __version__
 
     return operations.compile(
         BulkCompileRequest(
-            publisher_artifact=downloaded.path,
+            publisher_artifacts=downloaded,
             destination=root,
-            publisher_url=downloaded.url,
-            source_vintage=downloaded.source_vintage,
             built_at=datetime.now(UTC),
             compiler_version=__version__,
         )

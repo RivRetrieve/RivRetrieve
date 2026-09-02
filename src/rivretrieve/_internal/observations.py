@@ -93,6 +93,8 @@ class ObservationProvenance(BaseModel):
     metadata: str | None = None
     source_vintage: date | None = None
     publisher_artifact_checksum: str | None = None
+    publisher_artifact_checksums: tuple[str, ...] = ()
+    publisher_artifact_urls: tuple[str, ...] = ()
     acquisition_provenance: AcquisitionProvenance | None = None
 
 

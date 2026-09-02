@@ -61,11 +61,13 @@ class PublisherArtifact:
 
 @dataclass(frozen=True, slots=True)
 class StoreManifest:
-    format_version: Literal[1]
+    format_version: Literal[2]
+    provider_id: ProviderId
     compiler_version: str
     built_at: datetime
     source_vintage: date
     publisher_artifact: PublisherArtifact
+    publisher_artifacts: tuple[PublisherArtifact, ...]
     source_schema: SourceSchema
     source_column_dispositions: tuple[SourceColumnDisposition, ...]
     partition_row_counts: Mapping[PartitionIdentifier, int]
@@ -187,7 +189,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
     version = raw["format_version"]
     if type(version) is not int:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
-    if version != 1:
+    if version != 2:
         _refuse(
             StoreRefusalKind.INCOMPATIBLE,
             store,
@@ -354,6 +356,7 @@ def _validate_partition(
     path: Path,
     expected_rows: int,
     retained_columns: tuple[str, ...],
+    source_columns: tuple[dict[str, str], ...],
     store: StoreRoot,
     provider_id: ProviderId,
 ) -> None:
@@ -383,77 +386,102 @@ def _validate_partition(
     names_are_valid = tuple(schema.names[:5]) == _REQUIRED_FIELD_NAMES
     if not names_are_valid or not types_are_valid:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.schema:{identifier}")
-    for retained_column in retained_columns:
-        if retained_column not in schema.names:
-            _refuse(
-                StoreRefusalKind.MALFORMED,
-                store,
-                provider_id,
-                f"partition.retained_column:{identifier}:{retained_column}",
-            )
+    native_columns = tuple(column for column in retained_columns if column not in _REQUIRED_FIELD_NAMES)
+    expected_names = (*_REQUIRED_FIELD_NAMES, *native_columns)
+    source_types = {column["name"]: column["type"] for column in source_columns}
+    type_checks = {
+        "text": _is_utf8_string,
+        "string": _is_utf8_string,
+        "integer": pa.types.is_int64,
+        "double": pa.types.is_float64,
+        "float64": pa.types.is_float64,
+        "timestamp[us]": lambda value: pa.types.is_timestamp(value) and value.unit == "us" and value.tz is None,
+    }
+    native_types_are_valid = all(
+        source_types[name].lower() in type_checks and type_checks[source_types[name].lower()](schema.field(name).type)
+        for name in native_columns
+        if name in schema.names
+    )
+    if tuple(schema.names) != expected_names or not native_types_are_valid:
+        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.schema:{identifier}")
+    partition_year = int(str(identifier).rsplit("year=", 1)[1])
+    last_station: bytes | None = None
+    row_offset = 0
     try:
-        table = parquet.read()
+        batches = parquet.iter_batches(
+            batch_size=65_536,
+            columns=["station_id", "time", "time_zone", "value", "value_state"],
+        )
+        for batch in batches:
+            station_ids = batch.column("station_id").to_pylist()
+            times = batch.column("time").to_pylist()
+            time_zones = batch.column("time_zone").to_pylist()
+            values = batch.column("value").to_pylist()
+            value_states = batch.column("value_state").to_pylist()
+            for column_name, values_to_check in (
+                ("station_id", station_ids),
+                ("time", times),
+                ("time_zone", time_zones),
+                ("value_state", value_states),
+            ):
+                if any(value is None for value in values_to_check):
+                    _refuse(
+                        StoreRefusalKind.MALFORMED,
+                        store,
+                        provider_id,
+                        f"partition.nullability:{identifier}:{column_name}",
+                    )
+            if any(station_id == "" for station_id in station_ids):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.station_id:{identifier}")
+            bytewise_ids = [station_id.encode("utf-8") for station_id in station_ids]
+            if last_station is not None and bytewise_ids and last_station > bytewise_ids[0]:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.order:{identifier}")
+            if any(left > right for left, right in zip(bytewise_ids, bytewise_ids[1:], strict=False)):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.order:{identifier}")
+            if bytewise_ids:
+                last_station = bytewise_ids[-1]
+            for index, timestamp in enumerate(times, start=row_offset):
+                if timestamp.year != partition_year:
+                    _refuse(
+                        StoreRefusalKind.MALFORMED,
+                        store,
+                        provider_id,
+                        f"partition.year:{identifier}:row={index}",
+                    )
+            for index, (value, state) in enumerate(zip(values, value_states, strict=True), start=row_offset):
+                legal = (state == "published_value" and value is not None) or (
+                    state in {"published_null", "published_blank"} and value is None
+                )
+                if not legal:
+                    _refuse(
+                        StoreRefusalKind.MALFORMED,
+                        store,
+                        provider_id,
+                        f"value_state.combination:{identifier}:row={index}",
+                    )
+            row_offset += len(station_ids)
     except (OSError, ValueError, pa.ArrowException):
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.parquet:{identifier}")
-
-    station_ids = table.column("station_id").to_pylist()
-    times = table.column("time").to_pylist()
-    time_zones = table.column("time_zone").to_pylist()
-    values = table.column("value").to_pylist()
-    value_states = table.column("value_state").to_pylist()
-    for column_name, values_to_check in (
-        ("station_id", station_ids),
-        ("time", times),
-        ("time_zone", time_zones),
-        ("value_state", value_states),
-    ):
-        if any(value is None for value in values_to_check):
-            _refuse(
-                StoreRefusalKind.MALFORMED,
-                store,
-                provider_id,
-                f"partition.nullability:{identifier}:{column_name}",
-            )
-
-    if any(station_id == "" for station_id in station_ids):
-        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.station_id:{identifier}")
-    bytewise_ids = [station_id.encode("utf-8") for station_id in station_ids]
-    if any(left > right for left, right in zip(bytewise_ids, bytewise_ids[1:], strict=False)):
-        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.order:{identifier}")
-
-    partition_year = int(str(identifier).rsplit("year=", 1)[1])
-    for index, timestamp in enumerate(times):
-        if timestamp.year != partition_year:
-            _refuse(
-                StoreRefusalKind.MALFORMED,
-                store,
-                provider_id,
-                f"partition.year:{identifier}:row={index}",
-            )
-
-    for index, (value, state) in enumerate(zip(values, value_states, strict=True)):
-        legal = (state == "published_value" and value is not None) or (
-            state in {"published_null", "published_blank"} and value is None
-        )
-        if not legal:
-            _refuse(
-                StoreRefusalKind.MALFORMED,
-                store,
-                provider_id,
-                f"value_state.combination:{identifier}:row={index}",
-            )
 
 
 def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
     source_schema = raw["source_schema"]
     return StoreManifest(
-        format_version=1,
+        format_version=2,
+        provider_id=ProviderId(raw["provider_id"]),
         compiler_version=raw["compiler_version"],
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
         source_vintage=date.fromisoformat(raw["source_vintage"]),
-        publisher_artifact=PublisherArtifact(
-            url=raw["publisher_artifact"]["url"],
-            sha256=ArtifactChecksum(raw["publisher_artifact"]["sha256"]),
+        publisher_artifact=(
+            PublisherArtifact(raw["publisher_artifact"]["url"], ArtifactChecksum(raw["publisher_artifact"]["sha256"]))
+            if "publisher_artifact" in raw
+            else PublisherArtifact(
+                raw["publisher_artifacts"][0]["url"], ArtifactChecksum(raw["publisher_artifacts"][0]["sha256"])
+            )
+        ),
+        publisher_artifacts=tuple(
+            PublisherArtifact(item["url"], ArtifactChecksum(item["sha256"]))
+            for item in (raw.get("publisher_artifacts") or [raw["publisher_artifact"]])
         ),
         source_schema=SourceSchema(
             columns=tuple(SourceColumn(column["name"], column["type"]) for column in source_schema["columns"]),
@@ -478,6 +506,8 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     raw = _read_raw_manifest(store, provider_id)
     _check_revision(raw, store, provider_id)
     _validate_manifest_schema(raw, store, provider_id)
+    if raw["provider_id"] != str(provider_id):
+        _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
     _validate_source_contract(raw, store, provider_id)
     partition_files = _discover_partitions(raw, store, provider_id)
     retained_columns = tuple(
@@ -491,6 +521,7 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
             path,
             raw["partition_row_counts"][identifier],
             retained_columns,
+            tuple(raw["source_schema"]["columns"]),
             store,
             provider_id,
         )
