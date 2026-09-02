@@ -1,6 +1,6 @@
 # ch_foen Provider Port Notes
 
-`ch_foen` exposes three packaged instantaneous products through the shared live-stage engine. BAFU/FOEN is the data authority. `api.existenz.ch` and `influx.konzept.space` are intermediary publication and query surfaces.
+`ch_foen` exposes three packaged reported-value products through the shared live-stage engine. BAFU/FOEN is the data authority. `api.existenz.ch` and `influx.konzept.space` are intermediary publication and query surfaces.
 
 ## Runtime sources
 
@@ -10,11 +10,13 @@ The source publishes explicit UTC. Neither exact observation response publishes 
 
 ## Products and native fields
 
+The official BAFU pages distinguish support points, 5-minute means, 10-minute means, and hourly means, while a separate current-data page states only a ten-minute update cadence. No exact evidence binds the Existenz fields to one of those BAFU temporal products or to a label anchor. The catalogue therefore records frequency, statistic, period type, and period anchor as `unknown`, and runtime config uses `UnknownTemporalSupport`. The complete official contradiction records are `tests/test_data/ch_foen_bafu_hydrology_data_service.html` and `tests/test_data/ch_foen_bafu_current_hydrological_data.html`.
+
 | Product | Accepted native field | Source unit |
 | --- | --- | --- |
-| `discharge_instantaneous` | `flow` | `m3/s` |
-| `stage_instantaneous` | `height_abs`, or `height` when it is the sole returned alternative | `m` |
-| `water_temperature_instantaneous` | `temperature` | `°C` |
+| `discharge_reported` | `flow` | `m3/s` |
+| `stage_reported` | `height_abs`, or `height` when it is the sole returned alternative | `m` |
+| `water_temperature_reported` | `temperature` | `°C` |
 
 The complete exact parameters response is attested by `tests/test_data/ch_foen_parameters_2026-09-02.recording.json`. It distinguishes `flow` (`m3/s`) from `flow_ls` (`l/s`). The exact evidenced source query requests all five documented fields; the parser ignores `flow_ls` and does not retain or map it. The adapter does not relabel `flow_ls` as the packaged `flow` product. It fails if `flow` is absent. It also fails when both stage alternatives are returned, rather than silently conflating them. No stale daily computed products are exposed.
 

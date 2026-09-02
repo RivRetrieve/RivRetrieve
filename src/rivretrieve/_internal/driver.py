@@ -27,6 +27,9 @@ from rivretrieve._internal.engine import (
     RequestedWindow,
     Rows,
     RowsSchema,
+    SourceCallOrigin,
+    SourceQuery,
+    UnknownOriginFact,
     UnknownTemporalSupport,
     WindowEndpoint,
     WithIssues,
@@ -105,6 +108,90 @@ def _require_canonical_rows_within_requested(
             )
         else:
             assert_never(semantics)
+
+
+def _unknown_origin_value(value: UnknownOriginFact) -> dict[str, object]:
+    return {"status": "unknown", "reason": value.reason.value}
+
+
+def _copy_origin_mapping(value: Mapping[str, object]) -> dict[str, object]:
+    return {str(key): _origin_value(item) for key, item in value.items()}
+
+
+def _origin_value(value: object) -> object:
+    if isinstance(value, UnknownOriginFact):
+        return _unknown_origin_value(value)
+    if isinstance(value, bytes):
+        import base64
+
+        return {"encoding": "base64", "value": base64.b64encode(value).decode("ascii")}
+    if isinstance(value, Mapping):
+        return {str(key): _origin_value(item) for key, item in value.items()}
+    if isinstance(value, tuple | list):
+        return tuple(_origin_value(item) for item in value)
+    return value
+
+
+def _query_value(value: SourceQuery | UnknownOriginFact) -> dict[str, object]:
+    if isinstance(value, UnknownOriginFact):
+        return _unknown_origin_value(value)
+    return {"statement": value.statement, "parameters": tuple(_origin_value(item) for item in value.parameters)}
+
+
+def _origin_call(origin: SourceCallOrigin) -> dict[str, object]:
+    return {
+        "url": _origin_value(origin.url),
+        "request_parameters": _origin_value(origin.request_parameters),
+        "status_code": _origin_value(origin.status_code),
+        "retrieved_at": _origin_value(origin.retrieved_at),
+        "content_type": _origin_value(origin.content_type),
+        "source_path": _origin_value(origin.source_path),
+        "query": _query_value(origin.query),
+    }
+
+
+def _provenance_with_payload_origins(
+    provenance: ObservationProvenance,
+    payloads: tuple[Payload, ...],
+) -> ObservationProvenance:
+    """Bind one ordered source-call event per payload, independent of receipts."""
+    if not payloads:
+        return provenance
+    if (
+        provenance.calls_made
+        or provenance.endpoints
+        or provenance.retrieved_at is not None
+        or provenance.query is not None
+    ):
+        raise FatalContractError(
+            "Driver payload-origin enrichment requires empty call-derived base provenance; "
+            "pre-populated calls, endpoints, retrieval time, or query would be ambiguous."
+        )
+    origins = tuple(payload.origin for payload in payloads)
+    calls = tuple(_origin_call(origin) for origin in origins)
+    endpoints = tuple(dict.fromkeys(origin.url for origin in origins if isinstance(origin.url, str)))
+    retrieved = tuple(origin.retrieved_at for origin in origins if isinstance(origin.retrieved_at, datetime))
+    query_values = tuple(_query_value(origin.query) for origin in origins if isinstance(origin.query, SourceQuery))
+    known_query_list: list[dict[str, object]] = []
+    for query_value in query_values:
+        if query_value not in known_query_list:
+            known_query_list.append(query_value)
+    known_queries = tuple(known_query_list)
+    query: dict[str, object] | None
+    if not known_queries:
+        query = None
+    elif len(known_queries) == 1:
+        query = known_queries[0]
+    else:
+        query = {"calls": known_queries}
+    return provenance.model_copy(
+        update={
+            "calls_made": calls,
+            "endpoints": endpoints,
+            "retrieved_at": max(retrieved) if retrieved else None,
+            "query": query,
+        }
+    )
 
 
 class ProviderStages(Protocol):
@@ -223,7 +310,8 @@ def drive(
     _require_canonical_rows_within_requested(converted.value, config, request.window)
     issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
     receipt_payload = Receipts(provider_id=request.provider_id, entries=tuple(receipt_entries))
-    return assemble(converted.value, provenance, issues, receipt_payload)
+    enriched_provenance = _provenance_with_payload_origins(provenance, fetched.value)
+    return assemble(converted.value, enriched_provenance, issues, receipt_payload)
 
 
 def drive_store(

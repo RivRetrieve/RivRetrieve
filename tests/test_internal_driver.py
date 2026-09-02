@@ -33,6 +33,7 @@ from rivretrieve._internal.engine import (
     StopConvention,
     Unit,
     UnknownOriginFact,
+    UnknownOriginReason,
     WindowDeclaration,
     WindowEndpoint,
     WindowGranularity,
@@ -542,7 +543,8 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         supplied_receipts: Receipts,
     ) -> _AssemblyResult:
         events.append("assemble")
-        assert supplied_provenance is provenance
+        assert supplied_provenance.model_copy(update={"calls_made": ()}) == provenance
+        assert len(supplied_provenance.calls_made) == len(payloads)
         assert tuple(issue.code for issue in issues) == (
             "fetch.first",
             "fetch.second",
@@ -582,7 +584,8 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         schema=CanonicalRowsSchema.polars_schema,
     )
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
-    assert result.provenance is provenance
+    assert result.provenance.model_copy(update={"calls_made": ()}) == provenance
+    assert len(result.provenance.calls_made) == len(payloads)
     assert tuple(issue.code for issue in result.issues) == (
         "fetch.first",
         "fetch.second",
@@ -735,7 +738,8 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
     )
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
     assert tuple(issue.code for issue in result.issues) == ("fetch.station-3-not-found",)
-    assert result.provenance is provenance
+    assert result.provenance.model_copy(update={"calls_made": ()}) == provenance
+    assert len(result.provenance.calls_made) == len(payloads)
     assert result.receipts == Receipts(provider_id=request.provider_id, entries=())
     assert events == [
         "fetch",
@@ -1338,3 +1342,122 @@ def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
     assert result.issues == ()
     assert events == ["fetch", "parse:station-1"]
+
+
+def test_payload_origins_enrich_provenance_as_json_safe_ordered_facts() -> None:
+    from dataclasses import replace
+    from datetime import UTC
+
+    from rivretrieve._internal.engine import SourceQuery
+
+    requested_window, fetch_window = _windows()
+    request = _request(requested_window)
+    coordinates = SourceCoordinates({"parameter": "height"})
+    first = replace(
+        _payload("station-1", coordinates, fetch_window),
+        origin=SourceCallOrigin(
+            "https://same.test/data",
+            {
+                "none": None,
+                "text": "x",
+                "integer": 1,
+                "float": 1.5,
+                "bytes": b"\xff",
+            },
+            200,
+            datetime(2026, 1, 2, 1, tzinfo=UTC),
+            "text/csv",
+            "/one",
+            SourceQuery("first", (None, "x", 1, 1.5, b"\xff")),
+        ),
+    )
+    second = replace(
+        _payload("station-2", coordinates, fetch_window),
+        origin=SourceCallOrigin(
+            "https://same.test/data",
+            UnknownOriginFact(UnknownOriginReason.UNAVAILABLE),
+            UnknownOriginFact(UnknownOriginReason.UNAVAILABLE),
+            datetime(2026, 1, 2, 2, tzinfo=UTC),
+            UnknownOriginFact(UnknownOriginReason.UNAVAILABLE),
+            UnknownOriginFact(UnknownOriginReason.UNAVAILABLE),
+            SourceQuery("second", ("2",)),
+        ),
+    )
+    unknown = _payload("station-3", coordinates, fetch_window)
+    base = _provenance(request)
+
+    enriched = driver_module._provenance_with_payload_origins(base, (first, first, second, unknown))
+
+    assert enriched.source == base.source
+    assert enriched.request == base.request
+    assert enriched.endpoints == ("https://same.test/data",)
+    assert enriched.retrieved_at == datetime(2026, 1, 2, 2, tzinfo=UTC)
+    assert len(enriched.calls_made) == 4
+    assert enriched.calls_made[0] == enriched.calls_made[1]
+    assert tuple(call["url"] for call in enriched.calls_made[:3]) == (
+        "https://same.test/data",
+        "https://same.test/data",
+        "https://same.test/data",
+    )
+    assert set(enriched.calls_made[3]) == {
+        "url",
+        "request_parameters",
+        "status_code",
+        "retrieved_at",
+        "content_type",
+        "source_path",
+        "query",
+    }
+    assert all(value == {"status": "unknown", "reason": "unknown"} for value in enriched.calls_made[3].values())
+    assert enriched.calls_made[2]["request_parameters"] == {
+        "status": "unknown",
+        "reason": "unavailable",
+    }
+    assert enriched.query == {
+        "calls": (
+            {
+                "statement": "first",
+                "parameters": (
+                    None,
+                    "x",
+                    1,
+                    1.5,
+                    {"encoding": "base64", "value": "/w=="},
+                ),
+            },
+            {"statement": "second", "parameters": ("2",)},
+        )
+    }
+    dumped = enriched.model_dump_json()
+    assert '"retrieved_at":"2026-01-02T02:00:00Z"' in dumped
+    assert '"encoding":"base64","value":"/w=="' in dumped
+    assert "authorization" not in dumped.lower()
+    assert "header" not in dumped.lower()
+
+
+def test_payload_origin_enrichment_rejects_prepopulated_call_derived_provenance() -> None:
+    requested_window, fetch_window = _windows()
+    request = _request(requested_window)
+    payload = _payload("station-1", SourceCoordinates({"parameter": "height"}), fetch_window)
+    populated = _provenance(request).model_copy(update={"calls_made": ({"url": "already"},)})
+    with pytest.raises(FatalContractError, match="requires empty call-derived base provenance"):
+        driver_module._provenance_with_payload_origins(populated, (payload,))
+
+
+@pytest.mark.parametrize("value", [True, False, float("nan"), float("inf"), float("-inf")])
+def test_source_call_parameters_reject_boolean_and_non_finite_float(value: object) -> None:
+    from rivretrieve._internal.engine import SourceQuery
+
+    with pytest.raises(TypeError, match="unsupported value"):
+        SourceQuery("query", (value,))  # ty: ignore[invalid-argument-type]
+    unknown = UnknownOriginFact()
+    with pytest.raises(TypeError, match="unsupported value"):
+        SourceCallOrigin(
+            unknown,
+            {"invalid": value},  # ty: ignore[invalid-argument-type]
+            unknown,
+            unknown,
+            unknown,
+            unknown,
+            unknown,
+        )

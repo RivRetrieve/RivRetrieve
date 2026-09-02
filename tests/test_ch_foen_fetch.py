@@ -67,7 +67,7 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
     import rivretrieve._internal.driver as driver_module
     from rivretrieve._internal.driver import drive
     from rivretrieve._internal.engine import ObservationRequest, RequestedWindow
-    from rivretrieve._internal.observations import ObservationProvenance
+    from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
     from rivretrieve._internal.primitives import ProviderId
     from rivretrieve._internal.providers.ch_foen.declaration import declaration
     from rivretrieve._internal.providers.registration import LiveStages
@@ -97,3 +97,39 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
     assert result.canonical_rows.height == 18
     assert result.canonical_rows["time"].min() == datetime(2020, 1, 1)
     assert result.canonical_rows["time"].max() == datetime(2020, 1, 1, 0, 50)
+    assert result.provenance.endpoints == ("https://influx.konzept.space/api/v2/query",)
+    assert result.provenance.retrieved_at == recording.retrieved_at
+    assert result.provenance.query == {"statement": recording.request.body, "parameters": ()}
+    assert len(result.provenance.calls_made) == 1
+    assert result.provenance.calls_made[0]["query"] == result.provenance.query
+    included = drive(
+        request,
+        declaration.observations.stages,
+        provenance=ObservationProvenance(source="recording", provider_id=ProviderId("ch_foen")),
+        receipts=ReceiptMode.INCLUDE,
+        transport=AuthenticatedTransport(
+            ReplayTransport((recording,)),
+            (
+                CredentialHeader(
+                    "Authorization",
+                    "Token SENTINEL-NOT-A-REAL-TOKEN",
+                    ("https://influx.konzept.space",),
+                ),
+            ),
+        ),
+    )
+    assert included.provenance == result.provenance
+    assert len(included.receipts.entries) == 1
+    public_json = result.provenance.model_dump_json()
+    assert "SENTINEL-NOT-A-REAL-TOKEN" not in public_json
+    assert "authorization" not in public_json.lower()
+    assert "header" not in public_json.lower()
+    assert set(result.provenance.calls_made[0]) == {
+        "url",
+        "request_parameters",
+        "status_code",
+        "retrieved_at",
+        "content_type",
+        "source_path",
+        "query",
+    }

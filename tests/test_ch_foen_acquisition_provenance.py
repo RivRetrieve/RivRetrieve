@@ -19,6 +19,7 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
         "bafu_station_values": "ch_bafu",
         "bafu_product_values": "ch_bafu",
         "bafu_observation_values": "ch_bafu",
+        "bafu_temporal_support_not_identified": "ch_bafu",
         "existenz_absence": "ch_existenz",
         "existenz_transport": "ch_existenz",
     }.items() <= bindings.items()
@@ -37,6 +38,8 @@ def test_swiss_terms_recordings_and_native_bytes_are_verified(tmp_path: Path) ->
         "ch_foen_parameters_2026-09-02.recording.json",
         "ch_foen_2135_rest_2026-09-01.recording.json",
         "ch_foen_2135_flux_2020-01-01.recording.json",
+        "ch_foen_bafu_current_hydrological_data.html",
+        "ch_foen_bafu_hydrology_data_service.html",
     ):
         source = Path("tests/test_data") / name
         target = tmp_path / source

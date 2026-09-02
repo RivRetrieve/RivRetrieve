@@ -44,6 +44,22 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         media_type="text/html; charset=utf-8",
         sha256="d2ad98f7f12463cf9d67e0f72848185219557818814a5df02c86ed72138f7d66",
     )
+    bafu_current_data = RecordingReference(
+        recording_id="ch_foen_bafu_current_data_2026_09_02",
+        repository_path="tests/test_data/ch_foen_bafu_current_hydrological_data.html",
+        source_url="https://www.bafu.admin.ch/de/aktuelle-hydrologische-daten-beziehen",
+        retrieved_at=datetime.fromisoformat("2026-09-02T17:04:52.348247Z"),
+        media_type="text/html;charset=utf-8",
+        sha256="5aa90c7c311a155c1c3b9df7f5d403497fdb4552039ea24b6b787bdac601d94c",
+    )
+    bafu_data_service = RecordingReference(
+        recording_id="ch_foen_bafu_data_service_2026_09_02",
+        repository_path="tests/test_data/ch_foen_bafu_hydrology_data_service.html",
+        source_url="https://www.bafu.admin.ch/de/datenservice-hydrologie-fuer-fliessgewaesser-und-seen",
+        retrieved_at=datetime.fromisoformat("2026-09-02T17:04:52.675158Z"),
+        media_type="text/html;charset=utf-8",
+        sha256="425dbcf44abca31b65061b0652f46d02b6750aefb16ade4da9471c9f0326f082",
+    )
     existenz = RecordingReference(
         recording_id="ch_foen_terms_existenz",
         repository_path="tests/test_data/ch_foen_terms_existenz.html",
@@ -83,7 +99,8 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
     )
     bafu_parameter_facts = ("source.product.native_id", "source.product.native_physics")
     bafu_observation_facts = ("source.observation.value", "source.observation.quality")
-    bafu_facts = bafu_catalogue_facts + bafu_parameter_facts + bafu_observation_facts
+    bafu_temporal_facts = ("source.product.temporal_support_not_identified",)
+    bafu_facts = bafu_catalogue_facts + bafu_parameter_facts + bafu_observation_facts + bafu_temporal_facts
     intermediary_facts = (
         "source.station.crs_not_published",
         "source.station_product.availability_not_published",
@@ -133,6 +150,16 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         retrieved_at_start=bafu.retrieved_at,
         recording_ids=(bafu.recording_id,),
     )
+    bafu_temporal_audit = AcquisitionRecord(
+        acquisition_id="bafu_temporal_audit_2026_09_02",
+        method="http_request",
+        instant_type="retrieval_interval",
+        description="Official update-cadence and distinct temporal-product evidence",
+        requested_from=(bafu_current_data.source_url, bafu_data_service.source_url),
+        retrieved_at_start=bafu_current_data.retrieved_at,
+        retrieved_at_end=bafu_data_service.retrieved_at,
+        recording_ids=(bafu_current_data.recording_id, bafu_data_service.recording_id),
+    )
     existenz_terms = AcquisitionRecord(
         acquisition_id="existenz_terms_capture_2026_08_20",
         method="http_request",
@@ -155,12 +182,22 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             SourceRecord(
                 source_id="ch_bafu",
                 issuer="Federal Office for the Environment (BAFU/FOEN)",
-                acquisitions=(acq, parameter_capture, observation_capture, bafu_terms),
+                acquisitions=(acq, parameter_capture, observation_capture, bafu_terms, bafu_temporal_audit),
                 evidence=(
                     EvidenceReference(
                         evidence_id="bafu_hydrology_terms",
                         description="BAFU hydrology terms and source wording",
                         recording=bafu,
+                    ),
+                    EvidenceReference(
+                        evidence_id="bafu_current_data_update_cadence",
+                        description="Official current-data update cadence without exact Existenz temporal binding",
+                        recording=bafu_current_data,
+                    ),
+                    EvidenceReference(
+                        evidence_id="bafu_continuous_data_product_variants",
+                        description="Official distinct support-point and mean products",
+                        recording=bafu_data_service,
                     ),
                     EvidenceReference(
                         evidence_id="existenz_parameter_dictionary",
@@ -227,6 +264,12 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 facts=("source.provider.bafu_license_statement", "source.provider.bafu_citation_statement"),
                 source_id="ch_bafu",
                 acquisition_id=bafu_terms.acquisition_id,
+            ),
+            FactBinding(
+                fact_group="bafu_temporal_support_not_identified",
+                facts=bafu_temporal_facts,
+                source_id="ch_bafu",
+                acquisition_id=bafu_temporal_audit.acquisition_id,
             ),
             FactBinding(
                 fact_group="existenz_terms_statements",
@@ -303,6 +346,7 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
                 ExternalFactReference(source_id="ch_bafu", fact="source.provider.canonical_identity"),
                 ExternalFactReference(source_id="ch_bafu", fact="source.station.native_identity"),
                 ExternalFactReference(source_id="ch_bafu", fact="source.product.native_physics"),
+                ExternalFactReference(source_id="ch_bafu", fact="source.product.temporal_support_not_identified"),
             ),
         ),
         fact_group="canonical_bafu_catalogue_carrier",

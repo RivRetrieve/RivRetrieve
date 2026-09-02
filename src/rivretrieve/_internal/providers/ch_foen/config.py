@@ -8,13 +8,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rivretrieve._internal.engine import (
-    Instant,
     ProductConfig,
     ProductWindowDeclarations,
     ProviderConfig,
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownTemporalSupport,
     WindowDeclaration,
     WindowGranularity,
     WindowRenderingVocabulary,
@@ -42,18 +42,22 @@ class ChFoenRequestCoordinates:
 _CONFIG = ProviderConfig(
     zone=ZoneValue("+00:00"),
     products={
-        ProductId("discharge_instantaneous"): ProductConfig(
-            SourceCoordinates(ChFoenSourceCoordinates((NativeField("flow", Unit.M3_S),))), Unit.M3_S, Instant()
+        ProductId("discharge_reported"): ProductConfig(
+            SourceCoordinates(ChFoenSourceCoordinates((NativeField("flow", Unit.M3_S),))),
+            Unit.M3_S,
+            UnknownTemporalSupport(),
         ),
-        ProductId("stage_instantaneous"): ProductConfig(
+        ProductId("stage_reported"): ProductConfig(
             SourceCoordinates(
                 ChFoenSourceCoordinates((NativeField("height_abs", Unit.M), NativeField("height", Unit.M)))
             ),
             Unit.M,
-            Instant(),
+            UnknownTemporalSupport(),
         ),
-        ProductId("water_temperature_instantaneous"): ProductConfig(
-            SourceCoordinates(ChFoenSourceCoordinates((NativeField("temperature", Unit.DEG_C),))), Unit.DEG_C, Instant()
+        ProductId("water_temperature_reported"): ProductConfig(
+            SourceCoordinates(ChFoenSourceCoordinates((NativeField("temperature", Unit.DEG_C),))),
+            Unit.DEG_C,
+            UnknownTemporalSupport(),
         ),
     },
 )
