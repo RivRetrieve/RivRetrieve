@@ -203,6 +203,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                             "許可等は必要ありません。 「公共データ利用規約（第1.0版）」に従い、データをご利用ください。"
                         ),
                         recording_id=licence_recording.recording_id,
+                        fact="source.provider.license_terms",
                     ),
                     SourceStatement(
                         kind="citation",
@@ -212,6 +213,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                             "PDL1.0（http://www1.river.go.jp/）"
                         ),
                         recording_id=citation_recording.recording_id,
+                        fact="source.provider.citation_instruction",
                     ),
                 ),
             ),

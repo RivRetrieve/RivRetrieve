@@ -64,6 +64,24 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         ),
         retrieved_at_start=datetime.fromisoformat("2026-08-02T01:14:11Z"),
     )
+    licence_terms = AcquisitionRecord(
+        acquisition_id="public_domain_capture_2026_08_20",
+        method="http_request",
+        instant_type="retrieval",
+        description="Agency-wide USGS copyright and credits HTML recording",
+        requested_from=(licence.source_url,),
+        retrieved_at_start=licence.retrieved_at,
+        recording_ids=(licence.recording_id,),
+    )
+    citation_terms = AcquisitionRecord(
+        acquisition_id="citation_capture_2026_08_20",
+        method="http_request",
+        instant_type="retrieval",
+        description="Water Data for the Nation citation HTML recording",
+        requested_from=(citation.source_url,),
+        retrieved_at_start=citation.retrieved_at,
+        recording_ids=(citation.recording_id,),
+    )
     runtime = AcquisitionRecord(
         acquisition_id="observation_request",
         method="runtime_http_request",
@@ -75,7 +93,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         source_id="usgs_nwis",
         issuer="U.S. Geological Survey",
         operator="National Water Information System",
-        acquisitions=(catalogue, runtime),
+        acquisitions=(catalogue, runtime, licence_terms, citation_terms),
         evidence=(
             EvidenceReference(
                 evidence_id="usgs_public_domain_statement",
@@ -89,11 +107,33 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             ),
         ),
         statements=(
-            SourceStatement(kind="license", exact_text=_LICENSE_TEXT, recording_id=licence.recording_id),
-            SourceStatement(kind="citation", exact_text=_CITATION_TEXT, recording_id=citation.recording_id),
+            SourceStatement(
+                kind="license",
+                exact_text=_LICENSE_TEXT,
+                recording_id=licence.recording_id,
+                fact="source.usgs.license_statement",
+            ),
+            SourceStatement(
+                kind="citation",
+                exact_text=_CITATION_TEXT,
+                recording_id=citation.recording_id,
+                fact="source.usgs.citation_statement",
+            ),
         ),
     )
     bindings = (
+        FactBinding(
+            fact_group="license_statement",
+            facts=("source.usgs.license_statement",),
+            source_id="usgs_nwis",
+            acquisition_id=licence_terms.acquisition_id,
+        ),
+        FactBinding(
+            fact_group="citation_statement",
+            facts=("source.usgs.citation_statement",),
+            source_id="usgs_nwis",
+            acquisition_id=citation_terms.acquisition_id,
+        ),
         FactBinding(
             fact_group="provider_identity",
             facts=("source.provider.usgs_agency_identity",),

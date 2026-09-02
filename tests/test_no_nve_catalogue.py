@@ -142,8 +142,11 @@ def test_projected_national_artifacts_have_pinned_complete_content() -> None:
     assert pl.read_parquet(catalogue / "station_products.parquet").is_empty()
     provenance = json.loads((catalogue / "provenance.json").read_text(encoding="utf-8"))
     assert provenance["native_table"] is None
-    assert provenance["source_records"] == []
-    assert len(provenance["fact_bindings"]) == 1
+    assert {statement["kind"] for source in provenance["source_records"] for statement in source["statements"]} == {
+        "license",
+        "citation",
+    }
+    assert len(provenance["fact_bindings"]) == 2
     authored = provenance["fact_bindings"][0]
     assert authored["fact_group"] == "rivretrieve_authored_provider_registration"
     assert authored["transformation"]["kind"] == "authored_constant"

@@ -200,6 +200,15 @@ def build_acquisition_provenance(
                         retrieved_at_end=datetime.fromisoformat("2026-08-02T19:54:27Z"),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="imgw_regulations_capture_2026_08_20",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="IMGW public-data regulations HTML recording",
+                        requested_from=(terms.source_url,),
+                        retrieved_at_start=terms.retrieved_at,
+                        recording_ids=(terms.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="imgw_observation_request",
                         method="runtime_http_request",
                         instant_type="runtime",
@@ -227,6 +236,7 @@ def build_acquisition_provenance(
                             "biur lub koszty wykonania badań, pomiarów i ocen, jakie ma ponieść odbiorca."
                         ),
                         recording_id=terms.recording_id,
+                        fact="source.imgw.license_statement",
                     ),
                     SourceStatement(
                         kind="citation",
@@ -238,6 +248,7 @@ def build_acquisition_provenance(
                             "Instytut Badawczy”."
                         ),
                         recording_id=terms.recording_id,
+                        fact="source.imgw.citation_statement",
                     ),
                 ),
             ),
@@ -301,7 +312,7 @@ def build_acquisition_provenance(
                 fact_group="imgw_source_statements",
                 facts=IMGW_STATEMENT_FACTS,
                 source_id="sr.pl.imgw",
-                acquisition_id="imgw_catalogue_routes_2026_08_02",
+                acquisition_id="imgw_regulations_capture_2026_08_20",
             ),
             FactBinding(
                 fact_group="grdc_native_station_fields",

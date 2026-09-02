@@ -94,6 +94,15 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         retrieved_at_start=datetime.fromisoformat("2026-08-01T18:31:08Z"),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="terms_capture_2026_08_21",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Meteo LT API data-use conditions HTML recording",
+                        requested_from=(recording.source_url,),
+                        retrieved_at_start=recording.retrieved_at,
+                        recording_ids=(recording.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="observation_request",
                         method="runtime_http_request",
                         instant_type="runtime",
@@ -107,12 +116,28 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                     ),
                 ),
                 statements=(
-                    SourceStatement(kind="license", exact_text=_LICENSE, recording_id=recording.recording_id),
-                    SourceStatement(kind="citation", exact_text=_CITATION, recording_id=recording.recording_id),
+                    SourceStatement(
+                        kind="license",
+                        exact_text=_LICENSE,
+                        recording_id=recording.recording_id,
+                        fact="source.meteo_lt.license_statement",
+                    ),
+                    SourceStatement(
+                        kind="citation",
+                        exact_text=_CITATION,
+                        recording_id=recording.recording_id,
+                        fact="source.meteo_lt.citation_statement",
+                    ),
                 ),
             ),
         ),
         fact_bindings=(
+            FactBinding(
+                fact_group="terms_statements",
+                facts=("source.meteo_lt.license_statement", "source.meteo_lt.citation_statement"),
+                source_id="lt_lhmt",
+                acquisition_id="terms_capture_2026_08_21",
+            ),
             FactBinding(
                 fact_group="catalogue_external",
                 facts=external[:-2],
@@ -150,7 +175,9 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 ),
             ),
         ),
-        fact_universe=external + canonical,
+        fact_universe=external
+        + canonical
+        + ("source.meteo_lt.license_statement", "source.meteo_lt.citation_statement"),
     )
 
 

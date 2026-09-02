@@ -1,29 +1,43 @@
-"""deferred provenance : ProviderId × CatalogueFactUniverse → AcquisitionProvenance (pure)."""
+"""deferred provenance : ProviderId × SourceRecords × FactBindings × SourceFacts → AcquisitionProvenance (pure)."""
 
 from __future__ import annotations
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     FactBinding,
+    SourceRecord,
     Transformation,
     WithheldFact,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 
-def deferred_acquisition_provenance(provider_id: str) -> AcquisitionProvenance:
+def deferred_acquisition_provenance(
+    provider_id: str,
+    *,
+    source_records: tuple[SourceRecord, ...] = (),
+    fact_bindings: tuple[FactBinding, ...] = (),
+    source_facts: tuple[str, ...] = (),
+) -> AcquisitionProvenance:
     """Build the closed provenance record for an uncertified provider.
 
     Parameters
     ----------
     provider_id
         Packaged provider whose credentialed acquisition remains deferred.
+    source_records
+        Independently established non-catalogue source records to retain.
+    fact_bindings
+        Direct bindings for the independently established source facts.
+    source_facts
+        Source facts added to the otherwise canonical catalogue fact universe.
 
     Returns
     -------
     AcquisitionProvenance
-        A closed record withholding every catalogue fact without inventing an
-        acquisition, source, or native-table identity.
+        A closed record withholding every unestablished catalogue fact without
+        inventing a native-table identity. Independently established source
+        records and their direct fact bindings remain available.
     """
     authored_provider_facts = tuple(
         fact
@@ -51,8 +65,8 @@ def deferred_acquisition_provenance(provider_id: str) -> AcquisitionProvenance:
         schema_version=2,
         provider_id=provider_id,
         native_table=None,
-        fact_universe=CATALOGUE_FACT_UNIVERSE,
-        source_records=(),
+        fact_universe=CATALOGUE_FACT_UNIVERSE + source_facts,
+        source_records=source_records,
         fact_bindings=(
             FactBinding(
                 fact_group="rivretrieve_authored_provider_registration",
@@ -65,6 +79,7 @@ def deferred_acquisition_provenance(provider_id: str) -> AcquisitionProvenance:
                     external_inputs=(),
                 ),
             ),
+            *fact_bindings,
         ),
         withheld_facts=tuple(
             WithheldFact(

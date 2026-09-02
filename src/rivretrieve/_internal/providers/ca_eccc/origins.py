@@ -94,6 +94,15 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         retrieved_at_start=datetime.fromisoformat("2026-08-02T01:09:10Z"),
                         retrieved_at_end=datetime.fromisoformat("2026-08-02T01:09:20Z"),
                     ),
+                    AcquisitionRecord(
+                        acquisition_id="msc_licence_capture_2026_08_20",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="ECCC Data Servers End-use Licence response",
+                        requested_from=(licence.source_url,),
+                        retrieved_at_start=licence.retrieved_at,
+                        recording_ids=(licence.recording_id,),
+                    ),
                 ),
                 evidence=(
                     EvidenceReference(
@@ -103,7 +112,12 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                     ),
                 ),
                 statements=(
-                    SourceStatement(kind="license", exact_text=LICENCE_TEXT, recording_id=licence.recording_id),
+                    SourceStatement(
+                        kind="license",
+                        exact_text=LICENCE_TEXT,
+                        recording_id=licence.recording_id,
+                        fact="source.provider.license_statement",
+                    ),
                 ),
             ),
             SourceRecord(
@@ -120,6 +134,15 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                             "https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/Hydat_sqlite3_<vintage>.zip",
                         ),
                     ),
+                    AcquisitionRecord(
+                        acquisition_id="wsc_citation_capture_2026_08_20",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Wateroffice hydrometric citation instructions response",
+                        requested_from=(citation.source_url,),
+                        retrieved_at_start=citation.retrieved_at,
+                        recording_ids=(citation.recording_id,),
+                    ),
                 ),
                 evidence=(
                     EvidenceReference(
@@ -129,11 +152,28 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                     ),
                 ),
                 statements=(
-                    SourceStatement(kind="citation", exact_text=CITATION_TEXT, recording_id=citation.recording_id),
+                    SourceStatement(
+                        kind="citation",
+                        exact_text=CITATION_TEXT,
+                        recording_id=citation.recording_id,
+                        fact="source.provider.citation_statement",
+                    ),
                 ),
             ),
         ),
         fact_bindings=(
+            FactBinding(
+                fact_group="msc_licence_statement",
+                facts=("source.provider.license_statement",),
+                source_id="ca_eccc_msc",
+                acquisition_id="msc_licence_capture_2026_08_20",
+            ),
+            FactBinding(
+                fact_group="wsc_citation_statement",
+                facts=("source.provider.citation_statement",),
+                source_id="ca_eccc_wsc",
+                acquisition_id="wsc_citation_capture_2026_08_20",
+            ),
             FactBinding(
                 fact_group="station_registry",
                 facts=station_facts,
@@ -160,7 +200,10 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 ),
             ),
         ),
-        fact_universe=station_facts + obs_facts + canonical_observation_facts,
+        fact_universe=station_facts
+        + obs_facts
+        + canonical_observation_facts
+        + ("source.provider.license_statement", "source.provider.citation_statement"),
     )
 
 

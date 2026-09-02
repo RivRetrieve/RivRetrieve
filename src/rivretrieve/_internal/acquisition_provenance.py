@@ -240,6 +240,7 @@ class SourceStatement(_ProvenanceModel):
     kind: Literal["license", "citation", "terms", "access"]
     exact_text: str | None = PydanticField(default=None, exclude_if=lambda value: value is None)
     recording_id: str | None = None
+    fact: str | None = PydanticField(default=None, exclude_if=lambda value: value is None)
     verification_status: Literal[
         "verified_public_recording",
         "verified_private_forwarded_copy",
@@ -260,14 +261,33 @@ class SourceStatement(_ProvenanceModel):
     @model_validator(mode="after")
     def _verification_reference_is_truthful(self) -> Self:
         if self.verification_status == "verified_public_recording":
-            if self.exact_text is None or self.recording_id is None or self.private_verification is not None:
-                raise ValueError("verified public statements require exact words and only a public recording id")
+            if (
+                self.exact_text is None
+                or self.recording_id is None
+                or self.fact is None
+                or self.private_verification is not None
+            ):
+                raise ValueError(
+                    "verified public statements require exact words, a public recording id, and a source fact"
+                )
+            if not self.fact.startswith("source."):
+                raise ValueError("verified public statement facts must name source facts")
         elif self.verification_status == "verified_private_forwarded_copy":
-            if self.exact_text is not None or self.recording_id is not None or self.private_verification is None:
+            if (
+                self.exact_text is not None
+                or self.recording_id is not None
+                or self.fact is not None
+                or self.private_verification is None
+            ):
                 raise ValueError("verified private statements expose only a redacted private verification")
             if self.private_verification.evidence_kind != "forwarded_copy":
                 raise ValueError("private verification status requires forwarded-copy evidence")
-        elif self.exact_text is not None or self.recording_id is not None or self.private_verification is not None:
+        elif (
+            self.exact_text is not None
+            or self.recording_id is not None
+            or self.fact is not None
+            or self.private_verification is not None
+        ):
             raise ValueError("unverified private statements must be fully redacted")
         return self
 
@@ -453,6 +473,11 @@ class AcquisitionProvenance(_ProvenanceModel):
             if len(acquisition_ids) != len(set(acquisition_ids)):
                 raise ValueError(f"source {record.source_id} acquisition ids must be unique")
             acquisition_keys.update((record.source_id, acquisition_id) for acquisition_id in acquisition_ids)
+            claimed_recording_ids = [
+                recording_id for acquisition in record.acquisitions for recording_id in acquisition.recording_ids
+            ]
+            if len(claimed_recording_ids) != len(set(claimed_recording_ids)):
+                raise ValueError(f"source {record.source_id} recordings may be claimed by only one acquisition")
             for acquisition in record.acquisitions:
                 acquisition_recordings = set(acquisition.recording_ids)
                 if not acquisition_recordings <= issuer_recording_ids:
@@ -532,6 +557,41 @@ class AcquisitionProvenance(_ProvenanceModel):
             for record in self.source_records
             for acquisition in record.acquisitions
         }
+        direct_fact_acquisitions = {
+            (fact, binding.source_id): binding.acquisition_id
+            for binding in self.fact_bindings
+            if binding.transformation is None
+            for fact in binding.facts
+        }
+        for record in self.source_records:
+            for statement in record.statements:
+                if statement.verification_status != "verified_public_recording":
+                    continue
+                if statement.fact is None:  # pragma: no cover - rejected by SourceStatement
+                    raise AssertionError("verified public statement has no source fact")
+                acquisition_id = direct_fact_acquisitions.get((statement.fact, record.source_id))
+                acquisition = (
+                    acquisitions_by_key.get((record.source_id, acquisition_id)) if acquisition_id is not None else None
+                )
+                if acquisition is None or statement.recording_id not in acquisition.recording_ids:
+                    raise ValueError(
+                        f"source {record.source_id} statement recording must be claimed by its fact acquisition"
+                    )
+                recording = next(
+                    evidence.recording
+                    for evidence in record.evidence
+                    if evidence.recording.recording_id == statement.recording_id
+                )
+                if (
+                    acquisition.method != "http_request"
+                    or acquisition.instant_type != "retrieval"
+                    or acquisition.retrieved_at_start != recording.retrieved_at
+                    or acquisition.retrieved_at_end is not None
+                    or acquisition.requested_from != (recording.source_url,)
+                ):
+                    raise ValueError(
+                        f"source {record.source_id} statement acquisition must match its exact recording URL and instant"
+                    )
         runtime_observation_facts = {
             "source.observation.request",
             "source.observation.response",
