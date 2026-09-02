@@ -10,11 +10,14 @@ import pytest
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.engine import (
+    Instant,
     Payload,
+    ProductConfig,
     ProviderConfig,
     RowsSchema,
     SourceCallOrigin,
     SourceCoordinates,
+    Unit,
     UnknownOriginFact,
     WindowEndpoint,
     ZoneValue,
@@ -22,9 +25,14 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.providers.usgs_nwis.config import config
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
+from rivretrieve._internal.recordings import read_recording
 
 FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json")
+CURRENT_DV_RECORDING_PATH = Path(
+    "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2023-01-01_2023-01-03.recording.json"
+)
 
 
 def _payload(
@@ -49,7 +57,18 @@ def _origin() -> SourceCallOrigin:
 
 
 def _provider_config() -> ProviderConfig:
-    return ProviderConfig(zone=ZoneValue("unknown"), products={})
+    product = ProductConfig(
+        coordinates=SourceCoordinates(object()),
+        unit=Unit.FT,
+        semantics=Instant(),
+    )
+    return ProviderConfig(
+        zone=ZoneValue("unknown"),
+        products={
+            ProductId("payload-product"): product,
+            ProductId("tagged-product"): product,
+        },
+    )
 
 
 def _content(
@@ -75,6 +94,32 @@ def _content(
             }
         }
     ).encode()
+
+
+def test_parse_current_daily_recording_preserves_naive_period_labels_as_unknown_zone() -> None:
+    recording = read_recording(CURRENT_DV_RECORDING_PATH)
+
+    result = parse(
+        _payload(
+            recording.content,
+            (("07374000", ProductId("discharge_daily_mean")),),
+        ),
+        config(),
+    )
+
+    assert result.value.select("time", "time_zone").rows() == [
+        (datetime(2023, 1, day), "unknown") for day in range(1, 4)
+    ]
+
+
+def test_parse_refuses_naive_non_midnight_daily_timestamp() -> None:
+    content = _content([{"value": "1.0", "dateTime": "2023-01-01T12:00:00"}])
+
+    with pytest.raises(FatalContractError, match="naive daily.*midnight"):
+        parse(
+            _payload(content, (("07374000", ProductId("discharge_daily_mean")),)),
+            config(),
+        )
 
 
 def test_parse_fixture_emits_exact_native_rows_from_payload_identity() -> None:
