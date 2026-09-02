@@ -27,7 +27,7 @@ _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
 _NATIVE_TABLE = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
 _CATALOGUE_DIR = _NATIVE_TABLE.parent
 _CRS_EVIDENCE = _TEST_DATA_DIR / "ba_fhmzbih_crs_evidence_stations.json"
-_AGENTS = Path(__file__).parents[1] / "AGENTS.md"
+_PROVIDER_NOTES = Path(__file__).parents[1] / "docs/provider_ports/ba_fhmzbih.md"
 _RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC))
 _METADATA_COLUMNS = (
     "metadata_CATCHMENT_SIZE",
@@ -246,17 +246,10 @@ def test_publisher_capture_and_attestation_support_not_published_crs() -> None:
         values = [float(row[field]) for row in document if row[field] != ""]
         assert values and min(values) == minimum and max(values) == maximum
 
-    agents = _AGENTS.read_text(encoding="utf-8")
-    record = agents[agents.index("Bosnia publisher CRS-capture attestation") :]
-    for literal in (
-        str(crs_origin.evidence),
-        "2026-08-02T16:43:18Z",
-        "230",
-        "one uniform 24-key keyset",
-        "json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False)",
-        "c78bd3b3aee2859eaef3c4373029fe7619a7d8e40b53fa0eab7f989ade3524bc",
-    ):
-        assert literal in record
+    notes = " ".join(_PROVIDER_NOTES.read_text(encoding="utf-8").split())
+    assert "230 objects" in notes
+    assert "no horizontal-CRS token" in notes
+    assert "vertical metre elevations" in notes
 
 
 def test_committed_canonical_artifact_content_digests_are_pinned() -> None:

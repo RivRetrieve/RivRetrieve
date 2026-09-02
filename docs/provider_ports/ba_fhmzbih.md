@@ -28,16 +28,32 @@ The portal shards station workbooks across ten numbered "groups" (`/stations/{1.
 
 The packaged catalogue is a pure, network-free projection of the committed
 `catalogue/native.parquet` and `STATION_CATALOGUE_ORIGINS`. Canonical station identity and decimal
-coordinates come directly from the declared native columns. The source-only names, river,
-catchment, elevation, projected/local coordinates, and other source vocabulary remain readable in
-the native table. The publisher's station document does not publish a horizontal CRS, so the
-declared `NotPublished` origin emits canonical `crs = "unknown"` without inference.
+coordinates are defined by the declared native columns. The source-only names, river, catchment,
+elevation, projected/local coordinates, and other source vocabulary remain readable in the native
+table. The publisher's station document does not publish a horizontal CRS, so the declared
+`NotPublished` origin emits `crs = "unknown"` without inference. Row-level acquisition bindings are
+currently established only for station `4024`; the loader withholds the other 59 stations and every
+station-product row, recording 298 `no_acquisition_record_established` groups in provenance.
 
 | Source field | Canonical target | Notes |
 |---|---|---|
 | `metadata_station_no` | `station_id` | String station code, e.g. `"4510"` |
 | `metadata_station_latitude`, `metadata_station_longitude` | `latitude`, `longitude` | Decimal-degree strings strictly coerced to `Float64`; no transformation or reprojection |
 | all other `metadata_*` fields | native only | Preserved exactly in source vocabulary and not promoted to canonical station columns |
+
+## Native Catalogue Attestation
+
+The complete 60-row `layers/20/index.json` response was captured at `2026-08-02T12:42:03Z`.
+Canonical JSON of that complete response has SHA-256
+`907817ca04d3d5626151d8f57478b90dc22f5503b29b8097106768aca942545f`. The committed native table
+removes exactly the twelve volatile `L1_*` timeseries-snapshot fields, retains all 18 stable
+`metadata_*` strings, and sorts by `metadata_station_no`. The stable-response digest and native-table
+binding are recorded in `catalogue/provenance.json` and checked by the catalogue tests.
+
+The separate publisher station document, captured at `2026-08-02T16:43:18Z`, contains 230 objects with
+one uniform 24-key shape and no horizontal-CRS token. Its gauge-datum fields are vertical metre
+elevations, not horizontal coordinate systems. The complete capture and digest are pinned by the
+origin-evidence receipt and generator tests.
 
 ## Products
 
@@ -79,7 +95,10 @@ Stage values are published in centimetres and divided by `100.0` to produce the 
 
 ## Station-Product Availability
 
-All rows are `availability = "unknown"`. The metadata snapshot does not indicate which parameters a given station actually reports — in practice some stations' workbooks for a given parameter return zero data rows (e.g. station 4510's water-temperature workbook is empty both in the upstream test fixture and in the live response captured 2026-06-08). The retrieval path treats an empty-but-successfully-fetched workbook as `missing_data`, distinct from a `station_group_not_found` failure.
+The metadata snapshot does not establish which parameters a station reports. Candidate rows therefore
+have `availability = "unknown"`, but none currently has a complete acquisition binding and all are
+withheld from the packaged carrier. At observation time, an empty successfully fetched workbook is
+`missing_data`, distinct from a `station_group_not_found` failure.
 
 ## Live Verification
 

@@ -1,6 +1,6 @@
 # jp_mlit Provider Port Notes
 
-These notes capture evidence and context from porting the MLIT Water Information System (Japan) provider. They are not user documentation and not architecture contracts; promote only shared harness commitments to [architecture.md](../../architecture.md).
+These notes capture evidence and context from porting the MLIT Water Information System (Japan) provider. They are not user documentation and not architecture contracts; promote only shared harness commitments to [ADRs](../adr/).
 
 ## Source
 
@@ -12,19 +12,24 @@ Legacy reference: `JapanFetcher` from `https://github.com/kratzert/RivRetrieve-P
 | --- | --- | --- | --- |
 | `http://www1.river.go.jp/cgi-bin/DspWaterData.exe` | Observation HTML scrape page | None (public) | Returns EUC-JP HTML with a `.dat` download link; params: KIND, ID, BGNDATE, ENDDATE, KAWABOU |
 | `http://www1.river.go.jp/dat/dload/download/*.dat` | Actual data file | None (public) | Shift-JIS encoded; link extracted by regex from the HTML page |
-| `http://www1.river.go.jp/cgi-bin/SiteInfo.exe` | Station metadata | None (public) | Live station list not supported; legacy `JapanFetcher.get_metadata()` explicitly raises `NotImplementedError` |
+| `http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID={station_id}` | Native station-detail capture | None (public, historically) | EUC-JP HTML. The accepted 2026-08-02 campaign required HTTP 200 and the bytes for `世界測地系`; the endpoint later returned HTTP 403. |
 
 ## Catalogue Mapping
 
-| Legacy/source field | Canonical target | Decision |
-| --- | --- | --- |
-| `gauge_id` (cached CSV) | `station_id` | Direct mapping |
-| `latitude`, `longitude` | `latitude`, `longitude` | Direct mapping |
-| No name field in CSV | `name` | Gauge ID used as name; no station name available in cached CSV |
-| No elevation, drainage area | `elevation_m`, `drainage_area_km2` | Both `None`; cached CSV does not provide these fields |
-| `"Japan"` constant | `country` | Hardcoded |
+The committed native table is a semantic materialization of 1,023 accepted station-detail responses,
+not of the legacy cached CSV or the three-row fixture. It preserves the fifteen source columns,
+including distinct null, empty-string, and non-breaking-space states, and sorts by exact `観測所記号`.
 
-The cached `japan_sites.csv` provides only `gauge_id`, `latitude`, and `longitude` — far sparser than other providers. There is no programmatic live catalogue endpoint.
+| Native field | Canonical target | Decision |
+| --- | --- | --- |
+| `観測所記号` | `provider_id`, `station_id` | Exact source identity. |
+| `世界測地系` latitude/longitude DMS | `latitude`, `longitude` | Deterministic DMS conversion; `日本測地系` is retained but never consumed. |
+| Horizontal CRS | `crs` | `unknown`; the present source publishes no horizontal CRS token, and no datum or EPSG value is inferred. |
+| Other source fields | Native only | Preserved in source vocabulary. |
+
+The source DMS corrected three legacy packaged coordinates. The affected stations are `302011282228100`
+(about 3.79 km), `302011282218050` (about 96 m), and `308011288805010` (about 40 m). Source coordinates
+are authoritative.
 
 ## Product Mapping
 
@@ -130,13 +135,23 @@ No BeautifulSoup dependency was added. Regex is sufficient for finding the singl
 - **Hourly (KINDs 2, 6)**: Monthly windows. Begin date = `YYYYMM01`, end date = `YYYYMMdd` (last day of month). Request format uses `YYYYMMDD` (no separator).
 - **Daily (KINDs 3, 7)**: Yearly windows. Begin date = `YYYY0101`, end date = `YYYY1231`.
 
-## Live Catalogue
+## Native Capture Attestation
 
-Not supported. `JapanFetcher.get_metadata()` in the legacy source explicitly raises `NotImplementedError`. The packaged catalogue is built from the cached `japan_sites.csv` (1030 rows, providing only `gauge_id`, `latitude`, `longitude`). `generate_catalogue_from_live()` raises `FatalContractError` to prevent accidental invocations.
+The request seed is the sorted 1,024-station legacy catalogue at `origin/main` commit `22ff07c`.
+Requests ran from `2026-08-02T19:35:42Z` through `2026-08-02T19:50:44Z`. There were 1,023 accepted
+published responses and one source-confirmed absence, station `307051287711040`. The accepted responses
+carry 902 distinct whole-second retrieval instants from the capture manifest.
 
-## Station Catalogue
+The complete manifest and all reverified response bindings canonicalize to SHA-256
+`d935586b317cdf234760959c9e97788803bfda9cea2ff6551beaefaeb6e20d21`. The per-request URLs, bodies,
+timestamps, acceptance result, rejected witness, derived identifier and timestamp digests, parser
+witnesses, and native-frame digest are pinned by `origins.py`, `catalogue/provenance.json`, committed
+test data, and `tests/test_jp_mlit_catalogue.py`.
 
-1029 stations with valid coordinates (1030 in the CSV; station count depends on deduplication of `gauge_id`). No elevation or drainage area available in the source. Station names are gauge IDs (`gauge_id` as name).
+The representative CRS evidence response for `301011281104010` was accepted at
+`2026-08-02T19:35:42Z`. A later request on `2026-08-03T12:31:42Z` returned HTTP 403 with a 77-byte access-restriction body,
+so the evidence is non-refetchable and no later success is claimed. Canonical artefacts must be built only from committed
+`catalogue/native.parquet` plus origins.
 
 ## Pain Points
 

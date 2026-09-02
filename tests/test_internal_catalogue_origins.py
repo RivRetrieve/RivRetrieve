@@ -68,7 +68,7 @@ THAI_COORDINATE_EVIDENCE_PATH = Path("tests/test_data/th_thaiwater_coordinate_st
 REPOSITORY_ROOT = Path(__file__).parents[1]
 CATALOGUE_ORIGINS_MODULE_PATH = REPOSITORY_ROOT / "src/rivretrieve/_internal/catalogue_origins.py"
 CATALOGUE_ORIGINS_ADR_PATH = REPOSITORY_ROOT / "docs/adr/0012-a-catalogue-column-declares-its-origin.md"
-AGENTS_PATH = REPOSITORY_ROOT / "AGENTS.md"
+CATALOGUE_PROVENANCE_PATH = REPOSITORY_ROOT / "docs/catalogue-provenance.md"
 CONTEXT_PATH = REPOSITORY_ROOT / "CONTEXT.md"
 
 
@@ -282,18 +282,11 @@ def test_origin_scope_documentation_contract_pins_the_constant_docstring() -> No
     ), "origin gate scope docstring has drifted"
 
 
-def test_origin_scope_documentation_contract_pins_adr_and_agents_ruling() -> None:
+def test_origin_scope_documentation_contract_pins_adr_ruling() -> None:
     adr = _collapse_whitespace(CATALOGUE_ORIGINS_ADR_PATH.read_text())
-    agents = _collapse_whitespace(AGENTS_PATH.read_text())
     scoped_state = _collapse_whitespace(
         "There is no half-landed state within `ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled "
         "set is completely declared, while the explicitly deferred `br_ana` and `no_nve` remain outside that set."
-    )
-    agents_scope = _collapse_whitespace(
-        "Origin certification for this vision closes over eleven providers. br_ana and no_nve are deliberately "
-        "deferred by the operator's 2026-08-03 scope ruling to a separate effort ticket; they remain outside "
-        "ORIGIN_GATE_ENROLLED_PROVIDERS, not overlooked. The enrolment gate remains because removing it would "
-        "silently treat deferred providers as certified."
     )
 
     assert "## Consequence: the build stays red until every enrolled provider is declared" in adr, (
@@ -310,7 +303,11 @@ def test_origin_scope_documentation_contract_pins_adr_and_agents_ruling() -> Non
     assert "26,231" in adr, "ADR lost the USGS defect-history station count"
     assert "52,145" in adr, "ADR lost the Brazil defect-history row count"
     assert "4,889" in adr, "ADR lost the Norway defect-history station count"
-    assert agents_scope in agents, "AGENTS.md is missing the exact durable eleven-provider scope ruling"
+
+    maintenance = _collapse_whitespace(CATALOGUE_PROVENANCE_PATH.read_text())
+    assert "`ORIGIN_GATE_ENROLLED_PROVIDERS`" in maintenance
+    assert "ADR 0012" in maintenance
+    assert "`br_ana` and `no_nve`" in maintenance
 
 
 def test_origin_scope_documentation_contract_pins_glossary_boundary() -> None:

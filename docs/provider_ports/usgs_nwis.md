@@ -1,6 +1,6 @@
 # usgs_nwis Provider Port Notes
 
-These notes capture evidence and decisions from porting the USGS National Water Information System (NWIS) USA provider. See [architecture.md](../../architecture.md) for shared harness contracts. Provider-specific pain stays here; only shared harness gaps should be promoted to architecture.md.
+These notes capture evidence and decisions from porting the USGS National Water Information System (NWIS) USA provider. See [ADRs](../adr/) for shared harness contracts. Provider-specific pain stays here; only shared architecture decisions should be promoted to an ADR.
 
 ## Source Endpoints
 
@@ -12,6 +12,24 @@ These notes capture evidence and decisions from porting the USGS National Water 
 | `https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={code}&siteOutput=expanded` | Native-table refresh pass for expanded station fields | No token. |
 
 Legacy source consulted: `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/usa.py` (uses `dataretrieval` package, which wraps the same NWIS endpoints).
+
+## Native Catalogue Attestation
+
+The native capture covers the ordered 51-code scope of the 50 states plus DC. It used separate series
+and expanded requests because USGS does not allow `seriesCatalogOutput=true` and
+`siteOutput=expanded` together. The accepted 102 responses contain 26,258 stations in each pass and
+2,036,546 series rows with no cross-pass orphans. The supplied 55-code manifest also contains GU, MP,
+PR, and VI, which are deliberately outside the accepted scope. Those files account for 275 stations;
+the full supplied census has 26,533 stations in each pass and 2,055,307 series rows.
+
+The complete supplied manifest has SHA-256
+`d29ee34feaef0dda458c369ed5448e96b7e8b7064176a5f94360881b6cbdf34a`; its exact 102 consumed lines
+have SHA-256 `e197d3d5eb6f971e631693d7d6e2b26d1c7b7031850d62ed11f5891011dbc6bc`. All entries were
+verified against the manifest. The requests share campaign instant `2026-08-02T01:14:11Z`.
+Canonicalization retains all 42 expanded fields as strings, aligns twelve series-only list columns,
+preserves duplicate complete series rows, and sorts stations by exact `site_no`. The native-frame and
+sorted-identifier digests are enforced by `catalogue/provenance.json`, origins, and
+`tests/test_usgs_nwis_generate_catalogue.py`.
 
 ## Catalogue Mapping
 
@@ -52,7 +70,7 @@ Conversion approach:
 
 Series annotation `resolved_timezone` is always `"UTC"`. Series annotation `timezone_source` is `"provider_timestamp_offset"` because the conversion does not require inference — the offset is explicit in the response.
 
-**Divergence from legacy behavior:** The legacy `USAFetcher._parse_data()` did `pd.to_datetime(df.index.dt.date)`, which stripped timezone and time-of-day entirely and produced a timezone-naive date index at midnight. The new implementation preserves the full UTC timestamp, so a DV observation for `2023-01-01` at a CST station becomes `2023-01-01T06:00:00Z`, not `2023-01-01T00:00:00Z`. This is the correct behavior per architecture.md §16.
+**Divergence from legacy behavior:** The legacy `USAFetcher._parse_data()` did `pd.to_datetime(df.index.dt.date)`, which stripped timezone and time-of-day entirely and produced a timezone-naive date index at midnight. The new implementation preserves the full UTC timestamp, so a DV observation for `2023-01-01` at a CST station becomes `2023-01-01T06:00:00Z`, not `2023-01-01T00:00:00Z`. This is the ported behavior; shared time and zone representation is owned by [ADR 0006](../adr/0006-time-and-zone-are-two-columns.md) and [ADR 0007](../adr/0007-zone-values-are-iana-offset-or-unknown.md).
 
 ## Observation Retrieval
 

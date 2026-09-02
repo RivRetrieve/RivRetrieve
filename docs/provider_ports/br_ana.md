@@ -1,6 +1,6 @@
 # br_ana Provider Port Notes
 
-These notes capture endpoint facts, catalogue mapping decisions, and pain points from porting Brazil's ANA Hidroweb provider. Pain that is `br_ana`-specific stays here; shared harness gaps would be promoted to [architecture.md](../../architecture.md).
+These notes capture endpoint facts, catalogue mapping decisions, and pain points from porting Brazil's ANA Hidroweb provider. Pain that is `br_ana`-specific stays here; shared harness gaps would be promoted to [ADRs](../adr/).
 
 ## Source Endpoints
 
@@ -133,24 +133,20 @@ Two distinct windowing strategies, selected per-product by `is_telemetric_produc
 
 HTTP 404 per window emits `http_not_found` warning issue (not fatal), matching the established pattern from `lt_lhmt`, `usgs_nwis`, `cz_chmi`, `th_thaiwater`, `fr_hubeau`, `jp_mlit`.
 
-## Live Catalogue Generation
+## Packaged Catalogue Status
 
-> **Manual step — not automated in CI.**
->
-> The `br_ana` catalogue (`stations.parquet`, `products.parquet`, `station_products.parquet`, `provider.json`) must be regenerated **manually** by anyone with valid ANA credentials (`ANA_IDENTIFICADOR` / `ANA_SENHA`). These credentials are personal, cannot be shared, and must never be committed or stored anywhere in the repository. The packaged catalogue artifacts are committed to the repo after each manual regeneration so that end users can install and use `br_ana` without supplying credentials themselves.
+`br_ana` is withheld from certified catalogue generation pending the credentialed native acquisition
+owned by [issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90). The packaged catalogue keeps
+provider metadata but emits empty product, station, and station-product tables with structured
+`no_acquisition_record_established` provenance. The metadata fixture remains parser test data and must
+not generate packaged values. See [`../catalogue-provenance.md`](../catalogue-provenance.md) for the
+maintenance command and certification boundary.
 
-The generator fetches station metadata for all 27 states + DF sequentially with 0.1 s sleep between state requests to be polite to the API. A minimum live station guard of 1000 stations is set (Brazil reportedly has ~4000+ telemetry gauges; conservative floor catches silent fetch failures).
+A future credentialed response may refresh and attest a committed native table. It must not directly
+generate canonical artefacts. Credentials remain restricted to request headers and must never enter
+fixtures, logs, provenance, or repository files.
 
-Run with:
-```bash
-ANA_IDENTIFICADOR=<user> ANA_SENHA=<pass> \
-  python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
-  --live --out src/rivretrieve/_internal/providers/br_ana/catalogue/
-```
-
-Then commit the updated catalogue artifacts (`catalogue/*.parquet`, `catalogue/provider.json`) without the credentials.
-
-## Architecture.md Impact
+## Shared Architecture Impact
 
 None. Authentication, date-only UTC midnight timestamps, naive-local-to-UTC conversion, dual windowing strategies (annual vs. ≤30-day), and manual URL encoding are all provider-specific. The `quality_flag` row-annotation pattern reuses the established convention from `usgs_nwis` (`qualifier`) and `ca_eccc` (`quality_flag`) — no new shared harness concept introduced. No shared harness gap discovered.
 

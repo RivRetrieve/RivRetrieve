@@ -31,7 +31,9 @@ The 1,301-row recovered source is byte-identical to `kratzert/RivRetrieve-Python
 `f67f6d8507a55144bf235feb3f27f65648b90f83`. Its commit timestamp,
 `2025-10-10T18:46:34Z`, is the native-table provenance lower bound. The complete live roster captured
 at `2026-08-02T19:54:27Z` independently establishes exact identity-set agreement but contributes no
-geometry, names, area, or altitude. Publisher coordinate captures from `2026-08-02T18:45:32Z` are
+geometry, names, area, or altitude. Its 66,632 raw bytes have SHA-256
+`4b401f44942b59ac82b4485d07194215d5847127aefc8ba911386720a7e24755`. Publisher coordinate
+captures from `2026-08-02T18:45:32Z` are
 partial, whole-arc-second corroboration only.
 
 ## Products
