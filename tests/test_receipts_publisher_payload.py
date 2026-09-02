@@ -8,33 +8,15 @@ import pytest
 import rivretrieve as rr
 import rivretrieve._internal.driver as driver_module
 from rivretrieve._internal.observations import ReceiptAuthorship
-from rivretrieve._internal.recordings import RecordingEnvelope, read_recording
-from rivretrieve._internal.transport import TransportRequest, TransportResponse
+from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-_RECORDING = Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2023-01-01_2023-01-03.recording.json")
-
-
-class _PublisherClient:
-    def __init__(self, recording: RecordingEnvelope) -> None:
-        self.recording = recording
-        self.requests: list[TransportRequest] = []
-
-    def send(self, request: TransportRequest) -> TransportResponse:
-        self.requests.append(request)
-        return TransportResponse(
-            content=self.recording.content,
-            status_code=self.recording.status_code,
-            retrieved_at=self.recording.retrieved_at,
-            content_type=self.recording.content_type,
-            url=request.url,
-            request_parameters={} if request.params is None else request.params,
-        )
+_RECORDING = Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json")
 
 
 def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     recording = read_recording(_RECORDING)
-    client = _PublisherClient(recording)
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: client)
+    replay = ReplayTransport((recording,))
+    monkeypatch.setattr(driver_module, "HttpClient", lambda: replay)
 
     selection = rr.find(
         provider="usgs_nwis",
@@ -49,16 +31,6 @@ def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.M
         on_issue="ignore",
     )
 
-    assert len(client.requests) == 1
-    assert client.requests[0].url == "https://waterservices.usgs.gov/nwis/dv/"
-    assert client.requests[0].params == {
-        "format": "json",
-        "sites": "07374000",
-        "startDT": "2022-12-30",
-        "endDT": "2023-01-03",
-        "parameterCd": "00060",
-        "statCd": "00003",
-    }
     assert result.provenance.provider_id == "usgs_nwis"
     assert result.provenance.source == "live"
     assert result.data.select("station_id", "product_id", "time", "time_zone").row(0) == (
@@ -74,6 +46,7 @@ def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.M
     assert receipt.authorship.value == "publisher_payload"
     assert receipt.content is recording.content
     assert receipt.origin.url == "https://waterservices.usgs.gov/nwis/dv/"
-    assert receipt.origin.request_parameters == client.requests[0].params
+    assert receipt.origin.request_parameters == recording.request.parameters
+    assert receipt.origin.status_code == recording.status_code
     assert receipt.origin.retrieved_at == recording.retrieved_at
     assert receipt.origin.content_type == recording.content_type
