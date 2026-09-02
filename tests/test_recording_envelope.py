@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from rivretrieve._internal.recordings import (
     InvalidRecordingError,
+    RecordedRequest,
+    RecordingEnvelope,
     ReplayTransport,
     UnmatchedRequestError,
     dry_run_recordings,
@@ -81,3 +84,156 @@ def test_rerecord_dry_run_uses_recording_facts_only(capsys: pytest.CaptureFixtur
         'parameters: {"end":"2026-01-02","start":"2026-01-01","station":"REAL-1"}',
         "retrieved_at: 2026-01-03T04:05:06.000000Z",
     ]
+
+
+@pytest.mark.parametrize(
+    ("url", "parameters"),
+    [
+        ("https://example.test/data?access_token=secret", None),
+        ("https://example.test/data", {"api_key": "secret"}),
+        ("https://user:password@example.test/data", None),
+    ],
+)
+def test_recorded_requests_refuse_secret_bearing_request_locations(url: str, parameters: dict[str, str] | None) -> None:
+    with pytest.raises(ValueError, match="secret-bearing"):
+        RecordedRequest(HttpMethod.GET, url, parameters)
+
+
+def test_every_committed_observation_recording_is_secret_safe_and_replayable() -> None:
+    recordings = sorted((Path(__file__).parent / "test_data").rglob("*.recording.json"))
+    assert recordings
+    for recording in recordings:
+        read_recording(recording)
+
+
+def test_recording_response_refuses_secret_bearing_fields() -> None:
+    with pytest.raises(ValueError, match="response contains a secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=b'{"access_token":"secret"}',
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/json",
+        )
+
+
+def test_recorded_request_refuses_secret_in_utf8_multipart_body() -> None:
+    body = b'--boundary\r\nContent-Disposition: form-data; name="access_token"\r\n\r\nsecret\r\n--boundary--\r\n'
+
+    with pytest.raises(ValueError, match="secret-bearing body field"):
+        RecordedRequest(HttpMethod.POST, "https://example.test/data", body=body)
+
+
+def test_recording_response_refuses_secret_in_utf16_json() -> None:
+    content = '{"access_token":"secret"}'.encode("utf-16")
+
+    with pytest.raises(ValueError, match="response contains a secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=content,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/json; charset=utf-16",
+        )
+
+
+def test_opaque_binary_zip_response_is_not_treated_as_structured_secret_data() -> None:
+    recording = RecordingEnvelope(
+        request=RecordedRequest(HttpMethod.GET, "https://example.test/data.zip"),
+        content=b"PK\x03\x04access_token=publisher-column-name",
+        status_code=200,
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        content_type="application/zip",
+    )
+
+    assert recording.content.startswith(b"PK")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b'{"access_token":"secret"}',
+        b"access_token=secret",
+    ],
+)
+def test_textual_secret_mislabeled_as_zip_is_not_trusted(content: bytes) -> None:
+    with pytest.raises(ValueError, match="secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=content,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/zip",
+        )
+
+
+def test_xml_element_name_is_screened_for_secrets() -> None:
+    with pytest.raises(ValueError, match="secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=b"<response><access_token>secret</access_token></response>",
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/xml",
+        )
+
+
+@pytest.mark.parametrize(
+    ("content_type", "content"),
+    [
+        ("application/zip", b"PK\x03\x04\x00\xff"),
+        (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            b"PK\x03\x04\x00\xff",
+        ),
+        ("application/vnd.ms-excel", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1\x00\xff"),
+        ("application/pdf", b"%PDF-1.7\x00\xff"),
+        ("application/vnd.apache.parquet", b"PAR1\x00\xff"),
+        ("application/gzip", b"\x1f\x8b\x00\xff"),
+        ("application/octet-stream", b"\x00\xff\x00\xff"),
+    ],
+)
+def test_coherent_opaque_binary_recordings_remain_supported(content_type: str, content: bytes) -> None:
+    recording = RecordingEnvelope(
+        request=RecordedRequest(HttpMethod.GET, "https://example.test/binary"),
+        content=content,
+        status_code=200,
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        content_type=content_type,
+    )
+
+    assert recording.content == content
+
+
+@pytest.mark.parametrize(
+    ("content_type", "content", "message"),
+    [
+        ("application/json", b"not-json", "not valid JSON"),
+        ("multipart/form-data; boundary=boundary", b"not-multipart", "multipart response evidence is unsupported"),
+        ("application/x-custom", b"\x00\xff", "unsupported recording content type"),
+    ],
+)
+def test_ambiguous_structured_and_unknown_response_content_is_rejected(
+    content_type: str, content: bytes, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=content,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type=content_type,
+        )
+
+
+@pytest.mark.parametrize("content", [b"null", b"42", b'"value"'])
+def test_valid_json_scalars_without_fields_remain_recordable(content: bytes) -> None:
+    recording = RecordingEnvelope(
+        request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+        content=content,
+        status_code=200,
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        content_type="application/json",
+    )
+
+    assert recording.content == content

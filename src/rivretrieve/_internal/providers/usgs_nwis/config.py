@@ -1,4 +1,7 @@
-"""config/window_declarations : () → ProviderConfig × ProductWindowDeclarations."""
+"""config/window_declarations : () → ProviderConfig × ProductWindowDeclarations.
+
+Contributed by: Thiago von Däniken
+"""
 
 from __future__ import annotations
 

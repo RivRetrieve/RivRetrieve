@@ -7,7 +7,9 @@ import base64
 import binascii
 import hashlib
 import json
+import re
 import sys
+import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -24,6 +26,27 @@ from rivretrieve._internal.transport import (
 
 RECORDING_FORMAT_VERSION = 1
 _SHA256_HEX_LENGTH = 64
+_SECRET_FIELD_NAMES = frozenset(
+    {
+        "authorization",
+        "proxyauthorization",
+        "cookie",
+        "setcookie",
+        "apikey",
+        "xapikey",
+        "token",
+        "apitoken",
+        "accesstoken",
+        "refreshtoken",
+        "clientsecret",
+        "password",
+        "passwd",
+        "secret",
+        "subscriptionkey",
+        "credentials",
+        "privatekey",
+    }
+)
 
 
 class InvalidRecordingError(ValueError):
@@ -54,6 +77,7 @@ class RecordedRequest:
             object.__setattr__(self, "parameters", MappingProxyType(dict(self.parameters)))
         if not isinstance(self.body, bytes | str | None):
             raise TypeError("recorded request body must be bytes, string, or None")
+        _require_secret_safe_request(self)
 
     @classmethod
     def from_transport_request(cls, request: TransportRequest) -> Self:
@@ -89,6 +113,8 @@ class RecordingEnvelope:
             raise ValueError("recording retrieval instant must be timezone-aware UTC")
         if self.content_type is not None and (not isinstance(self.content_type, str) or not self.content_type):
             raise TypeError("recording content type must be a non-empty string or None")
+        if _payload_has_secret_field(self.content, content_type=self.content_type):
+            raise ValueError("recording response contains a secret-bearing field")
         object.__setattr__(self, "sha256", hashlib.sha256(self.content).hexdigest())
 
     @classmethod
@@ -335,6 +361,224 @@ def _require_exact_keys(value: Mapping[str, object], expected: set[str], name: s
         missing = sorted(expected - actual)
         extra = sorted(actual - expected)
         raise InvalidRecordingError(f"recording {source} {name} fields differ: missing={missing}, extra={extra}")
+
+
+def _require_secret_safe_request(request: RecordedRequest) -> None:
+    authority = request.url.partition("://")[2].split("/", 1)[0]
+    if "@" in authority:
+        raise ValueError("recorded request contains secret-bearing URL credentials")
+    names = _form_field_names(request.url.partition("?")[2].partition("#")[0])
+    if request.parameters is not None:
+        names.extend(request.parameters)
+    sensitive = sorted(name for name in names if _is_secret_field_name(name))
+    if sensitive:
+        raise ValueError(f"recorded request contains secret-bearing parameter(s): {sensitive}")
+    if request.body is not None and _payload_has_secret_field(request.body):
+        raise ValueError("recorded request contains a secret-bearing body field")
+
+
+def _form_field_names(value: str) -> list[str]:
+    names: list[str] = []
+    for form_field in value.split("&"):
+        if not form_field:
+            continue
+        encoded_name = form_field.partition("=")[0].replace("+", " ")
+        names.append(re.sub(r"%([0-9a-fA-F]{2})", lambda match: chr(int(match.group(1), 16)), encoded_name))
+    return names
+
+
+def _normalise_secret_name(name: str) -> str:
+    return "".join(character for character in name.casefold() if character.isalnum())
+
+
+def _is_secret_field_name(name: str) -> bool:
+    normalised = _normalise_secret_name(name)
+    return normalised in _SECRET_FIELD_NAMES or normalised.endswith(
+        ("authtoken", "apitoken", "apikey", "password", "passwd", "secret", "subscriptionkey", "privatekey")
+    )
+
+
+def _payload_has_secret_field(
+    payload: bytes | str,
+    *,
+    content_type: str | None = None,
+) -> bool:
+    media_type = _media_type(content_type)
+    if media_type is not None and media_type.startswith("multipart/"):
+        raise ValueError("multipart response evidence is unsupported")
+    if (
+        media_type is not None
+        and not _is_structured_media_type(media_type)
+        and _opaque_signatures(media_type) is None
+        and not _is_generic_binary_media_type(media_type)
+    ):
+        raise ValueError(f"unsupported recording content type: {media_type}")
+    opaque_signature_mismatch = False
+    if isinstance(payload, str):
+        text = payload
+    else:
+        signatures = _opaque_signatures(media_type)
+        if signatures is not None:
+            if payload.startswith(signatures):
+                return False
+            text = _decode_text_payload(payload, content_type=content_type, structured=True)
+            opaque_signature_mismatch = True
+        elif _is_generic_binary_media_type(media_type):
+            if _has_opaque_magic(payload):
+                return False
+            text = _decode_text_payload(payload, content_type=content_type, structured=False)
+            if text is None:
+                return False
+        elif content_type is None and _has_opaque_magic(payload):
+            return False
+        else:
+            text = _decode_text_payload(
+                payload,
+                content_type=content_type,
+                structured=_is_structured_media_type(media_type),
+            )
+            if text is None:
+                raise ValueError("recording content without a type cannot be classified safely")
+    if text is None:  # Generic binary nullable decode paths return above.
+        raise AssertionError("unreachable text decoding state")
+    has_secret = _text_has_secret_field(text, media_type=media_type)
+    if opaque_signature_mismatch and not has_secret:
+        raise ValueError("recording content type does not match its binary signature")
+    return has_secret
+
+
+def _media_type(content_type: str | None) -> str | None:
+    if content_type is None:
+        return None
+    return content_type.partition(";")[0].strip().casefold()
+
+
+def _is_structured_media_type(media_type: str | None) -> bool:
+    if media_type is None:
+        return False
+    return (
+        media_type.startswith("text/")
+        or media_type.endswith("+json")
+        or media_type.endswith("+xml")
+        or media_type
+        in {
+            "application/json",
+            "application/xml",
+            "application/x-www-form-urlencoded",
+        }
+        or media_type.startswith("multipart/")
+    )
+
+
+def _opaque_signatures(media_type: str | None) -> tuple[bytes, ...] | None:
+    if media_type in {
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }:
+        return (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+    if media_type == "application/vnd.ms-excel":
+        return (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",)
+    if media_type == "application/pdf":
+        return (b"%PDF-",)
+    if media_type == "application/vnd.apache.parquet":
+        return (b"PAR1",)
+    if media_type == "application/gzip":
+        return (b"\x1f\x8b",)
+    return None
+
+
+def _is_generic_binary_media_type(media_type: str | None) -> bool:
+    return media_type == "application/octet-stream" or (
+        media_type is not None and media_type.startswith(("image/", "audio/", "video/"))
+    )
+
+
+def _has_opaque_magic(payload: bytes) -> bool:
+    return payload.startswith(
+        (
+            b"PK\x03\x04",
+            b"PK\x05\x06",
+            b"PK\x07\x08",
+            b"PAR1",
+            b"%PDF-",
+            b"\x1f\x8b",
+            b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
+        )
+    )
+
+
+def _decode_text_payload(
+    payload: bytes,
+    *,
+    content_type: str | None,
+    structured: bool,
+) -> str | None:
+    charset_match = None if content_type is None else re.search(r"charset\s*=\s*[\"']?([^;\s\"']+)", content_type, re.I)
+    encoding = charset_match.group(1) if charset_match is not None else None
+    if encoding is None:
+        if payload.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+            encoding = "utf-32"
+        elif payload.startswith((b"\xff\xfe", b"\xfe\xff")):
+            encoding = "utf-16"
+        elif payload.startswith(b"\xef\xbb\xbf"):
+            encoding = "utf-8-sig"
+        else:
+            encoding = "utf-8"
+    try:
+        return payload.decode(encoding)
+    except (LookupError, UnicodeDecodeError) as exc:
+        if structured:
+            raise ValueError("structured recording content cannot be decoded safely") from exc
+        return None
+
+
+def _text_has_secret_field(text: str, *, media_type: str | None) -> bool:
+    stripped = text.lstrip("\ufeff \t\r\n")
+    json_media = media_type == "application/json" or (media_type is not None and media_type.endswith("+json"))
+    if json_media or (media_type is None and stripped.startswith(("{", "["))):
+        try:
+            return _object_has_secret_field(json.loads(stripped))
+        except json.JSONDecodeError as exc:
+            raise ValueError("structured recording content is not valid JSON") from exc
+
+    if media_type == "application/xml" or (media_type is not None and media_type.endswith("+xml")):
+        try:
+            root = ET.fromstring(stripped)
+        except ET.ParseError as exc:
+            raise ValueError("structured recording content is not valid XML") from exc
+        if any(
+            _is_secret_field_name(_xml_local_name(name))
+            for element in root.iter()
+            for name in (element.tag, *element.attrib)
+            if isinstance(name, str)
+        ):
+            return True
+
+    declared_names = re.findall(
+        r"(?:content-disposition:[^\r\n;]*;[^\r\n]*?\bname|\bname)\s*=\s*[\"']?([^\"';\s\r\n]+)",
+        text,
+        flags=re.I,
+    )
+    keyed_names = re.findall(r"[\"']?([A-Za-z][A-Za-z0-9_.-]*)[\"']?\s*[:=]", text)
+    element_names = re.findall(r"<\s*/?\s*([A-Za-z_][A-Za-z0-9_.:-]*)", text)
+    names = [*_form_field_names(text), *declared_names, *keyed_names, *element_names]
+    return any(_is_secret_field_name(_xml_local_name(name)) for name in names)
+
+
+def _xml_local_name(name: str) -> str:
+    return name.rsplit("}", 1)[-1].rsplit(":", 1)[-1]
+
+
+def _object_has_secret_field(value: object) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            (isinstance(name, str) and _is_secret_field_name(name)) or _object_has_secret_field(child)
+            for name, child in value.items()
+        )
+    if isinstance(value, list):
+        return any(_object_has_secret_field(child) for child in value)
+    return False
 
 
 def _is_request_parameter(value: object) -> bool:

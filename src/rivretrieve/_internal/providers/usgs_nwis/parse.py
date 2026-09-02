@@ -1,4 +1,7 @@
-"""usgs_nwis parse : Payload × ProviderConfig → WithIssues[Rows]"""
+"""usgs_nwis parse : Payload × ProviderConfig → WithIssues[Rows]
+
+Contributed by: Thiago von Däniken
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Boundary-probe run : PortedProviderProduct* × BoundaryProbe* → ProbeResult* | BoundaryProbeContractError."""
+"""Boundary-probe run : DeclaredProvider* × (LiveProbe | StoreProbe)* → ProbeResult* | BoundaryProbeContractError."""
 
 from __future__ import annotations
 
@@ -11,7 +11,9 @@ import polars as pl
 
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.registration import BulkStore, DeclaredProvider, LiveStages
 from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope, ReplayTransport
+from rivretrieve._internal.store import StoreQuery, read_store
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
 READING_COUNT = "reading_count"
@@ -71,6 +73,39 @@ class BoundaryProbe:
         return self.provider_id, self.product_id
 
 
+@dataclass(frozen=True, slots=True)
+class StoreBoundaryProbe:
+    """One source-backed claim resolved through an exact validated-store query."""
+
+    provider_id: ProviderId
+    product_id: ProductId
+    query: StoreQuery
+    assertions: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.provider_id, str) or not self.provider_id:
+            raise TypeError("store boundary probe provider_id must be non-empty")
+        if not isinstance(self.product_id, str) or not self.product_id:
+            raise TypeError("store boundary probe product_id must be non-empty")
+        if not isinstance(self.query, StoreQuery):
+            raise TypeError("store boundary probe query must be StoreQuery")
+        if not isinstance(self.assertions, Mapping):
+            raise TypeError("store boundary probe assertions must be a mapping")
+        if any(not isinstance(name, str) for name in self.assertions):
+            raise TypeError("store boundary probe assertion names must be strings")
+        object.__setattr__(self, "assertions", MappingProxyType(dict(self.assertions)))
+
+    @property
+    def key(self) -> ProviderProduct:
+        return self.provider_id, self.product_id
+
+
+# Explicit name for callers that register both provider-kind evidence variants.
+LiveBoundaryProbe = BoundaryProbe
+
+type BoundaryEvidence = LiveBoundaryProbe | StoreBoundaryProbe
+
+
 class _AuditedReplayTransport(ReplayTransport):
     """Replay transport that reports which declared recordings a probe resolved."""
 
@@ -90,20 +125,23 @@ class _AuditedReplayTransport(ReplayTransport):
 
 
 class BoundaryProbeHarness:
-    """Register and run exactly one audited boundary probe for every ported product."""
+    """Register and run exactly one typed boundary proof for every ported product."""
 
     def __init__(self, ported_provider_products: Iterable[ProviderProduct]) -> None:
         ported = tuple(_provider_product(value) for value in ported_provider_products)
         if len(ported) != len(set(ported)):
             raise BoundaryProbeContractError("ported provider-products contain a duplicate")
         self._ported = frozenset(ported)
-        self._probes: dict[ProviderProduct, BoundaryProbe] = {}
+        self._probes: dict[ProviderProduct, BoundaryEvidence] = {}
 
-    def register(self, probe: BoundaryProbe) -> None:
-        """Validate and register a probe without executing provider code."""
-        if not isinstance(probe, BoundaryProbe):
-            raise TypeError("probe must be BoundaryProbe")
-        _require_recordings(probe)
+    def register(self, probe: BoundaryEvidence) -> None:
+        """Validate and register typed evidence without executing its source path."""
+        if not isinstance(probe, BoundaryProbe | StoreBoundaryProbe):
+            raise TypeError("probe must be BoundaryProbe or StoreBoundaryProbe")
+        if isinstance(probe, BoundaryProbe):
+            _require_recordings(probe)
+        else:
+            _require_store_query(probe)
         _require_exact_assertions(probe)
         _require_assertion_values(probe)
         if probe.key not in self._ported:
@@ -115,7 +153,7 @@ class BoundaryProbeHarness:
         self._probes[probe.key] = probe
 
     def run(self) -> tuple[pl.DataFrame, ...]:
-        """Refuse incomplete coverage, then replay and check every registered probe."""
+        """Refuse incomplete coverage, then execute and check every registered probe."""
         missing = sorted(self._ported - self._probes.keys())
         if missing:
             names = ", ".join(_describe(key) for key in missing)
@@ -124,13 +162,16 @@ class BoundaryProbeHarness:
         results: list[pl.DataFrame] = []
         for key in sorted(self._probes):
             probe = self._probes[key]
-            replay = _AuditedReplayTransport(probe.recordings)
-            frame = probe.run(replay)
-            if replay.unreplayed_requests:
-                requests = "; ".join(request.describe() for request in replay.unreplayed_requests)
-                raise BoundaryProbeContractError(
-                    f"Boundary probe {_describe(key)} did not replay recorded request(s): {requests}"
-                )
+            if isinstance(probe, BoundaryProbe):
+                replay = _AuditedReplayTransport(probe.recordings)
+                frame = probe.run(replay)
+                if replay.unreplayed_requests:
+                    requests = "; ".join(request.describe() for request in replay.unreplayed_requests)
+                    raise BoundaryProbeContractError(
+                        f"Boundary probe {_describe(key)} did not replay recorded request(s): {requests}"
+                    )
+            else:
+                frame = read_store(probe.query).rows
             _check_result(probe, frame)
             results.append(frame)
         return tuple(results)
@@ -138,7 +179,7 @@ class BoundaryProbeHarness:
 
 def run_boundary_probes(
     ported_provider_products: Iterable[ProviderProduct],
-    probes: Iterable[BoundaryProbe],
+    probes: Iterable[BoundaryEvidence],
 ) -> tuple[pl.DataFrame, ...]:
     """Build one harness, register its probes, and run complete coverage."""
     harness = BoundaryProbeHarness(ported_provider_products)
@@ -158,6 +199,105 @@ def _provider_product(value: object) -> ProviderProduct:
     return ProviderId(provider_id), ProductId(product_id)
 
 
+def run_manifest_boundary_probes(
+    declared: Iterable[DeclaredProvider],
+    probes: Iterable[BoundaryEvidence],
+) -> tuple[pl.DataFrame, ...]:
+    """Execute complete typed boundary evidence for manifest observation declarations.
+
+    Parameters
+    ----------
+    declared
+        Loaded providers whose observation products define the coverage obligation.
+    probes
+        Live replay or validated-store evidence registered for those products.
+
+    Returns
+    -------
+    tuple[polars.DataFrame, ...]
+        Checked source-wall-clock frames in provider-product order.
+
+    Raises
+    ------
+    BoundaryProbeContractError
+        If coverage or any registered evidence is incomplete or inconsistent.
+    """
+    declared_values = tuple(declared)
+    probe_values = tuple(probes)
+    kinds = _manifest_boundary_kinds(declared_values)
+    for probe in probe_values:
+        expected = kinds.get(probe.key)
+        if expected is LiveStages and not isinstance(probe, BoundaryProbe):
+            raise BoundaryProbeContractError(
+                f"Manifest LiveStages product {_describe(probe.key)} requires ReplayTransport evidence"
+            )
+        if expected is BulkStore and not isinstance(probe, StoreBoundaryProbe):
+            raise BoundaryProbeContractError(
+                f"Manifest BulkStore product {_describe(probe.key)} requires validated-store evidence"
+            )
+    return run_boundary_probes(manifest_boundary_obligations(declared_values), probe_values)
+
+
+def manifest_boundary_obligations(declared: Iterable[DeclaredProvider]) -> tuple[ProviderProduct, ...]:
+    """Return every observation product implied by manifest provider declarations.
+
+    Parameters
+    ----------
+    declared
+        Loaded provider declarations in manifest order.
+
+    Returns
+    -------
+    tuple[ProviderProduct, ...]
+        One obligation per product for each live or bulk provider.
+    """
+    obligations: list[ProviderProduct] = []
+    for item in declared:
+        observations = item.declaration.observations
+        if isinstance(observations, LiveStages):
+            products = observations.stages.config.products
+        elif isinstance(observations, BulkStore):
+            products = observations.config.products
+        else:
+            continue
+        obligations.extend(
+            (ProviderId(item.provider_id), ProductId(str(product_id))) for product_id in sorted(products, key=str)
+        )
+    return tuple(obligations)
+
+
+def _manifest_boundary_kinds(
+    declared: Iterable[DeclaredProvider],
+) -> dict[ProviderProduct, type[LiveStages] | type[BulkStore]]:
+    kinds: dict[ProviderProduct, type[LiveStages] | type[BulkStore]] = {}
+    for item in declared:
+        observations = item.declaration.observations
+        if isinstance(observations, LiveStages):
+            kind = LiveStages
+            products = observations.stages.config.products
+        elif isinstance(observations, BulkStore):
+            kind = BulkStore
+            products = observations.config.products
+        else:
+            continue
+        for product_id in products:
+            kinds[(ProviderId(item.provider_id), ProductId(str(product_id)))] = kind
+    return kinds
+
+
+def _require_store_query(probe: StoreBoundaryProbe) -> None:
+    query = probe.query
+    if query.provider_id != probe.provider_id:
+        raise BoundaryProbeContractError(
+            f"Boundary probe {_describe(probe.key)} query provider {query.provider_id} does not match"
+        )
+    if query.products != (probe.product_id,):
+        products = ", ".join(str(product) for product in query.products)
+        raise BoundaryProbeContractError(
+            f"Boundary probe {_describe(probe.key)} query products [{products}] do not match exactly"
+        )
+
+
 def _require_recordings(probe: BoundaryProbe) -> None:
     if not probe.recordings or not all(isinstance(value, RecordingEnvelope) for value in probe.recordings):
         raise BoundaryProbeContractError(
@@ -166,7 +306,7 @@ def _require_recordings(probe: BoundaryProbe) -> None:
         )
 
 
-def _require_exact_assertions(probe: BoundaryProbe) -> None:
+def _require_exact_assertions(probe: BoundaryEvidence) -> None:
     actual = set(probe.assertions)
     extra = sorted(actual - BOUNDARY_ASSERTIONS)
     if extra:
@@ -179,7 +319,7 @@ def _require_exact_assertions(probe: BoundaryProbe) -> None:
         raise BoundaryProbeContractError(f"Boundary probe {_describe(probe.key)} is missing assertion(s) {missing}")
 
 
-def _require_assertion_values(probe: BoundaryProbe) -> None:
+def _require_assertion_values(probe: BoundaryEvidence) -> None:
     count = probe.assertions[READING_COUNT]
     if type(count) is not int or count <= 0:
         raise BoundaryProbeContractError(
@@ -192,7 +332,7 @@ def _require_assertion_values(probe: BoundaryProbe) -> None:
             )
 
 
-def _check_result(probe: BoundaryProbe, frame: object) -> None:
+def _check_result(probe: BoundaryEvidence, frame: object) -> None:
     name = _describe(probe.key)
     if not isinstance(frame, pl.DataFrame):
         raise BoundaryProbeContractError(f"Boundary probe {name} did not return a Polars DataFrame")
@@ -226,7 +366,7 @@ def _check_result(probe: BoundaryProbe, frame: object) -> None:
 def _wall_clock(
     value: object,
     zone: object,
-    probe: BoundaryProbe,
+    probe: BoundaryEvidence,
     assertion: str,
 ) -> WallClockExpectation:
     if not isinstance(value, datetime):

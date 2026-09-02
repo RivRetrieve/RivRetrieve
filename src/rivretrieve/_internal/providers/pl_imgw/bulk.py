@@ -3,6 +3,8 @@
 The compiler expands every strict, headerless publisher CSV record into the three
 native daily products. It retains the ten source cells byte-for-byte as decoded
 text; the shared store reader is the only observation query path after publication.
+
+Contributed by: Thiago von Däniken
 """
 
 from __future__ import annotations
