@@ -1,12 +1,14 @@
 """HTTP transport = execute : TransportRequest × TransportPolicy → TransportResponse | TransportFailure"""
 
+import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Protocol
+from typing import Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 import requests
 
@@ -227,3 +229,120 @@ class HttpClient:
                 self._sleeper(remaining)
                 now = self._clock.monotonic()
         self._last_attempt_started_at = now
+
+
+@runtime_checkable
+class AuthenticationCapability(Protocol):
+    """Report whether credentials are scoped to one exact request origin."""
+
+    def can_authenticate(self, url: str) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class CredentialHeader:
+    """One redacted credential header scoped to exact HTTP origins."""
+
+    name: str
+    _value: str
+    origins: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or re.fullmatch(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+", self.name) is None:
+            raise TypeError("credential header name must use the HTTP field-name token grammar")
+        if not isinstance(self._value, str) or re.fullmatch(r"[\x20-\x7e]+", self._value) is None:
+            raise TypeError("credential header value must contain only visible ASCII or spaces")
+        if not isinstance(self.origins, tuple) or not self.origins:
+            raise TypeError("credential origins must be a non-empty tuple")
+        normalized = tuple(_credential_origin(value) for value in self.origins)
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("credential origins must be unique")
+        object.__setattr__(self, "origins", normalized)
+
+    def __repr__(self) -> str:
+        return f"CredentialHeader(name={self.name!r}, value=[REDACTED], origins={self.origins!r})"
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class AuthenticatedTransport:
+    """Apply credentials only to requests matching their exact origin scope."""
+
+    transport: Transport
+    credentials: tuple[CredentialHeader, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.credentials, tuple) or not self.credentials:
+            raise TypeError("credentials must be a non-empty tuple of CredentialHeader values")
+        if not all(isinstance(value, CredentialHeader) for value in self.credentials):
+            raise TypeError("credentials must contain only CredentialHeader values")
+        names = tuple(value.name.lower() for value in self.credentials)
+        if len(names) != len(set(names)):
+            raise ValueError("credential header names must be unique case-insensitively")
+
+    def __repr__(self) -> str:
+        names = tuple(value.name for value in self.credentials)
+        return f"AuthenticatedTransport(transport={self.transport!r}, credential_headers={names!r}, values=[REDACTED])"
+
+    def can_authenticate(self, url: str) -> bool:
+        origin = _request_origin(url)
+        return any(origin in credential.origins for credential in self.credentials)
+
+    def send(self, request: TransportRequest) -> TransportResponse:
+        origin = _request_origin(request.url)
+        applicable = tuple(credential for credential in self.credentials if origin in credential.origins)
+        if not applicable:
+            return self.transport.send(request)
+        existing = {name.lower() for name in request.headers}
+        names = tuple(value.name.lower() for value in applicable)
+        if len(names) != len(set(names)):
+            raise ValueError("applicable credential header names must be unique case-insensitively")
+        collisions = tuple(value.name for value in applicable if value.name.lower() in existing)
+        if collisions:
+            raise ValueError(f"source request already provides credential header: {collisions[0]}")
+        headers = dict(request.headers)
+        headers.update((value.name, value._value) for value in applicable)
+        authenticated = TransportRequest(request.method, request.url, request.params, headers, request.body)
+        sanitized_failure: TransportFailure | None = None
+        try:
+            return self.transport.send(authenticated)
+        except TransportFailure as error:
+            sanitized_failure = TransportFailure(request, error.reason, error.attempts, status_code=error.status_code)
+        assert sanitized_failure is not None
+        raise sanitized_failure from None
+
+
+def _credential_origin(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("credential origin must be a string")
+    split = urlsplit(value)
+    if split.scheme.lower() not in {"http", "https"} or split.hostname is None:
+        raise ValueError("credential origin must use http or https with an authority")
+    if (
+        split.username is not None
+        or split.password is not None
+        or split.query
+        or split.fragment
+        or split.path not in {"", "/"}
+    ):
+        raise ValueError("credential origin must contain only scheme and authority")
+    try:
+        port = split.port
+    except ValueError as error:
+        raise ValueError("credential origin has an invalid port") from error
+    if port in {80, 443}:
+        raise ValueError("credential origin must omit default ports")
+    authority = split.hostname.lower() if port is None else f"{split.hostname.lower()}:{port}"
+    return f"{split.scheme.lower()}://{authority}"
+
+
+def _request_origin(url: str) -> str:
+    split = urlsplit(url)
+    if split.scheme.lower() not in {"http", "https"} or split.hostname is None or split.username is not None:
+        raise ValueError("request URL has no safe HTTP origin")
+    try:
+        port = split.port
+    except ValueError as error:
+        raise ValueError("request URL has an invalid port") from error
+    if port in {80, 443}:
+        raise ValueError("request URL must omit explicit default ports")
+    authority = split.hostname.lower() if port is None else f"{split.hostname.lower()}:{port}"
+    return f"{split.scheme.lower()}://{authority}"

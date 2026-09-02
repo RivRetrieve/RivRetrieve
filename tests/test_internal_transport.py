@@ -292,3 +292,137 @@ def test_requests_exceptions_are_translated_to_transport_neutral_failures(failur
     ]
     annotations = " ".join(str(get_type_hints(obj)) for obj in public_objects)
     assert "requests" not in annotations
+
+
+def test_authenticated_transport_applies_sentinel_without_exposing_it() -> None:
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.transport import (
+        AuthenticatedTransport,
+        CredentialHeader,
+        HttpMethod,
+        TransportRequest,
+        TransportResponse,
+    )
+
+    class Capture:
+        request = None
+
+        def send(self, request):
+            self.request = request
+            return TransportResponse(
+                b"ok", 200, datetime(2026, 1, 1, tzinfo=UTC), "text/plain", request.url, request.params or {}
+            )
+
+    sentinel = "SENTINEL-NOT-A-REAL-TOKEN"
+    capture = Capture()
+    wrapped = AuthenticatedTransport(
+        capture, (CredentialHeader("Authorization", f"Token {sentinel}", ("https://example.test",)),)
+    )
+    original = TransportRequest(HttpMethod.POST, "https://example.test", headers={"Accept": "text/csv"})
+    wrapped.send(original)
+    assert capture.request.headers == {"Accept": "text/csv", "Authorization": f"Token {sentinel}"}
+    assert original.headers == {"Accept": "text/csv"}
+    assert sentinel not in repr(wrapped) and sentinel not in repr(wrapped.credentials)
+
+
+def test_authenticated_transport_validates_headers_and_rejects_collisions() -> None:
+    import pytest
+
+    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpMethod, TransportRequest
+
+    for invalid_name in ("Bad:Name", "Bad Name", "Bäd", "Bad\x01Name"):
+        with pytest.raises(TypeError):
+            CredentialHeader(invalid_name, "value", ("https://example.test",))
+    for invalid_value in ("line\nvalue", "tab\tvalue", "välue", ""):
+        with pytest.raises(TypeError):
+            CredentialHeader("X-API-Key", invalid_value, ("https://example.test",))
+
+    class Never:
+        def send(self, request):
+            raise AssertionError(request)
+
+    with pytest.raises(ValueError, match="unique"):
+        AuthenticatedTransport(
+            Never(),
+            (
+                CredentialHeader("X-API-Key", "a", ("https://example.test",)),
+                CredentialHeader("x-api-key", "b", ("https://example.test",)),
+            ),
+        )
+    wrapped = AuthenticatedTransport(Never(), (CredentialHeader("X-API-Key", "secret", ("https://example.test",)),))
+    with pytest.raises(ValueError, match="already provides"):
+        wrapped.send(TransportRequest(HttpMethod.GET, "https://example.test", headers={"x-api-key": "source"}))
+
+
+def test_authenticated_transport_failure_contains_only_original_safe_request() -> None:
+    import pytest
+
+    from rivretrieve._internal.transport import (
+        AuthenticatedTransport,
+        CredentialHeader,
+        HttpMethod,
+        TransportFailure,
+        TransportFailureReason,
+        TransportRequest,
+    )
+
+    sentinel = "SENTINEL-FAILURE-NOT-A-REAL-CREDENTIAL"
+
+    class Failing:
+        def send(self, request):
+            raise TransportFailure(request, TransportFailureReason.RETRY_EXHAUSTED, 3, status_code=503)
+
+    original = TransportRequest(HttpMethod.GET, "https://example.test", headers={"Accept": "application/json"})
+    wrapped = AuthenticatedTransport(Failing(), (CredentialHeader("X-API-Key", sentinel, ("https://example.test",)),))
+    with pytest.raises(TransportFailure) as info:
+        wrapped.send(original)
+    assert info.value.request is original
+    assert info.value.__cause__ is None
+    assert (
+        sentinel not in repr(info.value)
+        and sentinel not in str(info.value)
+        and sentinel not in repr(info.value.request)
+    )
+
+
+def test_authenticated_transport_applies_only_to_exact_scoped_origin() -> None:
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.transport import (
+        AuthenticatedTransport,
+        CredentialHeader,
+        HttpMethod,
+        TransportRequest,
+        TransportResponse,
+    )
+
+    sentinel = "SENTINEL-SCOPED-CREDENTIAL"
+
+    class Capture:
+        def __init__(self):
+            self.requests = []
+
+        def send(self, request):
+            self.requests.append(request)
+            return TransportResponse(b"ok", 200, datetime(2026, 1, 1, tzinfo=UTC), "text/plain", request.url, {})
+
+    capture = Capture()
+    wrapped = AuthenticatedTransport(
+        capture, (CredentialHeader("Authorization", sentinel, ("https://influx.konzept.space",)),)
+    )
+    urls = (
+        "https://influx.konzept.space/data",
+        "https://api.existenz.ch/data",
+        "https://sub.influx.konzept.space/data",
+        "http://influx.konzept.space/data",
+    )
+    for url in urls:
+        wrapped.send(TransportRequest(HttpMethod.GET, url))
+    assert wrapped.can_authenticate(urls[0]) is True
+    assert all(wrapped.can_authenticate(url) is False for url in urls[1:])
+    assert capture.requests[0].headers == {"Authorization": sentinel}
+    assert all("Authorization" not in request.headers for request in capture.requests[1:])
+    for malformed in ("https://user@influx.konzept.space/data", "https://influx.konzept.space:443/data"):
+        with pytest.raises(ValueError):
+            wrapped.send(TransportRequest(HttpMethod.GET, malformed))
