@@ -104,8 +104,6 @@ class RecordingEnvelope:
             raise TypeError("recording request must be RecordedRequest")
         if type(self.content) is not bytes:
             raise TypeError("recording content must be bytes")
-        if _payload_has_secret_field(self.content):
-            raise ValueError("recording response contains a secret-bearing field")
         if type(self.status_code) is not int:
             raise TypeError("recording status code must be an integer")
         if not isinstance(self.retrieved_at, datetime):
@@ -114,6 +112,8 @@ class RecordingEnvelope:
             raise ValueError("recording retrieval instant must be timezone-aware UTC")
         if self.content_type is not None and (not isinstance(self.content_type, str) or not self.content_type):
             raise TypeError("recording content type must be a non-empty string or None")
+        if _payload_has_secret_field(self.content, content_type=self.content_type):
+            raise ValueError("recording response contains a secret-bearing field")
         object.__setattr__(self, "sha256", hashlib.sha256(self.content).hexdigest())
 
     @classmethod
@@ -397,19 +397,105 @@ def _is_secret_field_name(name: str) -> bool:
     )
 
 
-def _payload_has_secret_field(payload: bytes | str) -> bool:
-    if isinstance(payload, bytes):
-        try:
-            text = payload.decode("utf-8")
-        except UnicodeDecodeError:
-            return False
-    else:
+def _payload_has_secret_field(
+    payload: bytes | str,
+    *,
+    content_type: str | None = None,
+) -> bool:
+    if isinstance(payload, str):
         text = payload
+    else:
+        media_type = _media_type(content_type)
+        if _is_opaque_media_type(media_type) or (content_type is None and _has_opaque_magic(payload)):
+            return False
+        text = _decode_text_payload(payload, content_type=content_type, structured=media_type is not None)
+        if text is None:
+            return False
+    return _text_has_secret_field(text, structured=_is_structured_media_type(_media_type(content_type)))
+
+
+def _media_type(content_type: str | None) -> str | None:
+    if content_type is None:
+        return None
+    return content_type.partition(";")[0].strip().casefold()
+
+
+def _is_structured_media_type(media_type: str | None) -> bool:
+    if media_type is None:
+        return False
+    return (
+        media_type.startswith("text/")
+        or media_type.endswith("+json")
+        or media_type.endswith("+xml")
+        or media_type
+        in {
+            "application/json",
+            "application/xml",
+            "application/x-www-form-urlencoded",
+        }
+        or media_type.startswith("multipart/")
+    )
+
+
+def _is_opaque_media_type(media_type: str | None) -> bool:
+    if media_type is None:
+        return False
+    return media_type.startswith(("image/", "audio/", "video/")) or media_type in {
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/octet-stream",
+        "application/pdf",
+        "application/vnd.apache.parquet",
+        "application/gzip",
+    }
+
+
+def _has_opaque_magic(payload: bytes) -> bool:
+    return payload.startswith((b"PK\x03\x04", b"PAR1", b"%PDF-", b"\x1f\x8b"))
+
+
+def _decode_text_payload(
+    payload: bytes,
+    *,
+    content_type: str | None,
+    structured: bool,
+) -> str | None:
+    charset_match = None if content_type is None else re.search(r"charset\s*=\s*[\"']?([^;\s\"']+)", content_type, re.I)
+    encoding = charset_match.group(1) if charset_match is not None else None
+    if encoding is None:
+        if payload.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+            encoding = "utf-32"
+        elif payload.startswith((b"\xff\xfe", b"\xfe\xff")):
+            encoding = "utf-16"
+        elif payload.startswith(b"\xef\xbb\xbf"):
+            encoding = "utf-8-sig"
+        else:
+            encoding = "utf-8"
     try:
-        value = json.loads(text)
-    except json.JSONDecodeError:
-        return any(_is_secret_field_name(name) for name in _form_field_names(text))
-    return _object_has_secret_field(value)
+        return payload.decode(encoding)
+    except (LookupError, UnicodeDecodeError) as exc:
+        if structured:
+            raise ValueError("structured recording content cannot be decoded safely") from exc
+        return None
+
+
+def _text_has_secret_field(text: str, *, structured: bool) -> bool:
+    stripped = text.lstrip("\ufeff \t\r\n")
+    if stripped.startswith(("{", "[")):
+        try:
+            return _object_has_secret_field(json.loads(stripped))
+        except json.JSONDecodeError as exc:
+            if structured:
+                raise ValueError("structured recording content is not valid JSON") from exc
+
+    declared_names = re.findall(
+        r"(?:content-disposition:[^\r\n;]*;[^\r\n]*?\bname|\bname)\s*=\s*[\"']?([^\"';\s\r\n]+)",
+        text,
+        flags=re.I,
+    )
+    keyed_names = re.findall(r"[\"']?([A-Za-z][A-Za-z0-9_.-]*)[\"']?\s*[:=]", text)
+    names = [*_form_field_names(text), *declared_names, *keyed_names]
+    return any(_is_secret_field_name(name) for name in names)
 
 
 def _object_has_secret_field(value: object) -> bool:

@@ -61,6 +61,32 @@ def _direct_http_imports(path: Path) -> set[str]:
     return imports & {"httpx", "requests", "urllib"}
 
 
+def _is_provider_owned_data_operation(name: str) -> bool:
+    tokens = name.lstrip("_").split("_")
+    operation_targets = {
+        "transform": {"data", "observation", "observations", "result", "results", "row", "rows", "value", "values"},
+        "convert": {
+            "data",
+            "observation",
+            "observations",
+            "result",
+            "results",
+            "row",
+            "rows",
+            "time",
+            "timestamp",
+            "timezone",
+            "unit",
+            "units",
+            "value",
+            "values",
+            "zone",
+        },
+        "assemble": {"data", "observation", "observations", "result", "results", "row", "rows"},
+    }
+    return bool(tokens and tokens[0] in operation_targets and set(tokens[1:]) & operation_targets[tokens[0]])
+
+
 def _engine_owned_operations_in_tree(tree: ast.Module, relative_path: Path) -> list[str]:
     violations = []
     forbidden_function_names = {
@@ -97,8 +123,7 @@ def _engine_owned_operations_in_tree(tree: ast.Module, relative_path: Path) -> l
     }
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
-            node.name in forbidden_function_names
-            or node.name.lstrip("_").split("_", 1)[0] in {"transform", "convert", "assemble"}
+            node.name in forbidden_function_names or _is_provider_owned_data_operation(node.name)
         ):
             violations.append(f"{relative_path}:{node.lineno}:provider-owned {node.name}")
         elif (
@@ -228,6 +253,17 @@ secret = operating_system.environ["TOKEN"]
         "adversarial/parse.py:4:provider-owned transform",
         "adversarial/parse.py:7:hidden environment read",
     ]
+
+
+def test_engine_owned_operations_allow_provider_request_builders() -> None:
+    source = """def assemble_request(station, window):
+    return {"station": station, "start": window.start}
+"""
+
+    assert _engine_owned_operations_in_tree(ast.parse(source), Path("adversarial/fetch.py")) == []
+    assert _is_provider_owned_data_operation("assemble_rows") is True
+    assert _is_provider_owned_data_operation("convert_units") is True
+    assert _is_provider_owned_data_operation("transform_observations") is True
 
 
 def test_runtime_provider_inventory_has_only_ratified_roles() -> None:

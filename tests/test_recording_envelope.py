@@ -115,3 +115,35 @@ def test_recording_response_refuses_secret_bearing_fields() -> None:
             retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
             content_type="application/json",
         )
+
+
+def test_recorded_request_refuses_secret_in_utf8_multipart_body() -> None:
+    body = b'--boundary\r\nContent-Disposition: form-data; name="access_token"\r\n\r\nsecret\r\n--boundary--\r\n'
+
+    with pytest.raises(ValueError, match="secret-bearing body field"):
+        RecordedRequest(HttpMethod.POST, "https://example.test/data", body=body)
+
+
+def test_recording_response_refuses_secret_in_utf16_json() -> None:
+    content = '{"access_token":"secret"}'.encode("utf-16")
+
+    with pytest.raises(ValueError, match="response contains a secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=content,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/json; charset=utf-16",
+        )
+
+
+def test_opaque_binary_zip_response_is_not_treated_as_structured_secret_data() -> None:
+    recording = RecordingEnvelope(
+        request=RecordedRequest(HttpMethod.GET, "https://example.test/data.zip"),
+        content=b"PK\x03\x04access_token=publisher-column-name",
+        status_code=200,
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        content_type="application/zip",
+    )
+
+    assert recording.content.startswith(b"PK")
