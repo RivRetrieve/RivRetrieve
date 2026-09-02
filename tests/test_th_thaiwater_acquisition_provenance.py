@@ -156,7 +156,7 @@ def test_committed_thaiwater_official_evidence_matches_capture_manifest() -> Non
         "official_water_wl.html": data / "th_thaiwater_official_water_wl-2026-09-02.html",
         "official_app.chunk.js": data / "th_thaiwater_official_app.chunk-2026-09-02.js",
     }
-    captures = {item["file"]: item for item in manifest["captures"] if item.get("file") in committed}
+    captures = {item["file"]: item for item in manifest["captures"]}
 
     assert set(captures) == set(committed)
     for source_name, path in committed.items():
