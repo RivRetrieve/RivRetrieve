@@ -661,7 +661,7 @@ def _native_value(
         value = float(stripped)
     except ValueError as error:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has non-numeric {field}") from error
-    if round(value, 3) in null_sentinels:
+    if value in null_sentinels:
         return None, "published_null"
     return value, "published_value"
 

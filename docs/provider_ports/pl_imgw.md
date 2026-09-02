@@ -107,10 +107,10 @@ canonical mode accepts only that native table; live JSON and fixtures cannot pro
 
 | Issue | Detail |
 |---|---|
-| Two CSV format eras | 2023+ is UTF-8 BOM + semicolon; pre-2023 is CP1250 + comma + quoting. Parser tries UTF-8-sig first (BOM detection), then CP1250, then latin-1. |
+| Two CSV format eras | 2023+ is UTF-8 BOM + semicolon; pre-2023 is CP1250 + comma + quoting. Parser accepts UTF-8 only when a BOM is present; otherwise it decodes CP1250. No permissive Latin-1 fallback exists. |
 | Publisher geometry is partial and coarser | `lista_stacji_hydro.csv` has 1,301 identities but no coordinates. `kody_stacji.csv` covers 784 packaged stations and the usable API subset covers 779, leaving 517 without publisher-published coordinates. The DMS route has zero exact recovered pairs, 779 within 1.5 arc-seconds on both axes, and five accepted disagreements; worst is `154180190` at approximately 0.0053675° on one axis. Recovered values remain authoritative. |
 | ZIP contains all stations | Every download fetches data for all ~900+ stations. The compiler retains every station row and queries filter only at the shared validated-store boundary. |
-| Sentinel masking | Water level 9999, discharge 99999.999/999, temperature 99.9 → `None`. The parser rounds to 3 decimal places before sentinel comparison to avoid floating-point near-miss. |
+| Sentinel masking | Water level 9999, discharge 99999.999/999, temperature 99.9 → `None`. Sentinel comparison uses exact decoded numeric equality; near-sentinel published values remain values. |
 | Leading spaces in pre-2023 station codes | Pre-2023 CP1250 CSV has quoted station codes like `" 149180020"`. The parser strips whitespace after CSV unquoting. |
 | Annual ZIP cut-off | Annual publication begins at 2023. Earlier years use 12 monthly ZIPs. The source plan encodes that confirmed boundary. |
 | Data lag | The 2025 annual artifact is published; the downloader selects only completed publication years and does not guess a current-year artifact. |

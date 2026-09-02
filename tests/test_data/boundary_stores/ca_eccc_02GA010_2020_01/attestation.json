@@ -13,11 +13,12 @@
     "role": "external operational input identity only; exact bytes are not committed and this object is not a fresh-clone test oracle"
   },
   "committed_store": {
-    "derivation": "The production HYDAT compiler compiled an uncommitted exact two-row SQLite extract copied without cell changes from DLY_FLOWS and DLY_LEVELS for 02GA010, YEAR=2020, MONTH=1. The compact store is an attestation, not a replayable copy of the full HYDAT artifact.",
-    "compiler_input_committed": false,
-    "manifest_artifact_sha256": "39d7f8f3293fb1c8a6fc4910843a90b9e34d5d92d37d823c2f9ac6b33e916958",
-    "manifest_artifact_url": "https://example.invalid/rivretrieve/ca_eccc_02GA010_exact-row-attestation.zip",
-    "role": "Derived compact compiler mechanics only; its deliberately non-source manifest identity must never be presented as HYDAT publisher provenance."
+    "derivation": "The production HYDAT compiler compiled the committed two-row SQLite ZIP copied without cell changes from the checksum-identified official HYDAT DLY_FLOWS and DLY_LEVELS rows for 02GA010, YEAR=2020, MONTH=1. The compact store proves compiler mechanics; it is not the full publisher artifact.",
+    "compiler_input_committed": true,
+    "manifest_artifact_sha256": "e495f496c829df145add21a5e9aae321abfff3096734933a6287ae3f559e6cb2",
+    "manifest_artifact_url": "https://raw.githubusercontent.com/RivRetrieve/RivRetrieve/main/tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip",
+    "role": "Derived compact compiler mechanics only; the repository-hosted input is not a publisher route and must never be presented as HYDAT publisher provenance.",
+    "compiler_input_path": "tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip"
   },
   "corroboration_recording": {
     "path": "tests/test_data/ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json",

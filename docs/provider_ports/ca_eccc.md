@@ -12,7 +12,7 @@
 Catalogue refresh uses the ECCC OGC Features API because it exposes the complete station population in
 a structured source vocabulary. Observation retrieval remains HYDAT-based: the observation client
 downloads the national SQLite archive, caches it locally, and queries `DLY_FLOWS` and `DLY_LEVELS`.
-The catalogue migration does not change that cache lifecycle, query path, issue vocabulary, or parser.
+Catalogue acquisition remains independent of observation compilation. The bulk adapter compiles the official HYDAT artifact into the certified store; runtime queries use only the shared validated-store path.
 
 ## Native Catalogue and Origins
 
@@ -83,8 +83,7 @@ three-feature FeatureCollection fixture. The fixture is not a flat HYDAT-style l
 
 ## Windowing
 
-HYDAT selects the inclusive range of years containing the requested endpoints. The parser then filters
-the reconstructed daily rows to the exact requested dates.
+HYDAT compilation retains every valid calendar-day cell in the national artifact. The shared validated-store reader, not provider code, clips observation queries to the requested closed interval.
 
 ## Station Count
 
@@ -98,6 +97,6 @@ no source feature was filtered. The previous 8,055 count is retained only as the
 | Coordinates in geometry, not properties | `LATITUDE`/`LONGITUDE` are not source properties. Native columns preserve coordinate indices 0 and 1; the canonical build aliases them only at its strict station inventory boundary. |
 | CRS evidence | Collection metadata declares `http://www.opengis.net/def/crs/OGC/1.3/CRS84`; this documents source longitude/latitude order and WGS 84. |
 | Source scalar fidelity | `REAL_TIME` and `RHBN` remain integers; drainage values remain floats or source nulls. No fixture compatibility coercions remain. |
-| Observation cache | The national HYDAT SQLite archive is cached once and queried read-only per station-product pair. |
+| Observation store | The national HYDAT SQLite archive is compiled once into a certified store. Runtime station-product requests query only the shared validated-store reader. |
 | No canonical elevation | The canonical station shape is identity and geometry; source station fields remain in `native.parquet`. |
 | No per-variable availability | Cannot materialize `available`/`unavailable` station-product rows at catalogue-generation time. All rows are `unknown`. |

@@ -18,6 +18,15 @@ def _official_url(name: str) -> str:
     return f"https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/{name}"
 
 
+def test_imgw_near_sentinel_numeric_is_not_reclassified_as_published_null() -> None:
+    from rivretrieve._internal.providers.pl_imgw.bulk import _native_value
+
+    assert _native_value("999.0004", "codz_2022_01.csv", 1, "Flow [m^3/s]", frozenset({999.0})) == (
+        999.0004,
+        "published_value",
+    )
+
+
 def test_imgw_plan_uses_monthly_archives_before_2023_and_annual_after() -> None:
     planned = plan_imgw_artifacts(first_year=2022, last_year=2023)
 
