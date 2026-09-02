@@ -159,16 +159,19 @@ def _fetch_provider_series(
     on_issue: OnIssue,
 ) -> ObservationResult:
     handle = _provider_lookup(provider_id)
+    by_station: dict[str, list[str]] = {}
+    for selected_series in series:
+        by_station.setdefault(selected_series.station_id, []).append(selected_series.product_id)
     results = tuple(
         handle.observations(
-            stations=selected_series.station_id,
-            products=selected_series.product_id,
+            stations=station_id,
+            products=tuple(product_ids),
             start=start,
             end=end,
             on_issue="ignore",
             receipts=receipts,
         )
-        for selected_series in series
+        for station_id, product_ids in by_station.items()
     )
     result = _merge_provider_results(results, series)
     apply_on_issue(result.issues, on_issue)
@@ -198,11 +201,16 @@ def _merge_provider_results(
     issues = _merge_provider_issues(results)
     receipt_entries = tuple(entry for result in results for entry in result.receipts.entries)
     return ObservationResult(
-        data=pl.concat([result.data for result in results]),
+        data=_canonical_observation_order(pl.concat([result.data for result in results])),
         provenance=first.provenance.model_copy(update={"request": merged_request}),
         issues=issues,
         receipts=Receipts(provider_id=first.provenance.provider_id, entries=receipt_entries),
     )
+
+
+def _canonical_observation_order(data: pl.DataFrame) -> pl.DataFrame:
+    """canonical observation order : ObservationData → ObservationData (pure)."""
+    return data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
 
 
 def _merge_provider_issues(results: tuple[ObservationResult, ...]) -> tuple[Issue, ...]:

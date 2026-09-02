@@ -87,11 +87,11 @@ for provider_id, station_id, count in (
     assert len(groups) == count
     assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
 thailand = rivretrieve.find(
-    provider="th_thaiwater", station="1", product="stage_instantaneous"
+    provider="th_thaiwater", station="1", product="stage_reported"
 )
 assert rivretrieve.as_frame(thailand).is_empty()
 groups = thailand.acquisition_provenance[0].withheld_facts
-assert len(groups) == 1_650
+assert len(groups) == 1_648
 assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
 """
     clean_environment = os.environ.copy()

@@ -19,6 +19,7 @@ from rivretrieve._internal.engine import (
     SourceCoordinates,
     Unit,
     UnknownOriginFact,
+    UnknownTemporalSupport,
     WindowEndpoint,
     ZoneValue,
     _make_fetch_window,
@@ -94,6 +95,21 @@ def _content(
             }
         }
     ).encode()
+
+
+def test_parse_rejects_temporal_support_not_declared_by_usgs() -> None:
+    unsupported = ProductConfig(
+        coordinates=SourceCoordinates(object()),
+        unit=Unit.FT,
+        semantics=UnknownTemporalSupport(),
+    )
+    provider_config = ProviderConfig(
+        zone=ZoneValue("unknown"),
+        products={ProductId("payload-product"): unsupported},
+    )
+
+    with pytest.raises(FatalContractError, match="does not declare unknown temporal support"):
+        parse(_payload(_content([{"dateTime": "2023-01-01T00:00:00+00:00", "value": "1"}])), provider_config)
 
 
 @pytest.mark.parametrize(

@@ -222,8 +222,8 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: monthly-chunk requests per station-product pair; 404 months silently skipped; "
-            "partial failures reported as recoverable issues"
+            "true: monthly station-window requests; co-published products share one source call; "
+            "404 and retry exhaustion reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,

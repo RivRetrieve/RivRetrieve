@@ -44,16 +44,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         set(),
     ),
     (
-        "th_thaiwater",
-        825,
-        2,
-        0,
-        {"discharge_instantaneous", "stage_instantaneous"},
-        "ThaiWater public API / Hydro-Informatics Institute (HII)",
-        "2026-08-02",
-        set(),
-    ),
-    (
         "za_dws",
         2905,
         3,
@@ -65,14 +55,12 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
 )
 DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py"}
-THAI_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"}
 DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
 JAPAN_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "br_ana": DEFERRED_CATALOGUE_MODULE_FILES,
     "jp_mlit": JAPAN_CATALOGUE_MODULE_FILES,
     "no_nve": DEFERRED_CATALOGUE_MODULE_FILES,
-    "th_thaiwater": THAI_CATALOGUE_MODULE_FILES,
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
@@ -243,7 +231,6 @@ def test_reference_tree_preserves_complete_porting_evidence() -> None:
             "no_nve_12.210.0_discharge_hourly_202301.json",
             "no_nve_metadata.json",
         },
-        "th_thaiwater": {"th_thaiwater_S13A_waterlevel_graph.json", "th_thaiwater_metadata.json"},
     }
     endpoints = {
         "br_ana": (
@@ -251,7 +238,6 @@ def test_reference_tree_preserves_complete_porting_evidence() -> None:
         ),
         "jp_mlit": "http://www1.river.go.jp",
         "no_nve": "https://hydapi.nve.no/api/v1/",
-        "th_thaiwater": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public",
     }
     source_names = {
         "issue_codes.py",

@@ -1,0 +1,66 @@
+"""lt_lhmt config/window_declarations : () → ProviderConfig × ProductWindowDeclarations.
+
+Contributed by: Thiago von Däniken
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+from rivretrieve._internal.engine import (
+    Daily,
+    DayDefinition,
+    ProductConfig,
+    ProductWindowDeclarations,
+    ProviderConfig,
+    SourceCoordinates,
+    StopConvention,
+    Unit,
+    WindowDeclaration,
+    WindowGranularity,
+    WindowRenderingVocabulary,
+    ZoneValue,
+)
+from rivretrieve._internal.primitives import ProductId
+
+
+@dataclass(frozen=True, slots=True)
+class LtLhmtSourceCoordinates:
+    native_field: Literal["waterDischarge", "waterLevel"]
+
+    def __post_init__(self) -> None:
+        if self.native_field not in ("waterDischarge", "waterLevel"):
+            raise ValueError("native_field must name a Meteo.lt observation field")
+
+
+_CONFIG = ProviderConfig(
+    zone=ZoneValue("+00:00"),
+    products={
+        ProductId("discharge_daily_mean"): ProductConfig(
+            coordinates=SourceCoordinates(LtLhmtSourceCoordinates("waterDischarge")),
+            unit=Unit.M3_S,
+            semantics=Daily(DayDefinition("unknown")),
+        ),
+        ProductId("stage_daily_mean"): ProductConfig(
+            coordinates=SourceCoordinates(LtLhmtSourceCoordinates("waterLevel")),
+            unit=Unit.CM,
+            semantics=Daily(DayDefinition("unknown")),
+        ),
+    },
+    cache=None,
+)
+_MONTH = WindowDeclaration(
+    granularity=WindowGranularity("year-month"),
+    rendering=WindowRenderingVocabulary.YEAR_MONTH,
+    stop_convention=StopConvention.INCLUSIVE,
+)
+_WINDOWS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _MONTH))
+
+
+def config() -> ProviderConfig:
+    return _CONFIG
+
+
+def window_declarations() -> ProductWindowDeclarations:
+    return _WINDOWS

@@ -16,9 +16,10 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table, stamp_native_table
-from rivretrieve._internal.engine import WithIssues
+from rivretrieve._internal.engine import UnknownTemporalSupport, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
+from rivretrieve._internal.providers.th_thaiwater.config import config
 from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
 
 FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"
@@ -28,8 +29,8 @@ ATTESTED_DATETIME = datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 FIXTURE_DIGEST = "afb6481ab844d39fb08874b0eaec310401f1a601afe0155a5311b52193cad827"
 NATIVE_FRAME_DIGEST = "3e2085ce51e3714d35feb053973c5074a0994278943b51c620c862be1f281cfd"
-RETAINED_PRODUCT_IDS = {"discharge_instantaneous", "stage_instantaneous"}
-WITHDRAWN_PRODUCT_IDS = {"discharge_daily_mean", "stage_daily_mean"}
+RETAINED_PRODUCT_IDS = {"discharge_reported", "stage_reported"}
+WITHDRAWN_PRODUCT_IDS = {"discharge_instantaneous", "stage_instantaneous"}
 
 ADDITIONS = {
     "3",
@@ -622,6 +623,23 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
+def test_unknown_temporal_support_uses_the_documented_unknown_catalogue_vocabulary() -> None:
+    catalogue = _build()
+    products = catalogue.products.sort("product_id")
+
+    assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
+    assert products.select("frequency", "statistic", "period_type", "period_anchor").unique().rows() == [
+        ("unknown", "unknown", "unknown", "unknown")
+    ]
+
+    docs = Path(__file__).parents[1] / "docs"
+    dictionary = (docs / "product_dictionary.md").read_text()
+    design = (docs / "design/provider-redesign.md").read_text()
+    assert "period_type:    instant | interval | unknown" in dictionary
+    assert "period_type:    instant | interval | unknown" in design
+    assert "Use `unknown` when source temporal support is not established." in dictionary
+
+
 def test_native_build_counts_and_identity_station_fields() -> None:
     catalogue = _build()
     committed = _committed_native_table().data
@@ -630,12 +648,21 @@ def test_native_build_counts_and_identity_station_fields() -> None:
 
     assert catalogue.stations.height == 825
     assert catalogue.products.height == 2
-    assert catalogue.station_products.height == 825 * 2 == 1_650
+    assert catalogue.station_products.height == 2
     assert set(catalogue.products["product_id"]) == RETAINED_PRODUCT_IDS
+    assert set(catalogue.products["frequency"]) == {"unknown"}
+    assert set(catalogue.products["statistic"]) == {"unknown"}
+    assert set(catalogue.products["period_type"]) == {"unknown"}
+    assert set(catalogue.products["period_anchor"]) == {"unknown"}
     assert set(catalogue.station_products["product_id"]) == RETAINED_PRODUCT_IDS
+    assert catalogue.station_products["station_id"].unique().to_list() == ["1373273"]
+    assert catalogue.station_products["availability"].cast(str).unique().to_list() == ["available"]
+    assert catalogue.station_products["published_record_start_date"].null_count() == 2
+    assert catalogue.station_products["published_record_end_date"].null_count() == 2
+    assert catalogue.station_products["last_catalogue_check"].unique().to_list() == [date(2026, 9, 2)]
     assert catalogue.station_products.group_by("product_id").len().sort("product_id").to_dicts() == [
-        {"product_id": "discharge_instantaneous", "len": 825},
-        {"product_id": "stage_instantaneous", "len": 825},
+        {"product_id": "discharge_reported", "len": 1},
+        {"product_id": "stage_reported", "len": 1},
     ]
     assert set(catalogue.products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
     assert set(catalogue.station_products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
@@ -730,12 +757,12 @@ def test_origin_enforcement_is_part_of_native_build() -> None:
         generate_catalogue.build_catalogue(_committed_native_table(), declarations)
 
 
-def test_dates_come_only_from_each_native_row_and_maximum_retrieval_date() -> None:
+def test_station_product_check_uses_recording_date_and_provider_uses_native_date() -> None:
     data = (
         _committed_native_table()
         .data.head(2)
         .with_columns(
-            pl.Series("station.id", ["100", "200"], dtype=pl.String),
+            pl.Series("station.id", ["1373273", "200"], dtype=pl.String),
             pl.Series(
                 "retrieved_at",
                 [datetime(2026, 8, 1, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC)],
@@ -749,7 +776,7 @@ def test_dates_come_only_from_each_native_row_and_maximum_retrieval_date() -> No
         station_id: values["last_catalogue_check"].unique().to_list()
         for station_id, values in catalogue.station_products.group_by("station_id")
     }
-    assert dates == {("100",): [date(2026, 8, 1)], ("200",): [date(2026, 8, 2)]}
+    assert dates == {("1373273",): [date(2026, 9, 2)]}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 

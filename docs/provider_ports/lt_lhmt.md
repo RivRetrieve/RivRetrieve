@@ -18,8 +18,8 @@ These notes capture evidence and decisions from porting the Lithuanian Hydromete
 | Publisher API documentation | `crs` | Documented constant `EPSG:4326`. |
 | `name`, `waterBody`, and other fields | Native only | Preserved in source vocabulary and not promoted into identity-and-geometry columns. |
 
-Observation mapping remains direct for `waterDischarge` in m³/s. `waterLevel` is converted from cm to
-canonical metres by division by 100.
+Observation parsing remains direct for `waterDischarge` in m³/s and `waterLevel` in cm. The shared
+engine converts stage from cm to canonical metres.
 
 ## Product Dictionary
 
@@ -36,37 +36,18 @@ No V1 vocabulary expansion needed. The legacy Lithuania fetcher exposed exactly 
 
 ## Time and Timezone
 
-**Key finding:** Meteo.lt `observationDateUtc` values are **date-only strings** (`YYYY-MM-DD`), not datetimes. There is no time-of-day component. The field name includes `Utc`, which is the only explicit timezone signal.
-
-**Decision:** Interpret date-only strings as UTC midnight (`T00:00:00Z`). The UTC claim is the provider's own declaration via the field name `observationDateUtc` — that is sufficient authority. The parser appends `T00:00:00Z` before calling `str.to_datetime(time_zone="UTC")`.
-
-**Structured issue emitted:** `date_only_timestamp` — warning-severity issue per parsed month whenever date-only strings are encountered. Also recorded as a `date_only_timestamp_flag=true` series annotation.
-
-**Series annotation `resolved_timezone` is always `"UTC"** for lt_lhmt. No timezone ambiguity because the source field name asserts UTC explicitly.
-
-This is a provider-specific fact. Shared time and zone representation is owned by [ADR 0006](../adr/0006-time-and-zone-are-two-columns.md) and [ADR 0007](../adr/0007-zone-values-are-iana-offset-or-unknown.md).
+The official API documentation defines `observationDateUtc` as an observation date in UTC. The parser
+preserves its date label as a naive midnight wall clock and sets `time_zone="+00:00"`. The daily
+interval anchor remains provider-defined because the documentation does not state whether the label
+is the start or end of the represented day.
 
 ## Observation Retrieval Design
 
-### Monthly chunking instead of 366-day windows
-
-The legacy fetcher decomposed date ranges into calendar-month chunks (`pd.date_range(start, end, freq="MS")`). This matches the API URL shape (`/historical/{YYYY-MM}`). The lt_lhmt port uses the same monthly decomposition.
-
-### 404 handling
-
-HTTP 404 on a month URL means that station/month has no data. The legacy fetcher silently skipped 404s (`if r.status_code == 404: continue`). The lt_lhmt port issues a structured `http_not_found` warning per 404 month rather than silently skipping — this satisfies the on_issue contract without raising by default.
-
-### No auth token
-
-No `Authorization` header, no embedded credential, no environment variable for credentials. This simplifies the client considerably compared to ch_foen.
-
-### Rate limiting
-
-The legacy fetcher enforced a rolling 180-requests/minute limit with a deque. The lt_lhmt runtime port does not implement active rate-limit enforcement in V1. The rate limit is documented in `provider.json` metadata for maintainer awareness. If rate limiting is needed in production, it belongs in a future transport middleware layer, not hardcoded in the provider.
-
-### No fallback fields
-
-Unlike ch_foen (which has `flow` / `flow_ls` fallback, `height_abs` / `height` fallback), Meteo.lt has exactly one field per product. The transform layer has no preferred/fallback selection logic.
+The shared engine decomposes the padded fetch window into `YYYY-MM` values. The provider fetcher sends
+one exact monthly request per station-month through `HttpClient`. Because each response contains both
+`waterDischarge` and `waterLevel`, requests for both products coalesce into one source call and one
+publisher receipt. HTTP 404 and retry exhaustion become source issues. The provider performs no
+clipping, unit conversion, retry loop, or result assembly.
 
 ## Native Catalogue Attestation
 
@@ -85,9 +66,7 @@ endpoint does not publish variable availability. The digest and pure build are c
 
 | Issue | Status | Action |
 | --- | --- | --- |
-| Date-only timestamps | Active; mitigated with UTC-midnight interpretation + structured issue. | Keep `date_only_timestamp` issue code; document in series annotations. |
-| Stage unit is cm, not m | Active; convert on ingest with `divide_by_100`. Raw value preserved in `raw_value` row annotation. | No further action needed. |
-| No per-variable station availability | Active; all station-product pairs materialized as `availability=unknown`. | Future: probe live API to determine real availability. |
-| 404 months emit issues | Active; structured `http_not_found` warning per 404 month. | Documented. |
-| No rate-limit enforcement in runtime | Active (V1 deferral). | Document rate limit in provider metadata; add transport middleware in V2 if needed. |
-| elevation_m and drainage_area_km2 always null | Active (API limitation). | Same as ch_foen; canonical columns are nullable. |
+| Date-only UTC labels | Documented source semantics. | Preserve midnight wall clock and `+00:00`; keep interval anchor provider-defined. |
+| Stage unit is cm | Declared in provider config. | Shared conversion changes cm to m. |
+| No per-variable station availability | Existing packaged Lithuania edges remain `unknown`. | Do not broaden catalogue claims. |
+| Source request failures | 404 and retry exhaustion are recoverable source issues. | Generic retry policy remains in `HttpClient`. |

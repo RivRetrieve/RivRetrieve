@@ -635,3 +635,27 @@ def test_fetch_refuses_zone_carrying_endpoint_before_stage_fetch(
         "`start = datetime.fromisoformat(start).replace(tzinfo=None)`."
     )
     assert recording_stages.usgs_nwis.calls == []
+
+
+@pytest.mark.parametrize("provider_order", ["time-major", "product-major"])
+def test_shared_observation_order_is_identical_across_provider_parse_orders(provider_order: str) -> None:
+    rows = [
+        {"station_id": "b", "product_id": "stage", "time": datetime(2026, 1, 2), "value": 2.0, "time_zone": "unknown"},
+        {"station_id": "a", "product_id": "stage", "time": datetime(2026, 1, 2), "value": 3.0, "time_zone": "unknown"},
+        {"station_id": "a", "product_id": "flow", "time": datetime(2026, 1, 2), "value": 4.0, "time_zone": "unknown"},
+        {"station_id": "a", "product_id": "flow", "time": datetime(2026, 1, 1), "value": 1.0, "time_zone": "unknown"},
+    ]
+    if provider_order == "time-major":
+        rows.sort(key=lambda row: (row["time"], row["product_id"], row["station_id"]))
+    else:
+        rows.sort(key=lambda row: (row["product_id"], row["station_id"], row["time"]))
+    frame = pl.DataFrame(rows, schema=ObservationDataSchema.polars_schema)
+
+    ordered = discovery._canonical_observation_order(frame)
+
+    assert ordered.select("station_id", "product_id", "time").rows() == [
+        ("a", "flow", datetime(2026, 1, 1)),
+        ("a", "flow", datetime(2026, 1, 2)),
+        ("a", "stage", datetime(2026, 1, 2)),
+        ("b", "stage", datetime(2026, 1, 2)),
+    ]

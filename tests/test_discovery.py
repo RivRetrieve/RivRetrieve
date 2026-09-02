@@ -19,11 +19,13 @@ EXPECTED_PRODUCT_IDS = [
     "discharge_daily_mean",
     "discharge_hourly_mean",
     "discharge_instantaneous",
+    "discharge_reported",
     "stage_daily_max",
     "stage_daily_mean",
     "stage_daily_min",
     "stage_hourly_mean",
     "stage_instantaneous",
+    "stage_reported",
     "water_temperature_daily_mean",
     "water_temperature_instantaneous",
 ]
@@ -76,8 +78,8 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_daily_mean",
     ],
     "th_thaiwater": [
-        "discharge_instantaneous",
-        "stage_instantaneous",
+        "discharge_reported",
+        "stage_reported",
     ],
     "usgs_nwis": [
         "discharge_daily_mean",

@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "purpose": "Current official ThaiWater publisher evidence for PR #202 blockers",
+  "publisher_hosts": [
+    "www.thaiwater.net"
+  ],
+  "captures": [
+    {
+      "file": "official_water_wl.html",
+      "requested_url": "https://www.thaiwater.net/water/wl",
+      "retrieved_utc": "2026-09-02T16:24:04.418069Z",
+      "status": 200,
+      "final_url": "https://www.thaiwater.net/water/wl",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 2989,
+      "sha256": "40d29be76b21fceca0045fc88450e8f0d037b068714956b2722ddfc6953d07c6"
+    },
+    {
+      "file": "official_app.chunk.js",
+      "requested_url": "https://www.thaiwater.net/dist/js/app.chunk.js",
+      "retrieved_utc": "2026-09-02T16:24:05.191409Z",
+      "status": 200,
+      "final_url": "https://www.thaiwater.net/dist/js/app.chunk.js",
+      "content_type": "application/javascript",
+      "bytes": 7602984,
+      "sha256": "c5aeb29ff02c604ec186a1eea56bbfa770091dee6953e3d497722e1fe8632ec8"
+    }
+  ],
+  "notes": [
+    "Each listed evidence file is an untouched complete HTTP response body.",
+    "No credentials, tokens, or secret request parameters were used."
+  ]
+}

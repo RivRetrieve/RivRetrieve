@@ -370,9 +370,11 @@ Product time semantics are explicit in metadata. V1 uses these fields:
 ```text
 frequency:      irregular | 5min | 10min | 15min | 30min | hourly | daily | monthly | annual | provider_defined | unknown
 statistic:      instantaneous | mean | sum | min | max | provider_defined | unknown
-period_type:    instant | interval
+period_type:    instant | interval | unknown
 period_anchor:  instant | start | end | midpoint | provider_defined | unknown
 ```
+
+`period_type="unknown"` records that source temporal support is unestablished. It corresponds to `UnknownTemporalSupport` in the shared observation engine and prevents a provider from guessing instant or interval support.
 
 The statistic is interpreted over the frequency interval. For example, `frequency="daily"` and `statistic="mean"` means a daily mean. `frequency="monthly"` and `statistic="sum"` means a monthly sum. In v1, statistics other than `instantaneous` should not normally be combined with `frequency="irregular"`, because the interval is not defined.
 

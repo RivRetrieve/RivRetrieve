@@ -11,6 +11,7 @@ from rivretrieve._internal.acquisition_provenance import (
     EvidenceReference,
     ExternalFactReference,
     FactBinding,
+    MaterialIdentity,
     NativeTableIdentity,
     RecordingReference,
     SemanticDigest,
@@ -44,7 +45,7 @@ _AGENCY_NAMES = {
     12: "Royal Irrigation Department",
     91: "Friend in Need (of “Pa”) Volunteers Foundation",
 }
-_PRODUCTS = ("discharge_instantaneous", "stage_instantaneous")
+_PRODUCTS = ("discharge_reported", "stage_reported")
 
 
 def _build_provider_acquisition_provenance(native_table: NativeTable) -> AcquisitionProvenance:
@@ -66,6 +67,35 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
         media_type="text/html; charset=UTF-8",
         sha256="5e3ac2e7ad1d125e8810c1004ef7fc4d4f85fef35233e0dca96378dc0c32a9c5",
     )
+    graph_page = RecordingReference(
+        recording_id="th_thaiwater_graph_page_2026_09_02",
+        repository_path="tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
+        source_url="https://www.thaiwater.net/water/wl",
+        retrieved_at=datetime.fromisoformat("2026-09-02T16:24:04.418069Z"),
+        media_type="text/html; charset=UTF-8",
+        sha256="40d29be76b21fceca0045fc88450e8f0d037b068714956b2722ddfc6953d07c6",
+    )
+    graph_bundle = RecordingReference(
+        recording_id="th_thaiwater_graph_bundle_2026_09_02",
+        repository_path="tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
+        source_url="https://www.thaiwater.net/dist/js/app.chunk.js",
+        retrieved_at=datetime.fromisoformat("2026-09-02T16:24:05.191409Z"),
+        media_type="application/javascript",
+        sha256="c5aeb29ff02c604ec186a1eea56bbfa770091dee6953e3d497722e1fe8632ec8",
+    )
+    product_semantics_acquisition = AcquisitionRecord(
+        acquisition_id="product_semantics_capture_2026_09_02",
+        method="http_request",
+        instant_type="retrieval_interval",
+        description=(
+            "Official ThaiWater graph page and complete application bundle mapping graph_data.value to "
+            "water level in m MSL and graph_data.discharge to discharge in m3/s; no temporal support declared"
+        ),
+        requested_from=(graph_page.source_url, graph_bundle.source_url),
+        retrieved_at_start=graph_page.retrieved_at,
+        retrieved_at_end=graph_bundle.retrieved_at,
+        recording_ids=(graph_page.recording_id, graph_bundle.recording_id),
+    )
     catalogue_acquisition = AcquisitionRecord(
         acquisition_id="waterlevel_load_2026_08_02",
         method="http_request",
@@ -81,6 +111,31 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
         description="Exact ThaiWater API observation request and response retained at runtime through the HII-operated route",
         requested_from=("https://api-v3.thaiwater.net/api/v1/thaiwater30/public/<observation-route>",),
     )
+    availability_recording = RecordingReference(
+        recording_id="th_thaiwater_1373273_graph_2026_08_01_02",
+        repository_path="tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json",
+        source_url=(
+            "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph"
+            "?station_type=tele_waterlevel&station_id=1373273&start_date=2026-08-01&end_date=2026-08-02"
+        ),
+        retrieved_at=datetime.fromisoformat("2026-09-02T14:46:18.094257Z"),
+        media_type="application/vnd.rivretrieve.recording+json",
+        sha256="a15d4453f9f3ff3df93e1ebfcc7f8098a98982ab5768b222b0b6943881d5c8ec",
+    )
+    availability_acquisition = AcquisitionRecord(
+        acquisition_id="waterlevel_graph_1373273_2026_08_01_02",
+        method="http_request",
+        instant_type="retrieval",
+        description="Complete 288-row ThaiWater graph response for station 1373273 and both published fields",
+        requested_from=(availability_recording.source_url,),
+        retrieved_at_start=availability_recording.retrieved_at,
+        recording_ids=(availability_recording.recording_id,),
+        material=MaterialIdentity(
+            filename="waterlevel_graph_1373273_2026-08-01_2026-08-02_retrieval-1.json",
+            byte_count=24_353,
+            sha256="436593e32ccb99e2edff4ea87681679608f226efada8bc263fd706dfc7c20d01",
+        ),
+    )
     records = []
     for agency_id, issuer in _AGENCY_NAMES.items():
         records.append(
@@ -88,12 +143,34 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
                 source_id=f"th_agency_{agency_id}",
                 issuer=issuer,
                 operator="Hydro-Informatics Institute ThaiWater API" if agency_id != 9 else None,
-                acquisitions=(catalogue_acquisition, runtime),
+                acquisitions=(
+                    catalogue_acquisition,
+                    runtime,
+                    *((availability_acquisition, product_semantics_acquisition) if agency_id == 9 else ()),
+                ),
                 evidence=(
                     EvidenceReference(
                         evidence_id="th_thaiwater_terms_surface",
                         description="HII terms surface recorded as evidence that no applicable licence or citation statement was found",
                         recording=terms,
+                    ),
+                    EvidenceReference(
+                        evidence_id="th_thaiwater_1373273_product_availability",
+                        description="Exact official graph response establishing both station-product edges",
+                        recording=availability_recording,
+                    ),
+                    EvidenceReference(
+                        evidence_id="th_thaiwater_graph_page",
+                        description="Official ThaiWater graph page loading the recorded application bundle",
+                        recording=graph_page,
+                    ),
+                    EvidenceReference(
+                        evidence_id="th_thaiwater_graph_field_mapping",
+                        description=(
+                            "Complete official bundle binding value to Water Level (m MSL) and discharge to "
+                            "Discharge (m3/second), without declaring represented temporal support"
+                        ),
+                        recording=graph_bundle,
                     ),
                 )
                 if agency_id == 9
@@ -127,6 +204,21 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
                 source_id="th_agency_9",
                 acquisition_id="waterlevel_load_2026_08_02",
             ),
+            FactBinding(
+                fact_group="source_product_semantics",
+                facts=("source.product.thaiwater_graph_field_meanings_and_units",),
+                source_id="th_agency_9",
+                acquisition_id="product_semantics_capture_2026_09_02",
+            ),
+            *(
+                FactBinding(
+                    fact_group=f"station_product:1373273:{product}:availability",
+                    facts=(f"source.station_product:1373273:{product}.availability",),
+                    source_id="th_agency_9",
+                    acquisition_id="waterlevel_graph_1373273_2026_08_01_02",
+                )
+                for product in _PRODUCTS
+            ),
         )
     )
     withheld = tuple(
@@ -138,6 +230,7 @@ def _build_provider_acquisition_provenance(native_table: NativeTable) -> Acquisi
         )
         for station_id, _ in station_agencies
         for product in _PRODUCTS
+        if station_id != "1373273"
     )
     facts = tuple(fact for binding in bindings for fact in binding.facts) + tuple(
         fact for item in withheld for fact in item.facts
@@ -167,9 +260,13 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
         provenance,
         product_facts,
         transformation=Transformation(
-            name="RivRetrieve canonical ThaiWater product definitions",
-            kind="authored_constant",
-            external_inputs=(),
+            name="ThaiWater graph fields to conservative canonical product definitions",
+            external_inputs=(
+                ExternalFactReference(
+                    source_id="th_agency_9",
+                    fact="source.product.thaiwater_graph_field_meanings_and_units",
+                ),
+            ),
         ),
         fact_group="canonical_product_carrier",
     )
@@ -183,6 +280,13 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
             name="ThaiWater platform facts to canonical provider and relation carriers",
             external_inputs=(
                 ExternalFactReference(source_id="th_agency_9", fact="source.provider.thaiwater_platform_identity"),
+                *(
+                    ExternalFactReference(
+                        source_id="th_agency_9",
+                        fact=f"source.station_product:1373273:{product}.availability",
+                    )
+                    for product in _PRODUCTS
+                ),
             ),
         ),
         fact_group="canonical_platform_carrier",

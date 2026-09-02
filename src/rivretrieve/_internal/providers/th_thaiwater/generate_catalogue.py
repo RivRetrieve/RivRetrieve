@@ -46,8 +46,6 @@ from rivretrieve._internal.primitives import ProviderId
 PROVIDER_ID = ProviderId("th_thaiwater")
 PROVIDER_NAME = "ThaiWater public API / Hydro-Informatics Institute (HII)"
 METADATA_URL = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
-AVAILABILITY_REASON = "ThaiWater metadata catalogue does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 VERTICAL_DATUM = "MSL"
 STATION_TYPE_FILTER = "tele_waterlevel"
 
@@ -184,22 +182,22 @@ class ProductDefinition:
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        product_id="stage_instantaneous",
+        product_id="stage_reported",
         observed_property="stage",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m",
         native_field="value",
     ),
     ProductDefinition(
-        product_id="discharge_instantaneous",
+        product_id="discharge_reported",
         observed_property="discharge",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         native_field="discharge",
     ),
@@ -380,11 +378,7 @@ def build_catalogue(
     products = build_products()
     stations = build_stations(native_table)
     enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
-    station_dates = native_table.data.select(
-        pl.col("station.id").alias("station_id"),
-        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
-    )
-    station_products = build_station_products(station_dates)
+    station_products = build_station_products(stations)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("ThaiWater native table has no valid retrieved_at values")
@@ -458,26 +452,23 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
     ).sort("station_id")
 
 
-def build_station_products(
-    station_dates: pl.DataFrame,
-) -> StationProductCatalog:
-    rows: list[dict[str, object]] = []
-    for station_id, retrieved_date in station_dates.iter_rows():
-        if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
-            raise FatalContractError("station retrieval date must pair a string identifier with a date")
-        for definition in PRODUCT_DEFINITIONS:
-            rows.append(
-                {
-                    "provider_id": PROVIDER_ID,
-                    "station_id": station_id,
-                    "product_id": definition.product_id,
-                    "availability": "unknown",
-                    "availability_reason": AVAILABILITY_REASON,
-                    "published_record_start_date": None,
-                    "published_record_end_date": None,
-                    "last_catalogue_check": retrieved_date,
-                }
-            )
+def build_station_products(stations: StationCatalog) -> StationProductCatalog:
+    if stations.filter(pl.col("station_id") == "1373273").height != 1:
+        raise FatalContractError("ThaiWater certified station-product station 1373273 is absent from the native table")
+    recording_date = date(2026, 9, 2)
+    rows = [
+        {
+            "provider_id": PROVIDER_ID,
+            "station_id": "1373273",
+            "product_id": definition.product_id,
+            "availability": "available",
+            "availability_reason": "Recorded ThaiWater graph response published a non-null native field",
+            "published_record_start_date": None,
+            "published_record_end_date": None,
+            "last_catalogue_check": recording_date,
+        }
+        for definition in PRODUCT_DEFINITIONS
+    ]
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
         pl.col("availability").cast(AvailabilityDtype)
     )
@@ -493,8 +484,7 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: 365-day window decomposition with stitched N x M station-product requests; "
-            "partial failures reported as recoverable issues"
+            "true: one date-rendered request per station-window; co-published products share one source call"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
@@ -521,6 +511,7 @@ def validate_generated_catalogue(
         station_products,
         acquisition_provenance=acquisition_provenance,
         on_issue="raise",
+        withheld_rows_already_applied=True,
     )
 
 

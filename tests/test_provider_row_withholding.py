@@ -54,9 +54,12 @@ def test_france_loader_executes_all_unmapped_sie_withholding() -> None:
 def test_thailand_loader_executes_availability_withholding_only() -> None:
     artifact = load_packaged_catalogue_artifact(thailand.catalogue)
     assert artifact.stations.height == 825
-    assert artifact.station_products.is_empty()
+    assert artifact.station_products.select("station_id", "product_id").sort("product_id").rows() == [
+        ("1373273", "discharge_reported"),
+        ("1373273", "stage_reported"),
+    ]
     assert artifact.acquisition_provenance is not None
-    assert len(artifact.acquisition_provenance.withheld_facts) == 1_650
+    assert len(artifact.acquisition_provenance.withheld_facts) == 1_648
 
 
 def test_public_find_excludes_withheld_rows_and_keeps_reasons() -> None:
@@ -71,8 +74,8 @@ def test_public_find_excludes_withheld_rows_and_keeps_reasons() -> None:
         assert len(provenance.withheld_facts) == count
         assert {group.reason for group in provenance.withheld_facts} == {"no_acquisition_record_established"}
 
-    selection = rr.find(provider="th_thaiwater", station="1", product="stage_instantaneous")
+    selection = rr.find(provider="th_thaiwater", station="1", product="stage_reported")
     assert rr.as_frame(selection).is_empty()
     provenance = selection.acquisition_provenance[0]
-    assert len(provenance.withheld_facts) == 1_650
+    assert len(provenance.withheld_facts) == 1_648
     assert {group.reason for group in provenance.withheld_facts} == {"no_acquisition_record_established"}

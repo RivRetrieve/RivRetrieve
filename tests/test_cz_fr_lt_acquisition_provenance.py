@@ -109,3 +109,17 @@ def test_france_withholds_facts_whose_sie_issuer_is_not_established() -> None:
         for binding in provenance.fact_bindings
         for fact in binding.facts
     )
+
+
+def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
+    provenance = rr.find(provider="lt_lhmt").acquisition_provenance[0]
+    runtime = next(
+        acquisition
+        for source in provenance.source_records
+        for acquisition in source.acquisitions
+        if acquisition.acquisition_id == "observation_request"
+    )
+
+    assert runtime.requested_from == (
+        "https://api.meteo.lt/v1/hydro-stations/{station}/observations/historical/{YYYY-MM}",
+    )

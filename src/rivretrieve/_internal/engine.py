@@ -331,6 +331,11 @@ class Instant:
 
 
 @dataclass(frozen=True, slots=True)
+class UnknownTemporalSupport:
+    """A source time label whose represented temporal support is not published."""
+
+
+@dataclass(frozen=True, slots=True)
 class DayDefinition:
     value: str
 
@@ -429,15 +434,15 @@ class CacheConfig:
 class ProductConfig:
     coordinates: SourceCoordinates
     unit: Unit
-    semantics: Instant | Daily | Hourly
+    semantics: Instant | Daily | Hourly | UnknownTemporalSupport
 
     def __post_init__(self) -> None:
         if not isinstance(self.coordinates, SourceCoordinates):
             raise TypeError("product coordinates must be SourceCoordinates")
         if not isinstance(self.unit, Unit):
             raise TypeError("product unit must be Unit")
-        if not isinstance(self.semantics, (Instant, Daily, Hourly)):
-            raise TypeError("product semantics must be Instant, Daily, or Hourly")
+        if not isinstance(self.semantics, (Instant, Daily, Hourly, UnknownTemporalSupport)):
+            raise TypeError("product semantics must be Instant, Daily, Hourly, or UnknownTemporalSupport")
 
 
 @dataclass(frozen=True, slots=True)
