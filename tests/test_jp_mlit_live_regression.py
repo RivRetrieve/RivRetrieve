@@ -1,6 +1,6 @@
 """Regression contract for corrected Japan MLIT live products."""
 
-from rivretrieve._internal.providers.jp_mlit.config import config, window_declarations
+from rivretrieve._internal.providers.jp_mlit.config import JpMlitSourceCoordinates, config, window_declarations
 from tests._catalogue import catalogue_reader
 
 
@@ -13,12 +13,9 @@ def test_japan_product_ids_and_unknown_source_semantics() -> None:
         "discharge_daily",
     )
     assert provider.zone.value == "unknown"
-    assert {coordinates.value.kind for coordinates in (p.coordinates for p in provider.products.values())} == {
-        2,
-        3,
-        6,
-        7,
-    }
+    coordinates = [product.coordinates.value for product in provider.products.values()]
+    assert all(isinstance(value, JpMlitSourceCoordinates) for value in coordinates)
+    assert {value.kind for value in coordinates if isinstance(value, JpMlitSourceCoordinates)} == {2, 3, 6, 7}
     declarations = window_declarations().products
     assert set(declarations) == set(provider.products)
     assert [

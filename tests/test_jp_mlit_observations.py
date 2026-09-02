@@ -1,5 +1,6 @@
 """Official MLIT recordings exercise the real shared-engine path."""
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -93,7 +94,10 @@ def test_exact_official_boundaries(
     assert rows["value"][[0, -1]].to_list() == pytest.approx([first_value, last_value])
     assert rows["time_zone"].unique().to_list() == ["unknown"]
     if index == 5:
-        assert [(issue.code, issue.details["count"]) for issue in result.issues] == [("source_missing", 552)]
+        assert len(result.issues) == 1
+        issue = result.issues[0]
+        assert issue.details is not None
+        assert (issue.code, issue.details["count"]) == ("source_missing", 552)
 
 
 def test_html_parse_validates_and_returns_no_rows() -> None:
@@ -156,11 +160,20 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts() ->
     assert result.canonical_rows.columns == ["time", "time_zone", "station_id", "product_id", "value"]
     assert len(result.receipts.entries) == 8
     assert [entry.content for entry in result.receipts.entries] == [read_recording(path).content for path in _PATHS]
+    request_parameters = [entry.origin.request_parameters for entry in result.receipts.entries]
+    assert all(isinstance(parameters, Mapping) for parameters in request_parameters)
     assert (
-        len({(entry.origin.url, tuple(entry.origin.request_parameters.items())) for entry in result.receipts.entries})
+        len(
+            {
+                (entry.origin.url, tuple(parameters.items()))
+                for entry, parameters in zip(result.receipts.entries, request_parameters, strict=True)
+                if isinstance(parameters, Mapping)
+            }
+        )
         == 8
     )
-    html = result.receipts.entries[0].origin.request_parameters
+    html = request_parameters[0]
+    assert isinstance(html, Mapping)
     assert dict(html) == {"KIND": 2, "ID": _STATION, "BGNDATE": "20230101", "ENDDATE": "20230131", "KAWABOU": "NO"}
     omitted = drive(
         _request(),
