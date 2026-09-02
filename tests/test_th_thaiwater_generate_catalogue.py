@@ -28,8 +28,8 @@ ATTESTED_DATETIME = datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 FIXTURE_DIGEST = "afb6481ab844d39fb08874b0eaec310401f1a601afe0155a5311b52193cad827"
 NATIVE_FRAME_DIGEST = "3e2085ce51e3714d35feb053973c5074a0994278943b51c620c862be1f281cfd"
-RETAINED_PRODUCT_IDS = {"discharge_instantaneous", "stage_instantaneous"}
-WITHDRAWN_PRODUCT_IDS = {"discharge_daily_mean", "stage_daily_mean"}
+RETAINED_PRODUCT_IDS = {"discharge_reported", "stage_reported"}
+WITHDRAWN_PRODUCT_IDS = {"discharge_instantaneous", "stage_instantaneous"}
 
 ADDITIONS = {
     "3",
@@ -632,6 +632,10 @@ def test_native_build_counts_and_identity_station_fields() -> None:
     assert catalogue.products.height == 2
     assert catalogue.station_products.height == 2
     assert set(catalogue.products["product_id"]) == RETAINED_PRODUCT_IDS
+    assert set(catalogue.products["frequency"]) == {"irregular"}
+    assert set(catalogue.products["statistic"]) == {"unknown"}
+    assert set(catalogue.products["period_type"]) == {"unknown"}
+    assert set(catalogue.products["period_anchor"]) == {"unknown"}
     assert set(catalogue.station_products["product_id"]) == RETAINED_PRODUCT_IDS
     assert catalogue.station_products["station_id"].unique().to_list() == ["1373273"]
     assert catalogue.station_products["availability"].cast(str).unique().to_list() == ["available"]
@@ -639,8 +643,8 @@ def test_native_build_counts_and_identity_station_fields() -> None:
     assert catalogue.station_products["published_record_end_date"].null_count() == 2
     assert catalogue.station_products["last_catalogue_check"].unique().to_list() == [date(2026, 9, 2)]
     assert catalogue.station_products.group_by("product_id").len().sort("product_id").to_dicts() == [
-        {"product_id": "discharge_instantaneous", "len": 1},
-        {"product_id": "stage_instantaneous", "len": 1},
+        {"product_id": "discharge_reported", "len": 1},
+        {"product_id": "stage_reported", "len": 1},
     ]
     assert set(catalogue.products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
     assert set(catalogue.station_products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)

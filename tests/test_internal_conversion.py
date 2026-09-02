@@ -24,6 +24,7 @@ from rivretrieve._internal.engine import (
     RowsSchema,
     SourceCoordinates,
     Unit,
+    UnknownTemporalSupport,
     WindowEndpoint,
     ZoneValue,
 )
@@ -39,7 +40,10 @@ def _window(start: datetime, end: datetime) -> RequestedWindow:
     return RequestedWindow(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
 
 
-def _product(unit: Unit = Unit.M, semantics: Instant | Daily | Hourly | None = None) -> ProductConfig:
+def _product(
+    unit: Unit = Unit.M,
+    semantics: Instant | Daily | Hourly | UnknownTemporalSupport | None = None,
+) -> ProductConfig:
     return ProductConfig(
         coordinates=SourceCoordinates("unused"),
         unit=unit,
@@ -593,3 +597,28 @@ def test_hourly_interval_mean_requires_an_on_hour_source_label() -> None:
             _config({"level": _product(semantics=Hourly(IntervalDefinition("unknown")))}),
             _window(datetime(2023, 1, 1), datetime(2023, 1, 2)),
         )
+
+
+def test_unknown_temporal_support_clips_only_on_the_source_label_axis() -> None:
+    from rivretrieve._internal.conversion import convert
+
+    result = convert(
+        _rows(
+            [
+                {
+                    "station_id": "station-1",
+                    "product_id": "reported",
+                    "time": timestamp,
+                    "value": float(index),
+                    "time_zone": "unknown",
+                }
+                for index, timestamp in enumerate(
+                    (datetime(2026, 8, 1, 11, 50), datetime(2026, 8, 1, 12), datetime(2026, 8, 1, 12, 10))
+                )
+            ]
+        ),
+        _config({"reported": _product(semantics=UnknownTemporalSupport())}),
+        _window(datetime(2026, 8, 1, 12), datetime(2026, 8, 1, 12)),
+    )
+
+    assert result.value.select("time", "time_zone").rows() == [(datetime(2026, 8, 1, 12), "unknown")]

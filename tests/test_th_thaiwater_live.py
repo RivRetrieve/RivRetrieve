@@ -11,16 +11,19 @@ from rivretrieve._internal.boundary_probes import (
     READING_COUNT,
     LiveBoundaryProbe,
     WallClockExpectation,
-    run_boundary_probes,
+    run_manifest_boundary_probes,
 )
 from rivretrieve._internal.engine import FetchWindow, RenderedWindow, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.registration import LiveStages
+from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.providers.th_thaiwater.declaration import declaration
-from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.recordings import RecordingEnvelope, ReplayTransport, read_recording
+from rivretrieve._internal.transport import TransportRequest, TransportResponse
+from rivretrieve._internal.window_planning import plan_windows
 
 _PROVIDER = ProviderId("th_thaiwater")
-_PRODUCTS = (ProductId("discharge_instantaneous"), ProductId("stage_instantaneous"))
+_PRODUCTS = (ProductId("discharge_reported"), ProductId("stage_reported"))
+_DECLARED = load_manifest((_PROVIDER,))
 _RECORDING = read_recording(
     Path(__file__).parent / "test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json"
 )
@@ -62,9 +65,7 @@ def _probe(product: ProductId) -> LiveBoundaryProbe:
 
 
 def test_each_thaiwater_product_has_an_exact_live_replay_probe() -> None:
-    run_boundary_probes(
-        tuple((_PROVIDER, product) for product in _PRODUCTS), tuple(_probe(product) for product in _PRODUCTS)
-    )
+    run_manifest_boundary_probes(_DECLARED, tuple(_probe(product) for product in _PRODUCTS))
 
 
 def test_one_graph_response_coalesces_both_products() -> None:
@@ -83,7 +84,52 @@ def test_one_graph_response_coalesces_both_products() -> None:
     assert fetched.value[0].station_products == tuple(("1373273", product) for product in _PRODUCTS)
     parsed = _STAGES.parse(fetched.value[0], _STAGES.config).value
     assert parsed.group_by("product_id").len().sort("product_id").rows() == [
-        ("discharge_instantaneous", 288),
-        ("stage_instantaneous", 288),
+        ("discharge_reported", 288),
+        ("stage_reported", 288),
     ]
     assert parsed["time_zone"].unique().to_list() == ["unknown"]
+
+
+def test_thaiwater_declares_only_the_source_proven_date_request_contract() -> None:
+    declarations = _STAGES.window_declarations.products
+
+    assert set(declarations) == set(_STAGES.config.products)
+    assert {item.granularity for item in declarations.values()} == {"date"}
+    assert {item.size for item in declarations.values()} == {None}
+
+
+class _CountingReplay(ReplayTransport):
+    def __init__(self, recordings: tuple[RecordingEnvelope, ...]) -> None:
+        super().__init__(recordings)
+        self.requests: list[TransportRequest] = []
+
+    def send(self, request: TransportRequest) -> TransportResponse:
+        self.requests.append(request)
+        return super().send(request)
+
+
+def test_accepted_366_date_window_is_one_exact_unsplit_request() -> None:
+    recording = read_recording(
+        Path(__file__).parent / "test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json"
+    )
+    replay = _CountingReplay((recording,))
+    fetch_window = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2025, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1, 23, 50)),
+    )
+    rendered = {
+        product: plan_windows(fetch_window, _STAGES.window_declarations.products[product]) for product in _PRODUCTS
+    }
+
+    fetched = _STAGES.fetch(
+        ("1373273",),
+        _PRODUCTS,
+        rendered,
+        fetch_window,
+        _STAGES.config,
+        replay,
+    )
+
+    assert len(replay.requests) == 1
+    assert len(fetched.value) == 1
+    assert fetched.value[0].content == recording.content

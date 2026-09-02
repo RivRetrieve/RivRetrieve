@@ -182,22 +182,22 @@ class ProductDefinition:
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        product_id="stage_instantaneous",
+        product_id="stage_reported",
         observed_property="stage",
         frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m",
         native_field="value",
     ),
     ProductDefinition(
-        product_id="discharge_instantaneous",
+        product_id="discharge_reported",
         observed_property="discharge",
         frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         native_field="discharge",
     ),
@@ -484,8 +484,7 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: 365-day window decomposition with stitched station-window requests; "
-            "co-published products share one source call"
+            "true: one date-rendered request per station-window; co-published products share one source call"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,

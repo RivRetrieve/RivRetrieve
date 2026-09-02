@@ -107,7 +107,9 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         method="runtime_http_request",
                         instant_type="runtime",
                         description="Exact monthly Meteo LT station observation response",
-                        requested_from=("https://api.meteo.lt/v1/stations/<station>/observations/<start>/<end>",),
+                        requested_from=(
+                            "https://api.meteo.lt/v1/hydro-stations/{station}/observations/historical/{YYYY-MM}",
+                        ),
                     ),
                 ),
                 evidence=(

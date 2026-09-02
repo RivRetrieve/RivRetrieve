@@ -9,13 +9,13 @@ from dataclasses import dataclass
 from typing import Literal
 
 from rivretrieve._internal.engine import (
-    Instant,
     ProductConfig,
     ProductWindowDeclarations,
     ProviderConfig,
     SourceCoordinates,
     StopConvention,
     Unit,
+    UnknownTemporalSupport,
     WindowDeclaration,
     WindowGranularity,
     WindowRenderingVocabulary,
@@ -36,26 +36,25 @@ class ThThaiWaterSourceCoordinates:
 _CONFIG = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={
-        ProductId("discharge_instantaneous"): ProductConfig(
+        ProductId("discharge_reported"): ProductConfig(
             coordinates=SourceCoordinates(ThThaiWaterSourceCoordinates("discharge")),
             unit=Unit.M3_S,
-            semantics=Instant(),
+            semantics=UnknownTemporalSupport(),
         ),
-        ProductId("stage_instantaneous"): ProductConfig(
+        ProductId("stage_reported"): ProductConfig(
             coordinates=SourceCoordinates(ThThaiWaterSourceCoordinates("value")),
             unit=Unit.M,
-            semantics=Instant(),
+            semantics=UnknownTemporalSupport(),
         ),
     },
     cache=None,
 )
-_CAPPED = WindowDeclaration(
-    granularity=WindowGranularity("capped-span"),
+_DATE_WINDOW = WindowDeclaration(
+    granularity=WindowGranularity("date"),
     rendering=WindowRenderingVocabulary.DATE,
     stop_convention=StopConvention.INCLUSIVE,
-    size=365,
 )
-_WINDOWS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _CAPPED))
+_WINDOWS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _DATE_WINDOW))
 
 
 def config() -> ProviderConfig:

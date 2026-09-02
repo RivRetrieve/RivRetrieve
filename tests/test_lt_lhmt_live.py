@@ -11,7 +11,7 @@ from rivretrieve._internal.boundary_probes import (
     READING_COUNT,
     LiveBoundaryProbe,
     WallClockExpectation,
-    run_boundary_probes,
+    run_manifest_boundary_probes,
 )
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
@@ -25,11 +25,12 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.lt_lhmt.declaration import declaration
-from rivretrieve._internal.providers.registration import LiveStages
+from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 _PROVIDER = ProviderId("lt_lhmt")
 _PRODUCTS = (ProductId("discharge_daily_mean"), ProductId("stage_daily_mean"))
+_DECLARED = load_manifest((_PROVIDER,))
 _RECORDING_PATH = Path(__file__).parent / "test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json"
 _RECORDING = read_recording(_RECORDING_PATH)
 
@@ -71,9 +72,7 @@ def _probe(product: ProductId) -> LiveBoundaryProbe:
 
 
 def test_each_lithuania_product_has_an_exact_live_replay_probe() -> None:
-    run_boundary_probes(
-        tuple((_PROVIDER, product) for product in _PRODUCTS), tuple(_probe(product) for product in _PRODUCTS)
-    )
+    run_manifest_boundary_probes(_DECLARED, tuple(_probe(product) for product in _PRODUCTS))
 
 
 def test_one_monthly_response_coalesces_both_products_and_one_receipt() -> None:

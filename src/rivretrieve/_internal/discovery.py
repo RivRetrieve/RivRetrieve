@@ -201,11 +201,16 @@ def _merge_provider_results(
     issues = _merge_provider_issues(results)
     receipt_entries = tuple(entry for result in results for entry in result.receipts.entries)
     return ObservationResult(
-        data=pl.concat([result.data for result in results]),
+        data=_canonical_observation_order(pl.concat([result.data for result in results])),
         provenance=first.provenance.model_copy(update={"request": merged_request}),
         issues=issues,
         receipts=Receipts(provider_id=first.provenance.provider_id, entries=receipt_entries),
     )
+
+
+def _canonical_observation_order(data: pl.DataFrame) -> pl.DataFrame:
+    """canonical observation order : ObservationData → ObservationData (pure)."""
+    return data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
 
 
 def _merge_provider_issues(results: tuple[ObservationResult, ...]) -> tuple[Issue, ...]:

@@ -1,0 +1,133 @@
+{
+  "format_version": 1,
+  "purpose": "Current official ThaiWater publisher evidence for PR #202 blockers",
+  "publisher_hosts": [
+    "www.thaiwater.net",
+    "api-v3.thaiwater.net"
+  ],
+  "captures": [
+    {
+      "file": "official_water_wl.html",
+      "requested_url": "https://www.thaiwater.net/water/wl",
+      "retrieved_utc": "2026-09-02T16:24:04.418069Z",
+      "status": 200,
+      "final_url": "https://www.thaiwater.net/water/wl",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 2989,
+      "sha256": "40d29be76b21fceca0045fc88450e8f0d037b068714956b2722ddfc6953d07c6"
+    },
+    {
+      "file": "official_app.chunk.js",
+      "requested_url": "https://www.thaiwater.net/dist/js/app.chunk.js",
+      "retrieved_utc": "2026-09-02T16:24:05.191409Z",
+      "status": 200,
+      "final_url": "https://www.thaiwater.net/dist/js/app.chunk.js",
+      "content_type": "application/javascript",
+      "bytes": 7602984,
+      "sha256": "c5aeb29ff02c604ec186a1eea56bbfa770091dee6953e3d497722e1fe8632ec8"
+    },
+    {
+      "file": "official_app.chunk.js.map",
+      "requested_url": "https://www.thaiwater.net/dist/js/app.chunk.js.map",
+      "retrieved_utc": "2026-09-02T16:24:07.183469Z",
+      "status": 200,
+      "final_url": "https://www.thaiwater.net/dist/js/app.chunk.js.map",
+      "content_type": "application/javascript",
+      "bytes": 11598923,
+      "sha256": "f64241185723c27e1625d61d28b74df380f6b8befc5b255f3ad577d3ff687946"
+    },
+    {
+      "file": "official_openapi.json.response",
+      "requested_url": "https://api-v3.thaiwater.net/openapi.json",
+      "retrieved_utc": "2026-09-02T16:24:09.407704Z",
+      "status": 404,
+      "final_url": "https://api-v3.thaiwater.net/openapi.json",
+      "content_type": "text/plain; charset=utf-8",
+      "bytes": 19,
+      "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+    },
+    {
+      "file": "official_swagger.json.response",
+      "requested_url": "https://api-v3.thaiwater.net/swagger.json",
+      "retrieved_utc": "2026-09-02T16:24:10.084057Z",
+      "status": 404,
+      "final_url": "https://api-v3.thaiwater.net/swagger.json",
+      "content_type": "text/plain; charset=utf-8",
+      "bytes": 19,
+      "sha256": "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+    },
+    {
+      "name": "365_inclusive_days",
+      "request_url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph?station_type=tele_waterlevel&station_id=1373273&start_date=2025-01-01&end_date=2025-12-31",
+      "retrieved_utc": "2026-09-02T16:21:42.884268Z",
+      "status": 200,
+      "final_url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph?station_type=tele_waterlevel&station_id=1373273&start_date=2025-01-01&end_date=2025-12-31",
+      "content_type": "application/json; charset=utf-8",
+      "bytes": 4189490,
+      "sha256": "8cfeb1c5ecee2578ea2451f14a9d7b019ff5533f1748eb8fce092c8ab96faa39",
+      "result": "OK",
+      "graph_rows": 52560,
+      "first_datetime": "2025-01-01 00:00",
+      "last_datetime": "2025-12-31 23:50",
+      "file": "365_inclusive_days.response.bin"
+    },
+    {
+      "name": "366_inclusive_days",
+      "request_url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph?station_type=tele_waterlevel&station_id=1373273&start_date=2025-01-01&end_date=2026-01-01",
+      "retrieved_utc": "2026-09-02T16:21:49.710562Z",
+      "status": 200,
+      "final_url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph?station_type=tele_waterlevel&station_id=1373273&start_date=2025-01-01&end_date=2026-01-01",
+      "content_type": "application/json; charset=utf-8",
+      "bytes": 4201437,
+      "sha256": "cf3a05e0b13fc2d6dcb49f3b41d5881d44d3b53df33a5b680780b86ef36d1703",
+      "result": "OK",
+      "graph_rows": 52704,
+      "first_datetime": "2025-01-01 00:00",
+      "last_datetime": "2026-01-01 23:50",
+      "file": "366_inclusive_days.response.bin"
+    },
+    {
+      "name": "one_day_boundary",
+      "request_url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph?station_type=tele_waterlevel&station_id=1373273&start_date=2026-08-01&end_date=2026-08-01",
+      "retrieved_utc": "2026-09-02T16:21:51.403679Z",
+      "status": 200,
+      "final_url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph?station_type=tele_waterlevel&station_id=1373273&start_date=2026-08-01&end_date=2026-08-01",
+      "content_type": "application/json; charset=utf-8",
+      "bytes": 12263,
+      "sha256": "daf0825258cb20d3ff5f1cd018f3b109de4344f84f6776d5be7918b7afcc4276",
+      "result": "OK",
+      "graph_rows": 144,
+      "first_datetime": "2026-08-01 00:00",
+      "last_datetime": "2026-08-01 23:50",
+      "file": "one_day_boundary.response.bin"
+    }
+  ],
+  "derived_citation_files": [
+    {
+      "file": "derived_RidChart.js",
+      "derived_from": "official_app.chunk.js.map",
+      "embedded_source": "webpack:///./resources/js/components/wl_rid/RidChart.js",
+      "bytes": 24517,
+      "sha256": "4815eab352df851f3dc2abf3f96831fbebf55b66813c7b71e2955267c6b00207"
+    },
+    {
+      "file": "derived_DischargeChart.js",
+      "derived_from": "official_app.chunk.js.map",
+      "embedded_source": "webpack:///./resources/js/components/wl_rid/DischargeChart.js",
+      "bytes": 16043,
+      "sha256": "d93155839bea15b266bf7e1998ca412ad016f6ad8b10c85d5ecff7c6b2844285"
+    },
+    {
+      "file": "derived_en.js",
+      "derived_from": "official_app.chunk.js.map",
+      "embedded_source": "webpack:///./resources/js/lang/translations/en.js",
+      "bytes": 152058,
+      "sha256": "febeb6cabc5c125b36b842c585e7395cf7338e723bd33a84ef42e31b4a4ca00d"
+    }
+  ],
+  "notes": [
+    "response.bin files are untouched HTTP response body bytes",
+    "derived_*.js files are exact sourcesContent members extracted from the untouched official source map; their hashes are recorded and the embedded webpack source names identify provenance",
+    "No credentials, tokens, or secret request parameters were used."
+  ]
+}

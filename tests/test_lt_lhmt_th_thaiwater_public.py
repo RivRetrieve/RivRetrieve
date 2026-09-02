@@ -62,6 +62,9 @@ def test_public_fetch_replays_padded_request_and_coalesces_one_call_and_receipt(
 
     assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
     assert result.data.height == expected_rows
+    assert result.data.equals(
+        result.data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
+    )
     assert set(result.data["product_id"]) == set(rr.products(provider))
     assert len(replay.requests) == 1
     assert len(result.receipts.entries) == 1
@@ -90,7 +93,7 @@ def test_thaiwater_find_has_only_the_two_recorded_edges() -> None:
     absent = rr.as_frame(rr.find(provider="th_thaiwater", station="1373272"))
 
     assert established.select("station_id", "product_id").sort("product_id").rows() == [
-        ("1373273", "discharge_instantaneous"),
-        ("1373273", "stage_instantaneous"),
+        ("1373273", "discharge_reported"),
+        ("1373273", "stage_reported"),
     ]
     assert absent.is_empty()

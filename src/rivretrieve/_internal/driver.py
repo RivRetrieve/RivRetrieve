@@ -27,6 +27,7 @@ from rivretrieve._internal.engine import (
     RequestedWindow,
     Rows,
     RowsSchema,
+    UnknownTemporalSupport,
     WindowEndpoint,
     WithIssues,
     _make_fetch_window,
@@ -86,13 +87,18 @@ def _require_canonical_rows_within_requested(
                 f"requested_start_date={requested_start_date}, requested_end_date={requested_end_date}. "
                 "This is a convert-stage contract breach; please report this row and request window."
             )
-        elif isinstance(semantics, Hourly | Instant):
+        elif isinstance(semantics, (Hourly, Instant, UnknownTemporalSupport)):
             if requested_start <= timestamp <= requested_end:
                 continue
-            axis = "Hourly label axis" if isinstance(semantics, Hourly) else "Instant timestamp axis"
+            if isinstance(semantics, Hourly):
+                axis = "Hourly label"
+            elif isinstance(semantics, Instant):
+                axis = "Instant timestamp"
+            else:
+                axis = "source time-label"
             raise FatalContractError(
-                f"CanonicalRows zero-based row index {index} is outside RequestedWindow on the {axis}: "
-                f"timestamp={timestamp.isoformat()}, time_zone={row['time_zone']!r}, "
+                f"CanonicalRows zero-based row index {index} is outside RequestedWindow on the {axis} "
+                f"axis: timestamp={timestamp.isoformat()}, time_zone={row['time_zone']!r}, "
                 f"station_id={row['station_id']!r}, product_id={row['product_id']!r}, "
                 f"requested_start={requested_start.isoformat()}, requested_end={requested_end.isoformat()}. "
                 "This is a convert-stage contract breach; please report this row and request window."

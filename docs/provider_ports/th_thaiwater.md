@@ -47,24 +47,24 @@ the origin-evidence receipt; it documents coordinate semantics and contributes n
 
 ## Product Dictionary
 
-The packaged catalogue advertises the two source-published instantaneous products. It does not
+The packaged catalogue advertises two source-published reported-value products. Their temporal support is unknown. It does not
 advertise daily means; those were derived by the retired observation implementation.
 
 | Native field | Canonical `product_id` | Unit |
 | --- | --- | --- |
-| `value` | `stage_instantaneous` | m |
-| `discharge` | `discharge_instantaneous` | m³/s |
+| `value` | `stage_reported` | m |
+| `discharge` | `discharge_reported` | m³/s |
 
 No unit conversion is required.
 
 ## Observation Retrieval
 
-- **Windowing**: the shared engine renders inclusive date windows capped at 365 days.
+- **Windowing**: the shared engine renders one inclusive date request for the requested source-label window. No publisher cap is claimed.
 - **Request**: `station_type=tele_waterlevel`, `station_id`, `start_date`, and `end_date` are sent to
   `waterlevel_graph` through the shared `HttpClient` transport seam.
 - **Coalescing**: one graph response publishes both `value` and `discharge`, so a station-window
   requested for both products produces one source call and one publisher receipt.
-- **Parsing**: `value` and `discharge` are projected directly into instantaneous source rows. Nulls
+- **Parsing**: `value` and `discharge` are projected directly into source-labeled rows without claiming an instant or interval. Nulls
   remain null. `value_out` remains uninterpreted. There is no provider clipping, aggregation, unit
   conversion, retry loop, or result assembly.
 
@@ -73,7 +73,7 @@ No unit conversion is required.
 825 stations at catalogue version `2026-08-02`, built offline from committed `native.parquet` plus the five station origins. Every native row is required to have `station_type == "tele_waterlevel"`, non-null latitude and longitude, and a unique String `station.id`; violations fail the build rather than being filtered, dropped, or deduplicated.
 
 The packaged station-product carrier contains exactly the two edges established by the recorded
-station `1373273` response: `stage_instantaneous` and `discharge_instantaneous`. Their published record
+station `1373273` response: `stage_reported` and `discharge_reported`. Their published record
 bounds remain null and `last_catalogue_check` is the recording date, `2026-09-02`. The other 1,648
 candidate availability facts remain explicitly withheld and do not become catalogue rows.
 
