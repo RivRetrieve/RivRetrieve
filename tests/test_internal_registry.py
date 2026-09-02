@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import warnings
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from datetime import UTC, datetime
 
 import polars as pl
@@ -1010,3 +1010,28 @@ def test_registered_runtime_catalogue_methods_have_registered_provider_provenanc
     assert registered_stub.handle.products().provenance == expected
     assert registered_stub.handle.stations().provenance == expected
     assert registered_stub.handle.station_products().provenance == expected
+
+
+def test_observation_result_carries_shared_acquisition_provenance(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    from rivretrieve._internal.providers.jp_mlit.origins import build_acquisition_provenance
+
+    shared = build_acquisition_provenance().model_copy(update={"provider_id": "test_provider"})
+    artifact = replace(
+        stub_packaged_catalogue_artifact("test_provider"),
+        acquisition_provenance=shared,
+    )
+    registry = ProviderRegistry()
+    handle = registry.register("test_provider", artifact, engine_provider_module=_EngineModule)
+
+    result = handle.observations(
+        stations="station-1",
+        products="level",
+        start="2026-01-01",
+        end="2026-01-02",
+        on_issue="ignore",
+    )
+
+    assert result.provenance.acquisition_provenance == shared
+    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]

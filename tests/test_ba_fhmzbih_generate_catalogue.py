@@ -267,10 +267,10 @@ def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
         "7bdef973654f395a4d2e6d148ec7004f1e259563e5dfaa10a93ae148aba2affb"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
-        "761a93315a093b1cad5a4ce1e0480a6e36430a32d28467c9fe689f0257c053a4"
+        "c9afc7b34edb5f47d736ab631b107019277e025e05634688b68bbabde8e70739"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
-        "8fe32129705d9c51e78b5379e2f9afede4d5c413677fc55e3df7c2c1594387f5"
+        "745d6f4791d1e78fa6f4e78082d3089808894915503e85cf8a2e3b0b78c98e0d"
     )
 
 

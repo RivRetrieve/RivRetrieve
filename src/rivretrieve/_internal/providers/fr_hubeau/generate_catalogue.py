@@ -15,8 +15,12 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
-from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.artifact import (
+    PackagedCatalogArtifact,
+    packaged_catalogue_artifact_from_components,
+)
 from rivretrieve._internal.catalogues.native import (
     RETRIEVED_AT_DTYPE,
     NativeTable,
@@ -39,6 +43,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.fr_hubeau.origins import (
+    NATIVE_TABLE_BYTE_SIZE,
+    NATIVE_TABLE_SHA256,
+    build_acquisition_provenance,
+)
 
 PROVIDER_ID = ProviderId("fr_hubeau")
 PROVIDER_NAME = "Hubeau / SCHAPI — French national hydrometric network"
@@ -249,6 +258,8 @@ class GeneratedFrHubeauCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
+    public_artifact: PackagedCatalogArtifact
 
 
 @dataclass(frozen=True)
@@ -605,8 +616,19 @@ def build_catalogue(
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("fr_hubeau native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
-    validate_generated_catalogue(provider_info, products, stations, station_products)
-    return GeneratedFrHubeauCatalogue(provider_info, products, stations, station_products)
+    acquisition_provenance = build_acquisition_provenance(
+        station_ids=tuple(stations.get_column("station_id").cast(pl.String).to_list()),
+        station_product_keys=tuple(station_products.select("station_id", "product_id").iter_rows()),
+    )
+    artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
+    return GeneratedFrHubeauCatalogue(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance,
+        artifact,
+    )
 
 
 def _require_origin_columns(native_table: NativeTable, origins: OriginDeclarations) -> None:
@@ -777,17 +799,19 @@ def validate_generated_catalogue(
     products: ProductCatalog,
     stations: StationCatalog,
     station_products: StationProductCatalog,
-) -> None:
+    acquisition_provenance: AcquisitionProvenance,
+) -> PackagedCatalogArtifact:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(
+    return packaged_catalogue_artifact_from_components(
         provider_info,
         products,
         stations,
         station_products,
+        acquisition_provenance=acquisition_provenance,
         on_issue="raise",
     )
 
@@ -796,11 +820,14 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as f:
-        json.dump(catalogue.provider_info, f, sort_keys=True, separators=(",", ":"))
+        json.dump(catalogue.public_artifact.provider_info, f, sort_keys=True, separators=(",", ":"))
         f.write("\n")
-    catalogue.products.write_parquet(output_path / "products.parquet")
-    catalogue.stations.write_parquet(output_path / "stations.parquet")
-    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    catalogue.public_artifact.products.write_parquet(output_path / "products.parquet")
+    catalogue.public_artifact.stations.write_parquet(output_path / "stations.parquet")
+    catalogue.public_artifact.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        catalogue.acquisition_provenance.model_dump_json() + "\n", encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -885,7 +912,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--out is required for canonical build")
         from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
-        write_catalogue(build_catalogue(read_native_table(args.native), FRANCE_ORIGIN_DECLARATIONS), args.out)
+        catalogue = build_catalogue(
+            read_native_table(
+                args.native,
+                expected_sha256=NATIVE_TABLE_SHA256,
+                expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+            ),
+            FRANCE_ORIGIN_DECLARATIONS,
+        )
+        verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
+        write_catalogue(catalogue, args.out)
         return 0
 
     if args.out is not None:

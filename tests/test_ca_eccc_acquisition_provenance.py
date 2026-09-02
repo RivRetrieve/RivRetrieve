@@ -1,0 +1,207 @@
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    ExternalFactReference,
+    verify_provenance_recordings,
+    verify_recorded_statement,
+)
+from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactError, load_packaged_catalogue_artifact
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.ca_eccc.generate_catalogue import main
+from rivretrieve._internal.providers.ca_eccc.origins import build_acquisition_provenance
+
+
+def test_canada_provenance_separates_geomet_from_hydat() -> None:
+    provenance = build_acquisition_provenance()
+    assert {source.source_id for source in provenance.source_records} == {"ca_eccc_msc", "ca_eccc_wsc"}
+    bindings = {item.fact_group: item.source_id for item in provenance.fact_bindings}
+    assert {
+        "station_registry": "ca_eccc_msc",
+        "hydat_observations": "ca_eccc_wsc",
+    }.items() <= bindings.items()
+    assert {statement.kind for source in provenance.source_records for statement in source.statements} == {
+        "license",
+        "citation",
+    }
+
+
+def test_canada_terms_recordings_and_native_bytes_are_verified(tmp_path: Path) -> None:
+    verify_provenance_recordings(build_acquisition_provenance(), Path.cwd())
+    evidence = Path("tests/test_data/ca_eccc_terms_licence.html")
+    target = tmp_path / evidence
+    target.parent.mkdir(parents=True)
+    target.write_bytes(evidence.read_bytes().replace(b"worldwide", b"worldwidX", 1))
+    citation = Path("tests/test_data/ca_eccc_terms_citation.html")
+    (tmp_path / citation).write_bytes(citation.read_bytes())
+    with pytest.raises(FatalContractError, match="ca_eccc_terms_licence digest mismatch"):
+        verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
+    native = tmp_path / "native.parquet"
+    shutil.copy2("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet", native)
+    native.write_bytes(native.read_bytes() + b"x")
+    with pytest.raises(FatalContractError, match="native table digest mismatch"):
+        main(["--native", str(native), "--out", str(tmp_path / "out")])
+
+
+def test_canada_canonical_carriers_are_rivretrieve_transformations() -> None:
+    provenance = build_acquisition_provenance()
+    canonical = [
+        binding
+        for binding in provenance.fact_bindings
+        if any(fact.startswith(("provider.", "product.", "station.", "station_product.")) for fact in binding.facts)
+    ]
+    assert canonical
+    assert all(binding.source_id is None and binding.acquisition_id is None for binding in canonical)
+    lineage_sources = {
+        reference.source_id
+        for binding in canonical
+        if binding.transformation is not None
+        for reference in binding.transformation.external_inputs
+    }
+    assert lineage_sources == {"ca_eccc_msc"}
+
+
+def test_external_fact_references_reject_dangling_and_misattributed_lineage() -> None:
+    provenance = build_acquisition_provenance()
+    assert all(
+        isinstance(reference, ExternalFactReference)
+        for binding in provenance.fact_bindings
+        if binding.transformation is not None
+        for reference in binding.transformation.external_inputs
+    )
+    payload = provenance.model_dump(mode="python")
+    transformed = next(binding for binding in payload["fact_bindings"] if binding.get("transformation") is not None)
+    transformed["transformation"]["external_inputs"] = ({"source_id": "ca_eccc_wsc", "fact": "station.dangling"},)
+    with pytest.raises(ValidationError, match="dangling or misattributed"):
+        AcquisitionProvenance.model_validate(payload)
+
+
+def test_recordings_are_artifact_unique_and_statements_are_issuer_local() -> None:
+    provenance = build_acquisition_provenance()
+    duplicate = provenance.model_dump(mode="python")
+    duplicate["source_records"][1]["evidence"][0]["recording"]["recording_id"] = "ca_eccc_terms_licence"
+    duplicate["source_records"][1]["statements"][0]["recording_id"] = "ca_eccc_terms_licence"
+    with pytest.raises(ValidationError, match="recording ids must be unique"):
+        AcquisitionProvenance.model_validate(duplicate)
+
+    cross_issuer = provenance.model_dump(mode="python")
+    cross_issuer["source_records"][0]["statements"][0]["recording_id"] = "ca_eccc_terms_citation"
+    with pytest.raises(ValidationError, match="issuer-local"):
+        AcquisitionProvenance.model_validate(cross_issuer)
+
+    cross_acquisition = provenance.model_dump(mode="python")
+    cross_acquisition["source_records"][0]["acquisitions"][0]["recording_ids"] = ("ca_eccc_terms_citation",)
+    with pytest.raises(ValidationError, match="issuer-local"):
+        AcquisitionProvenance.model_validate(cross_acquisition)
+
+
+def test_canada_real_loader_rejects_empty_acquisition_and_carrier_lineage(tmp_path: Path) -> None:
+    source = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue")
+    for mutation in ("acquisition", "carrier"):
+        copied = tmp_path / mutation
+        shutil.copytree(source, copied)
+        document = json.loads((copied / "provenance.json").read_text())
+        if mutation == "acquisition":
+            acquisition = document["source_records"][0]["acquisitions"][0]
+            acquisition["description"] = ""
+            acquisition["requested_from"] = []
+        else:
+            binding = next(
+                item for item in document["fact_bindings"] if item["fact_group"] == "canonical_msc_catalogue_carrier"
+            )
+            binding["transformation"]["external_inputs"] = []
+        (copied / "provenance.json").write_text(json.dumps(document))
+        with pytest.raises(CorruptCatalogArtifactError, match="description|requested_from|external inputs"):
+            load_packaged_catalogue_artifact(copied, on_issue="raise")
+
+
+def test_canada_real_loader_rejects_runtime_lineage_for_a_packaged_product(tmp_path: Path) -> None:
+    source = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue")
+    mutated = tmp_path / "catalogue"
+    shutil.copytree(source, mutated)
+    document = json.loads((mutated / "provenance.json").read_text())
+    product = next(item for item in document["fact_bindings"] if item["fact_group"] == "canonical_wsc_product_carrier")
+    product["transformation"] = {
+        "name": "invalid runtime-derived product",
+        "external_inputs": [{"source_id": "ca_eccc_wsc", "fact": "source.observation.value"}],
+    }
+    (mutated / "provenance.json").write_text(json.dumps(document))
+
+    with pytest.raises(CorruptCatalogArtifactError, match="runtime acquisition ancestor"):
+        load_packaged_catalogue_artifact(mutated, on_issue="raise")
+
+
+def test_canada_real_recording_rejects_an_empty_quotation(tmp_path: Path) -> None:
+    del tmp_path
+    provenance = build_acquisition_provenance()
+    document = provenance.model_dump(mode="python")
+    document["source_records"][0]["statements"][0]["exact_text"] = "   "
+    with pytest.raises(ValidationError, match="exact_text.*non-empty|source statement exact text"):
+        AcquisitionProvenance.model_validate(document)
+
+    recording = provenance.source_records[0].evidence[0].recording
+    body = Path(recording.repository_path).read_bytes()
+    with pytest.raises(FatalContractError, match="quotation must be non-empty"):
+        verify_recorded_statement(
+            recording_name="ca_eccc.empty",
+            body=body,
+            expected_sha256=recording.sha256,
+            media_type=recording.media_type,
+            exact_text="   ",
+        )
+
+
+def test_canada_rejects_transitive_runtime_lineage_for_a_packaged_product() -> None:
+    document = build_acquisition_provenance().model_dump(mode="python")
+    product = next(item for item in document["fact_bindings"] if item["fact_group"] == "canonical_wsc_product_carrier")
+    product["transformation"] = {
+        "name": "invalid transitively runtime-derived product",
+        "external_inputs": [
+            {"source_id": None, "fact": "observation.canonical_five_column_shape"},
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="runtime acquisition ancestor"):
+        AcquisitionProvenance.model_validate(document)
+
+
+@pytest.mark.parametrize(
+    "location",
+    (
+        "https://:",
+        "https://example.com/a b",
+        "http://-",
+        "private://:",
+        "private://grdc-bfg/other",
+        "https://example..com/path",
+        "https:///missing-host",
+        "https://example.com/path\tvalue",
+        "https://example.com:bad/path",
+        "https://example.com:/path",
+        "https://example.com:70000/path",
+        "https://example.com/%ZZ",
+        "https://example.com/a|b",
+        'https://example.com/"x',
+        "https://example.com/\\x",
+        "https://example.com?x=%GG",
+        "https://example.com/a[b]",
+        "https://example.com/path#frag#two",
+        "https://example.com/{",
+        "https://example.com/<>",
+    ),
+)
+def test_canada_real_loader_rejects_malformed_acquisition_locations(tmp_path: Path, location: str) -> None:
+    source = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue")
+    mutated = tmp_path / str(abs(hash(location)))
+    shutil.copytree(source, mutated)
+    document = json.loads((mutated / "provenance.json").read_text())
+    document["source_records"][0]["acquisitions"][0]["requested_from"] = [location]
+    (mutated / "provenance.json").write_text(json.dumps(document))
+
+    with pytest.raises(CorruptCatalogArtifactError, match="requested_from|location"):
+        load_packaged_catalogue_artifact(mutated, on_issue="raise")

@@ -22,8 +22,16 @@ from pathlib import Path
 import polars as pl
 import polars.testing as pl_testing
 
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    serialize_acquisition_provenance,
+    verify_acquisition_provenance_statements,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
-from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.artifact import (
+    PackagedCatalogArtifact,
+    packaged_catalogue_artifact_from_components,
+)
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
@@ -39,6 +47,10 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.jp_mlit.origins import (
+    NATIVE_TABLE_SHA256,
+    build_acquisition_provenance,
+)
 
 PROVIDER_ID = ProviderId("jp_mlit")
 PROVIDER_NAME = "MLIT Water Information System — Japan national hydrometric network"
@@ -92,6 +104,7 @@ class GeneratedJpMlitCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
 
 
 @dataclass(frozen=True)
@@ -152,7 +165,11 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
 EXPECTED_PRODUCT_IDS = frozenset(d.product_id for d in PRODUCT_DEFINITIONS)
 
 
-def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> GeneratedJpMlitCatalogue:
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
+    acquisition_provenance: AcquisitionProvenance | None = None,
+) -> GeneratedJpMlitCatalogue:
     if native_table.data.is_empty():
         raise FatalContractError("jp_mlit native table must not be empty")
     if native_table.data.schema != NATIVE_SCHEMA:
@@ -169,8 +186,15 @@ def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> G
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("jp_mlit native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
-    _validate(provider_info, products, stations, station_products)
-    return GeneratedJpMlitCatalogue(provider_info, products, stations, station_products)
+    provenance = acquisition_provenance or build_acquisition_provenance()
+    artifact = _validate(provider_info, products, stations, station_products, provenance)
+    return GeneratedJpMlitCatalogue(
+        artifact.provider_info,
+        artifact.products,
+        artifact.stations,
+        artifact.station_products,
+        provenance,
+    )
 
 
 def build_products() -> ProductCatalog:
@@ -281,17 +305,19 @@ def _validate(
     products: ProductCatalog,
     stations: StationCatalog,
     station_products: StationProductCatalog,
-) -> None:
+    acquisition_provenance: AcquisitionProvenance,
+) -> PackagedCatalogArtifact:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(
+    return packaged_catalogue_artifact_from_components(
         provider_info,
         products,
         stations,
         station_products,
+        acquisition_provenance=acquisition_provenance,
         on_issue="raise",
     )
 
@@ -305,6 +331,10 @@ def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) ->
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        serialize_acquisition_provenance(catalogue.acquisition_provenance) + "\n",
+        encoding="utf-8",
+    )
 
 
 class _NativeTdParser(HTMLParser):
@@ -771,6 +801,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--native-out", type=Path)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--license-recording", type=Path)
+    parser.add_argument("--citation-recording", type=Path)
     args = parser.parse_args(argv)
 
     native_mode = args.native is not None or args.out is not None
@@ -782,9 +814,27 @@ def main(argv: list[str] | None = None) -> int:
     if native_mode:
         if args.native is None or args.out is None:
             parser.error("jp_mlit native mode requires both --native and --out")
+        if args.license_recording is None or args.citation_recording is None:
+            parser.error("jp_mlit native mode requires license and citation recordings")
         from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
 
-        write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
+        provenance = build_acquisition_provenance()
+        try:
+            recording_bytes = {
+                "jp_mlit_terms_licence_euc_jp": args.license_recording.read_bytes(),
+                "jp_mlit_terms_citation": args.citation_recording.read_bytes(),
+            }
+        except OSError as exc:
+            raise FatalContractError("jp_mlit source-statement recording cannot be read") from exc
+        verify_acquisition_provenance_statements(provenance, recording_bytes)
+        write_catalogue(
+            build_catalogue(
+                read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256),
+                STATION_CATALOGUE_ORIGINS,
+                provenance,
+            ),
+            args.out,
+        )
         return 0
     if capture_mode:
         if any(value is None for value in (args.station_catalogue, args.responses_dir, args.manifest, args.native_out)):

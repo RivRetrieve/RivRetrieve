@@ -32,6 +32,8 @@ CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue")
 FIXTURE_PATH = Path("tests/test_data/jp_mlit_metadata.json")
 REJECTED_PATH = Path("tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html")
 NATIVE_PATH = CATALOGUE_PATH / "native.parquet"
+LICENSE_RECORDING = Path("tests/test_data/jp_mlit_terms_licence_euc_jp.html")
+CITATION_RECORDING = Path("tests/test_data/jp_mlit_terms_citation.pdf")
 FIXTURE_IDS = ["301011281104010", "303051283310060", "309191289913130"]
 ACCEPTED_SOURCE_FIXTURES = {
     "301011281104310": (
@@ -920,6 +922,12 @@ def test_native_cli_requires_partner(arguments: list[str], capsys: pytest.Captur
     assert "jp_mlit native mode requires both --native and --out" in capsys.readouterr().err
 
 
+def test_native_cli_requires_source_statement_recordings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+    assert "jp_mlit native mode requires license and citation recordings" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     "arguments",
     [
@@ -954,9 +962,97 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
     monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", forbidden)
     monkeypatch.setattr(generate_catalogue, "refresh_native_table_from_live", forbidden)
     before = NATIVE_PATH.read_bytes()
-    assert generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)]) == 0
+    assert (
+        generate_catalogue.main(
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--out",
+                str(tmp_path),
+                "--license-recording",
+                str(LICENSE_RECORDING),
+                "--citation-recording",
+                str(CITATION_RECORDING),
+            ]
+        )
+        == 0
+    )
     assert calls == [] and NATIVE_PATH.read_bytes() == before
-    expected_names = {"provider.json", "products.parquet", "stations.parquet", "station_products.parquet"}
+    expected_names = {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "provenance.json",
+    }
     assert {item.name for item in tmp_path.iterdir()} == expected_names
     for name in expected_names:
         assert (tmp_path / name).read_bytes() == (CATALOGUE_PATH / name).read_bytes()
+
+
+@pytest.mark.parametrize("statement_kind", ["license", "citation"])
+def test_native_cli_rejects_statement_absent_from_recording(
+    statement_kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provenance = generate_catalogue.build_acquisition_provenance()
+    source = provenance.source_records[0]
+    statements = tuple(
+        statement.model_copy(update={"exact_text": "この引用は記録に存在しません。"})
+        if statement.kind == statement_kind
+        else statement
+        for statement in source.statements
+    )
+    changed = provenance.model_copy(update={"source_records": (source.model_copy(update={"statements": statements}),)})
+    monkeypatch.setattr(generate_catalogue, "build_acquisition_provenance", lambda: changed)
+
+    with pytest.raises(
+        FatalContractError,
+        match=rf"jp_mlit.{statement_kind}: quotation is absent from recorded bytes",
+    ):
+        generate_catalogue.main(
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--out",
+                str(tmp_path / "catalogue"),
+                "--license-recording",
+                str(LICENSE_RECORDING),
+                "--citation-recording",
+                str(CITATION_RECORDING),
+            ]
+        )
+
+
+def test_native_build_removes_withheld_fact_before_writing(tmp_path: Path) -> None:
+    provenance = generate_catalogue.build_acquisition_provenance()
+    payload = provenance.model_dump(mode="json")
+    product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
+    product_binding["facts"].remove("product.native_id")
+    payload["withheld_facts"].append(
+        {
+            "fact_group": "withheld_product_native_id",
+            "facts": ["product.native_id"],
+            "reason": "no_acquisition_record_established",
+        }
+    )
+    withheld = type(provenance).model_validate(payload)
+
+    catalogue = generate_catalogue.build_catalogue(
+        read_native_table(NATIVE_PATH, expected_sha256=generate_catalogue.NATIVE_TABLE_SHA256),
+        STATION_CATALOGUE_ORIGINS,
+        withheld,
+    )
+    generate_catalogue.write_catalogue(catalogue, tmp_path)
+
+    written = pl.read_parquet(tmp_path / "products.parquet")
+    assert written["native_id"].null_count() == written.height
+    written_provenance = json.loads((tmp_path / "provenance.json").read_text())
+    assert written_provenance["withheld_facts"] == [
+        {
+            "fact_group": "withheld_product_native_id",
+            "facts": ["product.native_id"],
+            "reason": "no_acquisition_record_established",
+        }
+    ]

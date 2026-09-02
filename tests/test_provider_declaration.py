@@ -38,9 +38,9 @@ def test_mismatched_identity_names_directory_and_catalogue(
     tmp_path: Path,
 ) -> None:
     declaration = ProviderDeclaration(tmp_path / "catalogue", CatalogueOnly())
-    artifact = stub_packaged_catalogue_artifact("usgs_nwis")
+    artifact = stub_packaged_catalogue_artifact("xx_other")
 
-    with pytest.raises(FatalContractError, match="directory id xx_test.*provider_id usgs_nwis"):
+    with pytest.raises(FatalContractError, match="directory id xx_test.*provider_id xx_other"):
         register_manifest(
             ProviderRegistry(),
             ("xx_test",),
@@ -69,9 +69,7 @@ def test_live_stages_without_stage_contract_refuses_before_catalogue_loading(
             registry,
             ("xx_test",),
             declaration_loader=lambda _provider_id: declaration,
-            artifact_loader=lambda path: (
-                catalogue_loads.append(path) or stub_packaged_catalogue_artifact("xx_test")
-            ),
+            artifact_loader=lambda path: catalogue_loads.append(path) or stub_packaged_catalogue_artifact("xx_test"),
         )
 
     assert catalogue_loads == []
@@ -104,9 +102,7 @@ def test_bulk_store_requires_callable_operations_before_catalogue_loading(
             registry,
             ("xx_test",),
             declaration_loader=lambda _provider_id: declaration,
-            artifact_loader=lambda path: (
-                catalogue_loads.append(path) or stub_packaged_catalogue_artifact("xx_test")
-            ),
+            artifact_loader=lambda path: catalogue_loads.append(path) or stub_packaged_catalogue_artifact("xx_test"),
         )
 
     assert catalogue_loads == []

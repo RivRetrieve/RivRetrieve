@@ -14,8 +14,12 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
-from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.artifact import (
+    PackagedCatalogArtifact,
+    packaged_catalogue_artifact_from_components,
+)
 from rivretrieve._internal.catalogues.native import (
     NativeTable,
     RetrievedAt,
@@ -37,8 +41,14 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.ba_fhmzbih.origins import (
+    NATIVE_TABLE_BYTE_SIZE,
+    NATIVE_TABLE_SHA256,
+    build_acquisition_provenance,
+)
 
 PROVIDER_ID = ProviderId("ba_fhmzbih")
+EXPECTED_NATIVE_STATION_COUNT = 60
 PROVIDER_NAME = "FHMZBiH — Federal Hydrometeorological Institute of Bosnia and Herzegovina (vodostaji.voda.ba)"
 
 METADATA_URL = "https://vodostaji.voda.ba/data/internet/layers/20/index.json"
@@ -111,6 +121,8 @@ class GeneratedBaFhmzbihCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
+    public_artifact: PackagedCatalogArtifact
 
 
 @dataclass(frozen=True)
@@ -282,12 +294,22 @@ def build_catalogue(
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("ba_fhmzbih native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
-    validate_generated_catalogue(provider_info, products, stations, station_products)
+    acquisition_provenance = build_acquisition_provenance()
+    artifact = validate_generated_catalogue(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance,
+        allow_missing_withheld_rows=native_table.data.height != EXPECTED_NATIVE_STATION_COUNT,
+    )
     return GeneratedBaFhmzbihCatalogue(
         provider_info=provider_info,
         products=products,
         stations=stations,
         station_products=station_products,
+        acquisition_provenance=acquisition_provenance,
+        public_artifact=artifact,
     )
 
 
@@ -371,17 +393,22 @@ def validate_generated_catalogue(
     products: ProductCatalog,
     stations: StationCatalog,
     station_products: StationProductCatalog,
-) -> None:
+    acquisition_provenance: AcquisitionProvenance,
+    *,
+    allow_missing_withheld_rows: bool = False,
+) -> PackagedCatalogArtifact:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(
+    return packaged_catalogue_artifact_from_components(
         provider_info,
         products,
         stations,
         station_products,
+        acquisition_provenance=acquisition_provenance,
+        withheld_rows_already_applied=allow_missing_withheld_rows,
         on_issue="raise",
     )
 
@@ -390,11 +417,14 @@ def write_catalogue(catalogue: GeneratedBaFhmzbihCatalogue, out_dir: Path | str)
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as f:
-        json.dump(catalogue.provider_info, f, sort_keys=True, separators=(",", ":"))
+        json.dump(catalogue.public_artifact.provider_info, f, sort_keys=True, separators=(",", ":"))
         f.write("\n")
-    catalogue.products.write_parquet(output_path / "products.parquet")
-    catalogue.stations.write_parquet(output_path / "stations.parquet")
-    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    catalogue.public_artifact.products.write_parquet(output_path / "products.parquet")
+    catalogue.public_artifact.stations.write_parquet(output_path / "stations.parquet")
+    catalogue.public_artifact.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        catalogue.acquisition_provenance.model_dump_json() + "\n", encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -624,9 +654,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ba_fhmzbih native table content SHA-256: {digest}")
         return 0
 
+    verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
 
-    catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
+    catalogue = build_catalogue(
+        read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE),
+        STATION_CATALOGUE_ORIGINS,
+    )
     write_catalogue(catalogue, args.out)
     return 0
 

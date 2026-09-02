@@ -277,7 +277,7 @@ def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version() -
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_canonical_cli_writes_only_four_canonical_artifacts(tmp_path: Path) -> None:
+def test_canonical_cli_writes_only_five_canonical_artifacts(tmp_path: Path) -> None:
     result = generate_catalogue.main(
         [
             "--native",
@@ -293,6 +293,7 @@ def test_canonical_cli_writes_only_four_canonical_artifacts(tmp_path: Path) -> N
         "products.parquet",
         "stations.parquet",
         "station_products.parquet",
+        "provenance.json",
     }
     assert pl.read_parquet(tmp_path / "stations.parquet").height == 97
     assert pl.read_parquet(tmp_path / "products.parquet").height == 2

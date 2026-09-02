@@ -771,6 +771,7 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
         "products.parquet",
         "stations.parquet",
         "station_products.parquet",
+        "provenance.json",
     }
 
 

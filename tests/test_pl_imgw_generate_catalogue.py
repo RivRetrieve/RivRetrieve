@@ -765,8 +765,17 @@ def test_native_build_matches_independent_exact_full_projections() -> None:
     }
 
 
-def test_native_build_is_byte_identical_to_committed_artifacts(tmp_path: Path) -> None:
-    result = generate_catalogue.main(["--native", str(_NATIVE_PATH), "--out", str(tmp_path)])
+def test_native_build_without_reverification_input_is_byte_identical_to_committed_artifacts(tmp_path: Path) -> None:
+    result = generate_catalogue.main(
+        [
+            "--native",
+            str(_NATIVE_PATH),
+            "--out",
+            str(tmp_path),
+            "--terms-recording",
+            "tests/test_data/pl_imgw_terms_regulations.html",
+        ]
+    )
 
     assert result == 0
     for artifact_name in (
@@ -774,6 +783,7 @@ def test_native_build_is_byte_identical_to_committed_artifacts(tmp_path: Path) -
         "products.parquet",
         "stations.parquet",
         "station_products.parquet",
+        "provenance.json",
     ):
         assert (tmp_path / artifact_name).read_bytes() == (_CATALOGUE_PATH / artifact_name).read_bytes()
 
