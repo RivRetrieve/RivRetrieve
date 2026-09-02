@@ -119,6 +119,72 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
         media_type="application/pdf",
         sha256="1fbe9cccc866b3f496b7be4fcb546124c24e0c89fc3e57ab0a3ceca97107d487",
     )
+    observation_recordings = (
+        RecordingReference(
+            recording_id="jp_mlit_stage_hourly_2023_html",
+            repository_path="tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+            source_url="http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:50.958378Z"),
+            media_type="application/json",
+            sha256="c49c740e184980f6cf17cbf96100a6aafcf14b4647ffb4e25abd365008cdfb53",
+        ),
+        RecordingReference(
+            recording_id="jp_mlit_stage_hourly_2023_dat",
+            repository_path="tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+            source_url="http://www1.river.go.jp/dat/dload/download/2230101128110401020230101590470.dat",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:51.615711Z"),
+            media_type="application/json",
+            sha256="23c97ddf38f715212a55f42ce081122a1ef8fe243517f3ee7c0ff605535ca54f",
+        ),
+        RecordingReference(
+            recording_id="jp_mlit_stage_daily_2023_html",
+            repository_path="tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+            source_url="http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:52.879163Z"),
+            media_type="application/json",
+            sha256="29c8396c411405d14b363d5e8b3926202c8907b731ec79f3d2f36bde36fbf9e9",
+        ),
+        RecordingReference(
+            recording_id="jp_mlit_stage_daily_2023_dat",
+            repository_path="tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+            source_url="http://www1.river.go.jp/dat/dload/download/2330101128110401020230101590483.dat",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:53.503314Z"),
+            media_type="application/json",
+            sha256="f3a94b844e7c58a7bb20b1b19e99ce0d4e78c14dd6d9ba15867aa541cb64edc8",
+        ),
+        RecordingReference(
+            recording_id="jp_mlit_discharge_hourly_2023_html",
+            repository_path="tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+            source_url="http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:56.096963Z"),
+            media_type="application/json",
+            sha256="e5438ca64b710c74f4b3014323ceba871c18a9dfa07c1bb8fc193c6d0592d875",
+        ),
+        RecordingReference(
+            recording_id="jp_mlit_discharge_hourly_2023_dat",
+            repository_path="tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+            source_url="http://www1.river.go.jp/dat/dload/download/2630101128110401020230101590509.dat",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:56.748012Z"),
+            media_type="application/json",
+            sha256="736dd0d87f3bd028af992d1bf8f85159135d565e5f925af37aa2ce99a25fbc84",
+        ),
+        RecordingReference(
+            recording_id="jp_mlit_discharge_daily_2023_html",
+            repository_path="tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+            source_url="http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:58.031842Z"),
+            media_type="application/json",
+            sha256="80a565d00dfae186eb1abeeb1cd738e10d9099b0cf401debe5bd773984c18824",
+        ),
+        RecordingReference(
+            recording_id="jp_mlit_discharge_daily_2023_dat",
+            repository_path="tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+            source_url="http://www1.river.go.jp/dat/dload/download/2730101128110401020230101590516.dat",
+            retrieved_at=datetime.fromisoformat("2026-09-02T15:38:58.658831Z"),
+            media_type="application/json",
+            sha256="770efdba0b5c83e428116a323ba722f469a1b06930f72cf5b7bd8ca50aa02717",
+        ),
+    )
     return AcquisitionProvenance(
         schema_version=2,
         provider_id="jp_mlit",
@@ -183,6 +249,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                         ),
                         retrieved_at_start=datetime.fromisoformat("2026-09-02T15:38:50.958378Z"),
                         retrieved_at_end=datetime.fromisoformat("2026-09-02T15:38:58.658831Z"),
+                        recording_ids=tuple(recording.recording_id for recording in observation_recordings),
                     ),
                     AcquisitionRecord(
                         acquisition_id="observation_request",
@@ -208,6 +275,14 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                         evidence_id="jp_mlit_citation_statement",
                         description="MLIT Public Data License 1.0 PDF recording",
                         recording=citation_recording,
+                    ),
+                    *(
+                        EvidenceReference(
+                            evidence_id=f"{recording.recording_id}_evidence",
+                            description="Exact MLIT observation replay recording",
+                            recording=recording,
+                        )
+                        for recording in observation_recordings
                     ),
                 ),
                 statements=(

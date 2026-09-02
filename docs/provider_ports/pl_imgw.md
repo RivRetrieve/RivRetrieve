@@ -71,7 +71,7 @@ The parser uses the calendar month (column 10) directly. Calendar year = hydrolo
 
 ## Timestamps
 
-IMGW provides year/month/day integers only — no time, no timezone. Follows the established `date_only_timestamp` pattern (same as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily, `ca_eccc`):
+IMGW provides year/month/day integers only — no time, no timezone. Follows the established `date_only_timestamp` pattern (same as `lt_lhmt`, `fr_hubeau`, `br_ana`, `ca_eccc`):
 
 - Interpreted as UTC midnight `T00:00:00Z`
 - `warning`-severity `date_only_timestamp` issue emitted per parser call

@@ -28,10 +28,10 @@ NVE exposes three parameters and three resolutions, giving 9 product combination
 | NVE Parameter | ResolutionTime (min) | Product ID | Canonical? | V1 dictionary | Notes |
 | --- | --- | --- | --- | --- | --- |
 | 1000 (water level) | 1440 | `stage_daily_mean` | Yes | Yes | |
-| 1000 | 60 | `stage_hourly_mean` | No — provider-specific | No hourly stage in V1 | Same pattern as `jp_mlit`. |
+| 1000 | 60 | `stage_hourly_mean` | No — provider-specific | No hourly stage in V1 | Provider-specific NVE mapping. |
 | 1000 | 0 | `stage_instantaneous` | Yes | Yes | |
 | 1001 (discharge) | 1440 | `discharge_daily_mean` | Yes | Yes | |
-| 1001 | 60 | `discharge_hourly_mean` | No — provider-specific | No hourly discharge in V1 | Same pattern as `jp_mlit`. |
+| 1001 | 60 | `discharge_hourly_mean` | No — provider-specific | No hourly discharge in V1 | Provider-specific NVE mapping. |
 | 1001 | 0 | `discharge_instantaneous` | Yes | Yes | |
 | 1003 (water temperature) | 1440 | `water_temperature_daily_mean` | Yes | Yes | |
 | 1003 | 60 | `water_temperature_hourly_mean` | No — provider-specific | No hourly water_temperature in V1 | |

@@ -502,7 +502,7 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
 - **Stations:** 8,057 canonical stations from 8,057 attested native OGC features retrieved at `2026-08-02T01:09:10Z`.
 - **Key decisions:**
   - **Source split**: Native catalogue refresh uses the ECCC OGC Features API; observation retrieval retains the complete HYDAT SQLite archive in the provider-managed cache.
-  - **Timestamps**: `DATE` field is date-only (`YYYY-MM-DD`). Interpreted as UTC midnight. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` emitted per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily.
+  - **Timestamps**: `DATE` field is date-only (`YYYY-MM-DD`). Interpreted as UTC midnight. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` emitted per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`.
   - **HYDAT cache**: The observation client downloads the date-stamped national SQLite archive on first use and queries it read-only; this catalogue migration does not change its lifecycle or queries.
   - **Native catalogue**: The committed 18-column `native.parquet` preserves all 8,057 features, all 13 source properties, geometry type and coordinate scalars, plus the attested retrieval instant. Rows are sorted by feature `id`.
   - **Coordinates and CRS**: Live OGC API returns longitude/latitude in `feature["geometry"]["coordinates"]` (CRS84, lon-first). Canonical columns map index 1 to latitude and index 0 to longitude and declare documented `EPSG:4326`; no transformation or reprojection occurs.
@@ -532,7 +532,7 @@ The minimum harness before a real provider can be ported is M1-M2: shared issue/
   - **Two CSV format eras**: 2023+ is UTF-8 with BOM, semicolon-separated, unquoted. Pre-2023 is CP1250, comma-separated, quoted (station codes have leading spaces). Parser detects BOM for format dispatch.
   - **All-station ZIPs**: Each ZIP contains data for all ~900+ stations. Filtered to requested stations at parse time; memory usage peaks at ~20 MB per ZIP before filtering.
   - **Hydrological year calendar**: IMGW organises data by hydrological year (Nov–Oct). Calendar month comes from CSV column 10 directly. Calendar year = hydrological year − 1 for Nov/Dec, else hydrological year.
-  - **Timestamps**: Date-only UTC midnight pattern. IMGW provides year/month/day integers only. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `jp_mlit` daily, `ca_eccc`.
+  - **Timestamps**: Date-only UTC midnight pattern. IMGW provides year/month/day integers only. Series annotation `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`. Warning issue `date_only_timestamp` per parser call. Follows same pattern as `lt_lhmt`, `fr_hubeau`, `br_ana`, `ca_eccc`.
   - **Stage cm→m**: Raw cm value preserved in `raw_value` row annotation.
   - **Sentinel masking**: Water level 9999 → null; discharge 99999.999 or 999 → null; temperature 99.9 → null. Rounded to 3 decimal places before comparison.
   - **Recovered native facts**: `gauge_name`, `river`, `area`, and String `gauge_altitude` are preserved exactly in `catalogue/native.parquet`; the current canonical station shape continues to expose identity and geometry only.
