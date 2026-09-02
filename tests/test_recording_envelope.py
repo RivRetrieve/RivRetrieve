@@ -186,6 +186,7 @@ def test_xml_element_name_is_screened_for_secrets() -> None:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             b"PK\x03\x04\x00\xff",
         ),
+        ("application/vnd.ms-excel", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1\x00\xff"),
         ("application/pdf", b"%PDF-1.7\x00\xff"),
         ("application/vnd.apache.parquet", b"PAR1\x00\xff"),
         ("application/gzip", b"\x1f\x8b\x00\xff"),
@@ -199,6 +200,40 @@ def test_coherent_opaque_binary_recordings_remain_supported(content_type: str, c
         status_code=200,
         retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
         content_type=content_type,
+    )
+
+    assert recording.content == content
+
+
+@pytest.mark.parametrize(
+    ("content_type", "content", "message"),
+    [
+        ("application/json", b"not-json", "not valid JSON"),
+        ("multipart/form-data; boundary=boundary", b"not-multipart", "multipart response evidence is unsupported"),
+        ("application/x-custom", b"\x00\xff", "unsupported recording content type"),
+    ],
+)
+def test_ambiguous_structured_and_unknown_response_content_is_rejected(
+    content_type: str, content: bytes, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=content,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type=content_type,
+        )
+
+
+@pytest.mark.parametrize("content", [b"null", b"42", b'"value"'])
+def test_valid_json_scalars_without_fields_remain_recordable(content: bytes) -> None:
+    recording = RecordingEnvelope(
+        request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+        content=content,
+        status_code=200,
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        content_type="application/json",
     )
 
     assert recording.content == content

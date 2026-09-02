@@ -54,7 +54,7 @@ def _recording() -> RecordingEnvelope:
             "https://source.test/observations",
             {"start": "2026-01-01", "end": "2026-01-02"},
         ),
-        content=b"recorded source bytes",
+        content=b'{"values":[]}',
         status_code=200,
         retrieved_at=datetime(2026, 1, 3, 4, 5, tzinfo=UTC),
         content_type="application/json",

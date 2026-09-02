@@ -404,6 +404,15 @@ def _payload_has_secret_field(
     content_type: str | None = None,
 ) -> bool:
     media_type = _media_type(content_type)
+    if media_type is not None and media_type.startswith("multipart/"):
+        raise ValueError("multipart response evidence is unsupported")
+    if (
+        media_type is not None
+        and not _is_structured_media_type(media_type)
+        and _opaque_signatures(media_type) is None
+        and not _is_generic_binary_media_type(media_type)
+    ):
+        raise ValueError(f"unsupported recording content type: {media_type}")
     opaque_signature_mismatch = False
     if isinstance(payload, str):
         text = payload
@@ -429,8 +438,8 @@ def _payload_has_secret_field(
                 structured=_is_structured_media_type(media_type),
             )
             if text is None:
-                return False
-    if text is None:  # All nullable decode paths return above.
+                raise ValueError("recording content without a type cannot be classified safely")
+    if text is None:  # Generic binary nullable decode paths return above.
         raise AssertionError("unreachable text decoding state")
     has_secret = _text_has_secret_field(text, media_type=media_type)
     if opaque_signature_mismatch and not has_secret:
@@ -468,6 +477,8 @@ def _opaque_signatures(media_type: str | None) -> tuple[bytes, ...] | None:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }:
         return (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+    if media_type == "application/vnd.ms-excel":
+        return (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",)
     if media_type == "application/pdf":
         return (b"%PDF-",)
     if media_type == "application/vnd.apache.parquet":
@@ -524,12 +535,12 @@ def _decode_text_payload(
 
 def _text_has_secret_field(text: str, *, media_type: str | None) -> bool:
     stripped = text.lstrip("\ufeff \t\r\n")
-    if stripped.startswith(("{", "[")):
+    json_media = media_type == "application/json" or (media_type is not None and media_type.endswith("+json"))
+    if json_media or (media_type is None and stripped.startswith(("{", "["))):
         try:
             return _object_has_secret_field(json.loads(stripped))
         except json.JSONDecodeError as exc:
-            if _is_structured_media_type(media_type):
-                raise ValueError("structured recording content is not valid JSON") from exc
+            raise ValueError("structured recording content is not valid JSON") from exc
 
     if media_type == "application/xml" or (media_type is not None and media_type.endswith("+xml")):
         try:
