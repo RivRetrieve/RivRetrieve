@@ -18,7 +18,7 @@ All thirteen existing sources have observation adapters represented and proven t
 - a live HTTP provider contributes `fetch.py`, `parse.py`, and `config.py`;
 - a bulk provider contributes `bulk.py` and `config.py`;
 - `convert` and `assemble` have no provider implementation;
-- catalogue generation, origin declarations, registration declarations, and packaged catalogue artifacts remain separate concerns and do not count against the observation-adapter file rule.
+- catalogue generation, origin declarations, registration declarations, and packaged catalogue artifacts remain separate from the observation-adapter file rule; this Effort nevertheless owns the minimum certification needed to make the Bosnia, France, and Thailand adapters selectable.
 
 The result is not thirteen superficially similar pipelines. It is one pipeline whose source-facing edges are implemented thirteen times only where the sources genuinely differ.
 
@@ -29,7 +29,8 @@ The authoritative manifest names thirteen providers. On the confirmed starting r
 - `usgs_nwis` is the only `LiveStages` provider and is the existing proof of the live `fetch` / `parse` / `config` shape;
 - `ca_eccc` and `pl_imgw` are delivered `BulkStore` providers and remain on their distinct `bulk` / `config` shape;
 - the other ten providers are registered as `CatalogueOnly`;
-- eight of those ten have certified packaged products and can become publicly routable when their live stages land;
+- five of those ten already have selectable certified packaged station-product facts and can become publicly routable when their live stages land;
+- `ba_fhmzbih`, `fr_hubeau`, and `th_thaiwater` have source-backed catalogue material but still need the minimum native/origin/generator/canonical-artifact certification required for public selection; this Effort owns that work only for the products established by their observation-adapter evidence;
 - `br_ana` and `no_nve` deliberately expose empty certified catalogues until Effort #90 establishes their credentialed native acquisition and origins;
 - only one real HTTP boundary recording and probe exists, for one USGS instantaneous-discharge product;
 - active runtime code contains no provider `transform.py` and no provider-owned date-range filter, but ten retired provider trees preserve the old multi-file pipelines as non-runtime evidence.
@@ -99,14 +100,17 @@ All existing bulk-store guarantees remain intact, including atomic publication a
 
 ## Brazil and Norway
 
-This Effort owns authenticated observation adapters and source-backed conformance evidence for `br_ana` and `no_nve`. It does not absorb either adjacent Effort:
+This Effort owns authenticated observation adapters and source-backed conformance evidence for `br_ana` and `no_nve`. It does not absorb adjacent work:
 
-- #90 owns certified native catalogue acquisition, origins, and restoring routable packaged station-product facts;
-- #15 owns the public experience for loading credentials and reporting missing credentials.
+- #90 owns their credentialed native catalogue acquisition, origins, and restoration of routable packaged station-product facts;
+- #15 owns the public experience for loading credentials and reporting missing credentials;
+- #92 owns general live-station querying.
 
 The adapters may therefore be complete and proven while those two providers remain unavailable through public catalogue selection. Their tests must exercise the real source-facing stage behavior using credentials supplied outside committed evidence. Their provider code must not read `.env` or environment variables directly.
 
-This intermediate state is acceptable because the repository remains private until the Program closes. The Program, not #17 in isolation, proves the final end-to-end public path after #15 and #90 land.
+This exception does not extend to Bosnia, France, or Thailand. This Effort must make each of those providers publicly selectable for every observation product established by current source evidence. It must not invent speculative cross-products or availability facts to fill a catalogue matrix. A product whose present evidence cannot establish the required native, origin, station, or station-product fact remains unclaimed until that evidence exists.
+
+This intermediate Brazil and Norway state is acceptable because the repository remains private until the Program closes. The Program, not #17 in isolation, proves their final end-to-end public path after #15 and #90 land.
 
 ## Faithfulness and scope boundaries
 
@@ -116,9 +120,9 @@ The following settled Program decisions remain unchanged:
 - The returned data shape, provenance, issues, receipts, and public selection model do not vary by provider.
 - Quality codes, station identity, river naming, licences, record bounds, time zones, day definitions, and stage datums are not interpreted or inferred.
 - A wall-clock request is closed at both ends; providers do not reinterpret it.
-- Catalogue certification and canonical catalogue generation remain governed by the repository's native-table and origin rules.
+- Catalogue certification and canonical catalogue generation remain governed by the packaged catalogue rules in `AGENTS.md`; the Bosnia, France, and Thailand scope adds no fixture-backed or live canonical-generation exception.
 - Provider discovery remains the explicit thirteen-line manifest with one declaration per provider directory. Filesystem discovery and provider import side effects do not return.
-- Credential acquisition, general failure policy, caching, documentation-site construction, and providers beyond the existing thirteen are outside this Effort except where their already-settled contracts constrain a port.
+- Credential acquisition, general live-station querying (#92), general failure policy, caching, documentation-site construction, speculative cross-products, and providers beyond the existing thirteen are outside this Effort except where their already-settled contracts constrain a port.
 
 ## Attribution and retired code
 
@@ -130,14 +134,15 @@ After a provider's replacement passes its source-backed evidence, its correspond
 
 The Effort is complete when the repository demonstrates all of the following:
 
-1. Every one of the thirteen manifest providers has an observation adapter appropriate to `LiveStages` or `BulkStore`; Brazil and Norway may remain unroutable only because their certified catalogue facts are intentionally withheld by #90.
-2. Every newly routable live provider passes through the same public engine path and returns the fixed canonical result contract.
-3. Every declared product satisfies the real-recording and boundary-evidence obligations, including existing USGS and bulk products.
-4. Active provider code contains no reintroduced transform layer, provider-owned clipping, unit conversion, generic retries, result assembly, hidden configuration reads, or provider-ID branches outside provider directories.
-5. Chained, coalesced, authenticated, query-based, source-fixed-window, capped-window, and bulk behaviors retain complete provenance without leaking secrets.
-6. Repeated port friction has either disappeared into one justified shared engine capability or remains as an explicit contract failure that prevents the affected claim from landing. No local workaround masks it.
-7. Canada and Poland retain all delivered bulk-store guarantees while gaining complete boundary coverage.
-8. Each proven replacement removes its retired legacy subtree and carries evidence-derived `Contributed by:` attribution.
-9. The complete network-free test, formatting, lint, and type-check gates pass, and source-interaction evidence can be replayed from a fresh clone without live network access.
+1. Every one of the thirteen manifest providers has an observation adapter appropriate to `LiveStages` or `BulkStore`; only Brazil and Norway may remain unroutable, and only because #90 still withholds their certified catalogue facts.
+2. Every other newly routable live provider, including Bosnia, France, and Thailand, is publicly selectable for its source-established observation products, passes through the same public engine path, and returns the fixed canonical result contract.
+3. The Bosnia, France, and Thailand native tables, origins, generators, and canonical artifacts satisfy the packaged catalogue rules in `AGENTS.md`; unsupported products and cross-products remain absent rather than inferred.
+4. Every declared product satisfies the real-recording and boundary-evidence obligations, including existing USGS and bulk products.
+5. Active provider code contains no reintroduced transform layer, provider-owned clipping, unit conversion, generic retries, result assembly, hidden configuration reads, or provider-ID branches outside provider directories.
+6. Chained, coalesced, authenticated, query-based, source-fixed-window, capped-window, and bulk behaviors retain complete provenance without leaking secrets.
+7. Repeated port friction has either disappeared into one justified shared engine capability or remains as an explicit contract failure that prevents the affected claim from landing. No local workaround masks it.
+8. Canada and Poland retain all delivered bulk-store guarantees while gaining complete boundary coverage.
+9. Each proven replacement removes its retired legacy subtree and carries evidence-derived `Contributed by:` attribution.
+10. The complete network-free test, formatting, lint, and type-check gates pass, and source-interaction evidence can be replayed from a fresh clone without live network access.
 
 Passing these criteria answers the Effort's question. The engine supports the thirteen sources only if the providers remain small because shared logic truly has one home, not because duplicated behavior has been renamed or concealed.
