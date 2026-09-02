@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"numberMatched": 1,
+"name": "StationHydro",
+"features": [
+{ "type": "Feature", "properties": { "gid": 1, "CdStationHydro": "1011000101", "CdStationHydroAncienRef": "10113771", "LbStationHydro": "[Barbotteau] à Petit-Bourg - Barbotteau", "TypStationHydro": "STD", "DtMiseServiceStationHydro": "2012-11-10T23:00:00Z", "ProjCoordStationHydro": "39", "CoordXStationHydro": 643352.0, "CoordYStationHydro": 1790354.0, "NomIntervenant": "DEAL Guadeloupe - UH Guadeloupe", "LbAffichageStationHydro": "HydroPortail/Hydro 2" }, "geometry": { "type": "Point", "coordinates": [ -61.658989596947649, 16.189402471544746 ] } }
+]
+}

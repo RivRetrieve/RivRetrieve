@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"numberMatched": 1,
+"name": "StationHydro",
+"features": [
+{ "type": "Feature", "properties": { "gid": 5090, "CdStationHydro": "Y251002001", "CdStationHydroAncienRef": "Y2514015", "LbStationHydro": "L'Orb à Bédarieux", "TypStationHydro": "STD", "DtMiseServiceStationHydro": "1979-12-31T23:00:00Z", "ProjCoordStationHydro": "26", "CoordXStationHydro": 712700.0, "CoordYStationHydro": 6279677.0, "NomIntervenant": "DREAL Occitanie - UH Méditerranée O", "LbAffichageStationHydro": "Vigicrues/HydroPortail/Hydro 2" }, "geometry": { "type": "Point", "coordinates": [ 3.157282344039614, 43.616029774427403 ] } }
+]
+}

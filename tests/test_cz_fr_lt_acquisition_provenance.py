@@ -99,11 +99,20 @@ def test_france_withholds_facts_whose_sie_issuer_is_not_established() -> None:
     provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
 
     facts = {fact for item in provenance.withheld_facts for fact in item.facts}
-    assert sum(fact.startswith("source.station.") for fact in facts) == 7_323
-    assert sum(fact.startswith("source.observation.") for fact in facts) == 7_323
-    assert sum(fact.startswith("source.station_product.") for fact in facts) == 33_139
-    assert len(facts) == 47_785
+    assert sum(fact.startswith("source.station.") for fact in facts) == 7_320
+    assert sum(fact.startswith("source.observation.") for fact in facts) == 7_320
+    assert sum(fact.startswith("station_product:") for fact in facts) == 33_133
+    assert len(facts) == 47_773
     assert {item.reason for item in provenance.withheld_facts} == {"no_acquisition_record_established"}
+    bound_station_facts = {
+        fact for binding in provenance.fact_bindings for fact in binding.facts if fact.startswith("source.station.")
+    }
+    assert bound_station_facts == {
+        "source.station.01001336.identity_location_crs",
+        "source.station.1011000101.identity_location_crs",
+        "source.station.Y251002001.identity_location_crs",
+    }
+
     assert all(
         not fact.startswith(("source.station.", "source.station_product."))
         for binding in provenance.fact_bindings

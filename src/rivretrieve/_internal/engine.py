@@ -132,6 +132,7 @@ WindowGranularity = NewType("WindowGranularity", str)
 class WindowRenderingVocabulary(StrEnum):
     ISO_INSTANT = "iso-instant"
     DATE = "date"
+    DATE_DMY = "date-dmy"
     YEAR = "year"
     YEAR_MONTH = "year-month"
     NONE = "none"

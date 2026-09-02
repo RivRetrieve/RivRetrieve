@@ -19,11 +19,11 @@ def test_bosnia_provenance_withholds_unresolved_issuers_exactly() -> None:
     withheld = {fact for item in provenance.withheld_facts for fact in item.facts}
     assert "source.station:4024.identity_location" in bound
     assert "source.observation:4024.values_quality" in bound
-    assert len([fact for fact in withheld if fact.startswith("station:")]) == 59
-    assert len([fact for fact in withheld if fact.startswith("observation:")]) == 59
-    assert len([fact for fact in withheld if fact.startswith("station_product:")]) == 180
+    assert len([fact for fact in withheld if fact.startswith("station:")]) == 58
+    assert len([fact for fact in withheld if fact.startswith("observation:")]) == 58
+    assert len([fact for fact in withheld if fact.startswith("station_product:")]) == 177
     row_locators = [locator for group in provenance.withheld_facts for locator in group.catalogue_rows]
-    assert len(row_locators) == 239
+    assert len(row_locators) == 235
     assert {locator.product_id for locator in row_locators if locator.carrier == "station_product"} == {
         "discharge_instantaneous",
         "stage_instantaneous",

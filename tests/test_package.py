@@ -130,12 +130,12 @@ def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -
 def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     providers_root = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
     expected_station_products = {
-        "ba_fhmzbih": (0, 0, 0),
+        "ba_fhmzbih": (3, 0, 0),
         "br_ana": (0, 0, 0),
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (738, 0, 0),
         "cz_chmi": (4_155, 0, 0),
-        "fr_hubeau": (0, 0, 0),
+        "fr_hubeau": (6, 0, 0),
         "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
         "no_nve": (0, 0, 0),

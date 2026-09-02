@@ -1,0 +1,22 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+    "parameters": {
+      "code_entite": "1011000101",
+      "date_debut_obs_elab": "2025-01-01",
+      "date_fin_obs_elab": "2025-01-03",
+      "grandeur_hydro_elab": "QIXnJ",
+      "size": 20
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-02T15:46:12.659655Z",
+    "content_base64": "eyJjb3VudCI6MywiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic19lbGFiP2NvZGVfZW50aXRlPTEwMTEwMDAxMDEmZGF0ZV9kZWJ1dF9vYnNfZWxhYj0yMDI1LTAxLTAxJmRhdGVfZmluX29ic19lbGFiPTIwMjUtMDEtMDMmZ3JhbmRldXJfaHlkcm9fZWxhYj1RSVhuSiZjdXJzb3I9JnNpemU9MjAiLCJwcmV2IjpudWxsLCJuZXh0IjpudWxsLCJhcGlfdmVyc2lvbiI6IjIuMC4xIiwiZGF0YSI6W3siY29kZV9zaXRlIjoiMTAxMTAwMDEiLCJjb2RlX3N0YXRpb24iOiIxMDExMDAwMTAxIiwiZGF0ZV9vYnNfZWxhYiI6IjIwMjUtMDEtMDEiLCJyZXN1bHRhdF9vYnNfZWxhYiI6ODQ0LjAsImRhdGVfcHJvZCI6IjIwMjYtMDctMTRUMDg6MTc6NDlaIiwiY29kZV9zdGF0dXQiOjQsImxpYmVsbGVfc3RhdHV0IjoiRG9ubsOpZSBicnV0ZSIsImNvZGVfbWV0aG9kZSI6OCwibGliZWxsZV9tZXRob2RlIjoiQ2FsY3Vsw6llIiwiY29kZV9xdWFsaWZpY2F0aW9uIjoxNiwibGliZWxsZV9xdWFsaWZpY2F0aW9uIjoiTm9uIHF1YWxpZmnDqWUiLCJsb25naXR1ZGUiOi02MS42NTg5ODk1OTcsImxhdGl0dWRlIjoxNi4xODk0MDI0NzEsImdyYW5kZXVyX2h5ZHJvX2VsYWIiOiJRSVhuSiJ9LHsiY29kZV9zaXRlIjoiMTAxMTAwMDEiLCJjb2RlX3N0YXRpb24iOiIxMDExMDAwMTAxIiwiZGF0ZV9vYnNfZWxhYiI6IjIwMjUtMDEtMDIiLCJyZXN1bHRhdF9vYnNfZWxhYiI6ODEzLjAsImRhdGVfcHJvZCI6IjIwMjYtMDctMTRUMDg6MTc6NDlaIiwiY29kZV9zdGF0dXQiOjQsImxpYmVsbGVfc3RhdHV0IjoiRG9ubsOpZSBicnV0ZSIsImNvZGVfbWV0aG9kZSI6OCwibGliZWxsZV9tZXRob2RlIjoiQ2FsY3Vsw6llIiwiY29kZV9xdWFsaWZpY2F0aW9uIjoxNiwibGliZWxsZV9xdWFsaWZpY2F0aW9uIjoiTm9uIHF1YWxpZmnDqWUiLCJsb25naXR1ZGUiOi02MS42NTg5ODk1OTcsImxhdGl0dWRlIjoxNi4xODk0MDI0NzEsImdyYW5kZXVyX2h5ZHJvX2VsYWIiOiJRSVhuSiJ9LHsiY29kZV9zaXRlIjoiMTAxMTAwMDEiLCJjb2RlX3N0YXRpb24iOiIxMDExMDAwMTAxIiwiZGF0ZV9vYnNfZWxhYiI6IjIwMjUtMDEtMDMiLCJyZXN1bHRhdF9vYnNfZWxhYiI6ODIzLjAsImRhdGVfcHJvZCI6IjIwMjYtMDctMTRUMDg6MTc6NDlaIiwiY29kZV9zdGF0dXQiOjQsImxpYmVsbGVfc3RhdHV0IjoiRG9ubsOpZSBicnV0ZSIsImNvZGVfbWV0aG9kZSI6OCwibGliZWxsZV9tZXRob2RlIjoiQ2FsY3Vsw6llIiwiY29kZV9xdWFsaWZpY2F0aW9uIjoxNiwibGliZWxsZV9xdWFsaWZpY2F0aW9uIjoiTm9uIHF1YWxpZmnDqWUiLCJsb25naXR1ZGUiOi02MS42NTg5ODk1OTcsImxhdGl0dWRlIjoxNi4xODk0MDI0NzEsImdyYW5kZXVyX2h5ZHJvX2VsYWIiOiJRSVhuSiJ9XX0=",
+    "sha256": "82452c1484b16b1b5520aa2463982c1e44936b4ce44bf3727707529b23b0a901"
+  }
+}

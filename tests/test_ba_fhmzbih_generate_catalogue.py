@@ -158,7 +158,7 @@ def test_native_build_has_exact_counts_dates_and_schemas() -> None:
     assert set(catalogue.products["product_id"]).isdisjoint(withdrawn_product_ids)
     assert set(catalogue.station_products["product_id"]).isdisjoint(withdrawn_product_ids)
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
-    assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
+    assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2), date(2026, 9, 2)}
     assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert catalogue.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert catalogue.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
@@ -260,10 +260,10 @@ def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
         "7bdef973654f395a4d2e6d148ec7004f1e259563e5dfaa10a93ae148aba2affb"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
-        "c9afc7b34edb5f47d736ab631b107019277e025e05634688b68bbabde8e70739"
+        "4e62fd566f09c7e6f719a83895fbe310bcc8877a556f7376187a1537172e1798"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
-        "745d6f4791d1e78fa6f4e78082d3089808894915503e85cf8a2e3b0b78c98e0d"
+        "17a19a2e534ee264f93d0a8219acc31771119a566a6c8e026fa5becc9d2755bf"
     )
 
 

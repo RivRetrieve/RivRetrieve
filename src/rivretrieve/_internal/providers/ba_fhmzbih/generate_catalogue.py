@@ -357,11 +357,38 @@ def build_station_products(
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
                     "product_id": d.product_id,
-                    "availability": "unknown",
-                    "availability_reason": AVAILABILITY_REASON,
+                    "availability": (
+                        "available"
+                        if (station_id, d.product_id)
+                        in {
+                            ("4024", "discharge_instantaneous"),
+                            ("4024", "stage_instantaneous"),
+                            ("4110", "water_temperature_instantaneous"),
+                        }
+                        else "unknown"
+                    ),
+                    "availability_reason": (
+                        "Non-empty source workbook recorded on 2026-09-02"
+                        if (station_id, d.product_id)
+                        in {
+                            ("4024", "discharge_instantaneous"),
+                            ("4024", "stage_instantaneous"),
+                            ("4110", "water_temperature_instantaneous"),
+                        }
+                        else AVAILABILITY_REASON
+                    ),
                     "published_record_start_date": None,
                     "published_record_end_date": None,
-                    "last_catalogue_check": retrieved_date,
+                    "last_catalogue_check": (
+                        date(2026, 9, 2)
+                        if (station_id, d.product_id)
+                        in {
+                            ("4024", "discharge_instantaneous"),
+                            ("4024", "stage_instantaneous"),
+                            ("4110", "water_temperature_instantaneous"),
+                        }
+                        else retrieved_date
+                    ),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
