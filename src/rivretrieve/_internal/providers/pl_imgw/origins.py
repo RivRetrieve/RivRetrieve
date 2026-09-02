@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from rivretrieve._internal.acquisition_provenance import (
+    AbsenceMarkerValue,
     AcquisitionProvenance,
     AcquisitionRecord,
     EvidenceReference,
@@ -19,6 +20,7 @@ from rivretrieve._internal.acquisition_provenance import (
     WithheldFact,
 )
 from rivretrieve._internal.catalogue_origins import Field, NativeColumn, Withheld
+from rivretrieve._internal.issues import FatalContractError
 
 CRS_EVIDENCE_URL = "https://danepubliczne.imgw.pl/pl/apiinfo"
 """Retained IMGW evidence URL; it is not authority for GRDC-issued geometry."""
@@ -40,6 +42,23 @@ NATIVE_TABLE_SHA256 = "46b162f8f28e31db1a5e3caec1e5ead7f23cd07cfbc5c3975ca5e9af7
 NATIVE_TABLE_REVISION = "c9c81934bb1773b0286c968f4fd7323f724c71ac"
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet"
 NATIVE_TABLE_SEMANTIC_SHA256 = "c7fb3582edcc4b66a154d5dac52acd22d2847cd04ed54f5ee94fbf7c8bc6d9ec"
+
+# Public, redacted output of the completed local verification. The private message,
+# its headers, and the checked excerpt are deliberately not committed.
+FORWARDED_COPY_VERIFICATION = PrivateStatementVerification(
+    schema_version=2,
+    statement_id="pl_imgw.grdc.inclusion",
+    evidence_kind="forwarded_copy",
+    limitation="original_byte_identity_not_established",
+    evidence_sha256="6ffc840e3a371cc7731fdd587e3d3a3918e47aa73c0e7e1c1251e54494054742",
+    evidence_byte_count=228_628,
+    workbook_sha256="dfab6ea7de80fb1570f4a8dded8743ed7c7dcb4eb67fe75e2c0e02e9b964b7bf",
+    workbook_byte_count=116_301,
+    statement_sha256="a95a0e6b9f0f26c87b2d04e02098b3c0dbc24525bdd75b17dfddfa0cd0c443c2",
+    decoded_text_plain_occurrence_count=1,
+    decoded_text_html_occurrence_count=1,
+    verified=True,
+)
 
 PROVIDER_FACTS = (
     "provider.provider_id",
@@ -74,10 +93,16 @@ STATION_PRODUCT_FACTS = (
     "station_product.last_catalogue_check",
 )
 OBSERVATION_FACTS = (
-    "observation.request",
-    "observation.response",
-    "observation.value",
-    "observation.quality",
+    "source.observation.request",
+    "source.observation.response",
+    "source.observation.value",
+    "source.observation.quality",
+)
+IMGW_SOURCE_FACTS = (
+    "source.imgw.provider_service_identity",
+    "source.imgw.observation_archive_product_semantics",
+    "source.imgw.station_roster_membership",
+    "source.imgw.station_product.availability_not_published",
 )
 GRDC_NATIVE_FACTS = (
     "native.gauge_id",
@@ -92,6 +117,7 @@ POLAND_FACT_UNIVERSE = (
     *PROVIDER_FACTS,
     *PROVIDER_COMPATIBILITY_FACTS,
     *IMGW_STATEMENT_FACTS,
+    *IMGW_SOURCE_FACTS,
     *PRODUCT_FACTS,
     "station.provider_id",
     "station.station_id",
@@ -110,11 +136,30 @@ def build_acquisition_provenance(
 ) -> AcquisitionProvenance:
     """Build Poland's mixed-source acquisition provenance.
 
+    Parameters
+    ----------
+    private_verification
+        Optional local re-verification result. When supplied, it must equal the
+        committed redacted forwarded-copy declaration exactly.
+
     Returns
     -------
     AcquisitionProvenance
         Closed IMGW and GRDC source records with field-level bindings.
+
+    Raises
+    ------
+    FatalContractError
+        If a supplied re-verification record differs from the committed declaration.
     """
+    if private_verification is not None:
+        from rivretrieve._internal.private_source_verification import validate_private_email_verification_pin
+
+        private_verification = validate_private_email_verification_pin(private_verification)
+        if private_verification != FORWARDED_COPY_VERIFICATION:
+            raise FatalContractError("pl_imgw redacted private verification record differs from committed origin")
+    private_verification = FORWARDED_COPY_VERIFICATION
+
     terms = RecordingReference(
         recording_id="pl_imgw_terms_regulations",
         repository_path="tests/test_data/pl_imgw_terms_regulations.html",
@@ -221,15 +266,14 @@ def build_acquisition_provenance(
                         ),
                     ),
                     AcquisitionRecord(
-                        acquisition_id="grdc_workbook_corroboration_2025_11_07",
+                        acquisition_id="grdc_workbook_corroboration_private_receipt",
                         method="corroborating_receipt",
-                        instant_type="corroborating_receipt",
+                        instant_type="private_redacted_corroborating_receipt",
                         description=(
                             "Later GRDC workbook receipt corroborates every recovered field but is not "
                             "established as the historical acquisition that produced the recovered import"
                         ),
-                        requested_from=("private correspondence from GRDC/BfG",),
-                        retrieved_at_start=datetime.fromisoformat("2025-11-07T12:40:38Z"),
+                        requested_from=("private://grdc-bfg/correspondence",),
                         material=MaterialIdentity(
                             filename="Metadata_GRDC_30.10.2025.xlsx",
                             byte_count=116301,
@@ -240,15 +284,7 @@ def build_acquisition_provenance(
                 statements=(
                     SourceStatement(
                         kind="access",
-                        exact_text=(
-                            "I just wanted to send you the metadata for all stations of Poland.\n\n"
-                            "Feel free to include them!"
-                        ),
-                        verification_status=(
-                            "verified_private_original"
-                            if private_verification is not None
-                            else "unverified_private_original_required"
-                        ),
+                        verification_status="verified_private_forwarded_copy",
                         private_verification=private_verification,
                     ),
                 ),
@@ -256,8 +292,8 @@ def build_acquisition_provenance(
         ),
         fact_bindings=(
             FactBinding(
-                fact_group="imgw_provider_catalogue",
-                facts=PROVIDER_FACTS,
+                fact_group="imgw_catalogue_inputs",
+                facts=IMGW_SOURCE_FACTS,
                 source_id="sr.pl.imgw",
                 acquisition_id="imgw_catalogue_routes_2026_08_02",
             ),
@@ -268,45 +304,64 @@ def build_acquisition_provenance(
                 acquisition_id="imgw_catalogue_routes_2026_08_02",
             ),
             FactBinding(
+                fact_group="grdc_native_station_fields",
+                facts=GRDC_NATIVE_FACTS,
+                source_id="sr.pl.grdc",
+                acquisition_id="recovered_upstream_import_f67f6d8",
+            ),
+            FactBinding(
+                fact_group="rivretrieve_provider_catalogue",
+                facts=PROVIDER_FACTS,
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="IMGW service identity to RivRetrieve provider carrier",
+                    external_inputs=(
+                        ExternalFactReference(source_id="sr.pl.imgw", fact=IMGW_SOURCE_FACTS[0]),
+                        ExternalFactReference(source_id="sr.pl.imgw", fact=IMGW_SOURCE_FACTS[1]),
+                    ),
+                ),
+            ),
+            FactBinding(
                 fact_group="rivretrieve_provider_terms_compatibility",
                 facts=PROVIDER_COMPATIBILITY_FACTS,
                 source_id=None,
                 acquisition_id=None,
                 transformation=Transformation(
                     name="RivRetrieve null marker for unsafe singular mixed-source terms fields",
+                    kind="absence_marker",
+                    marker_value=AbsenceMarkerValue.NULL,
                     external_inputs=(
-                        ExternalFactReference(
-                            source_id="sr.pl.imgw",
-                            fact="source.imgw.license_statement",
-                        ),
-                        ExternalFactReference(
-                            source_id="sr.pl.imgw",
-                            fact="source.imgw.citation_statement",
-                        ),
-                        ExternalFactReference(
-                            source_id="sr.pl.grdc",
-                            fact="native.gauge_id",
-                        ),
+                        ExternalFactReference(source_id="sr.pl.imgw", fact="source.imgw.license_statement"),
+                        ExternalFactReference(source_id="sr.pl.imgw", fact="source.imgw.citation_statement"),
+                        ExternalFactReference(source_id="sr.pl.grdc", fact="native.gauge_id"),
                     ),
                 ),
             ),
             FactBinding(
-                fact_group="imgw_product_catalogue",
+                fact_group="rivretrieve_product_catalogue",
                 facts=PRODUCT_FACTS,
-                source_id="sr.pl.imgw",
-                acquisition_id="imgw_catalogue_routes_2026_08_02",
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="IMGW archive semantics to RivRetrieve product carrier",
+                    external_inputs=(ExternalFactReference(source_id="sr.pl.imgw", fact=IMGW_SOURCE_FACTS[1]),),
+                ),
             ),
             FactBinding(
-                fact_group="imgw_station_membership",
-                facts=("station.provider_id",),
-                source_id="sr.pl.imgw",
-                acquisition_id="imgw_catalogue_routes_2026_08_02",
-            ),
-            FactBinding(
-                fact_group="grdc_station_catalogue",
-                facts=("station.station_id", "station.latitude", "station.longitude", *GRDC_NATIVE_FACTS),
-                source_id="sr.pl.grdc",
-                acquisition_id="recovered_upstream_import_f67f6d8",
+                fact_group="rivretrieve_station_catalogue",
+                facts=("station.provider_id", "station.station_id", "station.latitude", "station.longitude"),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="IMGW roster and GRDC native fields to RivRetrieve station carrier",
+                    external_inputs=(
+                        ExternalFactReference(source_id="sr.pl.imgw", fact=IMGW_SOURCE_FACTS[2]),
+                        ExternalFactReference(source_id="sr.pl.grdc", fact="native.gauge_id"),
+                        ExternalFactReference(source_id="sr.pl.grdc", fact="native.latitude"),
+                        ExternalFactReference(source_id="sr.pl.grdc", fact="native.longitude"),
+                    ),
+                ),
             ),
             FactBinding(
                 fact_group="rivretrieve_crs_knowledge_state",
@@ -315,19 +370,25 @@ def build_acquisition_provenance(
                 acquisition_id=None,
                 transformation=Transformation(
                     name="RivRetrieve unknown marker for an unestablished source horizontal CRS",
-                    external_inputs=(
-                        ExternalFactReference(
-                            source_id="sr.pl.grdc",
-                            fact="source.grdc.horizontal_crs",
-                        ),
-                    ),
+                    kind="absence_marker",
+                    marker_value=AbsenceMarkerValue.UNKNOWN,
+                    external_inputs=(ExternalFactReference(source_id="sr.pl.grdc", fact="source.grdc.horizontal_crs"),),
                 ),
             ),
             FactBinding(
-                fact_group="imgw_station_product_catalogue",
+                fact_group="rivretrieve_station_product_catalogue",
                 facts=STATION_PRODUCT_FACTS,
-                source_id="sr.pl.imgw",
-                acquisition_id="imgw_catalogue_routes_2026_08_02",
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="IMGW and GRDC inputs to RivRetrieve station-product carrier",
+                    external_inputs=(
+                        ExternalFactReference(source_id="sr.pl.imgw", fact=IMGW_SOURCE_FACTS[1]),
+                        ExternalFactReference(source_id="sr.pl.imgw", fact=IMGW_SOURCE_FACTS[2]),
+                        ExternalFactReference(source_id="sr.pl.imgw", fact=IMGW_SOURCE_FACTS[3]),
+                        ExternalFactReference(source_id="sr.pl.grdc", fact="native.gauge_id"),
+                    ),
+                ),
             ),
             FactBinding(
                 fact_group="imgw_observation_acquisition",

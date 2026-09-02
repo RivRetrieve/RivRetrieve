@@ -6,12 +6,14 @@ from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     AcquisitionRecord,
     EvidenceReference,
+    ExternalFactReference,
     FactBinding,
     NativeTableIdentity,
     RecordingReference,
     SemanticDigest,
     SourceRecord,
     SourceStatement,
+    Transformation,
 )
 from rivretrieve._internal.catalogue_origins import Evidence, Field, NativeColumn, NotPublished
 
@@ -68,12 +70,21 @@ STATION_PRODUCT_FACTS = (
     "station_product.last_catalogue_check",
 )
 OBSERVATION_FACTS = (
-    "observation.request",
-    "observation.response",
-    "observation.value",
-    "observation.quality",
+    "source.observation.request",
+    "source.observation.response",
+    "source.observation.value",
+    "source.observation.quality",
+)
+SOURCE_FACTS = (
+    "source.provider.service_identity_and_terms",
+    "source.product.native_kind_semantics",
+    "source.station.native_identity",
+    "source.station.world_geodetic_dms",
+    "source.station.horizontal_crs_not_published",
+    "source.station_product.availability_not_published",
 )
 JAPAN_FACT_UNIVERSE = (
+    *SOURCE_FACTS,
     *PROVIDER_FACTS,
     *PRODUCT_FACTS,
     *STATION_FACTS,
@@ -113,6 +124,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
             repository_path=NATIVE_TABLE_REPOSITORY_PATH,
             revision=NATIVE_TABLE_REVISION,
             sha256=NATIVE_TABLE_SHA256,
+            byte_size=76_666,
             semantic_digest=SemanticDigest(
                 name="jp_mlit.native_table_content_sha256",
                 sha256=NATIVE_TABLE_SEMANTIC_SHA256,
@@ -128,6 +140,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                     AcquisitionRecord(
                         acquisition_id="station_register_capture_2026_08_02",
                         method="http_campaign",
+                        instant_type="retrieval_interval",
                         description=(
                             "1,024 requests seeded by the legacy packaged station identifiers; "
                             "1,023 accepted MLIT station-detail responses and one source-confirmed absence"
@@ -139,6 +152,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                     AcquisitionRecord(
                         acquisition_id="observation_request",
                         method="runtime_http_request",
+                        instant_type="runtime",
                         description=(
                             "Observation requests are acquired from MLIT DspWaterData pages and "
                             "the referenced Shift-JIS data download; each result retains its runtime calls"
@@ -184,28 +198,55 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
         ),
         fact_bindings=(
             FactBinding(
-                fact_group="provider_catalogue",
-                facts=PROVIDER_FACTS,
+                fact_group="mlit_catalogue_inputs",
+                facts=SOURCE_FACTS,
                 source_id="jp_mlit",
                 acquisition_id="station_register_capture_2026_08_02",
+            ),
+            FactBinding(
+                fact_group="provider_catalogue",
+                facts=PROVIDER_FACTS,
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="MLIT service and terms to RivRetrieve provider carrier",
+                    external_inputs=(ExternalFactReference(source_id="jp_mlit", fact=SOURCE_FACTS[0]),),
+                ),
             ),
             FactBinding(
                 fact_group="product_catalogue",
                 facts=PRODUCT_FACTS,
-                source_id="jp_mlit",
-                acquisition_id="station_register_capture_2026_08_02",
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="MLIT native KIND semantics to RivRetrieve product carrier",
+                    external_inputs=(ExternalFactReference(source_id="jp_mlit", fact=SOURCE_FACTS[1]),),
+                ),
             ),
             FactBinding(
                 fact_group="station_catalogue",
                 facts=STATION_FACTS,
-                source_id="jp_mlit",
-                acquisition_id="station_register_capture_2026_08_02",
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="MLIT station register fields to RivRetrieve station carrier",
+                    external_inputs=tuple(
+                        ExternalFactReference(source_id="jp_mlit", fact=fact) for fact in SOURCE_FACTS[2:5]
+                    ),
+                ),
             ),
             FactBinding(
                 fact_group="station_product_catalogue",
                 facts=STATION_PRODUCT_FACTS,
-                source_id="jp_mlit",
-                acquisition_id="station_register_capture_2026_08_02",
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="MLIT station and product facts to RivRetrieve station-product carrier",
+                    external_inputs=tuple(
+                        ExternalFactReference(source_id="jp_mlit", fact=fact)
+                        for fact in (SOURCE_FACTS[1], SOURCE_FACTS[2], SOURCE_FACTS[5])
+                    ),
+                ),
             ),
             FactBinding(
                 fact_group="observation_acquisition",

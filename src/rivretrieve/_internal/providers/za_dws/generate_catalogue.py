@@ -19,6 +19,7 @@ from typing import cast
 import polars as pl
 from pypdf import PdfReader
 
+from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -380,6 +381,13 @@ def write_catalogue(catalogue: GeneratedZaDwsCatalogue, out_dir: Path | str) -> 
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        __import__("rivretrieve._internal.providers.za_dws.origins", fromlist=["build_acquisition_provenance"])
+        .build_acquisition_provenance()
+        .model_dump_json()
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -686,7 +694,16 @@ def _validate(
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(provider_info, products, stations, station_products, on_issue="raise")
+    packaged_catalogue_artifact_from_components(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance=__import__(
+            "rivretrieve._internal.providers.za_dws.origins", fromlist=["build_acquisition_provenance"]
+        ).build_acquisition_provenance(),
+        on_issue="raise",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -768,9 +785,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--out requires --native")
     if args.retrieved_at is not None:
         parser.error("--retrieved-at is only valid with fixture or live refresh mode")
-    from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.za_dws.origins import (
+        NATIVE_TABLE_BYTE_SIZE,
+        NATIVE_TABLE_SHA256,
+        STATION_CATALOGUE_ORIGINS,
+        build_acquisition_provenance,
+    )
 
-    write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
+    verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
+    native_table = read_native_table(
+        args.native,
+        expected_sha256=NATIVE_TABLE_SHA256,
+        expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+    )
+    write_catalogue(build_catalogue(native_table, STATION_CATALOGUE_ORIGINS), args.out)
     return 0
 
 

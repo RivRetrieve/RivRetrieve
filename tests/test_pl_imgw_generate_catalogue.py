@@ -765,7 +765,7 @@ def test_native_build_matches_independent_exact_full_projections() -> None:
     }
 
 
-def test_native_build_is_byte_identical_to_committed_artifacts(tmp_path: Path) -> None:
+def test_native_build_without_reverification_input_is_byte_identical_to_committed_artifacts(tmp_path: Path) -> None:
     result = generate_catalogue.main(
         [
             "--native",

@@ -20,8 +20,6 @@ def test_wheel_excludes_catalogue_build_inputs(tmp_path: Path) -> None:
     assert len(wheels) == 1
 
     with ZipFile(wheels[0]) as wheel:
-        native_inputs = sorted(
-            name for name in wheel.namelist() if name.endswith("/catalogue/native.parquet")
-        )
+        native_inputs = sorted(name for name in wheel.namelist() if name.endswith("/catalogue/native.parquet"))
 
     assert native_inputs == []

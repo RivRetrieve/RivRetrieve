@@ -79,5 +79,8 @@ def test_projected_national_artifacts_have_pinned_complete_content() -> None:
     provenance = json.loads((catalogue / "provenance.json").read_text(encoding="utf-8"))
     assert provenance["native_table"] is None
     assert provenance["source_records"] == []
-    assert provenance["fact_bindings"] == []
+    assert len(provenance["fact_bindings"]) == 1
+    authored = provenance["fact_bindings"][0]
+    assert authored["fact_group"] == "rivretrieve_authored_provider_registration"
+    assert authored["transformation"]["kind"] == "authored_constant"
     assert {item["reason"] for item in provenance["withheld_facts"]} == {"no_acquisition_record_established"}

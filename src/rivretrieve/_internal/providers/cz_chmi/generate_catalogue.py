@@ -13,6 +13,7 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -36,6 +37,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.cz_chmi.origins import (
+    NATIVE_TABLE_BYTE_SIZE,
+    NATIVE_TABLE_SHA256,
+    build_acquisition_provenance,
+)
 
 PROVIDER_ID = ProviderId("cz_chmi")
 PROVIDER_NAME = "Czech Hydrometeorological Institute (CHMI) Open Data"
@@ -305,6 +311,7 @@ def validate_generated_catalogue(
         products,
         stations,
         station_products,
+        acquisition_provenance=build_acquisition_provenance(),
         on_issue="raise",
     )
 
@@ -318,6 +325,9 @@ def write_catalogue(catalogue: GeneratedCzChmiCatalogue, out_dir: Path | str) ->
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        build_acquisition_provenance().model_dump_json() + "\n", encoding="utf-8"
+    )
 
 
 def _extract_stations(raw_metadata: dict[str, object]) -> list[dict[str, object]]:
@@ -452,7 +462,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--retrieved-at is only valid with refresh mode")
     from rivretrieve._internal.providers.cz_chmi.origins import STATION_CATALOGUE_ORIGINS
 
-    write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
+    provenance = build_acquisition_provenance()
+    verify_provenance_recordings(provenance, Path(__file__).resolve().parents[5])
+    write_catalogue(
+        build_catalogue(
+            read_native_table(
+                args.native,
+                expected_sha256=NATIVE_TABLE_SHA256,
+                expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+            ),
+            STATION_CATALOGUE_ORIGINS,
+        ),
+        args.out,
+    )
     return 0
 
 

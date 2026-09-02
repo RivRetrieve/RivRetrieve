@@ -44,7 +44,12 @@ def stamp_native_table(source_rows: SourceRows, retrieved_at: RetrievedAt) -> Na
     return NativeTable(data)
 
 
-def read_native_table(path: Path | str, *, expected_sha256: str | None = None) -> NativeTable:
+def read_native_table(
+    path: Path | str,
+    *,
+    expected_sha256: str | None = None,
+    expected_byte_size: int | None = None,
+) -> NativeTable:
     """Read a native table after optional raw-byte identity verification.
 
     Parameters
@@ -54,6 +59,9 @@ def read_native_table(path: Path | str, *, expected_sha256: str | None = None) -
     expected_sha256
         Exact expected SHA-256 of the file bytes. When supplied, verification
         occurs before Parquet parsing.
+    expected_byte_size
+        Exact expected file size. This supplements raw digest verification and
+        is checked before Parquet parsing.
 
     Returns
     -------
@@ -70,15 +78,20 @@ def read_native_table(path: Path | str, *, expected_sha256: str | None = None) -
 
     source_path = Path(path)
     verified_bytes: bytes | None = None
-    if expected_sha256 is not None:
+    if expected_sha256 is not None or expected_byte_size is not None:
         try:
             verified_bytes = source_path.read_bytes()
         except OSError as exc:
             raise FatalContractError(f"Unable to read native table: {source_path}") from exc
         observed_sha256 = hashlib.sha256(verified_bytes).hexdigest()
-        if observed_sha256 != expected_sha256:
+        if expected_sha256 is not None and observed_sha256 != expected_sha256:
             raise FatalContractError(
                 f"native table digest mismatch: expected {expected_sha256}, observed {observed_sha256}"
+            )
+        observed_byte_size = len(verified_bytes)
+        if expected_byte_size is not None and observed_byte_size != expected_byte_size:
+            raise FatalContractError(
+                f"native table byte-size mismatch: expected {expected_byte_size}, observed {observed_byte_size}"
             )
     try:
         data = pl.read_parquet(io.BytesIO(verified_bytes) if verified_bytes is not None else source_path)

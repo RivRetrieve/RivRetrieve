@@ -285,8 +285,7 @@ def test_provider_tests_have_no_literal_builtin_provider_census() -> None:
                 continue
             expressions = (node.left, *node.comparators)
             has_literal = any(
-                isinstance(expression, ast.Constant) and isinstance(expression.value, int)
-                for expression in expressions
+                isinstance(expression, ast.Constant) and isinstance(expression.value, int) for expression in expressions
             )
             has_provider_count = any(
                 isinstance(expression, ast.Call)

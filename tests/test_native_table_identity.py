@@ -24,3 +24,15 @@ def test_japan_native_table_refuses_one_byte_substitution(tmp_path: Path) -> Non
         match=rf"native table digest mismatch: expected {_EXPECTED}, observed [0-9a-f]{{64}}",
     ):
         read_native_table(substituted, expected_sha256=_EXPECTED)
+
+
+def test_native_table_refuses_wrong_declared_byte_size() -> None:
+    with pytest.raises(
+        FatalContractError,
+        match=rf"native table byte-size mismatch: expected {_NATIVE.stat().st_size + 1}, observed {_NATIVE.stat().st_size}",
+    ):
+        read_native_table(
+            _NATIVE,
+            expected_sha256=_EXPECTED,
+            expected_byte_size=_NATIVE.stat().st_size + 1,
+        )

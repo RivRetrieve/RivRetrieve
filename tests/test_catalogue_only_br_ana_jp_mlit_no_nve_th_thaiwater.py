@@ -47,11 +47,11 @@ CATALOGUE_ONLY_PROVIDERS = (
         "th_thaiwater",
         825,
         2,
-        1650,
+        0,
         {"discharge_instantaneous", "stage_instantaneous"},
         "ThaiWater public API / Hydro-Informatics Institute (HII)",
         "2026-08-02",
-        {"unknown"},
+        set(),
     ),
     (
         "za_dws",

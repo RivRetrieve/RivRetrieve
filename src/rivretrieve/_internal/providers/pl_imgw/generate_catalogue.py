@@ -318,7 +318,6 @@ def _read_live_roster(path: Path, retrieved_at: RetrievedAt) -> LiveImgwRoster:
 def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
-    acquisition_provenance: AcquisitionProvenance | None = None,
 ) -> GeneratedPlImgwCatalogue:
     """Build all canonical artifacts from source-faithful native rows."""
     products = build_products()
@@ -331,10 +330,9 @@ def build_catalogue(
     station_products = build_station_products(stations, effective_date)
     provider_info = build_provider_info(effective_date)
 
-    if acquisition_provenance is None:
-        from rivretrieve._internal.providers.pl_imgw.origins import build_acquisition_provenance
+    from rivretrieve._internal.providers.pl_imgw.origins import build_acquisition_provenance
 
-        acquisition_provenance = build_acquisition_provenance()
+    acquisition_provenance = build_acquisition_provenance()
     _validate(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedPlImgwCatalogue(
         provider_info=provider_info,
@@ -515,24 +513,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--private-verification-record",
         type=Path,
-        help="Optional redacted original-email verification record consumed by canonical generation.",
+        help="Optional re-verification record; it must equal the committed redacted origin declaration.",
     )
     parser.add_argument(
-        "--verify-original-grdc-email",
+        "--verify-forwarded-grdc-email",
         type=Path,
-        help="Private original .eml to verify without retaining or printing its contents.",
+        help="Authorized private forwarded .eml to verify with an explicit original-identity limitation.",
     )
     parser.add_argument(
         "--private-verification-out",
         type=Path,
         help="Destination for the redacted private-email verification record.",
     )
+    parser.add_argument(
+        "--private-statement-text",
+        type=Path,
+        help="Private exact source words; read locally and included only after verification.",
+    )
     args = parser.parse_args(argv)
 
-    private_mode = args.verify_original_grdc_email is not None or args.private_verification_out is not None
+    private_email_inputs = tuple(value for value in (args.verify_forwarded_grdc_email,) if value is not None)
+    private_mode = bool(private_email_inputs) or args.private_verification_out is not None
     if private_mode:
-        if args.verify_original_grdc_email is None or args.private_verification_out is None:
-            parser.error("private verification requires --verify-original-grdc-email and --private-verification-out")
+        if (
+            len(private_email_inputs) != 1
+            or args.private_verification_out is None
+            or args.private_statement_text is None
+        ):
+            parser.error(
+                "private verification requires exactly one private email input, "
+                "--private-verification-out, and --private-statement-text"
+            )
         other_values = (
             args.fixture,
             args.native,
@@ -548,14 +559,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("private verification cannot be combined with catalogue generation")
         from rivretrieve._internal.private_source_verification import (
             serialize_private_email_verification,
-            verify_original_grdc_email,
+            verify_forwarded_grdc_email,
         )
 
+        private_email_path = private_email_inputs[0]
         try:
-            private_bytes = args.verify_original_grdc_email.read_bytes()
+            private_bytes = private_email_path.read_bytes()
         except OSError as exc:
-            raise FatalContractError("pl_imgw private original email cannot be read") from exc
-        record = verify_original_grdc_email(private_bytes)
+            raise FatalContractError("pl_imgw private email cannot be read") from exc
+        try:
+            private_statement_text = args.private_statement_text.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise FatalContractError("pl_imgw private statement text cannot be read") from exc
+        record = verify_forwarded_grdc_email(private_bytes, private_statement_text)
         args.private_verification_out.write_text(serialize_private_email_verification(record) + "\n", encoding="utf-8")
         print(f"pl_imgw private statement {record.statement_id}: verified; redacted record written")
         return 0
@@ -613,8 +629,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             private_verification_bytes = args.private_verification_record.read_bytes()
         except OSError as exc:
-            raise FatalContractError("pl_imgw redacted private verification record cannot be read") from exc
+            raise FatalContractError("pl_imgw private verification input cannot be read") from exc
         private_verification = parse_private_email_verification(private_verification_bytes)
+    if args.private_statement_text is not None:
+        parser.error("--private-statement-text is accepted only during local private-email verification")
     provenance = build_acquisition_provenance(private_verification)
     try:
         terms_bytes = args.terms_recording.read_bytes()
@@ -627,7 +645,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     catalogue = build_catalogue(
         read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256),
         STATION_CATALOGUE_ORIGINS,
-        provenance,
     )
     write_catalogue(catalogue, args.out)
     print(

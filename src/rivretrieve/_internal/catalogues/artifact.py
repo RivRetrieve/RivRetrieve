@@ -10,7 +10,7 @@ from pathlib import Path
 import polars as pl
 from pydantic import ValidationError
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+from rivretrieve._internal.acquisition_provenance import AbsenceMarkerValue, AcquisitionProvenance
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -30,7 +30,23 @@ REQUIRED_ARTIFACT_FILES = (
     "station_products.parquet",
 )
 
-ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset({"br_ana", "jp_mlit", "no_nve", "pl_imgw"})
+ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
+    {
+        "ba_fhmzbih",
+        "br_ana",
+        "ca_eccc",
+        "ch_foen",
+        "cz_chmi",
+        "fr_hubeau",
+        "jp_mlit",
+        "lt_lhmt",
+        "no_nve",
+        "pl_imgw",
+        "th_thaiwater",
+        "usgs_nwis",
+        "za_dws",
+    }
+)
 
 _CATALOGUE_FACT_SCHEMAS: tuple[tuple[str, CatalogueSchema], ...] = (
     ("provider", PROVIDER_INFO_CATALOG_SCHEMA),
@@ -78,6 +94,7 @@ def load_packaged_catalogue_artifact(
         stations,
         station_products,
         acquisition_provenance=acquisition_provenance,
+        withheld_rows_already_applied=True,
         on_issue=on_issue,
     )
 
@@ -89,6 +106,7 @@ def packaged_catalogue_artifact_from_components(
     station_products: pl.DataFrame,
     *,
     acquisition_provenance: AcquisitionProvenance | None = None,
+    withheld_rows_already_applied: bool = False,
     on_issue: OnIssue = "warn",
 ) -> PackagedCatalogArtifact:
     try:
@@ -108,8 +126,16 @@ def packaged_catalogue_artifact_from_components(
                 stations,
                 station_products,
                 acquisition_provenance,
+                allow_missing_rows=withheld_rows_already_applied,
             )
             provider_info_df = _provider_info_to_df(provider_info)
+            _validate_absence_marker_values(
+                provider_info_df,
+                products,
+                stations,
+                station_products,
+                acquisition_provenance,
+            )
         station_products = _normalize_availability(station_products)
 
         validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue=on_issue)
@@ -148,12 +174,51 @@ def _validate_catalogue_fact_universe(provenance: AcquisitionProvenance) -> None
         )
 
 
+def _validate_absence_marker_values(
+    provider_info: pl.DataFrame,
+    products: pl.DataFrame,
+    stations: pl.DataFrame,
+    station_products: pl.DataFrame,
+    provenance: AcquisitionProvenance,
+) -> None:
+    """Require declared absence markers to equal their canonical carrier values."""
+    tables = {
+        "provider": provider_info,
+        "product": products,
+        "station": stations,
+        "station_product": station_products,
+    }
+    for binding in provenance.fact_bindings:
+        transformation = binding.transformation
+        if transformation is None or transformation.kind != "absence_marker":
+            continue
+        marker_value = transformation.marker_value
+        if marker_value is None:  # pragma: no cover - rejected by the provenance model
+            raise AssertionError("absence-marker transformation has no marker value")
+        expected: object = None if marker_value == AbsenceMarkerValue.NULL else marker_value.value
+        for fact in binding.facts:
+            carrier, separator, column = fact.partition(".")
+            if not separator or carrier not in tables or column not in tables[carrier].columns:
+                raise FatalContractError(f"absence marker output {fact!r} does not resolve to a catalogue carrier")
+            mismatch_expression = (
+                pl.col(column).is_not_null() if marker_value == AbsenceMarkerValue.NULL else pl.col(column) != expected
+            )
+            mismatches = tables[carrier].filter(mismatch_expression).height
+            if mismatches:
+                raise FatalContractError(
+                    f"absence marker output {fact} must be exactly {marker_value.value}; "
+                    f"found {mismatches} mismatching rows"
+                )
+
+
 def _apply_withheld_facts(
     provider_info: Mapping[str, object],
     products: pl.DataFrame,
     stations: pl.DataFrame,
     station_products: pl.DataFrame,
     provenance: AcquisitionProvenance,
+    *,
+    allow_missing_rows: bool,
 ) -> tuple[dict[str, object], pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     normalized_provider = dict(provider_info)
     tables = {
@@ -162,6 +227,30 @@ def _apply_withheld_facts(
         "station_product": station_products,
     }
     schemas = dict(_CATALOGUE_FACT_SCHEMAS)
+    station_row_ids: list[str] = []
+    station_product_row_keys: list[tuple[str, str]] = []
+    for withheld_group in provenance.withheld_facts:
+        for locator in withheld_group.catalogue_rows:
+            if locator.carrier == "station":
+                matches = stations.filter(pl.col("station_id") == locator.station_id).height
+                if matches != 1 and not (allow_missing_rows and matches == 0):
+                    raise FatalContractError(
+                        f"{provenance.provider_id} withheld station row {locator.station_id!r} "
+                        f"matched {matches} catalogue rows"
+                    )
+                station_row_ids.append(locator.station_id)
+            else:
+                matches = station_products.filter(
+                    (pl.col("station_id") == locator.station_id) & (pl.col("product_id") == locator.product_id)
+                ).height
+                if matches != 1 and not (allow_missing_rows and matches == 0):
+                    raise FatalContractError(
+                        f"{provenance.provider_id} withheld station-product row "
+                        f"{locator.station_id!r}/{locator.product_id!r} matched {matches} catalogue rows"
+                    )
+                if locator.product_id is None:  # pragma: no cover - rejected by the model
+                    raise AssertionError("station-product locator has no product id")
+                station_product_row_keys.append((locator.station_id, locator.product_id))
     for withheld_group in provenance.withheld_facts:
         for withheld_fact in withheld_group.facts:
             prefix, separator, column_name = withheld_fact.partition(".")
@@ -170,11 +259,13 @@ def _apply_withheld_facts(
             schema = schemas[prefix]
             column = next(item for item in schema.columns if item.name == column_name)
             if prefix == "provider":
+                value = normalized_provider.get(column_name)
                 if column.nullable:
                     normalized_provider[column_name] = None
-                # provider.json is the packaged registration manifest. Required
-                # routing fields remain addressable, but provenance marks them
-                # unavailable as catalogue facts until acquisition is established.
+                elif value is not None:
+                    raise FatalContractError(
+                        f"{provenance.provider_id} withheld provider.{column_name} remains exposed"
+                    )
                 continue
             table = tables[prefix]
             if column.nullable:
@@ -185,6 +276,15 @@ def _apply_withheld_facts(
     products = tables["product"]
     stations = tables["station"]
     station_products = tables["station_product"]
+    if station_row_ids:
+        stations = stations.filter(~pl.col("station_id").is_in(station_row_ids))
+    if station_product_row_keys:
+        withheld_keys = pl.DataFrame(
+            station_product_row_keys,
+            schema={"station_id": pl.String, "product_id": pl.String},
+            orient="row",
+        )
+        station_products = station_products.join(withheld_keys, on=["station_id", "product_id"], how="anti")
     if station_products.height:
         station_products = station_products.join(
             stations.select("provider_id", "station_id"),

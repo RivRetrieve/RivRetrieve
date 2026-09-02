@@ -653,7 +653,18 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
             )
         )
     elif adapter.provider_id == "pl_imgw":
-        arguments.extend(("--terms-recording", "tests/test_data/pl_imgw_terms_regulations.html"))
+        committed_provenance = json.loads((adapter.native_path.parent / "provenance.json").read_text())
+        grdc = next(source for source in committed_provenance["source_records"] if source["source_id"] == "sr.pl.grdc")
+        redacted_record = tmp_path / "pl_imgw-redacted-private-verification.json"
+        redacted_record.write_text(json.dumps(grdc["statements"][0]["private_verification"]))
+        arguments.extend(
+            (
+                "--terms-recording",
+                "tests/test_data/pl_imgw_terms_regulations.html",
+                "--private-verification-record",
+                str(redacted_record),
+            )
+        )
     assert adapter.main(arguments) == 0
     assert calls == []
     assert adapter.native_path.read_bytes() == native_before
@@ -663,9 +674,13 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         path.name for path in catalogue_dir.iterdir() if path.is_file() and path.name != "native.parquet"
     }
     rebuilt_names = {path.name for path in output.iterdir() if path.is_file()}
-    expected_names = {"provider.json", "products.parquet", "stations.parquet", "station_products.parquet"}
-    if adapter.provider_id in {"jp_mlit", "pl_imgw"}:
-        expected_names.add("provenance.json")
+    expected_names = {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "provenance.json",
+    }
     assert committed_names == rebuilt_names == expected_names
     for name in committed_names:
         committed = (catalogue_dir / name).read_bytes()

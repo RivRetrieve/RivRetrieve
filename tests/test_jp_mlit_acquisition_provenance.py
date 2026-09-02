@@ -60,6 +60,7 @@ def test_japan_source_and_fact_groups_are_externally_observable() -> None:
     assert source.operator == "MLIT Water Information System"
     assert {statement.kind for statement in source.statements} == {"license", "citation"}
     assert {binding.fact_group for binding in provenance.fact_bindings} == {
+        "mlit_catalogue_inputs",
         "provider_catalogue",
         "product_catalogue",
         "station_catalogue",
@@ -70,7 +71,7 @@ def test_japan_source_and_fact_groups_are_externally_observable() -> None:
         binding for binding in provenance.fact_bindings if binding.fact_group == "observation_acquisition"
     )
     assert observation.acquisition_id == "observation_request"
-    assert "observation.value" in observation.facts
+    assert "source.observation.value" in observation.facts
     assert provenance.withheld_facts == ()
     assert provenance.native_table is not None
     assert provenance.native_table.revision == "ebeee6673f183a2bd182e81ee2b4bff7d56ee009"

@@ -3,16 +3,35 @@ from __future__ import annotations
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 import polars as pl
 import pytest
 
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import (
+    ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS,
     PackagedCatalogArtifact,
     packaged_catalogue_artifact_from_components,
 )
 from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
+
+
+def _packaged_provenance(provider_id: str) -> AcquisitionProvenance | None:
+    if provider_id not in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS:
+        return None
+    path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "rivretrieve"
+        / "_internal"
+        / "providers"
+        / provider_id
+        / "catalogue"
+        / "provenance.json"
+    )
+    return AcquisitionProvenance.model_validate_json(path.read_text())
 
 
 @dataclass(frozen=True)
@@ -229,6 +248,8 @@ def stub_packaged_catalogue_artifact() -> Callable[..., PackagedCatalogArtifact]
             _products(provider_id),
             _stations(provider_id),
             _station_products(provider_id),
+            acquisition_provenance=_packaged_provenance(provider_id),
+            withheld_rows_already_applied=True,
             on_issue="raise",
         )
 
@@ -256,6 +277,8 @@ def stub_packaged_catalogue_artifact_rich() -> Callable[..., PackagedCatalogArti
             _products(provider_id, rich=True),
             _stations(provider_id, rich=True),
             _station_products(provider_id, rich=True),
+            acquisition_provenance=_packaged_provenance(provider_id),
+            withheld_rows_already_applied=True,
             on_issue="raise",
         )
 

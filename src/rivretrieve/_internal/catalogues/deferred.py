@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, WithheldFact
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    FactBinding,
+    Transformation,
+    WithheldFact,
+)
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 
@@ -20,9 +25,17 @@ def deferred_acquisition_provenance(provider_id: str) -> AcquisitionProvenance:
         A closed record withholding every catalogue fact without inventing an
         acquisition, source, or native-table identity.
     """
+    authored_provider_facts = tuple(
+        fact
+        for fact in CATALOGUE_FACT_UNIVERSE
+        if fact.startswith("provider.")
+        and fact not in {"provider.catalogue_version", "provider.license", "provider.citation"}
+    )
     grouped_facts = {
-        "provider_manifest_without_acquisition": tuple(
-            fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith("provider.")
+        "provider_external_catalogue_facts_without_acquisition": (
+            "provider.catalogue_version",
+            "provider.license",
+            "provider.citation",
         ),
         "product_definitions_without_acquisition": tuple(
             fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith("product.")
@@ -40,7 +53,19 @@ def deferred_acquisition_provenance(provider_id: str) -> AcquisitionProvenance:
         native_table=None,
         fact_universe=CATALOGUE_FACT_UNIVERSE,
         source_records=(),
-        fact_bindings=(),
+        fact_bindings=(
+            FactBinding(
+                fact_group="rivretrieve_authored_provider_registration",
+                facts=authored_provider_facts,
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="RivRetrieve code-defined provider registration and capabilities",
+                    kind="authored_constant",
+                    external_inputs=(),
+                ),
+            ),
+        ),
         withheld_facts=tuple(
             WithheldFact(
                 fact_group=fact_group,

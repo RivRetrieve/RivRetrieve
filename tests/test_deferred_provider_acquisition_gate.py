@@ -48,15 +48,20 @@ def test_deferred_provider_packaged_source_facts_are_hard_withheld(
     assert provenance is not None
     assert provenance.native_table is None
     assert provenance.source_records == ()
-    assert provenance.fact_bindings == ()
+    assert len(provenance.fact_bindings) == 1
+    authored = provenance.fact_bindings[0]
+    assert authored.transformation is not None
+    assert authored.transformation.kind == "authored_constant"
     assert set(provenance.fact_universe) == set(CATALOGUE_FACT_UNIVERSE)
     assert {group.fact_group for group in provenance.withheld_facts} == {
-        "provider_manifest_without_acquisition",
+        "provider_external_catalogue_facts_without_acquisition",
         "product_definitions_without_acquisition",
         "station_identity_and_location_without_acquisition",
         "station_product_relationships_without_acquisition",
     }
-    assert {fact for group in provenance.withheld_facts for fact in group.facts} == set(CATALOGUE_FACT_UNIVERSE)
+    withheld = {fact for group in provenance.withheld_facts for fact in group.facts}
+    assert withheld == set(CATALOGUE_FACT_UNIVERSE) - set(authored.facts)
+    assert withheld & {"provider.provider_id", "provider.name"} == set()
     assert {group.reason for group in provenance.withheld_facts} == {"no_acquisition_record_established"}
 
 

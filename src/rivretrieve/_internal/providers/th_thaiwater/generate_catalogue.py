@@ -15,8 +15,12 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
-from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.artifact import (
+    PackagedCatalogArtifact,
+    packaged_catalogue_artifact_from_components,
+)
 from rivretrieve._internal.catalogues.native import (
     NativeTable,
     RetrievedAt,
@@ -162,6 +166,8 @@ class GeneratedThThaiWaterCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
+    public_artifact: PackagedCatalogArtifact
 
 
 @dataclass(frozen=True)
@@ -384,8 +390,18 @@ def build_catalogue(
         raise FatalContractError("ThaiWater native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
 
-    validate_generated_catalogue(provider_info, products, stations, station_products)
-    return GeneratedThThaiWaterCatalogue(provider_info, products, stations, station_products)
+    from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisition_provenance
+
+    acquisition_provenance = build_acquisition_provenance(native_table)
+    artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
+    return GeneratedThThaiWaterCatalogue(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance,
+        artifact,
+    )
 
 
 def _validate_canonical_native_table(native_table: NativeTable) -> None:
@@ -491,17 +507,19 @@ def validate_generated_catalogue(
     products: ProductCatalog,
     stations: StationCatalog,
     station_products: StationProductCatalog,
-) -> None:
+    acquisition_provenance: AcquisitionProvenance,
+) -> PackagedCatalogArtifact:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(
+    return packaged_catalogue_artifact_from_components(
         provider_info,
         products,
         stations,
         station_products,
+        acquisition_provenance=acquisition_provenance,
         on_issue="raise",
     )
 
@@ -510,11 +528,14 @@ def write_catalogue(catalogue: GeneratedThThaiWaterCatalogue, out_dir: Path | st
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as f:
-        json.dump(catalogue.provider_info, f, sort_keys=True, separators=(",", ":"))
+        json.dump(catalogue.public_artifact.provider_info, f, sort_keys=True, separators=(",", ":"))
         f.write("\n")
-    catalogue.products.write_parquet(output_path / "products.parquet")
-    catalogue.stations.write_parquet(output_path / "stations.parquet")
-    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    catalogue.public_artifact.products.write_parquet(output_path / "products.parquet")
+    catalogue.public_artifact.stations.write_parquet(output_path / "stations.parquet")
+    catalogue.public_artifact.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        catalogue.acquisition_provenance.model_dump_json() + "\n", encoding="utf-8"
+    )
 
 
 def _read_fixture_json(path: Path) -> dict[str, object]:
@@ -567,9 +588,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--out requires --native")
         if args.retrieved_at is not None:
             parser.error("--retrieved-at is only valid with refresh mode")
-        from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
+        from rivretrieve._internal.providers.th_thaiwater.origins import (
+            NATIVE_TABLE_BYTE_SIZE,
+            NATIVE_TABLE_SHA256,
+            STATION_CATALOGUE_ORIGINS,
+        )
 
-        catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
+        native_table = read_native_table(
+            args.native,
+            expected_sha256=NATIVE_TABLE_SHA256,
+            expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+        )
+        catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
+        verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
         write_catalogue(catalogue, args.out)
         return 0
 
