@@ -10,7 +10,6 @@ import hashlib
 import os
 import shutil
 from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -116,10 +115,14 @@ def certify_store(
         published = True
         validated = validate_store(StoreRoot(destination), request.provider_id)
         artifact.unlink()
-    except Exception:
-        _safe_remove_tree(stage)
-        if published:
-            _restore_previous(destination, backup)
+    except Exception as original:
+        _rollback_precommit(
+            original,
+            stage=stage,
+            destination=destination,
+            backup=backup,
+            restore_store=published or backup.exists(),
+        )
         raise
 
     _post_commit_cleanup(backup)
@@ -234,9 +237,15 @@ def _publish(stage: Path, destination: Path, backup: Path) -> None:
         os.replace(destination, backup)
     try:
         os.replace(stage, destination)
-    except Exception:
+    except Exception as publication_error:
         if had_previous:
-            os.replace(backup, destination)
+            try:
+                os.replace(backup, destination)
+            except Exception as restoration_error:
+                raise StoreCertificationError(
+                    "atomic publication failed and immediate prior-store restore failed: "
+                    f"{type(restoration_error).__name__}: {restoration_error}"
+                ) from publication_error
         raise
 
 
@@ -250,13 +259,6 @@ def _restore_previous(destination: Path, backup: Path) -> None:
 def _remove_tree(path: Path) -> None:
     if path.exists():
         shutil.rmtree(path)
-
-
-def _safe_remove_tree(path: Path) -> None:
-    # Cleanup must never hide the certification failure that protects the
-    # publisher artifact and previous store.
-    with suppress(OSError):
-        _remove_tree(path)
 
 
 def certify_store_batches(
@@ -301,36 +303,66 @@ def certify_store_batches(
         for artifact in artifacts:
             artifact.unlink()
     except Exception as original:
-        restoration_errors: list[Exception] = []
-        cleanup_errors: list[Exception] = []
-        if quarantine is not None:
-            try:
-                _restore_linked_artifacts(artifacts, quarantine_copies)
-            except Exception as error:
-                restoration_errors.append(error)
-        if published:
-            try:
-                _restore_previous(destination, backup)
-            except Exception as error:
-                restoration_errors.append(error)
-        for residue in (stage, *((quarantine,) if quarantine is not None and not restoration_errors else ())):
-            try:
-                _remove_tree(residue)
-            except OSError as error:
-                cleanup_errors.append(error)
-        if not restoration_errors and not cleanup_errors:
-            raise
-        details = [
-            *(f"restoration {type(error).__name__}: {error}" for error in restoration_errors),
-            *(f"cleanup {type(error).__name__}: {error}" for error in cleanup_errors),
-        ]
-        state = "incomplete" if restoration_errors else "complete with cleanup residue"
-        raise StoreCertificationError(f"pre-commit rollback was {state}: {'; '.join(details)}") from original
+        _rollback_precommit(
+            original,
+            stage=stage,
+            destination=destination,
+            backup=backup,
+            restore_store=published or backup.exists(),
+            artifacts=artifacts,
+            quarantine=quarantine,
+            quarantine_copies=quarantine_copies,
+        )
+        raise
 
     # Commit point: the validated destination is authoritative and every original
     # artifact has been unlinked while its quarantine links are still intact.
     _post_commit_cleanup(*(path for path in (quarantine, backup) if path is not None))
     return validated
+
+
+def _rollback_precommit(
+    original: Exception,
+    *,
+    stage: Path,
+    destination: Path,
+    backup: Path,
+    restore_store: bool,
+    artifacts: tuple[Path, ...] = (),
+    quarantine: Path | None = None,
+    quarantine_copies: tuple[Path, ...] = (),
+) -> None:
+    """Attempt independent pre-commit restoration and cleanup, then aggregate defects."""
+    restoration_errors: list[Exception] = []
+    cleanup_errors: list[Exception] = []
+    artifact_restoration_failed = False
+    if quarantine is not None:
+        try:
+            _restore_linked_artifacts(artifacts, quarantine_copies)
+        except Exception as error:
+            restoration_errors.append(error)
+            artifact_restoration_failed = True
+    if restore_store:
+        try:
+            _restore_previous(destination, backup)
+        except Exception as error:
+            restoration_errors.append(error)
+    cleanup_paths = [stage]
+    if quarantine is not None and not artifact_restoration_failed:
+        cleanup_paths.append(quarantine)
+    for residue in cleanup_paths:
+        try:
+            _remove_tree(residue)
+        except OSError as error:
+            cleanup_errors.append(error)
+    if not restoration_errors and not cleanup_errors:
+        return
+    details = [
+        *(f"restoration {type(error).__name__}: {error}" for error in restoration_errors),
+        *(f"cleanup {type(error).__name__}: {error}" for error in cleanup_errors),
+    ]
+    state = "incomplete" if restoration_errors else "complete with cleanup residue"
+    raise StoreCertificationError(f"pre-commit rollback was {state}: {'; '.join(details)}") from original
 
 
 def _post_commit_cleanup(*paths: Path) -> None:
@@ -358,16 +390,29 @@ def _link_artifact_rollback_copies(destination: Path, artifacts: tuple[Path, ...
             copy = quarantine / f"{index:06d}-{artifact.name}"
             os.link(artifact, copy)
             copies.append(copy)
-    except Exception:
-        _safe_remove_tree(quarantine)
+    except Exception as original:
+        try:
+            _remove_tree(quarantine)
+        except OSError as cleanup_error:
+            raise StoreCertificationError(
+                "publisher-artifact rollback-link setup failed and cleanup was incomplete: "
+                f"{type(cleanup_error).__name__}: {cleanup_error}"
+            ) from original
         raise
     return quarantine, tuple(copies)
 
 
 def _restore_linked_artifacts(artifacts: tuple[Path, ...], copies: tuple[Path, ...]) -> None:
+    failures: list[str] = []
     for artifact, copy in zip(artifacts, copies, strict=True):
-        if not artifact.exists():
+        if artifact.exists():
+            continue
+        try:
             os.link(copy, artifact)
+        except OSError as error:
+            failures.append(f"{artifact.name} ({type(error).__name__}: {error})")
+    if failures:
+        raise StoreCertificationError(f"publisher artifact restoration was incomplete: {failures!r}")
 
 
 def _verify_streamed_read_back(
