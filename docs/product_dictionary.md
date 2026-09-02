@@ -39,9 +39,11 @@ Initial V1 semantic vocabulary:
 ```text
 frequency:      irregular | 5min | 10min | 15min | 30min | hourly | daily | monthly | annual | provider_defined | unknown
 statistic:      instantaneous | mean | sum | min | max | provider_defined | unknown
-period_type:    instant | interval
+period_type:    instant | interval | unknown
 period_anchor:  instant | start | end | midpoint | provider_defined | unknown
 ```
+
+Use `unknown` when source temporal support is not established. This value corresponds to `UnknownTemporalSupport` in the shared observation engine and prevents providers from claiming instant or interval support without evidence.
 
 ## Canonical Products
 

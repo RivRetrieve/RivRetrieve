@@ -16,9 +16,10 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table, stamp_native_table
-from rivretrieve._internal.engine import WithIssues
+from rivretrieve._internal.engine import UnknownTemporalSupport, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
+from rivretrieve._internal.providers.th_thaiwater.config import config
 from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
 
 FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"
@@ -622,6 +623,23 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
+def test_unknown_temporal_support_uses_the_documented_unknown_catalogue_vocabulary() -> None:
+    catalogue = _build()
+    products = catalogue.products.sort("product_id")
+
+    assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
+    assert products.select("frequency", "statistic", "period_type", "period_anchor").unique().rows() == [
+        ("unknown", "unknown", "unknown", "unknown")
+    ]
+
+    docs = Path(__file__).parents[1] / "docs"
+    dictionary = (docs / "product_dictionary.md").read_text()
+    design = (docs / "design/provider-redesign.md").read_text()
+    assert "period_type:    instant | interval | unknown" in dictionary
+    assert "period_type:    instant | interval | unknown" in design
+    assert "Use `unknown` when source temporal support is not established." in dictionary
+
+
 def test_native_build_counts_and_identity_station_fields() -> None:
     catalogue = _build()
     committed = _committed_native_table().data
@@ -632,7 +650,7 @@ def test_native_build_counts_and_identity_station_fields() -> None:
     assert catalogue.products.height == 2
     assert catalogue.station_products.height == 2
     assert set(catalogue.products["product_id"]) == RETAINED_PRODUCT_IDS
-    assert set(catalogue.products["frequency"]) == {"irregular"}
+    assert set(catalogue.products["frequency"]) == {"unknown"}
     assert set(catalogue.products["statistic"]) == {"unknown"}
     assert set(catalogue.products["period_type"]) == {"unknown"}
     assert set(catalogue.products["period_anchor"]) == {"unknown"}

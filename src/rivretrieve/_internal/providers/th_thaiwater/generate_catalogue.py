@@ -184,7 +184,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="stage_reported",
         observed_property="stage",
-        frequency="irregular",
+        frequency="unknown",
         statistic="unknown",
         period_type="unknown",
         period_anchor="unknown",
@@ -194,7 +194,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="discharge_reported",
         observed_property="discharge",
-        frequency="irregular",
+        frequency="unknown",
         statistic="unknown",
         period_type="unknown",
         period_anchor="unknown",

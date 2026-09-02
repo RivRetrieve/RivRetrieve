@@ -47,8 +47,7 @@ the origin-evidence receipt; it documents coordinate semantics and contributes n
 
 ## Product Dictionary
 
-The packaged catalogue advertises two source-published reported-value products. Their temporal support is unknown. It does not
-advertise daily means; those were derived by the retired observation implementation.
+The packaged catalogue advertises two source-published reported-value products. Their temporal support is unknown. Their `frequency`, `statistic`, `period_type`, and `period_anchor` fields are therefore all `unknown`. It does not advertise daily means; those were derived by the retired observation implementation.
 
 | Native field | Canonical `product_id` | Unit |
 | --- | --- | --- |
