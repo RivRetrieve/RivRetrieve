@@ -24,16 +24,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         set(),
     ),
     (
-        "jp_mlit",
-        1023,
-        4,
-        4092,
-        {"discharge_daily_mean", "discharge_hourly_mean", "stage_daily_mean", "stage_hourly_mean"},
-        "MLIT Water Information System — Japan national hydrometric network",
-        "2026-08-02",
-        {"unknown"},
-    ),
-    (
         "no_nve",
         0,
         0,
@@ -56,10 +46,8 @@ CATALOGUE_ONLY_PROVIDERS = (
 )
 DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py"}
 DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
-JAPAN_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "br_ana": DEFERRED_CATALOGUE_MODULE_FILES,
-    "jp_mlit": JAPAN_CATALOGUE_MODULE_FILES,
     "no_nve": DEFERRED_CATALOGUE_MODULE_FILES,
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
@@ -221,11 +209,6 @@ def test_reference_tree_preserves_complete_porting_evidence() -> None:
             "br_ana_60435000_cotas_2020.json",
             "br_ana_metadata.json",
         },
-        "jp_mlit": {
-            "jp_mlit_301011281104010_kind2_202301.dat",
-            "jp_mlit_301011281104010_kind7_2023.dat",
-            "jp_mlit_metadata.json",
-        },
         "no_nve": {
             "no_nve_12.210.0_discharge_daily_2023.json",
             "no_nve_12.210.0_discharge_hourly_202301.json",
@@ -236,9 +219,9 @@ def test_reference_tree_preserves_complete_porting_evidence() -> None:
         "br_ana": (
             "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
         ),
-        "jp_mlit": "http://www1.river.go.jp",
         "no_nve": "https://hydapi.nve.no/api/v1/",
     }
+    assert not (REFERENCE_ROOT / "jp_mlit").exists()
     source_names = {
         "issue_codes.py",
         "module.py",

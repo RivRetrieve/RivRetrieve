@@ -170,16 +170,31 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                         recording_ids=(citation_recording.recording_id,),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="observation_contract_capture_2026_09_02",
+                        method="http_campaign",
+                        instant_type="retrieval_interval",
+                        description=(
+                            "Four official KIND chains captured exact EUC-JP HTML and publisher-minted Shift-JIS DAT "
+                            "responses establishing quantity, cadence, labels, units, and native flag legends"
+                        ),
+                        requested_from=(
+                            "http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
+                            "http://www1.river.go.jp/dat/dload/download/published-file.dat",
+                        ),
+                        retrieved_at_start=datetime.fromisoformat("2026-09-02T15:38:50.958378Z"),
+                        retrieved_at_end=datetime.fromisoformat("2026-09-02T15:38:58.658831Z"),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="observation_request",
                         method="runtime_http_request",
                         instant_type="runtime",
                         description=(
-                            "Observation requests are acquired from MLIT DspWaterData pages and "
-                            "the referenced Shift-JIS data download; each result retains its runtime calls"
+                            "Observation requests retain ordered EUC-JP HTML and publisher-minted Shift-JIS DAT calls; "
+                            "KIND 2/3/6/7 titles establish quantity and cadence but not a mean statistic, anchor, or zone"
                         ),
                         requested_from=(
                             "http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
-                            "http://www1.river.go.jp/dat/dload/download/<published-file>",
+                            "http://www1.river.go.jp/dat/dload/download/published-file.dat",
                         ),
                     ),
                 ),
@@ -238,8 +253,14 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                 acquisition_id="citation_terms_capture_2026_08_21",
             ),
             FactBinding(
-                fact_group="mlit_catalogue_inputs",
-                facts=SOURCE_FACTS[3:],
+                fact_group="mlit_product_kind_semantics",
+                facts=(SOURCE_FACTS[3],),
+                source_id="jp_mlit",
+                acquisition_id="observation_contract_capture_2026_09_02",
+            ),
+            FactBinding(
+                fact_group="mlit_station_catalogue_inputs",
+                facts=SOURCE_FACTS[4:],
                 source_id="jp_mlit",
                 acquisition_id="station_register_capture_2026_08_02",
             ),
