@@ -133,3 +133,10 @@ def test_accepted_366_date_window_is_one_exact_unsplit_request() -> None:
     assert len(replay.requests) == 1
     assert len(fetched.value) == 1
     assert fetched.value[0].content == recording.content
+    parsed = _STAGES.parse(fetched.value[0], _STAGES.config).value
+    assert parsed.group_by("product_id").len().sort("product_id").rows() == [
+        ("discharge_reported", 52_704),
+        ("stage_reported", 52_704),
+    ]
+    assert parsed["time"].min() == datetime(2025, 1, 1)
+    assert parsed["time"].max() == datetime(2026, 1, 1, 23, 50)

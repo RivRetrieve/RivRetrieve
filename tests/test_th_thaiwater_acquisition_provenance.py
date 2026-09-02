@@ -162,3 +162,10 @@ def test_committed_thaiwater_official_evidence_matches_capture_manifest() -> Non
     for source_name, path in committed.items():
         assert path.stat().st_size == captures[source_name]["bytes"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == captures[source_name]["sha256"]
+
+    bundle = committed["official_app.chunk.js"].read_bytes()
+    assert b"e.data.graph_data.filter(e=>null!==e.value):e.data.graph_data.filter(e=>null!==e.discharge)" in bundle
+    assert "ระดับน้ำ".encode() in bundle
+    assert "ม.รทก.".encode() in bundle
+    assert "ปริมาณน้ำท่า".encode() in bundle
+    assert "(ม.3/วิ.)".encode() in bundle
