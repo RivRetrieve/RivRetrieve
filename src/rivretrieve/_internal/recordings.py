@@ -7,6 +7,7 @@ import base64
 import binascii
 import hashlib
 import json
+import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -24,6 +25,27 @@ from rivretrieve._internal.transport import (
 
 RECORDING_FORMAT_VERSION = 1
 _SHA256_HEX_LENGTH = 64
+_SECRET_FIELD_NAMES = frozenset(
+    {
+        "authorization",
+        "proxyauthorization",
+        "cookie",
+        "setcookie",
+        "apikey",
+        "xapikey",
+        "token",
+        "apitoken",
+        "accesstoken",
+        "refreshtoken",
+        "clientsecret",
+        "password",
+        "passwd",
+        "secret",
+        "subscriptionkey",
+        "credentials",
+        "privatekey",
+    }
+)
 
 
 class InvalidRecordingError(ValueError):
@@ -54,6 +76,7 @@ class RecordedRequest:
             object.__setattr__(self, "parameters", MappingProxyType(dict(self.parameters)))
         if not isinstance(self.body, bytes | str | None):
             raise TypeError("recorded request body must be bytes, string, or None")
+        _require_secret_safe_request(self)
 
     @classmethod
     def from_transport_request(cls, request: TransportRequest) -> Self:
@@ -81,6 +104,8 @@ class RecordingEnvelope:
             raise TypeError("recording request must be RecordedRequest")
         if type(self.content) is not bytes:
             raise TypeError("recording content must be bytes")
+        if _payload_has_secret_field(self.content):
+            raise ValueError("recording response contains a secret-bearing field")
         if type(self.status_code) is not int:
             raise TypeError("recording status code must be an integer")
         if not isinstance(self.retrieved_at, datetime):
@@ -335,6 +360,67 @@ def _require_exact_keys(value: Mapping[str, object], expected: set[str], name: s
         missing = sorted(expected - actual)
         extra = sorted(actual - expected)
         raise InvalidRecordingError(f"recording {source} {name} fields differ: missing={missing}, extra={extra}")
+
+
+def _require_secret_safe_request(request: RecordedRequest) -> None:
+    authority = request.url.partition("://")[2].split("/", 1)[0]
+    if "@" in authority:
+        raise ValueError("recorded request contains secret-bearing URL credentials")
+    names = _form_field_names(request.url.partition("?")[2].partition("#")[0])
+    if request.parameters is not None:
+        names.extend(request.parameters)
+    sensitive = sorted(name for name in names if _is_secret_field_name(name))
+    if sensitive:
+        raise ValueError(f"recorded request contains secret-bearing parameter(s): {sensitive}")
+    if request.body is not None and _payload_has_secret_field(request.body):
+        raise ValueError("recorded request contains a secret-bearing body field")
+
+
+def _form_field_names(value: str) -> list[str]:
+    names: list[str] = []
+    for form_field in value.split("&"):
+        if not form_field:
+            continue
+        encoded_name = form_field.partition("=")[0].replace("+", " ")
+        names.append(re.sub(r"%([0-9a-fA-F]{2})", lambda match: chr(int(match.group(1), 16)), encoded_name))
+    return names
+
+
+def _normalise_secret_name(name: str) -> str:
+    return "".join(character for character in name.casefold() if character.isalnum())
+
+
+def _is_secret_field_name(name: str) -> bool:
+    normalised = _normalise_secret_name(name)
+    return normalised in _SECRET_FIELD_NAMES or normalised.endswith(
+        ("authtoken", "apitoken", "apikey", "password", "passwd", "secret", "subscriptionkey", "privatekey")
+    )
+
+
+def _payload_has_secret_field(payload: bytes | str) -> bool:
+    if isinstance(payload, bytes):
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+    else:
+        text = payload
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        return any(_is_secret_field_name(name) for name in _form_field_names(text))
+    return _object_has_secret_field(value)
+
+
+def _object_has_secret_field(value: object) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            (isinstance(name, str) and _is_secret_field_name(name)) or _object_has_secret_field(child)
+            for name, child in value.items()
+        )
+    if isinstance(value, list):
+        return any(_object_has_secret_field(child) for child in value)
+    return False
 
 
 def _is_request_parameter(value: object) -> bool:

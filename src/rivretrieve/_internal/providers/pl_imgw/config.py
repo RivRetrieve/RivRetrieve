@@ -1,4 +1,7 @@
-"""PL IMGW declaration : ProviderConfig."""
+"""PL IMGW declaration : ProviderConfig.
+
+Contributed by: Thiago von Däniken
+"""
 
 from dataclasses import dataclass
 from typing import Final

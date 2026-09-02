@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from rivretrieve._internal.recordings import (
     InvalidRecordingError,
+    RecordedRequest,
+    RecordingEnvelope,
     ReplayTransport,
     UnmatchedRequestError,
     dry_run_recordings,
@@ -81,3 +84,34 @@ def test_rerecord_dry_run_uses_recording_facts_only(capsys: pytest.CaptureFixtur
         'parameters: {"end":"2026-01-02","start":"2026-01-01","station":"REAL-1"}',
         "retrieved_at: 2026-01-03T04:05:06.000000Z",
     ]
+
+
+@pytest.mark.parametrize(
+    ("url", "parameters"),
+    [
+        ("https://example.test/data?access_token=secret", None),
+        ("https://example.test/data", {"api_key": "secret"}),
+        ("https://user:password@example.test/data", None),
+    ],
+)
+def test_recorded_requests_refuse_secret_bearing_request_locations(url: str, parameters: dict[str, str] | None) -> None:
+    with pytest.raises(ValueError, match="secret-bearing"):
+        RecordedRequest(HttpMethod.GET, url, parameters)
+
+
+def test_every_committed_observation_recording_is_secret_safe_and_replayable() -> None:
+    recordings = sorted((Path(__file__).parent / "test_data").rglob("*.recording.json"))
+    assert recordings
+    for recording in recordings:
+        read_recording(recording)
+
+
+def test_recording_response_refuses_secret_bearing_fields() -> None:
+    with pytest.raises(ValueError, match="response contains a secret-bearing field"):
+        RecordingEnvelope(
+            request=RecordedRequest(HttpMethod.GET, "https://example.test/data"),
+            content=b'{"access_token":"secret"}',
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            content_type="application/json",
+        )

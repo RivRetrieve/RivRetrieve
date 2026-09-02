@@ -1,4 +1,7 @@
-"""CA ECCC declaration : ProviderConfig × ProductWindowDeclarations."""
+"""CA ECCC declaration : ProviderConfig × ProductWindowDeclarations.
+
+Contributed by: Thiago von Däniken
+"""
 
 from dataclasses import dataclass
 from typing import Final

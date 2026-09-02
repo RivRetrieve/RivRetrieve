@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import tomllib
-from collections import Counter
 from importlib import import_module
 from pathlib import Path
 
@@ -29,41 +28,19 @@ RATIFIED_RUNTIME_ROLES = {
     "parse.py",
 }
 CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
-_BASE_RUNTIME_FILE_COUNTS = Counter(
-    {
-        "__init__.py": 13,
-        "metadata.py": 9,
-        "origins.py": 5,
-        "issue_codes.py": 9,
-        "config.py": 3,
-        "fetch.py": 1,
-        "parse.py": 1,
-        "bulk.py": 2,
-    }
-)
-# Providers migrated to declared origins since the base inventory above. Each one adds an
-# `origins.py` and removes a `metadata.py`. They are named individually, and one per line, so that
-# two branches enrolling DIFFERENT providers merge as a union. An anonymous `+= 1` on both sides is
-# byte-identical text, so git deduplicates it and the count silently under-reports by one for every
-# enrolment beyond the first -- which is exactly what happened merging Thailand into a main that
-# already carried Bosnia and South Africa.
-_MIGRATED_SINCE_BASE = (
-    "ba_fhmzbih",
-    "fr_hubeau",
-    "jp_mlit",
-    "pl_imgw",
-    "th_thaiwater",
-    "za_dws",
-)
-_METADATA_REMOVED_AFTER_SCHEMA_NARROWING = (
-    "br_ana",
-    "lt_lhmt",
-    "no_nve",
-)
-RUNTIME_FILE_COUNTS = _BASE_RUNTIME_FILE_COUNTS.copy()
-RUNTIME_FILE_COUNTS["declaration.py"] = len(BUILTIN_PROVIDER_IDS)
-RUNTIME_FILE_COUNTS["origins.py"] += len(_MIGRATED_SINCE_BASE)
-RUNTIME_FILE_COUNTS["metadata.py"] -= len(_MIGRATED_SINCE_BASE) + len(_METADATA_REMOVED_AFTER_SCHEMA_NARROWING)
+OBSERVATION_ADAPTER_ROLES = {
+    "bulk.py",
+    "config.py",
+    "fetch.py",
+    "parse.py",
+    "transform.py",
+    "convert.py",
+    "assemble.py",
+}
+CONTRIBUTORS = {
+    provider_id: ("Nicolas Lazaro" if provider_id == "ch_foen" else "Thiago von Däniken")
+    for provider_id in BUILTIN_PROVIDER_IDS
+}
 
 
 def _runtime_provider_files() -> list[Path]:
@@ -86,6 +63,27 @@ def _direct_http_imports(path: Path) -> set[str]:
 
 def _engine_owned_operations_in_tree(tree: ast.Module, relative_path: Path) -> list[str]:
     violations = []
+    forbidden_function_names = {
+        "transform",
+        "convert",
+        "assemble",
+        "_filter_date_range",
+        "filter_date_range",
+    }
+    environment_names = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "os"
+        for alias in node.names
+        if alias.name in {"environ", "getenv"}
+    }
+    os_module_names = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.name == "os"
+    }
     fetch_window_factory_names = {
         alias.asname or alias.name
         for node in ast.walk(tree)
@@ -98,7 +96,45 @@ def _engine_owned_operations_in_tree(tree: ast.Module, relative_path: Path) -> l
         if alias.name == "_make_fetch_window"
     }
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+            node.name in forbidden_function_names
+            or node.name.lstrip("_").split("_", 1)[0] in {"transform", "convert", "assemble"}
+        ):
+            violations.append(f"{relative_path}:{node.lineno}:provider-owned {node.name}")
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and (
+                node.module in {"rivretrieve._internal.assembly", "rivretrieve._internal.conversion"}
+                or (node.level > 0 and node.module.split(".")[-1] in {"assembly", "conversion"})
+            )
+        ) or (
+            isinstance(node, ast.Import)
+            and any(
+                alias.name in {"rivretrieve._internal.assembly", "rivretrieve._internal.conversion"}
+                for alias in node.names
+            )
+        ):
+            violations.append(f"{relative_path}:{node.lineno}:engine-owned module import")
+        elif (
+            isinstance(node, ast.Import)
+            and any(alias.name.split(".")[0] in {"dotenv", "backoff", "tenacity"} for alias in node.names)
+            or isinstance(node, ast.ImportFrom)
+            and node.module in {"dotenv", "backoff", "tenacity"}
+        ):
+            violations.append(f"{relative_path}:{node.lineno}:hidden configuration or retry import")
+        elif isinstance(node, ast.Subscript | ast.Call) and (
+            any(
+                isinstance(child, ast.Attribute)
+                and isinstance(child.value, ast.Name)
+                and child.value.id in os_module_names
+                and child.attr in {"getenv", "environ"}
+                for child in ast.walk(node)
+            )
+            or any(isinstance(child, ast.Name) and child.id in environment_names for child in ast.walk(node))
+        ):
+            violations.append(f"{relative_path}:{node.lineno}:hidden environment read")
+        elif isinstance(node, ast.ImportFrom) and (
             node.module == "rivretrieve._internal.engine"
             or (node.level > 0 and node.module is not None and node.module.split(".")[-1] == "engine")
         ):
@@ -177,17 +213,58 @@ engine._make_fetch_window(start, end)
     ]
 
 
+def test_engine_owned_operations_reject_provider_transforms_and_hidden_environment_reads() -> None:
+    source = """import os as operating_system
+from rivretrieve._internal.conversion import convert
+
+def transform(rows):
+    return convert(rows)
+
+secret = operating_system.environ["TOKEN"]
+"""
+
+    assert _engine_owned_operations_in_tree(ast.parse(source), Path("adversarial/parse.py")) == [
+        "adversarial/parse.py:2:engine-owned module import",
+        "adversarial/parse.py:4:provider-owned transform",
+        "adversarial/parse.py:7:hidden environment read",
+    ]
+
+
 def test_runtime_provider_inventory_has_only_ratified_roles() -> None:
     runtime_files = _runtime_provider_files()
     provider_directories = {path.parent.name for path in runtime_files}
 
-    assert Counter(path.name for path in runtime_files) == RUNTIME_FILE_COUNTS
     assert provider_directories == set(BUILTIN_PROVIDER_IDS)
     assert {path.name for path in runtime_files} <= RATIFIED_RUNTIME_ROLES
     assert {path.parent.name for path in runtime_files if path.name == "parser.py"} == set()
-    for provider_id in BUILTIN_PROVIDER_IDS:
-        provider_files = {path.name for path in runtime_files if path.parent.name == provider_id}
+
+    for item in load_manifest(BUILTIN_PROVIDER_IDS):
+        provider_files = {path.name for path in runtime_files if path.parent.name == item.provider_id}
+        adapter_files = provider_files & OBSERVATION_ADAPTER_ROLES
+        kind = item.declaration.observations
+        if isinstance(kind, LiveStages):
+            assert adapter_files == {"config.py", "fetch.py", "parse.py"}
+        elif isinstance(kind, BulkStore):
+            assert adapter_files == {"bulk.py", "config.py"}
+        else:
+            assert isinstance(kind, CatalogueOnly)
+            assert adapter_files == set()
         assert "declaration.py" in provider_files
+
+
+def test_observation_adapter_module_docstrings_preserve_contributor_attribution() -> None:
+    for item in load_manifest(BUILTIN_PROVIDER_IDS):
+        kind = item.declaration.observations
+        if isinstance(kind, LiveStages):
+            filenames = ("config.py", "fetch.py", "parse.py")
+        elif isinstance(kind, BulkStore):
+            filenames = ("bulk.py", "config.py")
+        else:
+            continue
+        for filename in filenames:
+            docstring = ast.get_docstring(_tree(PROVIDERS_ROOT / item.provider_id / filename), clean=False)
+            assert docstring is not None
+            assert f"Contributed by: {CONTRIBUTORS[item.provider_id]}" in docstring
 
 
 def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
@@ -311,10 +388,10 @@ def test_runtime_engine_has_no_provider_id_switch() -> None:
     violations: list[str] = []
     runtime_root = ROOT / "src" / "rivretrieve"
     for path in sorted(runtime_root.rglob("*.py")):
-        if path.is_relative_to(PROVIDERS_ROOT):
+        if any(path.is_relative_to(PROVIDERS_ROOT / provider_id) for provider_id in BUILTIN_PROVIDER_IDS):
             continue
         for node in ast.walk(_tree(path)):
-            if not isinstance(node, ast.Compare):
+            if not isinstance(node, ast.Compare | ast.Match):
                 continue
             literals = {
                 child.value

@@ -3,6 +3,8 @@
 The compiler unpivots publisher monthly rows into native daily observations. It
 preserves the publisher's values and quality cells; the shared store reader is the
 only observation query path after the certified atomic publication succeeds.
+
+Contributed by: Thiago von Däniken
 """
 
 from __future__ import annotations

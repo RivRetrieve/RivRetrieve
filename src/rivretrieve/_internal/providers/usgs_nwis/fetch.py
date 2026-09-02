@@ -1,4 +1,7 @@
-"""usgs_nwis fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]]."""
+"""usgs_nwis fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]].
+
+Contributed by: Thiago von Däniken
+"""
 
 from __future__ import annotations
 
