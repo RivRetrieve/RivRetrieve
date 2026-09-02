@@ -10,9 +10,9 @@
 ## Catalogue and Observation Source Split
 
 Catalogue refresh uses the ECCC OGC Features API because it exposes the complete station population in
-a structured source vocabulary. Observation retrieval remains HYDAT-based: the observation client
-downloads the national SQLite archive, caches it locally, and queries `DLY_FLOWS` and `DLY_LEVELS`.
-Catalogue acquisition remains independent of observation compilation. The bulk adapter compiles the official HYDAT artifact into the certified store; runtime queries use only the shared validated-store path.
+a structured source vocabulary. Observation retrieval remains HYDAT-based. The bulk adapter downloads
+the national SQLite archive and compiles `DLY_FLOWS` and `DLY_LEVELS` into the certified store.
+Catalogue acquisition remains independent of observation compilation. Runtime queries use only the shared validated-store path.
 
 ## Native Catalogue and Origins
 
