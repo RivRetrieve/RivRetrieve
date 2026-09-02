@@ -14,6 +14,7 @@ from rivretrieve._internal.catalogues.artifact import (
 )
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.jp_mlit.declaration import declaration
+from rivretrieve._internal.providers.jp_mlit.origins import build_acquisition_provenance
 
 
 def test_japan_provenance_is_shared_by_catalogue_result_and_selection() -> None:
@@ -60,8 +61,14 @@ def test_japan_source_and_fact_groups_are_externally_observable() -> None:
     assert source.operator == "MLIT Water Information System"
     assert {statement.kind for statement in source.statements} == {"license", "citation"}
     assert {binding.fact_group for binding in provenance.fact_bindings} == {
+        "mlit_service_identity",
+        "mlit_license_terms",
+        "mlit_citation_instruction",
         "mlit_catalogue_inputs",
-        "provider_catalogue",
+        "provider_identity",
+        "provider_rivretrieve_carrier",
+        "provider_license",
+        "provider_citation",
         "product_catalogue",
         "station_catalogue",
         "station_product_catalogue",
@@ -169,3 +176,53 @@ def test_withheld_required_japan_fact_removes_affected_rows_and_edges(tmp_path: 
     assert artifact.products.is_empty()
     assert artifact.station_products.is_empty()
     assert artifact.stations.height == 1023
+
+
+def test_japan_terms_facts_follow_their_exact_recorded_acquisitions() -> None:
+    provenance = build_acquisition_provenance()
+    source = provenance.source_records[0]
+    acquisitions = {item.acquisition_id: item for item in source.acquisitions}
+
+    licence = acquisitions["license_terms_capture_2026_08_21"]
+    assert licence.method == "http_request"
+    assert licence.instant_type == "retrieval"
+    assert licence.requested_from == ("http://www1.river.go.jp/caution.html",)
+    assert licence.retrieved_at_start.isoformat() == "2026-08-21T09:46:54+00:00"
+    assert licence.recording_ids == ("jp_mlit_terms_licence_euc_jp",)
+
+    citation = acquisitions["citation_terms_capture_2026_08_21"]
+    assert citation.method == "http_request"
+    assert citation.instant_type == "retrieval"
+    assert citation.requested_from == ("http://www1.river.go.jp/WDBrules_20251210.pdf",)
+    assert citation.retrieved_at_start.isoformat() == "2026-08-21T09:47:00+00:00"
+    assert citation.recording_ids == ("jp_mlit_terms_citation",)
+
+    statements = {item.kind: item for item in source.statements}
+    assert statements["license"].recording_id == licence.recording_ids[0]
+    assert statements["citation"].recording_id == citation.recording_ids[0]
+
+    bindings = {item.fact_group: item for item in provenance.fact_bindings}
+    assert bindings["mlit_service_identity"].facts == ("source.provider.service_identity",)
+    assert bindings["mlit_service_identity"].acquisition_id == "station_register_capture_2026_08_02"
+    assert bindings["mlit_license_terms"].facts == ("source.provider.license_terms",)
+    assert bindings["mlit_license_terms"].acquisition_id == licence.acquisition_id
+    assert bindings["mlit_citation_instruction"].facts == ("source.provider.citation_instruction",)
+    assert bindings["mlit_citation_instruction"].acquisition_id == citation.acquisition_id
+
+    provider_license = bindings["provider_license"]
+    assert provider_license.facts == ("provider.license",)
+    assert provider_license.transformation is not None
+    assert tuple(item.model_dump() for item in provider_license.transformation.external_inputs) == (
+        {"source_id": "jp_mlit", "fact": "source.provider.license_terms"},
+    )
+    provider_citation = bindings["provider_citation"]
+    assert provider_citation.facts == ("provider.citation",)
+    assert provider_citation.transformation is not None
+    assert tuple(item.model_dump() for item in provider_citation.transformation.external_inputs) == (
+        {"source_id": "jp_mlit", "fact": "source.provider.citation_instruction"},
+    )
+
+    authored = bindings["provider_rivretrieve_carrier"]
+    assert authored.transformation is not None
+    assert authored.transformation.kind == "authored_constant"
+    assert authored.transformation.external_inputs == ()

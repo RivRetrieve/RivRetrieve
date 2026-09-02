@@ -76,7 +76,9 @@ OBSERVATION_FACTS = (
     "source.observation.quality",
 )
 SOURCE_FACTS = (
-    "source.provider.service_identity_and_terms",
+    "source.provider.service_identity",
+    "source.provider.license_terms",
+    "source.provider.citation_instruction",
     "source.product.native_kind_semantics",
     "source.station.native_identity",
     "source.station.world_geodetic_dms",
@@ -150,6 +152,24 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                         retrieved_at_end=datetime.fromisoformat("2026-08-02T19:50:45Z"),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="license_terms_capture_2026_08_21",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="MLIT Water Information System terms page EUC-JP HTML recording",
+                        requested_from=(licence_recording.source_url,),
+                        retrieved_at_start=licence_recording.retrieved_at,
+                        recording_ids=(licence_recording.recording_id,),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="citation_terms_capture_2026_08_21",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="MLIT Public Data License 1.0 citation PDF recording",
+                        requested_from=(citation_recording.source_url,),
+                        retrieved_at_start=citation_recording.retrieved_at,
+                        recording_ids=(citation_recording.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="observation_request",
                         method="runtime_http_request",
                         instant_type="runtime",
@@ -198,19 +218,68 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
         ),
         fact_bindings=(
             FactBinding(
-                fact_group="mlit_catalogue_inputs",
-                facts=SOURCE_FACTS,
+                fact_group="mlit_service_identity",
+                facts=(SOURCE_FACTS[0],),
                 source_id="jp_mlit",
                 acquisition_id="station_register_capture_2026_08_02",
             ),
             FactBinding(
-                fact_group="provider_catalogue",
-                facts=PROVIDER_FACTS,
+                fact_group="mlit_license_terms",
+                facts=(SOURCE_FACTS[1],),
+                source_id="jp_mlit",
+                acquisition_id="license_terms_capture_2026_08_21",
+            ),
+            FactBinding(
+                fact_group="mlit_citation_instruction",
+                facts=(SOURCE_FACTS[2],),
+                source_id="jp_mlit",
+                acquisition_id="citation_terms_capture_2026_08_21",
+            ),
+            FactBinding(
+                fact_group="mlit_catalogue_inputs",
+                facts=SOURCE_FACTS[3:],
+                source_id="jp_mlit",
+                acquisition_id="station_register_capture_2026_08_02",
+            ),
+            FactBinding(
+                fact_group="provider_identity",
+                facts=PROVIDER_FACTS[:2],
                 source_id=None,
                 acquisition_id=None,
                 transformation=Transformation(
-                    name="MLIT service and terms to RivRetrieve provider carrier",
+                    name="MLIT service identity to RivRetrieve provider identity carrier",
                     external_inputs=(ExternalFactReference(source_id="jp_mlit", fact=SOURCE_FACTS[0]),),
+                ),
+            ),
+            FactBinding(
+                fact_group="provider_rivretrieve_carrier",
+                facts=PROVIDER_FACTS[2:7],
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="RivRetrieve Japan provider carrier semantics",
+                    kind="authored_constant",
+                    external_inputs=(),
+                ),
+            ),
+            FactBinding(
+                fact_group="provider_license",
+                facts=(PROVIDER_FACTS[7],),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="MLIT exact licence terms to RivRetrieve provider license carrier",
+                    external_inputs=(ExternalFactReference(source_id="jp_mlit", fact=SOURCE_FACTS[1]),),
+                ),
+            ),
+            FactBinding(
+                fact_group="provider_citation",
+                facts=(PROVIDER_FACTS[8],),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="MLIT exact citation instruction to RivRetrieve provider citation carrier",
+                    external_inputs=(ExternalFactReference(source_id="jp_mlit", fact=SOURCE_FACTS[2]),),
                 ),
             ),
             FactBinding(
@@ -220,7 +289,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                 acquisition_id=None,
                 transformation=Transformation(
                     name="MLIT native KIND semantics to RivRetrieve product carrier",
-                    external_inputs=(ExternalFactReference(source_id="jp_mlit", fact=SOURCE_FACTS[1]),),
+                    external_inputs=(ExternalFactReference(source_id="jp_mlit", fact=SOURCE_FACTS[3]),),
                 ),
             ),
             FactBinding(
@@ -231,7 +300,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                 transformation=Transformation(
                     name="MLIT station register fields to RivRetrieve station carrier",
                     external_inputs=tuple(
-                        ExternalFactReference(source_id="jp_mlit", fact=fact) for fact in SOURCE_FACTS[2:5]
+                        ExternalFactReference(source_id="jp_mlit", fact=fact) for fact in SOURCE_FACTS[4:7]
                     ),
                 ),
             ),
@@ -244,7 +313,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                     name="MLIT station and product facts to RivRetrieve station-product carrier",
                     external_inputs=tuple(
                         ExternalFactReference(source_id="jp_mlit", fact=fact)
-                        for fact in (SOURCE_FACTS[1], SOURCE_FACTS[2], SOURCE_FACTS[5])
+                        for fact in (SOURCE_FACTS[3], SOURCE_FACTS[4], SOURCE_FACTS[7])
                     ),
                 ),
             ),
