@@ -10,13 +10,21 @@ import urllib.error
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    AcquisitionRecord,
+    EvidenceReference,
+    FactBinding,
+    RecordingReference,
+    SourceRecord,
+    SourceStatement,
+)
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.deferred import deferred_acquisition_provenance
 from rivretrieve._internal.catalogues.schemas import (
@@ -72,6 +80,57 @@ BRAZIL_STATES = [
 ]
 
 MIN_LIVE_STATIONS = 1000
+
+
+_SOURCE_FACT = "source.ana.open_data_license_statement"
+_EXACT_TEXT = "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle."
+
+
+def build_acquisition_provenance() -> AcquisitionProvenance:
+    """Build deferred catalogue provenance plus independently established ANA words."""
+    recording = RecordingReference(
+        recording_id="br_ana_terms_licence",
+        repository_path="tests/test_data/br_ana_terms_licence.html",
+        source_url="https://www.gov.br/ana/pt-br/acesso-a-informacao/dados-abertos",
+        retrieved_at=datetime.fromisoformat("2026-08-21T09:30:30Z"),
+        media_type="text/html;charset=utf-8",
+        sha256="fdf143188469d23a9e2d4429c2a956d8fc311882a9a7e5d255f27e698ec3334f",
+    )
+    acquisition_id = "public_terms_capture_2026_08_21"
+    source_id = "br_ana.terms"
+    source = SourceRecord(
+        source_id=source_id,
+        issuer="Agência Nacional de Águas e Saneamento Básico (ANA)",
+        acquisitions=(
+            AcquisitionRecord(
+                acquisition_id=acquisition_id,
+                method="http_request",
+                instant_type="retrieval",
+                description="ANA institutional open-data terms HTML response",
+                requested_from=(recording.source_url,),
+                retrieved_at_start=recording.retrieved_at,
+                recording_ids=(recording.recording_id,),
+            ),
+        ),
+        evidence=(
+            EvidenceReference(
+                evidence_id="br_ana_public_terms",
+                description="Public source terms recording from the completed source survey",
+                recording=recording,
+            ),
+        ),
+        statements=(
+            SourceStatement(
+                kind="license", exact_text=_EXACT_TEXT, recording_id=recording.recording_id, fact=_SOURCE_FACT
+            ),
+        ),
+    )
+    binding = FactBinding(
+        fact_group="established_public_terms", facts=(_SOURCE_FACT,), source_id=source_id, acquisition_id=acquisition_id
+    )
+    return deferred_acquisition_provenance(
+        "br_ana", source_records=(source,), fact_bindings=(binding,), source_facts=(_SOURCE_FACT,)
+    )
 
 
 @dataclass(frozen=True)
@@ -202,7 +261,7 @@ def generate_catalogue(
     station_ids = stations["station_id"].to_list()
     station_products = build_station_products(station_ids=station_ids, catalogue_date=effective_date)
     provider_info = build_provider_info(effective_date, generator_input=generator_input)
-    provenance = deferred_acquisition_provenance(PROVIDER_ID)
+    provenance = build_acquisition_provenance()
     validate_generated_catalogue(
         provider_info,
         products,
@@ -343,7 +402,7 @@ def generate_withheld_catalogue(*, catalogue_date: date) -> GeneratedBrAnaCatalo
         products=pl.DataFrame(schema=PRODUCT_CATALOG_SCHEMA.polars_schema),
         stations=pl.DataFrame(schema=STATION_CATALOG_SCHEMA.polars_schema),
         station_products=pl.DataFrame(schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema),
-        acquisition_provenance=deferred_acquisition_provenance(PROVIDER_ID),
+        acquisition_provenance=build_acquisition_provenance(),
     )
 
 

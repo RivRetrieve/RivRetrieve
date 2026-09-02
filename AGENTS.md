@@ -624,22 +624,30 @@ native table and origins, and commit the resulting canonical artifacts alongside
   those 54 rows and otherwise preserves source coordinates. France's four canonical artifacts are a
   pure function of the committed native material and its two endpoint-specific origin declarations.
 
-### 4.2 Providers not yet migrated
+### 4.2 Providers awaiting credentialed native acquisition
 
 Exactly two providers, `br_ana` and `no_nve`, remain without both a committed native table and origin
-declarations. Their legacy catalogue generation remains outside this certification, and their four
-canonical packaged catalogue artifacts must be generated from the live provider API before the
-provider is committed.
+declarations. Effort #90 owns their credentialed native acquisition. Until that work lands, their
+packaged catalogues are generated deterministically and without network access by the
+`--withhold-uncertified` operation. The result retains registered provider metadata and emits empty
+product, station, and station-product carriers. Its acquisition provenance declares structured
+`no_acquisition_record_established` facts for every withheld external catalogue group and may also
+carry independently established public source terms. Public terms evidence does not establish a native
+acquisition, station, product, or station-product availability fact.
 
+Live or fixture-backed canonical generation must not republish the legacy uncertified catalogue values.
+A future credentialed live response is an input to Effort #90's attested native-table migration, not a
+direct source for canonical packaged artifacts. Regime 4.1 remains the rule for the eleven enrolled
+providers. This temporary two-provider rule disappears only after each deferred provider has a
+committed attested native table and origin declarations and joins Regime 4.1.
 
-- `tests/test_data/<provider>_metadata_*.json` is a test fixture used for offline tests. It must
-  never be used to generate the four canonical packaged catalogue artifacts.
-- After writing all provider code and tests, run
-  `generate_catalogue.py --live --out src/rivretrieve/_internal/providers/<provider>/catalogue/` to
-  produce the four canonical packaged artifacts.
-
-Commit the resulting artifacts alongside the code in both regimes. Regime 4.1 expands as each
-provider milestone migrates; this distinction disappears once all thirteen providers have migrated.
+- `tests/test_data/<provider>_metadata_*.json` remains test-only and must not generate canonical
+  packaged values.
+- Regenerate the deferred artifacts with
+  `generate_catalogue.py --withhold-uncertified --catalogue-date <existing-version> --out
+  src/rivretrieve/_internal/providers/<provider>/catalogue/`.
+- Commit all five deterministic artifacts: `provider.json`, `products.parquet`, `stations.parquet`,
+  `station_products.parquet`, and `provenance.json`.
 
 Some generators include a provider-specific minimum-station guard that raises `FatalContractError`
 when `--live` returns an implausibly small count, catching silent fetch failures or accidental

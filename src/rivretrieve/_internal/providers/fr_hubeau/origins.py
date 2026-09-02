@@ -93,7 +93,12 @@ def _build_provider_acquisition_provenance(
         media_type="text/html; charset=UTF-8",
         sha256=_TERMS_SHA256,
     )
-    external = ("source.provider.platform", "source.product.native_api_semantics", "source.observation.transport")
+    external = (
+        "source.provider.platform",
+        "source.product.hydrometry_api_semantics",
+        "source.product.temperature_api_semantics",
+        "source.observation.transport",
+    )
     canonical = (
         "canonical.provider_id",
         "canonical.product_identity",
@@ -153,16 +158,34 @@ def _build_provider_acquisition_provenance(
                 operator="Hub’Eau platform",
                 acquisitions=(
                     AcquisitionRecord(
-                        acquisition_id="catalogue_capture_2026_08_02",
+                        acquisition_id="hydrometry_catalogue_capture_2026_08_02",
                         method="http_campaign",
-                        instant_type="retrieval_interval",
-                        description="Seven hydrometry pages (6,454 rows) and one temperature response (869 rows)",
-                        requested_from=(
-                            "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations",
-                            "https://hubeau.eaufrance.fr/api/v1/temperature/station",
+                        instant_type="retrieval",
+                        description="Seven complete Hub’Eau hydrometry referential pages, 6,454 rows",
+                        requested_from=tuple(
+                            f"https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page={page}&format=json"
+                            for page in range(1, 8)
                         ),
                         retrieved_at_start=datetime.fromisoformat("2026-08-02T17:32:58Z"),
-                        retrieved_at_end=datetime.fromisoformat("2026-08-02T17:33:34Z"),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="temperature_catalogue_capture_2026_08_02",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Complete Hub’Eau temperature station response, 869 rows",
+                        requested_from=(
+                            "https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json",
+                        ),
+                        retrieved_at_start=datetime.fromisoformat("2026-08-02T17:33:34Z"),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="general_conditions_capture_2026_08_20",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Hub’Eau general conditions section 5.1.3 HTML recording",
+                        requested_from=(recording.source_url,),
+                        retrieved_at_start=recording.retrieved_at,
+                        recording_ids=(recording.recording_id,),
                     ),
                     AcquisitionRecord(
                         acquisition_id="observation_transport",
@@ -180,21 +203,43 @@ def _build_provider_acquisition_provenance(
                     ),
                 ),
                 statements=(
-                    SourceStatement(kind="license", exact_text=_LICENSE, recording_id=recording.recording_id),
-                    SourceStatement(kind="citation", exact_text=_CITATION, recording_id=recording.recording_id),
+                    SourceStatement(
+                        kind="license",
+                        exact_text=_LICENSE,
+                        recording_id=recording.recording_id,
+                        fact="source.hubeau.license_statement",
+                    ),
+                    SourceStatement(
+                        kind="citation",
+                        exact_text=_CITATION,
+                        recording_id=recording.recording_id,
+                        fact="source.hubeau.citation_statement",
+                    ),
                 ),
             ),
         ),
         fact_bindings=(
             FactBinding(
-                fact_group="platform_and_product_external",
+                fact_group="terms_statements",
+                facts=("source.hubeau.license_statement", "source.hubeau.citation_statement"),
+                source_id="fr_hubeau",
+                acquisition_id="general_conditions_capture_2026_08_20",
+            ),
+            FactBinding(
+                fact_group="hydrometry_platform_and_product_external",
                 facts=external[:2],
                 source_id="fr_hubeau",
-                acquisition_id="catalogue_capture_2026_08_02",
+                acquisition_id="hydrometry_catalogue_capture_2026_08_02",
+            ),
+            FactBinding(
+                fact_group="temperature_product_external",
+                facts=external[2:3],
+                source_id="fr_hubeau",
+                acquisition_id="temperature_catalogue_capture_2026_08_02",
             ),
             FactBinding(
                 fact_group="observation_transport",
-                facts=external[2:],
+                facts=external[3:],
                 source_id="fr_hubeau",
                 acquisition_id="observation_transport",
             ),
@@ -206,12 +251,17 @@ def _build_provider_acquisition_provenance(
                 transformation=Transformation(
                     name="rivretrieve_france_platform_product_harmonisation",
                     external_inputs=tuple(
-                        ExternalFactReference(source_id="fr_hubeau", fact=fact) for fact in external[:2]
+                        ExternalFactReference(source_id="fr_hubeau", fact=fact) for fact in external[:3]
                     ),
                 ),
             ),
         ),
-        fact_universe=external + canonical + station_facts + observation_facts + availability_facts,
+        fact_universe=external
+        + canonical
+        + station_facts
+        + observation_facts
+        + availability_facts
+        + ("source.hubeau.license_statement", "source.hubeau.citation_statement"),
         withheld_facts=withheld,
     )
 
@@ -224,7 +274,8 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
             name="fr_hubeau external facts to RivRetrieve canonical catalogue carriers",
             external_inputs=(
                 ExternalFactReference(source_id="fr_hubeau", fact="source.provider.platform"),
-                ExternalFactReference(source_id="fr_hubeau", fact="source.product.native_api_semantics"),
+                ExternalFactReference(source_id="fr_hubeau", fact="source.product.hydrometry_api_semantics"),
+                ExternalFactReference(source_id="fr_hubeau", fact="source.product.temperature_api_semantics"),
             ),
         ),
     )

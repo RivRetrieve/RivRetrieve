@@ -6,14 +6,22 @@ import argparse
 import json
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import polars as pl
 import requests
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    AcquisitionRecord,
+    EvidenceReference,
+    FactBinding,
+    RecordingReference,
+    SourceRecord,
+    SourceStatement,
+)
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.deferred import deferred_acquisition_provenance
 from rivretrieve._internal.catalogues.schemas import (
@@ -37,6 +45,63 @@ STATIONS_URL = f"{BASE_URL}Stations"
 OBSERVATIONS_URL = f"{BASE_URL}Observations"
 
 MIN_LIVE_STATIONS = 100
+
+
+_LICENSE_FACT = "source.nve.license_statement"
+_CITATION_FACT = "source.nve.citation_statement"
+_LICENSE = "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0)."
+_CITATION = "When using data from this service, if possible, please refer to this service as origin of data."
+
+
+def build_acquisition_provenance() -> AcquisitionProvenance:
+    """Build deferred catalogue provenance plus independently established NVE words."""
+    recording = RecordingReference(
+        recording_id="no_nve_terms_licence",
+        repository_path="tests/test_data/no_nve_terms_licence.html",
+        source_url="https://hydapi.nve.no/UserDocumentation/",
+        retrieved_at=datetime.fromisoformat("2026-08-21T09:19:38Z"),
+        media_type="text/html; charset=utf-8",
+        sha256="d66c35806f7f62ac5fb95fa4219f80a8c2690c7e8ae4bdc022c770a684fa9f8a",
+    )
+    acquisition_id = "public_terms_capture_2026_08_21"
+    source_id = "no_nve.terms"
+    source = SourceRecord(
+        source_id=source_id,
+        issuer="Norwegian Water Resources and Energy Directorate (NVE)",
+        acquisitions=(
+            AcquisitionRecord(
+                acquisition_id=acquisition_id,
+                method="http_request",
+                instant_type="retrieval",
+                description="NVE HydAPI user-documentation terms HTML response",
+                requested_from=(recording.source_url,),
+                retrieved_at_start=recording.retrieved_at,
+                recording_ids=(recording.recording_id,),
+            ),
+        ),
+        evidence=(
+            EvidenceReference(
+                evidence_id="no_nve_public_terms",
+                description="Public source terms recording from the completed source survey",
+                recording=recording,
+            ),
+        ),
+        statements=(
+            SourceStatement(
+                kind="license", exact_text=_LICENSE, recording_id=recording.recording_id, fact=_LICENSE_FACT
+            ),
+            SourceStatement(
+                kind="citation", exact_text=_CITATION, recording_id=recording.recording_id, fact=_CITATION_FACT
+            ),
+        ),
+    )
+    facts = (_LICENSE_FACT, _CITATION_FACT)
+    binding = FactBinding(
+        fact_group="established_public_terms", facts=facts, source_id=source_id, acquisition_id=acquisition_id
+    )
+    return deferred_acquisition_provenance(
+        "no_nve", source_records=(source,), fact_bindings=(binding,), source_facts=facts
+    )
 
 
 @dataclass(frozen=True)
@@ -229,7 +294,7 @@ def generate_catalogue(
         catalogue_date=effective_date,
     )
     provider_info = build_provider_info(effective_date, generator_input=generator_input)
-    provenance = deferred_acquisition_provenance(PROVIDER_ID)
+    provenance = build_acquisition_provenance()
     validate_generated_catalogue(
         provider_info,
         products,
@@ -406,7 +471,7 @@ def generate_withheld_catalogue(*, catalogue_date: date) -> GeneratedNoNveCatalo
         products=pl.DataFrame(schema=PRODUCT_CATALOG_SCHEMA.polars_schema),
         stations=pl.DataFrame(schema=STATION_CATALOG_SCHEMA.polars_schema),
         station_products=pl.DataFrame(schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema),
-        acquisition_provenance=deferred_acquisition_provenance(PROVIDER_ID),
+        acquisition_provenance=build_acquisition_provenance(),
     )
 
 

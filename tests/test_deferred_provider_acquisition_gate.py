@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 import rivretrieve as rr
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogues.artifact import (
     CATALOGUE_FACT_UNIVERSE,
     CorruptCatalogArtifactError,
@@ -47,12 +47,12 @@ def test_deferred_provider_packaged_source_facts_are_hard_withheld(
     provenance = artifact.acquisition_provenance
     assert provenance is not None
     assert provenance.native_table is None
-    assert provenance.source_records == ()
-    assert len(provenance.fact_bindings) == 1
+    assert provenance.source_records
+    assert len(provenance.fact_bindings) == 2
     authored = provenance.fact_bindings[0]
     assert authored.transformation is not None
     assert authored.transformation.kind == "authored_constant"
-    assert set(provenance.fact_universe) == set(CATALOGUE_FACT_UNIVERSE)
+    assert set(CATALOGUE_FACT_UNIVERSE) < set(provenance.fact_universe)
     assert {group.fact_group for group in provenance.withheld_facts} == {
         "provider_external_catalogue_facts_without_acquisition",
         "product_definitions_without_acquisition",
@@ -195,3 +195,62 @@ def test_acquisition_provenance_v2_rejects_legacy_and_mixed_withheld_shapes() ->
     ]
     with pytest.raises(ValidationError, match="no_acquisition_record_established"):
         AcquisitionProvenance.model_validate(mixed)
+
+
+def test_deferred_public_terms_are_traced_without_republishing_catalogue_values() -> None:
+    expected = {
+        "br_ana": {"license"},
+        "no_nve": {"license", "citation"},
+    }
+    for provider_id, kinds in expected.items():
+        artifact = load_packaged_catalogue_artifact(catalogue_path(provider_id), on_issue="raise")
+        provenance = artifact.acquisition_provenance
+        assert provenance is not None
+        assert artifact.products.is_empty() and artifact.stations.is_empty() and artifact.station_products.is_empty()
+        statements = [statement for source in provenance.source_records for statement in source.statements]
+        assert {statement.kind for statement in statements} == kinds
+        assert all(statement.verification_status == "verified_public_recording" for statement in statements)
+        verify_provenance_recordings(provenance, Path.cwd())
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "expected_url", "expected_instant", "expected_sha256", "expected_statements"),
+    (
+        (
+            "br_ana",
+            "https://www.gov.br/ana/pt-br/acesso-a-informacao/dados-abertos",
+            "2026-08-21T09:30:30Z",
+            "fdf143188469d23a9e2d4429c2a956d8fc311882a9a7e5d255f27e698ec3334f",
+            {
+                "source.ana.open_data_license_statement": "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle."
+            },
+        ),
+        (
+            "no_nve",
+            "https://hydapi.nve.no/UserDocumentation/",
+            "2026-08-21T09:19:38Z",
+            "d66c35806f7f62ac5fb95fa4219f80a8c2690c7e8ae4bdc022c770a684fa9f8a",
+            {
+                "source.nve.license_statement": "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+                "source.nve.citation_statement": "When using data from this service, if possible, please refer to this service as origin of data.",
+            },
+        ),
+    ),
+)
+def test_deferred_terms_match_completed_survey_exactly(
+    provider_id: str,
+    expected_url: str,
+    expected_instant: str,
+    expected_sha256: str,
+    expected_statements: dict[str, str],
+) -> None:
+    provenance = load_packaged_catalogue_artifact(catalogue_path(provider_id), on_issue="raise").acquisition_provenance
+    assert provenance is not None
+    source = provenance.source_records[0]
+    acquisition = source.acquisitions[0]
+    recording = source.evidence[0].recording
+    assert acquisition.requested_from == (expected_url,)
+    assert acquisition.retrieved_at_start.isoformat().replace("+00:00", "Z") == expected_instant
+    assert recording.source_url == expected_url
+    assert recording.sha256 == expected_sha256
+    assert {statement.fact: statement.exact_text for statement in source.statements} == expected_statements

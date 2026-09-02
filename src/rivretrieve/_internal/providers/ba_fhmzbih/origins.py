@@ -178,6 +178,15 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         retrieved_at_start=datetime.fromisoformat("2026-08-02T12:42:03Z"),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="terms_surface_capture_2026_08_20",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Exact-host Impressum response examined for published terms and citation words",
+                        requested_from=(absence.source_url,),
+                        retrieved_at_start=absence.retrieved_at,
+                        recording_ids=(absence.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="observation_request",
                         method="runtime_http_request",
                         instant_type="runtime",
@@ -195,11 +204,22 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                     ),
                 ),
                 statements=(
-                    SourceStatement(kind="terms", exact_text=DATA_STANDING_TEXT, recording_id=absence.recording_id),
+                    SourceStatement(
+                        kind="terms",
+                        exact_text=DATA_STANDING_TEXT,
+                        recording_id=absence.recording_id,
+                        fact="source.provider.terms_absence_statement",
+                    ),
                 ),
             ),
         ),
         fact_bindings=(
+            FactBinding(
+                fact_group="terms_surface_statement",
+                facts=("source.provider.terms_absence_statement",),
+                source_id="ba_avp_sava",
+                acquisition_id="terms_surface_capture_2026_08_20",
+            ),
             FactBinding(
                 fact_group="canonical_provider",
                 facts=provider_facts,
@@ -226,7 +246,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             ),
         ),
         withheld_facts=withheld,
-        fact_universe=universe,
+        fact_universe=universe + ("source.provider.terms_absence_statement",),
     )
 
 

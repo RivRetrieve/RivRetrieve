@@ -82,6 +82,24 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         description="Exact Existenz observation request and response",
         requested_from=("https://api.existenz.ch/apiv1/hydro/latest",),
     )
+    bafu_terms = AcquisitionRecord(
+        acquisition_id="bafu_terms_capture_2026_08_20",
+        method="http_request",
+        instant_type="retrieval",
+        description="BAFU hydrology terms and source-wording response",
+        requested_from=(bafu.source_url,),
+        retrieved_at_start=bafu.retrieved_at,
+        recording_ids=(bafu.recording_id,),
+    )
+    existenz_terms = AcquisitionRecord(
+        acquisition_id="existenz_terms_capture_2026_08_20",
+        method="http_request",
+        instant_type="retrieval",
+        description="Existenz API conditions and BAFU credit response",
+        requested_from=(existenz.source_url,),
+        retrieved_at_start=existenz.retrieved_at,
+        recording_ids=(existenz.recording_id,),
+    )
     return AcquisitionProvenance(
         schema_version=2,
         provider_id="ch_foen",
@@ -95,7 +113,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             SourceRecord(
                 source_id="ch_bafu",
                 issuer="Federal Office for the Environment (BAFU/FOEN)",
-                acquisitions=(acq, runtime),
+                acquisitions=(acq, runtime, bafu_terms),
                 evidence=(
                     EvidenceReference(
                         evidence_id="bafu_hydrology_terms",
@@ -104,15 +122,25 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                     ),
                 ),
                 statements=(
-                    SourceStatement(kind="license", exact_text=BAFU_LICENCE, recording_id=bafu.recording_id),
-                    SourceStatement(kind="citation", exact_text=BAFU_CITATION, recording_id=bafu.recording_id),
+                    SourceStatement(
+                        kind="license",
+                        exact_text=BAFU_LICENCE,
+                        recording_id=bafu.recording_id,
+                        fact="source.provider.bafu_license_statement",
+                    ),
+                    SourceStatement(
+                        kind="citation",
+                        exact_text=BAFU_CITATION,
+                        recording_id=bafu.recording_id,
+                        fact="source.provider.bafu_citation_statement",
+                    ),
                 ),
             ),
             SourceRecord(
                 source_id="ch_existenz",
                 issuer="Christian Studer, Bureau für digitale Existenz",
                 operator="api.existenz.ch",
-                acquisitions=(acq, runtime),
+                acquisitions=(acq, runtime, existenz_terms),
                 evidence=(
                     EvidenceReference(
                         evidence_id="existenz_api_terms",
@@ -121,12 +149,34 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                     ),
                 ),
                 statements=(
-                    SourceStatement(kind="terms", exact_text=EXISTENZ_TERMS, recording_id=existenz.recording_id),
-                    SourceStatement(kind="citation", exact_text=EXISTENZ_CREDIT, recording_id=existenz.recording_id),
+                    SourceStatement(
+                        kind="terms",
+                        exact_text=EXISTENZ_TERMS,
+                        recording_id=existenz.recording_id,
+                        fact="source.provider.existenz_terms_statement",
+                    ),
+                    SourceStatement(
+                        kind="citation",
+                        exact_text=EXISTENZ_CREDIT,
+                        recording_id=existenz.recording_id,
+                        fact="source.provider.existenz_citation_statement",
+                    ),
                 ),
             ),
         ),
         fact_bindings=(
+            FactBinding(
+                fact_group="bafu_terms_statements",
+                facts=("source.provider.bafu_license_statement", "source.provider.bafu_citation_statement"),
+                source_id="ch_bafu",
+                acquisition_id=bafu_terms.acquisition_id,
+            ),
+            FactBinding(
+                fact_group="existenz_terms_statements",
+                facts=("source.provider.existenz_terms_statement", "source.provider.existenz_citation_statement"),
+                source_id="ch_existenz",
+                acquisition_id=existenz_terms.acquisition_id,
+            ),
             FactBinding(
                 fact_group="bafu_station_product_values",
                 facts=bafu_facts,
@@ -153,7 +203,15 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 ),
             ),
         ),
-        fact_universe=bafu_facts + intermediary_facts + canonical_observation_facts,
+        fact_universe=bafu_facts
+        + intermediary_facts
+        + canonical_observation_facts
+        + (
+            "source.provider.bafu_license_statement",
+            "source.provider.bafu_citation_statement",
+            "source.provider.existenz_terms_statement",
+            "source.provider.existenz_citation_statement",
+        ),
     )
 
 

@@ -1,0 +1,598 @@
+<script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.11.3.min.js"></script>
+<script src="https://ajax.aspnetcdn.com/ajax/jquery.validate/1.14.0/jquery.validate.min.js"></script>
+<script src="https://ajax.aspnetcdn.com/ajax/jquery.validation.unobtrusive/3.2.6/jquery.validate.unobtrusive.min.js"></script>
+
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu" crossorigin="anonymous">
+<!-- Optional theme -->
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap-theme.min.css" integrity="sha384-6pzBo3FDv/PJ8r2KRkGHifhEocL+1X2rVCTTkUfGk7/0pbek5mMa1upzvWbrUbOZ" crossorigin="anonymous">
+<!-- Latest compiled and minified JavaScript -->
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js" integrity="sha384-aJ21OjlMXNL5UyIl/XNwTMqvzeRMZH2w8c5cRVpzpU8Y5bApTppSuUkhZXN0VxHd" crossorigin="anonymous"></script>
+
+<link href="/Css/nve-stylesheet.css" rel="stylesheet" />
+
+<div class="jumbotron" style="background-color:#F4F4F4">
+    <img src="/Images/nve-logo.png" alt="NVE logo" class="img-responsive" />
+</div>
+
+<div class="row">
+    <div class="col-sm-1"></div>
+
+    <div class="col-sm-11">
+
+        <h1>NVE Hydrological API (HydAPI) - API documentation</h1>
+        
+        <h2>Introduction to NVE's Hydrological API</h2>
+        <a id="introduction"></a>
+        <p>
+            NVE Hydrological API (HydAPI) is a is a RESTful API that provides access to <a href="https://www.nve.no">NVE's</a> 
+            (The Norwegian Water Resources and Energy Directorate) archive of historical and active observed time series. The 
+            time series are 
+            continuously updated with the latest observations from NVE's systems. The series exposed are the most common types like discharge, water stage,
+            water temperature and other types. For full overview over all exposed time series types see the
+            section for <a href="#parameters">Parameters</a> and <a href="#series">Series</a>. This page contains useful reference
+            documentation related to usage of the HydAPI. Contact us if you have more detailed questions at this email:
+            <a href="mailto:hydrology@nve.no?subject=hydrological api question">hydrology@nve.no</a>
+        </p>
+
+      
+        <h2>Quick-links</h2>
+
+        <ul>
+            <li><a href="/swagger/index.html?urls.primaryName=V1">API reference (swagger definition)</a></li>
+            <li><a href="/Users">Creating an API-key</a></li>
+            <li><a href="https://github.com/NVE/HydAPI">Code examples on GitHub</a></li>
+        </ul>
+
+        <h2>Table of contents</h2>
+        <ol>
+            <li><a href="#introduction">Introduction</a></li>
+            <li><a href="#license">License</a></li>
+            <li><a href="#termsofuse">Terms of use</a></li>
+            <li><a href="#versioning">Versioning</a></li>
+            <li><a href="#access">Access to the API</a></li>
+            <li><a href="#gettingstarted">Getting started</a></li>
+            <li><a href="#returnedresponseheader">Returned response header</a></li>
+            <li><a href="#github">Code examples on Github</a></li>
+            <li><a href="#guide">Guide for API usage - How things are structured</a></li>
+            <li><a href="#stations">Stations</a></li>
+            <li><a href="#series">Series</a></li>
+            <li><a href="#parameters">Parameters</a></li>
+            <li><a href="#ratingcurves">Rating curves</a></li>
+            <li><a href="#percentiles">Percentiles</a></li>
+            <li><a href="#observationsget">Observations - GET-method</a></li>
+            <li><a href="#observationspost">Observations - POST-method</a></li>
+            <li><a href="#changelog">Changelog</a></li>
+        </ol>
+
+
+        <h2>License</h2>
+        <a id="license"></a>
+        <p>
+            The data provided by the API is licensed under the <a href="https://data.norge.no/nlod/en">
+                Norwegian License for Open Government Data (NLOD)
+            </a> which is compatible with
+            <a href="https://creativecommons.org/licenses/by/3.0/no/deed.no">CC Navngivelse 3.0 Norge (CC BY 3.0)</a>.
+            Data is provided by the API "as is". It can contain erroneous or missing data. NVE does not take any responsibility
+            for data that can give wrong or misleading information.
+
+            When using data from this service, if possible, please refer to this service as origin of data.
+        </p>
+
+        <h2>Versioning</h2>
+        <a id="versioning"></a>
+        <p>
+            The API is currently version 1.0, and may be subject to change
+            without any change in version number.
+            <br />
+        </p>
+
+        <h2>Access to the API</h2>
+        <a id="access"></a>
+        <p>
+            All requests to the API needs to be supported with an API-key in the request-header. We require this in
+            order to provide all users a free, stable and reliable service.
+        </p>
+
+        <h2>Terms of use</h2>
+        <a id="termsofuse"></a>
+        <p>
+            <h3>Max response size</h3>
+            There is an upper limit of the number of data points you can retrieve in one request for observations.
+            The request will terminate with an error if the query reaches this limit. If this happens, adjust the timespan
+            in your query.
+            <h3>Max requests per time unit</h3>
+            Throttling: The API will only support a fixed number of requests from a client (API-key) per
+            time unit, and will deny request when this limit is reached. Clients that violate this policy will be temporarily
+            blocked by the API, and an error-message will show. Each response will contain information in the header (x-rate-limit-limit,
+            x-rate-limit-remaining, x-rate-limit-reset). The start and end times in the metadata resolution list are updated approx. each 10 minutes,
+            and the metadata for the stations and series is updated approx. each 4 hours. So the recommended requesting interval should be related to these updates.
+
+
+            <h3>Guidelines for efficient usage</h3>
+            Some guidelines for efficient usage:
+            <ul>
+                <li>Cache large queries. Try not to use large queries unnecessary.</li>
+                <li>Do small queries, and fetch only data that you need.</li>
+                <li>If you are interested to know if a time series has new data, or data newer than a given timestamp - use the <a href="#series">Series</a> metadata method.</li>
+            </ul>
+        </p>
+
+        <h2>Getting started</h2>
+        <a id="gettingstarted"></a>
+        <p>
+            To be able to receive data from the HydAPI, you will need to provide an API-key with your request. The API-key is
+            added in the request-header for all requests. An API-key is connected to an email-address, and will be used for
+            traffic control (throttling) purposes. The email can also be used for information about the API (new versions and so
+            on). Remember to keep your API-key stored in a secure place, as they are non-retrievable after generated. An API-key can be generated more than once on same email address, and old keys on the same email address are still valid even if new one are generated.
+        </p>
+
+        <b>To generate a API-key, click here:</b> <a href="/Users">Click here to create an API-key</a>
+
+        In Swagger view, click the button "Authorize",
+        <img alt="Swagger authorize button" src="/Images/Authorize.PNG" /> and then enter the API-key. This will automatically set
+        the X-API-Key header in each call made to the API using the Swagger view.
+
+
+        The API-key is added to the header for each request: <br />
+        <kbd>
+            curl -X GET "https://hydapi.nve.no/api/v1/Parameters" -H "accept: application/json" -H "X-API-Key:
+            XXXX---EXAMPLE KEY---XXXX"
+        </kbd><br />
+        For an additional code example implementing the API in C# look in the section: <a href="#github">Code examples on github</a>.
+
+        <h2>Returned response header</h2>
+        <a id="returnedresponseheader"></a>
+        <p>
+            The response header includes information about; the input url, the API version, license information, the timestamp for when
+            request is processed on the server, the processing time and the number of data records returned.
+        </p>
+
+        <p>
+            <pre>
+            <code>
+                    {
+                        "currentLink": "https://hydapi.nve.no/api/v1/Observations?StationId=6.10.0&Parameter=1000&ResolutionTime=1440",
+                        "apiVersion": "1.0",
+                        "license": "https://data.norge.no/nlod/en",
+                        "createdAt": "2019-09-23T07:52:12.3293346Z",
+                        "queryTime": "00:00:00.0685120",
+                        "itemCount": 1,
+                        "data": [
+                        {
+                            ...(truncated)
+                </code>
+            </pre>
+        </p>
+        <h2>Code examples on GitHub</h2>
+        <a id="github"></a>
+        <p>
+            Code examples for different languages is available in this <a href="https://github.com/NVE/HydAPI">GitHub repo</a>.
+        </p>
+
+        <h2>Guide for API usage - How things are structured</h2>
+        <a id="guide"></a>
+        <p>
+            NVE has stations all over Norway. A station is identified by a unique station-id. The station-id is a combination of three
+            numbers separated by a "." (example 124.23.0). A station can contain several different measured series (time series). A
+            series connected to a station is of one specific parameter type.
+
+            A parameter gives the type of data the observed time series contains. Examples of parameters are discharge, water stage and
+            water temperature. A time series has versions, and it is the one preferred version that is returned in the API. For detailed
+            information about the input and output fields we refer to the API documented in <a href="/swagger/index.html?urls.primaryName=V1">Swagger documentation </a>
+            under the last part where all Models are listed.
+        </p>
+        <h2>Stations</h2>
+        <a id="stations"></a>
+        <p>
+            The available stations can be found by giving no filter to the query, or the query can be filtered with parameters. The returned
+            station contains metadata for the station, and lists out the available series with start and end dates. Start and end dates can
+            be empty/null because this information is missing for the series. This does not mean that the series have no data.
+
+            It is also possible to filter on active/non active stations.
+            If no filter criteria are entered, all stations are returned.
+            See Swagger the definition for Station (listed under models) for more detailed information.
+            <br />Example url
+            <kbd>https://hydapi.nve.no/api/v1/Stations?CouncilName=Tynset&Active=OnlyActive</kbd>
+        </p>
+
+        <h2>Series</h2>
+        <a id="series"></a>
+        <p>
+            All available series can be found by using this method. You can filter the search by supplying 
+            parameters filtering the list, giving e.g. series giving air-temperature (17) or series in a specific
+            county. It is also possible to view only series with newer data than a certain time using the DataFrom field. A series contains metadata and a resolution list that views the different available time resolutions for the series. The supported time resolutions are raw/instantaneous (0), hour(60) 
+            and day(1440). The resolution-list shows the start and end times for observations
+            for a specific resolution. The start and end times in the resolution list are updated approx. each 10 minutes.
+            The metadata for the series is updated approx. each 180 minutes.
+
+            If no filter criteria is given, all series are returned.
+            <br />Example url
+            <kbd>https://hydapi.nve.no/api/v1/Series?StationId=1.200.0</kbd>
+        </p>
+
+        <h2>Parameters</h2>
+        <a id="parameters"></a>
+        <p>
+            Parameter gives the type of data, like discharge, water stage or water temperature.
+            This method lists all parameters available in the API. A parameter has a id (number internal defined in NVE) identifying that
+            parameter type. Example “Discharge“ has parameter 1001. The unit is also viewed for the parameter
+            <br />Example url
+            <kbd>https://hydapi.nve.no/api/v1/Parameters </kbd>
+        </p>
+        <h2>Rating curves</h2>
+        <a id="ratingcurves"></a>
+        <p>
+            The relation between the water stage and discharge is expressed as a “rating curve”. The rating curves query will list the
+            discharge series with available rating curves. To find a specific rating curve for a series in this list, use the detailed
+            rating curve search for a station-id. A rating curve can have different periods, to indicate what period the curve is valid for.
+            A period will be limited by dtStartDate and dtEndDate. If dtEndData is null, the period is not ended. One period we can have
+            one or more segments. One segment is starting on the minimum value, and ending on the maximum value. One segment starts where
+            the prior ends. Within one segment the discharge is given by the formula Q (discharge)= constant *(input - zero)exp exponent
+            <br />Example urls
+            <kbd>https://hydapi.nve.no/api/v1/Ratingcurves</kbd>
+            <br />
+            <kbd>https://hydapi.nve.no/api/v1/Ratingcurves/1.56.0</kbd>
+        </p>
+        Example output.
+        <p>
+            <pre>
+            {
+                 "currentLink": "https://hydapi.nve.no/api/v1/Ratingcurves/1.56.0",
+                 "apiVersion": "1.0",
+                 "license": "https://data.norge.no/nlod/en",
+                 "createdAt": "2019-09-23T08:02:11.1472544Z",
+                 "queryTime": "00:00:00.0003155",
+                 "itemCount": 1,
+                 "data": [
+                 {
+                    "stationId": "1.56.0",
+                    "parameter": 1001,
+                    "versionNo": 1,
+                    "generationNo": 0,
+                    "periodNo": 1,
+                    "segmentNo": 1,
+                    "constant": 12.9921,
+                    "exponent": 2.2209,
+                    "maximum": 160.74,
+                    "minimum": 150.742,
+                    "zero": -150.742,
+                    "dtEstablDate": "1996-11-25T00:00:00",
+                    "dtStartDate": "1992-06-30T00:00:00",
+                    "dtEndDate": null
+                }
+                ]
+            }
+        </pre>
+        </p>
+        <h2>Percentiles</h2>
+        <a id="percentiles"></a>
+        <p>
+            Percentiles-list is listing of series that have percentile statistics.
+            To find the detailed information use the Percentile-details. The percentile percentages statistical information for a series
+            are given for each day within a year.
+            <br />Example urls
+            <kbd>https://hydapi.nve.no/api/v1/Percentiles</kbd>
+            <br />
+            Get the stage parameter percentile-list for station 1.200.0:
+            <br />
+            <kbd>https://hydapi.nve.no/api/v1/Percentiles/1.200.0/1000</kbd>
+
+        </p>
+
+        <h2>Observations - GET-method</h2>
+        <a id="observationsget"></a>
+        <p>
+            Observations can be retrieved using a GET-method.
+        </p>
+        <p>
+            The observations for a series can be found if the following fields are given;
+            <ul>
+                <li>
+                    StationId; The Station is identified by a unique station-id. The station-id is tree numbers separated
+                    by a comma (example 124.23.0). If you want to fetch data from several stations in the same request, you can supply
+                    the station-ids separated by commas (Example: "6.10.0,12.209.0").
+                </li>
+                <li>
+                    Parameter; The parameter number or parameter name (Example "1000" or "stage"). If you want to
+                    fetch several parameters in the same request, you can supply the parameters on a list separated by commas (Example "1000,1001").
+                </li>
+                <li>
+                    ResolutionTime; Enter the resolution time. The supported values are “hour”(60), ”day”(1440) or “inst”(0). "inst" is instantaneous and
+                    is different for different time series.
+                </li>
+                <li>
+                    VersionNumber; The api also supports series with more than one version. Most series has just one version. If a series has more version can be found in metadata search.
+                    If the VersionNumber is not specified, and it only exists one version, this version of the series is returned.
+                    If a series has more than one version, the version to be returned can be specified here, if not specified then
+                    the system returns the version with the newest data.
+                </li>
+
+                <li>
+                    ReferenceTime; Describes the time interval to get returned observations from. The interval has a start time and a end time.<br />
+                    ReferenceTime is implemented using the ISO-8601 standard and with some extensions.<br />
+                    The "/" is used as a separator between the start time and end time. Example "2010-02-02/2012-03-03".<br />
+                    If left side of "/" is left undefined, it will be handled as an open start returning all observations prior to the end time<br />
+                    If right side of "/" is left undefined, it will be handled as an open end returning all observations from the start time and forward<br />
+                    The observations includes the start and end times. All times is given in UTC-0<br />
+                    <br />
+                    If field is left empty the latest observations is returned.
+                    <br />
+                    The reference time can also use a period (defined in ISO-8601). If a period is used, it is relative to the datetime it is entered together with.<br />
+                    If no datetime is given, the period is relative to datetime now.<br />
+                    <br />
+                    <ul>
+                        The following reference times formats are supported T= a datetime P=period
+                        <li>
+                            T/T example: "2010-02-02/2012-03-03" gives the interval starting 2010-02-02 and ending 2012-03-03
+                        </li>
+                        <li>
+                            T/P example: "2010-02-02/P3D" gives the interval starting 2010-02-02 and ending 2010-03-05
+                        </li>
+                        <li>
+                            P/T example: "P2DT5H/2012-10-03T19:00" gives the interval starting 2012-10-01T14:00:00Z and ending 2012-10-03T19:00:00Z
+                        </li>
+                        <li>
+                            /T   example: "/2012-03-03T11:00" gives the interval with all observations until 2012-03-03T11:00Z
+                        </li>
+                        <li>
+                            T/   example: "2012-03-03/" gives the interval with all observations from 2012-03-03T00:00Z
+                        </li>
+                        <li>
+                            P/   example: "P3D/" gives the interval starting 3 days prior to now and ends now
+                        </li>
+                        <li>
+                            /P   example: "/P2D" gives the interval starting now and ends in 2 days
+                        </li>
+                        <li>
+                            (+|-)P / (+|-)P only if both sides are periods, then negative period is allowed.
+                        </li>
+                        <li>
+                            <ul>
+                                <li>
+                                    Example: "-P4D/-P2D" gives the interval starting 4 days prior to now and ends 2 days prior to now
+                                </li>
+                                <li>
+                                    Example: "-P4D/P2D" gives the interval starting 4 days prior to now and ends 2 in days
+                                </li>
+                                <li>
+                                    Example: "P3D/P5D" gives the interval starting in 3 days and ends 5 days prior to now
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+            The result can be filtered on quality types, correction types and within the given reference time. If no reference time is given, the API will return the last observed value.
+
+            <br />
+            <p>
+            Asking for two parameters on two stations in the same request, will give a result of four time series (if they exist).
+
+            Note that there is a maximum number of parallel series you can ask for in one query, and the number of returned observations combined cannot exceed the total
+            number of records.
+
+            When asking for multiple series, there can be situations where the combination of station-id and parameter gives a
+            non-existent series. The behaviour for the different variants are given below:
+            <ul>
+                <li>If the series exist and it contains data for the given query, it will return both metadata and data for that series.</li>
+                <li>If the series exist, but it contains no data for the given query, the query will return metadata for the serie with an empty data-element.</li>
+                <li>If the series does not exist, the series will be omitted from the output.</li>
+            </ul>
+        </p>
+        <pre>
+        <code>
+                    {
+                        "currentLink": "https://hydapi.nve.no/api/v1/Observations?StationId=6.10.0&Parameter=1000&ResolutionTime=1440",
+                        "apiVersion": "1.0",
+                        "license": "https://data.norge.no/nlod/en",
+                        "createdAt": "2019-09-23T11:16:51.788047Z",
+                        "queryTime": "00:00:00.0511162",
+                        "itemCount": 1,
+                        "data": [
+                        {
+                            "stationId": "6.10.0",
+                            "stationName": "Gryta",
+                            "parameter": 1000,
+                            "parameterName": "Vannstand",
+                            "parameterNameEng": "Stage",
+                            "serieVersionNo": 0,
+                            "method": "Mean",
+                            "unit": "m",
+                            "observationCount": 1,
+                            "observations": [
+                            {
+                                "time": "2019-09-22T11:00:00Z",
+                                "value": 0.2255617,
+                                "correction": 0,
+                                "quality": 1
+                            }
+                            ]
+                        }
+                        ]
+                    }
+                </code>
+            </pre>
+
+        <br />
+        All the timestamps returned from the API are given in the timezone UTC-0 (Zulu-time). Time series with resolutiontime day, is timestamped with 11:00Z. The data for a day observation is calculted using "Norwegian normal time" UTC-1.
+
+        In the response header the serieVersionNo is showing what version for the series that is used for the result.
+
+        The method is showing the aggregation method used for aggregation for this parameter type.
+        <ul>
+            <li>
+                Precipitation is using type "sum"
+            </li>
+            <li>
+                Snow depth is using type "instant"
+            </li>
+            <li>
+                The rest of the parameters are using type "mean".
+            </li>
+        </ul>
+
+
+        The quality types is indicating if the observed values is be quality checked.
+        <ul>
+            <li>
+                Unknown = 0
+            </li>
+            <li>
+                Uncontrolled = 1
+            </li>
+            <li>
+                PrimaryControlled = 2
+            </li>
+            <li>
+                SecondaryControlled = 3
+            </li>
+        </ul>
+
+
+        The correction types is indicating if the value has been corrected
+        <ul>
+            <li>
+                0: No changes
+            </li>
+            <li>
+                1: Manual- or ice correction
+            </li>
+            <li>
+                2: Interpolation
+            </li>
+            <li>
+                3: Value computed with models or/and other series
+            </li>
+            <li>
+                4: Daily mean computed with arithmetic mean. (Only used on series where we normally should use discharge curve)
+            </li>
+            <li>
+                5: Smooth negative value. (Only used with inflow)
+            </li>
+            <li>
+                6: Dry pipe. (Only used with groundwater data)
+            </li>
+            <li>
+                7: Ice in pipe. (Only used with groundwater data)
+            </li>
+            <li>
+                8: Damaged pipe. (Only used with groundwater data)
+            </li>
+            <li>
+                9: Pumping. (Only used with groundwater data)
+            </li>
+            <li>
+                11: Start/end value linear adjustment
+            </li>
+            <li>
+                12: Incomplete data source
+            </li>
+            <li>
+                13: The value is calculated based on a similar station or a station close by. The value is adjusted according to
+                the statistical differences between the original station and the replacement station
+            </li>
+            <li>
+                14: The value is missing, and is only calculated based on statistical information for the data series.
+            </li>
+            <li>
+                15: The value is the result of a calculation that ended in Nan(not a number) or +/-Inf. (Technically, the value
+                needs to be outside the interval -1e+300 to +1e0399.)
+            </li>
+            <li>
+                16: Value fetched from rejected period.
+            </li>
+        </ul><br />Example url
+        <p>
+            <kbd>https://hydapi.nve.no/api/v1/Observations?StationId=6.10.0&Parameter=1000&ResolutionTime=0</kbd>
+        </p>
+
+        <h2>Observations - POST-method</h2>
+        <a id="observationspost"></a>
+        <p>
+            It is also possible to use a POST-method request if you want to fetch several independent time series. 
+            In the POST-method you can specify all parameters for each individual time series.
+
+            Example: I want to get the latest daily(1440) stage-parameter (1000) for Urula-station (12.209.0), the latest hourly(60) water-temperature (1003) for the Lierelv station (1.200.0) and the latest instantenous (0) air-temperature (17) for the Engsetvatn station (101.1.0). This query is not possible with the GET-method in a single request.
+            <br />
+            The body of the request must be populated this JSON-array:
+            <pre>
+                <code>
+                    [
+                        {
+                            "stationId": "12.209.0",
+                            "parameter": "1000",
+                            "resolutionTime": "1440"
+                        },
+                        {
+                            "stationId": "1.200.0",
+                            "parameter": "1003",
+                            "resolutionTime": "60"
+                        },
+                        {
+                            "stationId": "101.1.0",
+                            "parameter": "17",
+                            "resolutionTime": "0"
+                        }
+                    ]
+                </code>                
+            </pre>
+
+            Another example: Getting the first week of the year for the stage-parameter (1000) for the three 
+            first years in the millennium for station 12.209.0.
+
+            <pre>
+            <code>
+                    [
+                     {
+                        "stationId": "12.209.0",
+                        "parameter": "1000",
+                        "resolutionTime": "1440",
+                        "referenceTime": "2000-01-01/P7D"
+                     },
+                     {
+                        "stationId": "12.209.0",
+                        "parameter": "1000",
+                        "resolutionTime": "1440",
+                        "referenceTime": "2001-01-01/P7D"
+                     },
+                     {
+                        "stationId": "12.209.0",
+                        "parameter": "1000",
+                        "resolutionTime": "1440",
+                        "referenceTime": "2002-01-01/P7D"
+                     }
+                    ]
+                </code>
+            </pre>
+        </p>
+
+        <h2>Changelog</h2>
+        <a id="changelog"></a>
+        <p>
+            <h3>v1.0</h3>
+            <ul>
+                <li>February 2023; Added new metadata to endpoints Stations and Series.
+                    <ul>
+                        <li>
+                            For Stations; Highest regulated water level, Lowest regulated water level, Mean annual discharge, Reservoir capacity,Nn2000 offset height,Station purpose, 
+                            List of minimum discharges, List of usage tags 
+                        </li>
+                        <li>
+                            For Series;  Publication text, Publication text short, Out of service text
+                        </li>
+                    </ul>
+                </li>
+                <br/>
+                <li>Changed Observations GET-call to support returning multiple time series.</li>
+                <li>Added Observations POST-call to support queries for multiple time series with full configuration.</li>
+                <li>Changed to specification of time in Observations from From- and To-field to ReferenceTime with support</li>
+                <li>Changed the result object from Observations-methods to support multiple time series in one invocation.</li>
+            </ul>
+            <h3>v0.9 (removed version)</h3>
+            <ul>
+                <li>First beta version public available</li>
+            </ul>
+        </p>
+    </div>
+</div>

@@ -306,3 +306,79 @@ def test_acquisition_accepts_runtime_templates_and_narrow_private_location() -> 
     AcquisitionProvenance.model_validate(bosnia)
     poland = _document("pl_imgw")
     AcquisitionProvenance.model_validate(poland)
+
+
+def test_every_public_statement_is_bound_to_its_recording_acquisition() -> None:
+    for path in _PROVENANCE_PATHS:
+        document = json.loads(path.read_text())
+        bindings = {
+            (binding.get("source_id"), fact): binding.get("acquisition_id")
+            for binding in document["fact_bindings"]
+            for fact in binding["facts"]
+        }
+        for source in document["source_records"]:
+            acquisitions = {item["acquisition_id"]: item for item in source["acquisitions"]}
+            for statement in source["statements"]:
+                if statement.get("verification_status", "verified_public_recording") != "verified_public_recording":
+                    continue
+                fact = statement["fact"]
+                acquisition = acquisitions[bindings[(source["source_id"], fact)]]
+                assert statement["recording_id"] in acquisition["recording_ids"], (path, statement)
+
+
+def test_public_statement_rejects_recording_claimed_by_an_unrelated_acquisition() -> None:
+    document = _document("jp_mlit")
+    statement = document["source_records"][0]["statements"][0]
+    statement["fact"] = "source.provider.license_terms"
+    license_acquisition = document["source_records"][0]["acquisitions"][1]
+    unrelated = document["source_records"][0]["acquisitions"][2]
+    unrelated["recording_ids"].append(statement["recording_id"])
+    license_acquisition["recording_ids"].remove(statement["recording_id"])
+    with pytest.raises(ValidationError, match="statement recording must be claimed by its fact acquisition"):
+        AcquisitionProvenance.model_validate(document)
+
+
+def test_public_statement_rejects_fact_bound_to_an_unrelated_acquisition() -> None:
+    document = _document("jp_mlit")
+    statement = document["source_records"][0]["statements"][0]
+    statement["fact"] = "source.provider.license_terms"
+    binding = next(item for item in document["fact_bindings"] if statement["fact"] in item["facts"])
+    binding["acquisition_id"] = "citation_terms_capture_2026_08_21"
+    with pytest.raises(ValidationError, match="statement recording must be claimed by its fact acquisition"):
+        AcquisitionProvenance.model_validate(document)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("requested_from", ["https://example.test/unrelated"]), ("retrieved_at_start", "2026-08-20T00:00:00Z")),
+)
+def test_public_statement_rejects_acquisition_that_mismatches_recording(field: str, value: object) -> None:
+    document = _document("jp_mlit")
+    statement = document["source_records"][0]["statements"][0]
+    acquisition = next(
+        item
+        for item in document["source_records"][0]["acquisitions"]
+        if statement["recording_id"] in item["recording_ids"]
+    )
+    acquisition[field] = value
+    with pytest.raises(ValidationError, match="statement acquisition must match its exact recording URL and instant"):
+        AcquisitionProvenance.model_validate(document)
+
+
+def test_missing_terms_do_not_block_traced_values_and_do_not_explain_current_retrieval_loss() -> None:
+    bosnia = _document("ba_fhmzbih")
+    bosnia_statement_facts = {
+        statement["fact"] for source in bosnia["source_records"] for statement in source["statements"]
+    }
+    bosnia_withheld = {fact for group in bosnia["withheld_facts"] for fact in group["facts"]}
+    assert bosnia_statement_facts.isdisjoint(bosnia_withheld)
+    assert any(fact.startswith("station:") for fact in bosnia_withheld)
+    assert any(fact.startswith("station_product:") for fact in bosnia_withheld)
+
+    thailand = _document("th_thaiwater")
+    assert [statement for source in thailand["source_records"] for statement in source["statements"]] == []
+    thailand_withheld = {fact for group in thailand["withheld_facts"] for fact in group["facts"]}
+    assert thailand_withheld
+    assert all(fact.startswith("station_product:") and fact.endswith(":availability") for fact in thailand_withheld)
+    bound = {fact for binding in thailand["fact_bindings"] for fact in binding["facts"]}
+    assert any(fact.startswith("source.station:") for fact in bound)
