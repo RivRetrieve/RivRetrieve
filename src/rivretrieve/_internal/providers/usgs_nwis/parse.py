@@ -21,6 +21,7 @@ from rivretrieve._internal.engine import (
     ProviderConfig,
     Rows,
     RowsSchema,
+    UnknownTemporalSupport,
     WithIssues,
     ZoneValue,
 )
@@ -46,6 +47,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
         raise FatalContractError(f"usgs_nwis product is absent from provider config: {product_id}") from error
     if isinstance(semantics, Hourly):
         raise FatalContractError("usgs_nwis does not declare hourly interval product semantics")
+    if isinstance(semantics, UnknownTemporalSupport):
+        raise FatalContractError("usgs_nwis does not declare unknown temporal support")
 
     if not payload.content.strip():
         return _result(_empty_rows(), [_missing_data_issue(station_id)])
