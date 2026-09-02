@@ -24,6 +24,7 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ch_foen import generate_catalogue
+from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
 
 FIXTURE_PATH = Path("tests/test_data/switzerland_metadata_locations.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
@@ -398,6 +399,7 @@ def test_native_build_has_exact_projection_counts_dates_and_schemas() -> None:
         catalogue.products,
         catalogue.stations,
         catalogue.station_products,
+        acquisition_provenance=build_acquisition_provenance(),
         on_issue="raise",
     )
 

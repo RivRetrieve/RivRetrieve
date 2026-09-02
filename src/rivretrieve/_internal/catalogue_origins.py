@@ -1,10 +1,11 @@
-"""CatalogueOrigin ≔ Field(NativeColumn) | NotPublished(Evidence) | Documented(DocumentedValue, Evidence); origin gate : EnrolledProvider × OriginDeclarations × NativeTable × StationCatalog → list[Issue]."""
+"""CatalogueOrigin ≔ Field | NotPublished | Documented | Withheld; origin gate : EnrolledProvider × OriginDeclarations × NativeTable × StationCatalog → list[Issue]."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Literal
 
 import polars as pl
 
@@ -68,6 +69,14 @@ class NotPublished:
 
 
 @dataclass(frozen=True, slots=True)
+class Withheld:
+    """A canonical placeholder whose source fact lacks acquisition evidence."""
+
+    reason: Literal["acquisition_not_established"] = "acquisition_not_established"
+    marker: Literal["unknown"] = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
 class Documented:
     value: DocumentedValue
     evidence: Evidence
@@ -79,7 +88,7 @@ class Documented:
             raise TypeError("Documented.evidence must be Evidence")
 
 
-type CatalogueOrigin = Field | NotPublished | Documented
+type CatalogueOrigin = Field | NotPublished | Documented | Withheld
 type OriginDeclarations = Mapping[str, object]
 
 ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
@@ -199,6 +208,34 @@ def validate_catalogue_origins(
                         message=(
                             f"{provider_id}.{canonical_column}: emitted value does not match documented value "
                             f"'{origin.value}'"
+                        ),
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+        elif isinstance(origin, Withheld):
+            if origin.reason != "acquisition_not_established":
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.malformed_withheld_reason",
+                        message=f"{provider_id}.{canonical_column}: Withheld origin has an invalid reason",
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif origin.marker != "unknown" or _has_value_other_than(
+                stations,
+                canonical_column,
+                DocumentedValue(origin.marker),
+            ):
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.withheld_marker_mismatch",
+                        message=(
+                            f"{provider_id}.{canonical_column}: Withheld origin must emit only the "
+                            f"unavailable marker {origin.marker!r}"
                         ),
                         details=details,
                         provider_id=provider_id,

@@ -14,7 +14,7 @@ def test_ba_fhmzbih_in_providers_list() -> None:
 
 def test_ba_fhmzbih_stations_offline() -> None:
     result = catalogue_reader("ba_fhmzbih").read_stations()
-    assert result.data.height == 60
+    assert result.data.height == 1
     assert result.data["crs"].unique().to_list() == ["unknown"]
 
 
@@ -40,7 +40,9 @@ def test_ba_fhmzbih_station_products_offline() -> None:
     stations = catalogue_reader("ba_fhmzbih").read_stations()
     products = catalogue_reader("ba_fhmzbih").read_products()
     result = catalogue_reader("ba_fhmzbih").read_station_products()
-    assert result.data.height == 180 == stations.data.height * products.data.height
+    assert result.data.is_empty()
+    assert stations.data.height == 1
+    assert products.data.height == 3
 
 
 def test_ba_fhmzbih_info() -> None:
@@ -79,8 +81,8 @@ def test_ba_fhmzbih_catalogue_catalogue_path_exists() -> None:
 
 def test_ba_fhmzbih_station_fields() -> None:
     result = catalogue_reader("ba_fhmzbih").read_stations()
-    row = result.data.filter(result.data["station_id"] == "4510")
+    row = result.data.filter(result.data["station_id"] == "4024")
     assert row.height == 1
-    assert row["latitude"][0] == 44.64680728070949
-    assert row["longitude"][0] == 17.90406242892678
+    assert row["latitude"][0] == 43.96558356471353
+    assert row["longitude"][0] == 18.256887847750523
     assert row["crs"][0] == "unknown"

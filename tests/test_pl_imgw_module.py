@@ -36,6 +36,7 @@ def test_pl_imgw_station_products_and_artifacts() -> None:
         "products.parquet",
         "stations.parquet",
         "station_products.parquet",
+        "provenance.json",
     }
 
 

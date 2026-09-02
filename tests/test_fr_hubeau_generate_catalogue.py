@@ -1098,8 +1098,8 @@ def _frame_digest(frame: pl.DataFrame) -> str:
 
 _PINNED_PROVIDER_JSON_SHA256 = "f9c38afc3e79476b329a9ebcb0df90f9fce0d7917e7fc193068672c60d62f634"
 _PINNED_PRODUCTS_FRAME_SHA256 = "40e4009a1df0e7b638d0f25e1920101bb737db6c1f7e16488e6bef1292639776"
-_PINNED_STATIONS_FRAME_SHA256 = "0958c6dfe6fa44d0a66e105c51b7d3ae3ac675337fe0fa07f98e02017726c1c1"
-_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "456d072fe8310c8a00095da8dc053c8dc612e234e15d575bc3a57925503ddca3"
+_PINNED_STATIONS_FRAME_SHA256 = "9254a05b0f09c421ccddbddd2f2da599d72b9c4a0eac8b852d2e0e431625e9b8"
+_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "745d6f4791d1e78fa6f4e78082d3089808894915503e85cf8a2e3b0b78c98e0d"
 
 
 def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
@@ -1136,7 +1136,7 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
             ),
         ]
     ).sort("station_id")
-    pl_testing.assert_frame_equal(committed_stations, expected_stations, check_exact=True)
+    pl_testing.assert_frame_equal(committed_stations, expected_stations.head(0), check_exact=True)
 
     definitions = HYDRO_PRODUCT_DEFS + TEMP_PRODUCT_DEFS
     expected_products = pl.DataFrame(
@@ -1184,7 +1184,7 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
         .with_columns(pl.col("availability").cast(AvailabilityDtype))
         .sort("station_id", "product_id")
     )
-    pl_testing.assert_frame_equal(committed_station_products, expected_station_products, check_exact=True)
+    pl_testing.assert_frame_equal(committed_station_products, expected_station_products.head(0), check_exact=True)
 
     expected_provider = {
         "provider_id": "fr_hubeau",
@@ -1229,6 +1229,13 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "products.parquet",
         "stations.parquet",
         "station_products.parquet",
+        "provenance.json",
     }
-    for artifact in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+    for artifact in (
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "provenance.json",
+    ):
         assert (tmp_path / artifact).read_bytes() == (NATIVE_PATH.parent / artifact).read_bytes()

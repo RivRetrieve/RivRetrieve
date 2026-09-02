@@ -15,6 +15,7 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -875,6 +876,9 @@ def validate_generated_catalogue(
         products,
         stations,
         station_products,
+        acquisition_provenance=__import__(
+            "rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["build_acquisition_provenance"]
+        ).build_acquisition_provenance(),
         on_issue="raise",
     )
 
@@ -888,6 +892,13 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        __import__("rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["build_acquisition_provenance"])
+        .build_acquisition_provenance()
+        .model_dump_json()
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _read_fixture_json(path: Path) -> list[object]:
@@ -947,9 +958,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--native requires --out")
         if args.native_out is not None or args.retrieved_at is not None:
             parser.error("--native cannot be combined with --native-out or --retrieved-at")
-        from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
+        from rivretrieve._internal.providers.usgs_nwis.origins import (
+            NATIVE_TABLE_BYTE_SIZE,
+            NATIVE_TABLE_SHA256,
+            STATION_CATALOGUE_ORIGINS,
+            build_acquisition_provenance,
+        )
 
-        catalogue = build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS)
+        verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
+        native_table = read_native_table(
+            args.native,
+            expected_sha256=NATIVE_TABLE_SHA256,
+            expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+        )
+        catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
         write_catalogue(catalogue, args.out)
         return 0
 

@@ -175,7 +175,7 @@ def test_ba_fhmzbih_daily_mean_absent_and_corrupting_request_refused_by_name() -
     assert product_id not in rr.products("ba_fhmzbih")
     selection = rr.find(
         provider="ba_fhmzbih",
-        station="4510",
+        station="4024",
         product=product_id,
     )
 
@@ -183,11 +183,7 @@ def test_ba_fhmzbih_daily_mean_absent_and_corrupting_request_refused_by_name() -
         rr.fetch(selection, start="2025-03-23", end="2025-03-26")
 
     assert exc_info.value.reason.product_ids == (product_id,)
-    assert exc_info.value.reason.published_products == (
-        "discharge_instantaneous",
-        "stage_instantaneous",
-        "water_temperature_instantaneous",
-    )
+    assert exc_info.value.reason.published_products == ()
 
 
 def test_probe_that_does_not_replay_its_recording_is_refused() -> None:

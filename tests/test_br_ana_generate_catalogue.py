@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-from datetime import date, datetime
 from pathlib import Path
 
 import polars as pl
@@ -71,30 +69,18 @@ def test_fixture_build_uses_exact_reduced_carriers() -> None:
     assert tuple(cat.provider_info) == tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
 
 
-def _frame_content_sha256(frame: pl.DataFrame) -> str:
-    def normalized(value: object) -> object:
-        return value.isoformat() if isinstance(value, date | datetime) else value
-
-    payload = {
-        "columns": frame.columns,
-        "rows": [[normalized(value) for value in row] for row in frame.iter_rows()],
-    }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    ).hexdigest()
-
-
 def test_projected_national_artifacts_have_pinned_complete_content() -> None:
     catalogue = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/br_ana/catalogue"
-    assert hashlib.sha256((catalogue / "provider.json").read_bytes()).hexdigest() == (
-        "96ed829f389b0079c1194133af94ad3ca7f6c07aecaa5a5c8a8f27b4fbfde1f2"
-    )
-    assert _frame_content_sha256(pl.read_parquet(catalogue / "products.parquet")) == (
-        "eb464a090e8727a2d4982f3cb2d330893830cfe9f28efa4baf05f77ceef6cb11"
-    )
-    assert _frame_content_sha256(pl.read_parquet(catalogue / "stations.parquet")) == (
-        "aa9428890df6b35f13e80a9de5e1de44e0c01dbd298f10ab9f057c511c898666"
-    )
-    assert _frame_content_sha256(pl.read_parquet(catalogue / "station_products.parquet")) == (
-        "3e221ca0c924b3423906675ae1851b8d6930be9224b9a42022184fbf3ded8674"
-    )
+    provider_info = json.loads((catalogue / "provider.json").read_text(encoding="utf-8"))
+    assert provider_info["catalogue_version"] is None
+    assert pl.read_parquet(catalogue / "products.parquet").is_empty()
+    assert pl.read_parquet(catalogue / "stations.parquet").is_empty()
+    assert pl.read_parquet(catalogue / "station_products.parquet").is_empty()
+    provenance = json.loads((catalogue / "provenance.json").read_text(encoding="utf-8"))
+    assert provenance["native_table"] is None
+    assert provenance["source_records"] == []
+    assert len(provenance["fact_bindings"]) == 1
+    authored = provenance["fact_bindings"][0]
+    assert authored["fact_group"] == "rivretrieve_authored_provider_registration"
+    assert authored["transformation"]["kind"] == "authored_constant"
+    assert {item["reason"] for item in provenance["withheld_facts"]} == {"no_acquisition_record_established"}

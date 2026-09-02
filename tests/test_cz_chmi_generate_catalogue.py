@@ -665,7 +665,7 @@ def test_legacy_canonical_generation_apis_are_removed() -> None:
     assert not hasattr(generate_catalogue, "generate_catalogue_from_live")
 
 
-def test_native_cli_writes_four_artifacts_without_touching_native(tmp_path: Path) -> None:
+def test_native_cli_writes_five_artifacts_without_touching_native(tmp_path: Path) -> None:
     native_bytes = NATIVE_PATH.read_bytes()
 
     result = generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
@@ -677,6 +677,7 @@ def test_native_cli_writes_four_artifacts_without_touching_native(tmp_path: Path
         "products.parquet",
         "stations.parquet",
         "station_products.parquet",
+        "provenance.json",
     }
 
 

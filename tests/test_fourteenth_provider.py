@@ -11,8 +11,6 @@ from pathlib import Path
 
 import polars as pl
 
-from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-
 ROOT = Path(__file__).parents[1]
 PACKAGE_ROOT = ROOT / "src" / "rivretrieve"
 PROVIDERS_ROOT = PACKAGE_ROOT / "_internal" / "providers"
@@ -57,7 +55,7 @@ def test_new_catalogue_only_provider_requires_only_its_directory_and_manifest_li
         "    observations=CatalogueOnly(),\n"
         ")\n"
     )
-    template_catalogue = providers_root / BUILTIN_PROVIDER_IDS[0] / "catalogue"
+    template_catalogue = providers_root / "ca_eccc" / "catalogue"
     _copy_catalogue_with_provider_id(template_catalogue, provider_root / "catalogue", provider_id)
     _append_manifest_line(package / "_internal" / "provider_manifest.py", provider_id)
 

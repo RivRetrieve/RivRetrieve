@@ -42,9 +42,9 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
     (
         "fr_hubeau",
-        7323,
+        0,
         6,
-        33139,
+        0,
         {
             "discharge_daily_max",
             "discharge_daily_mean",
@@ -54,8 +54,8 @@ CATALOGUE_ONLY_PROVIDERS = (
             "water_temperature_instantaneous",
         },
         "Hubeau / SCHAPI — French national hydrometric network",
-        {"unknown"},
-        {"EPSG:4326"},
+        set(),
+        set(),
     ),
     (
         "lt_lhmt",

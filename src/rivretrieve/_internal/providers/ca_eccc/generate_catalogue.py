@@ -15,6 +15,7 @@ from typing import cast
 import polars as pl
 import requests
 
+from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -38,6 +39,11 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.ca_eccc.origins import (
+    NATIVE_TABLE_BYTE_SIZE,
+    NATIVE_TABLE_SHA256,
+    build_acquisition_provenance,
+)
 
 PROVIDER_ID = ProviderId("ca_eccc")
 PROVIDER_NAME = "ECCC Hydrometric — Environment and Climate Change Canada"
@@ -500,7 +506,14 @@ def _validate(
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(provider_info, products, stations, station_products, on_issue="raise")
+    packaged_catalogue_artifact_from_components(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance=build_acquisition_provenance(),
+        on_issue="raise",
+    )
 
 
 def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) -> None:
@@ -513,6 +526,9 @@ def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) ->
     catalogue.products.write_parquet(output_path / "products.parquet", statistics=False)
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        build_acquisition_provenance().model_dump_json() + "\n", encoding="utf-8"
+    )
 
 
 def _validate_feature_collection(payload: object) -> tuple[list[object], list[Issue]]:
@@ -701,9 +717,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--out requires --native")
     if args.retrieved_at is not None:
         parser.error("--retrieved-at is only valid with refresh mode")
+    verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
     from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
 
-    write_catalogue(build_catalogue(read_native_table(args.native), STATION_CATALOGUE_ORIGINS), args.out)
+    write_catalogue(
+        build_catalogue(
+            read_native_table(
+                args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
+            ),
+            STATION_CATALOGUE_ORIGINS,
+        ),
+        args.out,
+    )
     return 0
 
 

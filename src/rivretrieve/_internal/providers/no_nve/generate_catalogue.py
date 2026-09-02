@@ -13,7 +13,9 @@ from typing import Any, cast
 import polars as pl
 import requests
 
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+from rivretrieve._internal.catalogues.deferred import deferred_acquisition_provenance
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -166,6 +168,7 @@ class GeneratedNoNveCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance | None = None
 
 
 def generate_catalogue_from_fixture(
@@ -226,12 +229,20 @@ def generate_catalogue(
         catalogue_date=effective_date,
     )
     provider_info = build_provider_info(effective_date, generator_input=generator_input)
-    validate_generated_catalogue(provider_info, products, stations, station_products)
+    provenance = deferred_acquisition_provenance(PROVIDER_ID)
+    validate_generated_catalogue(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance=provenance,
+    )
     return GeneratedNoNveCatalogue(
         provider_info=provider_info,
         products=products,
         stations=stations,
         station_products=station_products,
+        acquisition_provenance=provenance,
     )
 
 
@@ -358,6 +369,8 @@ def validate_generated_catalogue(
     products: ProductCatalog,
     stations: StationCatalog,
     station_products: StationProductCatalog,
+    *,
+    acquisition_provenance: AcquisitionProvenance,
 ) -> None:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
@@ -369,19 +382,57 @@ def validate_generated_catalogue(
         products,
         stations,
         station_products,
+        acquisition_provenance=acquisition_provenance,
         on_issue="raise",
     )
 
 
+def generate_withheld_catalogue(*, catalogue_date: date) -> GeneratedNoNveCatalogue:
+    """Create schema-valid empty carriers for the uncertified packaged catalogue.
+
+    Parameters
+    ----------
+    catalogue_date
+        Existing packaged manifest version retained by the withholding operation.
+
+    Returns
+    -------
+    GeneratedNoNveCatalogue
+        Provider registration manifest, empty fact carriers, and a closed
+        withheld-fact provenance record.
+    """
+    return GeneratedNoNveCatalogue(
+        provider_info=build_provider_info(catalogue_date, generator_input="withheld_uncertified"),
+        products=pl.DataFrame(schema=PRODUCT_CATALOG_SCHEMA.polars_schema),
+        stations=pl.DataFrame(schema=STATION_CATALOG_SCHEMA.polars_schema),
+        station_products=pl.DataFrame(schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema),
+        acquisition_provenance=deferred_acquisition_provenance(PROVIDER_ID),
+    )
+
+
 def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> None:
+    if catalogue.acquisition_provenance is None:
+        raise FatalContractError(f"{PROVIDER_ID} catalogue writing requires acquisition provenance")
+    gated = packaged_catalogue_artifact_from_components(
+        catalogue.provider_info,
+        catalogue.products,
+        catalogue.stations,
+        catalogue.station_products,
+        acquisition_provenance=catalogue.acquisition_provenance,
+        on_issue="raise",
+    )
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as f:
-        json.dump(catalogue.provider_info, f, sort_keys=True, separators=(",", ":"))
+        json.dump(gated.provider_info, f, sort_keys=True, separators=(",", ":"))
         f.write("\n")
-    catalogue.products.write_parquet(output_path / "products.parquet")
-    catalogue.stations.write_parquet(output_path / "stations.parquet")
-    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    gated.products.write_parquet(output_path / "products.parquet")
+    gated.stations.write_parquet(output_path / "stations.parquet")
+    gated.station_products.write_parquet(output_path / "station_products.parquet")
+    (output_path / "provenance.json").write_text(
+        catalogue.acquisition_provenance.model_dump_json(exclude_none=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -457,10 +508,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Generate the packaged no_nve catalogue artifacts.\n\n"
-            "Two modes:\n"
-            "  --fixture PATH   Offline. Build from a JSON fixture (NVE station array).\n"
-            "  --live           Online. Fetch active and inactive stations from NVE HydAPI.\n"
-            "                   Requires NVE_API_KEY environment variable."
+            "Three modes:\n"
+            "  --fixture PATH          Parse an offline NVE station array.\n"
+            "  --live                  Fetch HydAPI input; requires NVE_API_KEY.\n"
+            "  --withhold-uncertified  Write empty packaged carriers without network."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -476,12 +527,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Fetch live catalogue from NVE HydAPI. Requires NVE_API_KEY env var.",
     )
+    source.add_argument(
+        "--withhold-uncertified",
+        action="store_true",
+        help="Write empty carriers and explicit provenance without network or credentials.",
+    )
     parser.add_argument("--out", type=Path, required=True, help="Output directory for catalogue artifacts.")
     parser.add_argument("--catalogue-date", type=date.fromisoformat, default=date.today())
     parser.add_argument("--api-key", type=str, default=None, help="NVE API key (overrides NVE_API_KEY env var).")
     args = parser.parse_args(argv)
 
-    if args.live:
+    if args.withhold_uncertified:
+        catalogue = generate_withheld_catalogue(catalogue_date=args.catalogue_date)
+    elif args.live:
         catalogue = generate_catalogue_from_live(
             api_key=args.api_key,
             catalogue_date=args.catalogue_date,
