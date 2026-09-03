@@ -58,6 +58,16 @@ def test_init_public_surface_exports_m9_function_surface() -> None:
     assert rivretrieve.to_utc is to_utc
 
 
+def test_clear_cache_public_help_describes_all_destructive_recovery_effects() -> None:
+    documentation = rivretrieve.clear_cache.__doc__
+
+    assert documentation is not None
+    assert "compiled observation store" in documentation
+    assert "preserved pending publisher downloads" in documentation
+    assert "destructive" in documentation
+    assert "retry" in documentation
+
+
 def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -> None:
     deferred_names = [
         "ProviderInfo",
