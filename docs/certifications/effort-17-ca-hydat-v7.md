@@ -2,6 +2,8 @@
 
 This is a sanitized operational record. The source archive, generated store, runner, and full logs are external evidence and are not committed. This record does not claim that the 278,852,677-byte official response is replayable from a fresh clone. The committed compact fixture separately proves the compiler boundary on a checksum-pinned derived input.
 
+This record remains valid historical evidence for exact head `78cde3408df5cd9143b0f66b342f5b1bbbc405b1`. [V8](effort-17-ca-hydat-v8.md) supersedes it only as the current exact-head operational evidence after a documentation-only dependency-closure change.
+
 ## Certified runtime
 
 - Code commit: `78cde3408df5cd9143b0f66b342f5b1bbbc405b1`
