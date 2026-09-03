@@ -120,6 +120,7 @@ class _RecordingStages:
                 source_path=UnknownOriginFact(),
                 query=UnknownOriginFact(),
             ),
+            prerequisite_calls=(),
         )
         return WithIssues(
             value=(payload,),

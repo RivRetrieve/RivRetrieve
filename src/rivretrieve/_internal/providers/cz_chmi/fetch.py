@@ -89,6 +89,7 @@ def fetch(
                     source_path=UnknownOriginFact(),
                     query=UnknownOriginFact(),
                 ),
+                prerequisite_calls=response.prerequisite_calls,
             )
         )
     return WithIssues(value=tuple(payloads), issues=())

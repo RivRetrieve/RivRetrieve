@@ -1,6 +1,6 @@
-"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × WindowGranularity × WindowRenderingVocabulary × StopConvention × WindowDeclaration × ProductWindowDeclarations × RenderedWindow × ObservationRequest × SourceCoordinates × SourceCallParameter × UnknownOriginReason × UnknownOriginFact × SourceQuery × SourceCallOrigin × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig.
+"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × WindowGranularity × WindowRenderingVocabulary × StopConvention × WindowDeclaration × ProductWindowDeclarations × RenderedWindow × ObservationRequest × SourceCoordinates × SourceCallParameter × UnknownOriginReason × UnknownOriginFact × SourceQuery × SourceCallOrigin × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × DailyLabelTime × ZoneValue × CacheConfig × ProductConfig × ProviderConfig.
 
-Payload ≔ SourceCoordinates × station-product tags × FetchWindow × bytes × SourceCallOrigin.
+Payload ≔ SourceCoordinates × station-product tags × FetchWindow × bytes × SourceCallOrigin × ordered SecretCallTrace*.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import polars as pl
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.transport import SecretCallTrace
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -292,12 +293,17 @@ class Payload:
     fetch_window: FetchWindow
     content: bytes
     origin: SourceCallOrigin
+    prerequisite_calls: tuple[SecretCallTrace, ...]
 
     def __post_init__(self) -> None:
         if type(self.content) is not bytes:
             raise TypeError("payload content must be bytes")
         if not isinstance(self.origin, SourceCallOrigin):
             raise TypeError("payload origin must be SourceCallOrigin")
+        if not isinstance(self.prerequisite_calls, tuple) or any(
+            not isinstance(call, SecretCallTrace) for call in self.prerequisite_calls
+        ):
+            raise TypeError("payload prerequisite calls must be a tuple of SecretCallTrace values")
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,12 +376,41 @@ class DayDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class DailyLabelTime:
+    """DailyLabelTime ≔ the exact source wall-clock label of a daily value."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, str):
+            raise TypeError("daily label time must be a string")
+        match = re.fullmatch(r"([0-9]{2}):([0-9]{2})(?::([0-9]{2})(?:\.([0-9]{1,6}))?)?", self.value)
+        if match is None:
+            raise ValueError("daily label time must have strict shape HH:MM[:SS[.ffffff]]")
+        hours, minutes, seconds = (int(value or 0) for value in match.group(1, 2, 3))
+        if hours > 23 or minutes > 59 or seconds > 59:
+            raise ValueError("daily label time is out of range")
+
+    @property
+    def components(self) -> tuple[int, int, int, int]:
+        clock, _, fraction = self.value.partition(".")
+        parts = tuple(int(value) for value in clock.split(":"))
+        hours, minutes = parts[:2]
+        seconds = parts[2] if len(parts) == 3 else 0
+        microseconds = int(fraction.ljust(6, "0")) if fraction else 0
+        return hours, minutes, seconds, microseconds
+
+
+@dataclass(frozen=True, slots=True)
 class Daily:
     day_definition: DayDefinition
+    label_time: DailyLabelTime
 
     def __post_init__(self) -> None:
         if not isinstance(self.day_definition, DayDefinition):
             raise TypeError("daily semantics require a DayDefinition")
+        if not isinstance(self.label_time, DailyLabelTime):
+            raise TypeError("daily semantics require a DailyLabelTime")
 
 
 @dataclass(frozen=True, slots=True)

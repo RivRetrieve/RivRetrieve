@@ -75,6 +75,7 @@ def _recording() -> RecordingEnvelope:
                 "parameterCd": "00060",
                 "statCd": "00003",
             },
+            ordinary_headers={"Accept": "application/json", "User-Agent": "RivRetrieve"},
         ),
         content=_FIXTURE.read_bytes(),
         status_code=200,
@@ -100,3 +101,28 @@ def test_stop_convention_flip_misses_exact_recording() -> None:
     message = str(exc_info.value)
     assert '"endDT":"2023-01-04"' in message
     assert '"endDT":"2023-01-03"' not in message
+
+
+def test_provider_modules_cannot_import_or_name_private_credential_request_authority() -> None:
+    import ast
+
+    provider_root = Path(__file__).parents[1] / "src" / "rivretrieve" / "_internal" / "providers"
+    forbidden = {
+        "_CredentialTransportRequest",
+        "_ExecutableTransportRequest",
+        "_make_credential_transport_request",
+        "_is_authorized_credential_request",
+    }
+    violations: list[str] = []
+    for source_path in provider_root.rglob("*.py"):
+        tree = ast.parse(source_path.read_text(), filename=str(source_path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name in forbidden:
+                        violations.append(f"{source_path}:{node.lineno}:{alias.name}")
+            if isinstance(node, ast.Name) and node.id in forbidden:
+                violations.append(f"{source_path}:{node.lineno}:{node.id}")
+            if isinstance(node, ast.Attribute) and node.attr in forbidden:
+                violations.append(f"{source_path}:{node.lineno}:{node.attr}")
+    assert violations == []

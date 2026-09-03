@@ -39,6 +39,7 @@ def payload(path):
             UnknownOriginFact(),
             UnknownOriginFact(),
         ),
+        (),
     )
 
 
@@ -74,6 +75,7 @@ def test_parser_does_not_relabel_flow_ls_as_m3s():
         p.fetch_window,
         json.dumps(document).encode(),
         p.origin,
+        (),
     )
     with pytest.raises(Exception, match="no declared field"):
         parse(p, config())
@@ -88,6 +90,7 @@ def test_stage_uses_same_unit_height_fallback_but_refuses_two_returned_alternati
         base.fetch_window,
         json.dumps(fallback).encode(),
         base.origin,
+        (),
     )
     assert parse(value, config()).value["value"].to_list() == [501.0]
     ambiguous = {"payload": {"timestamp": [0], "2135|height_abs": [1.0], "2135|height": [501.0]}}
@@ -97,6 +100,7 @@ def test_stage_uses_same_unit_height_fallback_but_refuses_two_returned_alternati
         base.fetch_window,
         json.dumps(ambiguous).encode(),
         base.origin,
+        (),
     )
     with pytest.raises(Exception, match="multiple alternatives"):
         parse(value, config())

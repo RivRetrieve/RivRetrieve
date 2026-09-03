@@ -132,6 +132,7 @@ class _EngineModule:
             fetch_window=window,
             content=b"test payload",
             origin=_origin(),
+            prerequisite_calls=(),
         )
         _EngineModule.emitted_payload = payload
         return WithIssues(
@@ -538,6 +539,7 @@ def test_registry_observations_exclusive_stop_source_keeps_reading_at_closed_req
                         fetch_window=window,
                         content=json.dumps([value.isoformat() for value in selected]).encode(),
                         origin=_origin(),
+                        prerequisite_calls=(),
                     ),
                 )
             )
@@ -668,6 +670,7 @@ def test_registry_observations_parameterless_fixed_span_returns_rows_and_underco
                         fetch_window=window,
                         content=b'["2026-01-01T00:00:00","2026-01-02T00:00:00"]',
                         origin=_origin(),
+                        prerequisite_calls=(),
                     ),
                 ),
                 issues=(undercoverage_issue,),

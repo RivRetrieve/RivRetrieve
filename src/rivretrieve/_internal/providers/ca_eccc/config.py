@@ -9,6 +9,7 @@ from typing import Final
 from rivretrieve._internal.engine import (
     CacheConfig,
     Daily,
+    DailyLabelTime,
     DayDefinition,
     ObservationStoreConfig,
     ProductConfig,
@@ -39,7 +40,7 @@ config: Final[ProviderConfig] = ProviderConfig(
                 )
             ),
             unit=Unit.M3_S,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_daily_mean"): ProductConfig(
             coordinates=SourceCoordinates(
@@ -50,7 +51,7 @@ config: Final[ProviderConfig] = ProviderConfig(
                 )
             ),
             unit=Unit.M,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
     },
     cache=CacheConfig(store=ObservationStoreConfig(format_version=2)),

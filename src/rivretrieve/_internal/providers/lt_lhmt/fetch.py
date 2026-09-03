@@ -81,6 +81,7 @@ def fetch(
                     fetch_window=fetch_window,
                     content=response.content,
                     origin=_origin(response),
+                    prerequisite_calls=response.prerequisite_calls,
                 )
             )
     return WithIssues(value=tuple(payloads), issues=tuple(issues))

@@ -46,7 +46,7 @@ from rivretrieve._internal.observations import (
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.receipts import encode_store_excerpt
-from rivretrieve._internal.transport import HttpClient, Transport
+from rivretrieve._internal.transport import HttpClient, SecretCallTrace, Transport
 from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
@@ -138,6 +138,21 @@ def _query_value(value: SourceQuery | UnknownOriginFact) -> dict[str, object]:
     return {"statement": value.statement, "parameters": tuple(_origin_value(item) for item in value.parameters)}
 
 
+def _secret_call(call: SecretCallTrace) -> dict[str, object]:
+    return {
+        "method": call.method.value,
+        "url": call.url,
+        "ordinary_headers": dict(call.ordinary_headers),
+        "request_parameters": None if call.request_parameters is None else dict(call.request_parameters),
+        "request_body_shape": call.request_body_shape.value,
+        "credential_header_names": call.credential_header_names,
+        "status_code": call.status_code,
+        "retrieved_at": call.retrieved_at,
+        "content_type": call.content_type,
+        "response_disposition": call.response_disposition.value,
+    }
+
+
 def _origin_call(origin: SourceCallOrigin) -> dict[str, object]:
     return {
         "url": _origin_value(origin.url),
@@ -154,9 +169,7 @@ def _provenance_with_payload_origins(
     provenance: ObservationProvenance,
     payloads: tuple[Payload, ...],
 ) -> ObservationProvenance:
-    """Bind one ordered source-call event per payload, independent of receipts."""
-    if not payloads:
-        return provenance
+    """Bind ordered prerequisite event(s), then one payload-origin event per payload, independent of receipts."""
     if (
         provenance.calls_made
         or provenance.endpoints
@@ -167,10 +180,32 @@ def _provenance_with_payload_origins(
             "Driver payload-origin enrichment requires empty call-derived base provenance; "
             "pre-populated calls, endpoints, retrieval time, or query would be ambiguous."
         )
+    if not payloads:
+        return provenance
     origins = tuple(payload.origin for payload in payloads)
-    calls = tuple(_origin_call(origin) for origin in origins)
-    endpoints = tuple(dict.fromkeys(origin.url for origin in origins if isinstance(origin.url, str)))
-    retrieved = tuple(origin.retrieved_at for origin in origins if isinstance(origin.retrieved_at, datetime))
+    calls = tuple(
+        call
+        for payload in payloads
+        for call in (*(_secret_call(item) for item in payload.prerequisite_calls), _origin_call(payload.origin))
+    )
+    endpoints = tuple(
+        dict.fromkeys(
+            url
+            for payload in payloads
+            for url in (
+                *(call.url for call in payload.prerequisite_calls),
+                *((payload.origin.url,) if isinstance(payload.origin.url, str) else ()),
+            )
+        )
+    )
+    retrieved = tuple(
+        instant
+        for payload in payloads
+        for instant in (
+            *(call.retrieved_at for call in payload.prerequisite_calls),
+            *((payload.origin.retrieved_at,) if isinstance(payload.origin.retrieved_at, datetime) else ()),
+        )
+    )
     query_values = tuple(_query_value(origin.query) for origin in origins if isinstance(origin.query, SourceQuery))
     known_query_list: list[dict[str, object]] = []
     for query_value in query_values:

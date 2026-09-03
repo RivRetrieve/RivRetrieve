@@ -10,6 +10,7 @@ from typing import Literal
 
 from rivretrieve._internal.engine import (
     Daily,
+    DailyLabelTime,
     DayDefinition,
     ProductConfig,
     ProductWindowDeclarations,
@@ -40,12 +41,12 @@ _CONFIG = ProviderConfig(
         ProductId("discharge_daily_mean"): ProductConfig(
             coordinates=SourceCoordinates(LtLhmtSourceCoordinates("waterDischarge")),
             unit=Unit.M3_S,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_daily_mean"): ProductConfig(
             coordinates=SourceCoordinates(LtLhmtSourceCoordinates("waterLevel")),
             unit=Unit.CM,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
     },
     cache=None,

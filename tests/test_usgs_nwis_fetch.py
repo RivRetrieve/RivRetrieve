@@ -6,13 +6,14 @@ from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import get_type_hints
+from typing import Any, cast, get_type_hints
 
 import polars as pl
 import pytest
 
 from rivretrieve._internal.engine import (
     Daily,
+    DailyLabelTime,
     DayDefinition,
     FetchWindow,
     Instant,
@@ -37,6 +38,8 @@ from rivretrieve._internal.providers.usgs_nwis.config import (
 from rivretrieve._internal.providers.usgs_nwis.fetch import fetch
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
 from rivretrieve._internal.transport import (
+    AuthenticatedTransport,
+    CredentialHeader,
     HttpClient,
     HttpMethod,
     TransportFailure,
@@ -126,7 +129,7 @@ def _custom_config() -> ProviderConfig:
             ProductId("custom_daily"): ProductConfig(
                 coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("dv", "12345", "54321")),
                 unit=Unit.FT3_S,
-                semantics=Daily(DayDefinition("unknown")),
+                semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
             ),
             ProductId("custom_instant"): ProductConfig(
                 coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("iv", "67890", None)),
@@ -142,7 +145,7 @@ def _failure(secret: str, status_code: int | None) -> TransportFailure:
         method=HttpMethod.GET,
         url=f"https://do-not-leak.example/data?token={secret}",
         params={"api_key": secret},
-        headers={"Authorization": f"Bearer {secret}"},
+        headers={"Accept": "application/json"},
         body=secret,
     )
     return TransportFailure(
@@ -292,11 +295,7 @@ def test_transport_credentials_do_not_reach_final_payload_origin() -> None:
         method=HttpMethod.GET,
         url="https://waterservices.usgs.gov/nwis/dv/",
         params={"format": "json", "sites": "01234567"},
-        headers={
-            "Accept": "application/json",
-            "Authorization": "Bearer transport-secret",
-            "X-API-Key": "api-key-secret",
-        },
+        headers={"Accept": "application/json"},
     )
     sent_requests: list[TransportRequest] = []
 
@@ -304,7 +303,13 @@ def test_transport_credentials_do_not_reach_final_payload_origin() -> None:
         sent_requests.append(request)
         return b"daily-bytes", 200, "application/json; charset=utf-8"
 
-    response = HttpClient(sender=sender, clock=FixedClock()).send(source_request)
+    response = AuthenticatedTransport(
+        HttpClient(sender=sender, clock=FixedClock()),
+        (
+            CredentialHeader("Authorization", "Bearer transport-secret", ("https://waterservices.usgs.gov",)),
+            CredentialHeader("X-API-Key", "api-key-secret", ("https://waterservices.usgs.gov",)),
+        ),
+    ).send(source_request)
     product = ProductId("custom_daily")
     provider_config = _custom_config()
     payload = fetch_module._payload(
@@ -315,19 +320,18 @@ def test_transport_credentials_do_not_reach_final_payload_origin() -> None:
         response,
     )
 
-    assert sent_requests == [
-        TransportRequest(
-            method=HttpMethod.GET,
-            url="https://waterservices.usgs.gov/nwis/dv/",
-            params={"format": "json", "sites": "01234567"},
-            headers={
-                "Accept": "application/json",
-                "Authorization": "Bearer transport-secret",
-                "X-API-Key": "api-key-secret",
-                "User-Agent": "RivRetrieve",
-            },
-        )
-    ]
+    assert len(sent_requests) == 1
+    executed = sent_requests[0]
+    assert executed.method is HttpMethod.GET
+    assert executed.url == source_request.url
+    assert dict(executed.headers) == {
+        "Accept": "application/json",
+        "Authorization": "Bearer transport-secret",
+        "X-API-Key": "api-key-secret",
+        "User-Agent": "RivRetrieve",
+    }
+    assert cast("Any", executed).credential_header_names == ("Authorization", "X-API-Key")
+
     forbidden = (
         "Authorization",
         "Bearer transport-secret",
@@ -337,7 +341,7 @@ def test_transport_credentials_do_not_reach_final_payload_origin() -> None:
     request_scan = tuple(str(value) for value in fields(TransportRequest))
     request_scan += tuple(str(getattr(source_request, field.name)) for field in fields(source_request))
     for value in forbidden:
-        assert any(value in candidate for candidate in request_scan)
+        assert all(value not in candidate for candidate in request_scan)
 
     assert "headers" not in {field.name for field in fields(payload.origin)}
     origin_scan = tuple(str(getattr(payload.origin, field.name)) for field in fields(payload.origin))
@@ -547,7 +551,8 @@ def test_terminal_sender_failure_is_a_broken_seam(
     request = TransportRequest(
         HttpMethod.GET,
         "https://do-not-leak.example",
-        headers={"Authorization": "Bearer terminal-secret"},
+        headers={"Accept": "application/json"},
+        body="terminal-secret",
     )
     failure = TransportFailure(
         request,

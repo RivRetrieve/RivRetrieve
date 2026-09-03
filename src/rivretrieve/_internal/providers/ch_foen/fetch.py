@@ -151,4 +151,5 @@ def _payload(coordinates, pairs, window, response, query) -> Payload:
             UnknownOriginFact(),
             query,
         ),
+        response.prerequisite_calls,
     )

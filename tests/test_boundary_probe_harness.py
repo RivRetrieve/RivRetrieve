@@ -53,6 +53,7 @@ def _recording() -> RecordingEnvelope:
             HttpMethod.GET,
             "https://source.test/observations",
             {"start": "2026-01-01", "end": "2026-01-02"},
+            ordinary_headers={"User-Agent": "RivRetrieve"},
         ),
         content=b'{"values":[]}',
         status_code=200,
@@ -82,6 +83,7 @@ def test_invented_payload_cannot_ground_probe_and_runner_does_not_run() -> None:
         ),
         content=b"invented",
         origin=SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown),
+        prerequisite_calls=(),
     )
     ran = False
 

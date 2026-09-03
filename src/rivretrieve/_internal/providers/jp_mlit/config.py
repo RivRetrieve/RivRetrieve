@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from rivretrieve._internal.engine import (
     Daily,
+    DailyLabelTime,
     DayDefinition,
     Hourly,
     IntervalDefinition,
@@ -40,13 +41,17 @@ _CONFIG = ProviderConfig(
             SourceCoordinates(JpMlitSourceCoordinates(2)), Unit.M, Hourly(IntervalDefinition("unknown"))
         ),
         ProductId("stage_daily"): ProductConfig(
-            SourceCoordinates(JpMlitSourceCoordinates(3)), Unit.M, Daily(DayDefinition("unknown"))
+            SourceCoordinates(JpMlitSourceCoordinates(3)),
+            Unit.M,
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("discharge_hourly"): ProductConfig(
             SourceCoordinates(JpMlitSourceCoordinates(6)), Unit.M3_S, Hourly(IntervalDefinition("unknown"))
         ),
         ProductId("discharge_daily"): ProductConfig(
-            SourceCoordinates(JpMlitSourceCoordinates(7)), Unit.M3_S, Daily(DayDefinition("unknown"))
+            SourceCoordinates(JpMlitSourceCoordinates(7)),
+            Unit.M3_S,
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
     },
 )

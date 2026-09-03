@@ -11,6 +11,7 @@ from typing import Literal
 
 from rivretrieve._internal.engine import (
     Daily,
+    DailyLabelTime,
     DayDefinition,
     Instant,
     ProductConfig,
@@ -57,7 +58,7 @@ _CONFIG = ProviderConfig(
         ProductId("discharge_daily_mean"): ProductConfig(
             coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("dv", "00060", "00003")),
             unit=Unit.FT3_S,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("discharge_instantaneous"): ProductConfig(
             coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("iv", "00060", None)),
@@ -67,17 +68,17 @@ _CONFIG = ProviderConfig(
         ProductId("stage_daily_mean"): ProductConfig(
             coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("dv", "00065", "00003")),
             unit=Unit.FT,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_daily_max"): ProductConfig(
             coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("dv", "00065", "00001")),
             unit=Unit.FT,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_daily_min"): ProductConfig(
             coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("dv", "00065", "00002")),
             unit=Unit.FT,
-            semantics=Daily(DayDefinition("unknown")),
+            semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_instantaneous"): ProductConfig(
             coordinates=SourceCoordinates(UsgsNwisSourceCoordinates("iv", "00065", None)),

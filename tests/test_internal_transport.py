@@ -7,7 +7,9 @@ import requests
 
 from rivretrieve._internal.transport import (
     TRANSPORT_POLICY,
+    AuthenticatedTransport,
     Clock,
+    CredentialHeader,
     HttpClient,
     HttpMethod,
     Sender,
@@ -18,6 +20,8 @@ from rivretrieve._internal.transport import (
     TransportResponse,
 )
 
+_OTHER_ORIGIN_SECRET = "SENTINEL-OTHER-ORIGIN-SECRET"
+_COLLISION_SENTINEL = "SENTINEL-STATIC-COLLISION"
 _TRACE_SENTINEL = "SENTINEL-TRACEBACK-SECRET"
 
 
@@ -53,7 +57,7 @@ class RecordingSender:
         self.calls: list[tuple[TransportRequest, float]] = []
         self.started_at: list[float] = []
 
-    def __call__(self, request: TransportRequest, timeout_seconds: float) -> tuple[bytes, int, str | None]:
+    def __call__(self, request: Any, timeout_seconds: float) -> tuple[bytes, int, str | None]:
         self.calls.append((request, timeout_seconds))
         if self.clock is not None:
             self.started_at.append(self.clock.monotonic())
@@ -87,9 +91,6 @@ def test_successful_get_and_post_preserve_source_request_and_byte_response(
         params=params,
         headers={
             "Accept": "application/octet-stream",
-            "Referer": "https://source.example/",
-            "Authorization": "Bearer transport-secret",
-            "X-API-Key": "api-key-secret",
         },
         body=body,
     )
@@ -128,9 +129,6 @@ def test_successful_get_and_post_preserve_source_request_and_byte_response(
         "api-key-secret",
         "Authorization",
         "X-API-Key",
-        "Referer",
-        "Accept",
-        "User-Agent",
     ):
         assert all(forbidden not in candidate for candidate in scanned)
     assert "headers" not in {field.name for field in response_fields}
@@ -156,11 +154,8 @@ def test_absent_content_type_survives_transport() -> None:
 @pytest.mark.parametrize("override", ["User-Agent", "user-agent"])
 def test_user_agent_is_mandatory_and_source_override_is_rejected(override: str) -> None:
     allowed_headers = {
-        "Authorization": "Bearer secret",
-        "X-API-Key": "secret",
         "Accept": "application/json",
         "Content-type": "application/vnd.flux",
-        "Referer": "https://source.example/",
     }
     client, sender, _, _ = make_client([(b"ok", 200, "text/plain")])
     client.send(TransportRequest(HttpMethod.GET, "https://source.example", headers=allowed_headers))
@@ -353,9 +348,8 @@ def test_authenticated_transport_validates_headers_and_rejects_collisions() -> N
                 CredentialHeader("x-api-key", "b", ("https://example.test",)),
             ),
         )
-    wrapped = AuthenticatedTransport(Never(), (CredentialHeader("X-API-Key", "secret", ("https://example.test",)),))
-    with pytest.raises(ValueError, match="already provides"):
-        wrapped.send(TransportRequest(HttpMethod.GET, "https://example.test", headers={"x-api-key": "source"}))
+    with pytest.raises(ValueError, match="explicitly safe ordinary"):
+        TransportRequest(HttpMethod.GET, "https://example.test", headers={"x-api-key": "source"})
 
 
 def test_authenticated_transport_failure_contains_only_original_safe_request() -> None:
@@ -380,7 +374,8 @@ def test_authenticated_transport_failure_contains_only_original_safe_request() -
     wrapped = AuthenticatedTransport(Failing(), (CredentialHeader("X-API-Key", sentinel, ("https://example.test",)),))
     with pytest.raises(TransportFailure) as info:
         wrapped.send(original)
-    assert info.value.request is original
+    assert info.value.request == original
+    assert info.value.request is not original
     assert info.value.__cause__ is None
     assert (
         sentinel not in repr(info.value)
@@ -572,3 +567,384 @@ def test_credential_failure_traceback_locals_never_expose_value() -> None:
             assert error.__cause__ is None and error.__context__ is None
         else:
             raise AssertionError("credentialed failure was not sanitized")
+
+
+@pytest.mark.parametrize(
+    ("origin", "matching", "separate"),
+    [
+        ("HTTP://EXAMPLE.test:80", "http://example.test/path", "http://example.test:8080/path"),
+        ("HTTPS://EXAMPLE.test:443", "https://example.test/path", "https://example.test:80/path"),
+        ("https://127.0.0.1:8443", "https://127.0.0.1:8443/path", "https://127.0.0.1/path"),
+        ("https://[::1]:443", "https://[::1]/path", "https://[::1]:8443/path"),
+        ("https://example.test.", "https://example.test./path", "https://example.test/path"),
+    ],
+)
+def test_credential_origin_normalization_table(origin: str, matching: str, separate: str) -> None:
+    class Never:
+        def send(self, request):
+            raise AssertionError(request)
+
+    wrapped = AuthenticatedTransport(Never(), (CredentialHeader("X-Key", "value", (origin,)),))
+    assert wrapped.can_authenticate(matching)
+    assert not wrapped.can_authenticate(separate)
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://example.test:",
+        "https://usér.example",
+        "https://user@example.test",
+        "https://user:password@example.test",
+        "https://example.test/path",
+        "https://example.test?query=1",
+        "https://example.test#fragment",
+        "ftp://example.test",
+        "https:///missing",
+    ],
+)
+def test_credential_origins_reject_ambiguous_authorities_and_non_origins(origin: str) -> None:
+    with pytest.raises(ValueError):
+        CredentialHeader("X-Key", "value", (origin,))
+
+
+def test_transport_request_rejects_case_colliding_or_control_character_headers_before_send() -> None:
+    with pytest.raises(ValueError, match="case-insensitively"):
+        TransportRequest(HttpMethod.GET, "https://example.test", headers={"Accept": "text/csv", "accept": "text/csv"})
+    with pytest.raises(ValueError, match="visible ASCII"):
+        TransportRequest(HttpMethod.GET, "https://example.test", headers={"Accept": "text/csv\nsecret"})
+
+
+def test_http_client_rejects_unclassified_execution_metadata_before_sender_call() -> None:
+    client, sender, _, _ = make_client([(b"unreachable", 200, "text/plain")])
+    with pytest.raises(ValueError, match="explicitly safe ordinary"):
+        client.send(TransportRequest(HttpMethod.GET, "https://example.test", headers={"X-Unknown": "value"}))
+    assert sender.calls == []
+
+
+def test_public_mixed_case_credential_header_refusal_retains_no_caller_value() -> None:
+    class Never:
+        def send(self, request):
+            raise AssertionError(request)
+
+    wrapped = AuthenticatedTransport(
+        Never(), (CredentialHeader("Authorization", "actual-secret", ("https://example.test",)),)
+    )
+    try:
+        wrapped.send(
+            TransportRequest(
+                HttpMethod.GET,
+                "https://example.test/data",
+                headers={"Accept": "application/json", "aUtHoRiZaTiOn": _COLLISION_SENTINEL},
+            )
+        )
+    except ValueError as error:
+        import traceback
+
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _COLLISION_SENTINEL not in rendered
+        assert error.__cause__ is None and error.__context__ is None
+    else:
+        raise AssertionError("collision was not refused")
+
+
+def test_static_success_metadata_echo_is_sanitized_without_secret_traceback_locals() -> None:
+    class Echo:
+        def send(self, request):
+            return TransportResponse(
+                b"safe data",
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                _COLLISION_SENTINEL,
+                request.url,
+                {},
+            )
+
+    wrapped = AuthenticatedTransport(
+        Echo(), (CredentialHeader("X-API-Key", _COLLISION_SENTINEL, ("https://example.test",)),)
+    )
+    try:
+        wrapped.send(
+            TransportRequest(HttpMethod.GET, "https://example.test/data", headers={"Accept": "application/json"})
+        )
+    except TransportFailure as error:
+        import traceback
+
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert error.reason is TransportFailureReason.RETAINED_METADATA_UNSAFE
+        assert _COLLISION_SENTINEL not in rendered
+        assert error.__cause__ is None and error.__context__ is None
+    else:
+        raise AssertionError("credential metadata echo was not refused")
+
+
+def test_public_transport_request_has_no_credential_tagging_constructor_channel() -> None:
+    import inspect
+
+    assert "credential_header_names" not in inspect.signature(TransportRequest).parameters
+    with pytest.raises(TypeError):
+        TransportRequest(
+            HttpMethod.GET,
+            "https://example.test",
+            credential_header_names=("Authorization",),  # ty: ignore[unknown-argument]
+        )
+
+
+@pytest.mark.parametrize("kind", ["mapping_proxy", "custom_mapping"])
+def test_immutable_credential_header_mappings_are_detached_before_constructor_failure(kind: str) -> None:
+    from collections.abc import Mapping
+    from types import MappingProxyType
+
+    class SecretMapping(Mapping):
+        def __iter__(self):
+            return iter(("Authorization",))
+
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, key):
+            if key != "Authorization":
+                raise KeyError(key)
+            return _COLLISION_SENTINEL
+
+        def __repr__(self):
+            return f"SecretMapping({_COLLISION_SENTINEL})"
+
+    try:
+        if kind == "mapping_proxy":
+            TransportRequest(
+                HttpMethod.GET,
+                "https://example.test",
+                headers=MappingProxyType({"Authorization": _COLLISION_SENTINEL}),
+            )
+        else:
+            TransportRequest(HttpMethod.GET, "https://example.test", headers=SecretMapping())
+    except ValueError as error:
+        import traceback
+
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _COLLISION_SENTINEL not in rendered
+        assert error.__cause__ is None and error.__context__ is None
+    else:
+        raise AssertionError("credential-like mapping was not refused")
+
+
+def test_unknown_and_control_header_refusals_detach_values_from_traceback() -> None:
+    import traceback
+
+    for make_headers in (
+        lambda: {"X-Unknown": _COLLISION_SENTINEL},
+        lambda: {"Accept": f"application/json\n{_COLLISION_SENTINEL}"},
+    ):
+        try:
+            TransportRequest(HttpMethod.GET, "https://example.test", headers=make_headers())
+        except ValueError as error:
+            rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+            assert _COLLISION_SENTINEL not in rendered
+        else:
+            raise AssertionError("unsafe ordinary header was not refused")
+
+
+def _cross_origin_secret_request(location: str) -> TransportRequest:
+    url = "https://a.example.test/data"
+    params = None
+    headers = {"Accept": "application/json"}
+    body = None
+    if location == "url":
+        url += f"/{_OTHER_ORIGIN_SECRET}"
+    elif location == "parameter_name":
+        params = {_OTHER_ORIGIN_SECRET: "value"}
+    elif location == "parameter_value":
+        params = {"value": _OTHER_ORIGIN_SECRET}
+    elif location == "ordinary_header":
+        headers = {"Accept": _OTHER_ORIGIN_SECRET}
+    elif location == "body":
+        body = _OTHER_ORIGIN_SECRET
+    return TransportRequest(HttpMethod.GET, url, params, headers, body)
+
+
+@pytest.mark.parametrize("location", ["url", "parameter_name", "parameter_value", "ordinary_header", "body"])
+def test_static_transport_refuses_any_owned_secret_cross_origin_before_delegation(location: str) -> None:
+    import traceback
+
+    class Capture:
+        def __init__(self):
+            self.calls = []
+
+        def send(self, request):
+            self.calls.append(request)
+            raise AssertionError("must not delegate")
+
+    capture = Capture()
+    wrapped = AuthenticatedTransport(
+        capture,
+        (
+            CredentialHeader("X-A", "secret-a", ("https://a.example.test",)),
+            CredentialHeader("X-B", _OTHER_ORIGIN_SECRET, ("https://b.example.test",)),
+        ),
+    )
+    try:
+        wrapped.send(_cross_origin_secret_request(location))
+    except TransportFailure as error:
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _OTHER_ORIGIN_SECRET not in rendered
+        assert _OTHER_ORIGIN_SECRET not in repr(error.request)
+        assert error.__cause__ is None and error.__context__ is None
+        assert capture.calls == []
+    else:
+        raise AssertionError("cross-origin owned secret was not refused")
+
+
+def test_static_transport_scans_untrusted_prerequisite_trace_fields_for_owned_secrets() -> None:
+    import traceback
+
+    from rivretrieve._internal.transport import RequestBodyShape, SecretCallTrace
+
+    trace = SecretCallTrace(
+        HttpMethod.GET,
+        "https://auth.example.test/token",
+        {"Accept": _COLLISION_SENTINEL},
+        None,
+        RequestBodyShape.NONE,
+        ("X-Auth",),
+        200,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        "application/json",
+    )
+
+    class Echo:
+        def __init__(self, call):
+            self.call = call
+
+        def send(self, request):
+            return TransportResponse(
+                b"data",
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                "application/json",
+                request.url,
+                {},
+                prerequisite_calls=(self.call,),
+            )
+
+    wrapped = AuthenticatedTransport(
+        Echo(trace), (CredentialHeader("X-API-Key", _COLLISION_SENTINEL, ("https://example.test",)),)
+    )
+    try:
+        wrapped.send(TransportRequest(HttpMethod.GET, "https://example.test/data"))
+    except TransportFailure as error:
+        del trace
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _COLLISION_SENTINEL not in rendered
+        assert error.reason is TransportFailureReason.RETAINED_METADATA_UNSAFE
+    else:
+        raise AssertionError("secret-bearing prerequisite trace was not refused")
+
+
+def _percent_encode_every_byte(value: str) -> str:
+    return "".join(f"%{byte:02X}" for byte in value.encode())
+
+
+def _percent_layers(value: str, count: int) -> str:
+    from urllib.parse import quote
+
+    encoded = _percent_encode_every_byte(value)
+    for _ in range(count - 1):
+        encoded = quote(encoded, safe="")
+    return encoded
+
+
+@pytest.mark.parametrize(("location", "layers"), [("url", 1), ("url", 2), ("url", 9), ("body", 1), ("body", 2)])
+def test_static_transport_refuses_encoded_owned_secret_before_cross_origin_delegation(
+    location: str, layers: int
+) -> None:
+    import traceback
+
+    class Capture:
+        def __init__(self):
+            self.calls = []
+
+        def send(self, request):
+            self.calls.append(request)
+            raise AssertionError("must not delegate")
+
+    encoded = _percent_layers(_OTHER_ORIGIN_SECRET, layers)
+    capture = Capture()
+    wrapped = AuthenticatedTransport(
+        capture,
+        (CredentialHeader("X-B", _OTHER_ORIGIN_SECRET, ("https://b.example.test",)),),
+    )
+    try:
+        request = (
+            TransportRequest(HttpMethod.GET, f"https://a.example.test/data?value={encoded}")
+            if location == "url"
+            else TransportRequest(
+                HttpMethod.POST,
+                "https://a.example.test/data",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                body=f"value={encoded}",
+            )
+        )
+        wrapped.send(request)
+    except TransportFailure as error:
+        request = None
+        encoded = ""
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _OTHER_ORIGIN_SECRET not in rendered
+        assert "%53%45%4E%54" not in rendered
+        assert "%2553%2545%254E%2554" not in rendered
+        assert capture.calls == []
+        assert "redacted.invalid" in error.request.url or error.request.body is None
+    else:
+        raise AssertionError("encoded secret was delegated")
+
+
+def test_encoded_secret_in_untrusted_response_metadata_never_escapes_wrapper() -> None:
+    import traceback
+
+    class Echo:
+        def send(self, request):
+            return TransportResponse(
+                b"safe",
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                _percent_layers(_OTHER_ORIGIN_SECRET, 2),
+                request.url,
+                {},
+            )
+
+    wrapped = AuthenticatedTransport(
+        Echo(), (CredentialHeader("X-B", _OTHER_ORIGIN_SECRET, ("https://b.example.test",)),)
+    )
+    try:
+        wrapped.send(TransportRequest(HttpMethod.GET, "https://a.example.test/data"))
+    except TransportFailure as error:
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _OTHER_ORIGIN_SECRET not in rendered
+        assert "%2553%2545%254E%2554" not in rendered
+        assert error.reason is TransportFailureReason.RETAINED_METADATA_UNSAFE
+    else:
+        raise AssertionError("encoded response secret escaped")
+
+
+@pytest.mark.parametrize("consumer", ["http", "replay"])
+def test_forged_private_credential_request_lacks_internal_authority(consumer: str) -> None:
+    from rivretrieve._internal.transport import RedirectPolicy, _CredentialTransportRequest
+
+    forged = object.__new__(_CredentialTransportRequest)
+    object.__setattr__(forged, "method", HttpMethod.GET)
+    object.__setattr__(forged, "url", "https://example.test/data")
+    object.__setattr__(forged, "params", None)
+    object.__setattr__(forged, "headers", {"X-Key": _COLLISION_SENTINEL})
+    object.__setattr__(forged, "body", None)
+    object.__setattr__(forged, "redirect_policy", RedirectPolicy.REFUSE)
+    object.__setattr__(forged, "credential_header_names", ("X-Key",))
+    with pytest.raises(TypeError, match="lacks internal transport authority"):
+        if consumer == "http":
+            HttpClient(
+                sender=lambda request, timeout_seconds: (_ for _ in ()).throw(AssertionError("must not send"))
+            ).send(forged)
+        else:
+            from rivretrieve._internal.recordings import ReplayTransport
+
+            ReplayTransport([])._resolve(forged)

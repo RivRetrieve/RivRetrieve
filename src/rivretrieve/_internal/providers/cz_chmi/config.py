@@ -8,6 +8,7 @@ from typing import Literal
 
 from rivretrieve._internal.engine import (
     Daily,
+    DailyLabelTime,
     DayDefinition,
     Hourly,
     IntervalDefinition,
@@ -42,13 +43,19 @@ _CONFIG = ProviderConfig(
     zone=ZoneValue("+00:00"),
     products={
         ProductId("discharge_daily_mean"): ProductConfig(
-            SourceCoordinates(CzChmiSourceCoordinates("DQ", "QD")), Unit.M3_S, Daily(DayDefinition("unknown"))
+            SourceCoordinates(CzChmiSourceCoordinates("DQ", "QD")),
+            Unit.M3_S,
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_daily_mean"): ProductConfig(
-            SourceCoordinates(CzChmiSourceCoordinates("DQ", "HD")), Unit.CM, Daily(DayDefinition("unknown"))
+            SourceCoordinates(CzChmiSourceCoordinates("DQ", "HD")),
+            Unit.CM,
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("water_temperature_daily_mean"): ProductConfig(
-            SourceCoordinates(CzChmiSourceCoordinates("DQ", "TD")), Unit.DEG_C, Daily(DayDefinition("unknown"))
+            SourceCoordinates(CzChmiSourceCoordinates("DQ", "TD")),
+            Unit.DEG_C,
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("discharge_hourly_mean"): ProductConfig(
             SourceCoordinates(CzChmiSourceCoordinates("HQ", "QH")), Unit.M3_S, Hourly(IntervalDefinition("unknown"))

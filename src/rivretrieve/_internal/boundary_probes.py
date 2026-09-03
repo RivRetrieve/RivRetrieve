@@ -115,9 +115,9 @@ class _AuditedReplayTransport(ReplayTransport):
         self._replayed_requests: list[RecordedRequest] = []
 
     def send(self, request: TransportRequest) -> TransportResponse:
-        response = super().send(request)
-        self._replayed_requests.append(RecordedRequest.from_transport_request(request))
-        return response
+        recording = self._resolve(request)
+        self._replayed_requests.append(recording.request)
+        return recording.to_transport_response()
 
     @property
     def unreplayed_requests(self) -> tuple[RecordedRequest, ...]:

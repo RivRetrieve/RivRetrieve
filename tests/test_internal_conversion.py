@@ -14,6 +14,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import (
     CanonicalRowsSchema,
     Daily,
+    DailyLabelTime,
     DayDefinition,
     Hourly,
     Instant,
@@ -402,7 +403,7 @@ def test_convert_daily_positive_offset_uses_zone_free_date_comparison() -> None:
                 }
             ]
         ),
-        _config({"daily": _product(semantics=Daily(DayDefinition("unknown")))}),
+        _config({"daily": _product(semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")))}),
         _window(datetime(2020, 6, 1), datetime(2020, 6, 1)),
     )
 
@@ -429,7 +430,7 @@ def test_convert_daily_negative_offset_does_not_project_or_shift_the_requested_d
                 ]
             ]
         ),
-        _config({"daily": _product(semantics=Daily(DayDefinition("unknown")))}),
+        _config({"daily": _product(semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")))}),
         _window(datetime(2023, 1, 1), datetime(2023, 1, 31)),
     )
 
@@ -452,7 +453,7 @@ def test_convert_daily_reads_naive_explicit_midnight_calendar_date() -> None:
                 }
             ]
         ),
-        _config({"daily": _product(semantics=Daily(DayDefinition("unknown")))}),
+        _config({"daily": _product(semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")))}),
         _window(endpoint, endpoint),
     )
 
@@ -475,7 +476,7 @@ def test_convert_clips_daily_unknown_zone_without_an_unknown_zone_warning() -> N
                 for label in [datetime(2022, 12, 31), datetime(2023, 1, 1)]
             ]
         ),
-        _config({"daily": _product(semantics=Daily(DayDefinition("09:00")))}),
+        _config({"daily": _product(semantics=Daily(DayDefinition("09:00"), DailyLabelTime("00:00")))}),
         _window(datetime(2023, 1, 1), datetime(2023, 1, 1)),
     )
 
@@ -499,9 +500,22 @@ def test_convert_rejects_non_midnight_daily_labels() -> None:
                     }
                 ]
             ),
-            _config({"daily": _product(semantics=Daily(DayDefinition("unknown")))}),
+            _config({"daily": _product(semantics=Daily(DayDefinition("unknown"), DailyLabelTime("00:00")))}),
             _window(datetime(2023, 1, 1), datetime(2023, 1, 1)),
         )
+
+
+def test_daily_conversion_accepts_and_preserves_declared_1100_label_on_calendar_date_axis() -> None:
+    from rivretrieve._internal.conversion import convert
+
+    row_time = datetime(2023, 1, 2, 11)
+    result = convert(
+        _rows([{"station_id": "nve", "product_id": "daily", "time": row_time, "value": 2.0, "time_zone": "+00:00"}]),
+        _config({"daily": _product(semantics=Daily(DayDefinition("00:00"), DailyLabelTime("11:00")))}),
+        _window(datetime(2023, 1, 2, 23), datetime(2023, 1, 2, 23)),
+    )
+
+    assert result.value["time"].to_list() == [row_time]
 
 
 def test_convert_empty_rows_returns_valid_empty_canonical_frame() -> None:
@@ -622,3 +636,27 @@ def test_unknown_temporal_support_clips_only_on_the_source_label_axis() -> None:
     )
 
     assert result.value.select("time", "time_zone").rows() == [(datetime(2026, 8, 1, 12), "unknown")]
+
+
+@pytest.mark.parametrize(
+    ("label", "timestamp", "accepted"),
+    [
+        ("11:00", datetime(2023, 1, 2, 10, 59, 59, 999999), False),
+        ("11:00", datetime(2023, 1, 2, 11, 0, 0, 1), False),
+        ("11:00:00.000001", datetime(2023, 1, 2, 11, 0, 0, 1), True),
+    ],
+)
+def test_daily_conversion_compares_full_declared_label_precision(label, timestamp, accepted) -> None:
+    from rivretrieve._internal.conversion import convert
+
+    rows = _rows([{"station_id": "nve", "product_id": "daily", "time": timestamp, "value": 1.0, "time_zone": "+00:00"}])
+    arguments = (
+        rows,
+        _config({"daily": _product(semantics=Daily(DayDefinition("00:00"), DailyLabelTime(label)))}),
+        _window(datetime(2023, 1, 2), datetime(2023, 1, 2, 23, 59, 59, 999999)),
+    )
+    if accepted:
+        assert convert(*arguments).value["time"].to_list() == [timestamp]
+    else:
+        with pytest.raises(FatalContractError, match="actual label"):
+            convert(*arguments)
