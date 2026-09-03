@@ -1,10 +1,30 @@
-"""provider declaration : PackagedCatalogue × CatalogueOnly → DeclaredProvider."""
+"""provider declaration : PackagedCatalogue × TransportSelectedLiveStages → DeclaredProvider."""
 
 from pathlib import Path
 
-from rivretrieve._internal.providers.registration import CatalogueOnly, ProviderDeclaration
+from rivretrieve._internal.providers.ch_foen.config import config, flux_window_declarations, window_declarations
+from rivretrieve._internal.providers.ch_foen.fetch import fetch
+from rivretrieve._internal.providers.ch_foen.parse import parse
+from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
+from rivretrieve._internal.transport import AuthenticationCapability, Transport
+
+
+class _Stages:
+    observation_source = "live"
+    config = config()
+    window_declarations = window_declarations()
+    fetch = staticmethod(fetch)
+    parse = staticmethod(parse)
+
+    @staticmethod
+    def window_declarations_for_transport(transport: Transport):
+        if isinstance(transport, AuthenticationCapability) and transport.can_authenticate(
+            "https://influx.konzept.space/api/v2/query"
+        ):
+            return flux_window_declarations()
+        return window_declarations()
+
 
 declaration = ProviderDeclaration(
-    catalogue=Path(__file__).with_name("catalogue"),
-    observations=CatalogueOnly(),
+    catalogue=Path(__file__).with_name("catalogue"), observations=LiveStages(stages=_Stages)
 )

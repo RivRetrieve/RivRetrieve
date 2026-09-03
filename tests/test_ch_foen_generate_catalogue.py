@@ -355,9 +355,9 @@ def test_native_build_has_exact_projection_counts_dates_and_schemas() -> None:
     catalogue = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
 
     retained_product_ids = {
-        "discharge_instantaneous",
-        "stage_instantaneous",
-        "water_temperature_instantaneous",
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
     }
     withdrawn_product_ids = {
         "discharge_daily_mean",
@@ -369,13 +369,15 @@ def test_native_build_has_exact_projection_counts_dates_and_schemas() -> None:
     assert catalogue.products.height == 3
     assert set(catalogue.products["product_id"]) == retained_product_ids
     assert set(catalogue.products["product_id"]).isdisjoint(withdrawn_product_ids)
+    for column in ("frequency", "statistic", "period_type", "period_anchor"):
+        assert set(catalogue.products[column]) == {"unknown"}
     assert catalogue.station_products.height == 738
     assert set(catalogue.station_products["product_id"]) == retained_product_ids
     assert set(catalogue.station_products["product_id"]).isdisjoint(withdrawn_product_ids)
     assert catalogue.station_products.group_by("product_id").len().sort("product_id").rows() == [
-        ("discharge_instantaneous", 246),
-        ("stage_instantaneous", 246),
-        ("water_temperature_instantaneous", 246),
+        ("discharge_reported", 246),
+        ("stage_reported", 246),
+        ("water_temperature_reported", 246),
     ]
     assert set(catalogue.stations["crs"]) == {"unknown"}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"

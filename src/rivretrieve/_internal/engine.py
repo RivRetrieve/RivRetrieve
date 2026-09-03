@@ -1,4 +1,4 @@
-"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × WindowGranularity × WindowRenderingVocabulary × StopConvention × WindowDeclaration × ProductWindowDeclarations × RenderedWindow × ObservationRequest × SourceCoordinates × SourceCallParameter × UnknownOriginFact × SourceQuery × SourceCallOrigin × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig.
+"""Engine stage seams ≔ wall-clock WindowEndpoint × RequestedWindow × FetchWindow × WindowGranularity × WindowRenderingVocabulary × StopConvention × WindowDeclaration × ProductWindowDeclarations × RenderedWindow × ObservationRequest × SourceCoordinates × SourceCallParameter × UnknownOriginReason × UnknownOriginFact × SourceQuery × SourceCallOrigin × Payload × WithIssues[A] × Rows × CanonicalRows × Unit × Instant × Daily × DayDefinition × ZoneValue × CacheConfig × ProductConfig × ProviderConfig.
 
 Payload ≔ SourceCoordinates × station-product tags × FetchWindow × bytes × SourceCallOrigin.
 """
@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from math import isfinite
 from types import MappingProxyType
 from typing import NewType, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -202,13 +203,29 @@ class SourceCoordinates:
 type SourceCallParameter = str | int | float | bytes | None
 
 
+class UnknownOriginReason(StrEnum):
+    UNKNOWN = "unknown"
+    NOT_PUBLISHED = "not_published"
+    NOT_APPLICABLE = "not_applicable"
+    UNAVAILABLE = "unavailable"
+
+
 @dataclass(frozen=True, slots=True)
 class UnknownOriginFact:
-    pass
+    reason: UnknownOriginReason = UnknownOriginReason.UNKNOWN
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, UnknownOriginReason):
+            raise TypeError("unknown source-call fact reason must be an UnknownOriginReason")
 
 
 def _is_source_call_parameter(value: object) -> bool:
-    return value is None or isinstance(value, str | int | float | bytes)
+    return (
+        value is None
+        or isinstance(value, str | bytes)
+        or type(value) is int
+        or (type(value) is float and isfinite(value))
+    )
 
 
 @dataclass(frozen=True, slots=True)

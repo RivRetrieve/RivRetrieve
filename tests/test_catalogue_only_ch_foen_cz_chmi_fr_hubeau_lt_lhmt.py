@@ -11,20 +11,6 @@ from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 CATALOGUE_ONLY_PROVIDERS = (
     (
-        "ch_foen",
-        246,
-        3,
-        738,
-        {
-            "discharge_instantaneous",
-            "stage_instantaneous",
-            "water_temperature_instantaneous",
-        },
-        "Swiss Federal Office for the Environment FOEN / BAFU",
-        {"unknown"},
-        {"unknown"},
-    ),
-    (
         "fr_hubeau",
         0,
         6,
@@ -43,7 +29,6 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
 )
 ENROLLED_CATALOGUE_MODULE_FILES = {
-    "ch_foen": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
     "fr_hubeau": {"__init__.py", "generate_catalogue.py", "issue_codes.py", "origins.py"},
 }
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
@@ -190,23 +175,8 @@ def test_ch_foen_has_origins_and_no_metadata_module() -> None:
     assert not (provider_directory / "metadata.py").exists()
 
 
-def test_reference_tree_preserves_ch_foen_fetch_evidence() -> None:
-    client = REFERENCE_ROOT / "ch_foen" / "source" / "observation_client.py"
-    assert "https://influx.konzept.space/api/v2/query?org=api.existenz.ch" in client.read_text()
-
-
 def test_reference_fixtures_are_colocated_and_active_catalogue_fixtures_remain() -> None:
     expected_source_files = {
-        "ch_foen": {
-            "issue_codes.py",
-            "module.py",
-            "observation_client.py",
-            "parser.py",
-            "query.py",
-            "raw_payload.py",
-            "retrieval.py",
-            "transform.py",
-        },
         "fr_hubeau": {
             "issue_codes.py",
             "module.py",
@@ -221,12 +191,6 @@ def test_reference_fixtures_are_colocated_and_active_catalogue_fixtures_remain()
         assert {path.name for path in source_dir.iterdir()} == source_names
 
     expected = {
-        "ch_foen": {
-            "switzerland_metadata_locations.json",
-            "switzerland_2206_discharge_20250101.csv",
-            "switzerland_2282_stage_20250101.csv",
-            "switzerland_2016_temperature_20200101.csv",
-        },
         "fr_hubeau": {
             "fr_hubeau_metadata.json",
             "fr_hubeau_temp_stations.json",
