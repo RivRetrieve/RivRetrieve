@@ -257,6 +257,9 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
         (ProviderId("usgs_nwis"), ProductId("stage_daily_mean")),
         (ProviderId("usgs_nwis"), ProductId("stage_daily_min")),
         (ProviderId("usgs_nwis"), ProductId("stage_instantaneous")),
+        (ProviderId("za_dws"), ProductId("discharge_daily_mean")),
+        (ProviderId("za_dws"), ProductId("discharge_instantaneous")),
+        (ProviderId("za_dws"), ProductId("stage_instantaneous")),
     )
 
 

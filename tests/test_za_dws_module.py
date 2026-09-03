@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import pytest
-
 import rivretrieve as rr
-from rivretrieve._internal.issues import ObservationsUnavailableError
+from rivretrieve._internal.providers.registration import LiveStages
+from rivretrieve._internal.providers.za_dws.declaration import declaration
 from rivretrieve._internal.registry import _registry
 from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
@@ -48,23 +47,10 @@ def test_za_dws_info() -> None:
     assert "South Africa" in info.name or "DWS" in info.name or "Water" in info.name
 
 
-def test_za_dws_observations_unavailable() -> None:
-    with pytest.raises(
-        ObservationsUnavailableError,
-        match="Provider za_dws has no observations registered",
-    ):
-        rr.providers()
-        _registry.get("za_dws").observations(
-            stations=["X3H001"],
-            products=["discharge_daily_mean"],
-            start="2020-01-01",
-            end="2020-01-02",
-        )
-
-
-def test_za_dws_catalogue_has_no_observations() -> None:
+def test_za_dws_registers_live_engine_stages() -> None:
     rr.providers()
-    assert _registry.get("za_dws")._stages is None
+    assert isinstance(declaration.observations, LiveStages)
+    assert _registry.get("za_dws")._stages is declaration.observations.stages
 
 
 def test_za_dws_catalogue_catalogue_path_exists() -> None:

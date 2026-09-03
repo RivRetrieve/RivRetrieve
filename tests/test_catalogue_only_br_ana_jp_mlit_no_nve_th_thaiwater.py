@@ -23,22 +23,10 @@ CATALOGUE_ONLY_PROVIDERS = (
         None,
         set(),
     ),
-    (
-        "za_dws",
-        2905,
-        3,
-        8715,
-        {"discharge_daily_mean", "discharge_instantaneous", "stage_instantaneous"},
-        "Department of Water and Sanitation — Verified Hydrology (DWS, South Africa)",
-        "2026-08-02",
-        {"unknown"},
-    ),
 )
 DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py"}
-DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "br_ana": DEFERRED_CATALOGUE_MODULE_FILES,
-    "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
 
