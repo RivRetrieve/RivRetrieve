@@ -941,9 +941,9 @@ def test_forged_private_credential_request_lacks_internal_authority(consumer: st
     object.__setattr__(forged, "credential_header_names", ("X-Key",))
     with pytest.raises(TypeError, match="lacks internal transport authority"):
         if consumer == "http":
-            HttpClient(sender=lambda request, timeout: (_ for _ in ()).throw(AssertionError("must not send"))).send(
-                forged
-            )
+            HttpClient(
+                sender=lambda request, timeout_seconds: (_ for _ in ()).throw(AssertionError("must not send"))
+            ).send(forged)
         else:
             from rivretrieve._internal.recordings import ReplayTransport
 
