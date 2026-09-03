@@ -488,3 +488,44 @@ def test_non_ascii_authentication_envelope_metadata_does_not_break_secret_scanni
     transport, _, _ = wrapper([(authentication_body, 200), (b'{"data":1}', 200)])
     response = transport.send(data_request())
     assert response.content == b'{"data":1}'
+
+
+def _encoded_token_layers(count: int) -> str:
+    from urllib.parse import quote
+
+    encoded = "".join(f"%{byte:02X}" for byte in _TOKEN.encode())
+    for _ in range(count - 1):
+        encoded = quote(encoded, safe="")
+    return encoded
+
+
+@pytest.mark.parametrize("layers", [1, 2, 9])
+def test_exchange_wrapper_refuses_encoded_cached_token_on_non_data_origin(layers: int) -> None:
+    transport, raw, _ = wrapper([(_AUTH_BODY, 200), (b'{"data":1}', 200)])
+    transport.send(data_request())
+    encoded = _encoded_token_layers(layers)
+    try:
+        transport.send(TransportRequest(HttpMethod.GET, f"https://other.example/data?token={encoded}"))
+    except CredentialExchangeError as error:
+        encoded = ""
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _TOKEN not in rendered
+        assert "%54%4F%4B%45%4E" not in rendered
+        assert "%2554%254F%254B%2545%254E" not in rendered
+        assert len(raw.requests) == 2
+        assert error.request.url == "https://redacted.invalid"
+    else:
+        raise AssertionError("encoded cached token crossed to another origin")
+
+
+def test_exchange_wrapper_rejects_double_encoded_token_in_response_metadata() -> None:
+    transport, _, _ = wrapper([(_AUTH_BODY, 200), (b'{"data":1}', 200, _encoded_token_layers(2))])
+    try:
+        transport.send(data_request())
+    except CredentialExchangeError as error:
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _TOKEN not in rendered
+        assert "%2554%254F%254B%2545%254E" not in rendered
+        assert error.reason is AuthenticationFailureReason.RETAINED_METADATA_UNSAFE
+    else:
+        raise AssertionError("encoded token response metadata escaped")
