@@ -227,6 +227,21 @@ description: Daily mean water temperature in degrees Celsius.
 notes: Use only when the native product is a daily mean over a defined daily period.
 ```
 
+### water_temperature_hourly_mean
+
+```text
+observed_property: water_temperature
+frequency: hourly
+statistic: mean
+period_type: interval
+period_anchor: start | end | midpoint | provider_defined | unknown
+unit: degC
+derived: false
+derivation_method: none
+description: Hourly mean water temperature in degrees Celsius.
+notes: The source interval anchoring must remain unknown when the publisher does not establish it. Added for the no_nve port: NVE HydAPI publishes a water-temperature series at resolution 60 whose method is Mean.
+```
+
 ## Provider-specific products
 
 ### jp_mlit: stage_hourly, stage_daily, discharge_hourly, discharge_daily
