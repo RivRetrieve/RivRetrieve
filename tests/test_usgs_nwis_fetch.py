@@ -6,7 +6,7 @@ from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import get_type_hints
+from typing import Any, cast, get_type_hints
 
 import polars as pl
 import pytest
@@ -330,7 +330,7 @@ def test_transport_credentials_do_not_reach_final_payload_origin() -> None:
         "X-API-Key": "api-key-secret",
         "User-Agent": "RivRetrieve",
     }
-    assert executed.credential_header_names == ("Authorization", "X-API-Key")
+    assert cast("Any", executed).credential_header_names == ("Authorization", "X-API-Key")
 
     forbidden = (
         "Authorization",

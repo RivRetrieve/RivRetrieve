@@ -56,7 +56,7 @@ class RecordingSender:
         self.calls: list[tuple[TransportRequest, float]] = []
         self.started_at: list[float] = []
 
-    def __call__(self, request: TransportRequest, timeout_seconds: float) -> tuple[bytes, int, str | None]:
+    def __call__(self, request: Any, timeout_seconds: float) -> tuple[bytes, int, str | None]:
         self.calls.append((request, timeout_seconds))
         if self.clock is not None:
             self.started_at.append(self.clock.monotonic())
@@ -682,4 +682,6 @@ def test_public_transport_request_has_no_credential_tagging_constructor_channel(
 
     assert "credential_header_names" not in inspect.signature(TransportRequest).parameters
     with pytest.raises(TypeError):
-        TransportRequest(HttpMethod.GET, "https://example.test", credential_header_names=("Authorization",))
+        TransportRequest(  # ty: ignore[unknown-argument]
+            HttpMethod.GET, "https://example.test", credential_header_names=("Authorization",)
+        )
