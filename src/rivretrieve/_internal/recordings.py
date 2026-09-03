@@ -1,4 +1,7 @@
-"""Recording replay = exact lookup : RecordedInteraction* × TransportRequest → TransportResponse | UnmatchedRequest."""
+"""Recording replay = exact lookup : RecordedInteraction* × TransportRequest → TransportResponse | UnmatchedRequest.
+
+Recording capture = RecordingTransport : Transport × TransportRequest → TransportResponse × RecordingEnvelope.
+"""
 
 from __future__ import annotations
 
@@ -25,6 +28,7 @@ from rivretrieve._internal.transport import (
     RequestParameter,
     SecretCallTrace,
     SecretResponseDisposition,
+    Transport,
     TransportRequest,
     TransportResponse,
     _CredentialTransportRequest,
@@ -300,6 +304,24 @@ class ReplayTransport:
 
 
 ReplayHttpClient = ReplayTransport
+
+
+class RecordingTransport:
+    """The dual of replay: send through a live transport and keep every exchange as an envelope."""
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+        self._recordings: list[RecordingEnvelope] = []
+
+    def send(self, request: TransportRequest) -> TransportResponse:
+        response = self._transport.send(request)
+        self._recordings.append(RecordingEnvelope.from_transport(request, response))
+        return response
+
+    @property
+    def recordings(self) -> tuple[RecordingEnvelope, ...]:
+        """Envelopes in send order, including non-2xx exchanges the provider then refused."""
+        return tuple(self._recordings)
 
 
 def write_recording(recording: RecordingEnvelope, path: str | Path) -> None:
