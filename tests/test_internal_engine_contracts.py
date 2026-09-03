@@ -162,6 +162,7 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
     assert tuple((member.name, member.value) for member in engine.WindowRenderingVocabulary) == (
         ("ISO_INSTANT", "iso-instant"),
         ("DATE", "date"),
+        ("DATE_DMY", "date-dmy"),
         ("YEAR", "year"),
         ("YEAR_MONTH", "year-month"),
         ("NONE", "none"),

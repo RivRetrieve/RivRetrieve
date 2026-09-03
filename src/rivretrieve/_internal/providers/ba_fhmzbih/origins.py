@@ -96,7 +96,7 @@ _STATION_IDS = (
     "9044",
     "9045",
 )
-_PRODUCT_IDS = ("discharge_instantaneous", "stage_instantaneous", "water_temperature_instantaneous")
+_PRODUCT_IDS = ("discharge_reported", "stage_reported", "water_temperature_reported")
 
 
 def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
@@ -110,8 +110,13 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
     )
     provider_facts = ("source.provider.service_operator", "source.provider.station_service_identity")
     product_facts = ("source.product.native_identifiers", "source.product.native_physics")
-    bound_station = "source.station:4024.identity_location"
-    bound_observation = "source.observation:4024.values_quality"
+    bound_stations = ("source.station:4024.identity_location", "source.station:4110.identity_location")
+    bound_observations = ("source.observation:4024.values_quality", "source.observation:4110.values_quality")
+    established_availability = {
+        ("4024", "discharge_reported"),
+        ("4024", "stage_reported"),
+        ("4110", "water_temperature_reported"),
+    }
     withheld_stations = tuple(
         WithheldFact(
             fact_group=f"withheld_station:{station_id}",
@@ -120,7 +125,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             catalogue_rows=(CatalogueRowLocator(carrier="station", station_id=station_id),),
         )
         for station_id in _STATION_IDS
-        if station_id != "4024"
+        if station_id not in {"4024", "4110"}
     )
     withheld_observations = tuple(
         WithheldFact(
@@ -129,7 +134,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             reason="no_acquisition_record_established",
         )
         for station_id in _STATION_IDS
-        if station_id != "4024"
+        if station_id not in {"4024", "4110"}
     )
     withheld_availability = tuple(
         WithheldFact(
@@ -142,12 +147,17 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         )
         for station_id in _STATION_IDS
         for product_id in _PRODUCT_IDS
+        if (station_id, product_id) not in established_availability
     )
     withheld = withheld_stations + withheld_observations + withheld_availability
     universe = (
         provider_facts
         + product_facts
-        + (bound_station, bound_observation)
+        + bound_stations
+        + bound_observations
+        + tuple(
+            f"station_product:{station}:{product}.availability" for station, product in sorted(established_availability)
+        )
         + tuple(fact for group in withheld for fact in group.facts)
     )
     return AcquisitionProvenance(
@@ -233,16 +243,35 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 acquisition_id="catalogue_capture_2026_08_02",
             ),
             FactBinding(
-                fact_group="station_4024",
-                facts=(bound_station,),
+                fact_group="stations_4024_4110",
+                facts=bound_stations,
                 source_id="ba_avp_sava",
                 acquisition_id="catalogue_capture_2026_08_02",
             ),
             FactBinding(
-                fact_group="observation_4024",
-                facts=(bound_observation,),
+                fact_group="observations_4024_4110",
+                facts=bound_observations,
                 source_id="ba_avp_sava",
                 acquisition_id="observation_request",
+            ),
+            FactBinding(
+                fact_group="recorded_availability",
+                facts=tuple(
+                    f"station_product:{station}:{product}.availability"
+                    for station, product in sorted(established_availability)
+                ),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="non-empty recorded workbook to available catalogue edge",
+                    external_inputs=tuple(
+                        ExternalFactReference(
+                            source_id="ba_avp_sava",
+                            fact=f"source.observation:{station}.values_quality",
+                        )
+                        for station in ("4024", "4110")
+                    ),
+                ),
             ),
         ),
         withheld_facts=withheld,
@@ -264,6 +293,7 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
                     "source.product.native_identifiers",
                     "source.product.native_physics",
                     "source.station:4024.identity_location",
+                    "source.station:4110.identity_location",
                 )
             ),
         ),

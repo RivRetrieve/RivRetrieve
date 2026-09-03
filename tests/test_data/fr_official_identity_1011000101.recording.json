@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://id.eaufrance.fr/StationHydro/1011000101",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-02T14:50:55.917585Z",
+    "content_base64": "ewoidHlwZSI6ICJGZWF0dXJlQ29sbGVjdGlvbiIsCiJudW1iZXJNYXRjaGVkIjogMSwKIm5hbWUiOiAiU3RhdGlvbkh5ZHJvIiwKImZlYXR1cmVzIjogWwp7ICJ0eXBlIjogIkZlYXR1cmUiLCAicHJvcGVydGllcyI6IHsgImdpZCI6IDEsICJDZFN0YXRpb25IeWRybyI6ICIxMDExMDAwMTAxIiwgIkNkU3RhdGlvbkh5ZHJvQW5jaWVuUmVmIjogIjEwMTEzNzcxIiwgIkxiU3RhdGlvbkh5ZHJvIjogIltCYXJib3R0ZWF1XSDDoCBQZXRpdC1Cb3VyZyAtIEJhcmJvdHRlYXUiLCAiVHlwU3RhdGlvbkh5ZHJvIjogIlNURCIsICJEdE1pc2VTZXJ2aWNlU3RhdGlvbkh5ZHJvIjogIjIwMTItMTEtMTBUMjM6MDA6MDBaIiwgIlByb2pDb29yZFN0YXRpb25IeWRybyI6ICIzOSIsICJDb29yZFhTdGF0aW9uSHlkcm8iOiA2NDMzNTIuMCwgIkNvb3JkWVN0YXRpb25IeWRybyI6IDE3OTAzNTQuMCwgIk5vbUludGVydmVuYW50IjogIkRFQUwgR3VhZGVsb3VwZSAtIFVIIEd1YWRlbG91cGUiLCAiTGJBZmZpY2hhZ2VTdGF0aW9uSHlkcm8iOiAiSHlkcm9Qb3J0YWlsL0h5ZHJvIDIiIH0sICJnZW9tZXRyeSI6IHsgInR5cGUiOiAiUG9pbnQiLCAiY29vcmRpbmF0ZXMiOiBbIC02MS42NTg5ODk1OTY5NDc2NDksIDE2LjE4OTQwMjQ3MTU0NDc0NiBdIH0gfQpdCn0K",
+    "sha256": "41cc5e3589015f9c36896920c77691edf295e794aa1f803b0569f51ec931a518"
+  }
+}

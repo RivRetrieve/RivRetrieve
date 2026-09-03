@@ -93,6 +93,40 @@ def _build_provider_acquisition_provenance(
         media_type="text/html; charset=UTF-8",
         sha256=_TERMS_SHA256,
     )
+    temperature_semantics_recording = RecordingReference(
+        recording_id="fr_hubeau_temperature_openapi",
+        repository_path="tests/test_data/fr_hubeau_temperature_openapi.json",
+        source_url="https://hubeau.eaufrance.fr/api/v1/temperature/api-docs",
+        retrieved_at=datetime.fromisoformat("2026-09-02T14:50:55.466790Z"),
+        media_type="application/json",
+        sha256="797506a9cf78fbba29fb82eca71ac278d7fe84bd90aa4552ac79a71752c059ef",
+    )
+    identity_recordings = {
+        "1011000101": RecordingReference(
+            recording_id="fr_identity_1011000101",
+            repository_path="tests/test_data/fr_official_identity_1011000101.json",
+            source_url="https://id.eaufrance.fr/StationHydro/1011000101",
+            retrieved_at=datetime.fromisoformat("2026-09-02T14:50:55.917585Z"),
+            media_type="application/json",
+            sha256="41cc5e3589015f9c36896920c77691edf295e794aa1f803b0569f51ec931a518",
+        ),
+        "Y251002001": RecordingReference(
+            recording_id="fr_identity_Y251002001",
+            repository_path="tests/test_data/fr_official_identity_Y251002001.json",
+            source_url="https://id.eaufrance.fr/StationHydro/Y251002001",
+            retrieved_at=datetime.fromisoformat("2026-09-02T16:01:00.478368Z"),
+            media_type="application/json",
+            sha256="787944fba7cdd5b041207ef5a39bfec5fb0f87faa4fdff4f2d821b4787873408",
+        ),
+        "01001336": RecordingReference(
+            recording_id="fr_identity_01001336",
+            repository_path="tests/test_data/fr_official_identity_01001336.json",
+            source_url="https://id.eaufrance.fr/StationMesureEauxSurface/01001336",
+            retrieved_at=datetime.fromisoformat("2026-09-02T14:50:56.960288Z"),
+            media_type="application/json",
+            sha256="e2fdd83c9bb517a0da43817e6955397e69944db02e104f61c3e0c3f5cffe54c8",
+        ),
+    }
     external = (
         "source.provider.platform",
         "source.product.hydrometry_api_semantics",
@@ -108,8 +142,22 @@ def _build_provider_acquisition_provenance(
     station_facts = tuple(f"source.station.{station_id}.identity_location_crs" for station_id in station_ids)
     observation_facts = tuple(f"source.observation.{station_id}.values_quality" for station_id in station_ids)
     availability_facts = tuple(
-        f"station_product.{station_id}.{product_id}.availability" for station_id, product_id in station_product_keys
+        f"station_product:{station_id}:{product_id}.availability" for station_id, product_id in station_product_keys
     )
+    established_stations = {"1011000101", "Y251002001", "01001336"}
+    established_edges = {
+        ("1011000101", "discharge_daily_mean"),
+        ("1011000101", "discharge_daily_max"),
+        ("1011000101", "stage_daily_max"),
+        ("Y251002001", "discharge_instantaneous"),
+        ("Y251002001", "stage_instantaneous"),
+        ("01001336", "water_temperature_reported"),
+    }
+    producer_by_station = {
+        "1011000101": "fr_deal_guadeloupe",
+        "Y251002001": "fr_dreal_occitanie",
+        "01001336": "fr_artois_picardie",
+    }
     withheld_stations = tuple(
         WithheldFact(
             fact_group=f"withheld_station:{station_id}",
@@ -118,6 +166,7 @@ def _build_provider_acquisition_provenance(
             catalogue_rows=(CatalogueRowLocator(carrier="station", station_id=station_id),),
         )
         for station_id, fact in zip(station_ids, station_facts, strict=True)
+        if station_id not in established_stations
     )
     withheld_observations = tuple(
         WithheldFact(
@@ -126,6 +175,7 @@ def _build_provider_acquisition_provenance(
             reason="no_acquisition_record_established",
         )
         for station_id, fact in zip(station_ids, observation_facts, strict=True)
+        if station_id not in established_stations
     )
     withheld_availability = tuple(
         WithheldFact(
@@ -137,6 +187,7 @@ def _build_provider_acquisition_provenance(
             ),
         )
         for (station_id, product_id), fact in zip(station_product_keys, availability_facts, strict=True)
+        if (station_id, product_id) not in established_edges
     )
     withheld = withheld_stations + withheld_observations + withheld_availability
     return AcquisitionProvenance(
@@ -179,6 +230,15 @@ def _build_provider_acquisition_provenance(
                         retrieved_at_start=datetime.fromisoformat("2026-08-02T17:33:34Z"),
                     ),
                     AcquisitionRecord(
+                        acquisition_id="temperature_semantics_openapi_2026_09_02",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Official temperature API contract naming timestamped results without defining their temporal support",
+                        requested_from=(temperature_semantics_recording.source_url,),
+                        retrieved_at_start=temperature_semantics_recording.retrieved_at,
+                        recording_ids=(temperature_semantics_recording.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="general_conditions_capture_2026_08_20",
                         method="http_request",
                         instant_type="retrieval",
@@ -201,6 +261,11 @@ def _build_provider_acquisition_provenance(
                         description="Hub'Eau general conditions section 5.1.3",
                         recording=recording,
                     ),
+                    EvidenceReference(
+                        evidence_id="fr_hubeau_temperature_openapi",
+                        description="Official temperature API contract for chronique result fields",
+                        recording=temperature_semantics_recording,
+                    ),
                 ),
                 statements=(
                     SourceStatement(
@@ -214,6 +279,99 @@ def _build_provider_acquisition_provenance(
                         exact_text=_CITATION,
                         recording_id=recording.recording_id,
                         fact="source.hubeau.citation_statement",
+                    ),
+                ),
+            ),
+            SourceRecord(
+                source_id="fr_deal_guadeloupe",
+                issuer="DEAL Guadeloupe - UH Guadeloupe",
+                operator="Hub’Eau",
+                acquisitions=(
+                    AcquisitionRecord(
+                        acquisition_id="identity_1011000101",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Official identity response naming the producing SIE body",
+                        requested_from=("https://id.eaufrance.fr/StationHydro/1011000101",),
+                        retrieved_at_start=identity_recordings["1011000101"].retrieved_at,
+                        recording_ids=(identity_recordings["1011000101"].recording_id,),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="observations_1011000101",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Recorded official observation response",
+                        requested_from=("https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",),
+                        retrieved_at_start=datetime.fromisoformat("2026-09-02T16:00:00Z"),
+                    ),
+                ),
+                evidence=(
+                    EvidenceReference(
+                        evidence_id="official_identity_1011000101",
+                        description="Official identity response naming the producing SIE body",
+                        recording=identity_recordings["1011000101"],
+                    ),
+                ),
+            ),
+            SourceRecord(
+                source_id="fr_dreal_occitanie",
+                issuer="DREAL Occitanie - UH Méditerranée O",
+                operator="HydroPortail",
+                acquisitions=(
+                    AcquisitionRecord(
+                        acquisition_id="identity_Y251002001",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Official identity response naming the producing SIE body",
+                        requested_from=("https://id.eaufrance.fr/StationHydro/Y251002001",),
+                        retrieved_at_start=identity_recordings["Y251002001"].retrieved_at,
+                        recording_ids=(identity_recordings["Y251002001"].recording_id,),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="observations_Y251002001",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Recorded official observation response",
+                        requested_from=("https://hydro.eaufrance.fr/stationhydro/ajax/Y251002001/series",),
+                        retrieved_at_start=datetime.fromisoformat("2026-09-02T15:03:08Z"),
+                    ),
+                ),
+                evidence=(
+                    EvidenceReference(
+                        evidence_id="official_identity_Y251002001",
+                        description="Official identity response naming the producing SIE body",
+                        recording=identity_recordings["Y251002001"],
+                    ),
+                ),
+            ),
+            SourceRecord(
+                source_id="fr_artois_picardie",
+                issuer="Agence de l'Eau Artois-Picardie",
+                operator="Hub’Eau",
+                acquisitions=(
+                    AcquisitionRecord(
+                        acquisition_id="identity_01001336",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Official identity response naming the producing SIE body",
+                        requested_from=("https://id.eaufrance.fr/StationMesureEauxSurface/01001336",),
+                        retrieved_at_start=identity_recordings["01001336"].retrieved_at,
+                        recording_ids=(identity_recordings["01001336"].recording_id,),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="observations_01001336",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Recorded official observation response",
+                        requested_from=("https://hubeau.eaufrance.fr/api/v1/temperature/chronique",),
+                        retrieved_at_start=datetime.fromisoformat("2026-09-02T16:00:00Z"),
+                    ),
+                ),
+                evidence=(
+                    EvidenceReference(
+                        evidence_id="official_identity_01001336",
+                        description="Official identity response naming the producing SIE body",
+                        recording=identity_recordings["01001336"],
                     ),
                 ),
             ),
@@ -235,13 +393,67 @@ def _build_provider_acquisition_provenance(
                 fact_group="temperature_product_external",
                 facts=external[2:3],
                 source_id="fr_hubeau",
-                acquisition_id="temperature_catalogue_capture_2026_08_02",
+                acquisition_id="temperature_semantics_openapi_2026_09_02",
             ),
             FactBinding(
                 fact_group="observation_transport",
                 facts=external[3:],
                 source_id="fr_hubeau",
                 acquisition_id="observation_transport",
+            ),
+            FactBinding(
+                fact_group="station_1011000101",
+                facts=("source.station.1011000101.identity_location_crs",),
+                source_id="fr_deal_guadeloupe",
+                acquisition_id="identity_1011000101",
+            ),
+            FactBinding(
+                fact_group="observation_1011000101",
+                facts=("source.observation.1011000101.values_quality",),
+                source_id="fr_deal_guadeloupe",
+                acquisition_id="observations_1011000101",
+            ),
+            FactBinding(
+                fact_group="station_Y251002001",
+                facts=("source.station.Y251002001.identity_location_crs",),
+                source_id="fr_dreal_occitanie",
+                acquisition_id="identity_Y251002001",
+            ),
+            FactBinding(
+                fact_group="observation_Y251002001",
+                facts=("source.observation.Y251002001.values_quality",),
+                source_id="fr_dreal_occitanie",
+                acquisition_id="observations_Y251002001",
+            ),
+            FactBinding(
+                fact_group="station_01001336",
+                facts=("source.station.01001336.identity_location_crs",),
+                source_id="fr_artois_picardie",
+                acquisition_id="identity_01001336",
+            ),
+            FactBinding(
+                fact_group="observation_01001336",
+                facts=("source.observation.01001336.values_quality",),
+                source_id="fr_artois_picardie",
+                acquisition_id="observations_01001336",
+            ),
+            FactBinding(
+                fact_group="established_availability",
+                facts=tuple(
+                    f"station_product:{station}:{product}.availability"
+                    for station, product in sorted(established_edges)
+                ),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="non-empty official recording to available catalogue edge",
+                    external_inputs=tuple(
+                        ExternalFactReference(
+                            source_id=producer_by_station[station], fact=f"source.observation.{station}.values_quality"
+                        )
+                        for station in sorted(established_stations)
+                    ),
+                ),
             ),
             FactBinding(
                 fact_group="canonical_platform_product",

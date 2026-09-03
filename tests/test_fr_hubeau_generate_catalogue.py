@@ -15,8 +15,6 @@ import pytest
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
-    STATION_PRODUCT_CATALOG_SCHEMA,
-    AvailabilityDtype,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
@@ -195,7 +193,7 @@ def test_generate_catalogue_hydro_station_products() -> None:
 def test_generate_catalogue_temp_station_products() -> None:
     cat = _catalogue()
     temp_sp = cat.station_products.filter(pl.col("station_id") == "01001336")
-    assert temp_sp["product_id"].to_list() == ["water_temperature_instantaneous"]
+    assert temp_sp["product_id"].to_list() == ["water_temperature_reported"]
 
 
 def _assert_fatal_issue(table: NativeTable, code: str, message: str) -> None:
@@ -1070,8 +1068,8 @@ def test_native_dates_flow_to_station_rows_and_provider_maximum() -> None:
     temperature_dates = catalogue.station_products.filter(pl.col("station_id") == temperature_id)[
         "last_catalogue_check"
     ].unique()
-    assert hydro_dates.to_list() == [datetime(2026, 8, 1).date()]
-    assert temperature_dates.to_list() == [datetime(2026, 8, 3).date()]
+    assert set(hydro_dates.to_list()) == {datetime(2026, 8, 1).date(), datetime(2026, 9, 2).date()}
+    assert set(temperature_dates.to_list()) == {datetime(2026, 9, 2).date()}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
@@ -1097,9 +1095,9 @@ def _frame_digest(frame: pl.DataFrame) -> str:
 
 
 _PINNED_PROVIDER_JSON_SHA256 = "f9c38afc3e79476b329a9ebcb0df90f9fce0d7917e7fc193068672c60d62f634"
-_PINNED_PRODUCTS_FRAME_SHA256 = "40e4009a1df0e7b638d0f25e1920101bb737db6c1f7e16488e6bef1292639776"
-_PINNED_STATIONS_FRAME_SHA256 = "9254a05b0f09c421ccddbddd2f2da599d72b9c4a0eac8b852d2e0e431625e9b8"
-_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "745d6f4791d1e78fa6f4e78082d3089808894915503e85cf8a2e3b0b78c98e0d"
+_PINNED_PRODUCTS_FRAME_SHA256 = "1800401b4987adbb771dcd39dd9b303ec6e30e29c7ffec41ccb4dbc53e2bdbd5"
+_PINNED_STATIONS_FRAME_SHA256 = "c3d5b0f2e6b5bd39135a3bb1314fcdebf537f4c4b1d9b9f0fa823045c423acc2"
+_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "ef2af963f04438238fd05b7d38e2d6c900ae64d72b1a66ce1f949c09343c4806"
 
 
 def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
@@ -1136,7 +1134,11 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
             ),
         ]
     ).sort("station_id")
-    pl_testing.assert_frame_equal(committed_stations, expected_stations.head(0), check_exact=True)
+    pl_testing.assert_frame_equal(
+        committed_stations,
+        expected_stations.filter(pl.col("station_id").is_in(["01001336", "1011000101", "Y251002001"])),
+        check_exact=True,
+    )
 
     definitions = HYDRO_PRODUCT_DEFS + TEMP_PRODUCT_DEFS
     expected_products = pl.DataFrame(
@@ -1158,33 +1160,17 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
     ).sort("product_id")
     pl_testing.assert_frame_equal(committed_products, expected_products, check_exact=True)
 
-    expected_station_product_rows: list[dict[str, object]] = []
-    for endpoint_frame, endpoint_definitions in (
-        (hydro, HYDRO_PRODUCT_DEFS),
-        (temperature, TEMP_PRODUCT_DEFS),
-    ):
-        for station_id, retrieved_at in (
-            endpoint_frame.select("code_station", "retrieved_at").sort("code_station").iter_rows()
-        ):
-            for definition in endpoint_definitions:
-                expected_station_product_rows.append(
-                    {
-                        "provider_id": "fr_hubeau",
-                        "station_id": station_id,
-                        "product_id": definition.product_id,
-                        "availability": "unknown",
-                        "availability_reason": "Hubeau catalogue does not expose per-variable station availability",
-                        "published_record_start_date": None,
-                        "published_record_end_date": None,
-                        "last_catalogue_check": retrieved_at.date(),
-                    }
-                )
-    expected_station_products = (
-        pl.DataFrame(expected_station_product_rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
-        .with_columns(pl.col("availability").cast(AvailabilityDtype))
-        .sort("station_id", "product_id")
-    )
-    pl_testing.assert_frame_equal(committed_station_products, expected_station_products.head(0), check_exact=True)
+    assert set(committed_station_products.select("station_id", "product_id").iter_rows()) == {
+        ("01001336", "water_temperature_reported"),
+        ("1011000101", "discharge_daily_mean"),
+        ("1011000101", "discharge_daily_max"),
+        ("1011000101", "stage_daily_max"),
+        ("Y251002001", "discharge_instantaneous"),
+        ("Y251002001", "stage_instantaneous"),
+    }
+    assert set(committed_station_products["availability"].cast(str)) == {"available"}
+    assert committed_station_products["published_record_start_date"].null_count() == 6
+    assert committed_station_products["published_record_end_date"].null_count() == 6
 
     expected_provider = {
         "provider_id": "fr_hubeau",

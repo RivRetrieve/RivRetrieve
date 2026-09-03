@@ -99,16 +99,19 @@ def test_france_withholds_facts_whose_sie_issuer_is_not_established() -> None:
     provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
 
     facts = {fact for item in provenance.withheld_facts for fact in item.facts}
-    assert sum(fact.startswith("source.station.") for fact in facts) == 7_323
-    assert sum(fact.startswith("source.observation.") for fact in facts) == 7_323
-    assert sum(fact.startswith("source.station_product.") for fact in facts) == 33_139
-    assert len(facts) == 47_785
+    assert sum(fact.startswith("source.station.") for fact in facts) == 7_320
+    assert sum(fact.startswith("source.observation.") for fact in facts) == 7_320
+    assert sum(fact.startswith("station_product:") for fact in facts) == 33_133
+    assert len(facts) == 47_773
     assert {item.reason for item in provenance.withheld_facts} == {"no_acquisition_record_established"}
-    assert all(
-        not fact.startswith(("source.station.", "source.station_product."))
-        for binding in provenance.fact_bindings
-        for fact in binding.facts
-    )
+    bound_station_facts = {
+        fact for binding in provenance.fact_bindings for fact in binding.facts if fact.startswith("source.station.")
+    }
+    assert bound_station_facts == {
+        "source.station.01001336.identity_location_crs",
+        "source.station.1011000101.identity_location_crs",
+        "source.station.Y251002001.identity_location_crs",
+    }
 
 
 def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
@@ -123,3 +126,24 @@ def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
     assert runtime.requested_from == (
         "https://api.meteo.lt/v1/hydro-stations/{station}/observations/historical/{YYYY-MM}",
     )
+
+
+def test_france_temperature_openapi_is_bound_without_instantaneous_inference() -> None:
+    provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
+    source = next(record for record in provenance.source_records if record.source_id == "fr_hubeau")
+    evidence = next(item for item in source.evidence if item.evidence_id == "fr_hubeau_temperature_openapi")
+    binding = next(item for item in provenance.fact_bindings if item.fact_group == "temperature_product_external")
+
+    document = evidence.recording.repository_path
+    assert binding.facts == ("source.product.temperature_api_semantics",)
+    assert binding.acquisition_id == "temperature_semantics_openapi_2026_09_02"
+    assert document == "tests/test_data/fr_hubeau_temperature_openapi.json"
+    text = Path(document).read_text(encoding="utf-8")
+    assert "API Hub'Eau - Température des cours d'eau en continu" in text
+    assert (
+        '"date_mesure_temp":{"type":"string","format":"date-time","example":"2016-12-01","description":"Date de la mesure"'
+        in text
+    )
+    assert '"heure_mesure_temp":{"type":"string","example":"16:12:36","description":"Heure de la mesure"' in text
+    assert '"resultat":{"type":"number","format":"double","description":"Résultat"' in text
+    assert "instant" not in text.lower()

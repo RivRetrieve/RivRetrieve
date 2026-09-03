@@ -63,12 +63,17 @@ def _plan_iso_instant(fetch_window: FetchWindow, declaration: WindowDeclaration)
 def _plan_date(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
     _require(
         declaration,
-        declaration.size is None and declaration.rendering is WindowRenderingVocabulary.DATE,
+        declaration.size is None
+        and declaration.rendering in (WindowRenderingVocabulary.DATE, WindowRenderingVocabulary.DATE_DMY),
         "size None and date rendering",
     )
     start = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
     stop = _datetime_from_endpoint(fetch_window, "end").replace(hour=0, minute=0, second=0, microsecond=0)
-    return (RenderedWindow(start.date().isoformat(), _render_date_stop(stop, declaration.stop_convention)),)
+    rendered_stop = _render_date_stop(stop, declaration.stop_convention)
+    if declaration.rendering is WindowRenderingVocabulary.DATE_DMY:
+        rendered_stop = datetime.fromisoformat(rendered_stop).strftime("%d/%m/%Y")
+        return (RenderedWindow(start.strftime("%d/%m/%Y"), rendered_stop),)
+    return (RenderedWindow(start.date().isoformat(), rendered_stop),)
 
 
 def _plan_year(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:

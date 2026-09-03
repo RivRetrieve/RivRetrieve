@@ -73,8 +73,8 @@ for provider_id in provider_ids:
     assert not any(name.endswith((".eml", ".xlsx")) for name in packaged_names)
 
 for provider_id, station_id, count in (
-    ("ba_fhmzbih", "1010", 298),
-    ("fr_hubeau", "01001336", 47_785),
+    ("ba_fhmzbih", "1010", 293),
+    ("fr_hubeau", "01010000", 47_773),
 ):
     try:
         rivretrieve.find(provider=provider_id, station=station_id)

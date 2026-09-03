@@ -338,12 +338,12 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ),
     # --- temperature/chronique (historical archive) ---------------------------
     ProductDefinition(
-        product_id="water_temperature_instantaneous",
+        product_id="water_temperature_reported",
         observed_property="water_temperature",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="degC",
         api_type="temperature",
         grandeur_code=None,
@@ -743,11 +743,45 @@ def build_station_products(
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
                     "product_id": d.product_id,
-                    "availability": "unknown",
-                    "availability_reason": AVAILABILITY_REASON,
+                    "availability": (
+                        "available"
+                        if (station_id, d.product_id)
+                        in {
+                            ("1011000101", "discharge_daily_mean"),
+                            ("1011000101", "discharge_daily_max"),
+                            ("1011000101", "stage_daily_max"),
+                            ("Y251002001", "discharge_instantaneous"),
+                            ("Y251002001", "stage_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
+                        }
+                        else "unknown"
+                    ),
+                    "availability_reason": (
+                        "Non-empty official source recording"
+                        if (station_id, d.product_id)
+                        in {
+                            ("1011000101", "discharge_daily_mean"),
+                            ("1011000101", "discharge_daily_max"),
+                            ("1011000101", "stage_daily_max"),
+                            ("Y251002001", "discharge_instantaneous"),
+                            ("Y251002001", "stage_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
+                        }
+                        else AVAILABILITY_REASON
+                    ),
                     "published_record_start_date": None,
                     "published_record_end_date": None,
-                    "last_catalogue_check": catalogue_date,
+                    "last_catalogue_check": date(2026, 9, 2)
+                    if (station_id, d.product_id)
+                    in {
+                        ("1011000101", "discharge_daily_mean"),
+                        ("1011000101", "discharge_daily_max"),
+                        ("1011000101", "stage_daily_max"),
+                        ("Y251002001", "discharge_instantaneous"),
+                        ("Y251002001", "stage_instantaneous"),
+                        ("01001336", "water_temperature_reported"),
+                    }
+                    else catalogue_date,
                 }
             )
 
@@ -760,11 +794,45 @@ def build_station_products(
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
                     "product_id": d.product_id,
-                    "availability": "unknown",
-                    "availability_reason": AVAILABILITY_REASON,
+                    "availability": (
+                        "available"
+                        if (station_id, d.product_id)
+                        in {
+                            ("1011000101", "discharge_daily_mean"),
+                            ("1011000101", "discharge_daily_max"),
+                            ("1011000101", "stage_daily_max"),
+                            ("Y251002001", "discharge_instantaneous"),
+                            ("Y251002001", "stage_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
+                        }
+                        else "unknown"
+                    ),
+                    "availability_reason": (
+                        "Non-empty official source recording"
+                        if (station_id, d.product_id)
+                        in {
+                            ("1011000101", "discharge_daily_mean"),
+                            ("1011000101", "discharge_daily_max"),
+                            ("1011000101", "stage_daily_max"),
+                            ("Y251002001", "discharge_instantaneous"),
+                            ("Y251002001", "stage_instantaneous"),
+                            ("01001336", "water_temperature_reported"),
+                        }
+                        else AVAILABILITY_REASON
+                    ),
                     "published_record_start_date": None,
                     "published_record_end_date": None,
-                    "last_catalogue_check": catalogue_date,
+                    "last_catalogue_check": date(2026, 9, 2)
+                    if (station_id, d.product_id)
+                    in {
+                        ("1011000101", "discharge_daily_mean"),
+                        ("1011000101", "discharge_daily_max"),
+                        ("1011000101", "stage_daily_max"),
+                        ("Y251002001", "discharge_instantaneous"),
+                        ("Y251002001", "stage_instantaneous"),
+                        ("01001336", "water_temperature_reported"),
+                    }
+                    else catalogue_date,
                 }
             )
 
