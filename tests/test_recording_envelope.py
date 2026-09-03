@@ -367,3 +367,66 @@ def test_replay_authentication_capability_uses_live_exact_origin_refusals(url: s
     replay = ReplayTransport([_V2_RECORDING])
     with pytest.raises(ValueError):
         replay.can_authenticate(url)
+
+
+def test_private_authenticated_replay_requires_exact_recorded_credential_names() -> None:
+    from rivretrieve._internal.transport import RedirectPolicy, _make_credential_transport_request
+
+    replay = ReplayTransport([_V2_RECORDING])
+    public = TransportRequest(
+        HttpMethod.GET, "https://secure.example.test/data", {"station": "A"}, {"Accept": "application/json"}
+    )
+    private = _make_credential_transport_request(
+        public,
+        {"Accept": "application/json", "Authorization": "SENTINEL-PRIVATE"},
+        ("Authorization",),
+        redirect_policy=RedirectPolicy.REFUSE,
+    )
+    with pytest.raises(UnmatchedRequestError):
+        replay._resolve(private)
+
+
+def test_private_authenticated_request_cannot_match_unauthenticated_v2_recording() -> None:
+    from rivretrieve._internal.transport import RedirectPolicy, _make_credential_transport_request
+
+    public = TransportRequest(HttpMethod.GET, "https://plain.example.test/data", headers={"Accept": "application/json"})
+    recording = RecordingEnvelope(
+        RecordedRequest(
+            HttpMethod.GET,
+            public.url,
+            ordinary_headers={"Accept": "application/json", "User-Agent": "RivRetrieve"},
+        ),
+        b'{"value":1}',
+        200,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        "application/json",
+    )
+    private = _make_credential_transport_request(
+        public,
+        {"Accept": "application/json", "X-API-Key": "SENTINEL-PRIVATE"},
+        ("X-API-Key",),
+        redirect_policy=RedirectPolicy.REFUSE,
+    )
+    with pytest.raises(UnmatchedRequestError):
+        ReplayTransport([recording])._resolve(private)
+
+
+def test_v2_recordings_differing_only_by_credential_names_are_ambiguous() -> None:
+    first = read_recording(_V2_RECORDING)
+    second = RecordingEnvelope(
+        RecordedRequest(
+            first.request.method,
+            first.request.url,
+            first.request.parameters,
+            first.request.body,
+            first.request.ordinary_headers,
+            ("Authorization",),
+        ),
+        first.content,
+        first.status_code,
+        first.retrieved_at,
+        first.content_type,
+        first.prerequisite_calls,
+    )
+    with pytest.raises(InvalidRecordingError, match="multiple recordings"):
+        ReplayTransport([first, second])

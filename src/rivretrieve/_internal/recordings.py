@@ -278,8 +278,14 @@ class ReplayTransport:
             recording = self._recordings.get(_request_key(recorded_request))
         except (TypeError, ValueError):
             recording = None
+            request_credential_names = ()
         if recording is not None:
-            return recording
+            # A public, secret-free request intentionally ignores recorded credential names.
+            # A private credential execution must prove the exact same typed channel.
+            if not request_credential_names or request_credential_names == recording.request.credential_header_names:
+                return recording
+        if request_credential_names:
+            raise UnmatchedRequestError(request)
         legacy_request = RecordedRequest(request.method, request.url, request.params, request.body)
         try:
             return self._legacy_recordings[_legacy_request_key(legacy_request)]
