@@ -682,6 +682,8 @@ def test_public_transport_request_has_no_credential_tagging_constructor_channel(
 
     assert "credential_header_names" not in inspect.signature(TransportRequest).parameters
     with pytest.raises(TypeError):
-        TransportRequest(  # ty: ignore[unknown-argument]
-            HttpMethod.GET, "https://example.test", credential_header_names=("Authorization",)
+        TransportRequest(
+            HttpMethod.GET,
+            "https://example.test",
+            credential_header_names=("Authorization",),  # ty: ignore[unknown-argument]
         )
