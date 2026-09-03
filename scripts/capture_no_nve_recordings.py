@@ -32,7 +32,11 @@ from rivretrieve._internal.engine import (  # noqa: E402
     _make_fetch_window,
 )
 from rivretrieve._internal.primitives import ProductId  # noqa: E402
-from rivretrieve._internal.providers.no_nve.config import config, window_declarations  # noqa: E402
+from rivretrieve._internal.providers.no_nve.config import (  # noqa: E402
+    NoNveSourceCoordinates,
+    config,
+    window_declarations,
+)
 from rivretrieve._internal.providers.no_nve.fetch import fetch  # noqa: E402
 from rivretrieve._internal.recordings import RecordingEnvelope, write_recording  # noqa: E402
 from rivretrieve._internal.transport import (  # noqa: E402
@@ -103,11 +107,12 @@ def api_key(environment: dict[str, str], dotenv_path: Path) -> str:
 
 def recording_name(job: CaptureJob, start: str, stop: str) -> str:
     coordinates = config().products[job.product_id].coordinates.value
-    parameter = getattr(coordinates, "parameter")
-    resolution_time = getattr(coordinates, "resolution_time")
-    return (
-        f"no_nve_{job.station_id}_{parameter}_{resolution_time}_"
-        f"{start[:10]}_{stop[:10]}.recording.json".replace("/", "_")
+    if not isinstance(coordinates, NoNveSourceCoordinates):
+        raise SystemExit(f"no_nve product has invalid source coordinates: {job.product_id}")
+    parameter = coordinates.parameter
+    resolution_time = coordinates.resolution_time
+    return f"no_nve_{job.station_id}_{parameter}_{resolution_time}_{start[:10]}_{stop[:10]}.recording.json".replace(
+        "/", "_"
     )
 
 
