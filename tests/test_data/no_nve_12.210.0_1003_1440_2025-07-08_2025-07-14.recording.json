@@ -21,9 +21,9 @@
   "response": {
     "status_code": 404,
     "content_type": "application/json; charset=utf-8",
-    "retrieved_at": "2026-09-03T21:44:14.294522Z",
-    "content_base64": "eyJ0eXBlIjoiaHR0cHM6Ly90b29scy5pZXRmLm9yZy9odG1sL3JmYzcyMzEjc2VjdGlvbi02LjUuNCIsInRpdGxlIjoiTm90IEZvdW5kIiwic3RhdHVzIjo0MDQsInRyYWNlSWQiOiIwMC04MWQzM2IwMWQ4ZDczNDQ0OGMxZmIxZmE4M2ExOTJlNy1jMmUzZjk5Yzg0Y2IzYjQ5LTAwIn0=",
-    "sha256": "2521ff9e74564a6e6e62218eff62628c5c3766987013e646bcc61c546b6c96d8",
+    "retrieved_at": "2026-09-03T22:19:32.420571Z",
+    "content_base64": "eyJ0eXBlIjoiaHR0cHM6Ly90b29scy5pZXRmLm9yZy9odG1sL3JmYzcyMzEjc2VjdGlvbi02LjUuNCIsInRpdGxlIjoiTm90IEZvdW5kIiwic3RhdHVzIjo0MDQsInRyYWNlSWQiOiIwMC1mODkxNDQzMzM0NzYzYjRiYmIyYTc2ZmVjMmI0YzAwMS1mMzgxOWJjNjk5NzFmYzQyLTAwIn0=",
+    "sha256": "47ff56c42ac78b796f4182e9594b09cf43f935cc18276e8dbc745efe4fea04dd",
     "prerequisite_calls": []
   }
 }

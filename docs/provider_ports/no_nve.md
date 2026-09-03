@@ -94,17 +94,24 @@ provenance, issues, and reprs therefore keep the header name and never a value.
 
 ## Capturing recordings
 
-The maintainer capture script is the composition root that reads the key:
+Recordings are made with the shared maintainer entry point, the composition root that reads the key
+from `NVE_API_KEY` in the environment or, failing that, from a dotenv-style file:
 
 ```bash
-uv run python scripts/capture_no_nve_recordings.py [ENV_FILE]
+uv run python -m rivretrieve._internal.record_observations --provider no_nve --station 1.200.0 \
+    --product stage_daily_mean --start 2025-07-10T00:00:00 --end 2025-07-12T00:00:00 \
+    --credential-header X-API-Key --credential-env NVE_API_KEY --credential-origin https://hydapi.nve.no \
+    --env-file .env --out-dir tests/test_data --name no_nve_1.200.0_1000_1440_2025-07-08_2025-07-14
 ```
 
-`ENV_FILE` defaults to `.env` beside the repository and is consulted only when `NVE_API_KEY` is absent
-from the environment. The script plans the same padded window the driver plans, calls the provider's
-own fetch stage through `AuthenticatedTransport(HttpClient(), …)`, and writes each interaction with
-`RecordingEnvelope.from_transport`, so a recorded request is by construction the request the port
-issues.
+The tool drives the provider through `drive()` with the engine's own padding and window planning,
+sends through `AuthenticatedTransport(HttpClient(), …)` wrapped in `RecordingTransport`, and writes
+each exchange with `RecordingEnvelope.from_transport`, so a recorded request is by construction the
+request the port issues for that public window. Recording names are
+`no_nve_<station>_<parameter>_<resolution>_<fetch start date>_<fetch stop date>`. One invocation
+per product produced the committed evidence; the two other recordings use station `12.210.0` with
+`water_temperature_daily_mean` and the same window, and station `1.200.0` with `stage_daily_mean`
+over `--start 1900-01-03T00:00:00 --end 1900-01-05T00:00:00`.
 
 Committed evidence, all captured on 2026-09-03: station `1.200.0` (Lierelv) for all nine series over
 `2025-07-08T00:00:00Z/2025-07-14T00:00:00Z`, the padded fetch window for the closed request window

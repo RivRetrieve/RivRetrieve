@@ -22,6 +22,7 @@ from typing import Self, TextIO, cast
 
 from rivretrieve._internal.transport import (
     TRANSPORT_POLICY,
+    AuthenticationCapability,
     ExecutedRequestEvidence,
     HttpMethod,
     RequestBodyShape,
@@ -312,6 +313,10 @@ class RecordingTransport:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
         self._recordings: list[RecordingEnvelope] = []
+
+    def can_authenticate(self, url: str) -> bool:
+        """Report the wrapped transport's credential scope so route selection records truthfully."""
+        return isinstance(self._transport, AuthenticationCapability) and self._transport.can_authenticate(url)
 
     def send(self, request: TransportRequest) -> TransportResponse:
         response = self._transport.send(request)
