@@ -100,3 +100,7 @@ no source feature was filtered. The previous 8,055 count is retained only as the
 | Observation store | The national HYDAT SQLite archive is compiled once into a certified store. Runtime station-product requests query only the shared validated-store reader. |
 | No canonical elevation | The canonical station shape is identity and geometry; source station fields remain in `native.parquet`. |
 | No per-variable availability | Cannot materialize `available`/`unavailable` station-product rows at catalogue-generation time. All rows are `unknown`. |
+
+## Failed compilation recovery
+
+A pre-commit failure preserves the downloaded publisher evidence and blocks an automatic retry at the same deterministic path. `rivretrieve.clear_cache(provider)` is the explicit destructive recovery action: it removes the compiled store, if any, and only the pending `publisher-artifact.download` namespace, then reports removed paths and bytes. It refuses unexpected directories and never follows symlinks.

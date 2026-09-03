@@ -15,6 +15,10 @@ This is a sanitized operational record. The source archive, generated store, run
 
 The later commit that adds this record changes the PR head only. It does not change the certified runtime closure. No runtime result is attributed to the record-only commit.
 
+## Evidence-split disposition
+
+Final review accepted the three-part evidence disposition: (1) this checksum-bound external operational certification covers the exact official national archive, (2) the committed checksum-pinned derived fixture covers deterministic compiler mechanics, and (3) committed official OGC/CSV recordings independently corroborate selected publisher facts. These parts have distinct claims. Together they do not make the 278,852,677-byte national response fresh-clone replayable, and no such claim is made.
+
 ## Official input
 
 - Requested and final URL: `https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/Hydat_sqlite3_20260717.zip`

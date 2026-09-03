@@ -46,3 +46,5 @@ The provider registry must distinguish the two kinds, because the surface differ
 bulk provider answers `download`, `cache_status` and `clear_cache`, and only a bulk
 provider can refuse a retrieval for want of a local store. Ticket #146, which owns what
 declares a built-in provider, inherits that distinction.
+
+`clear_cache(provider)` is the explicit destructive recovery boundary for bulk state. It removes the compiled store and regular files or symlinks in the composition root's exact `publisher-artifact.download` namespace, reports every removed path and total bytes, and does not follow symlinks. It refuses a directory or other unexpected entry in that namespace before deleting anything. Compilation failures preserve publisher artifacts automatically; retry therefore requires an explicit `clear_cache` call rather than silent evidence deletion.

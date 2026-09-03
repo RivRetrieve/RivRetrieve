@@ -379,6 +379,63 @@ def test_imgw_identity_rejects_nonofficial_origin_or_directory(tmp_path, url: st
         )
 
 
+def _imgw_compile_request_for_names(tmp_path: Path, names: tuple[str, ...]):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.providers.pl_imgw.bulk import DownloadedImgw, ImgwCompileRequest
+    from rivretrieve._internal.store import StoreRoot
+
+    artifacts = tuple(DownloadedImgw(tmp_path / name, _official_url(name)) for name in names)
+    first = artifacts[0]
+    return ImgwCompileRequest(
+        first.path,
+        StoreRoot(tmp_path / "store"),
+        first.url,
+        first.source_vintage,
+        datetime(2026, 9, 2, tzinfo=UTC),
+        "0.1.49",
+        artifacts,
+    )
+
+
+@pytest.mark.parametrize(
+    "names",
+    (
+        ("codz_2022_01.zip", "codz_2022_03.zip"),
+        ("codz_2021_12.zip", "codz_2022_02.zip"),
+        ("codz_2022_12.zip", "codz_2024.zip"),
+        ("codz_2023.zip", "codz_2025.zip"),
+    ),
+)
+def test_imgw_plural_compile_identity_refuses_internal_period_gap(tmp_path: Path, names: tuple[str, ...]) -> None:
+    with pytest.raises(ValueError, match="contiguous"):
+        _imgw_compile_request_for_names(tmp_path, names)
+
+
+@pytest.mark.parametrize("name", ("codz_2023_01.zip", "codz_2022.zip", "codz_2024_12.zip"))
+def test_imgw_compile_identity_refuses_wrong_publication_regime(tmp_path: Path, name: str) -> None:
+    with pytest.raises(ValueError, match="annual publication|annual artifact"):
+        _imgw_compile_request_for_names(tmp_path, (name,))
+
+
+@pytest.mark.parametrize(
+    "names",
+    (
+        ("codz_2022_01.zip",),
+        ("codz_2023.zip",),
+        ("codz_2022_01.zip", "codz_2022_02.zip"),
+        ("codz_2021_12.zip", "codz_2022_01.zip"),
+        ("codz_2022_12.zip", "codz_2023.zip"),
+        ("codz_2023.zip", "codz_2024.zip"),
+    ),
+)
+def test_imgw_compile_identity_accepts_valid_regime_and_contiguous_periods(
+    tmp_path: Path, names: tuple[str, ...]
+) -> None:
+    request = _imgw_compile_request_for_names(tmp_path, names)
+    assert len(request.publisher_artifacts) == len(names)
+
+
 def test_imgw_source_vintage_is_publisher_labelled_coverage_end() -> None:
     from rivretrieve._internal.providers.pl_imgw.bulk import DownloadedImgw
 

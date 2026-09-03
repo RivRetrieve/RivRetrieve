@@ -114,3 +114,7 @@ canonical mode accepts only that native table; live JSON and fixtures cannot pro
 | Leading spaces in pre-2023 station codes | Pre-2023 CP1250 CSV has quoted station codes like `" 149180020"`. The parser strips whitespace after CSV unquoting. |
 | Annual ZIP cut-off | Annual publication begins at 2023. Earlier years use 12 monthly ZIPs. The source plan encodes that confirmed boundary. |
 | Data lag | The 2025 annual artifact is published; the downloader selects only completed publication years and does not guess a current-year artifact. |
+
+## Failed compilation recovery
+
+A pre-commit failure preserves the downloaded publisher evidence and blocks an automatic retry at the same deterministic path. `rivretrieve.clear_cache(provider)` is the explicit destructive recovery action: it removes the compiled store, if any, and only the pending `publisher-artifact.download` namespace, then reports removed paths and bytes. It refuses unexpected directories and never follows symlinks.

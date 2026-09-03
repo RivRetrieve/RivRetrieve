@@ -80,3 +80,13 @@ def test_committed_definition_and_guideline_are_exact_untouched_publisher_bytes(
         content = (_DATA / name).read_bytes()
         assert len(content) == size
         assert hashlib.sha256(content).hexdigest() == digest
+
+
+def test_hydat_no_days_evidence_uses_portable_source_identities() -> None:
+    audit = json.loads((_DATA / "audit_result.json").read_text())
+    assert audit["source_database"] == "Hydat.sqlite3 (sole SQLite member of source_zip_url)"
+    assert audit["source_zip"] == ("https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/Hydat_sqlite3_20260717.zip")
+    forbidden = (b"/Users/", b"/home/", b"/private/tmp/")
+    evidence_files = tuple(path for path in _DATA.iterdir() if path.suffix in {".json", ".md", ".sql", ".csv"})
+    assert evidence_files
+    assert all(marker not in path.read_bytes() for path in evidence_files for marker in forbidden)

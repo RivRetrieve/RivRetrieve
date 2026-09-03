@@ -249,6 +249,11 @@ class ImgwCompileRequest:
             interval = tuple((year, month) for month in months)
             if previous is not None and interval[0] <= previous:
                 raise ValueError("IMGW publisher artifacts are out of period order or overlap")
+            if previous is not None:
+                previous_ordinal = previous[0] * 12 + previous[1]
+                next_ordinal = interval[0][0] * 12 + interval[0][1]
+                if next_ordinal != previous_ordinal + 1:
+                    raise ValueError("IMGW publisher artifact periods must be contiguous")
             if covered.intersection(interval):
                 raise ValueError("IMGW publisher artifact coverage overlaps")
             covered.update(interval)
