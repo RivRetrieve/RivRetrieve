@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "1.200.0",
+      "Parameter": "1001",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2025-07-08T00:00:00Z/2025-07-14T00:00:00Z"
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-03T21:44:05.316204Z",
+    "content_base64": "eyJjdXJyZW50TGluayI6Imh0dHBzOi8vaHlkYXBpLm52ZS5uby9hcGkvdjEvT2JzZXJ2YXRpb25zP1N0YXRpb25JZD0xLjIwMC4wJlBhcmFtZXRlcj0xMDAxJlJlc29sdXRpb25UaW1lPTE0NDAmUmVmZXJlbmNlVGltZT0yMDI1LTA3LTA4VDAwJTNBMDAlM0EwMFolMkYyMDI1LTA3LTE0VDAwJTNBMDAlM0EwMFoiLCJhcGlWZXJzaW9uIjoiMS4wIiwibGljZW5zZSI6Imh0dHBzOi8vZGF0YS5ub3JnZS5uby9ubG9kL2VuIiwiY3JlYXRlZEF0IjoiMjAyNi0wOS0wM1QyMTo0NDowNS4zMDUwMjU1WiIsInF1ZXJ5VGltZSI6IjAwOjAwOjAwLjAwNjU4NTkiLCJpdGVtQ291bnQiOjEsImRhdGEiOlt7InN0YXRpb25JZCI6IjEuMjAwLjAiLCJzdGF0aW9uTmFtZSI6IkxpZXJlbHYiLCJwYXJhbWV0ZXIiOjEwMDEsInBhcmFtZXRlck5hbWUiOiJWYW5uZsO4cmluZyIsInBhcmFtZXRlck5hbWVFbmciOiJEaXNjaGFyZ2UiLCJzZXJpZVZlcnNpb25ObyI6MSwibWV0aG9kIjoiTWVhbiIsInVuaXQiOiJtwrMvcyIsIm9ic2VydmF0aW9uQ291bnQiOjYsIm9ic2VydmF0aW9ucyI6W3sidGltZSI6IjIwMjUtMDctMDhUMTE6MDA6MDBaIiwidmFsdWUiOjAuOTUwNzA2MiwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6M30seyJ0aW1lIjoiMjAyNS0wNy0wOVQxMTowMDowMFoiLCJ2YWx1ZSI6MC43MzkyMTM2LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjozfSx7InRpbWUiOiIyMDI1LTA3LTEwVDExOjAwOjAwWiIsInZhbHVlIjowLjU3MDgyMywiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6M30seyJ0aW1lIjoiMjAyNS0wNy0xMVQxMTowMDowMFoiLCJ2YWx1ZSI6MC40NTk3NDg5LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjozfSx7InRpbWUiOiIyMDI1LTA3LTEyVDExOjAwOjAwWiIsInZhbHVlIjowLjM2ODU1MzcsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjN9LHsidGltZSI6IjIwMjUtMDctMTNUMTE6MDA6MDBaIiwidmFsdWUiOjAuMzAyMjM5NywiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6M31dfV19",
+    "sha256": "6037971de551ea5ef94f76bf18987225d29ad29ce4149a7f3ee9adb4cef2c062",
+    "prerequisite_calls": []
+  }
+}
