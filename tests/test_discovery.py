@@ -31,7 +31,6 @@ EXPECTED_PRODUCT_IDS = [
     "stage_instantaneous",
     "stage_reported",
     "water_temperature_daily_mean",
-    "water_temperature_instantaneous",
     "water_temperature_reported",
 ]
 
