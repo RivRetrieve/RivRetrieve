@@ -32,6 +32,7 @@ EXPECTED_PRODUCT_IDS = [
     "stage_reported",
     "water_temperature_daily_mean",
     "water_temperature_instantaneous",
+    "water_temperature_reported",
 ]
 
 EXPECTED_PRODUCTS_BY_PROVIDER = {
@@ -46,9 +47,9 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_daily_mean",
     ],
     "ch_foen": [
-        "discharge_instantaneous",
-        "stage_instantaneous",
-        "water_temperature_instantaneous",
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
     ],
     "cz_chmi": [
         "discharge_daily_mean",
