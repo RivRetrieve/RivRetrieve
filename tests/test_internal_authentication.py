@@ -51,6 +51,7 @@ class Scripted:
         content_type = metadata[0] if metadata else "application/json"
         response_url = metadata[1] if len(metadata) > 1 and metadata[1] is not None else request.url
         ordinary_override = metadata[2] if len(metadata) > 2 else None
+        prerequisites = metadata[3] if len(metadata) > 3 else ()
         applied_names = getattr(request, "credential_header_names", ())
         credential_names = {name.casefold() for name in applied_names}
         ordinary = {name: value for name, value in request.headers.items() if name.casefold() not in credential_names}
@@ -65,6 +66,7 @@ class Scripted:
             response_url,
             request.params or {},
             applied_credential_header_names=applied_names,
+            prerequisite_calls=prerequisites,
             executed_request=ExecutedRequestEvidence(ordinary, applied_names),
         )
 
@@ -404,3 +406,85 @@ def test_sanitized_auth_failures_emit_no_logs(caplog) -> None:
     with pytest.raises(CredentialExchangeError):
         transport.send(data_request())
     assert caplog.records == []
+
+
+def _non_data_origin_secret_request(value: str, location: str) -> TransportRequest:
+    url = "https://other.example/data"
+    params = None
+    headers = {"Accept": "application/json"}
+    body = None
+    if location == "url":
+        url += f"/{value}"
+    elif location == "parameter":
+        params = {"value": value}
+    elif location == "ordinary_header":
+        headers = {"Accept": value}
+    elif location == "body":
+        body = value
+    return TransportRequest(HttpMethod.GET, url, params, headers, body)
+
+
+@pytest.mark.parametrize("location", ["url", "parameter", "ordinary_header", "body"])
+def test_exchange_wrapper_refuses_identifier_or_password_on_non_data_origin_before_delegation(location: str) -> None:
+    transport, raw, _ = wrapper([])
+    try:
+        transport.send(_non_data_origin_secret_request(_IDENTIFIER, location))
+    except CredentialExchangeError as error:
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _IDENTIFIER not in rendered
+        assert _PASSWORD not in rendered
+        assert raw.requests == []
+        assert error.__cause__ is None and error.__context__ is None
+    else:
+        raise AssertionError("owned exchange secret crossed to another origin")
+
+
+def test_exchange_wrapper_refuses_cached_token_on_non_data_origin_before_delegation() -> None:
+    transport, raw, _ = wrapper([(_AUTH_BODY, 200), (b'{"data":1}', 200)])
+    transport.send(data_request())
+    assert len(raw.requests) == 2
+    try:
+        transport.send(_non_data_origin_secret_request(_TOKEN, "body"))
+    except CredentialExchangeError as error:
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _TOKEN not in rendered
+        assert len(raw.requests) == 2
+    else:
+        raise AssertionError("cached token crossed to another origin")
+
+
+def _token_trace_data_action():
+    from rivretrieve._internal.transport import RequestBodyShape, SecretCallTrace
+
+    trace = SecretCallTrace(
+        HttpMethod.GET,
+        "https://prerequisite.example/token",
+        {"Accept": _TOKEN},
+        None,
+        RequestBodyShape.NONE,
+        ("X-Auth",),
+        200,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        "application/json",
+    )
+    return (b'{"data":1}', 200, "application/json", None, None, (trace,))
+
+
+def test_exchange_wrapper_rejects_raw_token_echo_in_untrusted_prerequisite_trace() -> None:
+    transport, _, _ = wrapper([(_AUTH_BODY, 200), _token_trace_data_action()])
+    try:
+        transport.send(data_request())
+    except CredentialExchangeError as error:
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert error.reason is AuthenticationFailureReason.RETAINED_METADATA_UNSAFE
+        assert _TOKEN not in rendered
+        assert error.__cause__ is None and error.__context__ is None
+    else:
+        raise AssertionError("token-bearing prerequisite trace was not refused")
+
+
+def test_non_ascii_authentication_envelope_metadata_does_not_break_secret_scanning() -> None:
+    authentication_body = '{"items":{"tokenautenticacao":"TOKEN-ABC-123","label":"á"}}'.encode()
+    transport, _, _ = wrapper([(authentication_body, 200), (b'{"data":1}', 200)])
+    response = transport.send(data_request())
+    assert response.content == b'{"data":1}'

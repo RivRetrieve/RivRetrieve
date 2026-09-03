@@ -1,6 +1,8 @@
 """HTTP transport = execute : TransportRequest × TransportPolicy → TransportResponse | TransportFailure
 
 credential application : CredentialHeader* × TransportRequest → TransportResponse | sanitized TransportFailure.
+
+The trust boundary is this package's `_internal` namespace plus static provider-import tests. The private request seal prevents accidental construction and ordinary `object.__new__` forgery; it is not cryptographic isolation from hostile same-process reflection.
 """
 
 from __future__ import annotations
@@ -32,7 +34,10 @@ class RedirectPolicy(StrEnum):
     REFUSE = "refuse"
 
 
-@dataclass(frozen=True, repr=False)
+_EMPTY_HEADERS: Mapping[str, str] = MappingProxyType({})
+
+
+@dataclass(frozen=True, repr=False, init=False)
 class TransportRequest:
     method: HttpMethod
     url: str
@@ -41,14 +46,28 @@ class TransportRequest:
     body: bytes | str | None = None
     redirect_policy: RedirectPolicy = RedirectPolicy.METHOD_DEFAULT
 
-    def __post_init__(self) -> None:
-        headers, error = _validated_public_headers(self.headers)
+    def __init__(
+        self,
+        method: HttpMethod,
+        url: str,
+        params: Mapping[str, RequestParameter] | None = None,
+        headers: Mapping[str, str] = _EMPTY_HEADERS,
+        body: bytes | str | None = None,
+        redirect_policy: RedirectPolicy = RedirectPolicy.METHOD_DEFAULT,
+    ) -> None:
+        validated, error = _validated_public_headers(headers)
+        object.__setattr__(self, "method", method)
+        object.__setattr__(self, "url", url)
+        object.__setattr__(self, "params", params)
+        object.__setattr__(self, "headers", MappingProxyType(validated))
+        object.__setattr__(self, "body", body)
+        object.__setattr__(self, "redirect_policy", redirect_policy)
         if error is not None:
-            if isinstance(self.headers, dict):
-                self.headers.clear()
-            object.__setattr__(self, "headers", MappingProxyType({}))
+            if isinstance(headers, dict):
+                headers.clear()
+            headers = _EMPTY_HEADERS
+            validated = {}
             raise ValueError(error) from None
-        object.__setattr__(self, "headers", MappingProxyType(headers))
 
     def __repr__(self) -> str:
         headers = {
@@ -70,6 +89,7 @@ class _CredentialTransportRequest:
     body: bytes | str | None
     redirect_policy: RedirectPolicy
     credential_header_names: tuple[str, ...]
+    _authority_seal: object
 
     def __repr__(self) -> str:
         return (
@@ -80,24 +100,37 @@ class _CredentialTransportRequest:
         )
 
 
-def _make_credential_transport_request(
-    request: TransportRequest,
-    headers: Mapping[str, str],
-    credential_header_names: tuple[str, ...],
-    *,
-    redirect_policy: RedirectPolicy,
-) -> _CredentialTransportRequest:
-    value = object.__new__(_CredentialTransportRequest)
-    object.__setattr__(value, "method", request.method)
-    object.__setattr__(value, "url", request.url)
-    object.__setattr__(value, "params", request.params)
-    object.__setattr__(value, "headers", MappingProxyType(dict(headers)))
-    object.__setattr__(value, "body", request.body)
-    object.__setattr__(value, "redirect_policy", redirect_policy)
-    object.__setattr__(
-        value, "credential_header_names", _validated_header_names(credential_header_names, kind="credential")
-    )
-    return value
+def _credential_request_authority():
+    seal = object()
+
+    def make(
+        request: TransportRequest,
+        headers: Mapping[str, str],
+        credential_header_names: tuple[str, ...],
+        *,
+        redirect_policy: RedirectPolicy,
+    ) -> _CredentialTransportRequest:
+        value = object.__new__(_CredentialTransportRequest)
+        object.__setattr__(value, "method", request.method)
+        object.__setattr__(value, "url", request.url)
+        object.__setattr__(value, "params", request.params)
+        object.__setattr__(value, "headers", MappingProxyType(dict(headers)))
+        object.__setattr__(value, "body", request.body)
+        object.__setattr__(value, "redirect_policy", redirect_policy)
+        object.__setattr__(
+            value, "credential_header_names", _validated_header_names(credential_header_names, kind="credential")
+        )
+        object.__setattr__(value, "_authority_seal", seal)
+        return value
+
+    def is_authorized(value: object) -> bool:
+        return isinstance(value, _CredentialTransportRequest) and getattr(value, "_authority_seal", None) is seal
+
+    return make, is_authorized
+
+
+_make_credential_transport_request, _is_authorized_credential_request = _credential_request_authority()
+del _credential_request_authority
 
 
 type _ExecutableTransportRequest = TransportRequest | _CredentialTransportRequest
@@ -332,6 +365,8 @@ class HttpClient:
         self._last_attempt_started_at: float | None = None
 
     def send(self, request: _ExecutableTransportRequest) -> TransportResponse:
+        if isinstance(request, _CredentialTransportRequest) and not _is_authorized_credential_request(request):
+            raise TypeError("credential request lacks internal transport authority")
         prepared_request = self._with_policy_headers(request)
         credential_header_names = _request_credential_header_names(prepared_request)
         credential_names = {item.casefold() for item in credential_header_names}
@@ -484,10 +519,23 @@ class AuthenticatedTransport:
         return any(origin in credential.origins for credential in self.credentials)
 
     def send(self, request: TransportRequest) -> TransportResponse:
+        sanitized_request = _sanitize_if_request_contains_credentials(request, self.credentials)
+        if sanitized_request is not None:
+            request = sanitized_request
+            raise TransportFailure(request, TransportFailureReason.TERMINAL_SENDER_FAILURE, 1) from None
         origin = _request_origin(request.url)
         applicable = tuple(credential for credential in self.credentials if origin in credential.origins)
         if not applicable:
-            return self.transport.send(request)
+            result = self.transport.send(request)
+            if _response_contains_credentials(result, self.credentials):
+                result = None
+                request = _sanitized_request_for_credentials(request, self.credentials)
+                raise TransportFailure(
+                    request,
+                    TransportFailureReason.RETAINED_METADATA_UNSAFE,
+                    1,
+                ) from None
+            return result
         existing = {name.lower() for name in request.headers}
         names = tuple(value.name.lower() for value in applicable)
         if len(names) != len(set(names)):
@@ -511,6 +559,9 @@ class AuthenticatedTransport:
             names = tuple(value.name for value in applicable)
             evidence = result.executed_request or ExecutedRequestEvidence(request.headers, names)
             if evidence.credential_header_names != tuple(sorted(names, key=lambda name: (name.casefold(), name))):
+                result = None
+                evidence = ExecutedRequestEvidence({}, names)
+                request = _sanitized_request_for_credentials(request, applicable)
                 raise TransportFailure(
                     request,
                     TransportFailureReason.TERMINAL_SENDER_FAILURE,
@@ -557,7 +608,7 @@ def _send_with_credentials(
         redirect_policy=RedirectPolicy.REFUSE,
     )
     try:
-        response = transport.send(authenticated)  # ty: ignore[invalid-argument-type]
+        response = transport.send(authenticated)
         if 300 <= response.status_code < 400:
             return _CredentialSendFailure(TransportFailureReason.REDIRECT_REFUSED, 1, response.status_code)
         return response
@@ -568,7 +619,11 @@ def _send_with_credentials(
 
 
 def _request_credential_header_names(request: _ExecutableTransportRequest) -> tuple[str, ...]:
-    return request.credential_header_names if isinstance(request, _CredentialTransportRequest) else ()
+    if isinstance(request, _CredentialTransportRequest):
+        if not _is_authorized_credential_request(request):
+            raise TypeError("credential request lacks internal transport authority")
+        return request.credential_header_names
+    return ()
 
 
 def _validated_public_headers(headers: Mapping[str, str]) -> tuple[dict[str, str], str | None]:
@@ -602,26 +657,100 @@ def _sanitized_request_for_credentials(
     return _sanitized_source_request(request, forbidden_values=tuple(value._value for value in credentials))
 
 
+_PERCENT_TRIPLET = re.compile(rb"%[0-9A-Fa-f]{2}")
+_MALFORMED_PERCENT = re.compile(rb"%(?![0-9A-Fa-f]{2})")
+_MAX_PERCENT_DECODE_DEPTH = 8
+
+
+def _encoded_candidate_contains_values(
+    candidate: str | bytes,
+    values: tuple[str, ...],
+    *,
+    refuse_malformed: bool,
+) -> bool:
+    from urllib.parse import unquote_to_bytes
+
+    current = candidate.encode("utf-8") if isinstance(candidate, str) else candidate
+    secrets = tuple(value.encode("utf-8") for value in values if value)
+    for _ in range(_MAX_PERCENT_DECODE_DEPTH):
+        if any(secret in current for secret in secrets):
+            return True
+        if refuse_malformed and _MALFORMED_PERCENT.search(current):
+            return True
+        decoded = unquote_to_bytes(current.replace(b"+", b" "))
+        if decoded == current:
+            return False
+        current = decoded
+    return bool(_PERCENT_TRIPLET.search(current)) or any(secret in current for secret in secrets)
+
+
 def _request_contains_values(request: TransportRequest, values: tuple[str, ...]) -> bool:
-    text = (request.url, *(str(value) for value in (request.params or {}).values()), *request.headers.values())
-    if any(secret and secret in candidate for secret in values for candidate in text):
-        return True
-    if request.body is None:
-        return False
-    body = request.body if isinstance(request.body, bytes) else request.body.encode("utf-8")
-    return any(secret and secret.encode("ascii") in body for secret in values)
+    strict_form_candidates: tuple[str | bytes, ...] = (
+        request.url,
+        *(str(name) for name in (request.params or {})),
+        *(str(value) for value in (request.params or {}).values()),
+    )
+    content_type = next((value for name, value in request.headers.items() if name.casefold() == "content-type"), "")
+    body_is_form = content_type.partition(";")[0].strip().casefold() == "application/x-www-form-urlencoded"
+    metadata_candidates: tuple[str | bytes, ...] = (
+        request.method.value,
+        *request.headers.keys(),
+        *request.headers.values(),
+        *((request.body,) if request.body is not None and not body_is_form else ()),
+    )
+    if request.body is not None and body_is_form:
+        strict_form_candidates = (*strict_form_candidates, request.body)
+    return any(
+        _encoded_candidate_contains_values(candidate, values, refuse_malformed=True)
+        for candidate in strict_form_candidates
+    ) or any(
+        _encoded_candidate_contains_values(candidate, values, refuse_malformed=False)
+        for candidate in metadata_candidates
+    )
 
 
 def _response_contains_values(response: TransportResponse, values: tuple[str, ...]) -> bool:
-    retained = (
+    retained_text: list[str] = [
         response.url,
         response.content_type or "",
+        *(str(name) for name in response.request_parameters),
         *(str(value) for value in response.request_parameters.values()),
-        *(response.executed_request.ordinary_headers.values() if response.executed_request else ()),
+        *response.applied_credential_header_names,
+    ]
+    if response.executed_request is not None:
+        retained_text.extend(response.executed_request.ordinary_headers.keys())
+        retained_text.extend(response.executed_request.ordinary_headers.values())
+        retained_text.extend(response.executed_request.credential_header_names)
+    for call in response.prerequisite_calls:
+        retained_text.extend(
+            (
+                call.method.value,
+                call.url,
+                *call.ordinary_headers.keys(),
+                *call.ordinary_headers.values(),
+                *call.credential_header_names,
+                *(str(name) for name in (call.request_parameters or {})),
+                *(str(value) for value in (call.request_parameters or {}).values()),
+                call.request_body_shape.value,
+                str(call.status_code),
+                call.retrieved_at.isoformat(),
+                call.content_type or "",
+                call.response_disposition.value,
+            )
+        )
+    return any(
+        _encoded_candidate_contains_values(candidate, values, refuse_malformed=False)
+        for candidate in (*retained_text, response.content)
     )
-    return any(secret and secret in candidate for secret in values for candidate in retained) or any(
-        secret and secret.encode("ascii") in response.content for secret in values
-    )
+
+
+def _sanitize_if_request_contains_credentials(
+    request: TransportRequest, credentials: tuple[CredentialHeader, ...]
+) -> TransportRequest | None:
+    values = tuple(value._value for value in credentials)
+    if not _request_contains_values(request, values):
+        return None
+    return _sanitized_source_request(request, forbidden_values=values)
 
 
 def _sanitized_source_request(
@@ -631,46 +760,38 @@ def _sanitized_source_request(
     forbidden_values: tuple[str, ...] = (),
 ) -> TransportRequest:
     removed = {name.casefold() for name in (*remove_names, *_request_credential_header_names(request))}
-    headers: dict[str, str] = {}
-    for name, value in request.headers.items():
-        if (
-            name.casefold() in removed
-            or name.casefold() not in _SAFE_ORDINARY_HEADER_NAMES
-            or name.casefold() == "user-agent"
-        ):
-            continue
-        if any(secret and secret in value for secret in forbidden_values):
-            continue
-        try:
-            _safe_ordinary_headers({name: value})
-        except (TypeError, ValueError):
-            continue
-        headers[name] = value
     safe_url = (
-        request.url
-        if not any(secret and secret in request.url for secret in forbidden_values)
-        else _request_origin(request.url)
+        "https://redacted.invalid"
+        if _encoded_candidate_contains_values(request.url, forbidden_values, refuse_malformed=True)
+        else request.url
     )
-    safe_params = (
+    safe_params = {
+        name: value
+        for name, value in (request.params or {}).items()
+        if not _encoded_candidate_contains_values(str(name), forbidden_values, refuse_malformed=True)
+        and not _encoded_candidate_contains_values(str(value), forbidden_values, refuse_malformed=True)
+    }
+    safe_headers = {
+        name: value
+        for name, value in request.headers.items()
+        if name.casefold() not in removed
+        and not _encoded_candidate_contains_values(name, forbidden_values, refuse_malformed=False)
+        and not _encoded_candidate_contains_values(value, forbidden_values, refuse_malformed=False)
+    }
+    content_type = next((value for name, value in request.headers.items() if name.casefold() == "content-type"), "")
+    body_is_form = content_type.partition(";")[0].strip().casefold() == "application/x-www-form-urlencoded"
+    safe_body = (
         None
-        if request.params is None
-        else {
-            name: value
-            for name, value in request.params.items()
-            if not any(secret and secret in str(value) for secret in forbidden_values)
-        }
+        if request.body is not None
+        and _encoded_candidate_contains_values(request.body, forbidden_values, refuse_malformed=body_is_form)
+        else request.body
     )
-    body = request.body
-    if body is not None:
-        body_bytes = body if isinstance(body, bytes) else body.encode("utf-8")
-        if any(secret and secret.encode("ascii") in body_bytes for secret in forbidden_values):
-            body = None
     return TransportRequest(
         request.method,
         safe_url,
-        safe_params,
-        headers,
-        body,
+        safe_params or None,
+        safe_headers,
+        safe_body,
         request.redirect_policy,
     )
 

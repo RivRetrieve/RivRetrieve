@@ -27,7 +27,9 @@ from rivretrieve._internal.transport import (
     SecretResponseDisposition,
     TransportRequest,
     TransportResponse,
+    _CredentialTransportRequest,
     _ExecutableTransportRequest,
+    _is_authorized_credential_request,
     _request_credential_header_names,
     _request_origin,
     _safe_ordinary_headers,
@@ -258,14 +260,16 @@ class ReplayTransport:
         return _request_origin(url) in self._authenticated_origins
 
     def _resolve(self, request: _ExecutableTransportRequest) -> RecordingEnvelope:
+        if isinstance(request, _CredentialTransportRequest) and not _is_authorized_credential_request(request):
+            raise TypeError("credential request lacks internal transport authority")
+        if any(name.casefold() == "user-agent" for name in request.headers):
+            raise ValueError("Source request must not provide a User-Agent header")
         try:
             request_credential_names = _request_credential_header_names(request)
             credential_names = {name.casefold() for name in request_credential_names}
             executed_headers = {
                 name: value for name, value in request.headers.items() if name.casefold() not in credential_names
             }
-            if any(name.casefold() == "user-agent" for name in executed_headers):
-                raise ValueError("Source request must not provide a User-Agent header")
             executed_headers["User-Agent"] = TRANSPORT_POLICY.user_agent
             recorded_request = RecordedRequest(
                 request.method,
@@ -279,11 +283,12 @@ class ReplayTransport:
         except (TypeError, ValueError):
             recording = None
             request_credential_names = ()
-        if recording is not None:
-            # A public, secret-free request intentionally ignores recorded credential names.
-            # A private credential execution must prove the exact same typed channel.
-            if not request_credential_names or request_credential_names == recording.request.credential_header_names:
-                return recording
+        # A public, secret-free request intentionally ignores recorded credential names.
+        # A private credential execution must prove the exact same typed channel.
+        if recording is not None and (
+            not request_credential_names or request_credential_names == recording.request.credential_header_names
+        ):
+            return recording
         if request_credential_names:
             raise UnmatchedRequestError(request)
         legacy_request = RecordedRequest(request.method, request.url, request.params, request.body)
@@ -600,8 +605,21 @@ def _form_field_names(value: str) -> list[str]:
     for form_field in value.split("&"):
         if not form_field:
             continue
-        encoded_name = form_field.partition("=")[0].replace("+", " ")
-        names.append(re.sub(r"%([0-9a-fA-F]{2})", lambda match: chr(int(match.group(1), 16)), encoded_name))
+        name = form_field.partition("=")[0]
+        for _ in range(8):
+            if re.search(r"%(?![0-9a-fA-F]{2})", name):
+                raise ValueError("malformed percent encoding in form field name")
+            decoded = re.sub(
+                r"%([0-9a-fA-F]{2})",
+                lambda match: chr(int(match.group(1), 16)),
+                name.replace("+", " "),
+            )
+            if decoded == name:
+                names.append(name)
+                break
+            name = decoded
+        else:
+            raise ValueError("form field name exceeds percent-decoding depth")
     return names
 
 

@@ -169,7 +169,7 @@ def _provenance_with_payload_origins(
     provenance: ObservationProvenance,
     payloads: tuple[Payload, ...],
 ) -> ObservationProvenance:
-    """Bind one ordered source-call event per payload, independent of receipts."""
+    """Bind ordered prerequisite event(s), then one payload-origin event per payload, independent of receipts."""
     if (
         provenance.calls_made
         or provenance.endpoints

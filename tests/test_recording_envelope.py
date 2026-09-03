@@ -430,3 +430,63 @@ def test_v2_recordings_differing_only_by_credential_names_are_ambiguous() -> Non
     )
     with pytest.raises(InvalidRecordingError, match="multiple recordings"):
         ReplayTransport([first, second])
+
+
+@pytest.mark.parametrize("recording", [_RECORDING, _V2_RECORDING])
+def test_replay_refuses_provider_user_agent_before_any_v1_or_v2_lookup(recording: Path) -> None:
+    replay = ReplayTransport([recording])
+    loaded = read_recording(recording)
+    with pytest.raises(ValueError, match="User-Agent"):
+        replay.send(
+            TransportRequest(
+                loaded.request.method,
+                loaded.request.url,
+                loaded.request.parameters,
+                headers={"User-Agent": "RivRetrieve"},
+                body=loaded.request.body,
+            )
+        )
+
+
+def test_v2_safe_ordinary_header_spelling_is_exact_while_v1_remains_header_insensitive() -> None:
+    v2 = ReplayTransport([_V2_RECORDING])
+    with pytest.raises(UnmatchedRequestError):
+        v2.send(
+            TransportRequest(
+                HttpMethod.GET,
+                "https://secure.example.test/data",
+                {"station": "A"},
+                {"accept": "application/json"},
+            )
+        )
+    legacy = read_recording(_RECORDING)
+    response = ReplayTransport([legacy]).send(
+        TransportRequest(
+            legacy.request.method,
+            legacy.request.url,
+            legacy.request.parameters,
+            headers={"accept": "anything-safe"},
+            body=legacy.request.body,
+        )
+    )
+    assert response.content == legacy.content
+
+
+@pytest.mark.parametrize(
+    ("url", "body"),
+    [
+        ("https://example.test/data?access%255ftoken=value", None),
+        ("https://example.test/data", "access%255ftoken=value"),
+    ],
+)
+def test_recorded_request_refuses_double_encoded_secret_field_names(url: str, body: str | None) -> None:
+    with pytest.raises(ValueError, match="secret-bearing"):
+        RecordedRequest(HttpMethod.POST, url, body=body)
+
+
+def test_recorded_request_refuses_percent_encoding_beyond_fixed_depth() -> None:
+    encoded = "access_token"
+    for _ in range(9):
+        encoded = encoded.replace("%", "%25").replace("_", "%5f")
+    with pytest.raises(ValueError, match="percent-decoding depth"):
+        RecordedRequest(HttpMethod.GET, f"https://example.test/data?{encoded}=value")

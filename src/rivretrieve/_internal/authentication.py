@@ -24,6 +24,7 @@ from rivretrieve._internal.transport import (
     _credential_origin,
     _request_contains_values,
     _request_origin,
+    _response_contains_values,
     _sanitized_source_request,
 )
 
@@ -147,12 +148,17 @@ class CredentialExchangeTransport:
         return _request_origin(url) == self.spec.allowed_data_origin
 
     def send(self, request: TransportRequest) -> TransportResponse:
-        if not self.can_authenticate(request.url):
-            return self.transport.send(request)
-        sanitized_request = _sanitize_if_contains_exchange_secrets(request, self.secret_headers)
+        sanitized_request = _sanitize_if_contains_exchange_secrets(request, self.secret_headers, self._cached)
         if sanitized_request is not None:
             request = sanitized_request
             raise CredentialExchangeError(request, AuthenticationFailureReason.DATA_SEND_FAILED) from None
+        if not self.can_authenticate(request.url):
+            result = self.transport.send(request)
+            if _exchange_response_contains_secrets(result, self.secret_headers, self._cached):
+                result = None
+                request = _sanitized_exchange_request(request, self.secret_headers, self._cached)
+                raise CredentialExchangeError(request, AuthenticationFailureReason.RETAINED_METADATA_UNSAFE) from None
+            return result
         now = self.clock.monotonic()
         acquired = (
             self._cached
@@ -174,10 +180,32 @@ class CredentialExchangeTransport:
         return result
 
 
+def _exchange_secret_values(headers: tuple[CredentialHeader, ...], cached: _Acquired | None) -> tuple[str, ...]:
+    return tuple(header._value for header in headers) + (() if cached is None else (cached.token,))
+
+
+def _exchange_response_contains_secrets(
+    response: TransportResponse,
+    headers: tuple[CredentialHeader, ...],
+    cached: _Acquired | None,
+) -> bool:
+    return _response_contains_values(response, _exchange_secret_values(headers, cached))
+
+
+def _sanitized_exchange_request(
+    request: TransportRequest,
+    headers: tuple[CredentialHeader, ...],
+    cached: _Acquired | None,
+) -> TransportRequest:
+    return _sanitized_source_request(request, forbidden_values=_exchange_secret_values(headers, cached))
+
+
 def _sanitize_if_contains_exchange_secrets(
-    request: TransportRequest, headers: tuple[CredentialHeader, ...]
+    request: TransportRequest,
+    headers: tuple[CredentialHeader, ...],
+    cached: _Acquired | None,
 ) -> TransportRequest | None:
-    values = tuple(header._value for header in headers)
+    values = _exchange_secret_values(headers, cached)
     if not _request_contains_values(request, values):
         return None
     return _sanitized_source_request(request, forbidden_values=values)
@@ -292,19 +320,15 @@ def _send_acquired(
             "Authorization", f"{spec.output_scheme} {acquired.token}", (spec.allowed_data_origin,)
         )
         response = AuthenticatedTransport(transport, (bearer,)).send(request)
+        auth_response_text = (
+            () if acquired.auth_response is None else (acquired.auth_response.decode("utf-8", errors="ignore"),)
+        )
         known_text = tuple(header._value for header in secret_headers) + (
             acquired.token,
             f"{spec.output_scheme} {acquired.token}",
+            *auth_response_text,
         )
-        retained_text = (
-            response.url,
-            response.content_type or "",
-            *(response.executed_request.ordinary_headers.values() if response.executed_request else ()),
-        )
-        if any(secret in value for secret in known_text for value in retained_text):
-            return _Failure(AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, response.status_code)
-        known_bytes = tuple(value.encode("ascii") for value in known_text)
-        if any(secret in response.content for secret in known_bytes) or (
+        if _response_contains_values(response, known_text) or (
             acquired.auth_response is not None and acquired.auth_response in response.content
         ):
             return _Failure(AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, response.status_code)
