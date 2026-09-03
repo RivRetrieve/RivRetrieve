@@ -22,6 +22,9 @@ from rivretrieve._internal.transport import (
 _IDENTIFIER = "SENTINEL-IDENTIFIER"
 _PASSWORD = "SENTINEL-PASSWORD"
 _TOKEN = "SENTINEL-BEARER-TOKEN"
+_ENCODED_EXCHANGE_TOKEN_DOUBLE = (
+    "%2553%2545%254E%2554%2549%254E%2545%254C%252D%2542%2545%2541%2552%2545%2552%252D%2554%254F%254B%2545%254E"
+)
 _COLLISION_SENTINEL = "SENTINEL-CALLER-AUTHORIZATION"
 _AUTH_BODY = f'{{"items":{{"tokenautenticacao":"{_TOKEN}"}},"sentinel":"FULL-AUTH-RESPONSE"}}'.encode()
 
@@ -529,3 +532,47 @@ def test_exchange_wrapper_rejects_double_encoded_token_in_response_metadata() ->
         assert error.reason is AuthenticationFailureReason.RETAINED_METADATA_UNSAFE
     else:
         raise AssertionError("encoded token response metadata escaped")
+
+
+def _decoded_layers(value: str) -> tuple[str, ...]:
+    from urllib.parse import unquote
+
+    layers = [value]
+    for _ in range(9):
+        layers.append(unquote(layers[-1]))
+    return tuple(layers)
+
+
+@pytest.mark.parametrize("layers", [1, 2, 9])
+def test_exchange_response_refuses_encoded_extracted_token_before_trace_recording_or_provenance(
+    layers: int, tmp_path
+) -> None:
+    from rivretrieve._internal.driver import _secret_call
+    from rivretrieve._internal.recordings import RecordingEnvelope, write_recording
+
+    encoded = _encoded_token_layers(layers)
+    transport, raw, _ = wrapper([(_AUTH_BODY, 200, encoded), (b'{"data":1}', 200)])
+    try:
+        response = transport.send(data_request())
+    except CredentialExchangeError as error:
+        encoded = ""
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert error.reason is AuthenticationFailureReason.RETAINED_METADATA_UNSAFE
+        assert error.__cause__ is None and error.__context__ is None
+        assert _TOKEN not in rendered
+        assert "%53%45%4E%54" not in rendered
+        assert "%2553%2545%254E%2554" not in rendered
+        assert all(_TOKEN not in decoded for decoded in _decoded_layers(rendered))
+        assert len(raw.requests) == 1
+        retained_state = (repr(error), repr(transport), *(repr(request) for request in raw.requests))
+        assert all(all(_TOKEN not in decoded for decoded in _decoded_layers(item)) for item in retained_state)
+    else:
+        trace = response.prerequisite_calls[0]
+        recording = RecordingEnvelope.from_transport(data_request(), response)
+        recording_path = tmp_path / "escaped.recording.json"
+        write_recording(recording, recording_path)
+        provenance_event = _secret_call(trace)
+        assert encoded == trace.content_type
+        assert encoded in recording_path.read_text()
+        assert provenance_event["content_type"] == encoded
+        raise AssertionError("encoded token entered prerequisite trace, recording v2, and provenance")
