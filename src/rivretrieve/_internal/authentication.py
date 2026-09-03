@@ -273,13 +273,16 @@ def _acquire(
         except (TypeError, ValueError):
             return _Failure(AuthenticationFailureReason.TOKEN_INVALID, response.status_code)
         secrets = tuple(header._value for header in headers) + (value,)
-        retained = (
-            response.content_type or "",
-            response.url,
-            *(response.executed_request.ordinary_headers.values() if response.executed_request else ()),
-        )
-        if any(secret in item for secret in secrets for item in retained):
-            return _Failure(AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, response.status_code)
+        metadata_only_response = replace(response, content=b"")
+        if _response_contains_values(metadata_only_response, secrets):
+            status_code = response.status_code
+            metadata_only_response = None
+            response = None
+            secrets = ()
+            envelope = None
+            mapping = None
+            value = None
+            return _Failure(AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, status_code)
         trace = SecretCallTrace(
             method=spec.method,
             url=spec.exchange_url,
@@ -296,6 +299,8 @@ def _acquire(
         reason = (
             AuthenticationFailureReason.EXCHANGE_REDIRECT_REFUSED
             if error.reason.value == "redirect_refused"
+            else AuthenticationFailureReason.RETAINED_METADATA_UNSAFE
+            if error.reason.value == "retained_metadata_unsafe"
             else AuthenticationFailureReason.EXCHANGE_SEND_FAILED
         )
         return _Failure(reason, error.status_code)
