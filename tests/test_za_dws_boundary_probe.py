@@ -28,7 +28,11 @@ import polars as pl
 import pytest
 
 from rivretrieve._internal.boundary_probes import (
+    FIRST_WALL_CLOCK_TIME,
+    LAST_WALL_CLOCK_TIME,
+    READING_COUNT,
     LiveBoundaryProbe,
+    WallClockExpectation,
     run_manifest_boundary_probes,
 )
 from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
@@ -77,11 +81,24 @@ _CAPTURE_COMMANDS = (
 # Independently authored three-literal expectations: READING_COUNT, FIRST_WALL_CLOCK_TIME and
 # LAST_WALL_CLOCK_TIME per product. ``None`` means the recording does not exist yet and the
 # literals have not been authored; the test then fails rather than passing on absent evidence.
+# Template for the independent author (replace each None; times are naive ISO strings):
+#     _DAILY: {
+#         READING_COUNT: 9,
+#         FIRST_WALL_CLOCK_TIME: WallClockExpectation("2019-12-28T00:00:00", "unknown"),
+#         LAST_WALL_CLOCK_TIME: WallClockExpectation("2020-01-04T00:00:00", "unknown"),
+#     },
+#     _POINT_PRODUCTS[0]: {
+#         READING_COUNT: 123,
+#         FIRST_WALL_CLOCK_TIME: WallClockExpectation("2020-01-03T00:00:00", "unknown"),
+#         LAST_WALL_CLOCK_TIME: WallClockExpectation("2020-01-08T23:48:00", "unknown"),
+#     },
 _EXPECTATIONS: dict[ProductId, Mapping[str, object] | None] = {
     _DAILY: None,
     _POINT_PRODUCTS[0]: None,
     _POINT_PRODUCTS[1]: None,
 }
+_LITERAL_NAMES = (READING_COUNT, FIRST_WALL_CLOCK_TIME, LAST_WALL_CLOCK_TIME)
+_ZONE_LABEL = WallClockExpectation("1970-01-01T00:00:00", "unknown").time_zone
 
 
 def _require_evidence() -> None:
@@ -114,6 +131,7 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
 def _probe(product: ProductId) -> LiveBoundaryProbe:
     expectation = _EXPECTATIONS[product]
     assert expectation is not None
+    assert set(expectation) == set(_LITERAL_NAMES)
     return LiveBoundaryProbe(
         provider_id=_PROVIDER,
         product_id=product,
@@ -128,4 +146,4 @@ def test_every_south_africa_product_has_an_exact_live_replay_probe() -> None:
     observations = run_manifest_boundary_probes(load_manifest((_PROVIDER,)), tuple(_probe(p) for p in _RECORDINGS))
 
     assert len(observations) == 3
-    assert all(frame.get_column("time_zone").unique().to_list() == ["unknown"] for frame in observations)
+    assert all(frame.get_column("time_zone").unique().to_list() == [_ZONE_LABEL] for frame in observations)

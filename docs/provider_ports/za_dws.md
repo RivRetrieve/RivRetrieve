@@ -13,7 +13,8 @@ architecture changes need an ADR. The provider is a `LiveStages` adapter (`confi
 | `https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx` | Catalogue generation (maintainer-only) | None | Index of eight WMA River PDFs; see the attestation section. |
 
 The adapter sends only through the engine `HttpClient`, so every request carries the repository's
-fixed `User-Agent` and no other header.
+fixed `User-Agent` and no other header. See "Host refusal" below for why that header is not what
+the host objects to.
 
 ## Products and source coordinates
 
@@ -40,11 +41,15 @@ existing `Payload.station_products` tags and needed no engine change.
 
 A `<pre>` block holds a format legend (`POS. a-b = ...` lines), the station id on its own line,
 the line `Variable 100.00 Surface Water Level`, a header row (`DATE     D AVG F/R  QUAL` or
-`DATE     TIME             COR.LEVEL QUA           COR.FLOW  QUA`), whitespace-delimited data
-rows and the terminator `ZZZZZZZZZZZZ`. `parse` requires the legend, the requested station line,
-the variable line, the column labels it needs in the header row, and the terminator; a block that
-lacks any of these, a row whose token count differs from the header, or a non-numeric value
-raises rather than being repaired.
+`DATE     TIME             COR.LEVEL QUA           COR.FLOW  QUA`) and whitespace-delimited data
+rows. The real Daily response closes its rows with the terminator `ZZZZZZZZZZZZ`; the only real
+Point bytes end at a data row (`20200102 233600`) followed by `</pre>`, and that file may have
+been truncated by its author, so whether Point responses carry the terminator is unknown. `parse`
+requires the legend, the requested station line, the variable line and the column labels it needs
+in the header row for both DataTypes, and the terminator for Daily only; for Point it reads rows
+up to the terminator when present and to the end of the block otherwise, until a recording
+settles it. A block that lacks a required part, a row whose token count differs from the header,
+or a non-numeric value raises rather than being repaired.
 
 The Point legend's `POS.` columns for `COR.FLOW` are one character to the right of where the
 values actually sit in the real 2020 response, so rows are tokenised by whitespace rather than
@@ -63,13 +68,14 @@ Neither the HyData.aspx page, its legend, nor the archived Verified Hydrology pa
 retired port's SAST assumption is therefore not carried forward, and `to_utc` refuses this
 provider's rows until the source states its zone.
 
-## Stop convention
+## Stop convention (pending live confirmation)
 
-The two real 2020 responses kept as legacy reference both end one day before their `EndDT`:
-`Daily` with `EndDT=2020-01-31` ends at row `20200130`, and `Point` with `EndDT=2020-01-03` ends
-at `20200102 233600`. The rendered stop is therefore declared exclusive; the engine advances it by
-one day. The engine's two-day padding covers the request either way, so the declaration decides
-only how much of the padding the source answers; the boundary recordings confirm it.
+The real 2020 `Daily` response kept as legacy reference is complete (it carries the terminator)
+and ends at row `20200130` for `EndDT=2020-01-31`, so the rendered stop is declared exclusive and
+the engine advances it by one day. The legacy `Point` file also stops before its `EndDT`, but it
+may have been truncated and is not cited as evidence. The declaration awaits confirmation by the
+boundary recordings; the engine's two-day padding covers the request either way, so the
+declaration decides only how much of the padding the source answers.
 
 ## Window sizes (unverified)
 
@@ -84,17 +90,15 @@ surfaces as an unexpected HTTP status or as a no-data statement rather than as s
 |---|---|---|
 | `http_not_found` | warning | HTTP 404 for one station-window request. |
 | `source_request_failed` | warning | Transport retries exhausted for one request. |
-| `no_data_for_period` | warning | The portal answered with a plain-text no-data statement (`No data for requested period.` or `There is no row at position 0.`, both taken from the retired port and not yet observed through this adapter). |
-| `sentinel_missing_value` | info | Rows whose value field is the `99999.999` marker the Daily legend names; the rows are returned with a null value and the count, first and last time are reported. |
+| `no_data_for_period` | warning | The portal answered with the plain-text statement `No data for requested period.` and no `<pre>` block. The statement is inherited from the retired port's tests, where it appears only in invented strings; it has not been observed from the source. A second string the retired port used (`There is no row at position 0.`) had no observed source at all and was dropped. |
+| `unverified_marker_value` | warning | Rows whose value field is exactly the token `99999.999`. The Daily legend line reads `Daily avg flow rate in cubic metres/sec 99999.999`; the retired port read that as a missing-value marker, but the line is plausibly a column mask and the Point legend has no such token. The value is returned exactly as published, never nulled, and the issue names the token, its count, first and last time. |
 | `source_quality_code` | info | One per (product, quality code): the count, first and last time carrying that code. The code's meaning is source judgement and is not read. |
 
 ## Evidence state
 
 Observation evidence for this adapter is a set of recordings captured through the engine
-transport (ADR 0024). The DWS host answers HTTP 403 ("You don't have permission to access this
-resource") to every request from the porting network, including one sent through the engine
-`HttpClient` on 2026-09-03; the catalogue attestation below records the same refusal from two
-other egress points. No recording exists yet, so:
+transport (ADR 0024). The DWS host refuses the porting network (see "Host refusal"), so no
+recording exists yet and:
 
 - `tests/test_za_dws_boundary_probe.py` and `tests/test_za_dws_live.py` fail (they never skip)
   and name the missing files and the capture commands;
@@ -125,6 +129,27 @@ the three literals per product in `tests/test_za_dws_boundary_probe.py` from the
 without running the adapter, run `uv run pytest`, and delete the legacy subtree together with its
 entry in `tests/test_legacy_observation_reference_m7_s4.py`.
 
+## Host refusal (ADR 0024 consequence falsified)
+
+ADR 0024 records, in its context section, that "South Africa's 403 is a `User-Agent` header,
+which the archived legacy client already sets". That is not what was observed. On 2026-09-03,
+from the porting network, `GET https://www.dws.gov.za/Hydrology/Verified/HyData.aspx?Station=X3H001100.00&DataType=Daily&StartDT=2020-01-01&EndDT=2020-01-05&SiteType=RIV`
+returned HTTP 403 with the Apache-style body `403 Forbidden` / "You don't have permission to
+access this resource." (239 bytes, `text/html; charset=iso-8859-1`) for every variant tried:
+
+| User-Agent | IP family | Result |
+|---|---|---|
+| `Mozilla/5.0` (the retired client's header) | IPv4 and IPv6 | 403, same body |
+| a full current Chrome desktop string | IPv4 and IPv6 | 403, same body |
+| `python-requests` default | IPv4 and IPv6 | 403, same body |
+| `RivRetrieve` (engine `HttpClient`, 2026-09-03T21:41Z and 21:52Z) | default | 403, same body |
+
+Plain `http://` first redirected to `https://` and then returned the same 403. The catalogue
+attestation below records the same refusal from two other egress points on 2026-08-02. The
+`User-Agent` is therefore not the cause; the host refuses these networks. The adapter keeps the
+engine's fixed header and introduces no per-provider header escape hatch; evidence capture needs
+an egress the host accepts.
+
 ## Native Catalogue Attestation
 
 Direct DWS requests returned HTTP 403 from two independent egress points. The accepted acquisition is
@@ -152,5 +177,6 @@ that publishes nothing for a window answers with an issue rather than an error.
 | `100.00` suffix on station IDs | The `Station=` parameter requires `<id>100.00`; the page itself names the variable as "Variable 100.00 Surface Water Level". |
 | PDF-only catalogue | Station metadata lives in eight WMA PDFs; no JSON or CSV catalogue exists. |
 | Legend positions drift | The Point legend's column positions do not match the real row layout by one character; rows are tokenised, not sliced. |
-| Exclusive `EndDT` | Both real responses stop one day short of `EndDT`; declared exclusive, awaiting recorded confirmation. |
-| Host refuses the porting network | HTTP 403 for every request; evidence capture needs another egress. |
+| Exclusive `EndDT` | The complete real Daily response stops one day short of `EndDT`; declared exclusive, pending live confirmation. |
+| Terminator unknown for Point | Real Daily bytes end with `ZZZZZZZZZZZZ`; the only real Point bytes do not, and may be truncated. Required for Daily only. |
+| Host refuses the porting network | HTTP 403 for every User-Agent and IP family tried; evidence capture needs another egress. |

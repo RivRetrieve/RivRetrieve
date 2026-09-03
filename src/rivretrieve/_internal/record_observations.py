@@ -23,7 +23,18 @@ below the recorded request, and never written::
 ``--env-file`` is consulted only when the environment does not already carry the variable.
 
 One captured exchange is written as ``<name>.recording.json``; several are written as
-``<name>_p1.recording.json``, ``<name>_p2.recording.json`` and so on, in send order.
+``<name>_p1.recording.json``, ``<name>_p2.recording.json`` and so on, in send order. When the
+drive raises or any captured exchange has a non-2xx status, the same files are written under
+``<name>.failed.recording.json`` (``<name>_p1.failed.recording.json`` ...) so a non-evidence
+exchange can never be committed under the evidence name. A source whose documented answer is a
+non-2xx status (an HTTP 404 for a missing series, say) is recorded as evidence only under an
+explicit ``--expect-status 404``: exchanges with exactly that status then count as evidence, while
+any other non-2xx status or a raised drive still goes to the failed name.
+
+This entry point addresses the provider directly by id, station and product and bypasses
+catalogue selection (``rr.find``), so it can record a station-product the packaged catalogue
+does not yet list. The registered ``rivretrieve-rerecord`` entry point is its read-only
+counterpart: it inspects existing recordings and issues no request.
 """
 
 from __future__ import annotations
@@ -55,11 +66,16 @@ def record_observations(
     name: str,
     credentials: tuple[CredentialHeader, ...] = (),
     transport: Transport | None = None,
+    expected_status: int | None = None,
 ) -> tuple[Path, ...]:
     """Drive one live provider through a recording transport and write what it exchanged.
 
     ``transport`` is the live transport to record through; it defaults to the engine ``HttpClient``.
+    ``expected_status`` names one exact non-2xx status that is documented source behaviour and
+    therefore evidence; without it only 2xx exchanges are written under the evidence name.
     """
+    if expected_status is not None and (type(expected_status) is not int or not 100 <= expected_status <= 599):
+        raise FatalContractError("expected_status must be an HTTP status integer")
     (declared,) = load_manifest((provider_id,))
     observations = declared.declaration.observations
     if not isinstance(observations, LiveStages):
@@ -79,6 +95,7 @@ def record_observations(
     )
     client = HttpClient() if transport is None else transport
     recording_transport = RecordingTransport(AuthenticatedTransport(client, credentials) if credentials else client)
+    drive_raised = True
     try:
         drive(
             request,
@@ -86,22 +103,33 @@ def record_observations(
             provenance=ObservationProvenance(source="live", provider_id=public_request.provider_id),
             transport=recording_transport,
         )
+        drive_raised = False
     finally:
-        written = _write(recording_transport.recordings, out_dir, name)
+        captured = recording_transport.recordings
+        failed = drive_raised or any(
+            not 200 <= item.status_code < 300 and item.status_code != expected_status for item in captured
+        )
+        written = _write(captured, out_dir, name, failed=failed)
     return written
 
 
-def _write(recordings: tuple[RecordingEnvelope, ...], out_dir: Path, name: str) -> tuple[Path, ...]:
+def _write(recordings: tuple[RecordingEnvelope, ...], out_dir: Path, name: str, *, failed: bool) -> tuple[Path, ...]:
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
+    kind = ".failed.recording.json" if failed else ".recording.json"
     for index, recording in enumerate(recordings, start=1):
         suffix = "" if len(recordings) == 1 else f"_p{index}"
-        path = out_dir / f"{name}{suffix}.recording.json"
+        path = out_dir / f"{name}{suffix}{kind}"
         write_recording(recording, path)
         paths.append(path)
         print(
             f"{path}: HTTP {recording.status_code} {recording.content_type} at {recording.retrieved_at.isoformat()} "
             f"for {recording.request.describe()}"
+        )
+    if failed and recordings:
+        print(
+            "NOT EVIDENCE: the drive raised or a source exchange had a non-2xx status; "
+            "the exchanges above are preserved under the .failed.recording.json name and must not be committed"
         )
     if not recordings:
         print("no source exchange was issued; nothing written")
@@ -138,6 +166,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--credential-env", help="Environment variable holding the credential value.")
     parser.add_argument("--credential-origin", help="Exact origin the credential is scoped to, e.g. https://host.")
     parser.add_argument("--env-file", type=Path, help="Dotenv-style file consulted when the variable is not set.")
+    parser.add_argument(
+        "--expect-status",
+        type=int,
+        help="One exact non-2xx status that is documented source behaviour and counts as evidence, e.g. 404.",
+    )
     arguments = parser.parse_args(argv)
     credential_options = (arguments.credential_header, arguments.credential_env, arguments.credential_origin)
     if any(option is not None for option in credential_options) and not all(credential_options):
@@ -155,6 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments.out_dir,
         arguments.name,
         credentials,
+        expected_status=arguments.expect_status,
     )
     return 0
 

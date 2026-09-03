@@ -1,8 +1,9 @@
-"""record_observations credential path : CredentialHeader × fake sender → secret-free recording."""
+"""record_observations : fake sender → secret-free, correctly named evidence or failed envelopes."""
 
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,13 @@ import pytest
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.record_observations import credential_value, record_observations
 from rivretrieve._internal.recordings import RecordingTransport, read_recording
-from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient
+from rivretrieve._internal.transport import (
+    AuthenticatedTransport,
+    CredentialHeader,
+    HttpClient,
+    HttpMethod,
+    TransportRequest,
+)
 
 _SECRET = "SENTINEL-NOT-A-REAL-KEY"
 _ORIGIN = "https://hydapi.nve.no"
@@ -70,3 +77,156 @@ def test_credentialed_recording_keeps_the_header_name_and_never_the_value(tmp_pa
     assert recording.content == _EMPTY_SERIES
     assert recording.request.parameters is not None
     assert recording.request.parameters["ReferenceTime"] == "1900-01-01T00:00:00Z/1900-01-07T00:00:00Z"
+
+
+_DAILY_PAGE = (
+    b"<p><pre>Data are continuously updated and reviewed.\n"
+    b"POS.  1-8   = Date of daily flow  CCYYMMDD\n"
+    b"X3H001\nVariable 100.00 Surface Water Level\n\nDATE     D AVG F/R  QUAL\n"
+    b"20200101     1.257     1\nZZZZZZZZZZZZ\n</pre></p>"
+)
+_POINT_PAGE = (
+    b"<p><pre>Data are continuously updated and reviewed.\n"
+    b"POS.  1-8   = Date of measurement CCYYMMDD\n"
+    b"X3H001\nVariable 100.00 Surface Water Level\n"
+    b"DATE     TIME             COR.LEVEL QUA           COR.FLOW  QUA\n"
+    b"20200105 000000               0.146   1               1.230   1\n</pre></p>"
+)
+
+
+class _Clock:
+    def monotonic(self) -> float:
+        return 0.0
+
+    def utcnow(self) -> datetime:
+        return datetime(2026, 9, 4, tzinfo=UTC)
+
+
+def _client(status: int, body: bytes | None = None) -> HttpClient:
+    def sender(request, timeout_seconds):
+        if body is not None:
+            return body, status, "text/html; charset=utf-8"
+        page = _POINT_PAGE if (request.params or {}).get("DataType") == "Point" else _DAILY_PAGE
+        return page, status, "text/html; charset=utf-8"
+
+    return HttpClient(sender=sender, clock=_Clock(), sleeper=lambda seconds: None)
+
+
+def test_recording_transport_keeps_every_exchange_in_send_order() -> None:
+    transport = RecordingTransport(_client(200))
+    request = TransportRequest(HttpMethod.GET, "https://source.test/a", params={"x": "1"})
+    response = transport.send(request)
+    transport.send(TransportRequest(HttpMethod.GET, "https://source.test/b"))
+
+    assert response.content == _DAILY_PAGE
+    assert [item.request.url for item in transport.recordings] == ["https://source.test/a", "https://source.test/b"]
+    assert transport.recordings[0].request.parameters == {"x": "1"}
+    assert transport.recordings[0].request.ordinary_headers == {"User-Agent": "RivRetrieve"}
+
+
+def test_single_exchange_is_written_under_the_evidence_name_and_round_trips(tmp_path: Path) -> None:
+    written = record_observations(
+        "za_dws",
+        ["X3H001"],
+        ["discharge_daily_mean"],
+        "2019-12-30",
+        "2020-01-02",
+        tmp_path,
+        "daily",
+        transport=_client(200),
+    )
+
+    assert written == (tmp_path / "daily.recording.json",)
+    recording = read_recording(written[0])
+    assert recording.status_code == 200
+    assert recording.content == _DAILY_PAGE
+    assert dict(recording.request.parameters or {}) == {
+        "Station": "X3H001100.00",
+        "DataType": "Daily",
+        "StartDT": "2019-12-28",
+        "EndDT": "2020-01-05",
+        "SiteType": "RIV",
+    }
+
+
+def test_several_exchanges_are_numbered_in_send_order(tmp_path: Path) -> None:
+    # Daily and Point products issue one call each.
+    written = record_observations(
+        "za_dws",
+        ["X3H001"],
+        ["discharge_daily_mean", "stage_instantaneous"],
+        "2020-01-05",
+        "2020-01-06",
+        tmp_path,
+        "both",
+        transport=_client(200),
+    )
+
+    assert written == (tmp_path / "both_p1.recording.json", tmp_path / "both_p2.recording.json")
+    assert [dict(read_recording(path).request.parameters or {})["DataType"] for path in written] == ["Daily", "Point"]
+
+
+def test_non_2xx_exchange_is_preserved_under_the_failed_name(tmp_path: Path) -> None:
+    with pytest.raises(FatalContractError, match="unexpected HTTP status 403"):
+        record_observations(
+            "za_dws",
+            ["X3H001"],
+            ["discharge_daily_mean"],
+            "2019-12-30",
+            "2020-01-02",
+            tmp_path,
+            "d",
+            transport=_client(403, b"<html>Forbidden</html>"),
+        )
+
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["d.failed.recording.json"]
+    assert read_recording(tmp_path / "d.failed.recording.json").status_code == 403
+
+
+def test_refuses_providers_without_live_stages(tmp_path: Path) -> None:
+    with pytest.raises(FatalContractError, match="not a LiveStages provider"):
+        record_observations("br_ana", ["1"], ["discharge_daily_mean"], "2020-01-01", "2020-01-02", tmp_path, "x")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_expected_non_2xx_status_is_evidence_but_any_other_still_fails(tmp_path: Path) -> None:
+    # za_dws turns a 404 into an issue rather than raising, so the drive completes.
+    written = record_observations(
+        "za_dws",
+        ["X3H001"],
+        ["discharge_daily_mean"],
+        "2019-12-30",
+        "2020-01-02",
+        tmp_path / "expected",
+        "missing",
+        transport=_client(404, b"<html>Not Found</html>"),
+        expected_status=404,
+    )
+    assert written == (tmp_path / "expected" / "missing.recording.json",)
+    assert read_recording(written[0]).status_code == 404
+
+    with pytest.raises(FatalContractError, match="unexpected HTTP status 403"):
+        record_observations(
+            "za_dws",
+            ["X3H001"],
+            ["discharge_daily_mean"],
+            "2019-12-30",
+            "2020-01-02",
+            tmp_path / "other",
+            "forbidden",
+            transport=_client(403, b"<html>Forbidden</html>"),
+            expected_status=404,
+        )
+    assert sorted(path.name for path in (tmp_path / "other").iterdir()) == ["forbidden.failed.recording.json"]
+
+    with pytest.raises(FatalContractError, match="expected_status"):
+        record_observations(
+            "za_dws",
+            ["X3H001"],
+            ["discharge_daily_mean"],
+            "2020-01-01",
+            "2020-01-02",
+            tmp_path,
+            "x",
+            expected_status=42,
+        )

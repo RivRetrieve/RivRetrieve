@@ -1,6 +1,10 @@
 """Recording replay = exact lookup : RecordedInteraction* × TransportRequest → TransportResponse | UnmatchedRequest.
 
 Recording capture = RecordingTransport : Transport × TransportRequest → TransportResponse × RecordingEnvelope.
+
+The ``rivretrieve-rerecord`` entry point below only inspects existing recordings; live capture is
+performed by ``rivretrieve._internal.record_observations``, which drives a provider through
+``RecordingTransport``.
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 """za_dws parse : Payload × ProviderConfig → WithIssues[Rows].
 
 Decodes one HyData.aspx page: the ``<pre>`` block's format legend, station line, header row,
-whitespace-delimited fixed-format rows and ``ZZZZZZZZZZZZ`` terminator. Quality codes and the
-``99999.999`` marker are surfaced as issues and never interpreted.
+whitespace-delimited fixed-format rows and, for Daily, the ``ZZZZZZZZZZZZ`` terminator. Quality
+codes and the ``99999.999`` token are surfaced as issues and never interpreted.
 
 Contributed by: Thiago von Däniken
 """
@@ -30,10 +30,18 @@ _LEGEND_LINE = re.compile(r"^POS\.\s+\d+-\d+\s+=\s+")
 _VARIABLE_LINE = "Variable 100.00 Surface Water Level"
 _HEADER_PREFIX = "DATE"
 _TERMINATOR = "ZZZZZZZZZZZZ"
-# The Daily format legend reads "Daily avg flow rate in cubic metres/sec 99999.999".
-_SENTINEL_TOKEN = "99999.999"
-# Plain-text bodies the portal serves without a <pre> block when it holds nothing for a window.
-_NO_DATA_STATEMENTS = ("No data for requested period.", "There is no row at position 0.")
+# The real 2020 Daily response closes its rows with the terminator; the only real Point bytes
+# (a legacy file that may be truncated) end at a data row, so whether Point responses carry
+# the terminator is unknown until a recording settles it.
+_TERMINATOR_REQUIRED: dict[ZaDwsDataType, bool] = {"Daily": True, "Point": False}
+# The Daily legend line reads "Daily avg flow rate in cubic metres/sec 99999.999". The retired
+# port read that token as a missing-value marker; that meaning is unverified (the line may be a
+# column mask, and the Point legend has no such token), so a value equal to it is returned as
+# published and reported.
+_MARKER_TOKEN = "99999.999"
+# Plain-text body the retired port expected without a <pre> block when the portal holds nothing
+# for a window. It has not been observed through this adapter.
+_NO_DATA_STATEMENTS = ("No data for requested period.",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,10 +91,12 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
         if any(statement in text for statement in _NO_DATA_STATEMENTS):
             return WithIssues(_empty(), (_no_data(station, tuple(columns), route.data_type),))
         raise FatalContractError("za_dws response has neither a <pre> data block nor a recognised no-data statement")
-    data_lines = _data_lines(block.group(1).splitlines(), station, tuple(columns.values()))
+    data_lines = _data_lines(
+        block.group(1).splitlines(), station, tuple(columns.values()), _TERMINATOR_REQUIRED[route.data_type]
+    )
 
     rows: list[dict[str, object]] = []
-    sentinels: dict[ProductId, _Tally] = {}
+    markers: dict[ProductId, _Tally] = {}
     qualities: dict[tuple[ProductId, str], _Tally] = {}
     for line in data_lines:
         tokens = line.split()
@@ -98,15 +108,12 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
         for _, product in payload.station_products:
             column = columns[product]
             raw = tokens[layout.value_tokens[column]]
-            value: float | None
-            if raw == _SENTINEL_TOKEN:
-                value = None
-                sentinels.setdefault(product, _Tally()).add(time)
-            else:
-                try:
-                    value = float(raw)
-                except ValueError as error:
-                    raise FatalContractError(f"za_dws {column} field is not numeric: {line!r}") from error
+            try:
+                value = float(raw)
+            except ValueError as error:
+                raise FatalContractError(f"za_dws {column} field is not numeric: {line!r}") from error
+            if raw == _MARKER_TOKEN:
+                markers.setdefault(product, _Tally()).add(time)
             qualities.setdefault((product, tokens[layout.quality_tokens[column]]), _Tally()).add(time)
             rows.append(
                 {"station_id": station, "product_id": product, "time": time, "value": value, "time_zone": "unknown"}
@@ -115,7 +122,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     frame = pl.DataFrame(rows, schema=RowsSchema.polars_schema)
     validate_catalogue(frame, RowsSchema, on_issue="raise")
     issues = (
-        *(_sentinel_issue(station, product, tally) for product, tally in sentinels.items()),
+        *(_marker_issue(station, product, tally) for product, tally in markers.items()),
         *(_quality_issue(station, product, code, tally) for (product, code), tally in qualities.items()),
     )
     return WithIssues(value=frame, issues=issues)
@@ -140,7 +147,9 @@ def _text(content: bytes) -> str:
         raise FatalContractError("za_dws response is not UTF-8 text") from error
 
 
-def _data_lines(lines: list[str], station: str, columns: tuple[ZaDwsColumn, ...]) -> list[str]:
+def _data_lines(
+    lines: list[str], station: str, columns: tuple[ZaDwsColumn, ...], terminator_required: bool
+) -> list[str]:
     stripped = [line.strip() for line in lines]
     if not any(_LEGEND_LINE.match(line) for line in stripped):
         raise FatalContractError("za_dws <pre> block has no format legend")
@@ -159,7 +168,9 @@ def _data_lines(lines: list[str], station: str, columns: tuple[ZaDwsColumn, ...]
     try:
         terminator_index = stripped.index(_TERMINATOR, header_index + 1)
     except ValueError as error:
-        raise FatalContractError(f"za_dws <pre> block is not closed by the {_TERMINATOR} terminator") from error
+        if terminator_required:
+            raise FatalContractError(f"za_dws <pre> block is not closed by the {_TERMINATOR} terminator") from error
+        terminator_index = len(stripped)
     return [line for line in stripped[header_index + 1 : terminator_index] if line]
 
 
@@ -198,12 +209,15 @@ def _tally_details(station: str, product: ProductId, tally: _Tally) -> dict[str,
     }
 
 
-def _sentinel_issue(station: str, product: ProductId, tally: _Tally) -> Issue:
+def _marker_issue(station: str, product: ProductId, tally: _Tally) -> Issue:
     return Issue(
-        severity="info",
-        code=ZaDwsObservationIssueCodes.SENTINEL_MISSING_VALUE,
-        message=f"DWS published the {_SENTINEL_TOKEN} marker instead of a value; rows carry a null value",
-        details={**_tally_details(station, product, tally), "marker": _SENTINEL_TOKEN},
+        severity="warning",
+        code=ZaDwsObservationIssueCodes.UNVERIFIED_MARKER_VALUE,
+        message=(
+            f"DWS published the token {_MARKER_TOKEN}, which the Daily legend names and the retired port read "
+            "as a missing-value marker; the meaning is unverified, so the value is returned exactly as published"
+        ),
+        details={**_tally_details(station, product, tally), "token": _MARKER_TOKEN},
         provider_id=PROVIDER_ID,
     )
 

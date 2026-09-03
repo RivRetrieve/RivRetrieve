@@ -95,3 +95,15 @@ mechanical enforcement, and its failure mode — an author who ran the port befo
 expectation — is invisible in the diff. The three-literal limit is the mitigation: it keeps
 each expectation small enough that a wrong one is visible to a reviewer rather than buried
 in a 2,500-line provider test, which is what the two existing ports look like today.
+
+### Falsified consequence: South Africa's 403 is not a User-Agent header
+
+On 2026-09-03 the `za_dws` port sent `HyData.aspx` requests from its network with the archived
+legacy client's `Mozilla/5.0` header, a full current Chrome header, the python-requests default
+and the engine's fixed `RivRetrieve` header, over IPv4 and IPv6, and every one returned HTTP 403
+with the same Apache "You don't have permission to access this resource" body; the catalogue
+acquisition had already met the same refusal from two other egress points on 2026-08-02. The
+sentence in the context above attributing the 403 to a missing `User-Agent` is therefore
+falsified: the host refuses those networks, not that header. The rule stands unchanged. Recording
+the South African evidence requires an egress the host accepts, and no per-provider header
+escape hatch is introduced; the exact attempts are recorded in `docs/provider_ports/za_dws.md`.

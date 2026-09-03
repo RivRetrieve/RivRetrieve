@@ -73,10 +73,11 @@ _CONFIG = ProviderConfig(
     cache=None,
 )
 
-# The two real 2020 responses kept as legacy reference both end one day before their EndDT
-# (EndDT=2020-01-31 → last daily row 20200130; EndDT=2020-01-03 → last point row 20200102),
-# so the rendered stop is declared exclusive. The chunk sizes restate the retired port's
-# unverified claims (Daily ≈ 20 years, Point ≈ 1 year per request); see the port notes.
+# The real 2020 Daily response kept as legacy reference (complete: it carries the terminator)
+# ends at row 20200130 for EndDT=2020-01-31, so the rendered stop is declared exclusive,
+# pending live confirmation by the boundary recording. The legacy Point file may be truncated
+# and is not evidence. The chunk sizes restate the retired port's unverified claims
+# (Daily ≈ 20 years, Point ≈ 1 year per request); see the port notes.
 _DAILY_WINDOW = WindowDeclaration(
     granularity=WindowGranularity("n-year-chunk"),
     rendering=WindowRenderingVocabulary.DATE,
