@@ -289,8 +289,6 @@ class ReplayTransport:
             not request_credential_names or request_credential_names == recording.request.credential_header_names
         ):
             return recording
-        if request_credential_names:
-            raise UnmatchedRequestError(request)
         legacy_request = RecordedRequest(request.method, request.url, request.params, request.body)
         try:
             return self._legacy_recordings[_legacy_request_key(legacy_request)]
