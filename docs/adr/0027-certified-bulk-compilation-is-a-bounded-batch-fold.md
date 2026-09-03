@@ -1,0 +1,23 @@
+# ADR-0027: Certified bulk compilation is a bounded batch fold
+
+## Status
+
+Accepted
+
+## Context
+
+The 2026-07-17 HYDAT release contains 2,620,096 monthly source rows; calendar-correct expansion produces 79,811,984 daily rows. The original compiler first built every daily row as a Python dictionary, then constructed one DataFrame. Certification then materialised the expected frame and the complete staged store together. The real artifact exceeded 14 GB RSS before its first staging write. This is not an exceptional-source concern: atomic publication and exact read-back remain shared store semantics.
+
+## Decision
+
+`compile_store_batches` is a fold over an ordered `ObservationBatchStream`. The stream declares independently scanned totals for raw publisher records and expected output contributions, plus a SHA-256 inventory fingerprint over ordered exact source-unit identities and cardinalities. Each non-empty batch carries native rows, unique publisher-record inventory units, and emitted-row contributions. A unit binds an exact record or contiguous ordinal range, states its raw-record count and one-to-many expected-row count, and may receive bounded contributions from later product-sorted batches. The shared writer validates the engine schema, retained source schema, value states, unique inventory identities, exact agreement with the independent identity fingerprint, complete raw-record coverage, and expected-versus-actual output contributions. HYDAT identities bind table and SQLite rowid. IMGW identities bind artifact position, member, logical ordinal, and a digest of the exact decoded logical record. Streamed partitions are strictly increasing by product and year. Station identifiers are bytewise nondecreasing within each partition. Exact duplicate observation rows are preserved; the shared writer never deduplicates.
+
+The writer appends bounded batches as deterministic Parquet row groups to the partition's one `part-0.parquet`, records exact counts, and writes the manifest only after exhausting the stream. A disk-backed uniqueness journal avoids unbounded source-unit identity memory and is removed before validation.
+
+`certify_store_batches` decodes the unchanged publisher artifact twice. The first pass writes the staged store. The second pass compares every physical row and native field exactly against its corresponding Parquet row group. Validation reads Parquet in bounded Arrow batches. Only a complete exact second pass permits the atomic swap and artifact deletion. Before the explicit commit point, rollback attempts artifact restoration and previous-store restoration independently and reports every restoration failure. The commit point occurs only after the destination validates and all original artifacts are unlinked while rollback links remain intact. Cleanup after that point cannot safely reverse publication: a typed `StorePostCommitCleanupError` names non-secret residue paths, keeps the new destination authoritative, and requires retry or manual removal. Certification never reports success while residue remains.
+
+Provider decoders own source iteration and may produce a bounded batch only after decoding complete source units. HYDAT `NO_DAYS` is retained without interpretation: the exact 2026-07-17 source contains sparse level months whose non-null cells occur after that numeric count, plus 58,975 flow and 133,490 level months where it differs from the non-null-cell count. HYDAT therefore emits every valid calendar-day cell and rejects any non-null value or symbol cell beyond the calendar month. Canada queries each HYDAT table in product/year/station/month order and bounds batches by monthly source rows. Poland scans exact official artifacts incrementally, spills station-sort runs to private temporary SQLite storage, and merges them one product/year partition at a time. Official artifact periods must be ordered and disjoint. Overlap is refused as ambiguous; within-artifact duplicate multiplicity remains unchanged. Product and calendar semantics remain provider facts; partitioning, writing, validation, certification, and publication remain shared.
+
+## Consequences
+
+Shared-writer peak memory is proportional to one source batch and one Parquet row group, not national history. A provider may use bounded external sorting to establish deterministic cross-artifact order; it may not materialize the complete historical source in memory. Certification remains field-for-field and duplicate-sensitive without probabilistic hashes. A provider whose source cannot produce deterministic product/year/station order needs an explicit shared external-sort capability; it may not sort an unbounded history privately or weaken certification.

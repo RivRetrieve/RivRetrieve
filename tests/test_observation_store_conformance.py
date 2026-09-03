@@ -295,18 +295,22 @@ def test_manifest_schema_is_valid_draft_2020_12() -> None:
     schema = _load_json(SCHEMA_PATH)
     Draft202012Validator.check_schema(schema)
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-    assert schema["$id"] == "https://rivretrieve.org/schemas/observation-store-manifest-1.json"
+    assert schema["$id"] == "https://rivretrieve.org/schemas/observation-store-manifest-2.json"
     assert schema["required"] == [
         "format_version",
+        "provider_id",
         "compiler_version",
         "built_at",
         "source_vintage",
-        "publisher_artifact",
         "source_schema",
         "source_column_dispositions",
         "partition_row_counts",
     ]
-    assert schema["properties"]["format_version"]["const"] == 1
+    assert schema["oneOf"] == [
+        {"required": ["publisher_artifact"], "not": {"required": ["publisher_artifacts"]}},
+        {"required": ["publisher_artifacts"], "not": {"required": ["publisher_artifact"]}},
+    ]
+    assert schema["properties"]["format_version"]["const"] == 2
     assert schema["properties"]["built_at"]["pattern"] == (
         r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$"
     )
@@ -528,7 +532,7 @@ def _repair(name: str, store: Path) -> None:
     elif name == "invalid_manifest_type":
         manifest["compiler_version"] = valid_manifest["compiler_version"]
     elif name == "invalid_manifest_version":
-        manifest["format_version"] = 1
+        manifest["format_version"] = 2
     elif name == "invalid_manifest_checksum":
         manifest["publisher_artifact"]["sha256"] = valid_manifest["publisher_artifact"]["sha256"]
     elif name == "invalid_manifest_fingerprint":

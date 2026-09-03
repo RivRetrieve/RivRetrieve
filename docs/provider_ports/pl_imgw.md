@@ -10,13 +10,9 @@
 | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/codz_{year}.zip` | Observation retrieval — annual ZIP (2023+) | None | One file per year; ~1.5 MB compressed, ~20 MB uncompressed. Contains all stations for the year. |
 | `https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/{year}/codz_{year}_{month:02d}.zip` | Observation retrieval — monthly ZIP (pre-2023) | None | 12 files per year; ~2 MB each. Same schema as annual ZIP. Annual ZIPs do not exist for 2022 and earlier. |
 
-## Historical decision: Local Parquet cache
+## Bulk observation store
 
-The legacy Python `PolandFetcher` (Zarr), R `adapter_PL_IMGW.R` (WIDE master RDS), and the retired RivRetrieve observation pipeline built a local all-time cache. The cache implementation remains under `_internal` as the second runtime HTTP carve-out for the future provider port owned by ticket #17.
-
-The current `pl_imgw` provider is catalogue-only. `rr.provider("pl_imgw").observations(...)`, `row_annotation_schema()`, and `series_annotation_schema()` raise `ObservationsUnavailableError`. Its provider handle does not expose `cache_status()` or `refresh_cache()`. This is deliberate: without the retired retrieval reader, rebuilding every IMGW ZIP from 1951 would produce a Parquet cache that no supported call can query.
-
-The retained private `ImgwCacheClient` implementation still contains `cache_path_override`, `ensure_cache()`, `cache_status()`, and `refresh_cache()` so ticket #17 can use or replace the implementation when PL IMGW is ported to the engine stage contract. These are internal implementation details, not supported provider-handle methods.
+The active `BulkStore` adapter downloads complete daily archives only after the public consent and disk gate. Publication years 1951 through 2022 use twelve hydrological-month artifacts; years from 2023 use one annual artifact. The shared compiler records every exact artifact URL and checksum, folds the deterministic union into one certified store, publishes once atomically, and deletes downloads only after complete read-back succeeds. Runtime observation requests query only the validated local store.
 
 ## Catalogue Mapping
 
@@ -71,14 +67,9 @@ The parser uses the calendar month (column 10) directly. Calendar year = hydrolo
 
 ## Timestamps
 
-IMGW provides year/month/day integers only — no time, no timezone. Follows the established `date_only_timestamp` pattern (same as `lt_lhmt`, `fr_hubeau`, `br_ana`, `ca_eccc`):
+IMGW publishes date fields without a time-zone or day-definition declaration. Unlike the live adapters that use the established `date_only_timestamp` convention, the compiled bulk store retains naive midnight wall-clock values with `time_zone = "unknown"`. It never infers UTC or `Europe/Warsaw`.
 
-- Interpreted as UTC midnight `T00:00:00Z`
-- `warning`-severity `date_only_timestamp` issue emitted per parser call
-- Series annotation: `timezone_source = "date_only_utc_midnight"`, `date_only_timestamp_flag = "true"`
-- Row annotation: `timezone_source`, `date_only_timestamp_flag` on every row
-
-True local timezone is undocumented. Likely Central European Time (CET/CEST, UTC+1/+2), but IMGW does not state this.
+Native status and sentinel-bearing cells remain exact text in the store and opt-in store-excerpt receipts. Sentinel parsing determines only `value` and `value_state`; no source judgement enters the five-column canonical result.
 
 ## Hydrological Year Convention
 
@@ -116,10 +107,14 @@ canonical mode accepts only that native table; live JSON and fixtures cannot pro
 
 | Issue | Detail |
 |---|---|
-| Two CSV format eras | 2023+ is UTF-8 BOM + semicolon; pre-2023 is CP1250 + comma + quoting. Parser tries UTF-8-sig first (BOM detection), then CP1250, then latin-1. |
+| Two CSV format eras | 2023+ is UTF-8 BOM + semicolon; pre-2023 is CP1250 + comma + quoting. Parser accepts UTF-8 only when a BOM is present; otherwise it decodes CP1250. No permissive Latin-1 fallback exists. |
 | Publisher geometry is partial and coarser | `lista_stacji_hydro.csv` has 1,301 identities but no coordinates. `kody_stacji.csv` covers 784 packaged stations and the usable API subset covers 779, leaving 517 without publisher-published coordinates. The DMS route has zero exact recovered pairs, 779 within 1.5 arc-seconds on both axes, and five accepted disagreements; worst is `154180190` at approximately 0.0053675° on one axis. Recovered values remain authoritative. |
-| ZIP contains all stations | Every download fetches data for all ~900+ stations. The parser filters by `station_ids` immediately after decoding, discarding unrequested station rows. Memory usage peaks at ~20 MB per ZIP before filtering. |
-| Sentinel masking | Water level 9999, discharge 99999.999/999, temperature 99.9 → `None`. The parser rounds to 3 decimal places before sentinel comparison to avoid floating-point near-miss. |
+| ZIP contains all stations | Every download fetches data for all ~900+ stations. The compiler retains every station row and queries filter only at the shared validated-store boundary. |
+| Sentinel masking | Water level 9999, discharge 99999.999/999, temperature 99.9 → `None`. Sentinel comparison uses exact decoded numeric equality; near-sentinel published values remain values. |
 | Leading spaces in pre-2023 station codes | Pre-2023 CP1250 CSV has quoted station codes like `" 149180020"`. The parser strips whitespace after CSV unquoting. |
-| Annual ZIP cut-off | Only 2023 and 2024 have `codz_{YYYY}.zip`. Earlier years use 12 monthly ZIPs. The client selects strategy based on `year >= ANNUAL_ZIP_FROM_YEAR`. |
-| Data lag | Latest available data is 2024. 2025/2026 directories return 404. |
+| Annual ZIP cut-off | Annual publication begins at 2023. Earlier years use 12 monthly ZIPs. The source plan encodes that confirmed boundary. |
+| Data lag | The 2025 annual artifact is published; the downloader selects only completed publication years and does not guess a current-year artifact. |
+
+## Failed compilation recovery
+
+A pre-commit failure preserves the downloaded publisher evidence and blocks an automatic retry at the same deterministic path. `rivretrieve.clear_cache(provider)` is the explicit destructive recovery action: it removes the compiled store, if any, and only the pending `publisher-artifact.download` namespace, then reports removed paths and bytes. It refuses unexpected directories and never follows symlinks.

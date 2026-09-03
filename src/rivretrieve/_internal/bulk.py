@@ -31,6 +31,10 @@ class BulkOperationsUnavailableError(FatalContractError):
     """Raised when a bulk-only verb is applied to a publisher-payload provider."""
 
 
+class BulkArtifactCleanupRefusedError(FatalContractError):
+    """Raised when the pending-download namespace contains an unsafe entry."""
+
+
 class InsufficientDiskSpaceError(FatalContractError):
     """A pre-download refusal carrying both sides of the space comparison."""
 
@@ -50,6 +54,7 @@ class CacheClearResult:
     path: Path
     existed: bool
     bytes_freed: int
+    removed_paths: tuple[Path, ...]
 
 
 class FreeSpaceProbe(Protocol):
@@ -76,16 +81,45 @@ def cache_status(provider: str) -> StoreStatus:
 
 
 def clear_cache(provider: str) -> CacheClearResult:
-    """Delete a bulk provider's compiled store and report the exact loss."""
+    """Delete the compiled store and exact pending-download namespace.
+
+    This explicit destructive verb removes preserved failed-compilation inputs so a
+    later ``download()`` can retry. It never follows symlinks, never removes an
+    unrelated sibling, and refuses a real directory in the pending-file namespace
+    before deleting either the store or any pending input.
+    """
     provider_id, _config, root, _operations = _bulk_registration(provider)
     path = Path(root)
-    existed = path.exists() or path.is_symlink()
-    bytes_freed = _tree_size(path) if existed else 0
-    if path.is_symlink() or path.is_file():
-        path.unlink(missing_ok=True)
-    elif path.is_dir():
-        shutil.rmtree(path)
-    return CacheClearResult(provider_id, path, existed, bytes_freed)
+    pending = _pending_download_paths(path.parent)
+    store_existed = path.exists() or path.is_symlink()
+    removed_paths = *((path,) if store_existed else ()), *pending
+    bytes_freed = sum(_tree_size(item) for item in removed_paths)
+    for item in removed_paths:
+        if item.is_symlink() or item.is_file():
+            item.unlink()
+        elif item.is_dir():
+            shutil.rmtree(item)
+    return CacheClearResult(provider_id, path, bool(removed_paths), bytes_freed, removed_paths)
+
+
+def _pending_download_paths(work: Path) -> tuple[Path, ...]:
+    if work.is_symlink():
+        raise BulkArtifactCleanupRefusedError(f'Cannot clear symlinked pending-download namespace: "{work}"')
+    if not work.is_dir():
+        return ()
+    base_name = "publisher-artifact.download"
+    candidates = tuple(
+        sorted(
+            (item for item in work.iterdir() if item.name == base_name or item.name.startswith(f"{base_name}-")),
+            key=lambda item: item.name.encode("utf-8"),
+        )
+    )
+    for item in candidates:
+        if item.is_symlink() or item.is_file():
+            continue
+        kind = "unexpected directory" if item.is_dir() else "unexpected filesystem entry"
+        raise BulkArtifactCleanupRefusedError(f'Cannot clear {kind} in pending-download namespace: "{item}"')
+    return candidates
 
 
 def _download(
@@ -108,7 +142,7 @@ def _download(
     work.mkdir(parents=True, exist_ok=True)
     artifact = work / "publisher-artifact.download"
     client = client_factory()
-    downloaded = operations.download(
+    downloaded_value = operations.download(
         BulkDownloadRequest(
             destination=artifact,
             today=today,
@@ -117,14 +151,14 @@ def _download(
         )
     )
 
+    downloaded = downloaded_value if isinstance(downloaded_value, tuple) else (downloaded_value,)
+
     from rivretrieve import __version__
 
     return operations.compile(
         BulkCompileRequest(
-            publisher_artifact=downloaded.path,
+            publisher_artifacts=downloaded,
             destination=root,
-            publisher_url=downloaded.url,
-            source_vintage=downloaded.source_vintage,
             built_at=datetime.now(UTC),
             compiler_version=__version__,
         )

@@ -44,7 +44,7 @@ provider-native columns are permitted and are governed by source-column disposit
 The required physical names are exactly `station_id`, `time`, `time_zone`, `value`, and
 `value_state`; `source_time` and `native_value` are not format column names.
 
-Revision `1` fixes the physical encoding of the engine-facing columns: they MUST be the
+Revision `2` fixes the physical encoding of the engine-facing columns: they MUST be the
 first five fields of the Parquet schema, in the order shown in the table above;
 `station_id`, `time_zone`, and `value_state` MUST be UTF-8 string fields; `time` MUST be a
 microsecond-precision timestamp without a time zone; and `value` MUST be a 64-bit binary
@@ -99,8 +99,16 @@ closure mechanically.
 
 Provider-native columns retain the source's vocabulary and values. When a native name
 collides with an engine-facing column or cannot be represented faithfully as a Parquet
-field name, revision `1` compilation MUST refuse the source schema, as decided under
+field name, revision `2` compilation MUST refuse the source schema, as decided under
 **Milestone 2 decisions**; it MUST NOT silently rename, overwrite, or drop the column.
+
+## Bounded certified compilation
+
+A large publisher source is consumed as an ordered `ObservationBatchStream`. Every batch is checked against the complete engine and retained-source schema before its deterministic Parquet row group is written. Product/year partitions are strictly increasing and station identifiers are bytewise nondecreasing within a partition. The writer preserves observation duplicates. A provider may remove only exact full-row overlap when its declared publication artifacts overlap.
+
+Source-unit names are checked for global uniqueness with a temporary disk-backed journal. Accepted and emitted counts must agree in each batch and globally. The journal is not part of the published store.
+
+Certification performs a second bounded decode of the unchanged publisher artifacts and compares every physical field exactly with the staged Parquet row groups. Manifest validation also scans required physical fields in bounded Arrow batches. Only simultaneous complete source and store exhaustion permits atomic publication and artifact deletion.
 
 ## Native representation and the read boundary
 
@@ -124,12 +132,13 @@ property spelling. It MUST require exactly one value for each semantic field bel
 
 | Semantic field | Canonical form and meaning |
 |---|---|
-| Format version | The positive integer format revision. This contract is revision `1`; an implementation recognises only revisions it explicitly supports. |
+| Format version | The positive integer format revision. This contract is revision `2`; an implementation recognises only revisions it explicitly supports. |
+| Provider identity | The exact non-empty provider id whose declared bulk configuration and unit conversion may read the store. Validation MUST refuse a different requested provider before reading rows. |
 | Compiler version | A non-empty PEP 440 version string identifying the RivRetrieve compiler that produced the store. |
 | UTC build time | An RFC 3339 UTC instant in `YYYY-MM-DDTHH:MM:SS.ffffffZ` form, recording completion of the staged build before publication. |
-| Source vintage | A publisher-dated release date in `YYYY-MM-DD` form. It is a fact supplied by the publisher, never a freshness judgement or filesystem timestamp. |
-| Publisher-artifact URL | The absolute `https` URL actually used to retrieve the artifact, retained without semantic rewriting. |
-| Publisher-artifact checksum | `sha256:` followed by exactly 64 lowercase hexadecimal digits for the complete artifact bytes compiled. |
+| Source vintage | A source-dated release or coverage-end date in `YYYY-MM-DD` form, according to the provider declaration. It is derived from an exact publisher label, never from retrieval time, build time, freshness judgement, or filesystem timestamp. |
+| Publisher-artifact URLs | Each absolute `https` URL actually used to retrieve an artifact, retained in deterministic download order without semantic rewriting. A single-artifact store uses `publisher_artifact`; a multi-artifact store uses `publisher_artifacts`. |
+| Publisher-artifact checksums | For every URL, `sha256:` followed by exactly 64 lowercase hexadecimal digits for those complete artifact bytes. |
 | Source-schema fingerprint | `sha256:` followed by exactly 64 lowercase hexadecimal digits for the compiler's deterministic canonical encoding of the declared ordered source schema, including source column names and source data types. |
 | Per-partition row counts | A JSON object whose keys are canonical partition identifiers and whose values are non-negative JSON integers equal to the Parquet row counts. |
 | Source-column dispositions | The complete list of disposition records specified above. |
@@ -137,7 +146,7 @@ property spelling. It MUST require exactly one value for each semantic field bel
 The source-schema fingerprint MUST cover both the ordered source column names and the
 source data types; hashing column names alone is nonconforming.
 
-Revision `1` fixes that canonical encoding: the ordered `columns` list is serialised as
+Revision `2` fixes that canonical encoding: the ordered `columns` list is serialised as
 JSON with object keys sorted, no insignificant whitespace, and non-ASCII characters left
 unescaped, then encoded as UTF-8 and hashed with SHA-256; the manifest records the digest
 with the `sha256:` prefix. A reader MUST recompute the fingerprint under this encoding and
@@ -235,15 +244,15 @@ change in this milestone.
 
 ### IMGW partition finalisation
 
-Revision `1` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
+Revision `2` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
 every archive contribution and the final row count for each calendar `product`/`year` partition. The
 second pass streams contributing rows into the single file for that partition. A compiler MUST NOT
 finalise a partition file or its manifest count while an unread adjacent archive can still contribute.
-This decision does not change revision `1` partitioning.
+This decision does not change revision `2` partitioning.
 
 ### User-cache format revision
 
-Revision `1` is reserved for stores compiled from publisher artifacts. A future user-cache store MUST
+Revision `2` is reserved for stores compiled from publisher artifacts. A future user-cache store MUST
 use a distinct later format revision; it MUST NOT use a reduced revision-`1` manifest. This decision
 defines no user-cache layout or reader.
 

@@ -26,13 +26,13 @@ from rivretrieve._internal.store import (
 )
 
 FIXTURES = Path(__file__).parent / "test_data" / "observation_store_conformance"
-PROVIDER_ID = ProviderId("test_provider")
+PROVIDER_ID = ProviderId("fixture_bulk")
 EXPECTED = {
     "invalid_manifest_required_field": (StoreRefusalKind.MALFORMED, "manifest.required:built_at"),
     "invalid_manifest_type": (StoreRefusalKind.MALFORMED, "manifest.type:compiler_version"),
     "invalid_manifest_version": (
         StoreRefusalKind.INCOMPATIBLE,
-        "unsupported format revision 2",
+        "unsupported format revision 3",
     ),
     "invalid_manifest_checksum": (
         StoreRefusalKind.MALFORMED,
@@ -114,7 +114,7 @@ def _assert_refusal(store: Path, defect: str, kind: StoreRefusalKind = StoreRefu
     assert refusal.store == StoreRoot(store)
     assert refusal.provider_id == PROVIDER_ID
     assert refusal.defect == defect
-    assert refusal.rebuild_instruction == 'rivretrieve.download("test_provider")'
+    assert refusal.rebuild_instruction == 'rivretrieve.download("fixture_bulk")'
 
 
 def _validate_then_rewrite(store: Path, transform: object) -> None:
@@ -151,7 +151,7 @@ def test_discovered_fixture_inventory_exercises_the_production_seam() -> None:
         assert isinstance(result, ValidatedStore)
         assert result.root == StoreRoot(resolved)
         assert isinstance(result.manifest, StoreManifest)
-        assert result.manifest.format_version == 1
+        assert result.manifest.format_version == 2
         assert result.manifest.built_at.utcoffset() is not None
         assert result.manifest.publisher_artifact.url.startswith("https://")
         expected_keys = {PartitionIdentifier(key) for key in _manifest(path)["partition_row_counts"]}
@@ -180,7 +180,7 @@ def test_discovered_fixture_inventory_exercises_the_production_seam() -> None:
         refusal = raised.value.refusal
         assert refusal.store == StoreRoot(path.resolve())
         assert refusal.provider_id == PROVIDER_ID
-        assert refusal.rebuild_instruction == 'rivretrieve.download("test_provider")'
+        assert refusal.rebuild_instruction == 'rivretrieve.download("fixture_bulk")'
         assert refusal.kind == EXPECTED[name][0]
         assert refusal.defect == EXPECTED[name][1]
 
@@ -219,7 +219,7 @@ def test_missing_manifest_and_duplicate_json_member_are_refused(tmp_path: Path) 
 
     duplicate = _copy_fixture(tmp_path / "duplicate")
     text = (duplicate / "manifest.json").read_text(encoding="utf-8")
-    text = text.replace('  "format_version": 1,', '  "format_version": 1,\n  "format_version": 1,', 1)
+    text = text.replace('  "format_version": 2,', '  "format_version": 2,\n  "format_version": 2,', 1)
     (duplicate / "manifest.json").write_text(text, encoding="utf-8")
     _assert_refusal(duplicate, "manifest.json:duplicate:format_version")
 
@@ -271,7 +271,7 @@ def test_arbitrary_parquet_basename_and_native_columns_are_accepted(tmp_path: Pa
     original = _only_parquet(store)
     renamed = original.with_name("provider-chosen-name.parquet")
     original.rename(renamed)
-    result = validate_store(StoreRoot(store), ProviderId("native_provider"))
+    result = validate_store(StoreRoot(store), ProviderId("fixture_bulk"))
     assert isinstance(result, ValidatedStore)
     assert next(iter(result.partition_files.values())).name == renamed.name
     frame = pl.read_parquet(renamed)
@@ -284,7 +284,7 @@ def test_missing_retained_native_column_is_refused(tmp_path: Path) -> None:
     _validate_then_rewrite(store, lambda frame: frame.drop("source_quality"))
     _assert_refusal(
         store,
-        "partition.retained_column:product=level/year=2024:source_quality",
+        "partition.schema:product=level/year=2024",
     )
 
 
@@ -415,7 +415,7 @@ def test_unknown_revision_precedes_the_single_parquet_open_boundary(
     _assert_refusal(store, "unsupported format revision 99", StoreRefusalKind.INCOMPATIBLE)
     assert opened == []
 
-    manifest["format_version"] = 1
+    manifest["format_version"] = 2
     _write_manifest(store, manifest)
     _assert_refusal(store, "partition.parquet:product=level/year=2024")
     assert opened == expected_paths

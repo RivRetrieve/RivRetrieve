@@ -67,5 +67,5 @@ def complete(decoded_rows: pl.DataFrame, *, columns: tuple[SourceColumn, ...] = 
     return DecodedPublisherArtifact(
         decoded_rows,
         columns,
-        (SourceUnitCount("1998.csv", decoded_rows.height, decoded_rows.height),),
+        (SourceUnitCount("1998.csv", 1, decoded_rows.height),),
     )

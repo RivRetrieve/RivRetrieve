@@ -240,7 +240,7 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
 
 def test_store_boundary_probe_reads_validated_store_at_declared_query() -> None:
     store = StoreRoot(Path(__file__).parent / "test_data" / "observation_store_conformance" / "valid_future_austria")
-    provider_id = ProviderId("future_at")
+    provider_id = ProviderId("fixture_bulk")
     product_id = ProductId("level")
     query = StoreQuery(
         store=store,

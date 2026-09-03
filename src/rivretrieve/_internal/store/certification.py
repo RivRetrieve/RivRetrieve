@@ -1,4 +1,4 @@
-"""certify_compile : Artifact × SourceDecoder × StoreCompileRequest → ValidatedStore.
+"""certify_store_batches : Artifact+ × StreamingSourceDecoder × StoreCompileRequest → ValidatedStore.
 
 Certified compilation proves source closure and staged read-back equality before it
 replaces the only surviving observation store and deletes the publisher artifact.
@@ -10,27 +10,45 @@ import hashlib
 import os
 import shutil
 from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 import polars as pl
+import pyarrow.parquet as pq
 from polars.testing import assert_frame_equal
 
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.store.compiler import NativeStoreRows, StoreCompileRequest, compile_store
+from rivretrieve._internal.store.compiler import (
+    NativeStoreRows,
+    ObservationBatchStream,
+    StoreCompileRequest,
+    StreamingCompileEvidence,
+    _check_rows,
+    _physical_partition,
+    compile_store,
+    compile_store_batches,
+)
 from rivretrieve._internal.store.reader import StoreQuery, StoreReader
 from rivretrieve._internal.store.validation import SourceColumn, StoreRoot, ValidatedStore, validate_store
 
 
 @dataclass(frozen=True, slots=True)
 class SourceUnitCount:
-    """Accepted publisher records and rows emitted for one complete source unit."""
+    """Inventory facts for one unique publisher-record range."""
 
     source_unit: str
-    accepted_rows: int
+    publisher_records: int
+    expected_emitted_rows: int
+
+
+@dataclass(frozen=True, slots=True)
+class SourceUnitContribution:
+    """Rows actually emitted for one previously declared source unit."""
+
+    source_unit: str
     emitted_rows: int
 
 
@@ -51,10 +69,15 @@ class StoreCertificationError(RuntimeError):
     """The publisher artifact or staged store failed certification."""
 
 
+class StorePostCommitCleanupError(StoreCertificationError):
+    """The new store is authoritative but named non-secret cleanup residue remains."""
+
+
 CertificationError = StoreCertificationError
 
 
 SourceDecoder = Callable[[Path], NativeStoreMaterialization]
+StreamingSourceDecoder = Callable[[Path | tuple[Path, ...]], ObservationBatchStream]
 StoreWriter = Callable[[StoreCompileRequest, NativeStoreRows | pl.DataFrame], ValidatedStore]
 
 
@@ -69,12 +92,15 @@ def certify_store(
     """Compile, verify, atomically publish, then delete the publisher artifact.
 
     The decoder runs before a staging directory exists. It must report all observed
-    source fields and every independently complete source member. Any failure leaves
-    the previous store and publisher artifact untouched.
+    source fields and every independently complete source member. Any pre-commit failure
+    restores the previous store and publisher artifact. A typed post-commit cleanup
+    failure keeps the validated new store authoritative and names remaining residue.
     """
     artifact = Path(publisher_artifact)
     destination = Path(request.destination)
-    _check_artifact(artifact, destination, request)
+    if request.publisher_artifacts:
+        raise CertificationError("non-streaming certification accepts exactly one publisher artifact")
+    _check_artifact(artifact, destination, request.publisher_artifact)
     decoded = decode(artifact)
     _check_source(decoded, request)
 
@@ -89,13 +115,17 @@ def certify_store(
         published = True
         validated = validate_store(StoreRoot(destination), request.provider_id)
         artifact.unlink()
-    except Exception:
-        _safe_remove_tree(stage)
-        if published:
-            _restore_previous(destination, backup)
+    except Exception as original:
+        _rollback_precommit(
+            original,
+            stage=stage,
+            destination=destination,
+            backup=backup,
+            restore_store=published or backup.exists(),
+        )
         raise
 
-    _safe_remove_tree(backup)
+    _post_commit_cleanup(backup)
     return validated
 
 
@@ -104,7 +134,7 @@ certify_compile = certify_store
 certified_compile = certify_store
 
 
-def _check_artifact(artifact: Path, destination: Path, request: StoreCompileRequest) -> None:
+def _check_artifact(artifact: Path, destination: Path, expected_artifact: object) -> None:
     if not artifact.is_file():
         raise FileNotFoundError(f'publisher artifact does not exist: "{artifact}"')
     resolved_artifact = artifact.resolve()
@@ -116,10 +146,11 @@ def _check_artifact(artifact: Path, destination: Path, request: StoreCompileRequ
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     actual = f"sha256:{digest.hexdigest()}"
-    if actual != request.publisher_artifact.sha256:
-        raise CertificationError(
-            f"publisher artifact checksum mismatch: expected {request.publisher_artifact.sha256}; actual {actual}"
-        )
+    expected = expected_artifact
+    if not hasattr(expected, "sha256"):
+        raise TypeError("expected publisher artifact provenance is malformed")
+    if actual != expected.sha256:
+        raise CertificationError(f"publisher artifact checksum mismatch: expected {expected.sha256}; actual {actual}")
 
 
 def _check_source(decoded: NativeStoreMaterialization, request: StoreCompileRequest) -> None:
@@ -128,16 +159,12 @@ def _check_source(decoded: NativeStoreMaterialization, request: StoreCompileRequ
     names = [unit.source_unit for unit in decoded.source_units]
     if any(not name for name in names) or len(set(names)) != len(names):
         raise StoreCertificationError("source-unit counts require unique non-empty names")
-    if any(unit.accepted_rows < 0 or unit.emitted_rows < 0 for unit in decoded.source_units):
+    if any(unit.publisher_records < 0 or unit.expected_emitted_rows < 0 for unit in decoded.source_units):
         raise StoreCertificationError("source-unit counts must be non-negative")
-    mismatched = [unit.source_unit for unit in decoded.source_units if unit.accepted_rows != unit.emitted_rows]
-    if mismatched:
-        raise StoreCertificationError(f"source units did not compile completely: {mismatched!r}")
-    emitted = sum(unit.emitted_rows for unit in decoded.source_units)
+    emitted = sum(unit.expected_emitted_rows for unit in decoded.source_units)
     if emitted != pl.DataFrame(decoded.rows).height:
         raise StoreCertificationError(
-            f"source-unit emitted row count differs from materialized rows: expected={emitted}; "
-            f"actual={pl.DataFrame(decoded.rows).height}"
+            f"source-unit emitted rows differ from materialization: expected={emitted}; actual={pl.DataFrame(decoded.rows).height}"
         )
     declared = request.source_columns
     observed = decoded.observed_source_columns
@@ -210,9 +237,15 @@ def _publish(stage: Path, destination: Path, backup: Path) -> None:
         os.replace(destination, backup)
     try:
         os.replace(stage, destination)
-    except Exception:
+    except Exception as publication_error:
         if had_previous:
-            os.replace(backup, destination)
+            try:
+                os.replace(backup, destination)
+            except Exception as restoration_error:
+                raise StoreCertificationError(
+                    "atomic publication failed and immediate prior-store restore failed: "
+                    f"{type(restoration_error).__name__}: {restoration_error}"
+                ) from publication_error
         raise
 
 
@@ -228,8 +261,239 @@ def _remove_tree(path: Path) -> None:
         shutil.rmtree(path)
 
 
-def _safe_remove_tree(path: Path) -> None:
-    # Cleanup must never hide the certification failure that protects the
-    # publisher artifact and previous store.
-    with suppress(OSError):
-        _remove_tree(path)
+def certify_store_batches(
+    request: StoreCompileRequest,
+    publisher_artifact: Path | tuple[Path, ...],
+    decode: StreamingSourceDecoder,
+) -> ValidatedStore:
+    """certify_store_batches : Artifacts × StreamingDecoder × StoreCompileRequest → ValidatedStore."""
+    artifacts = (
+        tuple(Path(item) for item in publisher_artifact)
+        if isinstance(publisher_artifact, tuple)
+        else (Path(publisher_artifact),)
+    )
+    destination = Path(request.destination)
+    expected_artifacts = request.all_publisher_artifacts
+    if len(artifacts) != len(expected_artifacts):
+        raise CertificationError("publisher artifact path and provenance counts differ")
+    for artifact, expected in zip(artifacts, expected_artifacts, strict=True):
+        _check_artifact(artifact, destination, expected)
+    decoded = decode(artifacts if len(artifacts) > 1 else artifacts[0])
+    if decoded.observed_source_columns != request.source_columns:
+        raise CertificationError("observed source schema is not declaration-closed")
+
+    stage = destination.with_name(f".{destination.name}.staging-{uuid4().hex}")
+    backup = destination.with_name(f".{destination.name}.previous-{uuid4().hex}")
+    staged_request = replace(request, destination=StoreRoot(stage))
+    published = False
+    quarantine: Path | None = None
+    quarantine_copies: tuple[Path, ...] = ()
+    try:
+        evidence = compile_store_batches(staged_request, decoded)
+        _verify_streamed_read_back(
+            stage,
+            request,
+            evidence,
+            decode(artifacts if len(artifacts) > 1 else artifacts[0]),
+        )
+        quarantine, quarantine_copies = _link_artifact_rollback_copies(destination, artifacts)
+        _publish(stage, destination, backup)
+        published = True
+        validated = validate_store(StoreRoot(destination), request.provider_id)
+        for artifact in artifacts:
+            artifact.unlink()
+    except Exception as original:
+        _rollback_precommit(
+            original,
+            stage=stage,
+            destination=destination,
+            backup=backup,
+            restore_store=published or backup.exists(),
+            artifacts=artifacts,
+            quarantine=quarantine,
+            quarantine_copies=quarantine_copies,
+        )
+        raise
+
+    # Commit point: the validated destination is authoritative and every original
+    # artifact has been unlinked while its quarantine links are still intact.
+    _post_commit_cleanup(*(path for path in (quarantine, backup) if path is not None))
+    return validated
+
+
+def _rollback_precommit(
+    original: Exception,
+    *,
+    stage: Path,
+    destination: Path,
+    backup: Path,
+    restore_store: bool,
+    artifacts: tuple[Path, ...] = (),
+    quarantine: Path | None = None,
+    quarantine_copies: tuple[Path, ...] = (),
+) -> None:
+    """Attempt independent pre-commit restoration and cleanup, then aggregate defects."""
+    restoration_errors: list[Exception] = []
+    cleanup_errors: list[Exception] = []
+    artifact_restoration_failed = False
+    if quarantine is not None:
+        try:
+            _restore_linked_artifacts(artifacts, quarantine_copies)
+        except Exception as error:
+            restoration_errors.append(error)
+            artifact_restoration_failed = True
+    if restore_store:
+        try:
+            _restore_previous(destination, backup)
+        except Exception as error:
+            restoration_errors.append(error)
+    cleanup_paths = [stage]
+    if quarantine is not None and not artifact_restoration_failed:
+        cleanup_paths.append(quarantine)
+    for residue in cleanup_paths:
+        try:
+            _remove_tree(residue)
+        except OSError as error:
+            cleanup_errors.append(error)
+    if not restoration_errors and not cleanup_errors:
+        return
+    details = [
+        *(f"restoration {type(error).__name__}: {error}" for error in restoration_errors),
+        *(f"cleanup {type(error).__name__}: {error}" for error in cleanup_errors),
+    ]
+    state = "incomplete" if restoration_errors else "complete with cleanup residue"
+    raise StoreCertificationError(f"pre-commit rollback was {state}: {'; '.join(details)}") from original
+
+
+def _post_commit_cleanup(*paths: Path) -> None:
+    failures: list[str] = []
+    for path in paths:
+        try:
+            _remove_tree(path)
+        except OSError as error:
+            failures.append(f"{path.name} ({type(error).__name__}: {error})")
+    residues = [path.name for path in paths if path.exists()]
+    if failures or residues:
+        raise StorePostCommitCleanupError(
+            "new store is authoritative; post-commit cleanup requires retry: "
+            f"failures={failures!r}; residues={residues!r}"
+        )
+
+
+def _link_artifact_rollback_copies(destination: Path, artifacts: tuple[Path, ...]) -> tuple[Path, tuple[Path, ...]]:
+    """Create same-filesystem rollback links before any downloaded name is removed."""
+    quarantine = destination.parent / f".publisher-artifacts.rollback-{uuid4().hex}"
+    quarantine.mkdir()
+    copies: list[Path] = []
+    try:
+        for index, artifact in enumerate(artifacts):
+            copy = quarantine / f"{index:06d}-{artifact.name}"
+            os.link(artifact, copy)
+            copies.append(copy)
+    except Exception as original:
+        try:
+            _remove_tree(quarantine)
+        except OSError as cleanup_error:
+            raise StoreCertificationError(
+                "publisher-artifact rollback-link setup failed and cleanup was incomplete: "
+                f"{type(cleanup_error).__name__}: {cleanup_error}"
+            ) from original
+        raise
+    return quarantine, tuple(copies)
+
+
+def _restore_linked_artifacts(artifacts: tuple[Path, ...], copies: tuple[Path, ...]) -> None:
+    failures: list[str] = []
+    for artifact, copy in zip(artifacts, copies, strict=True):
+        if artifact.exists():
+            continue
+        try:
+            os.link(copy, artifact)
+        except OSError as error:
+            failures.append(f"{artifact.name} ({type(error).__name__}: {error})")
+    if failures:
+        raise StoreCertificationError(f"publisher artifact restoration was incomplete: {failures!r}")
+
+
+def _verify_streamed_read_back(
+    stage: Path,
+    request: StoreCompileRequest,
+    evidence: StreamingCompileEvidence,
+    expected_stream: ObservationBatchStream,
+) -> None:
+    """Compare every staged physical row with a second bounded source decode."""
+    validated = validate_store(StoreRoot(stage), request.provider_id)
+    actual_counts = {str(key): value for key, value in validated.manifest.partition_row_counts.items()}
+    if actual_counts != dict(evidence.partition_row_counts):
+        raise StoreCertificationError(
+            f"staged partition counts differ from streamed rows: expected={dict(evidence.partition_row_counts)!r}; "
+            f"actual={actual_counts!r}"
+        )
+    if expected_stream.observed_source_columns != request.source_columns:
+        raise StoreCertificationError("replayed source schema differs from the declared source schema")
+    current_identifier: str | None = None
+    current_parquet: pq.ParquetFile | None = None
+    current_row_group = 0
+    expected_counts: dict[str, int] = {}
+    try:
+        for batch in expected_stream.batches:
+            frame = pl.DataFrame(batch.rows)
+            native_columns = _check_rows(
+                frame,
+                request.source_columns,
+                request.source_column_dispositions,
+            )
+            years = frame.get_column("time").dt.year().unique().to_list()
+            products = frame.get_column("product").unique().to_list()
+            for product in sorted(products, key=lambda value: str(value).encode("utf-8")):
+                for year in sorted(years):
+                    selected = frame.filter((pl.col("product") == product) & (pl.col("time").dt.year() == year))
+                    if selected.is_empty():
+                        continue
+                    identifier = f"product={product}/year={year:04d}"
+                    expected = _physical_partition(selected, native_columns, request.source_columns)
+                    if identifier != current_identifier:
+                        if (
+                            current_identifier is not None
+                            and current_parquet is not None
+                            and current_row_group != current_parquet.num_row_groups
+                        ):
+                            raise StoreCertificationError(
+                                f"staged store contains unverified row groups: {current_identifier}"
+                            )
+                        current_identifier = identifier
+                        current_parquet = pq.ParquetFile(stage / identifier / "part-0.parquet")
+                        current_row_group = 0
+                    if current_parquet is None or current_row_group >= current_parquet.num_row_groups:
+                        raise StoreCertificationError(f"staged store lacks streamed row group: {identifier}")
+                    actual = cast(
+                        pl.DataFrame,
+                        pl.from_arrow(current_parquet.read_row_group(current_row_group)),
+                    )
+                    index = current_row_group
+                    try:
+                        assert_frame_equal(
+                            actual, expected, check_row_order=True, check_column_order=True, check_exact=True
+                        )
+                    except AssertionError as error:
+                        raise StoreCertificationError(
+                            f"staged store read-back differs from streamed rows: {identifier} row_group={index}: {error}"
+                        ) from error
+                    current_row_group += 1
+                    expected_counts[identifier] = expected_counts.get(identifier, 0) + expected.height
+    except StoreCertificationError:
+        raise
+    except Exception as error:
+        raise StoreCertificationError(f"second source decode failed during staged read-back: {error}") from error
+    if expected_counts != dict(evidence.partition_row_counts):
+        raise StoreCertificationError(
+            f"second source decode counts differ: expected={dict(evidence.partition_row_counts)!r}; actual={expected_counts!r}"
+        )
+    if (
+        current_identifier is not None
+        and current_parquet is not None
+        and current_row_group != current_parquet.num_row_groups
+    ):
+        raise StoreCertificationError(f"staged store contains unverified row groups: {current_identifier}")
+    if tuple(expected_counts) != tuple(evidence.partition_row_group_rows):
+        raise StoreCertificationError("second source decode did not traverse partitions in manifest order")

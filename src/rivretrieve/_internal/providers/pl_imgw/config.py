@@ -46,5 +46,5 @@ config: Final[ProviderConfig] = ProviderConfig(
             semantics=Daily(DayDefinition("unknown")),
         ),
     },
-    cache=CacheConfig(store=ObservationStoreConfig(format_version=1)),
+    cache=CacheConfig(store=ObservationStoreConfig(format_version=2)),
 )

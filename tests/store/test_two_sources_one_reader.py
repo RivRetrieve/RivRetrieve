@@ -63,9 +63,10 @@ def test_two_sources_one_reader(tmp_path: Path, monkeypatch) -> None:
         ImgwCompileRequest(
             imgw_artifact,
             pl_store,
-            "https://example.test/codz_2023.zip",
-            date(2023, 12, 31),
-            **common,
+            "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/2023/codz_2023.zip",
+            date(2023, 10, 31),
+            built_at=datetime(2026, 8, 11, tzinfo=UTC),
+            compiler_version="1.0",
         )
     )
 
@@ -96,5 +97,5 @@ def test_two_sources_one_reader(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert calls == ["ca_eccc", "pl_imgw"]
-    assert ca.data["value"].to_list() == [12.4]
+    assert ca.data["value"].to_list() == [12.4, *([None] * 30)]
     assert pl.data["value"].to_list() == [1.5]

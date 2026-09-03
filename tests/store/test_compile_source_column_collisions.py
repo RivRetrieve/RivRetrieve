@@ -19,9 +19,10 @@ from rivretrieve._internal.store import (
 )
 
 
-def test_compile_refuses_native_value_column_collision(tmp_path: Path) -> None:
+@pytest.mark.parametrize("native_name", ["value", "product"])
+def test_compile_refuses_native_engine_column_collision(tmp_path: Path, native_name: str) -> None:
     destination = StoreRoot(tmp_path / "store")
-    source_columns = (SourceColumn("value", "String"),)
+    source_columns = (SourceColumn(native_name, "String"),)
     request = StoreCompileRequest(
         destination=destination,
         provider_id=ProviderId("fixture"),
@@ -33,7 +34,7 @@ def test_compile_refuses_native_value_column_collision(tmp_path: Path) -> None:
             ArtifactChecksum("sha256:" + "1" * 64),
         ),
         source_columns=source_columns,
-        source_column_dispositions=(SourceColumnDisposition("value", Disposition.RETAINED, None, None),),
+        source_column_dispositions=(SourceColumnDisposition(native_name, Disposition.RETAINED, None, None),),
     )
     rows = pl.DataFrame(
         {

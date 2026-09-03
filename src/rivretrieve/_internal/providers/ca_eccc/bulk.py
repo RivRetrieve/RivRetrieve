@@ -1,4 +1,5 @@
 """compile_hydat : HydatCompileRequest × HYDATSQLite → ValidatedStore.
+decode_hydat_batches : HYDATSQLite → ObservationBatchStream.
 
 The compiler unpivots publisher monthly rows into native daily observations. It
 preserves the publisher's values and quality cells; the shared store reader is the
@@ -9,11 +10,11 @@ Contributed by: Thiago von Däniken
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import sqlite3
 import tempfile
 import zipfile
-from calendar import monthrange
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -27,19 +28,24 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.store import (
     ArtifactChecksum,
     Disposition,
+    NativeObservationBatch,
     NativeStoreMaterialization,
+    ObservationBatchStream,
     PublisherArtifact,
     SourceColumn,
     SourceColumnDisposition,
+    SourceUnitContribution,
     SourceUnitCount,
     StoreCompileRequest,
     StoreRoot,
     ValidatedStore,
-    certify_store,
+    certify_store_batches,
+    source_unit_inventory_fingerprint,
 )
 
 PROVIDER_ID: Final = ProviderId("ca_eccc")
 FORMAT_VERSION: Final = 1
+HYDAT_MONTHS_PER_BATCH: Final = 512
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +171,8 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
     """Certify and publish one complete HYDAT SQLite artifact.
 
     Success atomically replaces the previous store and deletes the SQLite artifact.
-    All failures retain both, as required by ADR 0021.
+    Pre-commit failures restore both. A typed post-commit cleanup failure keeps the
+    validated new store authoritative and reports residue, as required by ADR 0021.
     """
     artifact = Path(request.publisher_artifact)
     schema = _declared_schema()
@@ -182,16 +189,108 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
         source_columns=schema.source_columns,
         source_column_dispositions=schema.dispositions,
     )
-    return certify_store(
+    return certify_store_batches(
         compile_request,
         artifact,
-        lambda path: decode_hydat(path, schema),
+        lambda path: decode_hydat_batches(_require_single_path(path), schema),
     )
 
 
 # The provider contract calls its source-specific operation ``compile``. The longer
 # spelling is retained to make direct imports unambiguous in tests and tooling.
 compile = compile_hydat
+
+
+def decode_hydat_batches(path: Path, declared_schema: _HydatSchema | None = None) -> ObservationBatchStream:
+    """decode_hydat_batches : HYDATSQLite → ObservationBatchStream."""
+    artifact = Path(path)
+    schema = declared_schema or _declared_schema()
+
+    def batches() -> Iterator[NativeObservationBatch]:
+        with _sqlite_payload(artifact) as sqlite_path:
+            observed = _inspect_schema(sqlite_path)
+            if observed.source_columns != schema.source_columns:
+                raise ValueError("HYDAT source schema changed between declaration and decoding")
+            connection = _open_read_only(sqlite_path)
+            try:
+                for table in HYDAT_TABLES:
+                    quoted = _quote_identifier(table.table_name)
+                    rows: list[dict[str, object]] = []
+                    units: list[SourceUnitCount] = []
+                    contributions: list[SourceUnitContribution] = []
+                    for source_row in _iter_hydat_source_rows(connection, quoted):
+                        native = dict(source_row)
+                        rowid = native.pop("__rivretrieve_rowid")
+                        expected = calendar.monthrange(native["YEAR"], native["MONTH"])[1]
+                        before = len(rows)
+                        _unpivot_month(table, native, schema, rows)
+                        actual = len(rows) - before
+                        source_unit = f"{table.table_name}:rowid={rowid:012d}"
+                        units.append(SourceUnitCount(source_unit, 1, expected))
+                        contributions.append(SourceUnitContribution(source_unit, actual))
+                        if len(units) == HYDAT_MONTHS_PER_BATCH:
+                            yield NativeObservationBatch(
+                                _hydat_frame(rows, schema),
+                                tuple(units),
+                                tuple(contributions),
+                            )
+                            rows = []
+                            units = []
+                            contributions = []
+                    if rows:
+                        yield NativeObservationBatch(
+                            _hydat_frame(rows, schema),
+                            tuple(units),
+                            tuple(contributions),
+                        )
+            finally:
+                connection.close()
+
+    expected_records, expected_rows, inventory_sha256 = _expected_hydat_inventory(artifact, schema)
+    return ObservationBatchStream(schema.source_columns, batches(), expected_records, expected_rows, inventory_sha256)
+
+
+def _iter_hydat_source_rows(connection: sqlite3.Connection, quoted_table: str):
+    return connection.execute(
+        f"SELECT rowid AS __rivretrieve_rowid, * FROM {quoted_table} ORDER BY YEAR, STATION_NUMBER, MONTH, rowid"
+    )
+
+
+def _expected_hydat_inventory(artifact: Path, schema: _HydatSchema) -> tuple[int, int, str]:
+    """Inventory exact monthly row identities independently from emission."""
+    records = 0
+    rows = 0
+    with _sqlite_payload(artifact) as sqlite_path:
+        observed = _inspect_schema(sqlite_path)
+        if observed.source_columns != schema.source_columns:
+            raise ValueError("HYDAT source schema changed before expected-cell census")
+        connection = _open_read_only(sqlite_path)
+        try:
+
+            def units():
+                nonlocal records, rows
+                for table in HYDAT_TABLES:
+                    quoted = _quote_identifier(table.table_name)
+                    query = f"SELECT rowid, YEAR, MONTH FROM {quoted} ORDER BY rowid"
+                    for rowid, year, month in connection.execute(query):
+                        try:
+                            expected = calendar.monthrange(year, month)[1]
+                        except (TypeError, ValueError, OverflowError) as error:
+                            raise ValueError(f"{table.table_name} has an invalid year/month") from error
+                        records += 1
+                        rows += expected
+                        yield f"{table.table_name}:rowid={rowid:012d}", 1, expected
+
+            inventory_sha256 = source_unit_inventory_fingerprint(units())
+        finally:
+            connection.close()
+    return records, rows, inventory_sha256
+
+
+def _require_single_path(path: Path | tuple[Path, ...]) -> Path:
+    if not isinstance(path, Path):
+        raise TypeError("HYDAT compilation requires exactly one publisher artifact")
+    return path
 
 
 def decode_hydat(path: Path, declared_schema: _HydatSchema | None = None) -> NativeStoreMaterialization:
@@ -216,15 +315,24 @@ def decode_hydat(path: Path, declared_schema: _HydatSchema | None = None) -> Nat
                     units.append(
                         SourceUnitCount(
                             source_unit=f"{table.table_name}:rowid={rowid!s}:ordinal={ordinal}",
-                            accepted_rows=emitted,
-                            emitted_rows=emitted,
+                            publisher_records=1,
+                            expected_emitted_rows=emitted,
                         )
                     )
         finally:
             connection.close()
     if not rows:
         raise ValueError("HYDAT contains no daily flow or level rows")
-    frame = (
+    frame = _hydat_frame(rows, schema)
+    return NativeStoreMaterialization(
+        rows=frame,
+        observed_source_columns=schema.source_columns,
+        source_units=tuple(units),
+    )
+
+
+def _hydat_frame(rows: list[dict[str, object]], schema: _HydatSchema) -> pl.DataFrame:
+    return (
         pl.DataFrame(rows, infer_schema_length=None)
         .select(
             "product",
@@ -239,13 +347,23 @@ def decode_hydat(path: Path, declared_schema: _HydatSchema | None = None) -> Nat
             pl.col("product", "station_id", "time_zone", "value_state").cast(pl.String),
             pl.col("time").cast(pl.Datetime("us")),
             pl.col("value").cast(pl.Float64),
+            *(
+                pl.col(column.name).cast(_polars_source_type(column.type))
+                for column in schema.source_columns
+                if column.name in schema.retained_names
+            ),
         )
     )
-    return NativeStoreMaterialization(
-        rows=frame,
-        observed_source_columns=schema.source_columns,
-        source_units=tuple(units),
-    )
+
+
+def _polars_source_type(declared: str) -> type[pl.DataType]:
+    if declared == "TEXT":
+        return pl.String
+    if declared == "INTEGER":
+        return pl.Int64
+    if declared == "DOUBLE":
+        return pl.Float64
+    raise ValueError(f"unsupported HYDAT SQLite type: {declared}")
 
 
 def _unpivot_month(
@@ -263,11 +381,17 @@ def _unpivot_month(
     if type(year) is not int or type(month) is not int or type(no_days) is not int:
         raise TypeError(f"{table.table_name} YEAR, MONTH and NO_DAYS must be SQLite integers")
     try:
-        calendar_days = monthrange(year, month)[1]
+        valid_days = calendar.monthrange(year, month)[1]
     except (ValueError, OverflowError) as error:
         raise ValueError(f"{table.table_name} has an invalid year/month") from error
-    if no_days < 1 or no_days > calendar_days:
-        raise ValueError(f"{table.table_name} has invalid NO_DAYS={no_days} for {year:04d}-{month:02d}")
+
+    for day in range(valid_days + 1, 32):
+        value_tail = source[f"{table.value_prefix}{day}"]
+        symbol_tail = source[f"{table.symbol_prefix}{day}"]
+        if value_tail is not None or symbol_tail is not None:
+            raise ValueError(
+                f"{table.table_name} has a non-null value/symbol cell after the calendar month at day {day}"
+            )
 
     retained = dict.fromkeys(schema.retained_names)
     for column in schema.columns_by_table[table.table_name]:
@@ -275,7 +399,7 @@ def _unpivot_month(
         if qualified in retained:
             retained[qualified] = source[column]
 
-    for day in range(1, no_days + 1):
+    for day in range(1, valid_days + 1):
         raw_value = source[f"{table.value_prefix}{day}"]
         if raw_value is None:
             value = None
@@ -299,7 +423,7 @@ def _unpivot_month(
                 **retained,
             }
         )
-    return no_days
+    return valid_days
 
 
 def _declared_schema() -> _HydatSchema:
@@ -314,7 +438,7 @@ def _declared_schema() -> _HydatSchema:
         for name, declared_type in observed:
             qualified = f"{table.table_name}.{name}"
             source_columns.append(SourceColumn(qualified, declared_type))
-            if name in {"STATION_NUMBER", "YEAR", "MONTH", "NO_DAYS"} or (
+            if name in {"STATION_NUMBER", "YEAR", "MONTH"} or (
                 name.startswith(table.value_prefix) and name[len(table.value_prefix) :].isdigit()
             ):
                 dispositions.append(

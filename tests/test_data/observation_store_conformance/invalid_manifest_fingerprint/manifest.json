@@ -1,12 +1,45 @@
 {
-  "format_version": 1,
-  "compiler_version": "0.1.49",
   "built_at": "2026-08-11T10:00:00.000000Z",
-  "source_vintage": "2024-01-02",
-  "publisher_artifact": {
-    "url": "https://example.invalid/provider-neutral/source.bin",
-    "sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  "compiler_version": "0.1.49",
+  "format_version": 2,
+  "partition_row_counts": {
+    "product=level/year=2024": 1
   },
+  "provider_id": "fixture_bulk",
+  "publisher_artifact": {
+    "sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "url": "https://example.invalid/provider-neutral/source.bin"
+  },
+  "source_column_dispositions": [
+    {
+      "disposition": "retained",
+      "source_column": "station_id"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time_zone"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "value"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "native_unit"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_quality"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_note"
+    }
+  ],
   "source_schema": {
     "columns": [
       {
@@ -40,37 +73,5 @@
     ],
     "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   },
-  "source_column_dispositions": [
-    {
-      "source_column": "station_id",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "time",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "time_zone",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "value",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "native_unit",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "source_quality",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "source_note",
-      "disposition": "retained"
-    }
-  ],
-  "partition_row_counts": {
-    "product=level/year=2024": 1
-  }
+  "source_vintage": "2024-01-02"
 }

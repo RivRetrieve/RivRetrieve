@@ -69,3 +69,81 @@ def test_clear_cache_is_idempotent_and_confined_to_store(tmp_path, monkeypatch) 
     assert first.bytes_freed == 4
     assert second.existed is False
     assert neighbour.read_bytes() == b"publisher"
+
+
+def test_clear_cache_removes_exact_pending_namespace_without_following_symlinks(tmp_path, monkeypatch) -> None:
+    store = tmp_path / "ca_eccc" / "store"
+    store.mkdir(parents=True)
+    (store / "partition.parquet").write_bytes(b"1234")
+    base = store.parent / "publisher-artifact.download"
+    base.write_bytes(b"abc")
+    monthly = store.parent / "publisher-artifact.download-codz_2022_01.zip"
+    monthly.write_bytes(b"12345")
+    outside = tmp_path / "outside.zip"
+    outside.write_bytes(b"outside")
+    link = store.parent / "publisher-artifact.download-codz_2022_02.zip"
+    link.symlink_to(outside)
+    unrelated = store.parent / "publisher.zip"
+    unrelated.write_bytes(b"neighbour")
+    expected_bytes = 4 + 3 + 5 + link.lstat().st_size
+    monkeypatch.setattr(
+        bulk,
+        "_bulk_registration",
+        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(2, 1000), store, SimpleNamespace()),
+    )
+
+    result = bulk.clear_cache("ca_eccc")
+
+    assert result.existed is True
+    assert result.bytes_freed == expected_bytes
+    assert result.removed_paths == (store, base, monthly, link)
+    assert outside.read_bytes() == b"outside"
+    assert unrelated.read_bytes() == b"neighbour"
+    assert not store.exists()
+    assert not base.exists()
+    assert not monthly.exists()
+    assert not link.exists() and not link.is_symlink()
+
+
+def test_clear_cache_refuses_unexpected_directory_before_deleting_any_evidence(tmp_path, monkeypatch) -> None:
+    store = tmp_path / "pl_imgw" / "store"
+    store.mkdir(parents=True)
+    sentinel = store / "previous.parquet"
+    sentinel.write_bytes(b"prior")
+    pending = store.parent / "publisher-artifact.download-codz_2022_01.zip"
+    pending.write_bytes(b"artifact")
+    unexpected = store.parent / "publisher-artifact.download-codz_2022_02.zip"
+    unexpected.mkdir()
+    monkeypatch.setattr(
+        bulk,
+        "_bulk_registration",
+        lambda provider: ("pl_imgw", bulk.ObservationStoreConfig(2, 1000), store, SimpleNamespace()),
+    )
+
+    with pytest.raises(bulk.BulkArtifactCleanupRefusedError, match="unexpected directory"):
+        bulk.clear_cache("pl_imgw")
+
+    assert sentinel.read_bytes() == b"prior"
+    assert pending.read_bytes() == b"artifact"
+    assert unexpected.is_dir()
+
+
+def test_clear_cache_refuses_symlinked_pending_namespace_root(tmp_path, monkeypatch) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    evidence = outside / "publisher-artifact.download"
+    evidence.write_bytes(b"external")
+    provider_root = tmp_path / "ca_eccc"
+    provider_root.symlink_to(outside, target_is_directory=True)
+    store = provider_root / "store"
+    monkeypatch.setattr(
+        bulk,
+        "_bulk_registration",
+        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(2, 1000), store, SimpleNamespace()),
+    )
+
+    with pytest.raises(bulk.BulkArtifactCleanupRefusedError, match="symlinked pending-download namespace"):
+        bulk.clear_cache("ca_eccc")
+
+    assert evidence.read_bytes() == b"external"
+    assert provider_root.is_symlink()

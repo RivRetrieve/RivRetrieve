@@ -1,12 +1,46 @@
 {
-  "format_version": 1,
-  "compiler_version": "0.1.49",
   "built_at": "2026-08-11T10:02:00.123456Z",
-  "source_vintage": "2024-10-31",
-  "publisher_artifact": {
-    "url": "https://example.invalid/imgw/codz_2024.zip",
-    "sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  "compiler_version": "0.1.49",
+  "format_version": 2,
+  "partition_row_counts": {
+    "product=discharge/year=2023": 1,
+    "product=discharge/year=2024": 1
   },
+  "provider_id": "fixture_bulk",
+  "publisher_artifact": {
+    "sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "url": "https://example.invalid/imgw/codz_2024.zip"
+  },
+  "source_column_dispositions": [
+    {
+      "disposition": "retained",
+      "source_column": "station_id"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time_zone"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "value"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "native_unit"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_quality"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_note"
+    }
+  ],
   "source_schema": {
     "columns": [
       {
@@ -40,38 +74,5 @@
     ],
     "fingerprint": "sha256:fec7d282faad87c744bd83241c5be29a15b7a7254760b7a9aed0f4e27ba3ecca"
   },
-  "source_column_dispositions": [
-    {
-      "source_column": "station_id",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "time",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "time_zone",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "value",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "native_unit",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "source_quality",
-      "disposition": "retained"
-    },
-    {
-      "source_column": "source_note",
-      "disposition": "retained"
-    }
-  ],
-  "partition_row_counts": {
-    "product=discharge/year=2023": 1,
-    "product=discharge/year=2024": 1
-  }
+  "source_vintage": "2024-10-31"
 }

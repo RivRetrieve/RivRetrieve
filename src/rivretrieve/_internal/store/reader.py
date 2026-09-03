@@ -152,6 +152,14 @@ class StoreStatus:
         return None if self.manifest is None else self.manifest.publisher_artifact.sha256
 
     @property
+    def publisher_artifact_urls(self) -> tuple[str, ...]:
+        return () if self.manifest is None else tuple(item.url for item in self.manifest.publisher_artifacts)
+
+    @property
+    def publisher_artifact_checksums(self) -> tuple[ArtifactChecksum, ...]:
+        return () if self.manifest is None else tuple(item.sha256 for item in self.manifest.publisher_artifacts)
+
+    @property
     def source_schema_fingerprint(self) -> SourceSchemaFingerprint | None:
         return None if self.manifest is None else self.manifest.source_schema.fingerprint
 
@@ -163,7 +171,7 @@ class StoreStatus:
 
 
 class StoreReader:
-    """The source-neutral reader for revision-1 observation stores."""
+    """The source-neutral reader for revision-2 observation stores."""
 
     def query(self, query: StoreQuery) -> StoreReadResult:
         # Validation deliberately precedes partition selection and construction of any

@@ -245,6 +245,10 @@ def drive_store(
         update={
             "source_vintage": read.manifest.source_vintage,
             "publisher_artifact_checksum": str(read.manifest.publisher_artifact.sha256),
+            "publisher_artifact_checksums": tuple(
+                str(artifact.sha256) for artifact in read.manifest.publisher_artifacts
+            ),
+            "publisher_artifact_urls": tuple(artifact.url for artifact in read.manifest.publisher_artifacts),
         }
     )
     receipt_entries = () if receipts is ReceiptMode.OMIT else (encode_store_excerpt(read),)

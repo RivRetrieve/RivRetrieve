@@ -1,0 +1,27 @@
+{
+  "requested_url": "https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/HYDAT_Definition_EN.pdf",
+  "final_url": "https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/HYDAT_Definition_EN.pdf",
+  "retrieval_started_utc": "2026-09-02T18:07:04.779288Z",
+  "retrieval_completed_utc": "2026-09-02T18:07:05.513719Z",
+  "http_status": 200,
+  "content_type": "application/pdf",
+  "content_encoding": null,
+  "response_headers": {
+    "Date": "Wed, 02 Sep 2026 18:07:05 GMT",
+    "Server": "Apache",
+    "Last-Modified": "Mon, 09 May 2016 19:29:44 GMT",
+    "ETag": "\"ca24-5326dd4a59a00\"",
+    "Accept-Ranges": "bytes",
+    "Content-Length": "51748",
+    "Keep-Alive": "timeout=5, max=100",
+    "Connection": "Keep-Alive",
+    "Content-Type": "application/pdf"
+  },
+  "redirect_chain": [],
+  "decoded_body_filename": "HYDAT_Definition_EN.pdf",
+  "decoded_body_bytes": 51748,
+  "decoded_body_sha256": "b3ab1954bf5aeedb026cebe939764fcfbda0266fb267cb6a7315544c9be8e1ee",
+  "wire_body_filename": "HYDAT_Definition_EN.pdf",
+  "wire_body_bytes": 51748,
+  "wire_body_sha256": "b3ab1954bf5aeedb026cebe939764fcfbda0266fb267cb6a7315544c9be8e1ee"
+}

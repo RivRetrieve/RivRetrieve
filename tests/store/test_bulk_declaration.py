@@ -29,10 +29,10 @@ def test_registered_bulk_declaration_drives_download_without_central_id_wiring(
     compiled = cast(ValidatedStore, object())
     calls: list[str] = []
 
-    def declared_download(request: BulkDownloadRequest) -> DownloadedBulkArtifact:
+    def declared_download(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...]:
         calls.append("download")
         request.transfer("https://publisher.example/archive", request.destination)
-        return DownloadedBulkArtifact(request.destination, "https://publisher.example/archive", request.today)
+        return (DownloadedBulkArtifact(request.destination, "https://publisher.example/archive", request.today),)
 
     def declared_compile(request: BulkCompileRequest) -> ValidatedStore:
         calls.append("compile")
