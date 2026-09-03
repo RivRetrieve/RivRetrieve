@@ -1,0 +1,44 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://secure.example.test/data",
+    "parameters": {
+      "station": "A"
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-01-02T03:04:00.000000Z",
+    "content_base64": "eyJ2YWx1ZSI6MX0K",
+    "sha256": "3a37782e8974c48eebf2a0517c866ad15641c53b3d31993188796b56aeb79624",
+    "prerequisite_calls": [
+      {
+        "method": "GET",
+        "url": "https://auth.example.test/token",
+        "ordinary_headers": {
+          "User-Agent": "RivRetrieve"
+        },
+        "request_parameters": null,
+        "request_body_shape": "none",
+        "credential_header_names": [
+          "Identificador",
+          "Senha"
+        ],
+        "status_code": 200,
+        "retrieved_at": "2026-01-02T03:03:00.000000Z",
+        "content_type": "application/json",
+        "response_disposition": "secret_response_withheld"
+      }
+    ]
+  }
+}

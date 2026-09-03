@@ -212,6 +212,7 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
         ),
         fixture_bytes,
         origin,
+        (),
     )
     parsed = parse(payload, usgs_nwis_config())
     native = ObservationResult(

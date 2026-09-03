@@ -59,14 +59,12 @@ def convert(
         ZoneValue(row_zone)
 
         if isinstance(product.semantics, Daily):
-            if (
-                native_time.hour != 0
-                or native_time.minute != 0
-                or native_time.second != 0
-                or native_time.microsecond != 0
-            ):
+            actual_label = (native_time.hour, native_time.minute, native_time.second, native_time.microsecond)
+            if actual_label != product.semantics.label_time.components:
+                actual = native_time.time().isoformat(timespec="microseconds")
                 raise FatalContractError(
-                    f"Daily row for station {station_id} and product {product_id} must have a midnight label"
+                    f"Daily row for station {station_id} and product {product_id} must have declared label "
+                    f"{product.semantics.label_time.value}; actual label is {actual}"
                 )
         elif isinstance(product.semantics, Hourly):
             if native_time.minute != 0 or native_time.second != 0 or native_time.microsecond != 0:

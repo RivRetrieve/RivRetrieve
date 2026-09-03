@@ -75,6 +75,7 @@ def _recording() -> RecordingEnvelope:
                 "parameterCd": "00060",
                 "statCd": "00003",
             },
+            ordinary_headers={"Accept": "application/json", "User-Agent": "RivRetrieve"},
         ),
         content=_FIXTURE.read_bytes(),
         status_code=200,

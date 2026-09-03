@@ -8,6 +8,7 @@ from typing import Literal
 
 from rivretrieve._internal.engine import (
     Daily,
+    DailyLabelTime,
     DayDefinition,
     Instant,
     ProductConfig,
@@ -44,17 +45,17 @@ _CONFIG = ProviderConfig(
         ProductId("discharge_daily_mean"): ProductConfig(
             SourceCoordinates(FrHubeauSourceCoordinates("daily", "QmnJ", "station")),
             Unit.L_S,
-            Daily(DayDefinition("unknown")),
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("discharge_daily_max"): ProductConfig(
             SourceCoordinates(FrHubeauSourceCoordinates("daily", "QIXnJ", "station")),
             Unit.L_S,
-            Daily(DayDefinition("unknown")),
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_daily_max"): ProductConfig(
             SourceCoordinates(FrHubeauSourceCoordinates("daily", "HIXnJ", "station")),
             Unit.MM,
-            Daily(DayDefinition("unknown")),
+            Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("water_temperature_reported"): ProductConfig(
             SourceCoordinates(FrHubeauSourceCoordinates("temperature", "resultat", "station")),

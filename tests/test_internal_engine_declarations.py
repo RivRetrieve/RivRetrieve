@@ -6,6 +6,7 @@ import pytest
 from rivretrieve._internal.engine import (
     CacheConfig,
     Daily,
+    DailyLabelTime,
     DayDefinition,
     Instant,
     ObservationStoreConfig,
@@ -70,7 +71,7 @@ def test_zone_unknown_is_explicit_and_never_a_default() -> None:
 
 def test_instant_and_daily_are_distinct_immutable_semantics() -> None:
     instant = Instant()
-    daily = Daily(day_definition=DayDefinition("09:00"))
+    daily = Daily(day_definition=DayDefinition("09:00"), label_time=DailyLabelTime("11:00"))
     assert type(instant) is not type(daily)
     assert not isinstance(instant, Daily)
     assert not isinstance(daily, Instant)
@@ -81,7 +82,7 @@ def test_instant_and_daily_are_distinct_immutable_semantics() -> None:
 @pytest.mark.parametrize("raw", ["09:00", "unknown"])
 def test_daily_retains_declared_day_definition_including_unknown(raw: str) -> None:
     day_definition = DayDefinition(raw)
-    daily = Daily(day_definition=day_definition)
+    daily = Daily(day_definition=day_definition, label_time=DailyLabelTime("00:00"))
     assert daily.day_definition is day_definition
     assert daily.day_definition.value == raw
 
@@ -96,6 +97,17 @@ def test_day_definition_rejects_null_empty_and_malformed_values(raw: str) -> Non
         DayDefinition(raw)
     with pytest.raises(TypeError):
         daily_factory(day_definition="unknown")
+
+
+@pytest.mark.parametrize("raw", ["00:00", "11:00", "23:59:59", "12:34:56.123456"])
+def test_daily_label_time_accepts_strict_source_clocks(raw: str) -> None:
+    assert DailyLabelTime(raw).value == raw
+
+
+@pytest.mark.parametrize("raw", ["", "1:00", "24:00", "11:60", "11:00:60", "11:00:00.", "11:00:00.1234567"])
+def test_daily_label_time_rejects_ambiguous_or_invalid_clocks(raw: str) -> None:
+    with pytest.raises(ValueError):
+        DailyLabelTime(raw)
 
 
 def test_cache_config_declares_only_the_compiled_store_revision() -> None:

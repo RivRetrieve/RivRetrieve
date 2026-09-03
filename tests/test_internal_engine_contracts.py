@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import FrozenInstanceError, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 import polars as pl
 import polars.testing as pl_testing
@@ -290,6 +291,7 @@ def test_payload_accepts_bytes_and_preserves_complete_source_call() -> None:
         fetch_window=window,
         content=content,
         origin=origin,
+        prerequisite_calls=(),
     )
 
     assert payload.source_coordinates is coordinates
@@ -340,6 +342,7 @@ def test_payload_rejects_non_byte_content(content: object) -> None:
                 UnknownOriginFact(),
                 UnknownOriginFact(),
             ),
+            (),
         )
 
 
@@ -510,3 +513,19 @@ def _valid_frame(schema: CatalogueSchema) -> pl.DataFrame:
         {column.name: values[column.name] for column in schema.columns},
         schema=schema.polars_schema,
     )
+
+
+def test_payload_requires_explicit_prerequisite_trace_tuple() -> None:
+    factory = cast("Any", Payload)
+    unknown = UnknownOriginFact()
+    with pytest.raises(TypeError):
+        factory(
+            SourceCoordinates(object()),
+            (("station", ProductId("product")),),
+            _make_fetch_window(
+                WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
+                WindowEndpoint.from_datetime(datetime(2026, 1, 2)),
+            ),
+            b"data",
+            SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown),
+        )

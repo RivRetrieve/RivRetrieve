@@ -18,13 +18,23 @@ from types import MappingProxyType
 from typing import Self, TextIO, cast
 
 from rivretrieve._internal.transport import (
+    TRANSPORT_POLICY,
+    ExecutedRequestEvidence,
     HttpMethod,
+    RequestBodyShape,
     RequestParameter,
+    SecretCallTrace,
+    SecretResponseDisposition,
     TransportRequest,
     TransportResponse,
+    _ExecutableTransportRequest,
+    _request_credential_header_names,
+    _request_origin,
+    _safe_ordinary_headers,
 )
 
-RECORDING_FORMAT_VERSION = 1
+RECORDING_FORMAT_VERSION = 2
+_LEGACY_RECORDING_FORMAT_VERSION = 1
 _SHA256_HEX_LENGTH = 64
 _SECRET_FIELD_NAMES = frozenset(
     {
@@ -61,6 +71,8 @@ class RecordedRequest:
     url: str
     parameters: Mapping[str, RequestParameter] | None = None
     body: bytes | str | None = None
+    ordinary_headers: Mapping[str, str] = field(default_factory=dict)
+    credential_header_names: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.method, HttpMethod):
@@ -77,12 +89,22 @@ class RecordedRequest:
             object.__setattr__(self, "parameters", MappingProxyType(dict(self.parameters)))
         if not isinstance(self.body, bytes | str | None):
             raise TypeError("recorded request body must be bytes, string, or None")
+        evidence = ExecutedRequestEvidence(self.ordinary_headers, self.credential_header_names)
+        object.__setattr__(self, "ordinary_headers", evidence.ordinary_headers)
+        object.__setattr__(self, "credential_header_names", evidence.credential_header_names)
         _require_secret_safe_request(self)
 
     @classmethod
-    def from_transport_request(cls, request: TransportRequest) -> Self:
-        """Discard request headers, which may contain credentials and never enter recordings."""
-        return cls(request.method, request.url, request.params, request.body)
+    def from_transport_request(cls, request: TransportRequest, credential_header_names: tuple[str, ...] = ()) -> Self:
+        """Capture only explicitly safe ordinary headers plus typed credential-name evidence."""
+        return cls(
+            request.method,
+            request.url,
+            request.params,
+            request.body,
+            request.headers,
+            credential_header_names,
+        )
 
     def describe(self) -> str:
         parameters = "null" if self.parameters is None else _compact_json(dict(self.parameters))
@@ -98,6 +120,8 @@ class RecordingEnvelope:
     status_code: int
     retrieved_at: datetime
     content_type: str | None
+    prerequisite_calls: tuple[SecretCallTrace, ...] = ()
+    format_version: int = RECORDING_FORMAT_VERSION
     sha256: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -113,6 +137,19 @@ class RecordingEnvelope:
             raise ValueError("recording retrieval instant must be timezone-aware UTC")
         if self.content_type is not None and (not isinstance(self.content_type, str) or not self.content_type):
             raise TypeError("recording content type must be a non-empty string or None")
+        if not isinstance(self.prerequisite_calls, tuple) or any(
+            not isinstance(call, SecretCallTrace) for call in self.prerequisite_calls
+        ):
+            raise TypeError("recording prerequisite calls must be a tuple of SecretCallTrace values")
+        if type(self.format_version) is not int or self.format_version not in {
+            _LEGACY_RECORDING_FORMAT_VERSION,
+            RECORDING_FORMAT_VERSION,
+        }:
+            raise ValueError("recording format version is unsupported")
+        if self.format_version == _LEGACY_RECORDING_FORMAT_VERSION and (
+            self.prerequisite_calls or self.request.ordinary_headers or self.request.credential_header_names
+        ):
+            raise ValueError("legacy recordings cannot declare v2 request or prerequisite evidence")
         if _payload_has_secret_field(self.content, content_type=self.content_type):
             raise ValueError("recording response contains a secret-bearing field")
         object.__setattr__(self, "sha256", hashlib.sha256(self.content).hexdigest())
@@ -120,7 +157,24 @@ class RecordingEnvelope:
     @classmethod
     def from_transport(cls, request: TransportRequest, response: TransportResponse) -> Self:
         """Capture the request and the response facts returned by the shared transport."""
-        recorded_request = RecordedRequest.from_transport_request(request)
+        if response.executed_request is None:
+            raise InvalidRecordingError("transport response lacks typed executed-request evidence")
+        if response.applied_credential_header_names != response.executed_request.credential_header_names:
+            raise InvalidRecordingError("transport response credential execution evidence is inconsistent")
+        expected_headers = dict(request.headers)
+        if any(name.casefold() == "user-agent" for name in expected_headers):
+            raise InvalidRecordingError("source request must not provide User-Agent")
+        expected_headers["User-Agent"] = TRANSPORT_POLICY.user_agent
+        if dict(response.executed_request.ordinary_headers) != _safe_ordinary_headers(expected_headers):
+            raise InvalidRecordingError("transport response ordinary execution evidence is inconsistent")
+        recorded_request = RecordedRequest(
+            request.method,
+            request.url,
+            request.params,
+            request.body,
+            response.executed_request.ordinary_headers,
+            response.executed_request.credential_header_names,
+        )
         if response.url != request.url or dict(response.request_parameters) != dict(request.params or {}):
             raise InvalidRecordingError("transport response does not describe the request being recorded")
         return cls(
@@ -129,6 +183,7 @@ class RecordingEnvelope:
             status_code=response.status_code,
             retrieved_at=response.retrieved_at,
             content_type=response.content_type,
+            prerequisite_calls=response.prerequisite_calls,
         )
 
     def to_transport_response(self) -> TransportResponse:
@@ -139,6 +194,14 @@ class RecordingEnvelope:
             content_type=self.content_type,
             url=self.request.url,
             request_parameters={} if self.request.parameters is None else self.request.parameters,
+            applied_credential_header_names=self.request.credential_header_names,
+            prerequisite_calls=self.prerequisite_calls,
+            executed_request=ExecutedRequestEvidence(
+                self.request.ordinary_headers,
+                self.request.credential_header_names,
+            )
+            if self.format_version == RECORDING_FORMAT_VERSION
+            else None,
         )
 
 
@@ -151,9 +214,11 @@ class UnmatchedRequestError(LookupError):
 
     request: RecordedRequest
 
-    def __init__(self, request: TransportRequest | RecordedRequest) -> None:
+    def __init__(self, request: _ExecutableTransportRequest | RecordedRequest) -> None:
         self.request = (
-            request if isinstance(request, RecordedRequest) else RecordedRequest.from_transport_request(request)
+            request
+            if isinstance(request, RecordedRequest)
+            else RecordedRequest(request.method, request.url, request.params, request.body)
         )
         super().__init__(f"No recording matches request: {self.request.describe()}")
 
@@ -163,6 +228,12 @@ class ReplayTransport:
 
     def __init__(self, recordings: Iterable[RecordingEnvelope | str | Path]) -> None:
         resolved = tuple(_coerce_recording(recording) for recording in recordings)
+        for index, recording in enumerate(resolved):
+            for other in resolved[index + 1 :]:
+                if recording.format_version != other.format_version and _legacy_request_key(
+                    recording.request
+                ) == _legacy_request_key(other.request):
+                    raise InvalidRecordingError("mixed v1/v2 recordings could both match one runtime request")
         by_request: dict[tuple[object, ...], RecordingEnvelope] = {}
         for recording in resolved:
             key = _request_key(recording.request)
@@ -170,15 +241,53 @@ class ReplayTransport:
                 raise InvalidRecordingError(f"multiple recordings match request: {recording.request.describe()}")
             by_request[key] = recording
         self._recordings = MappingProxyType(by_request)
+        self._legacy_recordings = MappingProxyType(
+            {
+                _legacy_request_key(recording.request): recording
+                for recording in resolved
+                if recording.format_version == _LEGACY_RECORDING_FORMAT_VERSION
+            }
+        )
+        self._authenticated_origins = frozenset(
+            _request_origin(recording.request.url)
+            for recording in resolved
+            if recording.request.credential_header_names
+        )
 
-    def send(self, request: TransportRequest) -> TransportResponse:
-        recorded_request = RecordedRequest.from_transport_request(request)
-        key = _request_key(recorded_request)
+    def can_authenticate(self, url: str) -> bool:
+        return _request_origin(url) in self._authenticated_origins
+
+    def _resolve(self, request: _ExecutableTransportRequest) -> RecordingEnvelope:
         try:
-            recording = self._recordings[key]
+            request_credential_names = _request_credential_header_names(request)
+            credential_names = {name.casefold() for name in request_credential_names}
+            executed_headers = {
+                name: value for name, value in request.headers.items() if name.casefold() not in credential_names
+            }
+            if any(name.casefold() == "user-agent" for name in executed_headers):
+                raise ValueError("Source request must not provide a User-Agent header")
+            executed_headers["User-Agent"] = TRANSPORT_POLICY.user_agent
+            recorded_request = RecordedRequest(
+                request.method,
+                request.url,
+                request.params,
+                request.body,
+                executed_headers,
+                request_credential_names,
+            )
+            recording = self._recordings.get(_request_key(recorded_request))
+        except (TypeError, ValueError):
+            recording = None
+        if recording is not None:
+            return recording
+        legacy_request = RecordedRequest(request.method, request.url, request.params, request.body)
+        try:
+            return self._legacy_recordings[_legacy_request_key(legacy_request)]
         except KeyError as exc:
             raise UnmatchedRequestError(request) from exc
-        return recording.to_transport_response()
+
+    def send(self, request: TransportRequest) -> TransportResponse:
+        return self._resolve(request).to_transport_response()
 
 
 ReplayHttpClient = ReplayTransport
@@ -186,6 +295,8 @@ ReplayHttpClient = ReplayTransport
 
 def write_recording(recording: RecordingEnvelope, path: str | Path) -> None:
     """Write one deterministic recording envelope."""
+    if recording.format_version != RECORDING_FORMAT_VERSION:
+        raise InvalidRecordingError("writer emits recording format v2 only")
     destination = Path(path)
     destination.write_text(
         json.dumps(_recording_to_object(recording), indent=2, ensure_ascii=False) + "\n",
@@ -218,6 +329,11 @@ def dry_run_recordings(paths: Sequence[str | Path], *, output: TextIO | None = N
         )
         print(f"url: {recording.request.url}", file=destination)
         print(f"parameters: {parameters}", file=destination)
+        if recording.format_version == RECORDING_FORMAT_VERSION:
+            print(f"ordinary_headers: {_compact_json(dict(recording.request.ordinary_headers))}", file=destination)
+            print(
+                f"credential_header_names: {_compact_json(recording.request.credential_header_names)}", file=destination
+            )
         print(f"retrieved_at: {_format_utc(recording.retrieved_at)}", file=destination)
 
 
@@ -245,6 +361,15 @@ def _request_key(request: RecordedRequest) -> tuple[object, ...]:
         if request.parameters is None
         else tuple((name, _parameter_key(value)) for name, value in sorted(request.parameters.items()))
     )
+    return request.method, request.url, parameters, tuple(request.ordinary_headers.items()), request.body
+
+
+def _legacy_request_key(request: RecordedRequest) -> tuple[object, ...]:
+    parameters = (
+        None
+        if request.parameters is None
+        else tuple((name, _parameter_key(value)) for name, value in sorted(request.parameters.items()))
+    )
     return request.method, request.url, parameters, request.body
 
 
@@ -263,20 +388,29 @@ def _coerce_recording(recording: RecordingEnvelope | str | Path) -> RecordingEnv
 
 
 def _recording_to_object(recording: RecordingEnvelope) -> dict[str, object]:
+    request: dict[str, object] = {
+        "method": recording.request.method.value,
+        "url": recording.request.url,
+        "parameters": None if recording.request.parameters is None else dict(recording.request.parameters),
+        "body": _encode_body(recording.request.body),
+    }
+    if recording.format_version == RECORDING_FORMAT_VERSION:
+        request["ordinary_headers"] = dict(recording.request.ordinary_headers)
+        request["credential_header_names"] = list(recording.request.credential_header_names)
     return {
-        "format_version": RECORDING_FORMAT_VERSION,
-        "request": {
-            "method": recording.request.method.value,
-            "url": recording.request.url,
-            "parameters": None if recording.request.parameters is None else dict(recording.request.parameters),
-            "body": _encode_body(recording.request.body),
-        },
+        "format_version": recording.format_version,
+        "request": request,
         "response": {
             "status_code": recording.status_code,
             "content_type": recording.content_type,
             "retrieved_at": _format_utc(recording.retrieved_at),
             "content_base64": base64.b64encode(recording.content).decode("ascii"),
             "sha256": recording.sha256,
+            **(
+                {"prerequisite_calls": [_secret_call_to_object(call) for call in recording.prerequisite_calls]}
+                if recording.format_version == RECORDING_FORMAT_VERSION
+                else {}
+            ),
         },
     }
 
@@ -284,11 +418,15 @@ def _recording_to_object(recording: RecordingEnvelope) -> dict[str, object]:
 def _recording_from_object(value: object, source: Path) -> RecordingEnvelope:
     root = _require_object(value, "recording", source)
     _require_exact_keys(root, {"format_version", "request", "response"}, "recording", source)
-    if root["format_version"] != RECORDING_FORMAT_VERSION:
-        raise InvalidRecordingError(f"recording {source} has unsupported format_version {root['format_version']!r}")
+    version = root["format_version"]
+    if version not in {_LEGACY_RECORDING_FORMAT_VERSION, RECORDING_FORMAT_VERSION}:
+        raise InvalidRecordingError(f"recording {source} has unsupported format_version {version!r}")
 
     request_value = _require_object(root["request"], "request", source)
-    _require_exact_keys(request_value, {"method", "url", "parameters", "body"}, "request", source)
+    request_keys = {"method", "url", "parameters", "body"}
+    if version == RECORDING_FORMAT_VERSION:
+        request_keys |= {"ordinary_headers", "credential_header_names"}
+    _require_exact_keys(request_value, request_keys, "request", source)
     try:
         method = HttpMethod(request_value["method"])
     except (TypeError, ValueError) as exc:
@@ -296,23 +434,34 @@ def _recording_from_object(value: object, source: Path) -> RecordingEnvelope:
     parameters = request_value["parameters"]
     if parameters is not None and not isinstance(parameters, dict):
         raise InvalidRecordingError(f"recording {source} request parameters must be an object or null")
+    if version == RECORDING_FORMAT_VERSION:
+        if not isinstance(request_value["ordinary_headers"], dict):
+            raise InvalidRecordingError(f"recording {source} ordinary_headers must be an object")
+        if not isinstance(request_value["credential_header_names"], list) or any(
+            not isinstance(name, str) for name in request_value["credential_header_names"]
+        ):
+            raise InvalidRecordingError(f"recording {source} credential_header_names must be a string array")
     try:
         request = RecordedRequest(
             method=method,
             url=cast("str", request_value["url"]),
             parameters=cast("Mapping[str, RequestParameter] | None", parameters),
             body=_decode_body(request_value["body"], source),
+            ordinary_headers=cast("Mapping[str, str]", request_value["ordinary_headers"])
+            if version == RECORDING_FORMAT_VERSION
+            else {},
+            credential_header_names=tuple(cast("list[str]", request_value["credential_header_names"]))
+            if version == RECORDING_FORMAT_VERSION and isinstance(request_value["credential_header_names"], list)
+            else (),
         )
     except (TypeError, ValueError) as exc:
         raise InvalidRecordingError(f"recording {source} has an invalid request: {exc}") from exc
 
     response = _require_object(root["response"], "response", source)
-    _require_exact_keys(
-        response,
-        {"status_code", "content_type", "retrieved_at", "content_base64", "sha256"},
-        "response",
-        source,
-    )
+    response_keys = {"status_code", "content_type", "retrieved_at", "content_base64", "sha256"}
+    if version == RECORDING_FORMAT_VERSION:
+        response_keys.add("prerequisite_calls")
+    _require_exact_keys(response, response_keys, "response", source)
     content = _decode_base64(response["content_base64"], "response content", source)
     expected_digest = response["sha256"]
     if (
@@ -334,10 +483,73 @@ def _recording_from_object(value: object, source: Path) -> RecordingEnvelope:
             status_code=cast("int", response["status_code"]),
             retrieved_at=retrieved_at,
             content_type=cast("str | None", response["content_type"]),
+            prerequisite_calls=_secret_calls_from_object(response["prerequisite_calls"], source)
+            if version == RECORDING_FORMAT_VERSION
+            else (),
+            format_version=cast("int", version),
         )
     except (TypeError, ValueError) as exc:
         raise InvalidRecordingError(f"recording {source} has an invalid response: {exc}") from exc
     return recording
+
+
+def _secret_call_to_object(call: SecretCallTrace) -> dict[str, object]:
+    return {
+        "method": call.method.value,
+        "url": call.url,
+        "ordinary_headers": dict(call.ordinary_headers),
+        "request_parameters": None if call.request_parameters is None else dict(call.request_parameters),
+        "request_body_shape": call.request_body_shape.value,
+        "credential_header_names": list(call.credential_header_names),
+        "status_code": call.status_code,
+        "retrieved_at": _format_utc(call.retrieved_at),
+        "content_type": call.content_type,
+        "response_disposition": call.response_disposition.value,
+    }
+
+
+def _secret_calls_from_object(value: object, source: Path) -> tuple[SecretCallTrace, ...]:
+    if not isinstance(value, list):
+        raise InvalidRecordingError(f"recording {source} prerequisite_calls must be an array")
+    result: list[SecretCallTrace] = []
+    expected = {
+        "method",
+        "url",
+        "ordinary_headers",
+        "request_parameters",
+        "request_body_shape",
+        "credential_header_names",
+        "status_code",
+        "retrieved_at",
+        "content_type",
+        "response_disposition",
+    }
+    for index, raw in enumerate(value):
+        item = _require_object(raw, f"prerequisite_calls[{index}]", source)
+        _require_exact_keys(item, expected, f"prerequisite_calls[{index}]", source)
+        if not isinstance(item["ordinary_headers"], dict) or not isinstance(item["credential_header_names"], list):
+            raise InvalidRecordingError(f"recording {source} has malformed prerequisite call headers")
+        parameters = item["request_parameters"]
+        if parameters is not None and not isinstance(parameters, dict):
+            raise InvalidRecordingError(f"recording {source} has malformed prerequisite call parameters")
+        try:
+            result.append(
+                SecretCallTrace(
+                    method=HttpMethod(item["method"]),
+                    url=cast("str", item["url"]),
+                    ordinary_headers=cast("Mapping[str, str]", item["ordinary_headers"]),
+                    request_parameters=cast("Mapping[str, RequestParameter] | None", parameters),
+                    request_body_shape=RequestBodyShape(item["request_body_shape"]),
+                    credential_header_names=tuple(cast("list[str]", item["credential_header_names"])),
+                    status_code=cast("int", item["status_code"]),
+                    retrieved_at=_parse_utc(item["retrieved_at"]),
+                    content_type=cast("str | None", item["content_type"]),
+                    response_disposition=SecretResponseDisposition(item["response_disposition"]),
+                )
+            )
+        except (TypeError, ValueError) as exc:
+            raise InvalidRecordingError(f"recording {source} has invalid prerequisite call: {exc}") from exc
+    return tuple(result)
 
 
 def _unique_json_object(pairs: list[tuple[str, object]], source: Path) -> dict[str, object]:

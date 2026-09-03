@@ -7,7 +7,9 @@ import requests
 
 from rivretrieve._internal.transport import (
     TRANSPORT_POLICY,
+    AuthenticatedTransport,
     Clock,
+    CredentialHeader,
     HttpClient,
     HttpMethod,
     Sender,
@@ -18,6 +20,7 @@ from rivretrieve._internal.transport import (
     TransportResponse,
 )
 
+_COLLISION_SENTINEL = "SENTINEL-STATIC-COLLISION"
 _TRACE_SENTINEL = "SENTINEL-TRACEBACK-SECRET"
 
 
@@ -87,9 +90,6 @@ def test_successful_get_and_post_preserve_source_request_and_byte_response(
         params=params,
         headers={
             "Accept": "application/octet-stream",
-            "Referer": "https://source.example/",
-            "Authorization": "Bearer transport-secret",
-            "X-API-Key": "api-key-secret",
         },
         body=body,
     )
@@ -128,9 +128,6 @@ def test_successful_get_and_post_preserve_source_request_and_byte_response(
         "api-key-secret",
         "Authorization",
         "X-API-Key",
-        "Referer",
-        "Accept",
-        "User-Agent",
     ):
         assert all(forbidden not in candidate for candidate in scanned)
     assert "headers" not in {field.name for field in response_fields}
@@ -156,11 +153,8 @@ def test_absent_content_type_survives_transport() -> None:
 @pytest.mark.parametrize("override", ["User-Agent", "user-agent"])
 def test_user_agent_is_mandatory_and_source_override_is_rejected(override: str) -> None:
     allowed_headers = {
-        "Authorization": "Bearer secret",
-        "X-API-Key": "secret",
         "Accept": "application/json",
         "Content-type": "application/vnd.flux",
-        "Referer": "https://source.example/",
     }
     client, sender, _, _ = make_client([(b"ok", 200, "text/plain")])
     client.send(TransportRequest(HttpMethod.GET, "https://source.example", headers=allowed_headers))
@@ -353,9 +347,8 @@ def test_authenticated_transport_validates_headers_and_rejects_collisions() -> N
                 CredentialHeader("x-api-key", "b", ("https://example.test",)),
             ),
         )
-    wrapped = AuthenticatedTransport(Never(), (CredentialHeader("X-API-Key", "secret", ("https://example.test",)),))
-    with pytest.raises(ValueError, match="already provides"):
-        wrapped.send(TransportRequest(HttpMethod.GET, "https://example.test", headers={"x-api-key": "source"}))
+    with pytest.raises(ValueError, match="explicitly safe ordinary"):
+        TransportRequest(HttpMethod.GET, "https://example.test", headers={"x-api-key": "source"})
 
 
 def test_authenticated_transport_failure_contains_only_original_safe_request() -> None:
@@ -380,7 +373,8 @@ def test_authenticated_transport_failure_contains_only_original_safe_request() -
     wrapped = AuthenticatedTransport(Failing(), (CredentialHeader("X-API-Key", sentinel, ("https://example.test",)),))
     with pytest.raises(TransportFailure) as info:
         wrapped.send(original)
-    assert info.value.request is original
+    assert info.value.request == original
+    assert info.value.request is not original
     assert info.value.__cause__ is None
     assert (
         sentinel not in repr(info.value)
@@ -572,3 +566,120 @@ def test_credential_failure_traceback_locals_never_expose_value() -> None:
             assert error.__cause__ is None and error.__context__ is None
         else:
             raise AssertionError("credentialed failure was not sanitized")
+
+
+@pytest.mark.parametrize(
+    ("origin", "matching", "separate"),
+    [
+        ("HTTP://EXAMPLE.test:80", "http://example.test/path", "http://example.test:8080/path"),
+        ("HTTPS://EXAMPLE.test:443", "https://example.test/path", "https://example.test:80/path"),
+        ("https://127.0.0.1:8443", "https://127.0.0.1:8443/path", "https://127.0.0.1/path"),
+        ("https://[::1]:443", "https://[::1]/path", "https://[::1]:8443/path"),
+        ("https://example.test.", "https://example.test./path", "https://example.test/path"),
+    ],
+)
+def test_credential_origin_normalization_table(origin: str, matching: str, separate: str) -> None:
+    class Never:
+        def send(self, request):
+            raise AssertionError(request)
+
+    wrapped = AuthenticatedTransport(Never(), (CredentialHeader("X-Key", "value", (origin,)),))
+    assert wrapped.can_authenticate(matching)
+    assert not wrapped.can_authenticate(separate)
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://example.test:",
+        "https://usér.example",
+        "https://user@example.test",
+        "https://user:password@example.test",
+        "https://example.test/path",
+        "https://example.test?query=1",
+        "https://example.test#fragment",
+        "ftp://example.test",
+        "https:///missing",
+    ],
+)
+def test_credential_origins_reject_ambiguous_authorities_and_non_origins(origin: str) -> None:
+    with pytest.raises(ValueError):
+        CredentialHeader("X-Key", "value", (origin,))
+
+
+def test_transport_request_rejects_case_colliding_or_control_character_headers_before_send() -> None:
+    with pytest.raises(ValueError, match="case-insensitively"):
+        TransportRequest(HttpMethod.GET, "https://example.test", headers={"Accept": "text/csv", "accept": "text/csv"})
+    with pytest.raises(ValueError, match="visible ASCII"):
+        TransportRequest(HttpMethod.GET, "https://example.test", headers={"Accept": "text/csv\nsecret"})
+
+
+def test_http_client_rejects_unclassified_execution_metadata_before_sender_call() -> None:
+    client, sender, _, _ = make_client([(b"unreachable", 200, "text/plain")])
+    with pytest.raises(ValueError, match="explicitly safe ordinary"):
+        client.send(TransportRequest(HttpMethod.GET, "https://example.test", headers={"X-Unknown": "value"}))
+    assert sender.calls == []
+
+
+def test_public_mixed_case_credential_header_refusal_retains_no_caller_value() -> None:
+    class Never:
+        def send(self, request):
+            raise AssertionError(request)
+
+    wrapped = AuthenticatedTransport(
+        Never(), (CredentialHeader("Authorization", "actual-secret", ("https://example.test",)),)
+    )
+    try:
+        wrapped.send(
+            TransportRequest(
+                HttpMethod.GET,
+                "https://example.test/data",
+                headers={"Accept": "application/json", "aUtHoRiZaTiOn": _COLLISION_SENTINEL},
+            )
+        )
+    except ValueError as error:
+        import traceback
+
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert _COLLISION_SENTINEL not in rendered
+        assert error.__cause__ is None and error.__context__ is None
+    else:
+        raise AssertionError("collision was not refused")
+
+
+def test_static_success_metadata_echo_is_sanitized_without_secret_traceback_locals() -> None:
+    class Echo:
+        def send(self, request):
+            return TransportResponse(
+                b"safe data",
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                _COLLISION_SENTINEL,
+                request.url,
+                {},
+            )
+
+    wrapped = AuthenticatedTransport(
+        Echo(), (CredentialHeader("X-API-Key", _COLLISION_SENTINEL, ("https://example.test",)),)
+    )
+    try:
+        wrapped.send(
+            TransportRequest(HttpMethod.GET, "https://example.test/data", headers={"Accept": "application/json"})
+        )
+    except TransportFailure as error:
+        import traceback
+
+        rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+        assert error.reason is TransportFailureReason.RETAINED_METADATA_UNSAFE
+        assert _COLLISION_SENTINEL not in rendered
+        assert error.__cause__ is None and error.__context__ is None
+    else:
+        raise AssertionError("credential metadata echo was not refused")
+
+
+def test_public_transport_request_has_no_credential_tagging_constructor_channel() -> None:
+    import inspect
+
+    assert "credential_header_names" not in inspect.signature(TransportRequest).parameters
+    with pytest.raises(TypeError):
+        TransportRequest(HttpMethod.GET, "https://example.test", credential_header_names=("Authorization",))

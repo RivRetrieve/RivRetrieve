@@ -169,6 +169,7 @@ def fetch(
                         fetch_window,
                         html.content,
                         _origin(html),
+                        html.prerequisite_calls,
                     )
                 )
                 links = _page(html.content, coordinates.kind, station_id)
@@ -198,6 +199,7 @@ def fetch(
                         fetch_window,
                         dat.content,
                         _origin(dat),
+                        dat.prerequisite_calls,
                     )
                 )
     return WithIssues(tuple(payloads), tuple(issues))

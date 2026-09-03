@@ -16,8 +16,9 @@ from rivretrieve._internal.recordings import (
     UnmatchedRequestError,
     dry_run_recordings,
     read_recording,
+    write_recording,
 )
-from rivretrieve._internal.transport import HttpMethod, TransportRequest
+from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpMethod, TransportRequest
 
 _RECORDING = Path(__file__).parent / "test_data" / "observation_recording_synthetic.json"
 
@@ -45,7 +46,7 @@ def test_replay_returns_recorded_response_only_for_exact_request() -> None:
         method=HttpMethod.GET,
         url="https://example.test/observations",
         params={"start": "2026-01-01", "station": "REAL-1", "end": "2026-01-02"},
-        headers={"Authorization": "not recorded"},
+        headers={"Accept": "text/csv"},
     )
 
     response = replay.send(request)
@@ -237,3 +238,132 @@ def test_valid_json_scalars_without_fields_remain_recordable(content: bytes) -> 
     )
 
     assert recording.content == content
+
+
+_V2_RECORDING = Path(__file__).parent / "test_data" / "observation_recording_v2_synthetic.recording.json"
+
+
+def test_v2_matches_exact_safe_executed_headers_and_exposes_exact_origin_capability() -> None:
+    replay = ReplayTransport([_V2_RECORDING])
+    request = TransportRequest(
+        HttpMethod.GET, "https://secure.example.test/data", {"station": "A"}, {"Accept": "application/json"}
+    )
+    response = replay.send(request)
+    assert response.applied_credential_header_names == ("X-API-Key",)
+    assert response.executed_request is not None
+    assert len(response.prerequisite_calls) == 1
+    assert response.prerequisite_calls[0].response_disposition.value == "secret_response_withheld"
+    assert response.prerequisite_calls[0].credential_header_names == ("Identificador", "Senha")
+    assert dict(response.executed_request.ordinary_headers) == {
+        "Accept": "application/json",
+        "User-Agent": "RivRetrieve",
+    }
+    assert replay.can_authenticate("https://secure.example.test/other")
+    assert not replay.can_authenticate("https://sub.secure.example.test/other")
+    with pytest.raises(UnmatchedRequestError):
+        replay.send(TransportRequest(HttpMethod.GET, request.url, request.params, {"Accept": "text/csv"}))
+
+
+def test_v2_round_trip_never_serializes_credential_values(tmp_path: Path) -> None:
+    original = read_recording(_V2_RECORDING)
+    output = tmp_path / "v2.json"
+    write_recording(original, output)
+    reread = read_recording(output)
+    assert reread == original
+    data = output.read_bytes()
+    assert b"X-API-Key" in data
+    assert b"SENTINEL-CREDENTIAL-VALUE" not in data
+
+
+def test_v2_refuses_unknown_or_case_colliding_ordinary_headers() -> None:
+    with pytest.raises(ValueError, match="explicitly"):
+        RecordedRequest(HttpMethod.GET, "https://example.test", ordinary_headers={"X-Unclassified": "value"})
+    with pytest.raises(ValueError, match="case-insensitively"):
+        RecordedRequest(
+            HttpMethod.GET, "https://example.test", ordinary_headers={"Accept": "text/csv", "accept": "text/csv"}
+        )
+    with pytest.raises(ValueError, match="collide"):
+        RecordedRequest(
+            HttpMethod.GET,
+            "https://example.test",
+            ordinary_headers={"Accept": "text/csv"},
+            credential_header_names=("accept",),
+        )
+
+
+def test_mixed_v1_v2_replay_ambiguity_is_refused() -> None:
+    legacy = read_recording(_RECORDING)
+    v2 = RecordingEnvelope(
+        request=RecordedRequest(
+            legacy.request.method,
+            legacy.request.url,
+            legacy.request.parameters,
+            legacy.request.body,
+            {"User-Agent": "RivRetrieve"},
+        ),
+        content=legacy.content,
+        status_code=legacy.status_code,
+        retrieved_at=legacy.retrieved_at,
+        content_type=legacy.content_type,
+    )
+    with pytest.raises(InvalidRecordingError, match="mixed v1/v2"):
+        ReplayTransport([legacy, v2])
+
+
+def test_writer_refuses_to_promote_legacy_recording(tmp_path: Path) -> None:
+    with pytest.raises(InvalidRecordingError, match="v2 only"):
+        write_recording(read_recording(_RECORDING), tmp_path / "promoted.json")
+
+
+def test_v2_replays_through_exact_origin_authenticated_transport_without_using_secret_value() -> None:
+    sentinel = "SENTINEL-REPLAY-MUST-NOT-PERSIST"
+    replay = ReplayTransport([_V2_RECORDING])
+    wrapped = AuthenticatedTransport(
+        replay,
+        (CredentialHeader("X-API-Key", sentinel, ("https://secure.example.test",)),),
+    )
+    response = wrapped.send(
+        TransportRequest(
+            HttpMethod.GET,
+            "https://secure.example.test/data",
+            {"station": "A"},
+            {"Accept": "application/json"},
+        )
+    )
+    scanned = (repr(replay), repr(wrapped), repr(response), str(response))
+    assert response.content == b'{"value":1}\n'
+    assert response.applied_credential_header_names == ("X-API-Key",)
+    assert all(sentinel not in value for value in scanned)
+
+
+def test_v2_refuses_oversized_header_values_and_trace_name_collisions() -> None:
+    from rivretrieve._internal.transport import RequestBodyShape, SecretCallTrace
+
+    with pytest.raises(ValueError, match="too large"):
+        RecordedRequest(HttpMethod.GET, "https://example.test", ordinary_headers={"Accept": "x" * 1025})
+    with pytest.raises(ValueError, match="collide"):
+        SecretCallTrace(
+            HttpMethod.GET,
+            "https://auth.example.test/token",
+            {"Accept": "application/json"},
+            None,
+            RequestBodyShape.NONE,
+            ("accept",),
+            200,
+            datetime(2026, 1, 1, tzinfo=UTC),
+            "application/json",
+        )
+
+
+def test_v1_recording_never_claims_authentication_capability() -> None:
+    replay = ReplayTransport([_RECORDING])
+    assert not replay.can_authenticate("https://example.test/observations")
+
+
+@pytest.mark.parametrize(
+    "url", ["https://secure.example.test:", "https://usér.example/path", "https://user@secure.example.test/path"]
+)
+def test_replay_authentication_capability_uses_live_exact_origin_refusals(url: str) -> None:
+    replay = ReplayTransport([_V2_RECORDING])
+    with pytest.raises(ValueError):
+        replay.can_authenticate(url)

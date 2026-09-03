@@ -98,7 +98,14 @@ def fetch(
                         f"fr_hubeau request returned unexpected HTTP status {response.status_code}"
                     )
                 payloads.append(
-                    Payload(source, ((station, product),), fetch_window, response.content, _origin(response))
+                    Payload(
+                        source,
+                        ((station, product),),
+                        fetch_window,
+                        response.content,
+                        _origin(response),
+                        response.prerequisite_calls,
+                    )
                 )
                 if coordinates.family == "hydroportail":
                     break

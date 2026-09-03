@@ -16,6 +16,7 @@ from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
     Daily,
+    DailyLabelTime,
     DayDefinition,
     FetchWindow,
     Instant,
@@ -289,6 +290,7 @@ def _payload(
         fetch_window=fetch_window,
         content=(f'{{"station_id":"{station_id}"}}').encode(),
         origin=_origin(),
+        prerequisite_calls=(),
     )
 
 
@@ -903,6 +905,7 @@ def _drive_boundary_rows(
             fetch_window=fetch_window,
             content=(f'{{"payload_index":{index}}}').encode(),
             origin=_origin(),
+            prerequisite_calls=(),
         )
         for index, station_id in enumerate(request.stations, start=1)
     )
@@ -1181,7 +1184,7 @@ def test_drive_rejects_engine_created_fetch_window_that_does_not_contain_request
             "this row and request window.",
         ),
         (
-            Daily(DayDefinition("00:00")),
+            Daily(DayDefinition("00:00"), DailyLabelTime("00:00")),
             datetime(2026, 1, 2, 12),
             datetime(2026, 1, 2, 18),
             datetime(2026, 1, 3, 0),
@@ -1296,7 +1299,7 @@ def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -
             ProductId("level"): ProductConfig(
                 coordinates=coordinates,
                 unit=Unit.CM,
-                semantics=Daily(DayDefinition("00:00")),
+                semantics=Daily(DayDefinition("00:00"), DailyLabelTime("00:00")),
             )
         },
     )
@@ -1460,4 +1463,91 @@ def test_source_call_parameters_reject_boolean_and_non_finite_float(value: objec
             unknown,
             unknown,
             unknown,
+        )
+
+
+def test_prerequisite_calls_are_interleaved_before_each_actual_payload_origin() -> None:
+    from dataclasses import replace
+    from datetime import UTC
+
+    from rivretrieve._internal.transport import HttpMethod, RequestBodyShape, SecretCallTrace
+
+    requested_window, fetch_window = _windows()
+    request = _request(requested_window)
+    coordinates = SourceCoordinates({"parameter": "height"})
+
+    def auth(minute: int) -> SecretCallTrace:
+        return SecretCallTrace(
+            HttpMethod.GET,
+            "https://auth.test/token",
+            {"User-Agent": "RivRetrieve"},
+            None,
+            RequestBodyShape.NONE,
+            ("Identificador", "Senha"),
+            200,
+            datetime(2026, 1, 2, 0, minute, tzinfo=UTC),
+            "application/json",
+        )
+
+    def data(station: str, minute: int, traces=()):
+        return replace(
+            _payload(station, coordinates, fetch_window),
+            station_products=((station, ProductId("level")), (station, ProductId("flow"))),
+            origin=SourceCallOrigin(
+                f"https://data.test/{station}",
+                {},
+                200,
+                datetime(2026, 1, 2, 0, minute, tzinfo=UTC),
+                "application/json",
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+            ),
+            prerequisite_calls=traces,
+        )
+
+    payloads = (data("A", 1, (auth(0),)), data("B", 2), data("C", 4, (auth(3),)))
+    enriched = driver_module._provenance_with_payload_origins(_provenance(request), payloads)
+    assert tuple(call["url"] for call in enriched.calls_made) == (
+        "https://auth.test/token",
+        "https://data.test/A",
+        "https://data.test/B",
+        "https://auth.test/token",
+        "https://data.test/C",
+    )
+    assert enriched.endpoints == (
+        "https://auth.test/token",
+        "https://data.test/A",
+        "https://data.test/B",
+        "https://data.test/C",
+    )
+    assert enriched.retrieved_at == datetime(2026, 1, 2, 0, 4, tzinfo=UTC)
+    assert enriched.calls_made[0]["response_disposition"] == "secret_response_withheld"
+    assert set(enriched.calls_made[0]) == {
+        "method",
+        "url",
+        "ordinary_headers",
+        "request_parameters",
+        "request_body_shape",
+        "credential_header_names",
+        "status_code",
+        "retrieved_at",
+        "content_type",
+        "response_disposition",
+    }
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"calls_made": ({"url": "already"},)},
+        {"endpoints": ("https://already.test",)},
+        {"retrieved_at": datetime(2026, 1, 1)},
+        {"query": {"statement": "already"}},
+    ],
+)
+def test_payload_origin_enrichment_refuses_each_ambiguous_base_field_even_without_payloads(update) -> None:
+    requested_window, _ = _windows()
+    with pytest.raises(FatalContractError, match="requires empty call-derived base provenance"):
+        driver_module._provenance_with_payload_origins(
+            _provenance(_request(requested_window)).model_copy(update=update), ()
         )

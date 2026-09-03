@@ -162,6 +162,7 @@ def _payload(
             source_path=UnknownOriginFact(),
             query=UnknownOriginFact(),
         ),
+        prerequisite_calls=response.prerequisite_calls,
     )
 
 
