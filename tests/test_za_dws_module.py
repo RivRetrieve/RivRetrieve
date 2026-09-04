@@ -9,7 +9,7 @@ from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 
 def test_za_dws_in_providers_list() -> None:
-    assert "za_dws" in rr.providers()
+    assert "za_dws" in rr.providers().get_column("provider_id").to_list()
 
 
 def test_za_dws_stations_offline() -> None:

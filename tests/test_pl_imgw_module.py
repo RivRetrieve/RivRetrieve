@@ -12,7 +12,7 @@ BULK_OBSERVATIONS = (
 
 
 def test_pl_imgw_registered_with_packaged_stations() -> None:
-    assert "pl_imgw" in rr.providers()
+    assert "pl_imgw" in rr.providers().get_column("provider_id").to_list()
     result = catalogue_reader("pl_imgw").read_stations()
     assert isinstance(result, CatalogResult)
     assert result.data.height == 1301

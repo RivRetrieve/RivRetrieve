@@ -75,7 +75,7 @@ def test_each_lithuania_product_has_an_exact_live_replay_probe() -> None:
     run_manifest_boundary_probes(_DECLARED, tuple(_probe(product) for product in _PRODUCTS))
 
 
-def test_one_monthly_response_coalesces_both_products_and_one_receipt() -> None:
+def test_each_product_series_has_one_monthly_response_and_receipt() -> None:
     replay = ReplayTransport((_RECORDING,))
     result = drive(
         ObservationRequest(
@@ -97,5 +97,5 @@ def test_one_monthly_response_coalesces_both_products_and_one_receipt() -> None:
         ("discharge_daily_mean", 26),
         ("stage_daily_mean", 26),
     ]
-    assert len(result.receipts.entries) == 1
+    assert len(result.receipts.entries) == 2
     assert result.receipts.entries[0].content == _RECORDING.content

@@ -6,7 +6,7 @@ from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 
 def test_ba_fhmzbih_catalogue_and_live_declaration():
-    assert "ba_fhmzbih" in rr.providers()
+    assert "ba_fhmzbih" in rr.providers().get_column("provider_id").to_list()
     assert isinstance(declaration.observations, LiveStages)
     assert catalogue_reader("ba_fhmzbih").read_stations().data.height == 2
     products = catalogue_reader("ba_fhmzbih").read_products().data

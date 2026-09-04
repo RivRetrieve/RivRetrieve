@@ -1,4 +1,4 @@
-"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode × Transport → _AssemblyResult; route_window_declarations : ProviderStages × Transport → ProductWindowDeclarations."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode × Transport × CredentialVariableNames → _AssemblyResult; route_window_declarations : ProviderStages × Transport → ProductWindowDeclarations."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ from rivretrieve._internal.engine import (
     WithIssues,
     _make_fetch_window,
 )
-from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.observations import (
     ObservationProvenance,
     ReceiptAuthorship,
@@ -43,10 +43,19 @@ from rivretrieve._internal.observations import (
     ReceiptMode,
     Receipts,
 )
-from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.receipts import encode_store_excerpt
-from rivretrieve._internal.transport import HttpClient, SecretCallTrace, Transport
+from rivretrieve._internal.transport import (
+    AuthenticationCapability,
+    HttpClient,
+    SecretCallTrace,
+    Transport,
+    TransportFailure,
+    TransportFailureReason,
+    TransportRequest,
+    TransportResponse,
+)
 from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
@@ -229,6 +238,88 @@ def _provenance_with_payload_origins(
     )
 
 
+class _SourceResponseTransport:
+    """source response transport : TransportRequest × Transport → TransportResponse ∪ TransportFailure."""
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def can_authenticate(self, url: str) -> bool:
+        return isinstance(self._transport, AuthenticationCapability) and self._transport.can_authenticate(url)
+
+    def send(self, request: TransportRequest) -> TransportResponse:
+        response = self._transport.send(request)
+        if 200 <= response.status_code < 300:
+            return response
+        raise TransportFailure(
+            request,
+            TransportFailureReason.HTTP_STATUS,
+            1,
+            status_code=response.status_code,
+        )
+
+
+def _source_failure_issue(
+    provider_id: ProviderId,
+    station_id: str,
+    product_id: ProductId,
+    failure: TransportFailure,
+    credential_names: tuple[str, ...],
+) -> Issue:
+    """source failure classification : Series × TransportFailure × CredentialNames → Issue."""
+    details: dict[str, object] = {
+        "station_id": station_id,
+        "product_id": str(product_id),
+        "failure_reason": failure.reason.value,
+        "attempts": failure.attempts,
+        "status_code": failure.status_code,
+    }
+    if failure.status_code == 404:
+        return Issue(
+            severity="warning",
+            code="source.http_not_found",
+            message=(
+                f"Provider {provider_id} source returned HTTP 404 for station {station_id}, product {product_id}."
+            ),
+            details=details,
+            provider_id=provider_id,
+        )
+    if failure.status_code in (401, 403) and credential_names:
+        names = ", ".join(credential_names)
+        details["credential_variables"] = list(credential_names)
+        message = (
+            f"Provider {provider_id} rejected the credential for station {station_id}, product {product_id}: "
+            f"HTTP {failure.status_code}; check {names}."
+        )
+    elif failure.reason is TransportFailureReason.HTTP_STATUS:
+        message = (
+            f"Provider {provider_id} failed for station {station_id}, product {product_id}: HTTP {failure.status_code}."
+        )
+    else:
+        reason_text = {
+            TransportFailureReason.RETRY_EXHAUSTED: (
+                "transport retries were exhausted after a timeout or retryable response"
+            ),
+            TransportFailureReason.TERMINAL_SENDER_FAILURE: "the transport sender failed terminally",
+            TransportFailureReason.REDIRECT_REFUSED: "a credentialed redirect was refused",
+            TransportFailureReason.RETAINED_METADATA_UNSAFE: (
+                "the response could not be retained without exposing a credential"
+            ),
+            TransportFailureReason.HTTP_STATUS: "the source returned a non-success HTTP status",
+        }[failure.reason]
+        status = f" with HTTP status {failure.status_code}" if failure.status_code is not None else ""
+        message = (
+            f"Provider {provider_id} failed for station {station_id}, product {product_id}: {reason_text}{status}."
+        )
+    return Issue(
+        severity="error",
+        code="source.request_failed",
+        message=message,
+        details=details,
+        provider_id=provider_id,
+    )
+
+
 class ProviderStages(Protocol):
     """Fetch returns ordered source calls; parse receives each exact Payload without transformation."""
 
@@ -267,6 +358,7 @@ def drive(
     provenance: ObservationProvenance,
     receipts: ReceiptMode = ReceiptMode.OMIT,
     transport: Transport | None = None,
+    credential_names: tuple[str, ...] = (),
 ) -> _AssemblyResult:
     if receipts not in (ReceiptMode.OMIT, ReceiptMode.INCLUDE) or not isinstance(receipts, ReceiptMode):
         raise TypeError("receipts must be ReceiptMode.OMIT or ReceiptMode.INCLUDE")
@@ -316,18 +408,38 @@ def drive(
                 "this is an internal provider contract breach before fetch."
             ) from error
         planned[product_id] = plan_windows(fetch_window, declaration)
-    rendered_windows = MappingProxyType(dict(planned))
-    fetched = provider.fetch(
-        request.stations,
-        request.products,
-        rendered_windows,
-        fetch_window,
-        config,
-        resolved_transport,
-    )
+    fetched_payloads: list[Payload] = []
+    fetch_issues: list[Issue] = []
+    for station_id in request.stations:
+        for product_id in request.products:
+            rendered_windows = MappingProxyType({product_id: planned[product_id]})
+            try:
+                fetched = provider.fetch(
+                    (station_id,),
+                    (product_id,),
+                    rendered_windows,
+                    fetch_window,
+                    config,
+                    _SourceResponseTransport(resolved_transport),
+                )
+            except TransportFailure as failure:
+                fetch_issues.append(
+                    _source_failure_issue(
+                        request.provider_id,
+                        station_id,
+                        product_id,
+                        failure,
+                        credential_names,
+                    )
+                )
+                continue
+            fetch_issues.extend(fetched.issues)
+            fetched_payloads.extend(fetched.value)
+
+    payloads = tuple(fetched_payloads)
     parsed: list[WithIssues[Rows]] = []
     receipt_entries: list[ReceiptEntry] = []
-    for payload in fetched.value:
+    for payload in payloads:
         if receipts is ReceiptMode.INCLUDE:
             receipt_entries.append(
                 ReceiptEntry(
@@ -343,9 +455,9 @@ def drive(
     converted = convert(rows, config, request.window)
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
     _require_canonical_rows_within_requested(converted.value, config, request.window)
-    issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues) + converted.issues
+    issues = tuple(fetch_issues) + tuple(issue for result in parsed for issue in result.issues) + converted.issues
     receipt_payload = Receipts(provider_id=request.provider_id, entries=tuple(receipt_entries))
-    enriched_provenance = _provenance_with_payload_origins(provenance, fetched.value)
+    enriched_provenance = _provenance_with_payload_origins(provenance, payloads)
     return assemble(converted.value, enriched_provenance, issues, receipt_payload)
 
 

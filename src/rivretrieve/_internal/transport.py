@@ -235,6 +235,7 @@ class TransportResponse:
 
 
 class TransportFailureReason(StrEnum):
+    HTTP_STATUS = "http_status"
     TERMINAL_SENDER_FAILURE = "terminal_sender_failure"
     RETRY_EXHAUSTED = "retry_exhausted"
     REDIRECT_REFUSED = "redirect_refused"

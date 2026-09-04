@@ -66,7 +66,7 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     catalogue_version: str | None,
     availability: set[str],
 ) -> None:
-    assert provider_id in rr.providers()
+    assert provider_id in rr.providers().get_column("provider_id").to_list()
     reader = catalogue_reader(provider_id)
     info = provider_info(provider_id)
     stations_result = reader.read_stations()

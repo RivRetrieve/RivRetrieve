@@ -61,7 +61,9 @@ from importlib.resources import files
 import rivretrieve
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 
-provider_ids = tuple(rivretrieve.providers())
+provider_frame = rivretrieve.providers()
+assert provider_frame.columns == ["provider_id", "credentials", "access"]
+provider_ids = tuple(provider_frame["provider_id"])
 assert provider_ids == BUILTIN_PROVIDER_IDS
 provider_root = files("rivretrieve._internal.providers")
 for provider_id in provider_ids:

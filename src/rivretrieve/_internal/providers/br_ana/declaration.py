@@ -7,4 +7,5 @@ from rivretrieve._internal.providers.registration import CatalogueOnly, Provider
 declaration = ProviderDeclaration(
     catalogue=Path(__file__).with_name("catalogue"),
     observations=CatalogueOnly(),
+    required_credentials=("ANA_IDENTIFICADOR", "ANA_SENHA"),
 )

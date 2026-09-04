@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import rivretrieve as rr
-import rivretrieve._internal.driver as driver_module
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 DATA = Path(__file__).parent / "test_data"
@@ -13,7 +13,7 @@ DATA = Path(__file__).parent / "test_data"
 
 def _public(monkeypatch, provider, station, product, start, end, recordings):
     replay = ReplayTransport(tuple(read_recording(DATA / name) for name in recordings))
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: replay)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider=provider, station=station, product=product)
     result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
     assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]

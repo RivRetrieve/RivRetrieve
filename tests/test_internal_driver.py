@@ -98,14 +98,16 @@ class _ThrowawayProvider:
         transport: object,
     ) -> WithIssues[tuple[Payload, ...]]:
         self._events.append("fetch")
-        assert stations == _STATIONS
+        assert len(stations) == len(products) == 1
         assert products == _PRODUCTS
         assert rendered_windows == {ProductId("level"): (RenderedWindow(window.start.date, window.end.date),)}
         assert all(payload.fetch_window == window for payload in self._payloads)
         assert isinstance(window, FetchWindow)
         assert not isinstance(window, RequestedWindow)
         assert config is self.config
-        return WithIssues(value=self._payloads, issues=self._fetch_issues)
+        matching = tuple(payload for payload in self._payloads if payload.station_products[0][0] == stations[0])
+        issues = self._fetch_issues if stations[0] == _STATIONS[0] else ()
+        return WithIssues(value=matching, issues=issues)
 
     def parse(
         self,
@@ -142,10 +144,10 @@ def _issue(
     )
 
 
-def _request(window: RequestedWindow) -> ObservationRequest:
+def _request(window: RequestedWindow, stations: tuple[str, ...] = _STATIONS) -> ObservationRequest:
     return ObservationRequest(
         provider_id=ProviderId("throwaway"),
-        stations=_STATIONS,
+        stations=stations,
         products=_PRODUCTS,
         window=window,
     )
@@ -211,7 +213,8 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
             transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
             assert stations == ("station-1",)
-            assert supplied_products == products
+            assert len(supplied_products) == 1
+            assert supplied_products[0] in products
             assert supplied_config is config
             received.append((rendered_windows, fetch_window))
             return WithIssues(())
@@ -224,13 +227,17 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
     )
 
     assert result.canonical_rows.is_empty()
-    assert len(received) == 1
-    rendered_windows, fetch_window = received[0]
-    assert list(rendered_windows) == list(products)
-    assert rendered_windows == {
+    assert len(received) == 2
+    assert [tuple(rendered) for rendered, _ in received] == [
+        (ProductId("date_product"),),
+        (ProductId("year_product"),),
+    ]
+    rendered_by_product = {product: rendered[product] for rendered, _ in received for product in rendered}
+    assert rendered_by_product == {
         ProductId("date_product"): (RenderedWindow("2025-12-30", "2026-01-04"),),
         ProductId("year_product"): (RenderedWindow("2025", None), RenderedWindow("2026", None)),
     }
+    rendered_windows, fetch_window = received[0]
     with pytest.raises(TypeError):
         rendered_windows[ProductId("date_product")] = ()  # type: ignore[index]
     assert fetch_window == _make_fetch_window(
@@ -356,7 +363,7 @@ def test_drive_rejects_invalid_receipts_modes_before_provider_work(invalid_recei
 
 def test_drive_default_omit_never_constructs_receipt_entry(monkeypatch: pytest.MonkeyPatch) -> None:
     requested_window, fetch_window = _windows()
-    request = _request(requested_window)
+    request = _request(requested_window, ("station-1",))
     coordinates = SourceCoordinates({"parameter": "height"})
     payload = _payload("station-1", coordinates, fetch_window)
     provider = _ThrowawayProvider(
@@ -409,7 +416,7 @@ def test_drive_widens_fetch_window_by_exactly_two_calendar_days_across_month_and
         WindowEndpoint.from_datetime(requested_start),
         WindowEndpoint.from_datetime(requested_end),
     )
-    request = _request(requested)
+    request = _request(requested, ("station-1",))
     coordinates = SourceCoordinates({"parameter": "height"})
     config = _config(coordinates)
     received: list[FetchWindow] = []
@@ -428,7 +435,7 @@ def test_drive_widens_fetch_window_by_exactly_two_calendar_days_across_month_and
             supplied_config: ProviderConfig,
             transport: object,
         ) -> WithIssues[tuple[Payload, ...]]:
-            assert stations == _STATIONS
+            assert stations == ("station-1",)
             assert products == _PRODUCTS
             assert supplied_config is config
             received.append(window)
@@ -488,7 +495,7 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
 ) -> None:
     events: list[str] = []
     requested_window, fetch_window = _windows()
-    request = _request(requested_window)
+    request = _request(requested_window, ("station-1", "station-2"))
     coordinates = SourceCoordinates({"parameter": "height"})
     config = _config(coordinates)
     payloads = (
@@ -601,6 +608,7 @@ def test_drive_accumulates_every_stage_issue_in_encounter_order(
         assert entry.content is payload.content
         assert entry.origin is payload.origin
     assert events == [
+        "fetch",
         "fetch",
         "parse:station-1",
         "parse:station-2",
@@ -745,6 +753,10 @@ def test_drive_returns_four_stations_and_one_issue_when_one_of_five_fails() -> N
     assert result.receipts == Receipts(provider_id=request.provider_id, entries=())
     assert events == [
         "fetch",
+        "fetch",
+        "fetch",
+        "fetch",
+        "fetch",
         "parse:station-1",
         "parse:station-2",
         "parse:station-4",
@@ -819,7 +831,7 @@ def test_drive_all_source_failure_reaches_convert_and_assemble(
     assert result.issues == fetch_issues
     assert result.provenance is provenance
     assert result.receipts == Receipts(provider_id=request.provider_id, entries=())
-    assert events == ["fetch", "convert", "assemble"]
+    assert events == ["fetch"] * 5 + ["convert", "assemble"]
     assert {name for name in dir(provider) if not name.startswith("_")} == {
         "config",
         "fetch",
@@ -852,11 +864,13 @@ class _BoundaryProvider:
         transport: object,
     ) -> WithIssues[tuple[Payload, ...]]:
         self._events.append("fetch")
-        assert stations == tuple(f"station-{index}" for index in range(1, len(self._payloads) + 1))
+        assert len(stations) == len(products) == 1
         assert products == (ProductId("level"),)
         assert window == self._payloads[0].fetch_window
         assert config is self.config
-        return WithIssues(value=self._payloads)
+        return WithIssues(
+            value=tuple(payload for payload in self._payloads if payload.station_products[0][0] == stations[0])
+        )
 
     def parse(
         self,
@@ -965,7 +979,7 @@ def test_drive_rejects_each_malformed_parse_result_before_later_parse_or_convert
     with pytest.raises(FatalContractError, match="Rows is missing required columns: time_zone"):
         _drive_boundary_rows((malformed_rows, later_rows), events)
 
-    assert events == ["fetch", "parse-1"]
+    assert events == ["fetch", "fetch", "parse-1"]
 
 
 def test_drive_rejects_malformed_second_parse_result(
@@ -1010,7 +1024,7 @@ def test_drive_rejects_malformed_second_parse_result(
     with pytest.raises(FatalContractError, match="Rows is missing required columns: time_zone"):
         _drive_boundary_rows((first_rows, malformed_rows), events)
 
-    assert events == ["fetch", "parse-1", "parse-2"]
+    assert events == ["fetch", "fetch", "parse-1", "parse-2"]
 
 
 def test_drive_rejects_malformed_canonical_rows_before_assemble(
@@ -1208,7 +1222,7 @@ def test_drive_rejects_post_convert_row_outside_product_semantic_axis_before_ass
         WindowEndpoint.from_datetime(requested_start),
         WindowEndpoint.from_datetime(requested_end),
     )
-    request = _request(requested)
+    request = _request(requested, ("station-1",))
     coordinates = SourceCoordinates({"parameter": "height"})
     config = ProviderConfig(
         zone=ZoneValue("+00:00"),
@@ -1291,7 +1305,7 @@ def test_drive_daily_product_accepts_midday_start_and_returns_that_dates_row() -
         WindowEndpoint.from_datetime(datetime(2026, 1, 2, 12)),
         WindowEndpoint.from_datetime(datetime(2026, 1, 2, 18)),
     )
-    request = _request(requested)
+    request = _request(requested, ("station-1",))
     coordinates = SourceCoordinates({"parameter": "height"})
     config = ProviderConfig(
         zone=ZoneValue("+00:00"),
@@ -1354,7 +1368,7 @@ def test_payload_origins_enrich_provenance_as_json_safe_ordered_facts() -> None:
     from rivretrieve._internal.engine import SourceQuery
 
     requested_window, fetch_window = _windows()
-    request = _request(requested_window)
+    request = _request(requested_window, ("station-1", "station-2"))
     coordinates = SourceCoordinates({"parameter": "height"})
     first = replace(
         _payload("station-1", coordinates, fetch_window),

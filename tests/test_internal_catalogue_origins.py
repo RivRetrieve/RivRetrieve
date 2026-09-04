@@ -245,7 +245,7 @@ def test_origin_gate_enrols_exactly_the_eleven_in_scope_providers() -> None:
             ProviderId("za_dws"),
         }
     )
-    registered = frozenset(map(ProviderId, rr.providers()))
+    registered = frozenset(map(ProviderId, rr.providers().get_column("provider_id").to_list()))
 
     assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered >= ORIGIN_GATE_ENROLLED_PROVIDERS

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import fields
 from datetime import UTC, datetime
@@ -8,7 +7,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast, get_type_hints
 
-import polars as pl
 import pytest
 
 from rivretrieve._internal.engine import (
@@ -349,250 +347,32 @@ def test_transport_credentials_do_not_reach_final_payload_origin() -> None:
         assert all(value not in candidate for candidate in origin_scan)
 
 
-def test_five_stations_one_404_preserves_four_parsed_station_results_and_one_issue(
+def test_non_success_response_is_handed_to_the_engine_without_provider_classification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fixture = FIXTURE_PATH.read_bytes()
-    client = _patch_client(
-        monkeypatch,
-        [
-            _response(fixture),
-            _response(fixture),
-            _response(b"not found", 404),
-            _response(fixture),
-            _response(fixture),
-        ],
-    )
-    stations = ("station-1", "station-2", "station-3", "station-4", "station-5")
-    product = ProductId("discharge_daily_mean")
-    provider_config = config()
-
-    fetched = fetch(stations, (product,), _renderings(product), _window(), provider_config, client)
-    parsed = tuple(parse(payload, provider_config) for payload in fetched.value)
-    rows = pl.concat([result.value for result in parsed], how="vertical")
-    all_issues = fetched.issues + tuple(issue for result in parsed for issue in result.issues)
-
-    assert len(client.requests) == 5
-    assert [payload.station_products[0][0] for payload in fetched.value] == [
-        "station-1",
-        "station-2",
-        "station-4",
-        "station-5",
-    ]
-    assert rows.height == 40
-    assert rows["station_id"].unique(maintain_order=True).to_list() == [
-        "station-1",
-        "station-2",
-        "station-4",
-        "station-5",
-    ]
-    assert len(all_issues) == 1
-    assert all_issues[0].code == "http_not_found"
-    assert all_issues[0].details == {
-        "station_id": "station-3",
-        "product_id": "discharge_daily_mean",
-        "source_coordinates": {
-            "endpoint": "dv",
-            "parameter_code": "00060",
-            "statistic_code": "00003",
-        },
-        "fetch_window": {"start": "2023-01-01", "end": "2023-01-10"},
-        "status_code": 404,
-    }
-
-
-def test_404_does_not_skip_remaining_products_for_station(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = _patch_client(
-        monkeypatch,
-        [_response(b"not found", 404), _response(b"instant-bytes")],
-    )
-    daily = ProductId("custom_daily")
-    instant = ProductId("custom_instant")
-
-    result = fetch(
-        ("station-1",),
-        (daily, instant),
-        _renderings(daily, instant),
-        _window(),
-        _custom_config(),
-        client,
-    )
-
-    assert len(client.requests) == 2
-    assert [payload.station_products for payload in result.value] == [
-        (("station-1", instant),),
-    ]
-    assert [payload.content for payload in result.value] == [b"instant-bytes"]
-    assert [issue.code for issue in result.issues] == ["http_not_found"]
-    assert result.issues[0].details is not None
-    assert result.issues[0].details["product_id"] == daily
-
-
-def test_retry_exhaustion_does_not_skip_remaining_products_for_station(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = _patch_client(
-        monkeypatch,
-        [_failure("first-product-secret", None), _response(b"instant-bytes")],
-    )
-    daily = ProductId("custom_daily")
-    instant = ProductId("custom_instant")
-
-    result = fetch(
-        ("station-1",),
-        (daily, instant),
-        _renderings(daily, instant),
-        _window(),
-        _custom_config(),
-        client,
-    )
-
-    assert len(client.requests) == 2
-    assert [payload.station_products for payload in result.value] == [
-        (("station-1", instant),),
-    ]
-    assert [payload.content for payload in result.value] == [b"instant-bytes"]
-    assert [issue.code for issue in result.issues] == ["source_request_failed"]
-    assert result.issues[0].details is not None
-    assert result.issues[0].details["product_id"] == daily
-
-
-def test_all_404_returns_empty_payload_tuple_with_every_issue_and_call_tag(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    stations = ("station-1", "station-2", "station-3", "station-4", "station-5")
-    client = _patch_client(
-        monkeypatch,
-        [_response(b"not found", 404) for _ in stations],
-    )
+    client = _patch_client(monkeypatch, [_response(b"not found", 404)])
     product = ProductId("stage_instantaneous")
 
-    result = fetch(stations, (product,), _renderings(product), _window(), config(), client)
+    result = fetch(("station-1",), (product,), _renderings(product), _window(), config(), client)
 
-    assert len(client.requests) == 5
-    assert result.value == ()
-    assert len(result.issues) == 5
-    assert [issue.code for issue in result.issues] == ["http_not_found"] * 5
-    assert [issue.details["station_id"] for issue in result.issues if issue.details] == list(stations)
-    for issue in result.issues:
-        assert issue.details is not None
-        assert issue.details["product_id"] == "stage_instantaneous"
-        assert issue.details["source_coordinates"] == {
-            "endpoint": "iv",
-            "parameter_code": "00065",
-            "statistic_code": None,
-        }
-        assert issue.details["fetch_window"] == {
-            "start": "2023-01-01",
-            "end": "2023-01-10",
-        }
-        assert issue.details["status_code"] == 404
+    (payload,) = result.value
+    assert payload.origin.status_code == 404
+    assert payload.content == b"not found"
+    assert result.issues == ()
 
 
-def test_retry_exhausted_timeout_dns_and_rate_limit_are_sanitized_issues(
+def test_transport_failure_propagates_to_the_engine_isolation_point(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = _patch_client(
-        monkeypatch,
-        [
-            _failure("timeout-secret", None),
-            _failure("dns-secret", None),
-            _failure("rate-secret", 429),
-        ],
-    )
-    stations = ("timeout-station", "dns-station", "rate-station")
-    product = ProductId("discharge_instantaneous")
-
-    result = fetch(stations, (product,), _renderings(product), _window(), config(), client)
-
-    assert len(client.requests) == 3
-    assert result.value == ()
-    assert [issue.code for issue in result.issues] == [
-        "source_request_failed",
-        "source_request_failed",
-        "source_request_failed",
-    ]
-    assert [issue.details["failure_reason"] for issue in result.issues if issue.details] == [
-        "retry_exhausted",
-        "retry_exhausted",
-        "retry_exhausted",
-    ]
-    assert [issue.details["attempts"] for issue in result.issues if issue.details] == [
-        3,
-        3,
-        3,
-    ]
-    assert [issue.details["status_code"] for issue in result.issues if issue.details] == [
-        None,
-        None,
-        429,
-    ]
-    serialized = json.dumps(
-        [issue.model_dump(mode="json") for issue in result.issues],
-        sort_keys=True,
-    )
-    for forbidden in (
-        "timeout-secret",
-        "dns-secret",
-        "rate-secret",
-        "do-not-leak.example",
-        "Authorization",
-        "api_key",
-        "Bearer",
-    ):
-        assert forbidden not in serialized
-
-
-def test_terminal_sender_failure_is_a_broken_seam(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = TransportRequest(
-        HttpMethod.GET,
-        "https://do-not-leak.example",
-        headers={"Accept": "application/json"},
-        body="terminal-secret",
-    )
-    failure = TransportFailure(
-        request,
-        TransportFailureReason.TERMINAL_SENDER_FAILURE,
-        1,
-    )
+    failure = _failure("transport-secret", None)
     client = _patch_client(monkeypatch, [failure])
+    product = ProductId("stage_instantaneous")
 
     with pytest.raises(TransportFailure) as raised:
-        fetch(
-            ("station-1",),
-            (ProductId("discharge_instantaneous"),),
-            _renderings(ProductId("discharge_instantaneous")),
-            _window(),
-            config(),
-            client,
-        )
+        fetch(("station-1",), (product,), _renderings(product), _window(), config(), client)
 
     assert raised.value is failure
-    assert len(client.requests) == 1
-
-
-@pytest.mark.parametrize("status_code", [400, 401, 403, 422])
-def test_unexpected_terminal_http_status_is_a_broken_seam(
-    monkeypatch: pytest.MonkeyPatch,
-    status_code: int,
-) -> None:
-    client = _patch_client(monkeypatch, [_response(b"source error", status_code)])
-
-    with pytest.raises(FatalContractError, match=str(status_code)):
-        fetch(
-            ("station-1",),
-            (ProductId("discharge_instantaneous"),),
-            _renderings(ProductId("discharge_instantaneous")),
-            _window(),
-            config(),
-            client,
-        )
-
-    assert len(client.requests) == 1
+    assert "transport-secret" not in str(raised.value)
 
 
 def test_successful_malformed_body_stays_opaque_until_parse(

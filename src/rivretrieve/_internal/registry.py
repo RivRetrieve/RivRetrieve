@@ -34,7 +34,8 @@ from rivretrieve._internal.results import CatalogResult
 from rivretrieve._internal.store import StoreRoot
 
 if TYPE_CHECKING:
-    from rivretrieve._internal.providers.registration import BulkStore
+    from rivretrieve._internal.providers.registration import BulkStore, CredentialHeaderBinding
+    from rivretrieve._internal.transport import Transport
 
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -60,6 +61,8 @@ class _ProviderHandle:
     _store_config: ProviderConfig | None = None
     _store_root: StoreRoot | None = None
     _bulk_operations: BulkStore | None = None
+    required_credentials: tuple[str, ...] = ()
+    credential_headers: tuple[CredentialHeaderBinding, ...] = ()
 
     def info(self) -> ProviderInfo:
         return ProviderInfo.from_row(self._artifact.provider_info)
@@ -106,6 +109,7 @@ class _ProviderHandle:
         end: object,
         on_issue: OnIssue = "warn",
         receipts: ReceiptMode = ReceiptMode.OMIT,
+        transport: Transport | None = None,
     ) -> ObservationResult:
         if self._stages is None and self._store_config is None:
             if self._module is not None:
@@ -121,7 +125,13 @@ class _ProviderHandle:
         if self._stages is not None:
             if self._observation_source is None:
                 raise FatalContractError(f"Provider {self.provider_id} has engine stages without an observation source")
-            result = self._drive_engine(request, self._stages, self._observation_source, receipts=receipts)
+            result = self._drive_engine(
+                request,
+                self._stages,
+                self._observation_source,
+                receipts=receipts,
+                transport=transport,
+            )
         elif self._store_config is not None and self._store_root is not None:
             result = self._drive_store(request, self._store_config, self._store_root, receipts=receipts)
         else:
@@ -136,6 +146,7 @@ class _ProviderHandle:
         observation_source: str,
         *,
         receipts: ReceiptMode = ReceiptMode.OMIT,
+        transport: Transport | None = None,
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -195,6 +206,8 @@ class _ProviderHandle:
                 },
             ),
             receipts=receipts,
+            transport=transport,
+            credential_names=self.required_credentials,
         )
         return ObservationResult(
             data=assembled.canonical_rows.select(
@@ -359,6 +372,8 @@ class ProviderRegistry:
         bulk_config: ProviderConfig | None = None,
         observation_store: StoreRoot | None = None,
         bulk_operations: BulkStore | None = None,
+        required_credentials: tuple[str, ...] = (),
+        credential_headers: tuple[CredentialHeaderBinding, ...] = (),
     ) -> _ProviderHandle:
         if not _PROVIDER_ID_PATTERN.fullmatch(provider_id):
             raise FatalContractError(f"Provider ID has invalid format: {provider_id}")
@@ -404,6 +419,8 @@ class ProviderRegistry:
             _store_config=bulk_config,
             _store_root=observation_store,
             _bulk_operations=bulk_operations,
+            required_credentials=required_credentials,
+            credential_headers=credential_headers,
         )
         self._providers[provider_id] = _ProviderRecord(
             provider_id=typed_provider_id,

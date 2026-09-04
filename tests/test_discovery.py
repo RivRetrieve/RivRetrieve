@@ -125,7 +125,8 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_providers_empty_registry_returns_default_providers() -> None:
-    assert rr.providers() == [
+    result = rr.providers()
+    assert result.get_column("provider_id").to_list() == [
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
@@ -140,6 +141,9 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "usgs_nwis",
         "za_dws",
     ]
+    credentials = dict(result.select("provider_id", "credentials").iter_rows())
+    assert credentials["no_nve"] == ["NVE_API_KEY"]
+    assert credentials["br_ana"] == ["ANA_IDENTIFICADOR", "ANA_SENHA"]
 
 
 def test_providers_sorted_independent_of_registration_order(
@@ -150,7 +154,7 @@ def test_providers_sorted_independent_of_registration_order(
     _registry.register("z_provider", stub_packaged_catalogue_artifact("z_provider"))
     _registry.register("a_provider", stub_packaged_catalogue_artifact("a_provider"))
 
-    assert rr.providers() == ["a_provider", "z_provider"]
+    assert rr.providers().get_column("provider_id").to_list() == ["a_provider", "z_provider"]
 
 
 def test_global_products_returns_sorted_deduplicated_vocabulary(
@@ -200,7 +204,7 @@ def test_global_discovery_uses_reader_for_table_selection_and_validation(
 
 
 def test_products_returns_exact_global_vocabulary_and_every_provider_subset() -> None:
-    assert list(EXPECTED_PRODUCTS_BY_PROVIDER) == rr.providers()
+    assert list(EXPECTED_PRODUCTS_BY_PROVIDER) == rr.providers().get_column("provider_id").to_list()
     assert rr.products() == EXPECTED_PRODUCT_IDS
     for provider_id, expected in EXPECTED_PRODUCTS_BY_PROVIDER.items():
         actual = rr.products(provider=provider_id)

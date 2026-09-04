@@ -1,12 +1,18 @@
+"""public retrieval : Selection × WindowInputs × CredentialSources → ObservationResult(s); provider discovery : ProviderDeclarations × CredentialSources → ProviderAccessFrame."""
+
 from __future__ import annotations
 
+import os
+from datetime import date, datetime, time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import polars as pl
+from dotenv import dotenv_values
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
-from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_issue
-from rivretrieve._internal.observations import ObservationResult, ReceiptMode, Receipts
+from rivretrieve._internal.issues import FatalContractError, Issue, MissingCredentialError, apply_on_issue
+from rivretrieve._internal.observations import ObservationRequest, ObservationResult, ReceiptMode, Receipts
 from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.selection import _as_frame as _selection_as_frame
 from rivretrieve._internal.selection import _EmptyReason, _require_selection, _Selection, _Series
@@ -15,6 +21,7 @@ from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.station_map import StationMap
+from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient, Transport
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -24,9 +31,21 @@ if TYPE_CHECKING:
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 
 
-def providers() -> list[str]:
+def providers() -> pl.DataFrame:
+    """providers : BuiltInProviderDeclarations × CredentialSources → ProviderAccessFrame."""
     _ensure_default_providers_registered()
-    return _registry.list_provider_ids()
+    resolved = _resolve_credentials(_registry.list_provider_ids(), require_all=False)
+    rows = []
+    for record in _registry.iter_records():
+        names = record.handle.required_credentials
+        missing = tuple(name for name in names if name not in resolved[record.provider_id])
+        access = "open" if not names else f"missing {', '.join(missing)}" if missing else "ready"
+        rows.append((str(record.provider_id), list(names), access))
+    return pl.DataFrame(
+        rows,
+        schema={"provider_id": pl.Utf8, "credentials": pl.List(pl.Utf8), "access": pl.Utf8},
+        orient="row",
+    )
 
 
 def find(
@@ -89,8 +108,8 @@ class MultiProviderSelectionError(FatalContractError):
 def fetch(
     selection: _Selection,
     *,
-    start: object,
-    end: object,
+    start: object = None,
+    end: object = None,
     receipts: bool = False,
     on_issue: OnIssue = "warn",
 ) -> ObservationResult:
@@ -106,13 +125,17 @@ def fetch(
     if len(provider_ids) != 1:
         raise MultiProviderSelectionError(provider_ids)
 
+    normalized_start, normalized_end, future_local_date = _normalize_window(selection.series, start=start, end=end)
+    credential_values = _resolve_credentials(provider_ids, require_all=True)
     provider_id = provider_ids[0]
     receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
     return _fetch_provider_series(
         provider_id,
         partitions[provider_id],
-        start=start,
-        end=end,
+        start=normalized_start,
+        end=normalized_end,
+        future_local_date=future_local_date,
+        credentials=credential_values[provider_id],
         receipts=receipt_mode,
         on_issue=on_issue,
     )
@@ -121,25 +144,107 @@ def fetch(
 def fetch_by_provider(
     selection: _Selection,
     *,
-    start: object,
-    end: object,
+    start: object = None,
+    end: object = None,
     receipts: bool = False,
     on_issue: OnIssue = "warn",
 ) -> dict[str, ObservationResult]:
     _require_selection(selection)
     partitions = _partition_by_provider(selection.series)
+    if not partitions:
+        return {}
+    normalized_start, normalized_end, future_local_date = _normalize_window(selection.series, start=start, end=end)
+    provider_ids = tuple(partitions)
+    credential_values = _resolve_credentials(provider_ids, require_all=True)
     receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
-    return {
+    results = {
         provider_id: _fetch_provider_series(
             provider_id,
             series,
-            start=start,
-            end=end,
+            start=normalized_start,
+            end=normalized_end,
+            future_local_date=future_local_date,
+            credentials=credential_values[provider_id],
             receipts=receipt_mode,
-            on_issue=on_issue,
+            on_issue="ignore",
         )
         for provider_id, series in partitions.items()
     }
+    apply_on_issue(
+        tuple(issue for result in results.values() for issue in result.issues),
+        on_issue,
+    )
+    return results
+
+
+def _normalize_window(
+    series: tuple[_Series, ...],
+    *,
+    start: object,
+    end: object,
+) -> tuple[datetime, datetime, date | None]:
+    """public window normalization : InputEndpoints × LocalDate → RequestedWindow × FutureFlag."""
+    local_date = date.today()
+    normalized_end_input = local_date.isoformat() if end is None else end
+    representative = series[0]
+    request = ObservationRequest.from_inputs(
+        provider_id=representative.provider_id,
+        stations=(representative.station_id,),
+        products=(representative.product_id,),
+        start=start,
+        end=normalized_end_input,
+    )
+    local_day_end = datetime.combine(local_date, time.max)
+    future_local_date = local_date if datetime.fromisoformat(request.end.isoformat()) > local_day_end else None
+    return (
+        datetime.fromisoformat(request.start.isoformat()),
+        datetime.fromisoformat(request.end.isoformat()),
+        future_local_date,
+    )
+
+
+def _resolve_credentials(
+    provider_ids: tuple[str, ...] | list[str],
+    *,
+    require_all: bool,
+) -> dict[str, dict[str, str]]:
+    """credential resolution : ProviderDeclarations × Environment × WorkingDotenv → ProviderCredentialValues."""
+    dotenv = dotenv_values(Path.cwd() / ".env")
+    resolved: dict[str, dict[str, str]] = {}
+    missing: dict[str, tuple[str, ...]] = {}
+    for provider_id in provider_ids:
+        names = _registry.get(provider_id).required_credentials
+        provider_values: dict[str, str] = {}
+        for name in names:
+            environment_value = os.environ.get(name)
+            file_value = dotenv.get(name)
+            value: str | None = None
+            if name in os.environ:
+                if environment_value is not None and environment_value.strip():
+                    value = environment_value
+            elif isinstance(file_value, str) and file_value.strip():
+                value = file_value
+            if value is not None:
+                provider_values[name] = value
+        resolved[provider_id] = provider_values
+        absent = tuple(name for name in names if name not in provider_values)
+        if absent:
+            missing[provider_id] = absent
+    if require_all and missing:
+        raise MissingCredentialError(missing)
+    return resolved
+
+
+def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transport:
+    """credential transport : ProviderCredentialValues × HeaderBindings → Transport."""
+    base = HttpClient()
+    bindings = _registry.get(provider_id).credential_headers
+    if not bindings:
+        return base
+    return AuthenticatedTransport(
+        base,
+        tuple(CredentialHeader(binding.header, values[binding.variable], binding.origins) for binding in bindings),
+    )
 
 
 def _partition_by_provider(series: tuple[_Series, ...]) -> dict[str, tuple[_Series, ...]]:
@@ -153,8 +258,10 @@ def _fetch_provider_series(
     provider_id: str,
     series: tuple[_Series, ...],
     *,
-    start: object,
-    end: object,
+    start: datetime,
+    end: datetime,
+    future_local_date: date | None,
+    credentials: dict[str, str],
     receipts: ReceiptMode,
     on_issue: OnIssue,
 ) -> ObservationResult:
@@ -162,6 +269,7 @@ def _fetch_provider_series(
     by_station: dict[str, list[str]] = {}
     for selected_series in series:
         by_station.setdefault(selected_series.station_id, []).append(selected_series.product_id)
+    transport = _credentialed_transport(provider_id, credentials)
     results = tuple(
         handle.observations(
             stations=station_id,
@@ -170,10 +278,23 @@ def _fetch_provider_series(
             end=end,
             on_issue="ignore",
             receipts=receipts,
+            transport=transport,
         )
         for station_id, product_ids in by_station.items()
     )
     result = _merge_provider_results(results, series)
+    if future_local_date is not None:
+        future_issue = Issue(
+            severity="info",
+            code="request.future_end",
+            message=(
+                f"Requested window for provider {provider_id} extends past the caller's local date "
+                f"{future_local_date.isoformat()}; the requested end was kept unchanged."
+            ),
+            details={"requested_end": end.isoformat(), "local_date": future_local_date.isoformat()},
+            provider_id=handle.provider_id,
+        )
+        result = result.model_copy(update={"issues": (*result.issues, future_issue)})
     apply_on_issue(result.issues, on_issue)
     return result
 
@@ -200,9 +321,32 @@ def _merge_provider_results(
     }
     issues = _merge_provider_issues(results)
     receipt_entries = tuple(entry for result in results for entry in result.receipts.entries)
+    calls_made = tuple(call for result in results for call in result.provenance.calls_made)
+    endpoints = tuple(dict.fromkeys(endpoint for result in results for endpoint in result.provenance.endpoints))
+    retrieved = tuple(
+        result.provenance.retrieved_at for result in results if result.provenance.retrieved_at is not None
+    )
+    queries: list[dict[str, object]] = []
+    for result in results:
+        query = result.provenance.query
+        if query is not None and query not in queries:
+            queries.append(query)
+    merged_query = None if not queries else queries[0] if len(queries) == 1 else {"calls": tuple(queries)}
     return ObservationResult(
         data=_canonical_observation_order(pl.concat([result.data for result in results])),
-        provenance=first.provenance.model_copy(update={"request": merged_request}),
+        provenance=first.provenance.model_copy(
+            update={
+                "request": merged_request,
+                "calls_made": calls_made,
+                "endpoints": endpoints,
+                "retrieved_at": max(retrieved) if retrieved else None,
+                "query": merged_query,
+                "time_windows": tuple(window for result in results for window in result.provenance.time_windows),
+                "decomposition": tuple(
+                    dict.fromkeys(value for result in results for value in result.provenance.decomposition)
+                ),
+            }
+        ),
         issues=issues,
         receipts=Receipts(provider_id=first.provenance.provider_id, entries=receipt_entries),
     )

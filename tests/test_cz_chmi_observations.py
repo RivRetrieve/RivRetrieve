@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 
 import rivretrieve as rr
-import rivretrieve._internal.driver as driver_module
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     FetchWindow,
@@ -138,7 +138,7 @@ def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call
         transport=ReplayTransport([_DQ]),
     )
     assert result.canonical_rows.height == 6
-    assert len(result.receipts.entries) == 1
+    assert len(result.receipts.entries) == 3
     stage = result.canonical_rows.filter(pl.col("product_id") == "stage_daily_mean").sort("time")
     assert stage["value"][0] == pytest.approx(0.13)
 
@@ -163,8 +163,20 @@ def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_
     )
     daily = read_recording(_DQ)
     hourly = read_recording(_HQ)
-    assert [entry.content for entry in included.receipts.entries] == [daily.content, hourly.content]
-    assert [entry.origin.url for entry in included.receipts.entries] == [daily.request.url, hourly.request.url]
+    assert [entry.content for entry in included.receipts.entries] == [
+        daily.content,
+        daily.content,
+        daily.content,
+        hourly.content,
+        hourly.content,
+    ]
+    assert [entry.origin.url for entry in included.receipts.entries] == [
+        daily.request.url,
+        daily.request.url,
+        daily.request.url,
+        hourly.request.url,
+        hourly.request.url,
+    ]
     assert len({entry.origin.url for entry in included.receipts.entries}) == 2
     assert included.canonical_rows.columns == ["time", "time_zone", "station_id", "product_id", "value"]
 
@@ -214,7 +226,7 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality() -> None:
 
 
 def test_public_selection_routes_to_czech_live_engine(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: ReplayTransport([_HQ]))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([_HQ]))
     selection = rr.find(provider="cz_chmi", station=_STATION, product="discharge_hourly_mean")
     assert rr.as_frame(selection).select("provider_id", "station_id", "product_id").row(0) == (
         "cz_chmi",

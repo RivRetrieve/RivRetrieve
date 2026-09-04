@@ -335,12 +335,14 @@ def test_runtime_direct_http_imports_are_only_declared_cache_carve_outs() -> Non
 
 def test_registry_matches_declared_provider_kinds() -> None:
     declared = load_manifest(BUILTIN_PROVIDER_IDS)
-    assert set(rr.providers()) == set(BUILTIN_PROVIDER_IDS)
+    assert set(rr.providers().get_column("provider_id").to_list()) == set(BUILTIN_PROVIDER_IDS)
     records = {str(record.provider_id): record.handle for record in _registry.iter_records()}
 
     for item in declared:
         handle = records[item.provider_id]
         kind = item.declaration.observations
+        assert handle.required_credentials == item.declaration.required_credentials
+        assert handle.credential_headers == item.declaration.credential_headers
         if isinstance(kind, LiveStages):
             assert handle._module is None
             assert handle._stages is kind.stages
@@ -438,3 +440,29 @@ def test_runtime_engine_has_no_provider_id_switch() -> None:
             if switched:
                 violations.append(f"{path.relative_to(ROOT)}:{node.lineno}:{','.join(switched)}")
     assert violations == []
+
+
+def test_source_failure_isolation_exists_once_in_the_engine() -> None:
+    provider_violations: list[str] = []
+    for path in PROVIDERS_ROOT.glob("*/fetch.py"):
+        tree = _tree(path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ExceptHandler) and (
+                isinstance(node.type, ast.Name) and node.type.id == "TransportFailure"
+            ):
+                provider_violations.append(f"{path.parent.name}:{node.lineno}:TransportFailure")
+            if isinstance(node, ast.Compare) and any(
+                isinstance(child, ast.Attribute) and child.attr == "status_code" for child in ast.walk(node)
+            ):
+                provider_violations.append(f"{path.parent.name}:{node.lineno}:status branch")
+    assert provider_violations == []
+
+    driver = _tree(ROOT / "src" / "rivretrieve" / "_internal" / "driver.py")
+    isolation_points = [
+        node
+        for node in ast.walk(driver)
+        if isinstance(node, ast.ExceptHandler)
+        and isinstance(node.type, ast.Name)
+        and node.type.id == "TransportFailure"
+    ]
+    assert len(isolation_points) == 1

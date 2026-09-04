@@ -68,7 +68,7 @@ def test_new_catalogue_only_provider_requires_only_its_directory_and_manifest_li
             "-c",
             (
                 "import rivretrieve as rr; "
-                f"assert {provider_id!r} in rr.providers(); "
+                f"assert {provider_id!r} in rr.providers().get_column('provider_id').to_list(); "
                 f"frame = rr.as_frame(rr.find(provider={provider_id!r})); "
                 "assert frame.height > 0; "
                 f"assert set(frame['provider_id']) == {{{provider_id!r}}}"

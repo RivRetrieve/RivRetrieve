@@ -33,6 +33,8 @@ import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.engine import RequestedWindow
@@ -109,15 +111,14 @@ def _write(recordings: tuple[RecordingEnvelope, ...], out_dir: Path, name: str) 
 
 
 def credential_value(variable: str, environment: Mapping[str, str], env_file: Path | None) -> str:
-    """Resolve one credential value from the environment, then from a dotenv-style file."""
+    """Resolve one credential value from the environment, then from an explicit dotenv file."""
     value = environment.get(variable)
     if value:
         return value
-    if env_file is not None and env_file.is_file():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            key, separator, raw = line.partition("=")
-            if separator and key.strip() == variable and raw.strip():
-                return raw.strip().strip("'\"")
+    dotenv = dotenv_values(env_file) if env_file is not None and env_file.is_file() else {}
+    file_value = dotenv.get(variable)
+    if isinstance(file_value, str) and file_value:
+        return file_value
     location = "the environment" if env_file is None else f"the environment or {env_file}"
     raise FatalContractError(f"credential variable {variable} is not set in {location}")
 

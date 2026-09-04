@@ -211,25 +211,32 @@ def test_source_quality_and_correction_codes_are_surfaced_without_interpretation
     assert quality.details["count"] == 6
 
 
-def test_a_missing_series_becomes_a_warning_issue_and_no_payload() -> None:
+def test_a_missing_series_becomes_an_engine_warning_and_no_rows() -> None:
     product = ProductId("water_temperature_daily_mean")
-    recording = read_recording(_recording_path("12.210.0", product, "2025-07-08_2025-07-14"))
+    station = "12.210.0"
+    recording = read_recording(_recording_path(station, product, "2025-07-08_2025-07-14"))
     assert recording.status_code == 404
-    result = fetch(
-        ("12.210.0",),
-        (product,),
-        MappingProxyType({product: (_RECORDED_WINDOW,)}),
-        _fetch_window("2025-07-08T00:00:00", "2025-07-14T00:00:00"),
-        config(),
-        _credentialed(recording),
+    result = drive(
+        ObservationRequest(
+            provider_id=_PROVIDER,
+            stations=(station,),
+            products=(product,),
+            window=RequestedWindow(
+                start=WindowEndpoint.from_datetime(datetime(2025, 7, 10)),
+                end=WindowEndpoint.from_datetime(datetime(2025, 7, 12)),
+            ),
+        ),
+        _STAGES,
+        provenance=ObservationProvenance(source="recording", provider_id=_PROVIDER),
+        transport=_credentialed(recording),
     )
 
-    assert result.value == ()
+    assert result.canonical_rows.is_empty()
     (issue,) = result.issues
-    assert issue.code == "http_not_found"
+    assert issue.code == "source.http_not_found"
     assert issue.severity == "warning"
     assert issue.details is not None
-    assert issue.details["station_id"] == "12.210.0"
+    assert issue.details["station_id"] == station
 
 
 def test_an_empty_series_parses_to_no_rows_and_one_missing_data_issue() -> None:
@@ -253,7 +260,7 @@ def test_an_empty_series_parses_to_no_rows_and_one_missing_data_issue() -> None:
 
 
 def test_norway_stays_publicly_unselectable_until_its_catalogue_is_certified() -> None:
-    assert _PROVIDER in rr.providers()
+    assert _PROVIDER in rr.providers().get_column("provider_id").to_list()
     selection = rr.find(provider=_PROVIDER)
     assert selection.series == ()
     with pytest.raises(EmptySelectionError) as error:

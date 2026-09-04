@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import rivretrieve as rr
-import rivretrieve._internal.driver as driver_module
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
@@ -16,7 +16,7 @@ _RECORDING = Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_
 def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     recording = read_recording(_RECORDING)
     replay = ReplayTransport((recording,))
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: replay)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
 
     selection = rr.find(
         provider="usgs_nwis",
