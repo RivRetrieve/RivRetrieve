@@ -124,7 +124,11 @@ uv run python -m rivretrieve._internal.record_observations --provider za_dws --s
 
 The Daily request straddles the year edge (`StartDT=2019-12-28`, `EndDT=2020-01-05`); the Point
 request spans several local midnights (`StartDT=2020-01-03`, `EndDT=2020-01-09`). Each command
-issues exactly one source call, so each writes exactly one `<name>.recording.json`. Then author
+issues exactly one source call, so each writes exactly one `<name>.recording.json`. A drive that
+raises or an exchange with a status the command did not expect is preserved under
+`<name>.failed.recording.json` and must not be committed; only 2xx exchanges are evidence unless
+`--expect-status <code>` names one documented non-2xx answer (for DWS none is documented yet, so
+the option is not used here). Then author
 the three literals per product in `tests/test_za_dws_boundary_probe.py` from the recording bytes
 without running the adapter, run `uv run pytest`, and delete the legacy subtree together with its
 entry in `tests/test_legacy_observation_reference_m7_s4.py`.
