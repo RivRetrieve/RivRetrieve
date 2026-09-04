@@ -1,153 +1,163 @@
-"""Tests for no_nve catalogue generation from fixtures."""
+"""Full offline certification of the NVE station catalogue."""
 
 from __future__ import annotations
 
+import hashlib
 import json
-from datetime import date
 from pathlib import Path
 
 import polars as pl
+import polars.testing as pl_testing
+import pytest
 
-from rivretrieve._internal.catalogues.schemas import (
-    PRODUCT_CATALOG_SCHEMA,
-    PROVIDER_INFO_CATALOG_SCHEMA,
-    STATION_PRODUCT_CATALOG_SCHEMA,
+import rivretrieve as rr
+from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
+from rivretrieve._internal.catalogues.native import NativeTable, read_native_table
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.no_nve import generate_catalogue
+from rivretrieve._internal.providers.no_nve.origins import (
+    NATIVE_TABLE_BYTE_SIZE,
+    NATIVE_TABLE_SEMANTIC_SHA256,
+    NATIVE_TABLE_SHA256,
+    STATION_CATALOGUE_ORIGINS,
+    build_acquisition_provenance,
 )
-from rivretrieve._internal.providers.no_nve.generate_catalogue import (
-    generate_catalogue_from_fixture,
-)
 
-_FIXTURE = Path(__file__).parent / "test_data" / "no_nve_metadata.json"
-
-
-def test_catalogue_from_fixture_station_count() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert len(cat.stations) == 3
+_ROOT = Path(__file__).parents[1]
+_DATA = Path(__file__).parent / "test_data"
+_CAPTURE_RECORD = _DATA / "no_nve_station_catalogue_capture.json"
+_NATIVE = _ROOT / "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet"
+_CATALOGUE = _NATIVE.parent
 
 
-def test_catalogue_from_fixture_product_count() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert len(cat.products) == 9
+def _capture():
+    return generate_catalogue.read_capture_record(_CAPTURE_RECORD)
 
 
-def test_catalogue_from_fixture_station_product_count() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert len(cat.station_products) == 27  # 3 × 9
+def _catalogue():
+    return generate_catalogue.build_catalogue(read_native_table(_NATIVE), STATION_CATALOGUE_ORIGINS)
 
 
-def test_catalogue_station_identity_present() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    row = cat.stations.filter(pl.col("station_id") == "12.210.0")
-    assert not row.is_empty()
-    assert row["crs"][0] == "unknown"
+def test_complete_capture_identities_counts_and_request_set() -> None:
+    capture = _capture()
+    assert [item.requested_url for item in capture.responses] == [
+        "https://hydapi.nve.no/api/v1/Stations?Active=1",
+        "https://hydapi.nve.no/api/v1/Stations?Active=0",
+    ]
+    assert [
+        (item.response_row_count, item.accepted_row_count, item.distinct_station_count) for item in capture.responses
+    ] == [
+        (4902, 4902, 4902),
+        (1893, 1893, 1893),
+    ]
+    assert capture.overlap_station_count == 1893
+    assert capture.distinct_station_count == 4902
+    for response in capture.responses:
+        body = (_ROOT / response.repository_path).read_bytes()
+        assert len(body) == response.byte_size
+        assert hashlib.sha256(body).hexdigest() == response.sha256
+        document = json.loads(body)
+        assert document["currentLink"] == response.requested_url
+        assert document["itemCount"] == len(document["data"]) == response.response_row_count
 
 
-def test_catalogue_products_include_all_nine() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    product_ids = set(cat.products["product_id"].to_list())
-    expected = {
-        "discharge_daily_mean",
-        "discharge_hourly_mean",
-        "discharge_instantaneous",
+def test_full_responses_materialize_the_exact_committed_semantic_frame() -> None:
+    capture = _capture()
+    fresh = generate_catalogue.materialize_captured_native_table(capture, _ROOT)
+    committed = read_native_table(
+        _NATIVE, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
+    )
+    pl_testing.assert_frame_equal(fresh.data, committed.data, check_exact=True)
+    assert hashlib.sha256(_NATIVE.read_bytes()).hexdigest() == capture.native_table.sha256 == NATIVE_TABLE_SHA256
+    assert len(_NATIVE.read_bytes()) == capture.native_table.byte_size == NATIVE_TABLE_BYTE_SIZE
+    assert generate_catalogue.native_table_semantic_digest(fresh) == capture.native_table.semantic_sha256
+    assert generate_catalogue.native_table_semantic_digest(committed) == NATIVE_TABLE_SEMANTIC_SHA256
+
+
+def test_offline_native_rematerialization_is_byte_identical(tmp_path: Path) -> None:
+    output = tmp_path / "native.parquet"
+    assert (
+        generate_catalogue.main(
+            [
+                "--materialize-record",
+                str(_CAPTURE_RECORD),
+                "--native-out",
+                str(output),
+                "--repository-root",
+                str(_ROOT),
+            ]
+        )
+        == 0
+    )
+    assert output.read_bytes() == _NATIVE.read_bytes()
+
+
+def test_build_populates_exact_attested_catalogue() -> None:
+    catalogue = _catalogue()
+    assert (catalogue.stations.height, catalogue.products.height, catalogue.station_products.height) == (4902, 9, 44118)
+    assert catalogue.station_products.filter(pl.col("availability") == "available").height == 14847
+    assert catalogue.station_products.filter(pl.col("availability") == "unavailable").height == 29271
+    assert catalogue.station_products["published_record_start_date"].null_count() == 44118
+    assert catalogue.station_products["published_record_end_date"].null_count() == 44118
+    assert catalogue.provider_info["catalogue_version"] == "2026-09-04"
+    assert set(catalogue.products["product_id"]) == generate_catalogue.EXPECTED_PRODUCT_IDS
+    assert set(catalogue.stations["crs"]) == {"unknown"}
+    assert catalogue.acquisition_provenance.native_table is not None
+    assert catalogue.acquisition_provenance.withheld_facts == ()
+
+
+def test_build_is_network_free_and_byte_identical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*args: object, **kwargs: object) -> object:
+        raise AssertionError("network access during native catalogue build")
+
+    monkeypatch.setattr("rivretrieve._internal.transport.HttpClient.send", refuse)
+    output = tmp_path / "catalogue"
+    assert generate_catalogue.main(["--native", str(_NATIVE), "--out", str(output)]) == 0
+    for name in (
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "provenance.json",
+    ):
+        assert (output / name).read_bytes() == (_CATALOGUE / name).read_bytes()
+
+
+def test_public_discovery_selects_a_real_norwegian_edge() -> None:
+    selection = rr.find(provider="no_nve", station="1.200.0", product="stage_daily_mean")
+    assert len(selection.series) == 1
+    assert (selection.series[0].provider_id, selection.series[0].station_id, selection.series[0].product_id) == (
+        "no_nve",
+        "1.200.0",
         "stage_daily_mean",
-        "stage_hourly_mean",
-        "stage_instantaneous",
-        "water_temperature_daily_mean",
-        "water_temperature_hourly_mean",
-        "water_temperature_instantaneous",
-    }
-    assert product_ids == expected
-
-
-def test_catalogue_product_discharge_daily_canonical_unit() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    row = cat.products.filter(pl.col("product_id") == "discharge_daily_mean")
-    assert row["unit"][0] == "m3/s"
-
-
-def test_catalogue_product_native_id_format() -> None:
-    """native_id must be 'parameter_id:resolution_time' string."""
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    row = cat.products.filter(pl.col("product_id") == "discharge_daily_mean")
-    assert row["native_id"][0] == "1001:1440"
-
-
-def test_catalogue_station_product_availability_uses_series_list() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    # 12.210.0 has parameter 1001 (discharge), resTime 1440 → discharge_daily_mean available
-    row = cat.station_products.filter(
-        (pl.col("station_id") == "12.210.0") & (pl.col("product_id") == "discharge_daily_mean")
     )
-    assert not row.is_empty()
-    assert str(row["availability"][0]) == "available"
+    assert selection.empty_reason is None
+    assert "stage_daily_mean" in rr.products(provider="no_nve")
 
 
-def test_catalogue_station_product_unavailable_for_missing_parameter() -> None:
-    """water_temperature_daily_mean not in 12.210.0 seriesList → unavailable."""
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    row = cat.station_products.filter(
-        (pl.col("station_id") == "12.210.0") & (pl.col("product_id") == "water_temperature_daily_mean")
+def test_packaged_provenance_closes_capture_and_canonical_facts() -> None:
+    provenance = build_acquisition_provenance()
+    verify_provenance_recordings(provenance, _ROOT)
+    bound = {fact for binding in provenance.fact_bindings for fact in binding.facts}
+    assert set(provenance.fact_universe) == bound
+    assert [acquisition.requested_from for acquisition in provenance.source_records[0].acquisitions[2:]] == [
+        ("https://hydapi.nve.no/api/v1/Stations?Active=1",),
+        ("https://hydapi.nve.no/api/v1/Stations?Active=0",),
+    ]
+    assert all(acquisition.material is not None for acquisition in provenance.source_records[0].acquisitions[1:])
+
+
+def test_native_value_mutation_is_rejected() -> None:
+    native = read_native_table(_NATIVE)
+    mutated = NativeTable(
+        native.data.with_columns(
+            pl.when(pl.col("stationId") == "1.200.0").then(None).otherwise(pl.col("latitude")).alias("latitude")
+        )
     )
-    assert not row.is_empty()
-    assert str(row["availability"][0]) == "unavailable"
+    with pytest.raises(FatalContractError, match="source field types"):
+        generate_catalogue.build_catalogue(mutated, STATION_CATALOGUE_ORIGINS)
 
 
-def test_catalogue_station_151_all_unavailable() -> None:
-    """Station 151.10.0 with empty seriesList → all products unavailable."""
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    s151 = cat.station_products.filter(pl.col("station_id") == "151.10.0")
-    availabilities = set(s151["availability"].cast(str).to_list())
-    assert availabilities == {"unavailable"}
-
-
-def test_catalogue_provider_info_name_contains_nve() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert "NVE" in cat.provider_info["name"]
-
-
-def test_catalogue_provider_info_live_stations_false() -> None:
-    """generate_catalogue_from_live() is a maintainer tool, not a runtime live catalogue."""
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert cat.provider_info["live_stations"] is False
-
-
-def test_catalogue_provider_info_live_products_false() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert cat.provider_info["live_products"] is False
-
-
-def test_catalogue_provider_id_is_no_nve() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert cat.provider_info["provider_id"] == "no_nve"
-
-
-def test_catalogue_respects_catalogue_date() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE, catalogue_date=date(2024, 1, 15))
-    assert cat.provider_info["catalogue_version"] == "2024-01-15"
-
-
-def test_fixture_build_uses_exact_reduced_carriers() -> None:
-    cat = generate_catalogue_from_fixture(_FIXTURE)
-    assert cat.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
-    assert cat.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
-    assert tuple(cat.provider_info) == tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
-
-
-def test_projected_national_artifacts_have_pinned_complete_content() -> None:
-    catalogue = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/no_nve/catalogue"
-    provider_info = json.loads((catalogue / "provider.json").read_text(encoding="utf-8"))
-    assert provider_info["catalogue_version"] is None
-    assert pl.read_parquet(catalogue / "products.parquet").is_empty()
-    assert pl.read_parquet(catalogue / "stations.parquet").is_empty()
-    assert pl.read_parquet(catalogue / "station_products.parquet").is_empty()
-    provenance = json.loads((catalogue / "provenance.json").read_text(encoding="utf-8"))
-    assert provenance["native_table"] is None
-    assert {statement["kind"] for source in provenance["source_records"] for statement in source["statements"]} == {
-        "license",
-        "citation",
-    }
-    assert len(provenance["fact_bindings"]) == 2
-    authored = provenance["fact_bindings"][0]
-    assert authored["fact_group"] == "rivretrieve_authored_provider_registration"
-    assert authored["transformation"]["kind"] == "authored_constant"
-    assert {item["reason"] for item in provenance["withheld_facts"]} == {"no_acquisition_record_established"}
+def test_brazil_remains_empty_and_unselectable() -> None:
+    assert rr.find(provider="br_ana").series == ()
+    assert rr.products(provider="br_ana") == []

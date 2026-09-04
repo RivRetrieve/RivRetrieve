@@ -46,10 +46,10 @@ pinned by `tests/test_provider_row_withholding.py`.
 ## Current certification boundary
 
 `ORIGIN_GATE_ENROLLED_PROVIDERS` in `catalogue_origins.py` is the executable certification boundary.
-[ADR 0012](adr/0012-a-catalogue-column-declares-its-origin.md) records why `br_ana` and `no_nve` remain
-outside it pending the credentialed native acquisition in
-[issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90). Until each gains a committed attested
-native table and origin declarations, generate its deterministic empty catalogue with:
+[ADR 0012](adr/0012-a-catalogue-column-declares-its-origin.md) records the original deferral boundary.
+`no_nve` is enrolled after gaining a committed attested native table and complete origin declarations.
+`br_ana` remains outside it pending a credentialed native acquisition. Until Brazil gains a committed
+attested native table and origin declarations, generate its deterministic empty catalogue with:
 
 ```bash
 uv run python src/rivretrieve/_internal/providers/<provider>/generate_catalogue.py \

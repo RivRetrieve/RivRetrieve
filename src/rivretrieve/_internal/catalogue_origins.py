@@ -100,13 +100,14 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("fr_hubeau"),
         ProviderId("jp_mlit"),
         ProviderId("lt_lhmt"),
+        ProviderId("no_nve"),
         ProviderId("pl_imgw"),
         ProviderId("th_thaiwater"),
         ProviderId("usgs_nwis"),
         ProviderId("za_dws"),
     }
 )
-"""The eleven providers certified by this vision. br_ana and no_nve were deliberately deferred by the 2026-08-03 human scope ruling and remain unenrolled for a separate effort ticket."""
+"""The twelve providers with complete audited catalogue origin declarations. br_ana remains explicitly deferred."""
 
 
 def validate_catalogue_origins(

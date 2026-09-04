@@ -60,6 +60,21 @@
     "attestation_identity": "Japan publisher CRS-capture attestation"
   },
   {
+    "provider_id": "no_nve",
+    "declaration_map": "stations",
+    "canonical_column": "crs",
+    "evidence_url": "https://hydapi.nve.no/swagger/v1/swagger.json",
+    "requested_url": "https://hydapi.nve.no/swagger/v1/swagger.json",
+    "final_url": "https://hydapi.nve.no/swagger/v1/swagger.json",
+    "http_status": 200,
+    "status_record": "recorded",
+    "retrieved_at": "2026-09-04T17:48:13Z",
+    "sha256": "6f30fa885e55ca4600e974de702ac818a14e6b236f11c968ecb511da3b9a0516",
+    "digest_method": "raw",
+    "capture_path": "tests/test_data/no_nve_swagger.json",
+    "attestation_identity": "Norway credentialed native-table attestation"
+  },
+  {
     "provider_id": "pl_imgw",
     "declaration_map": "stations",
     "canonical_column": "crs",

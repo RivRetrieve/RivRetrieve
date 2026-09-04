@@ -41,12 +41,13 @@ false claim cleanly. A person reads the source's documentation once and links it
 
 ## Consequence: the build stays red until every enrolled provider is declared
 
-On 2026-08-03 the operator deferred `br_ana` and `no_nve` to a separate effort ticket.
-The complete-provider rule quantifies over `ORIGIN_GATE_ENROLLED_PROVIDERS`: all eleven
-enrolled members must be completely declared, while the two deferred providers are
+On 2026-08-03 the operator deferred `br_ana` and `no_nve` to separate work. That statement
+records the boundary at the time of this decision. `no_nve` subsequently gained a complete
+attested native table and origin declarations and entered `ORIGIN_GATE_ENROLLED_PROVIDERS`.
+The complete-provider rule now quantifies over all twelve enrolled members. `br_ana` remains
 intentionally unenrolled rather than compliant. There is no half-landed state within
-`ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled set is completely
-declared, while the explicitly deferred `br_ana` and `no_nve` remain outside that set.
-Brazil's availability must ultimately be fixed because no honest evidence link can be
-written for it, and USGS's request was corrected for the same reason. Those two providers
-are 64% of the 284,399 `unknown` rows in `station_products`.
+`ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled set is completely declared,
+while the explicitly deferred `br_ana` remains outside that set. Brazil's availability must
+ultimately be fixed because no honest evidence link can be written for it, and USGS's request
+was corrected for the same reason. The original defect history included 64% of the 284,399
+`unknown` rows in `station_products` across Brazil and Norway.

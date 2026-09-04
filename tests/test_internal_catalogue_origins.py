@@ -106,7 +106,7 @@ def test_native_column_rejects_empty_names(value: str) -> None:
 
 def test_field_rejects_a_bare_string_carrier() -> None:
     with pytest.raises(TypeError, match="Field.native_column must be a NativeColumn"):
-        Field("station_code")  # type: ignore[arg-type]
+        Field("station_code")  # ty: ignore[invalid-argument-type]
 
 
 def test_field_defers_native_table_membership_to_the_build_gate() -> None:
@@ -151,10 +151,10 @@ def test_evidence_rejects_empty_or_non_http_documentation_links(value: str) -> N
 
 def test_not_published_requires_the_named_evidence_carrier() -> None:
     with pytest.raises(TypeError, match="NotPublished.evidence must be Evidence"):
-        NotPublished("https://provider.example/documentation")  # type: ignore[arg-type]
+        NotPublished("https://provider.example/documentation")  # ty: ignore[invalid-argument-type]
 
     with pytest.raises(TypeError):
-        NotPublished()  # type: ignore[call-arg]
+        NotPublished()  # ty: ignore[missing-argument]
 
 
 def test_documented_carries_a_named_value_and_evidence_and_is_immutable() -> None:
@@ -167,7 +167,7 @@ def test_documented_carries_a_named_value_and_evidence_and_is_immutable() -> Non
     assert isinstance(origin.value, DocumentedValue)
     assert isinstance(origin.evidence, Evidence)
     with pytest.raises(FrozenInstanceError):
-        origin.value = DocumentedValue("EPSG:9999")
+        origin.value = DocumentedValue("EPSG:9999")  # ty: ignore[invalid-assignment]
 
 
 @pytest.mark.parametrize("value", ["", " ", "\t\n"])
@@ -179,9 +179,9 @@ def test_documented_value_rejects_empty_values(value: str) -> None:
 def test_documented_requires_named_carriers() -> None:
     evidence = Evidence("https://provider.example/documentation")
     with pytest.raises(TypeError, match="Documented.value must be a DocumentedValue"):
-        Documented("EPSG:4326", evidence)  # type: ignore[arg-type]
+        Documented("EPSG:4326", evidence)  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError, match="Documented.evidence must be Evidence"):
-        Documented(DocumentedValue("EPSG:4326"), str(evidence))  # type: ignore[arg-type]
+        Documented(DocumentedValue("EPSG:4326"), str(evidence))  # ty: ignore[invalid-argument-type]
 
 
 def test_catalogue_origin_union_contains_exactly_the_implemented_forms() -> None:
@@ -229,7 +229,7 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_the_eleven_in_scope_providers() -> None:
+def test_origin_gate_enrols_exactly_the_twelve_in_scope_providers() -> None:
     expected = frozenset(
         {
             ProviderId("ba_fhmzbih"),
@@ -239,6 +239,7 @@ def test_origin_gate_enrols_exactly_the_eleven_in_scope_providers() -> None:
             ProviderId("fr_hubeau"),
             ProviderId("jp_mlit"),
             ProviderId("lt_lhmt"),
+            ProviderId("no_nve"),
             ProviderId("pl_imgw"),
             ProviderId("th_thaiwater"),
             ProviderId("usgs_nwis"),
@@ -249,7 +250,7 @@ def test_origin_gate_enrols_exactly_the_eleven_in_scope_providers() -> None:
 
     assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered >= ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered - ORIGIN_GATE_ENROLLED_PROVIDERS == frozenset({ProviderId("br_ana"), ProviderId("no_nve")})
+    assert registered - ORIGIN_GATE_ENROLLED_PROVIDERS == frozenset({ProviderId("br_ana")})
 
 
 def _collapse_whitespace(value: str) -> str:
@@ -277,8 +278,7 @@ def test_origin_scope_documentation_contract_pins_the_constant_docstring() -> No
         "origin gate scope docstring is not immediately after the assignment"
     )
     assert docstring_statement.value.value == (
-        "The eleven providers certified by this vision. br_ana and no_nve were deliberately deferred by the "
-        "2026-08-03 human scope ruling and remain unenrolled for a separate effort ticket."
+        "The twelve providers with complete audited catalogue origin declarations. br_ana remains explicitly deferred."
     ), "origin gate scope docstring has drifted"
 
 
@@ -286,7 +286,7 @@ def test_origin_scope_documentation_contract_pins_adr_ruling() -> None:
     adr = _collapse_whitespace(CATALOGUE_ORIGINS_ADR_PATH.read_text())
     scoped_state = _collapse_whitespace(
         "There is no half-landed state within `ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled "
-        "set is completely declared, while the explicitly deferred `br_ana` and `no_nve` remain outside that set."
+        "set is completely declared, while the explicitly deferred `br_ana` remains outside that set."
     )
 
     assert "## Consequence: the build stays red until every enrolled provider is declared" in adr, (
@@ -294,10 +294,11 @@ def test_origin_scope_documentation_contract_pins_adr_ruling() -> None:
     )
     assert "2026-08-03" in adr, "ADR is missing the dated human scope ruling"
     assert "`br_ana`" in adr, "ADR is missing the deferred br_ana provider id"
-    assert "`no_nve`" in adr, "ADR is missing the deferred no_nve provider id"
-    assert "deferred `br_ana` and `no_nve` to a separate effort ticket" in adr, (
-        "ADR does not state that both providers were deferred to a separate effort ticket"
+    assert "`no_nve`" in adr, "ADR is missing the historical no_nve provider id"
+    assert "deferred `br_ana` and `no_nve` to separate work" in adr, (
+        "ADR does not preserve the historical deferral boundary"
     )
+    assert "`no_nve` subsequently gained" in adr, "ADR does not record Norway's later enrolment"
     assert scoped_state in adr, "ADR is missing the exact scoped half-landed-state contract"
     assert "ORIGIN_GATE_ENROLLED_PROVIDERS" in adr, "ADR is missing the explicit enrolment boundary name"
     assert "26,231" in adr, "ADR lost the USGS defect-history station count"
@@ -307,7 +308,8 @@ def test_origin_scope_documentation_contract_pins_adr_ruling() -> None:
     maintenance = _collapse_whitespace(CATALOGUE_PROVENANCE_PATH.read_text())
     assert "`ORIGIN_GATE_ENROLLED_PROVIDERS`" in maintenance
     assert "ADR 0012" in maintenance
-    assert "`br_ana` and `no_nve`" in maintenance
+    assert "`br_ana` remains outside it" in maintenance
+    assert "`no_nve` is enrolled" in maintenance
 
 
 def test_origin_scope_documentation_contract_pins_glossary_boundary() -> None:
@@ -470,10 +472,10 @@ def test_committed_bosnia_origins_pass_validation_and_enforcement() -> None:
     enforce_catalogue_origins(ProviderId("ba_fhmzbih"), STATION_CATALOGUE_ORIGINS, native_table, stations)
 
 
-@pytest.mark.parametrize("provider_id", [ProviderId("br_ana"), ProviderId("no_nve"), ProviderId("other_provider")])
+@pytest.mark.parametrize("provider_id", [ProviderId("br_ana"), ProviderId("other_provider")])
 def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation(provider_id: ProviderId) -> None:
     with pytest.raises(FatalContractError) as exc_info:
-        enforce_catalogue_origins(provider_id, {}, None, None)  # type: ignore[arg-type]
+        enforce_catalogue_origins(provider_id, {}, None, None)  # ty: ignore[invalid-argument-type]
 
     assert str(exc_info.value) == f"{provider_id}: provider is not enrolled in catalogue origin gate"
 

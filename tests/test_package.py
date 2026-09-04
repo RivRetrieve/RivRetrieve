@@ -138,7 +138,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "fr_hubeau": (6, 0, 0),
         "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
-        "no_nve": (0, 0, 0),
+        "no_nve": (44_118, 0, 0),
         "pl_imgw": (3_903, 0, 0),
         "th_thaiwater": (2, 0, 0),
         "usgs_nwis": (157_548, 57_450, 57_450),
@@ -169,12 +169,17 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "usgs_nwis",
         "za_dws",
     )
+    expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
+    expected_provider_terms["no_nve"] = (
+        "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
+        "which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+        "When using data from this service, if possible, please refer to this service as origin of data.",
+    )
     for provider_id in provider_ids:
         catalogue_path = providers_root / provider_id / "catalogue"
         raw_provider_info = json.loads((catalogue_path / "provider.json").read_text())
         assert set(raw_provider_info) == set(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
-        assert raw_provider_info["license"] is None
-        assert raw_provider_info["citation"] is None
+        assert (raw_provider_info["license"], raw_provider_info["citation"]) == expected_provider_terms[provider_id]
 
         artifact = load_packaged_catalogue_artifact(catalogue_path, on_issue="raise")
         assert artifact.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
@@ -190,6 +195,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         assert artifact.station_products["published_record_start_date"].count() == start_count
         assert artifact.station_products["published_record_end_date"].count() == end_count
         assert tuple(artifact.provider_info) == tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
-        assert artifact.provider_info["license"] is None
-        assert artifact.provider_info["citation"] is None
+        assert (artifact.provider_info["license"], artifact.provider_info["citation"]) == expected_provider_terms[
+            provider_id
+        ]
         assert "metadata" not in artifact.provider_info

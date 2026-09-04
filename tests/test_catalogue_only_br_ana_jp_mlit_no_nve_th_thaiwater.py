@@ -170,9 +170,10 @@ def test_catalogue_only_provider_rejects_observation_retrieval(provider_id: str)
         _registry.get(provider_id).observations(stations="unused", products="unused", start=None, end=None)
 
 
-def test_no_nve_packaged_availability_is_withheld() -> None:
+def test_no_nve_packaged_availability_is_certified() -> None:
     station_products = catalogue_reader("no_nve").read_station_products().data
-    assert station_products.is_empty()
+    assert station_products.height == 44_118
+    assert set(station_products["availability"].cast(str)) == {"available", "unavailable"}
 
 
 def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:

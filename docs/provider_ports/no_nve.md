@@ -54,9 +54,32 @@ records station `103.3.0` publishing water temperature at resolution 60 with `me
 (the active station list of 2026-09-03 says the same of its resolution 1440 series), so the check is
 not decorative. The guard is deliberate: a request that includes such a series fails the whole result
 rather than returning the other products with an issue. That is the doctrine (a module dies rather
-than guess), and there is no per-provider isolation point. Per-station product unavailability is a
-catalogue fact that the certified catalogue owned by
-[issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90) must express.
+than guess), and there is no per-provider isolation point. Per-station product unavailability is a catalogue fact expressed by the certified native-table catalogue build.
+
+## Station catalogue acquisition
+
+The certified station catalogue comes from one authorized campaign on 2026-09-04. It issued exactly
+`Stations?Active=1` and `Stations?Active=0`. The complete response bytes are retained as repository audit
+evidence outside the wheel. The two responses contained 4,902 and 1,893 rows. Each response had no
+duplicate station identity. The 1,893 rows from `Active=0` also occurred byte-semantically unchanged in
+the `Active=1` response, leaving 4,902 distinct stations. These counts describe this capture. They are not
+acceptance thresholds for a future refresh.
+
+Materialization verifies both envelopes, their `itemCount`, every 98-field station object, every nested
+`seriesList` and `resolutionList` member, raw byte identities, and the attested counts. Identical overlap is
+collapsed. Rows are sorted by exact `stationId`. Each row uses the earliest retrieval instant of a response
+that contained it. Any differing overlap, duplicate identity, malformed member, missing coordinate, or
+unaccounted row refuses the materialization.
+
+The public OpenAPI schema was captured separately and reviewed. It documents `latitude` and `longitude`
+but no coordinate reference system for them. The canonical CRS therefore remains `unknown`; it is not
+inferred from Norway or from the UTM zone-33 fields that the same station object also publishes.
+
+HydAPI publishes `serieFrom` and `serieTo` per series version and `dataFromTime` and `dataToTime` per
+resolution member. A station-product edge can have several such members. The source does not publish one
+edge-level period, and choosing a minimum, maximum, or version would add RivRetrieve judgement. These
+fields remain intact in the native table. Canonical `published_record_start_date` and
+`published_record_end_date` therefore remain null rather than presenting an inferred coverage period.
 
 ## Time semantics
 

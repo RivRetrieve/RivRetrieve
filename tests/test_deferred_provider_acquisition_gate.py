@@ -21,10 +21,7 @@ from rivretrieve._internal.catalogues.artifact import (
 from rivretrieve._internal.discovery import EmptySelectionError
 from tests._catalogue import catalogue_path, catalogue_reader
 
-DEFERRED_PROVIDERS = {
-    "br_ana": (10_429, 52_145),
-    "no_nve": (4_889, 44_001),
-}
+DEFERRED_PROVIDERS = {"br_ana": (10_429, 52_145)}
 
 
 @pytest.mark.parametrize("provider_id,legacy_counts", DEFERRED_PROVIDERS.items())
@@ -36,7 +33,7 @@ def test_deferred_provider_packaged_source_facts_are_hard_withheld(
     artifact_path = catalogue_path(provider_id)
     artifact = load_packaged_catalogue_artifact(artifact_path, on_issue="raise")
 
-    assert legacy_counts in {(10_429, 52_145), (4_889, 44_001)}
+    assert legacy_counts == (10_429, 52_145)
     assert artifact.products.is_empty()
     assert artifact.stations.is_empty()
     assert artifact.station_products.is_empty()
@@ -123,7 +120,7 @@ def test_deferred_provider_selection_retains_reason_and_fails_truthfully(provide
 
 @pytest.mark.parametrize(
     "provider_id,catalogue_date",
-    (("br_ana", "2026-06-11"), ("no_nve", "2026-06-03")),
+    (("br_ana", "2026-06-11"),),
 )
 def test_maintainer_withholding_operation_is_network_free_and_deterministic(
     provider_id: str,
@@ -206,7 +203,16 @@ def test_deferred_public_terms_are_traced_without_republishing_catalogue_values(
         artifact = load_packaged_catalogue_artifact(catalogue_path(provider_id), on_issue="raise")
         provenance = artifact.acquisition_provenance
         assert provenance is not None
-        assert artifact.products.is_empty() and artifact.stations.is_empty() and artifact.station_products.is_empty()
+        if provider_id == "br_ana":
+            assert (
+                artifact.products.is_empty() and artifact.stations.is_empty() and artifact.station_products.is_empty()
+            )
+        else:
+            assert (
+                not artifact.products.is_empty()
+                and not artifact.stations.is_empty()
+                and not artifact.station_products.is_empty()
+            )
         statements = [statement for source in provenance.source_records for statement in source.statements]
         assert {statement.kind for statement in statements} == kinds
         assert all(statement.verification_status == "verified_public_recording" for statement in statements)
@@ -250,6 +256,7 @@ def test_deferred_terms_match_completed_survey_exactly(
     acquisition = source.acquisitions[0]
     recording = source.evidence[0].recording
     assert acquisition.requested_from == (expected_url,)
+    assert acquisition.retrieved_at_start is not None
     assert acquisition.retrieved_at_start.isoformat().replace("+00:00", "Z") == expected_instant
     assert recording.source_url == expected_url
     assert recording.sha256 == expected_sha256

@@ -42,7 +42,7 @@ ROOT = Path(__file__).parents[1]
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-DEFERRED_PROVIDERS = frozenset({ProviderId("br_ana"), ProviderId("no_nve")})
+DEFERRED_PROVIDERS = frozenset({ProviderId("br_ana")})
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +64,7 @@ class ProviderAdapter:
     def origins_argument(
         self, replacement: Mapping[str, Mapping[str, CatalogueOrigin]] | None = None
     ) -> Mapping[str, object]:
-        maps = {case.identity: dict(case.declarations) for case in self.cases}
+        maps: dict[str, Mapping[str, CatalogueOrigin]] = {case.identity: dict(case.declarations) for case in self.cases}
         if replacement is not None:
             maps.update(replacement)
         if self.provider_id == ProviderId("fr_hubeau"):
@@ -78,7 +78,9 @@ def _module(provider: str, leaf: str) -> ModuleType:
 
 def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapter:
     generator = _module(provider, "generate_catalogue")
-    native_path = Path(generator.__file__).parent / "catalogue/native.parquet"
+    module_path = generator.__file__
+    assert module_path is not None
+    native_path = Path(module_path).parent / "catalogue/native.parquet"
     return ProviderAdapter(
         provider_id=ProviderId(provider),
         native_path=native_path,
@@ -104,6 +106,7 @@ ADAPTERS = {
         "cz_chmi",
         "jp_mlit",
         "lt_lhmt",
+        "no_nve",
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",
@@ -223,6 +226,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "longitude": field("coordinates"),
             "crs": documented("https://api.meteo.lt/"),
         },
+        (ProviderId("no_nve"), "stations"): {
+            "provider_id": field("stationId"),
+            "station_id": field("stationId"),
+            "latitude": field("latitude"),
+            "longitude": field("longitude"),
+            "crs": unpublished("https://hydapi.nve.no/swagger/v1/swagger.json"),
+        },
         (ProviderId("pl_imgw"), "stations"): {
             "provider_id": field("gauge_id"),
             "station_id": field("gauge_id"),
@@ -264,7 +274,7 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
 
     assert frozenset(ADAPTERS) == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered - frozenset(ADAPTERS) == DEFERRED_PROVIDERS, (
-        "br_ana and no_nve must remain registered and BUILDING because neither has a committed full native input"
+        "br_ana must remain registered and BUILDING until it has a committed full native input"
     )
     assert not (DEFERRED_PROVIDERS & ORIGIN_GATE_ENROLLED_PROVIDERS)
     assert all(adapter.native_path.is_file() for adapter in ADAPTERS.values())
@@ -272,7 +282,7 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
     assert {
         (adapter.provider_id, case.identity): case.declarations for adapter, case in CASES
     } == _expected_declarations()
-    assert len(CASES) == 12
+    assert len(CASES) == 13
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
 
@@ -396,7 +406,7 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
     unrecorded = {row["provider_id"] for row in receipts if row["status_record"] == "not_recorded"}
     assert unrecorded == {"ba_fhmzbih", "pl_imgw", "th_thaiwater"}
     local = {row["provider_id"] for row in receipts if row["capture_path"] is not None}
-    assert local == {"ba_fhmzbih", "ch_foen", "cz_chmi", "jp_mlit", "pl_imgw", "th_thaiwater"}
+    assert local == {"ba_fhmzbih", "ch_foen", "cz_chmi", "jp_mlit", "no_nve", "pl_imgw", "th_thaiwater"}
     assert [row["provider_id"] for row in receipts if row["capture_path"] is None] == ["za_dws"]
 
 
@@ -462,6 +472,7 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("fr_hubeau"), "temperature/station"): (869, "EPSG:4326"),
     (ProviderId("jp_mlit"), "stations"): (1_023, "unknown"),
     (ProviderId("lt_lhmt"), "stations"): (97, "EPSG:4326"),
+    (ProviderId("no_nve"), "stations"): (4_902, "unknown"),
     (ProviderId("pl_imgw"), "stations"): (1_301, "unknown"),
     (ProviderId("th_thaiwater"), "stations"): (825, "unknown"),
     (ProviderId("za_dws"), "stations"): (2_905, "unknown"),
@@ -506,7 +517,7 @@ def test_real_build_crs_semantics_are_complete_and_reviewed(adapter: ProviderAda
 
 
 def test_not_published_and_documented_count_totals_are_pinned() -> None:
-    assert sum(count for (_, _), (count, value) in EXPECTED_CRS_COUNTS.items() if value == "unknown") == 7_191
+    assert sum(count for (_, _), (count, value) in EXPECTED_CRS_COUNTS.items() if value == "unknown") == 12_093
     assert 6_454 + 869 == 7_323
 
 
