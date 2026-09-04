@@ -13,7 +13,7 @@ stages = declaration.observations.stages
 
 
 def test_usgs_nwis_in_providers_list() -> None:
-    assert "usgs_nwis" in rr.providers()
+    assert "usgs_nwis" in rr.providers().get_column("provider_id").to_list()
 
 
 def test_usgs_nwis_declares_the_engine_stage_contract() -> None:

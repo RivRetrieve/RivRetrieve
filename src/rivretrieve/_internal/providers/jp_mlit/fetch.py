@@ -159,8 +159,6 @@ def fetch(
                     "KAWABOU": "NO",
                 }
                 html = transport.send(TransportRequest(method=HttpMethod.GET, url=_DSP_URL, params=params))
-                if not 200 <= html.status_code < 300:
-                    raise FatalContractError(f"jp_mlit HTML request returned unexpected HTTP status {html.status_code}")
                 tag = ((station_id, product_id),)
                 payloads.append(
                     Payload(
@@ -190,8 +188,6 @@ def fetch(
                     )
                     continue
                 dat = transport.send(TransportRequest(method=HttpMethod.GET, url=links[0]))
-                if not 200 <= dat.status_code < 300:
-                    raise FatalContractError(f"jp_mlit DAT request returned unexpected HTTP status {dat.status_code}")
                 payloads.append(
                     Payload(
                         SourceCoordinates(JpMlitPayloadCoordinates(coordinates.kind, "dat")),

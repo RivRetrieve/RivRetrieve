@@ -62,7 +62,6 @@ def fetch(
                 query,
             )
             response = transport.send(request)
-            _require_success(response.status_code)
             payloads.append(
                 _payload(
                     SourceCoordinates(ChFoenRequestCoordinates(tuple(query_fields))),
@@ -83,7 +82,6 @@ def fetch(
         "version": "1",
     }
     response = transport.send(TransportRequest(HttpMethod.GET, _REST, params, {"Accept": "application/json"}))
-    _require_success(response.status_code)
     return WithIssues(
         (
             _payload(
@@ -129,11 +127,6 @@ def _flux(station: str, fields: list[str], start: str, stop: str) -> str:
         '  |> keep(columns: ["_start", "_stop", "_time", "_value", "_field", "_measurement", "loc"])\n'
         '  |> sort(columns: ["_time", "_field"])\n'
     )
-
-
-def _require_success(status: int) -> None:
-    if not 200 <= status < 300:
-        raise FatalContractError(f"ch_foen request returned unexpected HTTP status {status}")
 
 
 def _payload(coordinates, pairs, window, response, query) -> Payload:

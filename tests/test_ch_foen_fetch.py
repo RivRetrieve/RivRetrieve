@@ -100,7 +100,7 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
     assert result.provenance.endpoints == ("https://influx.konzept.space/api/v2/query",)
     assert result.provenance.retrieved_at == recording.retrieved_at
     assert result.provenance.query == {"statement": recording.request.body, "parameters": ()}
-    assert len(result.provenance.calls_made) == 1
+    assert len(result.provenance.calls_made) == len(PRODUCTS)
     assert result.provenance.calls_made[0]["query"] == result.provenance.query
     included = drive(
         request,
@@ -119,7 +119,7 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
         ),
     )
     assert included.provenance == result.provenance
-    assert len(included.receipts.entries) == 1
+    assert len(included.receipts.entries) == len(PRODUCTS)
     public_json = result.provenance.model_dump_json()
     assert "SENTINEL-NOT-A-REAL-TOKEN" not in public_json
     assert "authorization" not in public_json.lower()

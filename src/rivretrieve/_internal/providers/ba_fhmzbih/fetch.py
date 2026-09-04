@@ -85,10 +85,7 @@ def fetch(
 
 
 def _send(transport: Transport, request: TransportRequest) -> TransportResponse:
-    response = transport.send(request)
-    if not 200 <= response.status_code < 300:
-        raise FatalContractError(f"ba_fhmzbih request returned unexpected HTTP status {response.status_code}")
-    return response
+    return transport.send(request)
 
 
 def _payload(

@@ -22,7 +22,7 @@ def test_m1_exit_criteria_smoke_sweep(
     _registry.register("a_provider", a_artifact)
 
     assert z_artifact.provider_info["provider_id"] == "z_provider"
-    assert rr.providers() == ["a_provider", "z_provider"]
+    assert rr.providers().get_column("provider_id").to_list() == ["a_provider", "z_provider"]
     with pytest.raises(UnknownProviderError):
         rr.products(provider="missing")
     assert rr.products() == ["level"]

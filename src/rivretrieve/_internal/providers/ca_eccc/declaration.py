@@ -48,4 +48,5 @@ declaration = ProviderDeclaration(
         download=_download,
         compile=_compile,
     ),
+    required_credentials=(),
 )

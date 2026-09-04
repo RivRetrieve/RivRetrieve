@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -15,6 +16,7 @@ from rivretrieve._internal.engine import ProviderConfig
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.registry import EngineProviderModule, ProviderRegistry
 from rivretrieve._internal.store import StoreRoot, ValidatedStore
+from rivretrieve._internal.transport import CredentialHeader
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,11 +97,22 @@ type ProviderKind = CatalogueOnly | LiveStages | BulkStore
 
 
 @dataclass(frozen=True, slots=True)
+class CredentialHeaderBinding:
+    """Bind one declared credential variable to one source-scoped HTTP header."""
+
+    variable: str
+    header: str
+    origins: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderDeclaration:
-    """State one provider's packaged catalogue and observation kind."""
+    """State one provider's packaged catalogue, observation kind, and credentials."""
 
     catalogue: Path
     observations: ProviderKind
+    required_credentials: tuple[str, ...] = ()
+    credential_headers: tuple[CredentialHeaderBinding, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +169,33 @@ def load_manifest(
             raise FatalContractError(
                 f"Provider {provider_id} has unrecognised observation kind: {value.observations!r}"
             )
+        credentials = value.required_credentials
+        if (
+            not isinstance(credentials, tuple)
+            or any(not isinstance(name, str) or re.fullmatch(r"[A-Z][A-Z0-9_]*", name) is None for name in credentials)
+            or len(credentials) != len(set(credentials))
+        ):
+            raise FatalContractError(f"Provider {provider_id} has malformed required credentials: {credentials!r}")
+        bindings = value.credential_headers
+        if not isinstance(bindings, tuple) or any(not isinstance(item, CredentialHeaderBinding) for item in bindings):
+            raise FatalContractError(f"Provider {provider_id} has malformed credential header bindings: {bindings!r}")
+        for binding in bindings:
+            if binding.variable not in credentials:
+                raise FatalContractError(
+                    f"Provider {provider_id} credential header references undeclared variable {binding.variable!r}"
+                )
+            try:
+                CredentialHeader(binding.header, "declaration-validation", binding.origins)
+            except (TypeError, ValueError) as exc:
+                raise FatalContractError(
+                    f"Provider {provider_id} has malformed credential header binding for {binding.variable}: {exc}"
+                ) from exc
         if isinstance(value.observations, LiveStages):
+            bound_variables = tuple(binding.variable for binding in bindings)
+            if set(bound_variables) != set(credentials) or len(bound_variables) != len(set(bound_variables)):
+                raise FatalContractError(
+                    f"Provider {provider_id} live credential bindings do not match required credentials"
+                )
             required_stage_members = ("config", "window_declarations", "observation_source", "fetch", "parse")
             missing_stage_members = tuple(
                 member for member in required_stage_members if not hasattr(value.observations.stages, member)
@@ -240,11 +279,23 @@ def register_manifest(
     for item, artifact in zip(declared, artifacts, strict=True):
         if item.provider_id in registered:
             continue
-        kind = item.declaration.observations
+        declaration = item.declaration
+        kind = declaration.observations
         if isinstance(kind, CatalogueOnly):
-            registry.register(item.provider_id, artifact)
+            registry.register(
+                item.provider_id,
+                artifact,
+                required_credentials=declaration.required_credentials,
+                credential_headers=declaration.credential_headers,
+            )
         elif isinstance(kind, LiveStages):
-            registry.register(item.provider_id, artifact, engine_provider_module=kind.stages)
+            registry.register(
+                item.provider_id,
+                artifact,
+                engine_provider_module=kind.stages,
+                required_credentials=declaration.required_credentials,
+                credential_headers=declaration.credential_headers,
+            )
         elif isinstance(kind, BulkStore):
             registry.register(
                 item.provider_id,
@@ -252,6 +303,8 @@ def register_manifest(
                 bulk_config=kind.config,
                 observation_store=StoreRoot(root / item.provider_id / "store"),
                 bulk_operations=kind,
+                required_credentials=declaration.required_credentials,
+                credential_headers=declaration.credential_headers,
             )
         else:  # load_manifest closes this union before any catalogue is loaded.
             raise AssertionError(f"unreachable provider kind for {item.provider_id}")

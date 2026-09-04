@@ -93,10 +93,6 @@ def fetch(
                 )
             while True:
                 response = transport.send(request)
-                if not 200 <= response.status_code < 300:
-                    raise FatalContractError(
-                        f"fr_hubeau request returned unexpected HTTP status {response.status_code}"
-                    )
                 payloads.append(
                     Payload(
                         source,

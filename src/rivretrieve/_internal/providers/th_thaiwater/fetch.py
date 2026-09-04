@@ -18,20 +18,10 @@ from rivretrieve._internal.engine import (
     UnknownOriginFact,
     WithIssues,
 )
-from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.th_thaiwater.config import ThThaiWaterSourceCoordinates
-from rivretrieve._internal.providers.th_thaiwater.issue_codes import ThThaiWaterObservationIssueCodes
-from rivretrieve._internal.transport import (
-    HttpMethod,
-    Transport,
-    TransportFailure,
-    TransportFailureReason,
-    TransportRequest,
-    TransportResponse,
-)
-
-PROVIDER_ID = ProviderId("th_thaiwater")
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,22 +48,10 @@ def fetch(
             groups.setdefault((window.start, window.stop), []).append(product)
 
     payloads: list[Payload] = []
-    issues: list[Issue] = []
     for station in stations:
         for (start, stop), group_products in groups.items():
             request = _request(station, start, stop)
-            try:
-                response = transport.send(request)
-            except TransportFailure as error:
-                if error.reason is not TransportFailureReason.RETRY_EXHAUSTED:
-                    raise
-                issues.append(_request_failed(station, tuple(group_products), start, stop, error))
-                continue
-            if response.status_code == 404:
-                issues.append(_not_found(station, tuple(group_products), start, stop))
-                continue
-            if not 200 <= response.status_code < 300:
-                raise FatalContractError(f"th_thaiwater request returned unexpected HTTP status {response.status_code}")
+            response = transport.send(request)
             payloads.append(
                 Payload(
                     source_coordinates=SourceCoordinates(ThThaiWaterGraphRoute()),
@@ -84,7 +62,7 @@ def fetch(
                     prerequisite_calls=response.prerequisite_calls,
                 )
             )
-    return WithIssues(value=tuple(payloads), issues=tuple(issues))
+    return WithIssues(value=tuple(payloads), issues=())
 
 
 def _coordinates(product: ProductId, config: ProviderConfig) -> ThThaiWaterSourceCoordinates:
@@ -121,42 +99,4 @@ def _origin(response: TransportResponse) -> SourceCallOrigin:
         content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
-    )
-
-
-def _details(station: str, products: tuple[ProductId, ...], start: str, stop: str | None) -> dict[str, object]:
-    return {
-        "station_id": station,
-        "product_ids": list(products),
-        "fetch_window": {"start": start, "end": stop},
-    }
-
-
-def _not_found(station: str, products: tuple[ProductId, ...], start: str, stop: str | None) -> Issue:
-    details = _details(station, products, start, stop)
-    details["status_code"] = 404
-    return Issue(
-        severity="warning",
-        code=ThThaiWaterObservationIssueCodes.HTTP_NOT_FOUND,
-        message="No data available for station-window request (HTTP 404)",
-        details=details,
-        provider_id=PROVIDER_ID,
-    )
-
-
-def _request_failed(
-    station: str,
-    products: tuple[ProductId, ...],
-    start: str,
-    stop: str | None,
-    error: TransportFailure,
-) -> Issue:
-    details = _details(station, products, start, stop)
-    details.update({"failure_reason": error.reason.value, "attempts": error.attempts, "status_code": error.status_code})
-    return Issue(
-        severity="warning",
-        code=ThThaiWaterObservationIssueCodes.SOURCE_REQUEST_FAILED,
-        message="th_thaiwater request failed after transport retries",
-        details=details,
-        provider_id=PROVIDER_ID,
     )

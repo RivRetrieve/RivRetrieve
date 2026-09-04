@@ -17,20 +17,11 @@ from rivretrieve._internal.engine import (
     UnknownOriginFact,
     WithIssues,
 )
-from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
-from rivretrieve._internal.providers.no_nve.issue_codes import NoNveObservationIssueCodes
-from rivretrieve._internal.transport import (
-    HttpMethod,
-    Transport,
-    TransportFailure,
-    TransportFailureReason,
-    TransportRequest,
-    TransportResponse,
-)
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
-PROVIDER_ID = ProviderId("no_nve")
 _URL = "https://hydapi.nve.no/api/v1/Observations"
 
 
@@ -44,24 +35,12 @@ def fetch(
 ) -> WithIssues[tuple[Payload, ...]]:
     resolved = tuple((product, _coordinates(product, config)) for product in products)
     payloads: list[Payload] = []
-    issues: list[Issue] = []
     for station in stations:
         for product, coordinates in resolved:
             for window in rendered_windows[product]:
                 reference_time = _reference_time(window)
                 request = _request(station, coordinates, reference_time)
-                try:
-                    response = transport.send(request)
-                except TransportFailure as error:
-                    if error.reason is not TransportFailureReason.RETRY_EXHAUSTED:
-                        raise
-                    issues.append(_request_failed(station, product, coordinates, reference_time, error))
-                    continue
-                if response.status_code == 404:
-                    issues.append(_not_found(station, product, coordinates, reference_time))
-                    continue
-                if not 200 <= response.status_code < 300:
-                    raise FatalContractError(f"no_nve request returned unexpected HTTP status {response.status_code}")
+                response = transport.send(request)
                 payloads.append(
                     Payload(
                         source_coordinates=SourceCoordinates(coordinates),
@@ -72,7 +51,7 @@ def fetch(
                         prerequisite_calls=response.prerequisite_calls,
                     )
                 )
-    return WithIssues(value=tuple(payloads), issues=tuple(issues))
+    return WithIssues(value=tuple(payloads), issues=())
 
 
 def _coordinates(product: ProductId, config: ProviderConfig) -> NoNveSourceCoordinates:
@@ -114,56 +93,4 @@ def _origin(response: TransportResponse) -> SourceCallOrigin:
         content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
-    )
-
-
-def _details(
-    station: str,
-    product: ProductId,
-    coordinates: NoNveSourceCoordinates,
-    reference_time: str,
-) -> dict[str, object]:
-    return {
-        "station_id": station,
-        "product_id": product,
-        "source_coordinates": {
-            "parameter": coordinates.parameter,
-            "resolution_time": coordinates.resolution_time,
-        },
-        "reference_time": reference_time,
-    }
-
-
-def _not_found(
-    station: str,
-    product: ProductId,
-    coordinates: NoNveSourceCoordinates,
-    reference_time: str,
-) -> Issue:
-    details = _details(station, product, coordinates, reference_time)
-    details["status_code"] = 404
-    return Issue(
-        severity="warning",
-        code=NoNveObservationIssueCodes.HTTP_NOT_FOUND,
-        message="No series available for station-product request (HTTP 404)",
-        details=details,
-        provider_id=PROVIDER_ID,
-    )
-
-
-def _request_failed(
-    station: str,
-    product: ProductId,
-    coordinates: NoNveSourceCoordinates,
-    reference_time: str,
-    error: TransportFailure,
-) -> Issue:
-    details = _details(station, product, coordinates, reference_time)
-    details.update({"failure_reason": error.reason.value, "attempts": error.attempts, "status_code": error.status_code})
-    return Issue(
-        severity="warning",
-        code=NoNveObservationIssueCodes.SOURCE_REQUEST_FAILED,
-        message="no_nve request failed after transport retries",
-        details=details,
-        provider_id=PROVIDER_ID,
     )

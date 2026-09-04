@@ -118,18 +118,25 @@ period of record (does not say who established it), coverage (implies continuity
 **Issue**:
 A fact about the data, returned rather than raised. A station answering 404, a window
 holding no observations, a zone that could not be established are all issues: non-fatal,
-carried alongside the value, and never a reason to discard the rows that did arrive. An
-exception is the other thing entirely — a violation of the contract between [[stage]]s,
-such as a parse handing back a frame with the wrong columns, where there is no result
-worth assembling. Severity is `info | warning | error`, so an issue also records what
-merely deserves saying, like a unit having been converted.
+carried alongside the value, and never a reason to discard the rows that did arrive. The
+[[engine]] isolates each requested series at its one source-call boundary: a 404 is a
+`warning`, while timeout, retry exhaustion, terminal sender failure, refused redirect,
+credential rejection, and every other non-success HTTP status are `error` issues for that
+series. Other series still run, and an all-failed request is an empty five-column frame
+whose issues state why. An exception is the other thing entirely — a violation of the
+contract between [[stage]]s, such as a parse handing back a frame with the wrong columns,
+where there is no result worth assembling. Severity is `info | warning | error`; `info`
+records what merely deserves saying, like a unit having been converted, and never activates
+the caller's issue policy.
 _Avoid_: error, warning, failure (each names one severity, not the category)
 
 ### Structure
 
 **Engine**:
 The shared core every provider sits on. It owns the contracts between stages and
-performs the [[stage]]s that are the same for everyone.
+performs the [[stage]]s that are the same for everyone. Its call of a provider's fetch
+stage for one requested series is the observation pipeline's sole failure-isolation point:
+a source failure becomes an [[issue]] there and cannot cancel independent series.
 _Avoid_: core, framework, base
 
 **Provider**:
@@ -166,9 +173,11 @@ _Avoid_: unported, disabled, stub, broken
 
 **Provider declaration**:
 The single statement, living in a [[provider]]'s own directory, of everything the
-[[engine]] needs to make that source usable: where its packaged catalogue sits and which
-[[provider-kind]] it is. It is the only file a new source must write beyond its stage
-code, and it is read once, at registration. Everything else a provider used to state
+[[engine]] needs to make that source usable: where its packaged catalogue sits, which
+[[provider-kind]] it is, and the names of any credential variables observation access
+requires. A header-authenticated provider also declares the header name and exact source
+origin without carrying a credential value. It is the only file a new source must write
+beyond its stage code, and it is read once, at registration. Everything else a provider used to state
 about itself — the catalogue-reading functions each of the thirteen copied verbatim — was
 never called, because the engine reads the catalogue from the artifact directly.
 _Avoid_: registration block, provider module (the pre-registry file, whose catalogue
@@ -254,9 +263,13 @@ several), inferred timezone, promoted timezone
 
 **Requested window**:
 The interval a caller asks for, closed at both ends, expressed as wall-clock time in the
-calendar each station's own source publishes. It is never an absolute interval on the
-world's timeline: asking for one day across two stations in different zones asks each
-gauge for its own day, not for one shared 24 hours. An endpoint carrying a zone is
+calendar each station's own source publishes. `start` is always stated by the caller.
+When `end` is omitted, it is the caller machine's local calendar date expanded to that
+bare date's last instant; provenance records this actual endpoint. A stated future end is
+kept unchanged and carries one `info` [[issue]] saying it extends past the caller's local
+date. The engine never clips it by assuming what "today" means at a station. The window
+is never an absolute interval on the world's timeline: asking for one day across two
+stations in different zones asks each gauge for its own day, not for one shared 24 hours. An endpoint carrying a zone is
 refused rather than reinterpreted, because a window that means an instant can only be
 placed against a [[station-timezone]], and five of the thirteen sources publish none — the
 capability would evaporate by country. This is what makes clipping possible for a station

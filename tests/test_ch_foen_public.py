@@ -6,7 +6,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
-import rivretrieve._internal.driver as driver_module
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
@@ -18,7 +18,7 @@ def test_public_selection_uses_anonymous_rest_and_returns_five_columns_with_raw_
     monkeypatch: pytest.MonkeyPatch,
 ):
     replay = ReplayTransport((_RECORDING,))
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: replay)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider="ch_foen", station="2135", product="discharge_reported")
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-02", receipts=True, on_issue="ignore")
     assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
@@ -35,7 +35,7 @@ def test_public_selection_uses_anonymous_rest_and_returns_five_columns_with_raw_
 def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
     fetched = rr.fetch(
         rr.find(provider="ch_foen", station="2135", product="discharge_reported"),
         start="2026-09-01",
@@ -72,7 +72,7 @@ def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
 
 
 def test_public_receipts_false_omits_publisher_bytes(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
     result = rr.fetch(
         rr.find(provider="ch_foen", station="2135", product="discharge_reported"),
         start="2026-09-01",

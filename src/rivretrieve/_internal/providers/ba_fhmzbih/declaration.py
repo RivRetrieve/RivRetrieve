@@ -19,5 +19,7 @@ class _Stages:
 
 
 declaration = ProviderDeclaration(
-    catalogue=Path(__file__).with_name("catalogue"), observations=LiveStages(stages=_Stages)
+    catalogue=Path(__file__).with_name("catalogue"),
+    observations=LiveStages(stages=_Stages),
+    required_credentials=(),
 )

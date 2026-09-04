@@ -44,6 +44,20 @@ class InvalidObservationRequestError(FatalContractError):
     pass
 
 
+class MissingCredentialError(FatalContractError):
+    def __init__(self, missing_by_provider: dict[str, tuple[str, ...]]) -> None:
+        self.missing_by_provider = {provider_id: tuple(names) for provider_id, names in missing_by_provider.items()}
+        requirements = "; ".join(
+            f"provider {provider_id} requires {', '.join(names)}"
+            for provider_id, names in self.missing_by_provider.items()
+        )
+        super().__init__(
+            "Missing credentials before observation fetch: "
+            f"{requirements}. Set each value in the process environment or ./.env; "
+            "see .env.example. No source request was made."
+        )
+
+
 class ObservationsUnavailableError(FatalContractError):
     pass
 

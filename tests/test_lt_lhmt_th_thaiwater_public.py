@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import rivretrieve as rr
-import rivretrieve._internal.driver as driver_module
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.engine import UnknownOriginFact
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.recordings import RecordingEnvelope, ReplayTransport, read_recording
@@ -44,7 +44,7 @@ class _CountingReplay(ReplayTransport):
         ),
     ],
 )
-def test_public_fetch_replays_padded_request_and_coalesces_one_call_and_receipt(
+def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
     monkeypatch: pytest.MonkeyPatch,
     provider: str,
     station: str,
@@ -55,7 +55,7 @@ def test_public_fetch_replays_padded_request_and_coalesces_one_call_and_receipt(
 ) -> None:
     envelope = read_recording(Path(__file__).parent / "test_data" / recording)
     replay = _CountingReplay(envelope)
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: replay)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
 
     selection = rr.find(provider=provider, station=station)
     result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
@@ -66,8 +66,8 @@ def test_public_fetch_replays_padded_request_and_coalesces_one_call_and_receipt(
         result.data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
     )
     assert set(result.data["product_id"]) == set(rr.products(provider))
-    assert len(replay.requests) == 1
-    assert len(result.receipts.entries) == 1
+    assert len(replay.requests) == 2
+    assert len(result.receipts.entries) == 2
     receipt = result.receipts.entries[0]
     assert receipt.content == envelope.content
     assert receipt.origin.url == envelope.request.url
@@ -78,9 +78,9 @@ def test_public_fetch_replays_padded_request_and_coalesces_one_call_and_receipt(
     assert receipt.origin.content_type == envelope.content_type
 
     omitted_replay = _CountingReplay(envelope)
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: omitted_replay)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: omitted_replay)
     without_receipts = rr.fetch(selection, start=start, end=end, receipts=False, on_issue="ignore")
-    assert len(omitted_replay.requests) == 1
+    assert len(omitted_replay.requests) == 2
     assert without_receipts.receipts.entries == ()
 
     if provider == "th_thaiwater":

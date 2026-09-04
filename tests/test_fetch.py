@@ -4,7 +4,7 @@ import inspect
 import warnings
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 
 import polars as pl
 import polars.testing as pl_testing
@@ -90,6 +90,7 @@ class _RecordingStages:
         self.provider_id = provider_id
         self.observation_source = f"recording://{provider_id}"
         self.calls: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+        self.fetch_windows: list[FetchWindow] = []
         self.issues_by_series: dict[tuple[str, str], tuple[Issue, ...]] = {}
 
     def fetch(
@@ -103,6 +104,7 @@ class _RecordingStages:
     ) -> WithIssues[tuple[Payload, ...]]:
         del rendered_windows
         self.calls.append((stations, tuple(str(product) for product in products)))
+        self.fetch_windows.append(fetch_window)
         payload = Payload(
             source_coordinates=config.products[products[0]].coordinates,
             station_products=((stations[0], products[0]),),
@@ -603,7 +605,7 @@ def test_fetch_functions_require_rivretrieve_selection_and_expose_request_contro
         assert signature.parameters["selection"].default is inspect.Parameter.empty
         for name in ("start", "end"):
             assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
-            assert signature.parameters[name].default is inspect.Parameter.empty
+            assert signature.parameters[name].default is None
         assert signature.parameters["receipts"].kind is inspect.Parameter.KEYWORD_ONLY
         assert signature.parameters["receipts"].default is False
         assert signature.parameters["on_issue"].kind is inspect.Parameter.KEYWORD_ONLY
@@ -660,3 +662,103 @@ def test_shared_observation_order_is_identical_across_provider_parse_orders(prov
         ("a", "stage", datetime(2026, 1, 2)),
         ("b", "stage", datetime(2026, 1, 2)),
     ]
+
+
+def test_fetch_defaults_end_to_the_callers_local_calendar_day(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    selection = rr.find(provider="usgs_nwis", station="station-1", product="level")
+
+    result = rr.fetch(selection, start="2026-01-01", on_issue="ignore")
+
+    local_day_end = datetime.combine(date.today(), time.max)
+    assert result.provenance.request is not None
+    assert result.provenance.request["end"] == local_day_end.isoformat()
+    assert (
+        recording_stages.usgs_nwis.fetch_windows[0].end.isoformat() == (local_day_end + timedelta(days=2)).isoformat()
+    )
+
+
+def test_fetch_without_start_raises_the_domain_error_before_fetch(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    selection = rr.find(provider="usgs_nwis", station="station-1", product="level")
+
+    with pytest.raises(InvalidObservationRequestError, match="start is required"):
+        rr.fetch(selection, end="2026-01-01")
+
+    assert recording_stages.usgs_nwis.calls == []
+
+
+def test_providers_declares_credentials_without_exposing_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NVE_API_KEY", "secret-sentinel")
+    monkeypatch.delenv("ANA_IDENTIFICADOR", raising=False)
+    monkeypatch.delenv("ANA_SENHA", raising=False)
+
+    result = rr.providers()
+
+    assert isinstance(result, pl.DataFrame)
+    assert result.columns == ["provider_id", "credentials", "access"]
+    no_nve = result.filter(pl.col("provider_id") == "no_nve").row(0, named=True)
+    assert no_nve == {"provider_id": "no_nve", "credentials": ["NVE_API_KEY"], "access": "ready"}
+    br_ana = result.filter(pl.col("provider_id") == "br_ana").row(0, named=True)
+    assert br_ana == {
+        "provider_id": "br_ana",
+        "credentials": ["ANA_IDENTIFICADOR", "ANA_SENHA"],
+        "access": "missing ANA_IDENTIFICADOR, ANA_SENHA",
+    }
+    assert "secret-sentinel" not in str(result)
+
+
+def test_future_end_is_preserved_with_one_info_issue(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    selection = rr.find(provider="usgs_nwis", station="station-1", product="level")
+    future = date.today() + timedelta(days=365)
+
+    result = rr.fetch(
+        selection,
+        start="2026-01-01",
+        end=future.isoformat(),
+        on_issue="raise",
+    )
+
+    assert result.provenance.request is not None
+    assert result.provenance.request["end"] == datetime.combine(future, time.max).isoformat()
+    future_issues = tuple(issue for issue in result.issues if issue.code == "request.future_end")
+    assert len(future_issues) == 1
+    details = future_issues[0].details
+    assert details is not None
+    assert details["requested_end"] == datetime.combine(future, time.max).isoformat()
+    assert date.today().isoformat() in future_issues[0].message
+
+
+def test_fetch_by_provider_on_issue_raise_attempts_every_series_and_carries_all_issues(
+    recording_stages: _RegisteredRecorders,
+) -> None:
+    ca_issue = Issue(
+        severity="error",
+        code="ca_failed",
+        message="ca failed",
+        provider_id=ProviderId("ca_eccc"),
+    )
+    us_issue = Issue(
+        severity="warning",
+        code="us_missing",
+        message="us missing",
+        provider_id=ProviderId("usgs_nwis"),
+    )
+    recording_stages.ca_eccc.issues_by_series[("station-1", "level")] = (ca_issue,)
+    recording_stages.usgs_nwis.issues_by_series[("station-1", "level")] = (us_issue,)
+
+    with pytest.raises(IssuePolicyError) as raised:
+        rr.fetch_by_provider(
+            rr.find(product="level"),
+            start="2026-01-01",
+            end="2026-01-01",
+            on_issue="raise",
+        )
+
+    assert raised.value.issues == (ca_issue, us_issue)
+    assert recording_stages.ca_eccc.calls == [(("station-1",), ("level",))]
+    assert recording_stages.usgs_nwis.calls == [(("station-1",), ("level",))]

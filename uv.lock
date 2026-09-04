@@ -869,6 +869,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pypdf" },
+    { name = "python-dotenv" },
     { name = "requests" },
     { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
 ]
@@ -899,6 +900,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pydantic" },
     { name = "pypdf", specifier = ">=6.13.1" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "requests" },
     { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'", specifier = ">=2026.2" },
 ]

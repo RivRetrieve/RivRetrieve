@@ -70,8 +70,6 @@ def fetch(
         response = transport.send(
             TransportRequest(method=HttpMethod.GET, url=url, headers={"Accept": "application/json"})
         )
-        if not 200 <= response.status_code < 300:
-            raise FatalContractError(f"cz_chmi request returned unexpected HTTP status {response.status_code}")
         payloads.append(
             Payload(
                 source_coordinates=SourceCoordinates(

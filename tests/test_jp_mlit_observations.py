@@ -9,7 +9,7 @@ from types import MappingProxyType
 import pytest
 
 import rivretrieve as rr
-import rivretrieve._internal.driver as driver_module
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     FetchWindow,
@@ -233,7 +233,7 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts() ->
 
 
 def test_public_selection_uses_corrected_ids_and_exact_eight_call_replay(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(driver_module, "HttpClient", lambda: ReplayTransport(_PATHS))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_PATHS))
     selection = rr.find(provider="jp_mlit", station=_STATION)
     assert set(rr.as_frame(selection)["product_id"]) == set(_PRODUCTS)
     assert not any(product.endswith("_mean") for product in rr.as_frame(selection)["product_id"])

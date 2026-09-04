@@ -30,6 +30,8 @@ def test_credential_value_prefers_environment_then_env_file(tmp_path: Path) -> N
     assert credential_value("NVE_API_KEY", {"NVE_API_KEY": "from-env"}, env_file) == "from-env"
     assert credential_value("NVE_API_KEY", {}, env_file) == "from-file"
     with pytest.raises(FatalContractError, match="NVE_API_KEY"):
+        credential_value("NVE_API_KEY", {"NVE_API_KEY": "  "}, env_file)
+    with pytest.raises(FatalContractError, match="NVE_API_KEY"):
         credential_value("NVE_API_KEY", {}, tmp_path / "absent")
 
 

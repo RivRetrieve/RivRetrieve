@@ -68,7 +68,7 @@ def test_deferred_provider_packaged_source_facts_are_hard_withheld(
 @pytest.mark.parametrize("provider_id", DEFERRED_PROVIDERS)
 def test_deferred_provider_public_discovery_exposes_no_packaged_catalogue_values(provider_id: str) -> None:
     """Prove installed discovery traverses the same hard-gated empty carriers."""
-    assert provider_id in rr.providers()
+    assert provider_id in rr.providers().get_column("provider_id").to_list()
     assert rr.products(provider=provider_id) == []
     reader = catalogue_reader(provider_id)
     results = (reader.read_products(), reader.read_stations(), reader.read_station_products())

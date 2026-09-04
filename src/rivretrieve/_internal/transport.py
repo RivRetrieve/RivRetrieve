@@ -235,6 +235,7 @@ class TransportResponse:
 
 
 class TransportFailureReason(StrEnum):
+    HTTP_STATUS = "http_status"
     TERMINAL_SENDER_FAILURE = "terminal_sender_failure"
     RETRY_EXHAUSTED = "retry_exhausted"
     REDIRECT_REFUSED = "redirect_refused"
@@ -528,12 +529,14 @@ class AuthenticatedTransport:
         if not applicable:
             result = self.transport.send(request)
             if _response_contains_credentials(result, self.credentials):
+                status_code = result.status_code
                 result = None
                 request = _sanitized_request_for_credentials(request, self.credentials)
                 raise TransportFailure(
                     request,
                     TransportFailureReason.RETAINED_METADATA_UNSAFE,
                     1,
+                    status_code=status_code,
                 ) from None
             return result
         existing = {name.lower() for name in request.headers}
@@ -569,6 +572,7 @@ class AuthenticatedTransport:
                 ) from None
             unsafe = _response_contains_credentials(result, applicable)
             if unsafe:
+                status_code = result.status_code
                 result = None
                 evidence = ExecutedRequestEvidence({}, names)
                 request = _sanitized_request_for_credentials(request, applicable)
@@ -576,6 +580,7 @@ class AuthenticatedTransport:
                     request,
                     TransportFailureReason.RETAINED_METADATA_UNSAFE,
                     1,
+                    status_code=status_code,
                 ) from None
             return replace(
                 result,
