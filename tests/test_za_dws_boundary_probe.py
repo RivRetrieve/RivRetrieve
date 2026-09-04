@@ -11,8 +11,9 @@ Independent literals
 --------------------
 The three literals per product are authored from the recording bytes and the DWS format legend
 by someone who has not run this adapter (ADR 0024). Counting rule for the author: every
-whitespace-delimited row between the ``DATE ...`` header and the ``ZZZZZZZZZZZZ`` terminator is
-one reading, including rows whose value is the ``99999.999`` marker; a Point row is one reading
+whitespace-delimited row between the ``DATE ...`` header and the ``ZZZZZZZZZZZZ`` terminator, or
+the end of the ``<pre>`` block when the terminator is absent, is one reading, including rows
+whose value is the ``99999.999`` token; a Point row is one reading
 for each of the two Point products; ``time`` is the row's ``CCYYMMDD`` date (Daily, labelled
 ``00:00:00``) or ``CCYYMMDD HHMMSS`` (Point); ``time_zone`` is ``unknown`` because the source
 states no time standard.

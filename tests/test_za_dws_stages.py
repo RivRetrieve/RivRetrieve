@@ -200,3 +200,36 @@ def test_parse_dies_rather_than_guess(
 ) -> None:
     with pytest.raises(FatalContractError, match=match):
         _STAGES.parse(_payload(content, data_type, products), _CONFIG)
+
+
+# A mutated copy of the real 2020 legacy Daily bytes (reference/legacy_observations/za_dws), cut
+# to three rows with the second value replaced by the 99999.999 token. It grounds no claim about
+# the source; it only exercises how parse treats that token.
+_MUTATED_DAILY_PAGE = (
+    b"<p><pre>Data are continuously updated and reviewed.\n"
+    b"The format of this file is as follows:\n"
+    b"POS.  1-8   = Date of daily flow  CCYYMMDD\n"
+    b"POS. 10-18  = Daily avg flow rate in cubic metres/sec 99999.999\n"
+    b"POS. 20-24  = Quality code\n\n"
+    b"X3H001\nVariable 100.00 Surface Water Level\n\n"
+    b"DATE     D AVG F/R  QUAL\n"
+    b"20200101     1.257     1\n"
+    b"20200102 99999.999     1\n"
+    b"20200103     1.217     1\n"
+    b"ZZZZZZZZZZZZ\n</pre></p>"
+)
+
+
+def test_parse_returns_the_marker_token_as_published_with_a_warning() -> None:
+    result = _STAGES.parse(_payload(_MUTATED_DAILY_PAGE, "Daily", (_DAILY,)), _CONFIG)
+
+    assert result.value["value"].to_list() == [1.257, 99999.999, 1.217]
+    assert result.value["time_zone"].unique().to_list() == ["unknown"]
+    marker = [issue for issue in result.issues if issue.code == "unverified_marker_value"]
+    assert len(marker) == 1
+    assert marker[0].severity == "warning"
+    assert marker[0].details is not None
+    assert marker[0].details["token"] == "99999.999"
+    assert marker[0].details["count"] == 1
+    assert marker[0].details["first_time"] == "2020-01-02T00:00:00"
+    assert marker[0].details["last_time"] == "2020-01-02T00:00:00"
