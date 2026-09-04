@@ -21,7 +21,7 @@ from rivretrieve._internal.catalogue_origins import (
     AuthoredValue,
     Evidence,
     Field,
-    FieldTransform,
+    FloatConversion,
     NativeColumn,
     NotPublished,
 )
@@ -30,8 +30,8 @@ from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("no_nve")),
     "station_id": Field(NativeColumn("stationId")),
-    "latitude": Field(NativeColumn("latitude"), FieldTransform.FLOAT),
-    "longitude": Field(NativeColumn("longitude"), FieldTransform.FLOAT),
+    "latitude": Field(NativeColumn("latitude"), FloatConversion()),
+    "longitude": Field(NativeColumn("longitude"), FloatConversion()),
     "crs": NotPublished(Evidence("https://hydapi.nve.no/swagger/v1/swagger.json")),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet"

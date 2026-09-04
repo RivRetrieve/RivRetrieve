@@ -22,10 +22,10 @@ STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("lt_lhmt")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code")),
     "latitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("coordinates"), catalogue_origins.FieldTransform.STRUCT_MEMBER
+        catalogue_origins.NativeColumn("coordinates"), catalogue_origins.StructMemberConversion()
     ),
     "longitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("coordinates"), catalogue_origins.FieldTransform.STRUCT_MEMBER
+        catalogue_origins.NativeColumn("coordinates"), catalogue_origins.StructMemberConversion()
     ),
     "crs": catalogue_origins.Documented(
         catalogue_origins.DocumentedValue("EPSG:4326"),

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Literal, cast
+from typing import Literal, cast, final
 
 import polars as pl
 
@@ -52,7 +52,7 @@ class DocumentedValue(str):
 
 
 class AuthoredValue(str):
-    """An exact, non-empty canonical constant authored by RivRetrieve."""
+    """An exact, non-empty provider identity authored by RivRetrieve."""
 
     def __new__(cls, value: str) -> AuthoredValue:
         if not isinstance(value, str):
@@ -62,32 +62,127 @@ class AuthoredValue(str):
         return super().__new__(cls, value)
 
 
-class FieldTransform(StrEnum):
-    """An explicit established conversion from one native field to one canonical value."""
+class ConversionName(str):
+    """A stable non-empty name for one native-to-canonical conversion contract."""
 
-    IDENTITY = "identity"
-    FLOAT = "float"
-    STRUCT_MEMBER = "struct_member"
-    JAPAN_COMBINED_DMS = "japan_combined_dms"
-    DWS_UNSIGNED_DMS = "dws_unsigned_dms"
-    USGS_DATUM_TO_CRS = "usgs_datum_to_crs"
-    FRANCE_PROJECTION_31 = "france_projection_31"
+    def __new__(cls, value: str) -> ConversionName:
+        if not isinstance(value, str):
+            raise TypeError("conversion name must be a string")
+        if not value.strip():
+            raise ValueError("conversion name must not be empty")
+        return super().__new__(cls, value)
+
+
+class FieldConversion(ABC):
+    """A typed, immutable native-field conversion invoked by the generic origin gate."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def name(self) -> ConversionName:
+        """Return the stable conversion-contract name."""
+
+    @abstractmethod
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        """Convert one native row to the declared canonical field value."""
+
+    @final
+    def __eq__(self, other: object) -> bool:
+        return type(self) is type(other) and self.name == other.name
+
+    @final
+    def __hash__(self) -> int:
+        return hash((type(self), self.name))
+
+    @final
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+class IdentityConversion(FieldConversion):
+    """Copy the declared native field without conversion."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("identity")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        del canonical_column
+        return native_row[str(native_column)]
+
+
+class FloatConversion(FieldConversion):
+    """Convert a source-neutral scalar numeric representation to float."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("float")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        del canonical_column
+        value = native_row[str(native_column)]
+        if isinstance(value, bool) or not isinstance(value, str | int | float):
+            raise ValueError("numeric field is absent")
+        return float(value)
+
+
+class StructMemberConversion(FieldConversion):
+    """Select the canonical coordinate name from a source-neutral coordinate structure."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("struct_member")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        value = native_row[str(native_column)]
+        if not isinstance(value, Mapping) or canonical_column not in {"latitude", "longitude"}:
+            raise ValueError("coordinate structure is invalid")
+        return cast("Mapping[str, object]", value)[canonical_column]
 
 
 @dataclass(frozen=True, slots=True)
 class Field:
     native_column: NativeColumn
-    transform: FieldTransform = FieldTransform.IDENTITY
+    conversion: FieldConversion = IdentityConversion()
 
     def __post_init__(self) -> None:
         if not isinstance(self.native_column, NativeColumn):
             raise TypeError("Field.native_column must be a NativeColumn")
-        if not isinstance(self.transform, FieldTransform):
-            raise TypeError("Field.transform must be a FieldTransform")
+        if not isinstance(self.conversion, FieldConversion):
+            raise TypeError("Field.conversion must be a FieldConversion")
 
 
 @dataclass(frozen=True, slots=True)
 class Authored:
+    """The RivRetrieve-authored provider identity origin."""
+
     value: AuthoredValue
 
     def __post_init__(self) -> None:
@@ -274,7 +369,7 @@ def validate_catalogue_origins(
                             code="catalogue_origin.field_conversion_failed",
                             message=(
                                 f"{provider_id}.{canonical_column}: declared native field '{native_column}' "
-                                f"cannot undergo {origin.transform.value} conversion"
+                                f"cannot undergo {origin.conversion.name} conversion"
                             ),
                             details=details,
                             provider_id=provider_id,
@@ -297,7 +392,7 @@ def validate_catalogue_origins(
                                 f"'{native_column}' has a value"
                                 if unpropagated
                                 else f"{provider_id}.{canonical_column}: emitted value does not reproduce the "
-                                f"declared native field '{native_column}' through {origin.transform.value}"
+                                f"declared native field '{native_column}' through {origin.conversion.name}"
                             ),
                             details=details,
                             provider_id=provider_id,
@@ -305,12 +400,37 @@ def validate_catalogue_origins(
                     )
                     break
         elif isinstance(origin, Authored):
-            if not isinstance(getattr(origin, "value", None), AuthoredValue):
+            if canonical_column != "provider_id":
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.authored_scope_invalid",
+                        message=(
+                            f"{provider_id}.{canonical_column}: Authored origin is permitted only for provider_id"
+                        ),
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif not isinstance(getattr(origin, "value", None), AuthoredValue):
                 issues.append(
                     Issue(
                         severity="error",
                         code="catalogue_origin.malformed_authored_value",
                         message=f"{provider_id}.{canonical_column}: Authored origin must carry AuthoredValue",
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif origin.value != provider_id:
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.authored_provider_mismatch",
+                        message=(
+                            f"{provider_id}.{canonical_column}: authored value '{origin.value}' must equal "
+                            f"gate provider identity '{provider_id}'"
+                        ),
                         details=details,
                         provider_id=provider_id,
                     )
@@ -390,7 +510,28 @@ def validate_catalogue_origins(
                         provider_id=provider_id,
                     )
                 )
-        elif not isinstance(origin, NotPublished) or not isinstance(getattr(origin, "evidence", None), Evidence):
+        elif isinstance(origin, NotPublished):
+            if not isinstance(getattr(origin, "evidence", None), Evidence):
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.missing_evidence",
+                        message=f"{provider_id}.{canonical_column}: NotPublished origin must carry Evidence",
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif _has_value_other_than(stations, canonical_column, "unknown"):
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.not_published_marker_mismatch",
+                        message=f"{provider_id}.{canonical_column}: NotPublished origin must emit only 'unknown'",
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+        else:
             issues.append(
                 Issue(
                     severity="error",
@@ -416,63 +557,12 @@ def enforce_catalogue_origins(
         raise FatalContractError(issues[0].message, issues=issues)
 
 
-_JAPAN_DMS = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
-_USGS_DATUM_TO_CRS = {
-    "NAD27": "EPSG:4267",
-    "NAD83": "EPSG:4269",
-    "OLDHI": "EPSG:4135",
-    "WGS72": "EPSG:4322",
-    "WGS84": "EPSG:4326",
-}
-
-
 def _field_value(
     canonical_column: str,
     origin: Field,
     native_row: Mapping[str, object],
 ) -> object:
-    value = native_row[str(origin.native_column)]
-    transform = origin.transform
-    if transform is FieldTransform.IDENTITY:
-        return value
-    if transform is FieldTransform.FLOAT:
-        if isinstance(value, bool) or not isinstance(value, str | int | float):
-            raise ValueError("numeric field is absent")
-        return float(value)
-    if transform is FieldTransform.STRUCT_MEMBER:
-        if not isinstance(value, Mapping) or canonical_column not in {"latitude", "longitude"}:
-            raise ValueError("coordinate structure is invalid")
-        return cast("Mapping[str, object]", value)[canonical_column]
-    if transform is FieldTransform.JAPAN_COMBINED_DMS:
-        if not isinstance(value, str) or (match := _JAPAN_DMS.fullmatch(value)) is None:
-            raise ValueError("combined DMS coordinate is invalid")
-        parts = tuple(map(int, match.groups()))
-        offset = 0 if canonical_column == "latitude" else 3 if canonical_column == "longitude" else -1
-        if offset < 0:
-            raise ValueError("combined DMS is only a coordinate conversion")
-        degrees, minutes, seconds = parts[offset : offset + 3]
-        return degrees + minutes / 60 + seconds / 3600
-    if transform is FieldTransform.DWS_UNSIGNED_DMS:
-        if not isinstance(value, str) or canonical_column not in {"latitude", "longitude"}:
-            raise ValueError("unsigned DMS coordinate is invalid")
-        parts = value.split(":")
-        if len(parts) != 3:
-            raise ValueError("unsigned DMS coordinate is invalid")
-        degrees, minutes, seconds = map(float, parts)
-        magnitude = degrees + minutes / 60 + seconds / 3600
-        return -magnitude if canonical_column == "latitude" else magnitude
-    if transform is FieldTransform.USGS_DATUM_TO_CRS:
-        if not isinstance(value, str) or canonical_column != "crs":
-            raise ValueError("USGS datum is invalid")
-        return _USGS_DATUM_TO_CRS.get(value, "unknown")
-    if transform is FieldTransform.FRANCE_PROJECTION_31:
-        if canonical_column not in {"latitude", "longitude"}:
-            raise ValueError("France projection conversion is only a coordinate conversion")
-        if native_row.get("code_projection") == 31:
-            other = "longitude_station" if canonical_column == "latitude" else "latitude_station"
-            return native_row[other]
-        return value
-    raise AssertionError(f"unsupported field transform: {transform}")
+    return origin.conversion.apply(canonical_column, origin.native_column, native_row)
 
 
 def _resolve_station_id_alignment_key(

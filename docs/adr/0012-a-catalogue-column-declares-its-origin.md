@@ -9,21 +9,27 @@ fetched, a missing canonical row, any canonical value that differs from its decl
 field after an explicit conversion, an authored or documented constant that differs from the
 emitted value, and a documented or not-published claim carrying no evidence.
 
-The authored-constant form is limited to canonical identity owned by RivRetrieve. A provider id
-such as `no_nve` is not published in a station-id source field and must not claim that field as
-its origin. The declaration carries the exact authored value and the gate compares every emitted
-row with it.
+The authored-constant form is limited to `provider_id`, the canonical identity owned by
+RivRetrieve. A provider id such as `no_nve` is not published in a station-id source field and
+must not claim that field as its origin. The declaration and every emitted value must equal the
+provider identity supplied to the gate. `Authored` cannot replace source evidence for another
+canonical column.
 
-Every field origin also names its conversion. Identity is the default. A conversion is explicit
-only where the certified generator already performs it, such as parsing source DMS coordinates,
-reading a named coordinate-structure member, or mapping a published datum code to an EPSG id. The
-gate aligns native rows to canonical rows one-to-one and reproduces that conversion before it
-accepts the declaration.
+Every field origin carries a named, typed conversion contract. Identity is the default.
+Source-neutral scalar and structure conversions live with the generic origin types.
+Source-specific conversion code and vocabulary live in that provider's module, and the provider
+generator and declaration reuse the same implementation. The gate knows only the conversion
+interface: it aligns native rows to canonical rows one-to-one, invokes the declared conversion,
+and compares its result before accepting the declaration.
 
-The documented-constant form exists because a source may state a value in its
-documentation rather than repeat it for every station. `Field` would falsely claim that
-a native column carries that value, while `NotPublished` would falsely claim that the
-source is silent; the constant and its evidence therefore travel together in the origin.
+The documented-constant form exists because a source may state a value in its documentation
+rather than repeat it for every station. `Field` would falsely claim that a native column carries
+that value, while `NotPublished` would falsely claim that the source is silent; the constant and
+its evidence therefore travel together in the origin. `NotPublished` must emit only the canonical
+`unknown` marker: an unevidenced absence or a fabricated non-unknown value is rejected. `Withheld`
+remains distinct because it means acquisition was not established, not that reviewed source
+evidence states the field is unpublished.
+
 
 The decision exists because a null in the shipped catalogue means two incompatible things
 and nothing can tell them apart. `usgs_nwis` ships `begin_date` as a key on all 26,231

@@ -23,7 +23,7 @@ from rivretrieve._internal.catalogue_origins import (
     AuthoredValue,
     Evidence,
     Field,
-    FieldTransform,
+    FloatConversion,
     NativeColumn,
     NotPublished,
 )
@@ -32,8 +32,8 @@ from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("ba_fhmzbih")),
     "station_id": Field(NativeColumn("metadata_station_no")),
-    "latitude": Field(NativeColumn("metadata_station_latitude"), FieldTransform.FLOAT),
-    "longitude": Field(NativeColumn("metadata_station_longitude"), FieldTransform.FLOAT),
+    "latitude": Field(NativeColumn("metadata_station_latitude"), FloatConversion()),
+    "longitude": Field(NativeColumn("metadata_station_longitude"), FloatConversion()),
     "crs": NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json")),
 }
 NATIVE_TABLE_SHA256 = "abcbc2d2234ea1751d638307f89fba4cba4feca96c9cd1d77c728b87a0fea77a"

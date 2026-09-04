@@ -29,10 +29,10 @@ STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("th_thaiwater")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("station.id")),
     "latitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("station.tele_station_lat"), catalogue_origins.FieldTransform.FLOAT
+        catalogue_origins.NativeColumn("station.tele_station_lat"), catalogue_origins.FloatConversion()
     ),
     "longitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("station.tele_station_long"), catalogue_origins.FieldTransform.FLOAT
+        catalogue_origins.NativeColumn("station.tele_station_long"), catalogue_origins.FloatConversion()
     ),
     "crs": catalogue_origins.NotPublished(catalogue_origins.Evidence(CRS_EVIDENCE_URL)),
 }

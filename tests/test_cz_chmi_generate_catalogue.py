@@ -18,6 +18,7 @@ from rivretrieve._internal.catalogue_origins import (
     AuthoredValue,
     Evidence,
     Field,
+    FloatConversion,
     NativeColumn,
     NotPublished,
 )
@@ -168,8 +169,8 @@ NATIVE_SCHEMA = pl.Schema(
 CZ_ORIGINS = {
     "provider_id": Authored(AuthoredValue("cz_chmi")),
     "station_id": Field(NativeColumn("objID")),
-    "latitude": Field(NativeColumn("GEOGR1")),
-    "longitude": Field(NativeColumn("GEOGR2")),
+    "latitude": Field(NativeColumn("GEOGR1"), FloatConversion()),
+    "longitude": Field(NativeColumn("GEOGR2"), FloatConversion()),
     "crs": NotPublished(Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")),
 }
 

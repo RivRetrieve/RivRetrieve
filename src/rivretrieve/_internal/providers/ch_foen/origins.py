@@ -20,7 +20,7 @@ from rivretrieve._internal.catalogue_origins import (
     AuthoredValue,
     Evidence,
     Field,
-    FieldTransform,
+    FloatConversion,
     NativeColumn,
     NotPublished,
 )
@@ -29,8 +29,8 @@ from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("ch_foen")),
     "station_id": Field(NativeColumn("name")),
-    "latitude": Field(NativeColumn("details.lat"), FieldTransform.FLOAT),
-    "longitude": Field(NativeColumn("details.lon"), FieldTransform.FLOAT),
+    "latitude": Field(NativeColumn("details.lat"), FloatConversion()),
+    "longitude": Field(NativeColumn("details.lon"), FloatConversion()),
     "crs": NotPublished(Evidence("https://api.existenz.ch/#hydro")),
 }
 NATIVE_TABLE_SHA256 = "71b0a329568df9ad031339d3b77b4c692762c6feab6659c20751bebfbea18b48"

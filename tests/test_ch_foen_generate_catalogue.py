@@ -18,7 +18,7 @@ from rivretrieve._internal.catalogue_origins import (
     AuthoredValue,
     Evidence,
     Field,
-    FieldTransform,
+    FloatConversion,
     NativeColumn,
     NotPublished,
 )
@@ -372,8 +372,8 @@ def test_swiss_origins_match_canonical_schema_order_and_values() -> None:
     assert {
         "provider_id": Authored(AuthoredValue("ch_foen")),
         "station_id": Field(NativeColumn("name")),
-        "latitude": Field(NativeColumn("details.lat"), FieldTransform.FLOAT),
-        "longitude": Field(NativeColumn("details.lon"), FieldTransform.FLOAT),
+        "latitude": Field(NativeColumn("details.lat"), FloatConversion()),
+        "longitude": Field(NativeColumn("details.lon"), FloatConversion()),
         "crs": NotPublished(Evidence("https://api.existenz.ch/#hydro")),
     } == STATION_CATALOGUE_ORIGINS
 

@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import cast
+from typing import Never, cast
 
 import polars as pl
 
@@ -46,7 +46,10 @@ from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SHA256,
+    Projection31BoundsError,
+    Projection31PreconditionError,
     build_acquisition_provenance,
+    hydrometry_coordinates,
 )
 
 PROVIDER_ID = ProviderId("fr_hubeau")
@@ -641,7 +644,7 @@ def _require_origin_columns(native_table: NativeTable, origins: OriginDeclaratio
             )
 
 
-def _raise_catalogue_issue(code: str, message: str) -> None:
+def _raise_catalogue_issue(code: str, message: str) -> Never:
     issue = Issue(severity="error", code=code, message=message, provider_id=PROVIDER_ID)
     raise FatalContractError(message, issues=(issue,))
 
@@ -665,54 +668,31 @@ def build_products() -> ProductCatalog:
 
 
 def build_hydro_stations(native_table: NativeTable) -> StationCatalog:
-    from rivretrieve._internal.providers.fr_hubeau.origins import CODE_PROJECTION_31_METROPOLITAN_BOUNDS
-
-    correction_rows = native_table.data.filter(pl.col("code_projection") == 31)
-    for row in correction_rows.select(
-        "code_station",
-        "latitude_station",
-        "longitude_station",
-        "coordonnee_x_station",
-        "coordonnee_y_station",
-    ).iter_rows(named=True):
-        station_id = row["code_station"]
-        if (
-            row["coordonnee_x_station"] != row["latitude_station"]
-            or row["coordonnee_y_station"] != row["longitude_station"]
-        ):
+    rows: list[dict[str, object]] = []
+    for native_row in native_table.data.iter_rows(named=True):
+        station_id = native_row["code_station"]
+        try:
+            latitude, longitude = hydrometry_coordinates(native_row)
+        except Projection31PreconditionError:
             _raise_catalogue_issue(
                 "catalogue_coordinate.correction_precondition_failed",
                 f"fr_hubeau station {station_id} code_projection=31 does not match the documented transposition signature",
             )
-        corrected_latitude = row["longitude_station"]
-        corrected_longitude = row["latitude_station"]
-        latitude_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["latitude"]
-        longitude_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["longitude"]
-        if not (
-            latitude_bounds[0] <= corrected_latitude <= latitude_bounds[1]
-            and longitude_bounds[0] <= corrected_longitude <= longitude_bounds[1]
-        ):
+        except Projection31BoundsError:
             _raise_catalogue_issue(
                 "catalogue_coordinate.outside_metropolitan_bounds",
                 f"fr_hubeau station {station_id} remains outside the evidenced metropolitan bounds after code_projection=31 correction",
             )
-    return (
-        native_table.data.select(
-            pl.lit(PROVIDER_ID, dtype=pl.String).alias("provider_id"),
-            pl.col("code_station").cast(pl.String).alias("station_id"),
-            pl.when(pl.col("code_projection") == 31)
-            .then(pl.col("longitude_station"))
-            .otherwise(pl.col("latitude_station"))
-            .alias("latitude"),
-            pl.when(pl.col("code_projection") == 31)
-            .then(pl.col("latitude_station"))
-            .otherwise(pl.col("longitude_station"))
-            .alias("longitude"),
-            pl.lit("EPSG:4326").alias("crs"),
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": station_id,
+                "latitude": latitude,
+                "longitude": longitude,
+                "crs": "EPSG:4326",
+            }
         )
-        .cast(STATION_CATALOG_SCHEMA.polars_schema)
-        .sort("station_id")
-    )
+    return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
 
 
 def build_temp_stations(native_table: NativeTable) -> StationCatalog:

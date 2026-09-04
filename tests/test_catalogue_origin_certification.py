@@ -29,9 +29,12 @@ from rivretrieve._internal.catalogue_origins import (
     DocumentedValue,
     Evidence,
     Field,
-    FieldTransform,
+    FieldConversion,
+    FloatConversion,
+    IdentityConversion,
     NativeColumn,
     NotPublished,
+    StructMemberConversion,
     Withheld,
     enforce_catalogue_origins,
     validate_catalogue_origins,
@@ -40,6 +43,10 @@ from rivretrieve._internal.catalogues.native import NativeTable, read_native_tab
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
+from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
+from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
+from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
@@ -158,8 +165,8 @@ def _case_frames(
 
 
 def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, CatalogueOrigin]]:
-    def field(name: str, transform: FieldTransform = FieldTransform.IDENTITY) -> Field:
-        return Field(NativeColumn(name), transform)
+    def field(name: str, conversion: FieldConversion | None = None) -> Field:
+        return Field(NativeColumn(name), IdentityConversion() if conversion is None else conversion)
 
     def authored(value: str) -> Authored:
         return Authored(AuthoredValue(value))
@@ -177,36 +184,36 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         (ProviderId("ba_fhmzbih"), "stations"): {
             "provider_id": authored("ba_fhmzbih"),
             "station_id": field("metadata_station_no"),
-            "latitude": field("metadata_station_latitude", FieldTransform.FLOAT),
-            "longitude": field("metadata_station_longitude", FieldTransform.FLOAT),
+            "latitude": field("metadata_station_latitude", FloatConversion()),
+            "longitude": field("metadata_station_longitude", FloatConversion()),
             "crs": unpublished("https://vodostaji.voda.ba/data/internet/stations/stations.json"),
         },
         (ProviderId("ca_eccc"), "stations"): {
             "provider_id": authored("ca_eccc"),
             "station_id": field("STATION_NUMBER"),
-            "latitude": field("geometry.coordinates[1]", FieldTransform.FLOAT),
-            "longitude": field("geometry.coordinates[0]", FieldTransform.FLOAT),
+            "latitude": field("geometry.coordinates[1]", FloatConversion()),
+            "longitude": field("geometry.coordinates[0]", FloatConversion()),
             "crs": documented("https://api.weather.gc.ca/collections/hydrometric-stations?f=json"),
         },
         (ProviderId("ch_foen"), "stations"): {
             "provider_id": authored("ch_foen"),
             "station_id": field("name"),
-            "latitude": field("details.lat", FieldTransform.FLOAT),
-            "longitude": field("details.lon", FieldTransform.FLOAT),
+            "latitude": field("details.lat", FloatConversion()),
+            "longitude": field("details.lon", FloatConversion()),
             "crs": unpublished("https://api.existenz.ch/#hydro"),
         },
         (ProviderId("cz_chmi"), "stations"): {
             "provider_id": authored("cz_chmi"),
             "station_id": field("objID"),
-            "latitude": field("GEOGR1", FieldTransform.FLOAT),
-            "longitude": field("GEOGR2", FieldTransform.FLOAT),
+            "latitude": field("GEOGR1", FloatConversion()),
+            "longitude": field("GEOGR2", FloatConversion()),
             "crs": unpublished("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf"),
         },
         (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): {
             "provider_id": authored("fr_hubeau"),
             "station_id": field("code_station"),
-            "latitude": field("latitude_station", FieldTransform.FRANCE_PROJECTION_31),
-            "longitude": field("longitude_station", FieldTransform.FRANCE_PROJECTION_31),
+            "latitude": field("latitude_station", HydrometryCoordinateConversion()),
+            "longitude": field("longitude_station", HydrometryCoordinateConversion()),
             "crs": documented(
                 "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1011000101&format=geojson"
             ),
@@ -214,43 +221,43 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         (ProviderId("fr_hubeau"), "temperature/station"): {
             "provider_id": authored("fr_hubeau"),
             "station_id": field("code_station"),
-            "latitude": field("latitude", FieldTransform.FLOAT),
-            "longitude": field("longitude", FieldTransform.FLOAT),
+            "latitude": field("latitude", FloatConversion()),
+            "longitude": field("longitude", FloatConversion()),
             "crs": documented("https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json"),
         },
         (ProviderId("jp_mlit"), "stations"): {
             "provider_id": authored("jp_mlit"),
             "station_id": field("観測所記号"),
-            "latitude": field("世界測地系", FieldTransform.JAPAN_COMBINED_DMS),
-            "longitude": field("世界測地系", FieldTransform.JAPAN_COMBINED_DMS),
+            "latitude": field("世界測地系", WorldGeodeticDmsConversion()),
+            "longitude": field("世界測地系", WorldGeodeticDmsConversion()),
             "crs": unpublished("http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"),
         },
         (ProviderId("lt_lhmt"), "stations"): {
             "provider_id": authored("lt_lhmt"),
             "station_id": field("code"),
-            "latitude": field("coordinates", FieldTransform.STRUCT_MEMBER),
-            "longitude": field("coordinates", FieldTransform.STRUCT_MEMBER),
+            "latitude": field("coordinates", StructMemberConversion()),
+            "longitude": field("coordinates", StructMemberConversion()),
             "crs": documented("https://api.meteo.lt/"),
         },
         (ProviderId("no_nve"), "stations"): {
             "provider_id": authored("no_nve"),
             "station_id": field("stationId"),
-            "latitude": field("latitude", FieldTransform.FLOAT),
-            "longitude": field("longitude", FieldTransform.FLOAT),
+            "latitude": field("latitude", FloatConversion()),
+            "longitude": field("longitude", FloatConversion()),
             "crs": unpublished("https://hydapi.nve.no/swagger/v1/swagger.json"),
         },
         (ProviderId("pl_imgw"), "stations"): {
             "provider_id": authored("pl_imgw"),
             "station_id": field("gauge_id"),
-            "latitude": field("latitude", FieldTransform.FLOAT),
-            "longitude": field("longitude", FieldTransform.FLOAT),
+            "latitude": field("latitude", FloatConversion()),
+            "longitude": field("longitude", FloatConversion()),
             "crs": withheld(),
         },
         (ProviderId("th_thaiwater"), "stations"): {
             "provider_id": authored("th_thaiwater"),
             "station_id": field("station.id"),
-            "latitude": field("station.tele_station_lat", FieldTransform.FLOAT),
-            "longitude": field("station.tele_station_long", FieldTransform.FLOAT),
+            "latitude": field("station.tele_station_lat", FloatConversion()),
+            "longitude": field("station.tele_station_long", FloatConversion()),
             "crs": unpublished(
                 "https://standard.thaiwater.net/docs/การจัดทำมาตรฐานน้ำ-ระยะ/ข้อมูลอ้างอิง-ข้อมูลอ้า/การระบุพิกัดตำแหน่ง/"
             ),
@@ -258,15 +265,15 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         (ProviderId("usgs_nwis"), "stations"): {
             "provider_id": authored("usgs_nwis"),
             "station_id": field("site_no"),
-            "latitude": field("dec_lat_va", FieldTransform.FLOAT),
-            "longitude": field("dec_long_va", FieldTransform.FLOAT),
-            "crs": field("dec_coord_datum_cd", FieldTransform.USGS_DATUM_TO_CRS),
+            "latitude": field("dec_lat_va", FloatConversion()),
+            "longitude": field("dec_long_va", FloatConversion()),
+            "crs": field("dec_coord_datum_cd", DatumToCrsConversion()),
         },
         (ProviderId("za_dws"), "stations"): {
             "provider_id": authored("za_dws"),
             "station_id": field("Station"),
-            "latitude": field("Latitude (dd:mm:ss)", FieldTransform.DWS_UNSIGNED_DMS),
-            "longitude": field("Longitude (dd:mm:ss)", FieldTransform.DWS_UNSIGNED_DMS),
+            "latitude": field("Latitude (dd:mm:ss)", UnsignedDmsConversion()),
+            "longitude": field("Longitude (dd:mm:ss)", UnsignedDmsConversion()),
             "crs": unpublished(
                 "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf"
             ),

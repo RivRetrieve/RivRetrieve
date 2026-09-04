@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import shutil
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
@@ -16,7 +17,9 @@ from rivretrieve._internal.catalogue_origins import (
     ORIGIN_GATE_ENROLLED_PROVIDERS,
     Authored,
     AuthoredValue,
+    ConversionName,
     Field,
+    FieldConversion,
     NativeColumn,
     enforce_catalogue_origins,
 )
@@ -32,6 +35,40 @@ _DATA = Path(__file__).parent / "test_data"
 _NATIVE = _ROOT / "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet"
 _CAPTURE = _DATA / "no_nve_station_catalogue_capture.json"
 _SENTINEL = "CATALOGUE-CREDENTIAL-SENTINEL-NOT-REAL"
+
+
+class _ZeroConversion(FieldConversion):
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("test.zero")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        del canonical_column, native_column, native_row
+        return 0.0
+
+
+class _FailingConversion(FieldConversion):
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("test.failure")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        del canonical_column, native_column, native_row
+        raise ValueError("conversion refused")
 
 
 def _active_document() -> dict[str, object]:
@@ -176,6 +213,24 @@ def test_non_null_wrong_field_origin_refuses_on_the_real_native_build() -> None:
         generate_catalogue.build_catalogue(native, contradicted)
 
 
+def test_wrong_converter_refuses_on_the_real_native_build() -> None:
+    native = read_native_table(_NATIVE)
+    contradicted = dict(STATION_CATALOGUE_ORIGINS)
+    contradicted["longitude"] = Field(NativeColumn("longitude"), _ZeroConversion())
+
+    with pytest.raises(FatalContractError, match="does not reproduce the declared native field"):
+        generate_catalogue.build_catalogue(native, contradicted)
+
+
+def test_conversion_error_fails_loud_on_the_real_native_build() -> None:
+    native = read_native_table(_NATIVE)
+    contradicted = dict(STATION_CATALOGUE_ORIGINS)
+    contradicted["longitude"] = Field(NativeColumn("longitude"), _FailingConversion())
+
+    with pytest.raises(FatalContractError, match="cannot undergo test.failure conversion"):
+        generate_catalogue.build_catalogue(native, contradicted)
+
+
 def test_provider_identifier_has_a_truthful_authored_origin() -> None:
     native = read_native_table(_NATIVE)
     origin = STATION_CATALOGUE_ORIGINS["provider_id"]
@@ -183,8 +238,35 @@ def test_provider_identifier_has_a_truthful_authored_origin() -> None:
     contradicted = dict(STATION_CATALOGUE_ORIGINS)
     contradicted["provider_id"] = Authored(AuthoredValue("other_provider"))
 
-    with pytest.raises(FatalContractError, match="does not match authored value"):
+    with pytest.raises(FatalContractError, match="must equal gate provider identity 'no_nve'"):
         generate_catalogue.build_catalogue(native, contradicted)
+
+
+def test_authored_origin_cannot_replace_crs_evidence_on_the_real_build() -> None:
+    native = read_native_table(_NATIVE)
+    contradicted = dict(STATION_CATALOGUE_ORIGINS)
+    contradicted["crs"] = Authored(AuthoredValue("unknown"))
+
+    with pytest.raises(FatalContractError, match="Authored origin is permitted only for provider_id"):
+        generate_catalogue.build_catalogue(native, contradicted)
+
+
+def test_not_published_crs_refuses_a_fabricated_real_canonical_value() -> None:
+    native = read_native_table(_NATIVE)
+    stations = generate_catalogue.build_stations(native).with_columns(pl.lit("EPSG:4326").alias("crs"))
+
+    with pytest.raises(FatalContractError, match="NotPublished origin must emit only 'unknown'"):
+        enforce_catalogue_origins(ProviderId("no_nve"), STATION_CATALOGUE_ORIGINS, native, stations)
+
+
+def test_authored_provider_identity_is_bound_to_the_gate_provider() -> None:
+    native = read_native_table(_NATIVE)
+    stations = generate_catalogue.build_stations(native).with_columns(pl.lit("other_provider").alias("provider_id"))
+    contradicted = dict(STATION_CATALOGUE_ORIGINS)
+    contradicted["provider_id"] = Authored(AuthoredValue("other_provider"))
+
+    with pytest.raises(FatalContractError, match="must equal gate provider identity 'no_nve'"):
+        enforce_catalogue_origins(ProviderId("no_nve"), contradicted, native, stations)
 
 
 def test_each_real_origin_declaration_is_required_and_mutations_refuse() -> None:

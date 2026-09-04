@@ -23,7 +23,7 @@ from rivretrieve._internal.catalogue_origins import (
     Authored,
     AuthoredValue,
     Field,
-    FieldTransform,
+    FloatConversion,
     NativeColumn,
     Withheld,
 )
@@ -40,8 +40,8 @@ STATION_CSV_URL = (
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("pl_imgw")),
     "station_id": Field(NativeColumn("gauge_id")),
-    "latitude": Field(NativeColumn("latitude"), FieldTransform.FLOAT),
-    "longitude": Field(NativeColumn("longitude"), FieldTransform.FLOAT),
+    "latitude": Field(NativeColumn("latitude"), FloatConversion()),
+    "longitude": Field(NativeColumn("longitude"), FloatConversion()),
     "crs": Withheld(),
 }
 

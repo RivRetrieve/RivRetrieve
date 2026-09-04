@@ -1,5 +1,7 @@
 """japan catalogue authority : ∅ → OriginDeclarations × AcquisitionProvenance (pure)."""
 
+import re
+from collections.abc import Mapping
 from datetime import datetime
 
 from rivretrieve._internal.acquisition_provenance import (
@@ -18,18 +20,78 @@ from rivretrieve._internal.acquisition_provenance import (
 from rivretrieve._internal.catalogue_origins import (
     Authored,
     AuthoredValue,
+    ConversionName,
     Evidence,
     Field,
-    FieldTransform,
+    FieldConversion,
     NativeColumn,
     NotPublished,
 )
 
+_WORLD_GEODETIC_DMS = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
+
+
+class WorldGeodeticCoordinateFormatError(ValueError):
+    """The MLIT world-geodetic coordinate is not whole-number DMS."""
+
+
+class ImpossibleWorldGeodeticCoordinateError(ValueError):
+    """The MLIT world-geodetic coordinate is outside valid DMS ranges."""
+
+
+def world_geodetic_coordinates(value: object) -> tuple[float, float]:
+    if not isinstance(value, str) or (match := _WORLD_GEODETIC_DMS.fullmatch(value)) is None:
+        raise WorldGeodeticCoordinateFormatError
+    (
+        latitude_degrees,
+        latitude_minutes,
+        latitude_seconds,
+        longitude_degrees,
+        longitude_minutes,
+        longitude_seconds,
+    ) = map(int, match.groups())
+    latitude = latitude_degrees + latitude_minutes / 60 + latitude_seconds / 3600
+    longitude = longitude_degrees + longitude_minutes / 60 + longitude_seconds / 3600
+    if (
+        latitude > 90
+        or longitude > 180
+        or latitude_minutes >= 60
+        or longitude_minutes >= 60
+        or latitude_seconds > 60
+        or longitude_seconds > 60
+    ):
+        raise ImpossibleWorldGeodeticCoordinateError
+    return latitude, longitude
+
+
+class WorldGeodeticDmsConversion(FieldConversion):
+    """Convert MLIT's combined world-geodetic DMS field to one coordinate."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("jp_mlit.world_geodetic_dms")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        latitude, longitude = world_geodetic_coordinates(native_row[str(native_column)])
+        if canonical_column == "latitude":
+            return latitude
+        if canonical_column == "longitude":
+            return longitude
+        raise ValueError("MLIT DMS conversion is only defined for coordinates")
+
+
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("jp_mlit")),
     "station_id": Field(NativeColumn("観測所記号")),
-    "latitude": Field(NativeColumn("世界測地系"), FieldTransform.JAPAN_COMBINED_DMS),
-    "longitude": Field(NativeColumn("世界測地系"), FieldTransform.JAPAN_COMBINED_DMS),
+    "latitude": Field(NativeColumn("世界測地系"), WorldGeodeticDmsConversion()),
+    "longitude": Field(NativeColumn("世界測地系"), WorldGeodeticDmsConversion()),
     "crs": NotPublished(Evidence("http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010")),
 }
 
