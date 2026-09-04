@@ -112,13 +112,15 @@ def _write(recordings: tuple[RecordingEnvelope, ...], out_dir: Path, name: str) 
 
 def credential_value(variable: str, environment: Mapping[str, str], env_file: Path | None) -> str:
     """Resolve one credential value from the environment, then from an explicit dotenv file."""
-    value = environment.get(variable)
-    if value:
+    value: str | None
+    if variable in environment:
+        value = environment[variable]
+    else:
+        dotenv = dotenv_values(env_file) if env_file is not None and env_file.is_file() else {}
+        file_value = dotenv.get(variable)
+        value = file_value if isinstance(file_value, str) else None
+    if value is not None and value.strip():
         return value
-    dotenv = dotenv_values(env_file) if env_file is not None and env_file.is_file() else {}
-    file_value = dotenv.get(variable)
-    if isinstance(file_value, str) and file_value:
-        return file_value
     location = "the environment" if env_file is None else f"the environment or {env_file}"
     raise FatalContractError(f"credential variable {variable} is not set in {location}")
 

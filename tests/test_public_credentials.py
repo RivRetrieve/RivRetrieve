@@ -192,37 +192,76 @@ def test_blank_process_environment_shadows_dotenv_and_remains_missing(
         rr.fetch(selection, start="2025-07-10", end="2025-07-12")
 
 
-def test_wrong_nve_key_is_an_error_issue_that_exposes_only_the_variable_name(
+def test_committed_environment_template_stays_unresolved_when_copied_unchanged(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    for name in ("NVE_API_KEY", "ANA_IDENTIFICADOR", "ANA_SENHA"):
+        monkeypatch.delenv(name, raising=False)
+    template = Path(__file__).parents[1] / ".env.example"
+    (tmp_path / ".env").write_bytes(template.read_bytes())
+
+    access = dict(rr.providers().select("provider_id", "access").iter_rows())
+    assert access["no_nve"] == "missing NVE_API_KEY"
+    assert access["br_ana"] == "missing ANA_IDENTIFICADOR, ANA_SENHA"
+
+    _registry.clear()
+    selection = _register_no_nve(monkeypatch, stub_packaged_catalogue_artifact)
+    monkeypatch.setattr(
+        discovery,
+        "HttpClient",
+        lambda: (_ for _ in ()).throw(AssertionError("transport must not be constructed")),
+    )
+    with pytest.raises(MissingCredentialError):
+        rr.fetch(selection, start="2025-07-10", end="2025-07-12")
+
+
+@pytest.mark.parametrize(
+    ("status_code", "severity", "expected_code", "names_credential"),
+    [
+        (403, "error", "source.request_failed", True),
+        (404, "warning", "source.http_not_found", False),
+    ],
+)
+def test_credential_echo_preserves_safe_status_and_exposes_no_secret(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    status_code: int,
+    severity: str,
+    expected_code: str,
+    names_credential: bool,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", _SECRET)
     selection = _register_no_nve(monkeypatch, stub_packaged_catalogue_artifact)
 
-    class ForbiddenResponse:
+    class CredentialEchoResponse:
         def send(self, request: TransportRequest) -> TransportResponse:
             return TransportResponse(
-                content=b"forbidden",
-                status_code=403,
+                content=f"source echoed {_SECRET}".encode(),
+                status_code=status_code,
                 retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
                 content_type="text/plain",
                 url=request.url,
                 request_parameters={} if request.params is None else request.params,
             )
 
-    monkeypatch.setattr(discovery, "HttpClient", ForbiddenResponse)
+    monkeypatch.setattr(discovery, "HttpClient", CredentialEchoResponse)
 
     with pytest.warns(RuntimeWarning) as captured:
         result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", receipts=True)
 
     assert result.data.is_empty()
-    source_issues = tuple(issue for issue in result.issues if issue.severity == "error")
+    source_issues = tuple(issue for issue in result.issues if issue.code.startswith("source."))
     assert len(source_issues) == 1
     assert len(captured) == 1
-    assert "403" in source_issues[0].message
-    assert "NVE_API_KEY" in source_issues[0].message
+    assert source_issues[0].severity == severity
+    assert source_issues[0].code == expected_code
+    assert f"HTTP {status_code}" in source_issues[0].message
+    assert ("NVE_API_KEY" in source_issues[0].message) is names_credential
     public_text = repr((result, tuple(str(item.message) for item in captured)))
     assert _SECRET not in public_text
     assert result.receipts.entries == ()
