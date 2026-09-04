@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "1.200.0",
+      "Parameter": "1000",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2025-07-08T00:00:00Z/2025-07-14T00:00:00Z"
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-03T22:19:28.423491Z",
+    "content_base64": "eyJjdXJyZW50TGluayI6Imh0dHBzOi8vaHlkYXBpLm52ZS5uby9hcGkvdjEvT2JzZXJ2YXRpb25zP1N0YXRpb25JZD0xLjIwMC4wJlBhcmFtZXRlcj0xMDAwJlJlc29sdXRpb25UaW1lPTE0NDAmUmVmZXJlbmNlVGltZT0yMDI1LTA3LTA4VDAwJTNBMDAlM0EwMFolMkYyMDI1LTA3LTE0VDAwJTNBMDAlM0EwMFoiLCJhcGlWZXJzaW9uIjoiMS4wIiwibGljZW5zZSI6Imh0dHBzOi8vZGF0YS5ub3JnZS5uby9ubG9kL2VuIiwiY3JlYXRlZEF0IjoiMjAyNi0wOS0wM1QyMjoxOToyOC40MDI0OTY0WiIsInF1ZXJ5VGltZSI6IjAwOjAwOjAwLjAwNjgzNzYiLCJpdGVtQ291bnQiOjEsImRhdGEiOlt7InN0YXRpb25JZCI6IjEuMjAwLjAiLCJzdGF0aW9uTmFtZSI6IkxpZXJlbHYiLCJwYXJhbWV0ZXIiOjEwMDAsInBhcmFtZXRlck5hbWUiOiJWYW5uc3RhbmQiLCJwYXJhbWV0ZXJOYW1lRW5nIjoiU3RhZ2UiLCJzZXJpZVZlcnNpb25ObyI6MSwibWV0aG9kIjoiTWVhbiIsInVuaXQiOiJtIiwib2JzZXJ2YXRpb25Db3VudCI6Niwib2JzZXJ2YXRpb25zIjpbeyJ0aW1lIjoiMjAyNS0wNy0wOFQxMTowMDowMFoiLCJ2YWx1ZSI6MS4zOTMzMjcsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjN9LHsidGltZSI6IjIwMjUtMDctMDlUMTE6MDA6MDBaIiwidmFsdWUiOjEuMzYwNDg5LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjozfSx7InRpbWUiOiIyMDI1LTA3LTEwVDExOjAwOjAwWiIsInZhbHVlIjoxLjMyOTc3NSwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6M30seyJ0aW1lIjoiMjAyNS0wNy0xMVQxMTowMDowMFoiLCJ2YWx1ZSI6MS4zMDYyMTgsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjN9LHsidGltZSI6IjIwMjUtMDctMTJUMTE6MDA6MDBaIiwidmFsdWUiOjEuMjg0MDEyLCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjozfSx7InRpbWUiOiIyMDI1LTA3LTEzVDExOjAwOjAwWiIsInZhbHVlIjoxLjI2NTU2OSwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6M31dfV19",
+    "sha256": "89358c6c0e527485b4b870e7c0963b6ba8fca60a4de06e062ae53435c4897cb5",
+    "prerequisite_calls": []
+  }
+}

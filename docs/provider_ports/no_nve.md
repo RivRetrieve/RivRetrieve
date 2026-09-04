@@ -1,100 +1,157 @@
 # no_nve Provider Port Notes
 
-These notes capture evidence and context from the `no_nve` port of the NVE HydAPI provider. They are not user documentation and not a new architecture contract; promote only shared harness commitments to [ADRs](../adr/).
+These notes capture evidence and context from the `no_nve` port of the NVE HydAPI provider onto the
+shared observation engine. They are not user documentation and not a new architecture contract;
+promote only shared harness commitments to [ADRs](../adr/).
 
 ## Source
 
-Legacy source: `https://github.com/kratzert/RivRetrieve-Python/blob/main/rivretrieve/norway.py` (`NorwayFetcher`).
+`GET https://hydapi.nve.no/api/v1/Observations` with query parameters `StationId`, `Parameter`,
+`ResolutionTime` and `ReferenceTime`. Documentation:
+[https://hydapi.nve.no/UserDocumentation/](https://hydapi.nve.no/UserDocumentation/). The data is
+published under the [Norwegian License for Open Government Data](https://data.norge.no/nlod/en).
 
-## Endpoints
+One request carries one station, one parameter and one resolution. Two products never share a
+parameter/resolution pair, so nothing is coalesced and no identical call is issued twice.
 
-| Endpoint | Role | Credential | Notes |
-| --- | --- | --- | --- |
-| `https://hydapi.nve.no/api/v1/Stations?Active={0\|1}` | Maintainer catalogue generation (active + inactive stations). | `NVE_API_KEY` HTTP header `X-API-Key`. | Called twice (active=1, active=0) to get both active and inactive stations. Response has `stationId`, `stationName`, `latitude`, `longitude`, `masl`, `drainageBasinArea`, `riverName`, `active`, `seriesList`. |
-| `https://hydapi.nve.no/api/v1/Observations` | Runtime observation retrieval. | Same `NVE_API_KEY`. | Query params: `StationId`, `Parameter`, `ResolutionTime`, `ReferenceTime` (ISO 8601 interval `start/end`). |
+Observed source behaviour, verified against the live API on 2026-09-03:
 
-## Authentication
+| Question | Answer | Evidence |
+| --- | --- | --- |
+| Missing series | HTTP 404 with an RFC 7807 problem body | `no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json` |
+| Existing series, no observation in window | HTTP 200, `observationCount: 0`, empty `observations` | `no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json` |
+| ISO instants with a `Z` suffix in `ReferenceTime` | Accepted | every committed recording |
+| Stop convention | Inclusive on the instant axis | `no_nve_1.200.0_1000_1440_2023-03-23_2023-03-27.recording.json` (end `2023-03-27T00:00:00Z`) holds four daily values ending `2023-03-26T11:00:00Z`; `no_nve_1.200.0_1000_1440_2023-03-23_2023-03-27-eod.recording.json` (end `2023-03-27T23:59:59.999999Z`) holds five, ending `2023-03-27T11:00:00Z` |
+| Fractional-second end, the form a bare-date public request renders | Accepted | `no_nve_1.200.0_1000_1440_2025-07-08_2025-07-14-eod.recording.json`, end `2025-07-14T23:59:59.999999Z`, seven daily values ending `2025-07-14T11:00:00Z` |
+| Null values | Published as JSON `null` with a quality code | the two 2023 stage recordings above: every value is `null` with `quality` 2 |
 
-NVE HydAPI requires an API key in the `X-API-Key` HTTP header. The key is read from the `NVE_API_KEY` environment variable. If absent, `retrieve_observations()` returns empty data with an `auth_missing` warning issue (same pattern as `br_ana`). No token caching is needed — the key itself is static per session.
+## Products
 
-The key is **never** written to provenance or raw metadata.
+Nine products are claimed, one per parameter and resolution. Each is the canonical id from
+[`../product_dictionary.md`](../product_dictionary.md); `water_temperature_hourly_mean` was added to
+that dictionary by this port, because HydAPI publishes an hourly water-temperature series whose
+`method` is `Mean` and no canonical entry existed.
 
-To obtain an API key: https://hydapi.nve.no/UserDocumentation/#termsofuse
+| Product | `Parameter` | `ResolutionTime` | Published `method` | Published `unit` | Canonical unit | Semantics |
+| --- | --- | --- | --- | --- | --- | --- |
+| `discharge_daily_mean` | 1001 | 1440 | Mean | `m³/s` | `m3/s` | Daily, day definition unknown, label 11:00 |
+| `discharge_hourly_mean` | 1001 | 60 | Mean | `m³/s` | `m3/s` | Hourly, interval definition unknown |
+| `discharge_instantaneous` | 1001 | 0 | Instantaneous | `m³/s` | `m3/s` | Instant |
+| `stage_daily_mean` | 1000 | 1440 | Mean | `m` | `m` | Daily, day definition unknown, label 11:00 |
+| `stage_hourly_mean` | 1000 | 60 | Mean | `m` | `m` | Hourly, interval definition unknown |
+| `stage_instantaneous` | 1000 | 0 | Instantaneous | `m` | `m` | Instant |
+| `water_temperature_daily_mean` | 1003 | 1440 | Mean | `°C` | `degC` | Daily, day definition unknown, label 11:00 |
+| `water_temperature_hourly_mean` | 1003 | 60 | Mean | `°C` | `degC` | Hourly, interval definition unknown |
+| `water_temperature_instantaneous` | 1003 | 0 | Instantaneous | `°C` | `degC` | Instant |
 
-## Product Catalogue Mapping
+No product is unclaimed. Every one of the nine carries a real recording and an independently authored
+boundary probe.
 
-NVE exposes three parameters and three resolutions, giving 9 product combinations. All canonical V1 products match; hourly products use provider-specific IDs since no canonical hourly products exist in the V1 dictionary.
+`method` and `unit` are published per series and are checked by parse against the declared product
+statistic and source unit; a mismatch fails loudly rather than being reconciled. HydAPI publishes
+`method` per series rather than per parameter: `no_nve_103.3.0_1003_60_2025-07-08_2025-07-14.recording.json`
+records station `103.3.0` publishing water temperature at resolution 60 with `method: "Instantaneous"`
+(the active station list of 2026-09-03 says the same of its resolution 1440 series), so the check is
+not decorative. The guard is deliberate: a request that includes such a series fails the whole result
+rather than returning the other products with an issue. That is the doctrine (a module dies rather
+than guess), and there is no per-provider isolation point. Per-station product unavailability is a
+catalogue fact that the certified catalogue owned by
+[issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90) must express.
 
-| NVE Parameter | ResolutionTime (min) | Product ID | Canonical? | V1 dictionary | Notes |
-| --- | --- | --- | --- | --- | --- |
-| 1000 (water level) | 1440 | `stage_daily_mean` | Yes | Yes | |
-| 1000 | 60 | `stage_hourly_mean` | No — provider-specific | No hourly stage in V1 | Provider-specific NVE mapping. |
-| 1000 | 0 | `stage_instantaneous` | Yes | Yes | |
-| 1001 (discharge) | 1440 | `discharge_daily_mean` | Yes | Yes | |
-| 1001 | 60 | `discharge_hourly_mean` | No — provider-specific | No hourly discharge in V1 | Provider-specific NVE mapping. |
-| 1001 | 0 | `discharge_instantaneous` | Yes | Yes | |
-| 1003 (water temperature) | 1440 | `water_temperature_daily_mean` | Yes | Yes | |
-| 1003 | 60 | `water_temperature_hourly_mean` | No — provider-specific | No hourly water_temperature in V1 | |
-| 1003 | 0 | `water_temperature_instantaneous` | Yes | Yes | |
+## Time semantics
 
-`native_id` in the product catalogue is `"{parameter_id}:{resolution_time}"`, e.g. `"1001:1440"`.
+All timestamps are published in UTC, so every row carries `time_zone` `+00:00` and a naive wall-clock
+`time` equal to the published label.
 
-## Station-Product Availability (NVE seriesList)
+The documentation contradicts itself about the day definition:
 
-NVE is unique among ported providers in that the `/Stations` response contains a `seriesList` field for each station, listing available parameter+resolution pairs. This allows the catalogue generator to materialise accurate `available` / `unavailable` rows rather than `unknown` for all.
+> All the timestamps returned from the API are given in the timezone UTC-0 (Zulu-time). Time series
+> with resolutiontime day, is timestamped with 11:00Z. The data for a day observation is calculted
+> using "Norwegian normal time" UTC-1.
 
-- Stations with a non-empty `seriesList`: `available` for each matched `(parameter_id, resolution_time)` pair; `unavailable` for the rest.
-- Stations with an empty `seriesList` (`[]`): all products marked `unavailable`.
-- Stations with no `seriesList` key at all: all products marked `unknown`.
+Norwegian normal time is Central European Time, which is UTC+1, not UTC-1. The source therefore does
+not establish which 24 hours a daily value covers. The day definition stays `unknown` and the daily
+label time is the published `11:00`. It is never inferred from the country, the coordinates, or the
+retired implementation.
 
-## Timestamp Handling
+Hourly interval anchoring is not published either, so `IntervalDefinition("unknown")` is declared.
 
-NVE API timestamps include an explicit ISO 8601 timezone offset (e.g. `+01:00` for CET, `+02:00` for CEST in summer).
+## Window declaration
 
-| Resolution | Handling | Series annotation `timezone_source` | Issue emitted |
-| --- | --- | --- | --- |
-| Daily (1440) | Date portion extracted from ISO string before offset conversion → UTC midnight `YYYY-MM-DD T00:00:00Z`. This preserves the Norwegian calendar day regardless of UTC offset. | `date_only_utc_midnight` | `date_only_timestamp` (warning) |
-| Hourly (60) / Instantaneous (0) | Full ISO 8601 string with offset parsed by `datetime.fromisoformat()`; converted to UTC with `.astimezone(UTC)`. | `provider_timestamp_offset` | `timezone_local_to_utc` (info) |
+`iso-instant` granularity, `iso-instant` rendering, inclusive stop. `ReferenceTime` is the rendered
+start and stop joined with `/`. The inclusive stop is proven by the live probe recorded in the table
+above, not assumed: a date-only end truncates to midnight and silently drops a daily value stamped
+11:00Z that day, while an instant end includes both endpoints. A bare-date public request ends at
+`23:59:59.999999`, which the renderer emits with microseconds; the source accepts that form, as the
+end-of-day recording shows, so the whole public request shape is exercised. No provider-owned window arithmetic,
+clipping, timezone conversion, unit conversion, retry loop, or result assembly exists; all of it stays
+in the engine.
 
-**Daily date extraction rationale**: `2023-01-01T00:00:00+01:00` represents the start of the Norwegian calendar day `2023-01-01`. Converting to UTC first yields `2022-12-31T23:00:00Z`, which would place the daily value on `2022-12-31` — the wrong date. Extracting `2023-01-01` from the string before any timezone arithmetic correctly gives `2023-01-01T00:00:00Z`.
+## Source judgement codes
 
-The legacy `NorwayFetcher` used `pd.to_datetime(..., utc=True).dt.date` which incorrectly assigned the UTC date (one day earlier in winter). The port fixes this by using the local calendar date directly.
+`quality` and `correction` are HydAPI's own judgement codes. Parse never interprets them and never
+drops a reading because of them. It surfaces one `info` issue per distinct code, carrying the code,
+the number of readings that bear it, and the first and last source timestamps that do. A null `value`
+is carried as a null reading.
 
-## Units
+## Credentials
 
-NVE provides all values in standard units with no conversion required:
-- Stage: metres (m)
-- Discharge: m³/s
-- Water temperature: °C
+HydAPI requires an `X-API-Key` request header. Provider code reads no environment variable, no `.env`
+file, and no other file. At runtime the engine supplies the credential through
+`AuthenticatedTransport` with a `CredentialHeader` scoped to `https://hydapi.nve.no`; the provider
+issues a plain request and the transport applies the header below it. Recordings, receipts,
+provenance, issues, and reprs therefore keep the header name and never a value.
 
-## Windowing
+## Capturing recordings
 
-- Daily (resTime=1440): yearly windows, `YYYY-01-01/YYYY-12-31` ISO date intervals.
-- Hourly (resTime=60): monthly windows, `YYYY-MM-01/YYYY-MM-DD`.
-- Instantaneous (resTime=0): monthly windows (same as hourly, since NVE allows arbitrary date ranges but monthly chunks avoid excessively large requests).
+Recordings are made with the shared maintainer entry point, the composition root that reads the key
+from `NVE_API_KEY` in the environment or, failing that, from a dotenv-style file:
 
-## Packaged Catalogue Status
+```bash
+uv run python -m rivretrieve._internal.record_observations --provider no_nve --station 1.200.0 \
+    --product stage_daily_mean --start 2025-07-10T00:00:00 --end 2025-07-12T00:00:00 \
+    --credential-header X-API-Key --credential-env NVE_API_KEY --credential-origin https://hydapi.nve.no \
+    --env-file .env --out-dir tests/test_data --name no_nve_1.200.0_1000_1440_2025-07-08_2025-07-14
+```
 
-`no_nve` is withheld from certified catalogue generation pending the credentialed native acquisition
-owned by [issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90). The packaged catalogue keeps
-provider metadata but emits empty product, station, and station-product tables with structured
-`no_acquisition_record_established` provenance. `tests/test_data/no_nve_metadata.json` is a three-row
-parser fixture only and must not generate packaged values. See
-[`../catalogue-provenance.md`](../catalogue-provenance.md) for the maintenance command and certification
-boundary.
+The tool drives the provider through `drive()` with the engine's own padding and window planning,
+sends through `AuthenticatedTransport(HttpClient(), …)` wrapped in `RecordingTransport`, and writes
+each exchange with `RecordingEnvelope.from_transport`, so a recorded request is by construction the
+request the port issues for that public window. Recording names are
+`no_nve_<station>_<parameter>_<resolution>_<fetch start date>_<fetch stop date>`. One invocation
+per product produced the committed evidence; the two other recordings use station `12.210.0` with
+`water_temperature_daily_mean` and the same window, and station `1.200.0` with `stage_daily_mean`
+over `--start 1900-01-03T00:00:00 --end 1900-01-05T00:00:00`.
 
-A future authenticated `/Stations` response may refresh and attest a committed native table. It must
-not directly generate canonical artefacts, and the API key must not be recorded.
+Committed evidence: station `1.200.0` (Lierelv) for all nine series over
+`2025-07-08T00:00:00Z/2025-07-14T00:00:00Z`, the padded fetch window for the closed request window
+2025-07-10 to 2025-07-12 (captured 2026-09-03); station `12.210.0` for the missing water-temperature
+daily series (2026-09-03); station `1.200.0` stage daily over an 1900 window with no observations
+(2026-09-03); the end-of-day stage daily window for the bare-date public request
+`--start 2025-07-10 --end 2025-07-12` (2026-09-04); the two 2023 stop-convention stage daily windows
+for `--start 2023-03-25T00:00:00 --end 2023-03-25T00:00:00` and `--start 2023-03-25 --end 2023-03-25`
+(2026-09-04); and station `103.3.0` water temperature hourly over the July window (2026-09-04), whose
+capture ends in the parse refusal the recording exists to prove.
 
-## Pain Points
+## Packaged catalogue status
 
-| Issue | Resolution |
-| --- | --- |
-| `str, Enum` vs `StrEnum` | Issue codes must use `StrEnum` (not `str, Enum`) so that `str(code)` returns the value string, not the `ClassName.MEMBER` repr. Caught by test. See D7 in discoveries.md for related Pydantic extras issue. |
-| Daily timezone: UTC-first vs date-extraction | The legacy `NorwayFetcher` converted timestamps to UTC then stripped to date, which gives the wrong Norwegian calendar day in winter (CET = UTC+1). Fixed by extracting the date string before offset conversion. Documented in this file. |
-| `live_stations=True` vs harness routing | Initially set `live_stations=True` since NVE has a live `/Stations` endpoint. The harness raises `LiveCatalogueRoutingNotImplementedError` when this flag is set but no runtime live routing exists. Reverted to `live_stations=False` — the `generate_catalogue_from_live()` function is a maintainer tool, not a runtime catalogue path. Architecture `§5` note: declaring capability and routing capability are separate. |
-| Auth_missing early exit | If no `NVE_API_KEY`, `retrieve_observations` returns early before `resolve_product_policy` is called. Unsupported-product test must use a client with fake credentials to exercise that path. |
+Unchanged by this port. `no_nve` is withheld from certified catalogue generation pending the
+credentialed native acquisition owned by
+[issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90), so the packaged catalogue emits
+empty product, station, and station-product tables and the provider stays publicly unselectable. The
+adapter is nevertheless complete and proven; `rr.find(provider="no_nve", …)` returns an empty
+selection and `rr.fetch` reports the reason before any network access. See
+[`../catalogue-provenance.md`](../catalogue-provenance.md) for the maintenance command and the
+certification boundary.
 
-## Architecture Impact
+## Engine friction
 
-None. The `StrEnum` pattern, date extraction before UTC conversion, `seriesList` availability inference, and `auth_missing` early return are all provider-specific. No shared harness gap discovered.
+None. The source is expressed entirely through existing engine vocabulary: one existing window
+granularity, the existing credential transport, and the existing issue and provenance carriers. No
+new granularity, provider kind, or escape hatch was needed.
+
+## Retired implementation
+
+`reference/legacy_observations/no_nve/` was deleted once the recorded proofs passed. Its observation
+payloads were partly invented and grounded nothing; the retired code converted daily timestamps by
+string-slicing a local date and is not an oracle for this port.

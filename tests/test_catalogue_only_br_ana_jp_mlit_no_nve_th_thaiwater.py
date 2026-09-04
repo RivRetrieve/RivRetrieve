@@ -24,16 +24,6 @@ CATALOGUE_ONLY_PROVIDERS = (
         set(),
     ),
     (
-        "no_nve",
-        0,
-        0,
-        0,
-        set(),
-        "NVE HydAPI — Norwegian Water Resources and Energy Directorate",
-        None,
-        set(),
-    ),
-    (
         "za_dws",
         2905,
         3,
@@ -48,7 +38,6 @@ DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issu
 DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "br_ana": DEFERRED_CATALOGUE_MODULE_FILES,
-    "no_nve": DEFERRED_CATALOGUE_MODULE_FILES,
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
@@ -209,19 +198,14 @@ def test_reference_tree_preserves_complete_porting_evidence() -> None:
             "br_ana_60435000_cotas_2020.json",
             "br_ana_metadata.json",
         },
-        "no_nve": {
-            "no_nve_12.210.0_discharge_daily_2023.json",
-            "no_nve_12.210.0_discharge_hourly_202301.json",
-            "no_nve_metadata.json",
-        },
     }
     endpoints = {
         "br_ana": (
             "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
         ),
-        "no_nve": "https://hydapi.nve.no/api/v1/",
     }
     assert not (REFERENCE_ROOT / "jp_mlit").exists()
+    assert not (REFERENCE_ROOT / "no_nve").exists()
     source_names = {
         "issue_codes.py",
         "module.py",
