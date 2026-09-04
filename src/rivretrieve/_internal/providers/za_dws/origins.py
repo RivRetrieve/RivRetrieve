@@ -22,10 +22,14 @@ CRS_EVIDENCE_URL = "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_
 CRS_EVIDENCE_EXPLANATION = "The cited River PDF's own two-line coordinate header reads Latitude / dd:mm:ss and Longitude / dd:mm:ss; this names a representation format but never a datum. A case-insensitive review of all eight River PDFs found zero datum, WGS, ellipsoid, geodetic, projection, or EPSG occurrences. HyCatalogue.aspx is only a link index with no prose or coordinate header and is not CRS evidence."
 DMS_SIGN_CONVENTION = "DWS publishes unsigned DMS magnitudes with no leading sign, hemisphere marker, or hemisphere note; the build applies a southern negative latitude sign and an eastern positive longitude sign that the source does not carry."
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("Station")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("za_dws")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("Station")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("Latitude (dd:mm:ss)")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("Longitude (dd:mm:ss)")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("Latitude (dd:mm:ss)"), catalogue_origins.FieldTransform.DWS_UNSIGNED_DMS
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("Longitude (dd:mm:ss)"), catalogue_origins.FieldTransform.DWS_UNSIGNED_DMS
+    ),
     "crs": catalogue_origins.NotPublished(catalogue_origins.Evidence(CRS_EVIDENCE_URL)),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet"

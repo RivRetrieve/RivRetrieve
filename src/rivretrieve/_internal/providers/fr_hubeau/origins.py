@@ -28,10 +28,14 @@ CRS_EVIDENCE_URL = (
 TEMPERATURE_CRS_EVIDENCE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json"
 
 HYDROMETRY_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("fr_hubeau")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("latitude_station")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("longitude_station")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("latitude_station"), catalogue_origins.FieldTransform.FRANCE_PROJECTION_31
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("longitude_station"), catalogue_origins.FieldTransform.FRANCE_PROJECTION_31
+    ),
     "crs": catalogue_origins.Documented(
         catalogue_origins.DocumentedValue("EPSG:4326"),
         catalogue_origins.Evidence(CRS_EVIDENCE_URL),
@@ -39,10 +43,14 @@ HYDROMETRY_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigi
 }
 
 TEMPERATURE_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("fr_hubeau")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("latitude")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("longitude")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("latitude"), catalogue_origins.FieldTransform.FLOAT
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("longitude"), catalogue_origins.FieldTransform.FLOAT
+    ),
     "crs": catalogue_origins.Documented(
         catalogue_origins.DocumentedValue("EPSG:4326"),
         catalogue_origins.Evidence(TEMPERATURE_CRS_EVIDENCE_URL),

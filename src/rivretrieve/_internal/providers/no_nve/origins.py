@@ -16,21 +16,29 @@ from rivretrieve._internal.acquisition_provenance import (
     SourceStatement,
     Transformation,
 )
-from rivretrieve._internal.catalogue_origins import Evidence, Field, NativeColumn, NotPublished
+from rivretrieve._internal.catalogue_origins import (
+    Authored,
+    AuthoredValue,
+    Evidence,
+    Field,
+    FieldTransform,
+    NativeColumn,
+    NotPublished,
+)
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 STATION_CATALOGUE_ORIGINS = {
-    "provider_id": Field(NativeColumn("stationId")),
+    "provider_id": Authored(AuthoredValue("no_nve")),
     "station_id": Field(NativeColumn("stationId")),
-    "latitude": Field(NativeColumn("latitude")),
-    "longitude": Field(NativeColumn("longitude")),
+    "latitude": Field(NativeColumn("latitude"), FieldTransform.FLOAT),
+    "longitude": Field(NativeColumn("longitude"), FieldTransform.FLOAT),
     "crs": NotPublished(Evidence("https://hydapi.nve.no/swagger/v1/swagger.json")),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet"
-NATIVE_TABLE_REVISION = "4d7a361c733e78fe16e667d915a244c2fa139d8a"
-NATIVE_TABLE_SHA256 = "5c6eff5f1d46ff71abaf4e21d101a8de8e815506997dd57fb126264b9297add2"
-NATIVE_TABLE_BYTE_SIZE = 810559
-NATIVE_TABLE_SEMANTIC_SHA256 = "7eb6431affca082bfa21adfaba43572a93b41148029adca5aa058b84dd015d29"
+NATIVE_TABLE_REVISION = "0ce05667a7cddc3aca877dc5b687f0c97986cca1"
+NATIVE_TABLE_SHA256 = "26b9f113fb85a81b89690db8c3bd5b1bf2c4eebc1472d21eae193a6f5c7409bc"
+NATIVE_TABLE_BYTE_SIZE = 809226
+NATIVE_TABLE_SEMANTIC_SHA256 = "31cecf6af263800ca8b355f5047860a48ad20371fd2491e8b7c73ae430e8a4c9"
 
 _LICENSE_FACT = "source.nve.license_statement"
 _CITATION_FACT = "source.nve.citation_statement"
@@ -65,13 +73,13 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
     )
     active_1 = _capture_reference(
         1,
-        "2026-09-04T17:35:25.856545Z",
-        "d35e112f4dde27894206b472956db974c116ac991d5c85b6eb674911c8dc27f5",
+        "2026-09-04T18:59:57.133119Z",
+        "048a947ca05c9850cabdd76e90d8e010a3384ad03b08af19e7080915aae9c7c9",
     )
     active_0 = _capture_reference(
         0,
-        "2026-09-04T17:35:26.351409Z",
-        "e3e7eaebcd3993368e4395886f726f8a8669fac863c2cd435ce592f2401b86d7",
+        "2026-09-04T18:59:58.038985Z",
+        "87ffaf3a633a0f4b40bc43bed0d047a66c061f7816b314e7a89db1b5ca370233",
     )
     swagger = RecordingReference(
         recording_id="no_nve_swagger_2026_09_04",

@@ -47,17 +47,26 @@ requested), source table
 **Origin**:
 How one [[provider]] fills one catalogue column. Declared per provider rather than per
 column, so the same canonical column is filled one way by one source and left empty by
-another. It takes one of four forms: a column of that provider's [[native table]]; a
-[[documented]] constant; the statement that this source publishes nothing for that
-column, carrying [[evidence]]; or [[native-only]]. Every canonical column carries one for
+another. It takes one of five forms: a column of that provider's [[native table]], with an
+explicit conversion where needed; an [[authored]] canonical constant; a [[documented]]
+constant; the statement that this source publishes nothing for that column, carrying
+[[evidence]]; or [[native-only]]. Every canonical column carries one for
 every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled provider is explicitly
 outside origin certification rather than treated as compliant. The ways to breach it are
-an undeclared column, an origin naming a native column that was never fetched, a null where
-the native column held a value, a documented constant differing from the emitted value,
-and a documented or not-published claim carrying no evidence. Each fails the build rather
+an undeclared column, an origin naming a native column that was never fetched, missing or
+extra canonical rows, a canonical value differing from its declared converted native value,
+an authored or documented constant differing from the emitted value, and a documented or
+not-published claim carrying no evidence. Each fails the build rather
 than shipping.
 _Avoid_: mapping, provenance (which names the receipt travelling with a result, not the
 per-column declaration), nullable
+
+**Authored**:
+The [[origin]] for a canonical identifier owned by RivRetrieve rather than copied from a
+source. It carries the exact constant and the origin gate checks every emitted row. It is
+not a substitute for [[documented]]: a source-stated constant still requires source
+[[evidence]].
+_Avoid_: hard-coded, field
 
 **Native-only**:
 The [[origin]] for a column this source does publish and we decline to promote, because

@@ -20,10 +20,14 @@ from rivretrieve._internal.acquisition_provenance import (
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("objID")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("cz_chmi")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("objID")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("GEOGR1")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("GEOGR2")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("GEOGR1"), catalogue_origins.FieldTransform.FLOAT
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("GEOGR2"), catalogue_origins.FieldTransform.FLOAT
+    ),
     "crs": catalogue_origins.NotPublished(
         catalogue_origins.Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")
     ),

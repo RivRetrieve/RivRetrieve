@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 from dataclasses import replace
@@ -13,6 +14,8 @@ import pytest
 
 from rivretrieve._internal.catalogue_origins import (
     ORIGIN_GATE_ENROLLED_PROVIDERS,
+    Authored,
+    AuthoredValue,
     Field,
     NativeColumn,
     enforce_catalogue_origins,
@@ -72,9 +75,7 @@ def test_complete_response_shape_refuses_every_previous_silent_loss(mutation: st
     else:
         document["itemCount"] = len(rows) - 1
     with pytest.raises(FatalContractError):
-        generate_catalogue._parse_station_response(
-            _encoded(document), generate_catalogue.StationActivityFilter.INACTIVE
-        )
+        generate_catalogue._parse_station_response(_encoded(document), generate_catalogue.StationActivityFilter.ALL)
 
 
 def test_empty_complete_series_list_establishes_unavailability() -> None:
@@ -138,6 +139,52 @@ def test_semantic_and_raw_native_attestation_mutations_refuse_without_output(
             )
         assert not output.exists()
         assert not output.with_name(f".{output.name}.candidate").exists()
+
+
+def test_origin_gate_refuses_real_canonical_row_deletion_and_non_null_mutation() -> None:
+    native = read_native_table(_NATIVE)
+    stations = generate_catalogue.build_stations(native)
+    station_id = "1.10.0"
+    mutations = (
+        stations.filter(pl.col("station_id") != station_id),
+        stations.with_columns(
+            pl.when(pl.col("station_id") == station_id).then(0.0).otherwise(pl.col("longitude")).alias("longitude")
+        ),
+    )
+    for mutated in mutations:
+        with pytest.raises(FatalContractError):
+            enforce_catalogue_origins(ProviderId("no_nve"), STATION_CATALOGUE_ORIGINS, native, mutated)
+
+
+def test_full_response_duplicate_series_member_refuses_before_availability() -> None:
+    document = _active_document()
+    rows = cast("list[dict[str, object]]", document["data"])
+    row = next(item for item in rows if isinstance(item["seriesList"], list) and item["seriesList"])
+    series = cast("list[dict[str, object]]", row["seriesList"])
+    series.append(copy.deepcopy(series[0]))
+
+    with pytest.raises(FatalContractError, match="duplicate series member"):
+        generate_catalogue._parse_station_response(_encoded(document), generate_catalogue.StationActivityFilter.ALL)
+
+
+def test_non_null_wrong_field_origin_refuses_on_the_real_native_build() -> None:
+    native = read_native_table(_NATIVE)
+    contradicted = dict(STATION_CATALOGUE_ORIGINS)
+    contradicted["longitude"] = Field(NativeColumn("latitude"))
+
+    with pytest.raises(FatalContractError, match="does not reproduce the declared native field"):
+        generate_catalogue.build_catalogue(native, contradicted)
+
+
+def test_provider_identifier_has_a_truthful_authored_origin() -> None:
+    native = read_native_table(_NATIVE)
+    origin = STATION_CATALOGUE_ORIGINS["provider_id"]
+    assert origin == Authored(AuthoredValue("no_nve"))
+    contradicted = dict(STATION_CATALOGUE_ORIGINS)
+    contradicted["provider_id"] = Authored(AuthoredValue("other_provider"))
+
+    with pytest.raises(FatalContractError, match="does not match authored value"):
+        generate_catalogue.build_catalogue(native, contradicted)
 
 
 def test_each_real_origin_declaration_is_required_and_mutations_refuse() -> None:

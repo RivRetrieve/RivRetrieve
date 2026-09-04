@@ -20,11 +20,17 @@ from rivretrieve._internal.acquisition_provenance import (
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("site_no")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("site_no")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_lat_va")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_long_va")),
-    "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("dec_lat_va"), catalogue_origins.FieldTransform.FLOAT
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("dec_long_va"), catalogue_origins.FieldTransform.FLOAT
+    ),
+    "crs": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("dec_coord_datum_cd"), catalogue_origins.FieldTransform.USGS_DATUM_TO_CRS
+    ),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
 NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"

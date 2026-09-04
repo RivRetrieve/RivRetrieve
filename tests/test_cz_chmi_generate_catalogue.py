@@ -13,7 +13,14 @@ import polars.testing as pl_testing
 import pytest
 from pypdf import PdfReader
 
-from rivretrieve._internal.catalogue_origins import Evidence, Field, NativeColumn, NotPublished
+from rivretrieve._internal.catalogue_origins import (
+    Authored,
+    AuthoredValue,
+    Evidence,
+    Field,
+    NativeColumn,
+    NotPublished,
+)
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
@@ -159,7 +166,7 @@ NATIVE_SCHEMA = pl.Schema(
     }
 )
 CZ_ORIGINS = {
-    "provider_id": Field(NativeColumn("objID")),
+    "provider_id": Authored(AuthoredValue("cz_chmi")),
     "station_id": Field(NativeColumn("objID")),
     "latitude": Field(NativeColumn("GEOGR1")),
     "longitude": Field(NativeColumn("GEOGR2")),
@@ -315,7 +322,7 @@ def test_refresh_rejects_non_exact_header(header: str) -> None:
 )
 def test_refresh_rejects_invalid_row_shape(row: object) -> None:
     payload = _valid_payload()
-    rows: list[object] = copy.deepcopy(EXPECTED_ROWS)
+    rows = cast("list[object]", copy.deepcopy(EXPECTED_ROWS))
     rows[1] = row
     _data_block(payload)["values"] = rows
 
@@ -332,7 +339,7 @@ def test_refresh_rejects_invalid_row_shape(row: object) -> None:
 )
 def test_refresh_rejects_invalid_row_width(row: list[object], value_count: int) -> None:
     payload = _valid_payload()
-    rows: list[object] = copy.deepcopy(EXPECTED_ROWS)
+    rows = cast("list[object]", copy.deepcopy(EXPECTED_ROWS))
     rows[1] = row
     _data_block(payload)["values"] = rows
 
@@ -346,9 +353,9 @@ def test_refresh_rejects_invalid_row_width(row: list[object], value_count: int) 
 @pytest.mark.parametrize("station_id", [None, 206200, "", "   "])
 def test_refresh_rejects_invalid_obj_id(station_id: object) -> None:
     payload = _valid_payload()
-    row = copy.deepcopy(EXPECTED_ROWS[0])
+    row = cast("list[object]", copy.deepcopy(EXPECTED_ROWS[0]))
     row[0] = station_id
-    rows = copy.deepcopy(EXPECTED_ROWS)
+    rows = cast("list[object]", copy.deepcopy(EXPECTED_ROWS))
     rows[1] = row
     _data_block(payload)["values"] = rows
 

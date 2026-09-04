@@ -60,8 +60,8 @@ TERMS_URL = "https://hydapi.nve.no/UserDocumentation/"
 _CAPTURE_SCHEMA_VERSION = 1
 _ENVELOPE_FIELDS = ("currentLink", "apiVersion", "license", "createdAt", "queryTime", "itemCount", "data")
 _CANONICALIZATION = (
-    "Verify the complete Active=1 and Active=0 envelopes and all nested station, seriesList, and resolutionList members.",
-    "Reject duplicate station identities within a response and reject differing objects for identities present in both responses.",
+    "Verify the complete Active=1 all-station and Active=0 active-only envelopes and all nested station, seriesList, and resolutionList members.",
+    "Require every active-only station in the all-station response and reject differing overlap or duplicate identities.",
     "Collapse byte-semantically identical overlap, order rows by stationId, retain source field order, and use the earliest containing response retrieval instant.",
 )
 STATION_FIELDS = (
@@ -230,10 +230,10 @@ _CITATION = "When using data from this service, if possible, please refer to thi
 
 
 class StationActivityFilter(IntEnum):
-    """The two exact values accepted by the NVE Stations Active query."""
+    """NVE Stations query modes: Active=1 returns all stations; Active=0 returns only active stations."""
 
-    INACTIVE = 1
-    ACTIVE = 0
+    ALL = 1
+    ACTIVE_ONLY = 0
 
     @property
     def request_url(self) -> str:
@@ -368,8 +368,10 @@ def read_capture_record(path: Path | str) -> StationCatalogueCapture:
     if not isinstance(raw_responses, list) or len(raw_responses) != 2:
         raise FatalContractError("no_nve station capture record must declare exactly two responses")
     responses = tuple(_parse_recorded_response(item) for item in raw_responses)
-    if tuple(item.activity for item in responses) != (StationActivityFilter.INACTIVE, StationActivityFilter.ACTIVE):
-        raise FatalContractError("no_nve station capture record must declare Active=1 then Active=0")
+    if tuple(item.activity for item in responses) != (StationActivityFilter.ALL, StationActivityFilter.ACTIVE_ONLY):
+        raise FatalContractError(
+            "no_nve station capture record must declare all-station Active=1 then active-only Active=0"
+        )
     native = document["native_table"]
     if not isinstance(native, dict) or set(native) != {"repository_path", "byte_size", "sha256", "semantic_sha256"}:
         raise FatalContractError("no_nve station capture native-table identity has an unexpected shape")
@@ -453,16 +455,22 @@ def materialize_captured_native_table(capture: StationCatalogueCapture, reposito
         ):
             raise FatalContractError(f"no_nve captured response counts mismatch: {response.repository_path}")
         response_rows[response.activity] = rows
-    active_by_id = {cast("str", row["stationId"]): row for row in response_rows[StationActivityFilter.ACTIVE]}
-    inactive_by_id = {cast("str", row["stationId"]): row for row in response_rows[StationActivityFilter.INACTIVE]}
-    overlap = set(active_by_id) & set(inactive_by_id)
+    active_only_by_id = {cast("str", row["stationId"]): row for row in response_rows[StationActivityFilter.ACTIVE_ONLY]}
+    all_by_id = {cast("str", row["stationId"]): row for row in response_rows[StationActivityFilter.ALL]}
+    overlap = set(active_only_by_id) & set(all_by_id)
+    if any(row["stationStatusName"] != "Aktiv" for row in active_only_by_id.values()):
+        raise FatalContractError("no_nve Active=0 response contains a station not marked Aktiv")
+    if overlap != set(active_only_by_id) or not (set(all_by_id) - set(active_only_by_id)):
+        raise FatalContractError("no_nve Active=0 active-only response is not a strict subset of Active=1 all stations")
     if len(overlap) != capture.overlap_station_count:
         raise FatalContractError("no_nve captured response overlap count mismatch")
     for station_id in overlap:
-        if active_by_id[station_id] != inactive_by_id[station_id]:
-            raise FatalContractError(f"no_nve station {station_id} differs between Active responses")
-    union = dict(active_by_id)
-    union.update(inactive_by_id)
+        if active_only_by_id[station_id] != all_by_id[station_id]:
+            raise FatalContractError(
+                f"no_nve station {station_id} differs between all-station and active-only responses"
+            )
+    union = dict(active_only_by_id)
+    union.update(all_by_id)
     if len(union) != capture.distinct_station_count:
         raise FatalContractError("no_nve captured response distinct-station count mismatch")
     retrieved_at_by_activity = {response.activity: response.retrieved_at for response in capture.responses}
@@ -472,8 +480,8 @@ def materialize_captured_native_table(capture: StationCatalogueCapture, reposito
         containing_instants = [
             retrieved_at_by_activity[activity]
             for activity, members in (
-                (StationActivityFilter.INACTIVE, inactive_by_id),
-                (StationActivityFilter.ACTIVE, active_by_id),
+                (StationActivityFilter.ALL, all_by_id),
+                (StationActivityFilter.ACTIVE_ONLY, active_only_by_id),
             )
             if station_id in members
         ]
@@ -549,6 +557,7 @@ def _validate_station_scalar_types(station_id: str, row: Mapping[str, object]) -
 def _validate_series_list(station_id: str, value: object) -> None:
     if not isinstance(value, list):
         raise FatalContractError(f"no_nve station {station_id} seriesList must be a complete list")
+    seen_series: set[tuple[int, int]] = set()
     for series_index, item in enumerate(value):
         if not isinstance(item, dict) or tuple(item) != SERIES_FIELDS:
             raise FatalContractError(
@@ -566,6 +575,10 @@ def _validate_series_list(station_id: str, value: object) -> None:
             raise FatalContractError(
                 f"no_nve station {station_id} seriesList item {series_index} has invalid source types"
             )
+        series_identity = (series["parameter"], series["versionNo"])
+        if series_identity in seen_series:
+            raise FatalContractError(f"no_nve station {station_id} has a duplicate series member")
+        seen_series.add(series_identity)
         resolutions = series["resolutionList"]
         if not isinstance(resolutions, list):
             raise FatalContractError(
@@ -806,7 +819,7 @@ def capture_station_catalogue(
     relative_directory = _relative_path(response_repository_directory)
     captured: list[CapturedStationResponse] = []
     bodies: dict[StationActivityFilter, bytes] = {}
-    for activity in (StationActivityFilter.INACTIVE, StationActivityFilter.ACTIVE):
+    for activity in (StationActivityFilter.ALL, StationActivityFilter.ACTIVE_ONLY):
         response = transport.send(
             TransportRequest(HttpMethod.GET, STATIONS_URL, {"Active": int(activity)}, {"Accept": "application/json"})
         )
@@ -938,14 +951,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             response_repository_directory,
         )
         placeholder_native_identity = NativeTableAttestation("pending", 1, "0" * 64, "0" * 64)
-        active_rows = _parse_station_response(bodies[StationActivityFilter.ACTIVE], StationActivityFilter.ACTIVE)
-        inactive_rows = _parse_station_response(bodies[StationActivityFilter.INACTIVE], StationActivityFilter.INACTIVE)
-        active_ids = {cast("str", row["stationId"]) for row in active_rows}
-        inactive_ids = {cast("str", row["stationId"]) for row in inactive_rows}
+        active_only_rows = _parse_station_response(
+            bodies[StationActivityFilter.ACTIVE_ONLY], StationActivityFilter.ACTIVE_ONLY
+        )
+        all_rows = _parse_station_response(bodies[StationActivityFilter.ALL], StationActivityFilter.ALL)
+        active_only_ids = {cast("str", row["stationId"]) for row in active_only_rows}
+        all_ids = {cast("str", row["stationId"]) for row in all_rows}
         temporary = StationCatalogueCapture(
             responses=responses,
-            overlap_station_count=len(active_ids & inactive_ids),
-            distinct_station_count=len(active_ids | inactive_ids),
+            overlap_station_count=len(active_only_ids & all_ids),
+            distinct_station_count=len(active_only_ids | all_ids),
             canonicalization=_CANONICALIZATION,
             native_table=placeholder_native_identity,
         )

@@ -11,11 +11,14 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.catalogue_origins import (
     ORIGIN_GATE_ENROLLED_PROVIDERS,
+    Authored,
+    AuthoredValue,
     CatalogueOrigin,
     Documented,
     DocumentedValue,
     Evidence,
     Field,
+    FieldTransform,
     NativeColumn,
     NotPublished,
     Withheld,
@@ -115,6 +118,26 @@ def test_field_defers_native_table_membership_to_the_build_gate() -> None:
     assert origin.native_column == "column_not_yet_fetched"
 
 
+def test_field_conversion_is_named_and_immutable() -> None:
+    origin = Field(NativeColumn("coordinate"), FieldTransform.FLOAT)
+
+    assert origin.transform is FieldTransform.FLOAT
+    with pytest.raises(FrozenInstanceError):
+        origin.transform = FieldTransform.IDENTITY  # ty: ignore[invalid-assignment]
+    with pytest.raises(TypeError, match="Field.transform must be a FieldTransform"):
+        Field(NativeColumn("coordinate"), "float")  # ty: ignore[invalid-argument-type]
+
+
+def test_authored_carries_an_exact_immutable_canonical_value() -> None:
+    origin = Authored(AuthoredValue("provider_id"))
+
+    assert origin.value == "provider_id"
+    with pytest.raises(FrozenInstanceError):
+        origin.value = AuthoredValue("other")  # ty: ignore[invalid-assignment]
+    with pytest.raises(TypeError, match="Authored.value must be an AuthoredValue"):
+        Authored("provider_id")  # ty: ignore[invalid-argument-type]
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -185,7 +208,7 @@ def test_documented_requires_named_carriers() -> None:
 
 
 def test_catalogue_origin_union_contains_exactly_the_implemented_forms() -> None:
-    assert typing.get_args(CatalogueOrigin.__value__) == (Field, NotPublished, Documented, Withheld)
+    assert typing.get_args(CatalogueOrigin.__value__) == (Field, Authored, NotPublished, Documented, Withheld)
 
 
 def test_field_has_value_equality_and_hashing() -> None:
@@ -333,10 +356,10 @@ def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
 
     assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("gauge_id")),
+        "provider_id": Authored(AuthoredValue("pl_imgw")),
         "station_id": Field(NativeColumn("gauge_id")),
-        "latitude": Field(NativeColumn("latitude")),
-        "longitude": Field(NativeColumn("longitude")),
+        "latitude": Field(NativeColumn("latitude"), FieldTransform.FLOAT),
+        "longitude": Field(NativeColumn("longitude"), FieldTransform.FLOAT),
         "crs": Withheld(),
     } == STATION_CATALOGUE_ORIGINS
 
@@ -369,10 +392,10 @@ def test_japan_declarations_match_canonical_schema_order_and_values() -> None:
 
     assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("観測所記号")),
+        "provider_id": Authored(AuthoredValue("jp_mlit")),
         "station_id": Field(NativeColumn("観測所記号")),
-        "latitude": Field(NativeColumn("世界測地系")),
-        "longitude": Field(NativeColumn("世界測地系")),
+        "latitude": Field(NativeColumn("世界測地系"), FieldTransform.JAPAN_COMBINED_DMS),
+        "longitude": Field(NativeColumn("世界測地系"), FieldTransform.JAPAN_COMBINED_DMS),
         "crs": NotPublished(Evidence("http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010")),
     } == STATION_CATALOGUE_ORIGINS
 
@@ -392,17 +415,17 @@ def test_committed_japan_origins_and_build_pass_gate() -> None:
 
 def test_france_declarations_match_schema_order_and_endpoint_values() -> None:
     expected_hydrometry = {
-        "provider_id": Field(NativeColumn("code_station")),
+        "provider_id": Authored(AuthoredValue("fr_hubeau")),
         "station_id": Field(NativeColumn("code_station")),
-        "latitude": Field(NativeColumn("latitude_station")),
-        "longitude": Field(NativeColumn("longitude_station")),
+        "latitude": Field(NativeColumn("latitude_station"), FieldTransform.FRANCE_PROJECTION_31),
+        "longitude": Field(NativeColumn("longitude_station"), FieldTransform.FRANCE_PROJECTION_31),
         "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(FRANCE_CRS_EVIDENCE_URL)),
     }
     expected_temperature = {
-        "provider_id": Field(NativeColumn("code_station")),
+        "provider_id": Authored(AuthoredValue("fr_hubeau")),
         "station_id": Field(NativeColumn("code_station")),
-        "latitude": Field(NativeColumn("latitude")),
-        "longitude": Field(NativeColumn("longitude")),
+        "latitude": Field(NativeColumn("latitude"), FieldTransform.FLOAT),
+        "longitude": Field(NativeColumn("longitude"), FieldTransform.FLOAT),
         "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(TEMPERATURE_CRS_EVIDENCE_URL)),
     }
     schema_order = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
@@ -440,10 +463,10 @@ def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
 
     assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("metadata_station_no")),
+        "provider_id": Authored(AuthoredValue("ba_fhmzbih")),
         "station_id": Field(NativeColumn("metadata_station_no")),
-        "latitude": Field(NativeColumn("metadata_station_latitude")),
-        "longitude": Field(NativeColumn("metadata_station_longitude")),
+        "latitude": Field(NativeColumn("metadata_station_latitude"), FieldTransform.FLOAT),
+        "longitude": Field(NativeColumn("metadata_station_longitude"), FieldTransform.FLOAT),
         "crs": NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json")),
     } == STATION_CATALOGUE_ORIGINS
     carriers = {str(origin.native_column) for origin in STATION_CATALOGUE_ORIGINS.values() if isinstance(origin, Field)}
@@ -483,10 +506,10 @@ def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation(provider_i
 def test_lithuania_declarations_match_canonical_schema_order_and_values() -> None:
     assert tuple(LT_STATION_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("code")),
+        "provider_id": Authored(AuthoredValue("lt_lhmt")),
         "station_id": Field(NativeColumn("code")),
-        "latitude": Field(NativeColumn("coordinates")),
-        "longitude": Field(NativeColumn("coordinates")),
+        "latitude": Field(NativeColumn("coordinates"), FieldTransform.STRUCT_MEMBER),
+        "longitude": Field(NativeColumn("coordinates"), FieldTransform.STRUCT_MEMBER),
         "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://api.meteo.lt/")),
     } == LT_STATION_ORIGINS
 
@@ -494,11 +517,11 @@ def test_lithuania_declarations_match_canonical_schema_order_and_values() -> Non
 def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
     assert tuple(USGS_STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("site_no")),
+        "provider_id": Authored(AuthoredValue("usgs_nwis")),
         "station_id": Field(NativeColumn("site_no")),
-        "latitude": Field(NativeColumn("dec_lat_va")),
-        "longitude": Field(NativeColumn("dec_long_va")),
-        "crs": Field(NativeColumn("dec_coord_datum_cd")),
+        "latitude": Field(NativeColumn("dec_lat_va"), FieldTransform.FLOAT),
+        "longitude": Field(NativeColumn("dec_long_va"), FieldTransform.FLOAT),
+        "crs": Field(NativeColumn("dec_coord_datum_cd"), FieldTransform.USGS_DATUM_TO_CRS),
     } == USGS_STATION_CATALOGUE_ORIGINS
 
 
@@ -514,10 +537,10 @@ def test_thailand_declarations_match_schema_and_committed_coordinate_evidence() 
     )
     assert tuple(THAI_STATION_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("station.id")),
+        "provider_id": Authored(AuthoredValue("th_thaiwater")),
         "station_id": Field(NativeColumn("station.id")),
-        "latitude": Field(NativeColumn("station.tele_station_lat")),
-        "longitude": Field(NativeColumn("station.tele_station_long")),
+        "latitude": Field(NativeColumn("station.tele_station_lat"), FieldTransform.FLOAT),
+        "longitude": Field(NativeColumn("station.tele_station_long"), FieldTransform.FLOAT),
         "crs": NotPublished(Evidence(THAI_CRS_EVIDENCE_URL)),
     } == THAI_STATION_ORIGINS
     assert len(THAI_CRS_EVIDENCE_URL) == 104
@@ -539,10 +562,10 @@ def test_czech_declarations_match_canonical_schema_order_and_values() -> None:
 
     assert tuple(CZECH_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("objID")),
+        "provider_id": Authored(AuthoredValue("cz_chmi")),
         "station_id": Field(NativeColumn("objID")),
-        "latitude": Field(NativeColumn("GEOGR1")),
-        "longitude": Field(NativeColumn("GEOGR2")),
+        "latitude": Field(NativeColumn("GEOGR1"), FieldTransform.FLOAT),
+        "longitude": Field(NativeColumn("GEOGR2"), FieldTransform.FLOAT),
         "crs": NotPublished(Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")),
     } == CZECH_ORIGINS
 
@@ -562,10 +585,10 @@ def test_committed_czech_origins_pass_validation() -> None:
 def test_canada_declarations_match_canonical_schema_order_and_values() -> None:
     assert tuple(CANADA_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("STATION_NUMBER")),
+        "provider_id": Authored(AuthoredValue("ca_eccc")),
         "station_id": Field(NativeColumn("STATION_NUMBER")),
-        "latitude": Field(NativeColumn("geometry.coordinates[1]")),
-        "longitude": Field(NativeColumn("geometry.coordinates[0]")),
+        "latitude": Field(NativeColumn("geometry.coordinates[1]"), FieldTransform.FLOAT),
+        "longitude": Field(NativeColumn("geometry.coordinates[0]"), FieldTransform.FLOAT),
         "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(CRS_EVIDENCE_URL)),
     } == CANADA_ORIGINS
 
@@ -595,10 +618,10 @@ def test_dws_declarations_match_canonical_schema_order_and_values() -> None:
     evidence_url = "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf"
     assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("Station")),
+        "provider_id": Authored(AuthoredValue("za_dws")),
         "station_id": Field(NativeColumn("Station")),
-        "latitude": Field(NativeColumn("Latitude (dd:mm:ss)")),
-        "longitude": Field(NativeColumn("Longitude (dd:mm:ss)")),
+        "latitude": Field(NativeColumn("Latitude (dd:mm:ss)"), FieldTransform.DWS_UNSIGNED_DMS),
+        "longitude": Field(NativeColumn("Longitude (dd:mm:ss)"), FieldTransform.DWS_UNSIGNED_DMS),
         "crs": NotPublished(Evidence(evidence_url)),
     } == STATION_CATALOGUE_ORIGINS
     assert CATALOGUE_URL not in str(STATION_CATALOGUE_ORIGINS["crs"])
@@ -673,7 +696,6 @@ def test_origin_gate_rejects_absent_native_column() -> None:
 
 def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
-    declarations["latitude"] = Field(NativeColumn("name"))
     native_table, stations = _native_and_stations()
     first_station_id = stations["station_id"].item(0)
     broken_stations = stations.with_columns(
@@ -682,7 +704,7 @@ def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
 
     with pytest.raises(
         FatalContractError,
-        match=r"lt_lhmt\.latitude: canonical value is null where native column 'name' has a value",
+        match=r"lt_lhmt\.latitude: canonical value is null where native column 'coordinates' has a value",
     ) as exc_info:
         enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, broken_stations)
 

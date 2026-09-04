@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -40,6 +41,10 @@ def _catalogue():
 
 def test_complete_capture_identities_counts_and_request_set() -> None:
     capture = _capture()
+    assert [item.activity for item in capture.responses] == [
+        generate_catalogue.StationActivityFilter.ALL,
+        generate_catalogue.StationActivityFilter.ACTIVE_ONLY,
+    ]
     assert [item.requested_url for item in capture.responses] == [
         "https://hydapi.nve.no/api/v1/Stations?Active=1",
         "https://hydapi.nve.no/api/v1/Stations?Active=0",
@@ -59,6 +64,28 @@ def test_complete_capture_identities_counts_and_request_set() -> None:
         document = json.loads(body)
         assert document["currentLink"] == response.requested_url
         assert document["itemCount"] == len(document["data"]) == response.response_row_count
+    all_rows = json.loads((_ROOT / capture.responses[0].repository_path).read_bytes())["data"]
+    active_only_rows = json.loads((_ROOT / capture.responses[1].repository_path).read_bytes())["data"]
+    all_by_id = {row["stationId"]: row for row in all_rows}
+    active_only_by_id = {row["stationId"]: row for row in active_only_rows}
+    assert set(active_only_by_id) < set(all_by_id)
+    assert all(row["stationStatusName"] == "Aktiv" for row in active_only_rows)
+    assert all(all_by_id[station_id] == row for station_id, row in active_only_by_id.items())
+
+
+def test_client_retrieval_instants_are_distinct_from_server_created_at() -> None:
+    capture = _capture()
+    for response in capture.responses:
+        document = json.loads((_ROOT / response.repository_path).read_bytes())
+        server_created_at = datetime.fromisoformat(document["createdAt"].replace("Z", "+00:00"))
+        assert response.retrieved_at > server_created_at
+        assert (response.retrieved_at - server_created_at).total_seconds() < 60
+
+    native = read_native_table(_NATIVE)
+    assert set(native.data["retrieved_at"]) == {capture.responses[0].retrieved_at}
+    assert native.data["retrieved_at"].item(0) != datetime.fromisoformat(
+        json.loads((_ROOT / capture.responses[0].repository_path).read_bytes())["createdAt"].replace("Z", "+00:00")
+    )
 
 
 def test_full_responses_materialize_the_exact_committed_semantic_frame() -> None:

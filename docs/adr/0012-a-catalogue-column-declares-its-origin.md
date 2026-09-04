@@ -1,11 +1,24 @@
 # A catalogue column declares its origin
 
 Every catalogue column declares, per provider, where its values come from: a column of
-that provider's native table, a constant stated in the provider's documentation, the
-statement that this source publishes nothing for it, or native-only. A column with no
+that provider's native table, a RivRetrieve-authored canonical identifier, a constant stated
+in the provider's documentation, the statement that this source publishes nothing for it,
+or native-only. A column with no
 declaration fails the build, as does an origin naming a native column that was never
-fetched, a null where the native column held a value, a documented constant that differs
-from the emitted value, and a documented or not-published claim carrying no evidence.
+fetched, a missing canonical row, any canonical value that differs from its declared native
+field after an explicit conversion, an authored or documented constant that differs from the
+emitted value, and a documented or not-published claim carrying no evidence.
+
+The authored-constant form is limited to canonical identity owned by RivRetrieve. A provider id
+such as `no_nve` is not published in a station-id source field and must not claim that field as
+its origin. The declaration carries the exact authored value and the gate compares every emitted
+row with it.
+
+Every field origin also names its conversion. Identity is the default. A conversion is explicit
+only where the certified generator already performs it, such as parsing source DMS coordinates,
+reading a named coordinate-structure member, or mapping a published datum code to an EPSG id. The
+gate aligns native rows to canonical rows one-to-one and reproduces that conversion before it
+accepts the declaration.
 
 The documented-constant form exists because a source may state a value in its
 documentation rather than repeat it for every station. `Field` would falsely claim that
