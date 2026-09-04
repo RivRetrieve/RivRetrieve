@@ -52,6 +52,8 @@ class DatumToCrsConversion(catalogue_origins.FieldConversion):
     ) -> object:
         if canonical_column != "crs":
             raise ValueError("USGS datum conversion is only defined for CRS")
+        if native_column != "dec_coord_datum_cd":
+            raise ValueError("USGS datum conversion requires native field 'dec_coord_datum_cd'")
         return crs_from_datum(native_row[str(native_column)])
 
 

@@ -75,13 +75,16 @@ class HydrometryCoordinateConversion(catalogue_origins.FieldConversion):
         native_column: catalogue_origins.NativeColumn,
         native_row: Mapping[str, object],
     ) -> object:
-        del native_column
+        expected_native_column = {
+            "latitude": "latitude_station",
+            "longitude": "longitude_station",
+        }.get(canonical_column)
+        if expected_native_column is None:
+            raise ValueError("Hubeau coordinate conversion is only defined for coordinates")
+        if native_column != expected_native_column:
+            raise ValueError(f"Hubeau {canonical_column} conversion requires native field {expected_native_column!r}")
         latitude, longitude = hydrometry_coordinates(native_row)
-        if canonical_column == "latitude":
-            return latitude
-        if canonical_column == "longitude":
-            return longitude
-        raise ValueError("Hubeau coordinate conversion is only defined for coordinates")
+        return latitude if canonical_column == "latitude" else longitude
 
 
 CRS_EVIDENCE_URL = (

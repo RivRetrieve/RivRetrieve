@@ -154,6 +154,24 @@ def test_provider_owned_conversions_have_structural_equality_and_hash(
     assert hash(conversion) == hash(equivalent)
 
 
+@pytest.mark.parametrize(
+    ("conversion", "canonical_column", "wrong_native_column"),
+    [
+        (WorldGeodeticDmsConversion(), "latitude", NativeColumn("日本測地系")),
+        (HydrometryCoordinateConversion(), "latitude", NativeColumn("longitude_station")),
+        (DatumToCrsConversion(), "crs", NativeColumn("coord_datum_cd")),
+        (UnsignedDmsConversion(), "latitude", NativeColumn("Longitude (dd:mm:ss)")),
+    ],
+)
+def test_provider_owned_conversions_reject_wrong_native_columns(
+    conversion: FieldConversion,
+    canonical_column: str,
+    wrong_native_column: NativeColumn,
+) -> None:
+    with pytest.raises(ValueError, match="requires native field"):
+        conversion.apply(canonical_column, wrong_native_column, {})
+
+
 def test_shared_origin_gate_has_no_provider_specific_conversion_vocabulary() -> None:
     source = CATALOGUE_ORIGINS_MODULE_PATH.read_text(encoding="utf-8")
     forbidden = {

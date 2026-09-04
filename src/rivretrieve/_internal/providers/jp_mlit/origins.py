@@ -79,6 +79,8 @@ class WorldGeodeticDmsConversion(FieldConversion):
         native_column: NativeColumn,
         native_row: Mapping[str, object],
     ) -> object:
+        if native_column != "世界測地系":
+            raise ValueError("MLIT world-geodetic conversion requires native field '世界測地系'")
         latitude, longitude = world_geodetic_coordinates(native_row[str(native_column)])
         if canonical_column == "latitude":
             return latitude

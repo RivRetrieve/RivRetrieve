@@ -57,6 +57,14 @@ class UnsignedDmsConversion(catalogue_origins.FieldConversion):
         native_column: catalogue_origins.NativeColumn,
         native_row: Mapping[str, object],
     ) -> object:
+        expected_native_column = {
+            "latitude": "Latitude (dd:mm:ss)",
+            "longitude": "Longitude (dd:mm:ss)",
+        }.get(canonical_column)
+        if expected_native_column is None:
+            raise ValueError("DWS DMS conversion is only defined for coordinates")
+        if native_column != expected_native_column:
+            raise ValueError(f"DWS {canonical_column} conversion requires native field {expected_native_column!r}")
         return unsigned_dms_coordinate(native_row[str(native_column)], canonical_column)
 
 

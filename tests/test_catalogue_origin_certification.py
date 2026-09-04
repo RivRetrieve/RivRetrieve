@@ -492,6 +492,17 @@ EXPECTED_CRS_COUNTS = {
 }
 
 
+def test_france_provider_owned_converter_refuses_a_swapped_existing_native_column() -> None:
+    adapter = ADAPTERS[ProviderId("fr_hubeau")]
+    native = read_native_table(adapter.native_path)
+    contradicted = dict(_france_origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS)
+    contradicted["latitude"] = Field(NativeColumn("longitude_station"), HydrometryCoordinateConversion())
+    origins = adapter.origins_argument({"hydrometrie/referentiel/stations": contradicted})
+
+    with pytest.raises(FatalContractError, match="cannot undergo fr_hubeau.projection_31_axis_correction"):
+        _build(adapter, native, origins)
+
+
 @pytest.mark.parametrize(
     ("adapter", "case"), CASES, ids=[f"{adapter.provider_id}-{case.identity}" for adapter, case in CASES]
 )
