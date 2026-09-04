@@ -39,6 +39,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.usgs_nwis.origins import crs_from_datum
 
 PROVIDER_ID = ProviderId("usgs_nwis")
 PROVIDER_NAME = "U.S. Geological Survey National Water Information System (USGS NWIS)"
@@ -285,14 +286,6 @@ class NativeInputKind(Enum):
 NO_MATCH_REASON = "No matching USGS source series was published for this station-product"
 BLANK_COVERAGE_REASON = "Matching USGS source series states blank coverage dates"
 CONFLICTING_COVERAGE_REASON = "Several matching USGS source series state conflicting coverage boundaries"
-
-_DATUM_TO_CRS = {
-    "NAD27": "EPSG:4267",
-    "NAD83": "EPSG:4269",
-    "OLDHI": "EPSG:4135",
-    "WGS72": "EPSG:4322",
-    "WGS84": "EPSG:4326",
-}
 
 _CFS_TO_M3S = 0.0283168466
 _FT_TO_M = 0.3048
@@ -730,16 +723,17 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
         station_id = _required_native_string(native_row["site_no"], "site_no")
         latitude = _required_native_float(native_row["dec_lat_va"], station_id, "dec_lat_va")
         longitude = _required_native_float(native_row["dec_long_va"], station_id, "dec_long_va")
-        datum = native_row["dec_coord_datum_cd"]
-        if not isinstance(datum, str):
-            raise FatalContractError(f"USGS station {station_id!r} has invalid dec_coord_datum_cd")
+        try:
+            crs = crs_from_datum(native_row["dec_coord_datum_cd"])
+        except ValueError as exc:
+            raise FatalContractError(f"USGS station {station_id!r} has invalid dec_coord_datum_cd") from exc
         rows.append(
             {
                 "provider_id": PROVIDER_ID,
                 "station_id": station_id,
                 "latitude": latitude,
                 "longitude": longitude,
-                "crs": _DATUM_TO_CRS.get(datum, "unknown"),
+                "crs": crs,
             }
         )
     return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")

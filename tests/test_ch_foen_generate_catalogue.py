@@ -7,12 +7,21 @@ import json
 from datetime import UTC, date, datetime
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import cast
 
 import polars as pl
 import polars.testing as pl_testing
 import pytest
 
-from rivretrieve._internal.catalogue_origins import Evidence, Field, NativeColumn, NotPublished
+from rivretrieve._internal.catalogue_origins import (
+    Authored,
+    AuthoredValue,
+    Evidence,
+    Field,
+    FloatConversion,
+    NativeColumn,
+    NotPublished,
+)
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
 from rivretrieve._internal.catalogues.schemas import (
@@ -96,18 +105,21 @@ def test_publisher_crs_evidence_names_hydro_but_no_reference_system() -> None:
 def _fixture_response() -> dict[str, object]:
     value = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     assert isinstance(value, dict)
-    return value
+    return cast("dict[str, object]", value)
 
 
 def _expected_native_frame(response: dict[str, object] | None = None) -> pl.DataFrame:
     source = _fixture_response() if response is None else response
-    payload = source["payload"]
-    assert isinstance(payload, dict)
+    payload_value = source["payload"]
+    assert isinstance(payload_value, dict)
+    payload = cast("dict[str, object]", payload_value)
     rows = []
-    for payload_key, station in payload.items():
-        assert isinstance(station, dict)
-        details = station["details"]
-        assert isinstance(details, dict)
+    for payload_key, station_value in payload.items():
+        assert isinstance(station_value, dict)
+        station = cast("dict[str, object]", station_value)
+        details_value = station["details"]
+        assert isinstance(details_value, dict)
+        details = cast("dict[str, object]", details_value)
         rows.append(
             {
                 "payload_key": payload_key,
@@ -188,18 +200,29 @@ def test_refresh_native_table_has_exact_ordered_schema_and_preserves_source() ->
 
 def test_refresh_native_table_normalizes_only_integer_details_id() -> None:
     response = _fixture_response()
-    payload = response["payload"]
-    assert isinstance(payload, dict)
-    integer_detail_ids = [
-        payload_key
-        for payload_key, station in payload.items()
-        if isinstance(station, dict) and isinstance(station["details"], dict) and type(station["details"]["id"]) is int
-    ]
+    payload_value = response["payload"]
+    assert isinstance(payload_value, dict)
+    payload = cast("dict[str, object]", payload_value)
+    integer_detail_ids: list[str] = []
+    for payload_key, station_value in payload.items():
+        assert isinstance(station_value, dict)
+        station = cast("dict[str, object]", station_value)
+        details_value = station["details"]
+        assert isinstance(details_value, dict)
+        details = cast("dict[str, object]", details_value)
+        if type(details["id"]) is int:
+            integer_detail_ids.append(payload_key)
 
     table = generate_catalogue.refresh_native_table(response, retrieved_at=ATTESTED_RETRIEVED_AT).value.data
 
+    station_2071_value = payload["2071"]
+    assert isinstance(station_2071_value, dict)
+    station_2071 = cast("dict[str, object]", station_2071_value)
+    details_2071_value = station_2071["details"]
+    assert isinstance(details_2071_value, dict)
+    details_2071 = cast("dict[str, object]", details_2071_value)
     assert integer_detail_ids == ["2071"]
-    assert payload["2071"]["details"]["id"] == 2071
+    assert details_2071["id"] == 2071
     assert table.schema["details.id"] == pl.String
     assert table.filter(pl.col("payload_key") == "2071").select("details.id").item() == "2071"
 
@@ -278,13 +301,16 @@ def test_fixture_refresh_has_no_exact_station_count_invariant(tmp_path: Path) ->
 )
 def test_refresh_native_table_rejects_each_absent_required_field(scope: str, field: str) -> None:
     response = copy.deepcopy(_fixture_response())
-    payload = response["payload"]
-    assert isinstance(payload, dict)
-    station = payload["2004"]
-    assert isinstance(station, dict)
-    details = station["details"]
-    assert isinstance(details, dict)
-    target = response if scope == "envelope" else station if scope == "station" else details
+    payload_value = response["payload"]
+    assert isinstance(payload_value, dict)
+    payload = cast("dict[str, object]", payload_value)
+    station_value = payload["2004"]
+    assert isinstance(station_value, dict)
+    station = cast("dict[str, object]", station_value)
+    details_value = station["details"]
+    assert isinstance(details_value, dict)
+    details = cast("dict[str, object]", details_value)
+    target: dict[str, object] = response if scope == "envelope" else station if scope == "station" else details
     target.pop(field)
 
     with pytest.raises(FatalContractError, match=field):
@@ -297,13 +323,16 @@ def test_refresh_native_table_rejects_each_absent_required_field(scope: str, fie
 )
 def test_refresh_native_table_rejects_boolean_numeric_fields(scope: str, field: str) -> None:
     response = copy.deepcopy(_fixture_response())
-    payload = response["payload"]
-    assert isinstance(payload, dict)
-    station = payload["2004"]
-    assert isinstance(station, dict)
-    details = station["details"]
-    assert isinstance(details, dict)
-    target = station if scope == "station" else details
+    payload_value = response["payload"]
+    assert isinstance(payload_value, dict)
+    payload = cast("dict[str, object]", payload_value)
+    station_value = payload["2004"]
+    assert isinstance(station_value, dict)
+    station = cast("dict[str, object]", station_value)
+    details_value = station["details"]
+    assert isinstance(details_value, dict)
+    details = cast("dict[str, object]", details_value)
+    target: dict[str, object] = station if scope == "station" else details
     target[field] = True
 
     with pytest.raises(FatalContractError, match=field):
@@ -341,10 +370,10 @@ def test_swiss_origins_match_canonical_schema_order_and_values() -> None:
 
     assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert {
-        "provider_id": Field(NativeColumn("name")),
+        "provider_id": Authored(AuthoredValue("ch_foen")),
         "station_id": Field(NativeColumn("name")),
-        "latitude": Field(NativeColumn("details.lat")),
-        "longitude": Field(NativeColumn("details.lon")),
+        "latitude": Field(NativeColumn("details.lat"), FloatConversion()),
+        "longitude": Field(NativeColumn("details.lon"), FloatConversion()),
         "crs": NotPublished(Evidence("https://api.existenz.ch/#hydro")),
     } == STATION_CATALOGUE_ORIGINS
 

@@ -1,16 +1,35 @@
 # A catalogue column declares its origin
 
 Every catalogue column declares, per provider, where its values come from: a column of
-that provider's native table, a constant stated in the provider's documentation, the
-statement that this source publishes nothing for it, or native-only. A column with no
+that provider's native table, a RivRetrieve-authored canonical identifier, a constant stated
+in the provider's documentation, the statement that this source publishes nothing for it,
+or native-only. A column with no
 declaration fails the build, as does an origin naming a native column that was never
-fetched, a null where the native column held a value, a documented constant that differs
-from the emitted value, and a documented or not-published claim carrying no evidence.
+fetched, a missing canonical row, any canonical value that differs from its declared native
+field after an explicit conversion, an authored or documented constant that differs from the
+emitted value, and a documented or not-published claim carrying no evidence.
 
-The documented-constant form exists because a source may state a value in its
-documentation rather than repeat it for every station. `Field` would falsely claim that
-a native column carries that value, while `NotPublished` would falsely claim that the
-source is silent; the constant and its evidence therefore travel together in the origin.
+The authored-constant form is limited to `provider_id`, the canonical identity owned by
+RivRetrieve. A provider id such as `no_nve` is not published in a station-id source field and
+must not claim that field as its origin. The declaration and every emitted value must equal the
+provider identity supplied to the gate. `Authored` cannot replace source evidence for another
+canonical column.
+
+Every field origin carries a named, typed conversion contract. Identity is the default.
+Source-neutral scalar and structure conversions live with the generic origin types.
+Source-specific conversion code and vocabulary live in that provider's module, and the provider
+generator and declaration reuse the same implementation. The gate knows only the conversion
+interface: it aligns native rows to canonical rows one-to-one, invokes the declared conversion,
+and compares its result before accepting the declaration.
+
+The documented-constant form exists because a source may state a value in its documentation
+rather than repeat it for every station. `Field` would falsely claim that a native column carries
+that value, while `NotPublished` would falsely claim that the source is silent; the constant and
+its evidence therefore travel together in the origin. `NotPublished` must emit only the canonical
+`unknown` marker: an unevidenced absence or a fabricated non-unknown value is rejected. `Withheld`
+remains distinct because it means acquisition was not established, not that reviewed source
+evidence states the field is unpublished.
+
 
 The decision exists because a null in the shipped catalogue means two incompatible things
 and nothing can tell them apart. `usgs_nwis` ships `begin_date` as a key on all 26,231
@@ -41,12 +60,13 @@ false claim cleanly. A person reads the source's documentation once and links it
 
 ## Consequence: the build stays red until every enrolled provider is declared
 
-On 2026-08-03 the operator deferred `br_ana` and `no_nve` to a separate effort ticket.
-The complete-provider rule quantifies over `ORIGIN_GATE_ENROLLED_PROVIDERS`: all eleven
-enrolled members must be completely declared, while the two deferred providers are
+On 2026-08-03 the operator deferred `br_ana` and `no_nve` to separate work. That statement
+records the boundary at the time of this decision. `no_nve` subsequently gained a complete
+attested native table and origin declarations and entered `ORIGIN_GATE_ENROLLED_PROVIDERS`.
+The complete-provider rule now quantifies over all twelve enrolled members. `br_ana` remains
 intentionally unenrolled rather than compliant. There is no half-landed state within
-`ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled set is completely
-declared, while the explicitly deferred `br_ana` and `no_nve` remain outside that set.
-Brazil's availability must ultimately be fixed because no honest evidence link can be
-written for it, and USGS's request was corrected for the same reason. Those two providers
-are 64% of the 284,399 `unknown` rows in `station_products`.
+`ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled set is completely declared,
+while the explicitly deferred `br_ana` remains outside that set. Brazil's availability must
+ultimately be fixed because no honest evidence link can be written for it, and USGS's request
+was corrected for the same reason. The original defect history included 64% of the 284,399
+`unknown` rows in `station_products` across Brazil and Norway.

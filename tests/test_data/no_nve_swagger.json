@@ -1,0 +1,2133 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Sample API",
+    "version": "1.0"
+  },
+  "paths": {
+    "/api/v1/Observations": {
+      "post": {
+        "tags": [
+          "Observations"
+        ],
+        "operationId": "PostObservations",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ObservationsRequestPost"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ObservationsRequestPost"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ObservationsRequestPost"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Observations"
+        ],
+        "operationId": "GetObservations",
+        "parameters": [
+          {
+            "name": "StationId",
+            "in": "query",
+            "description": "StationId is a unique identifier for a station. A format example is \"6.10.0\". You can also\r\ngive multiple stations separated with comma. Example: \"6.10.0,12.209.0\"",
+            "required": true,
+            "schema": {
+              "pattern": "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(,\\s*([0-9]+)\\.([0-9]+)\\.([0-9]+))*$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Parameter",
+            "in": "query",
+            "description": "Parameter can be a valid parameterId (number) or parameter name as a text. Example \"1003\" or \"vanntemperatur\". You can also\r\ngive multiple parameters separated with comma. Example: \"1000,1001\"",
+            "required": true,
+            "schema": {
+              "pattern": "^([0-9]+,)*[0-9]+$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "ResolutionTime",
+            "in": "query",
+            "description": "Resolution time can be entered as text or a number in minutes, valid resolutions are \"day\" and \"hour\" (or \"1440\" and \"60\"). \r\nFor raw/instantaneous data as it is measured, use \"inst\" (or \"0\").",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "VersionNumber",
+            "in": "query",
+            "description": "The api also supports series with more than one version. If a series has more version can be found in metadata search.\r\nIf the VersionNumber is not specified, and it only exists one version, this version of the series is returned.\r\nIf a series has more than one version, the version to be returned can be specified here, else\r\nthe system returns the version with the newest data.",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ReferenceTime",
+            "in": "query",
+            "description": "Reference time is the time range to get observations.\r\n\r\nIf left empty, only the last known observation is returned.\r\n\r\nA reference time is build up by using datetime(s) and period(s). Period = P and DateTime = T\r\nDatetime(T) - A datetime given in ISO-8601. Example “2019-01-12T19:00”\r\nPeriod(P) - A period given in ISO-8601. Example “P3D” (period of 3 days)\r\n\r\nPossible combinations:\r\n\r\nT/T  - Will give all observations between the two datetimes.\r\nT/   - Will give all observations from this datetime and to the latest value.\r\n/T   - Will give all observations prior to this datetime.\r\n\r\nYou can also use period and datetime together.Period is then relative to the datetime.\r\n\r\nP/T - example “P2D/2019-04-05”\r\nT/P - example “2019-04-05T09:00/PT12H”\r\n            \r\nYou can also use period alone or together with another period. Period(s) are then relative to now.\r\n            \r\nP/  - example “P2D/”\r\n/P  - example “/P24D”\r\nP/P - example “-P4D/P5D” (also allows negative periods only if two periods are combined)\r\n\r\nFor more information, see <a href=\"/UserDocumentation#observationsget\">user documentation</a>.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "QualityTypes",
+            "in": "query",
+            "description": "The Quality Types is indicating if the observation is controlled. Enter values separated with comma like 2,3 \r\nIf not entered all observations are returned\r\nUnknown=0,\r\nUncontrolled=1,\r\nPrimaryControlled=2,\r\nSecondaryControlled=3",
+            "schema": {
+              "pattern": "^([0-9]+,)*[0-9]+$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Method",
+            "in": "query",
+            "description": "Method for aggregation for the time series\r\nAdded for future usage where more method types can be supported for a time series.\r\nCurrently the method is set by the default method given by the combination of resolutiontime and parameter.\r\nResolutiontime instantaneous (0) always gives method \"Instantaneous\"\r\nResolutiontime hour and day gives aggregation type \"Mean\" for all parameters, except precipitation that gives aggregation method \"Sum\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "TimeOffset",
+            "in": "query",
+            "description": "TimeOffset is added for future usage where maybe time series with the resolution time day, can be offered with a time offset.\r\nCurrently the only time offset supported is 0 (PT0H), and this value the will be chosen by default.\r\nWhen the time offset is 0, it means that a day is defined to start 0 am. The day is always refered to with the timestamp 11am (UTC-0)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CorrectionTypes",
+            "in": "query",
+            "description": "The Correction Types is indicating if a observation is changed/corrected. Enter values separated with comma like 1,4,5 \r\n If not entered, all observations are returned\r\n 0: No changes\r\n 1: Manual- or ice correction\r\n 2: Interpolation\r\n 3: Value computed with models or/and other series\r\n 4: Daily mean computed with arithmetic mean. (Only used on series where we normally should use discharge curve)\r\n 5: Smooth negative value. (Only used with inflow)\r\n 6: Dry pipe. (Only used with groundwater data)\r\n 7: Ice in pipe. (Only used with groundwater data)\r\n 8: Damaged pipe. (Only used with groundwater data)\r\n 9: Pumping. (Only used with groundwater data)\r\n 11: Start/end value linear adjustment\r\n 12: Incomplete data source\r\n 13: The value is calculated based on a similar station or a station close by. The value is adjusted according to the statistical differences between the original station and the replacement station\r\n 14: The value is missing, and is only calculated based on statistical information for the data series.\r\n 15: The value is the result of a calculation that ended in Nan(not a number) or +/-Inf. (Technically, the value needs to be outside the interval -1e+300 to +1e0399.)\r\n 16: Value fetched from rejected period.",
+            "schema": {
+              "pattern": "^([0-9]+,)*[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Parameters": {
+      "get": {
+        "tags": [
+          "Parameters"
+        ],
+        "summary": "List out all parameter types for series existing in api",
+        "operationId": "GetParameters",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParametersResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Percentiles/{StationId}/{Parameter}": {
+      "get": {
+        "tags": [
+          "Percentiles"
+        ],
+        "summary": "View percentiles data details for a series.",
+        "operationId": "GetDistinctPercentiles",
+        "parameters": [
+          {
+            "name": "StationId",
+            "in": "path",
+            "description": "StationId is a unique identifier for a station. A format example is \"6.10.0\"",
+            "required": true,
+            "schema": {
+              "pattern": "^([0-9]+)\\.([0-9]+)\\.(\\*|[0-9]+)|([0-9]+)\\.(\\*)\\.(\\*)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Parameter",
+            "in": "path",
+            "description": "Parameter can be a valid parameterId (number) or parameter name as a text. Example \"1003\" or \"vanntemperatur\"",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Percentiles",
+            "in": "query",
+            "description": "List of percentiles to return. If not given, all will be returned. It can be any of these, separated by a comma:\r\n\r\nperc0,perc05,perc10,perc20,perc25,perc30,perc40,perc50,perc60,perc70,perc75,per80,perc90,perc95,perc100\r\n            \r\nExample:\r\n            \r\nperc05,perc25,perc60,perc95",
+            "schema": {
+              "pattern": "^((perc0|perc05|perc10|perc20|perc25|perc30|perc40|perc50|perc60|perc70|perc75|per80|perc90|perc95|perc100)+,)*(perc0|perc05|perc10|perc20|perc25|perc30|perc40|perc50|perc60|perc70|perc75|per80|perc90|perc95|perc100)+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PercentileDetailsResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Percentiles": {
+      "get": {
+        "tags": [
+          "Percentiles"
+        ],
+        "summary": "Lists out all series that have percentiles data",
+        "operationId": "GetPercentiles",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PercentileListResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Ratingcurves/{StationId}": {
+      "get": {
+        "tags": [
+          "Ratingcurves"
+        ],
+        "summary": "View rating curves details for a serie",
+        "operationId": "GetDistinctRatingcurve",
+        "parameters": [
+          {
+            "name": "StationId",
+            "in": "path",
+            "description": "StationId is a unique identifier for a station. A format example is \"6.10.0\"",
+            "required": true,
+            "schema": {
+              "pattern": "^([0-9]+)\\.([0-9]+)\\.(\\*|[0-9]+)|([0-9]+)\\.(\\*)\\.(\\*)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatingCurveDetailsResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Ratingcurves": {
+      "get": {
+        "tags": [
+          "Ratingcurves"
+        ],
+        "summary": "List out available rating curves for series",
+        "operationId": "GetRatingcurves",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatingCurveResultObject"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Series": {
+      "get": {
+        "tags": [
+          "Series"
+        ],
+        "summary": "List out all distinct series, or search for specific series",
+        "operationId": "GetSeries",
+        "parameters": [
+          {
+            "name": "StationId",
+            "in": "query",
+            "description": "StationId is a unique identifier for a station. A format example is \"6.10.0\".",
+            "schema": {
+              "pattern": "^([0-9]+)\\.([0-9]+)\\.(\\*|[0-9]+)|([0-9]+)\\.(\\*)\\.(\\*)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "StationName",
+            "in": "query",
+            "description": "StationName is a name of the station. This can be given as part of the name and is case insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Parameter",
+            "in": "query",
+            "description": "Parameter can be a valid parameter (number) or parameter name as a text. Example \"1003\" or \"vanntemperatur\"",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CouncilNumber",
+            "in": "query",
+            "description": "The number of the council the station resides in (kommunenummer) (example 0437).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CouncilName",
+            "in": "query",
+            "description": "The name of the council the station resides in (kommune) (example Tynset). This can be given as part of the name and is case insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CountyName",
+            "in": "query",
+            "description": "The name of the county the station resides in (fylke) (example Innlandet). This can be given as part of the name and is case insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "DataFrom",
+            "in": "query",
+            "description": "Filter for only view the series having data later than this date",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "Polygon",
+            "in": "query",
+            "description": "Will return stations that only is within the given polygon given as a polygon in WKT format. example POLYGON((60 9,60 11,58 11,58 9,60 9)), where points on polygon is given on the form (Latitude, Longitude) using <a href=\"https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry\">WKT</a>.",
+            "schema": {
+              "pattern": "POLYGON[\\ ]?\\(\\((.*)\\)\\)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SerieResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Stations": {
+      "get": {
+        "tags": [
+          "Stations"
+        ],
+        "summary": "List out all distinct stations, or search for specific stations",
+        "operationId": "GetStations",
+        "parameters": [
+          {
+            "name": "StationId",
+            "in": "query",
+            "description": "StationId is a unique identifier for a station. A format example is \"6.10.0\".",
+            "schema": {
+              "pattern": "^([0-9]+)\\.([0-9]+)\\.(\\*|[0-9]+)|([0-9]+)\\.(\\*)\\.(\\*)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "StationName",
+            "in": "query",
+            "description": "StationName is a name of the station. This can be given as part of the name and is case insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CouncilNumber",
+            "in": "query",
+            "description": "The number of the council the station resides in (kommunenummer) (example 0437).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CouncilName",
+            "in": "query",
+            "description": "The name of the council the station resides in (kommune) (example Tynset). This can be given as part of the name and is case insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CountyName",
+            "in": "query",
+            "description": "The name of the county the station resides in (fylke) (example Innlandet). This can be given as part of the name and is case insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Active",
+            "in": "query",
+            "description": "Return only active stations.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/StationShowActiveTypes"
+            }
+          },
+          {
+            "name": "Polygon",
+            "in": "query",
+            "description": "Will return stations that only is within the given polygon given as a polygon in WKT format. example POLYGON((60 9,60 11,58 11,58 9,60 9)), where points on polygon is given on the form (Latitude, Longitude) using <a href=\"https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry\">WKT</a>.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StationResultObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ObservationsRequestPost": {
+        "required": [
+          "parameter",
+          "resolutionTime",
+          "stationId"
+        ],
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "pattern": "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+            "type": "string",
+            "description": "StationId is a unique identifier for a station. A format example is \"6.10.0\""
+          },
+          "parameter": {
+            "type": "string",
+            "description": "Parameter can be a valid parameterId (number) or parameter name as a text. Example \"1003\" or \"vanntemperatur\""
+          },
+          "resolutionTime": {
+            "type": "string",
+            "description": "Resolution time can be entered as text or a number in minutes, valid resolutions are \"day\" and \"hour\" (or \"1440\" and \"60\"). \r\nFor raw/instantaneous data as it is measured, use \"inst\" (or \"0\")."
+          },
+          "versionNumber": {
+            "type": "integer",
+            "description": "The api also supports series with more than one version. If a series has more version can be found in metadata search.\r\nIf the VersionNumber is not specified, and it only exists one version, this version of the series is returned.\r\nIf a series has more than one version, the version to be returned can be specified here, else\r\nthe system returns the version with the newest data.",
+            "format": "int32",
+            "nullable": true
+          },
+          "referenceTime": {
+            "type": "string",
+            "description": "Reference time is the time range to get observations.\r\n\r\nIf left empty, only the last known observation is returned.\r\n\r\nA reference time is build up by using datetime(s) and period(s). Period = P and DateTime = T\r\nDatetime(T) - A datetime given in ISO-8601. Example “2019-01-12T19:00”\r\nPeriod(P) - A period given in ISO-8601. Example “P3D” (period of 3 days)\r\n\r\nPossible combinations:\r\n\r\nT/T  - Will give all observations between the two datetimes.\r\nT/   - Will give all observations from this datetime and to the latest value.\r\n/T   - Will give all observations prior to this datetime.\r\n\r\nYou can also use period and datetime together.Period is then relative to the datetime.\r\n\r\nP/T - example “P2D/2019-04-05”\r\nT/P - example “2019-04-05T09:00/PT12H”\r\n            \r\nYou can also use period alone or together with another period. Period(s) are then relative to now.\r\n            \r\nP/  - example “P2D/”\r\n/P  - example “/P24D”\r\nP/P - example “-P4D/P5D” (also allows negative periods only if two periods are combined)\r\n\r\nFor more information, see <a href=\"/UserDocumentation#observationsget\">user documentation</a>.",
+            "nullable": true
+          },
+          "qualityTypes": {
+            "pattern": "^([0-9]+,)*[0-9]+$",
+            "type": "string",
+            "description": "The Quality Types is indicating if the observation is controlled. Enter values separated with comma like 2,3 \r\nIf not entered all observations are returned\r\nUnknown=0,\r\nUncontrolled=1,\r\nPrimaryControlled=2,\r\nSecondaryControlled=3",
+            "nullable": true
+          },
+          "method": {
+            "type": "string",
+            "description": "Method for aggregation for the time series\r\nAdded for future usage where more method types can be supported for a time series.\r\nCurrently the method is set by the default method given by the combination of resolutiontime and parameter.\r\nResolutiontime instantaneous (0) always gives method \"Instantaneous\"\r\nResolutiontime hour and day gives aggregation type \"Mean\" for all parameters, except precipitation that gives aggregation method \"Sum\".",
+            "nullable": true
+          },
+          "timeOffset": {
+            "type": "string",
+            "description": "TimeOffset is added for future usage where maybe time series with the resolution time day, can be offered with a time offset.\r\nCurrently the only time offset supported is 0 (PT0H), and this value the will be chosen by default.\r\nWhen the time offset is 0, it means that a day is defined to start 0 am. The day is always refered to with the timestamp 11am (UTC-0)",
+            "nullable": true
+          },
+          "correctionTypes": {
+            "pattern": "^([0-9]+,)*[0-9]+$",
+            "type": "string",
+            "description": "The Correction Types is indicating if a observation is changed/corrected. Enter values separated with comma like 1,4,5 \r\n If not entered, all observations are returned\r\n 0: No changes\r\n 1: Manual- or ice correction\r\n 2: Interpolation\r\n 3: Value computed with models or/and other series\r\n 4: Daily mean computed with arithmetic mean. (Only used on series where we normally should use discharge curve)\r\n 5: Smooth negative value. (Only used with inflow)\r\n 6: Dry pipe. (Only used with groundwater data)\r\n 7: Ice in pipe. (Only used with groundwater data)\r\n 8: Damaged pipe. (Only used with groundwater data)\r\n 9: Pumping. (Only used with groundwater data)\r\n 11: Start/end value linear adjustment\r\n 12: Incomplete data source\r\n 13: The value is calculated based on a similar station or a station close by. The value is adjusted according to the statistical differences between the original station and the replacement station\r\n 14: The value is missing, and is only calculated based on statistical information for the data series.\r\n 15: The value is the result of a calculation that ended in Nan(not a number) or +/-Inf. (Technically, the value needs to be outside the interval -1e+300 to +1e0399.)\r\n 16: Value fetched from rejected period.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Observation": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "string",
+            "description": "The timestamp for the observation. It is given in UTC 0.",
+            "format": "date-time"
+          },
+          "value": {
+            "type": "number",
+            "description": "The observed value.",
+            "format": "double",
+            "nullable": true
+          },
+          "correction": {
+            "type": "integer",
+            "description": "This gives if the value has been corrected. The possible values are:\r\n\r\n0: No changes\r\n1: Manual- or ice correction\r\n2: Interpolation\r\n3: Value computed with models or/and other series\r\n4: Daily mean computed with arithmetic mean. (Only used on series where we normally should use discharge curve)\r\n5: Smooth negative value. (Only used with inflow)\r\n6: Dry pipe. (Only used with groundwater data)\r\n7: Ice in pipe. (Only used with groundwater data)\r\n8: Damaged pipe. (Only used with groundwater data)\r\n9: Pumping. (Only used with groundwater data)\r\n11: Start/end value linear adjustment\r\n12: Incomplete data source\r\n13: The value is calculated based on a similar station or a station close by.The value is adjusted according to the statistical differences between the original station and the replacement station\r\n14: The value is missing, and is only calculated based on statistical information for the data serie.\r\n15: The value is the result of a calculation that ended in Nan(not a number) or +/-Inf. (Technically, the value needs to be outside the interval -1e+300 to +1e0399.)\r\n16: Value fetched from rejected period.",
+            "format": "int32"
+          },
+          "quality": {
+            "type": "integer",
+            "description": "This gives if the value has been controlled. The possible values are:\r\n\r\n0 - unknown,\r\n1 - uncontrolled\r\n2 - primary controlled\r\n3 - secondary controlled",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Observation in a time series."
+      },
+      "ObservationResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Observation"
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "Parameters": {
+        "type": "object",
+        "properties": {
+          "parameter": {
+            "type": "integer",
+            "description": "The parameter id.",
+            "format": "int32"
+          },
+          "parameterName": {
+            "type": "string",
+            "description": "The name of the parameter in Norwegian.",
+            "nullable": true
+          },
+          "parameterNameEng": {
+            "type": "string",
+            "description": "The name of the parameter in English.",
+            "nullable": true
+          },
+          "unit": {
+            "type": "string",
+            "description": "The unit the observations for this series is given in.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ParametersResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Parameters"
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PercentileDetails": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "string",
+            "description": "StationId is a unique identifier for a station.",
+            "nullable": true
+          },
+          "parameter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "periodNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "meanValue": {
+            "type": "number",
+            "format": "double"
+          },
+          "dateMMDD": {
+            "type": "string",
+            "nullable": true
+          },
+          "perc0": {
+            "type": "number",
+            "description": "The 0 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc05": {
+            "type": "number",
+            "description": "The 5 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc10": {
+            "type": "number",
+            "description": "The 10 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc20": {
+            "type": "number",
+            "description": "The 20 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc25": {
+            "type": "number",
+            "description": "The 25 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc30": {
+            "type": "number",
+            "description": "The 30 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc40": {
+            "type": "number",
+            "description": "The 40 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc50": {
+            "type": "number",
+            "description": "The 50 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc60": {
+            "type": "number",
+            "description": "The 60 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc70": {
+            "type": "number",
+            "description": "The 70 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc75": {
+            "type": "number",
+            "description": "The 75 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc80": {
+            "type": "number",
+            "description": "The 80 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc90": {
+            "type": "number",
+            "description": "The 90 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc95": {
+            "type": "number",
+            "description": "The 95 percentile.",
+            "format": "double",
+            "nullable": true
+          },
+          "perc100": {
+            "type": "number",
+            "description": "The 100 percentile.",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PercentileDetailsResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PercentileDetails"
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Percentile": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "string",
+            "description": "StationId is a unique identifier for a station.",
+            "nullable": true
+          },
+          "parameter": {
+            "type": "integer",
+            "description": "The parameter id.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PercentileListResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Percentile"
+              }
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RatingCurveDetails": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "string",
+            "description": "StationId is a unique identifier for a station.",
+            "nullable": true
+          },
+          "parameter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "versionNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "generationNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "periodNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "segmentNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "constant": {
+            "type": "number",
+            "format": "double"
+          },
+          "exponent": {
+            "type": "number",
+            "format": "double"
+          },
+          "maximum": {
+            "type": "number",
+            "format": "double"
+          },
+          "minimum": {
+            "type": "number",
+            "format": "double"
+          },
+          "zero": {
+            "type": "number",
+            "format": "double"
+          },
+          "dtEstablDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dtStartDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dtEndDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RatingCurveDetailsResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RatingCurveDetails"
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RatingCurve": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "string",
+            "description": "StationId is a unique identifier for a station.",
+            "nullable": true
+          },
+          "parameter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "versionNo": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RatingCurveResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RatingCurve"
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Resolution": {
+        "type": "object",
+        "properties": {
+          "resTime": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "method": {
+            "type": "string",
+            "nullable": true
+          },
+          "timeOffset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dataFromTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dataToTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Serie": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "string",
+            "description": "The unique id of the station.",
+            "nullable": true
+          },
+          "stationName": {
+            "type": "string",
+            "description": "The name of the station.",
+            "nullable": true
+          },
+          "parameterName": {
+            "type": "string",
+            "description": "The name of the parameter/series.",
+            "nullable": true
+          },
+          "parameter": {
+            "type": "integer",
+            "description": "The type (parameter) for the series.",
+            "format": "int32"
+          },
+          "versionNo": {
+            "type": "integer",
+            "description": "The version number of the series.",
+            "format": "int32"
+          },
+          "methodKey": {
+            "type": "integer",
+            "description": "The method used for aggregation on data. 0 = instantaneous/as it is measured, 3 = mean, 5 = sum",
+            "format": "int32"
+          },
+          "unit": {
+            "type": "string",
+            "description": "The unit the observations for this series is given in.",
+            "nullable": true
+          },
+          "serieFrom": {
+            "type": "string",
+            "description": "The date the series officially started",
+            "format": "date-time",
+            "nullable": true
+          },
+          "serieTo": {
+            "type": "string",
+            "description": "The date the series officially ended. If null it is not ended, but it does not not need to have data up to date",
+            "format": "date-time",
+            "nullable": true
+          },
+          "latitude": {
+            "type": "number",
+            "description": "The latitude coordinate of the station where the series is observed.",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "The longitude coordinate of the station where the series is observed.",
+            "format": "double"
+          },
+          "utmEast_Z33": {
+            "type": "integer",
+            "description": "The utm zone 33 east coordinate of the station where the series is observed.",
+            "format": "int32"
+          },
+          "utmNorth_Z33": {
+            "type": "integer",
+            "description": "The utm zone 33 north coordinate of the station where the series is observed.",
+            "format": "int32"
+          },
+          "masl": {
+            "type": "integer",
+            "description": "Meter above sea level.",
+            "format": "int32"
+          },
+          "councilNumber": {
+            "type": "string",
+            "description": "The number of the council where the station for the series resides.",
+            "nullable": true
+          },
+          "councilName": {
+            "type": "string",
+            "description": "The name of the council where the station for the series resides.",
+            "nullable": true
+          },
+          "countyName": {
+            "type": "string",
+            "description": "The name of the county",
+            "nullable": true
+          },
+          "observationPlace": {
+            "type": "string",
+            "nullable": true
+          },
+          "measuredOrDerived": {
+            "type": "string",
+            "description": "If the value is measured, or derived from another value.",
+            "nullable": true
+          },
+          "resolutionList": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Resolution"
+            },
+            "description": "A list of supported time resolutions for this series.\r\n\r\nResTime is the time resolution. Supported resolutions are 0 (instantaneous) 60 (hourly), 1440 (daily).\r\nDataFromTime is the timestamp for the first observation of this time resolution.\r\nDataToTime is the timestamp for the last observation of this time resolution.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SerieResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Serie"
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "StationShowActiveTypes": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "SerieShort": {
+        "type": "object",
+        "properties": {
+          "parameterName": {
+            "type": "string",
+            "nullable": true
+          },
+          "parameter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "versionNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unit": {
+            "type": "string",
+            "nullable": true
+          },
+          "serieFrom": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "serieTo": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "resolutionList": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Resolution"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Station": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "string",
+            "description": "The unique id for the station.",
+            "nullable": true
+          },
+          "stationName": {
+            "type": "string",
+            "description": "The name of the station.",
+            "nullable": true
+          },
+          "latitude": {
+            "type": "number",
+            "description": "The latitude coordinate of the station.",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "The longitude coordinate of the station.",
+            "format": "double"
+          },
+          "utmEast_Z33": {
+            "type": "integer",
+            "description": "The utm zone 33 east coordinate of the station.",
+            "format": "int32"
+          },
+          "utmNorth_Z33": {
+            "type": "integer",
+            "description": "The utm zone 33 north coordinate of the station.",
+            "format": "int32"
+          },
+          "masl": {
+            "type": "integer",
+            "description": "Meter above the sea level.",
+            "format": "int32"
+          },
+          "riverName": {
+            "type": "string",
+            "description": "The name of the river where the station resides.",
+            "nullable": true
+          },
+          "councilNumber": {
+            "type": "string",
+            "description": "The number of the council the station resides in (kommunenummer) (example 0437).",
+            "nullable": true
+          },
+          "councilName": {
+            "type": "string",
+            "description": "The name of the council the station resides in (kommune) (example Tynset). This can be given as part of the name and is case insensitive.",
+            "nullable": true
+          },
+          "countyName": {
+            "type": "string",
+            "description": "The name of the county the station resides in (fylke) (example Innlandet). This can be given as part of the name and is case insensitive.",
+            "nullable": true
+          },
+          "drainageBasinKey": {
+            "type": "integer",
+            "description": "The internal NVE key number for drainage basin for the station",
+            "format": "int32"
+          },
+          "hierarchy": {
+            "type": "string",
+            "description": "The name of the river hierarchy where the station resides.",
+            "nullable": true
+          },
+          "lakeArea": {
+            "type": "number",
+            "description": "The lake area in km2, if the station is placed in a lake.",
+            "format": "double"
+          },
+          "lakeName": {
+            "type": "string",
+            "description": "The lake name, if the station is placed in a lake.",
+            "nullable": true
+          },
+          "lakeNo": {
+            "type": "integer",
+            "description": "The lake number, if the station is placed in a lake.",
+            "format": "int32"
+          },
+          "regineNo": {
+            "type": "string",
+            "description": "The RegineNo is a unique id for drainage basin area (example 002.D1), according to REGINE register.",
+            "nullable": true
+          },
+          "reservoirNo": {
+            "type": "string",
+            "description": "The ReservoirNo is a unique number for a reservoir, if the station is in a reservoir.",
+            "nullable": true
+          },
+          "reservoirName": {
+            "type": "string",
+            "description": "The ReservoirName is a name for a reservoir, if the station is in a reservoir.",
+            "nullable": true
+          },
+          "stationTypeName": {
+            "type": "string",
+            "description": "Defines what kind of station. Examples \"Konsesjonspålagt stasjon\", \"Forvaltningsstasjon\",\"Privat, \"Ikke pålagt\", \"Annen\" or it can also be empty.",
+            "nullable": true
+          },
+          "stationStatusName": {
+            "type": "string",
+            "description": "Defines what status of station. Examples \"Aktiv\" (in eng. Active), \"Nedlagt\" (in eng. Closed down).",
+            "nullable": true
+          },
+          "drainageBasinArea": {
+            "type": "number",
+            "description": "Drainage basin area in km2",
+            "format": "double",
+            "nullable": true
+          },
+          "drainageBasinAreaNorway": {
+            "type": "number",
+            "description": "Drainage basin area inside of norway in km2",
+            "format": "double",
+            "nullable": true
+          },
+          "gradient1085": {
+            "type": "number",
+            "description": "The slope factor for the area between the 10% and the 85% of the hypsographic curve for the drainage basin",
+            "format": "double",
+            "nullable": true
+          },
+          "gradientBasin": {
+            "type": "number",
+            "description": "The total slope factor for the drainage basin",
+            "format": "double",
+            "nullable": true
+          },
+          "gradientRiver": {
+            "type": "number",
+            "description": "The river slope factor for drainage basin",
+            "format": "double",
+            "nullable": true
+          },
+          "heightMinimum": {
+            "type": "integer",
+            "description": "The height above sea level (meters) for the lowest point of the drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso10": {
+            "type": "integer",
+            "description": "Meters above sea level where 10% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso20": {
+            "type": "integer",
+            "description": "Meters above sea level where 20% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso30": {
+            "type": "integer",
+            "description": "Meters above sea level where 30% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso40": {
+            "type": "integer",
+            "description": "Meters above sea level where 40% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso50": {
+            "type": "integer",
+            "description": "Meters above sea level where 50% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso60": {
+            "type": "integer",
+            "description": "Meters above sea level where 60% of the total area of the drainage basin is below this height. (Median height)",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso70": {
+            "type": "integer",
+            "description": "Meters above sea level where 70% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso80": {
+            "type": "integer",
+            "description": "Meters above sea level where 80% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightHypso90": {
+            "type": "integer",
+            "description": "Meters above sea level where 90% of the total area of the drainage basin is below this height",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightMaximum": {
+            "type": "integer",
+            "description": "Meters above sea level for the highest point of the drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "lengthKmBasin": {
+            "type": "number",
+            "description": "The length of the drainage basin in km",
+            "format": "double",
+            "nullable": true
+          },
+          "lengthKmRiver": {
+            "type": "number",
+            "description": "The length of the river in km",
+            "format": "double",
+            "nullable": true
+          },
+          "percentAgricul": {
+            "type": "number",
+            "description": "The percentage of the drainage basin being area of agriculture",
+            "format": "double",
+            "nullable": true
+          },
+          "percentBog": {
+            "type": "number",
+            "description": "The percentage of the drainage basin being area of bog",
+            "format": "double",
+            "nullable": true
+          },
+          "percentEffBog": {
+            "type": "number",
+            "description": "The calculated/weighted bog percent, used in calculating the influence for the lakes in flood events",
+            "format": "double",
+            "nullable": true
+          },
+          "percentEffLake": {
+            "type": "number",
+            "description": "The calculated/weighted lake percent, used in calculating the influence for the lakes in flood events",
+            "format": "double",
+            "nullable": true
+          },
+          "percentForest": {
+            "type": "number",
+            "description": "The percentage of the drainage basin being area of forest",
+            "format": "double",
+            "nullable": true
+          },
+          "percentGlacier": {
+            "type": "number",
+            "description": "The percentage of the drainage basin being area of effective glacier",
+            "format": "double",
+            "nullable": true
+          },
+          "percentLake": {
+            "type": "number",
+            "description": "The percentage of the drainage basin being area of lake",
+            "format": "double",
+            "nullable": true
+          },
+          "percentMountain": {
+            "type": "number",
+            "description": "The percentage of the drainage basin being area of effective mountain",
+            "format": "double",
+            "nullable": true
+          },
+          "percentUrban": {
+            "type": "number",
+            "description": "The percentage of the drainage basin being area of effective urban",
+            "format": "double",
+            "nullable": true
+          },
+          "utmZoneGravi": {
+            "type": "integer",
+            "description": "The centre of drainage basin area Utm zone",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmEastGravi": {
+            "type": "integer",
+            "description": "The utm east coordinate for centre of drainage basin area",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmNorthGravi": {
+            "type": "integer",
+            "description": "The utm north coordinate for centre of drainage basin area",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmZoneInlet": {
+            "type": "integer",
+            "description": "The inlet Utm zone for drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmEastInlet": {
+            "type": "integer",
+            "description": "The utm east coordinate for inlet for drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmNorthInlet": {
+            "type": "integer",
+            "description": "The utm north coordinate for inlet for drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmZoneOutlet": {
+            "type": "integer",
+            "description": "The outlet Utm zone for drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmEastOutlet": {
+            "type": "integer",
+            "description": "The utm east coordinate for outlet for drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "utmNorthOutlet": {
+            "type": "integer",
+            "description": "The utm north coordinate for outlet for drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "annualRunoff": {
+            "type": "number",
+            "description": "The middle annual yearly runoff in million m3/year (for the period 1961 - 1990)",
+            "format": "double",
+            "nullable": true
+          },
+          "specificDischarge": {
+            "type": "number",
+            "description": "The specific year runoff in l/s/km2 (for the period 1961 - 1990)",
+            "format": "double",
+            "nullable": true
+          },
+          "regulationArea": {
+            "type": "number",
+            "description": "The area in km2, that is effected by regulation",
+            "format": "double",
+            "nullable": true
+          },
+          "areaReservoirs": {
+            "type": "number",
+            "description": "The total area of all reservoirs in km2",
+            "format": "double",
+            "nullable": true
+          },
+          "volumeReservoirs": {
+            "type": "number",
+            "description": "The total volume/capacity of all reservoirs in million m3",
+            "format": "double",
+            "nullable": true
+          },
+          "regulationPartReservoirs": {
+            "type": "number",
+            "description": "The ratio between total volume of yearly runoff and the total volume of reservoir capacity. If the ratio exceeds 1, the capacity of the reservoirs are larger than the total yearly runoff",
+            "format": "double",
+            "nullable": true
+          },
+          "transferAreaIn": {
+            "type": "number",
+            "description": "Area in the drainage basin that is transferred in from other drainage basin. (Given in km2)",
+            "format": "double",
+            "nullable": true
+          },
+          "transferAreaOut": {
+            "type": "number",
+            "description": "Area in the drainage basin that is regulated/transferred to other drainage basin (Given in km2)",
+            "format": "double",
+            "nullable": true
+          },
+          "reservoirAreaIn": {
+            "type": "number",
+            "description": "Area of the reservoirs that is regulated/transferred in from other drainage basins (Given in km2)",
+            "format": "double",
+            "nullable": true
+          },
+          "reservoirAreaOut": {
+            "type": "number",
+            "description": "Area of the reservoirs that is regulated/transferred out of drainage basin (Given in km2)",
+            "format": "double",
+            "nullable": true
+          },
+          "reservoirVolumeIn": {
+            "type": "number",
+            "description": "Total volume of the reservoirs that is regulated/transferred in to the drainage basin. (Given in millons m3)",
+            "format": "double",
+            "nullable": true
+          },
+          "reservoirVolumeOut": {
+            "type": "number",
+            "description": "Total volume of the reservoirs that is regulated/transferred out of drainage basin. (Given in millons m3)",
+            "format": "double",
+            "nullable": true
+          },
+          "remainingArea": {
+            "type": "number",
+            "description": "Remaining area not effected by regulation. (Given in km2) (In Norwegian \"Uregulert restfelt\")",
+            "format": "double",
+            "nullable": true
+          },
+          "numberReservoirs": {
+            "type": "integer",
+            "description": "The number of regulation reservoirs in the drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "firstYearRegulation": {
+            "type": "integer",
+            "description": "Year of first regulation in drainage basin",
+            "format": "int32",
+            "nullable": true
+          },
+          "catchmentRegTypeName": {
+            "type": "string",
+            "description": "Type of regulation. Examples \"Uregulert\" (eng. \"Not regulated\"), \"Regulert m/magasinregulering\" (eng. \"Regulated with reservoirs\")",
+            "nullable": true
+          },
+          "owner": {
+            "type": "string",
+            "description": "The owner of the station",
+            "nullable": true
+          },
+          "qNumberOfYears": {
+            "type": "integer",
+            "description": "The number of years used by calculation of the statistical return periods",
+            "format": "int32",
+            "nullable": true
+          },
+          "qStartYear": {
+            "type": "integer",
+            "description": "The start year used in calculation of the statistical return periods",
+            "format": "int32",
+            "nullable": true
+          },
+          "qEndYear": {
+            "type": "integer",
+            "description": "The end year used in calculation of the statistical return periods",
+            "format": "int32",
+            "nullable": true
+          },
+          "qm": {
+            "type": "number",
+            "description": "The mean flooding, based on daily values",
+            "format": "double",
+            "nullable": true
+          },
+          "q5": {
+            "type": "number",
+            "description": "Flood with a return period of 5 years. There is a 20% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "q10": {
+            "type": "number",
+            "description": "Flood with a return period of 10 years. There is a 10% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "q20": {
+            "type": "number",
+            "description": "Flood with a return period of 20 years. There is a 5% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "q50": {
+            "type": "number",
+            "description": "Flood with a return period of 50 years. There is a 2% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "hm": {
+            "type": "number",
+            "description": "The stage according to mean flooding, based on daily values",
+            "format": "double",
+            "nullable": true
+          },
+          "h5": {
+            "type": "number",
+            "description": "Stage according to a return period of 5 years. There is a 20% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "h10": {
+            "type": "number",
+            "description": "Stage according to a return period of 10 years. There is a 10% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "h20": {
+            "type": "number",
+            "description": "Stage according to a return period of 20 years. There is a 5% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "h50": {
+            "type": "number",
+            "description": "Stage according to a return period of 50 years. There is a 2% probability each year that a flood of this size will be exceeded",
+            "format": "double",
+            "nullable": true
+          },
+          "culQm": {
+            "type": "number",
+            "description": "The mean flooding, based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culQ5": {
+            "type": "number",
+            "description": "Flood with a return period of 5 years. There is a 20% probability each year that a flood of this size will be exceeded, based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culQ10": {
+            "type": "number",
+            "description": "Flood with a return period of 10 years. There is a 10% probability each year that a flood of this size will be exceeded, based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culQ20": {
+            "type": "number",
+            "description": "Flood with a return period of 20 years. There is a 5% probability each year that a flood of this size will be exceeded, based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culQ50": {
+            "type": "number",
+            "description": "Flood with a return period of 50 years. There is a 2% probability each year that a flood of this size will be exceeded, based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culHm": {
+            "type": "number",
+            "description": "The stage according to mean flooding, based the timestep for the observed value",
+            "format": "double",
+            "nullable": true
+          },
+          "culH5": {
+            "type": "number",
+            "description": "Stage according to a return period of 5 years. There is a 20% probability each year that a flood of this size will be exceeded,based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culH10": {
+            "type": "number",
+            "description": "Stage according to a return period of 10 years. There is a 10% probability each year that a flood of this size will be exceeded,based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culH20": {
+            "type": "number",
+            "description": "Stage according to a return period of 20 years. There is a 5% probability each year that a flood of this size will be exceeded,based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "culH50": {
+            "type": "number",
+            "description": "Stage according to a return period of 50 years. There is a 2% probability each year that a flood of this size will be exceeded,based on the timestep for the observed values",
+            "format": "double",
+            "nullable": true
+          },
+          "seriesList": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SerieShort"
+            },
+            "description": "This station contains these series\r\n            \r\nParameterName is the name og what this serie is observing\r\nParameter is the id for ths parameter\r\nVersionNo is the version of the serie.\r\nUnit is the unit the observations for this series is given in.\r\nSerieFrom is the date this serie starts observations\r\nSerieTo is is the date this serie stops observations, or can be null if active",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "StationResultObject": {
+        "type": "object",
+        "properties": {
+          "currentLink": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "apiVersion": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "license": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "queryTime": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "itemCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Station"
+            },
+            "nullable": true,
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "description": "Authorization header using the API KEY. Example: \"X-API-Key: <ApiKey>\"",
+        "name": "X-API-Key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKey": [ ]
+    }
+  ]
+}

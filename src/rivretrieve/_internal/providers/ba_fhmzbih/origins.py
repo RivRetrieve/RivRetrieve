@@ -18,14 +18,22 @@ from rivretrieve._internal.acquisition_provenance import (
     WithheldFact,
     complete_transformed_fact_universe,
 )
-from rivretrieve._internal.catalogue_origins import Evidence, Field, NativeColumn, NotPublished
+from rivretrieve._internal.catalogue_origins import (
+    Authored,
+    AuthoredValue,
+    Evidence,
+    Field,
+    FloatConversion,
+    NativeColumn,
+    NotPublished,
+)
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 STATION_CATALOGUE_ORIGINS = {
-    "provider_id": Field(NativeColumn("metadata_station_no")),
+    "provider_id": Authored(AuthoredValue("ba_fhmzbih")),
     "station_id": Field(NativeColumn("metadata_station_no")),
-    "latitude": Field(NativeColumn("metadata_station_latitude")),
-    "longitude": Field(NativeColumn("metadata_station_longitude")),
+    "latitude": Field(NativeColumn("metadata_station_latitude"), FloatConversion()),
+    "longitude": Field(NativeColumn("metadata_station_longitude"), FloatConversion()),
     "crs": NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json")),
 }
 NATIVE_TABLE_SHA256 = "abcbc2d2234ea1751d638307f89fba4cba4feca96c9cd1d77c728b87a0fea77a"

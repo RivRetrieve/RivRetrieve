@@ -1,11 +1,12 @@
-"""CatalogueOrigin ≔ Field | NotPublished | Documented | Withheld; origin gate : EnrolledProvider × OriginDeclarations × NativeTable × StationCatalog → list[Issue]."""
+"""CatalogueOrigin ≔ Field | Authored | NotPublished | Documented | Withheld; origin gate : EnrolledProvider × OriginDeclarations × NativeTable × StationCatalog → list[Issue]."""
 
 from __future__ import annotations
 
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast, final
 
 import polars as pl
 
@@ -50,13 +51,143 @@ class DocumentedValue(str):
         return super().__new__(cls, value)
 
 
+class AuthoredValue(str):
+    """An exact, non-empty provider identity authored by RivRetrieve."""
+
+    def __new__(cls, value: str) -> AuthoredValue:
+        if not isinstance(value, str):
+            raise TypeError("authored value must be a string")
+        if not value.strip():
+            raise ValueError("authored value must not be empty")
+        return super().__new__(cls, value)
+
+
+class ConversionName(str):
+    """A stable non-empty name for one native-to-canonical conversion contract."""
+
+    def __new__(cls, value: str) -> ConversionName:
+        if not isinstance(value, str):
+            raise TypeError("conversion name must be a string")
+        if not value.strip():
+            raise ValueError("conversion name must not be empty")
+        return super().__new__(cls, value)
+
+
+class FieldConversion(ABC):
+    """A typed, immutable native-field conversion invoked by the generic origin gate."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def name(self) -> ConversionName:
+        """Return the stable conversion-contract name."""
+
+    @abstractmethod
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        """Convert one native row to the declared canonical field value."""
+
+    @final
+    def __eq__(self, other: object) -> bool:
+        return type(self) is type(other) and self.name == other.name
+
+    @final
+    def __hash__(self) -> int:
+        return hash((type(self), self.name))
+
+    @final
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+class IdentityConversion(FieldConversion):
+    """Copy the declared native field without conversion."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("identity")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        del canonical_column
+        return native_row[str(native_column)]
+
+
+class FloatConversion(FieldConversion):
+    """Convert a source-neutral scalar numeric representation to float."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("float")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        del canonical_column
+        value = native_row[str(native_column)]
+        if isinstance(value, bool) or not isinstance(value, str | int | float):
+            raise ValueError("numeric field is absent")
+        return float(value)
+
+
+class StructMemberConversion(FieldConversion):
+    """Select the canonical coordinate name from a source-neutral coordinate structure."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> ConversionName:
+        return ConversionName("struct_member")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        value = native_row[str(native_column)]
+        if not isinstance(value, Mapping) or canonical_column not in {"latitude", "longitude"}:
+            raise ValueError("coordinate structure is invalid")
+        return cast("Mapping[str, object]", value)[canonical_column]
+
+
 @dataclass(frozen=True, slots=True)
 class Field:
     native_column: NativeColumn
+    conversion: FieldConversion = IdentityConversion()
 
     def __post_init__(self) -> None:
         if not isinstance(self.native_column, NativeColumn):
             raise TypeError("Field.native_column must be a NativeColumn")
+        if not isinstance(self.conversion, FieldConversion):
+            raise TypeError("Field.conversion must be a FieldConversion")
+
+
+@dataclass(frozen=True, slots=True)
+class Authored:
+    """The RivRetrieve-authored provider identity origin."""
+
+    value: AuthoredValue
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, AuthoredValue):
+            raise TypeError("Authored.value must be an AuthoredValue")
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +219,7 @@ class Documented:
             raise TypeError("Documented.evidence must be Evidence")
 
 
-type CatalogueOrigin = Field | NotPublished | Documented | Withheld
+type CatalogueOrigin = Field | Authored | NotPublished | Documented | Withheld
 type OriginDeclarations = Mapping[str, object]
 
 ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
@@ -100,13 +231,14 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("fr_hubeau"),
         ProviderId("jp_mlit"),
         ProviderId("lt_lhmt"),
+        ProviderId("no_nve"),
         ProviderId("pl_imgw"),
         ProviderId("th_thaiwater"),
         ProviderId("usgs_nwis"),
         ProviderId("za_dws"),
     }
 )
-"""The eleven providers certified by this vision. br_ana and no_nve were deliberately deferred by the 2026-08-03 human scope ruling and remain unenrolled for a separate effort ticket."""
+"""The twelve providers with complete audited catalogue origin declarations. br_ana remains explicitly deferred."""
 
 
 def validate_catalogue_origins(
@@ -115,9 +247,13 @@ def validate_catalogue_origins(
     native_table: NativeTable,
     stations: StationCatalog,
 ) -> list[Issue]:
-    """Report invalid origins, including malformed objects that bypassed form constructors."""
+    """Report invalid origins, including row loss and contradicted field declarations."""
     issues: list[Issue] = []
     native_station_id = _resolve_station_id_alignment_key(declarations, native_table, stations)
+    native_by_station: dict[object, Mapping[str, object]] = {}
+    canonical_by_station: dict[object, Mapping[str, object]] = {}
+    native_alignment_valid = True
+    canonical_alignment_valid = True
     if native_station_id is None:
         issues.append(
             Issue(
@@ -131,6 +267,65 @@ def validate_catalogue_origins(
                 provider_id=provider_id,
             )
         )
+    else:
+        station_origin = declarations["station_id"]
+        assert isinstance(station_origin, Field)
+        for row in native_table.data.iter_rows(named=True):
+            try:
+                station_id = _field_value("station_id", station_origin, row)
+            except (KeyError, TypeError, ValueError):
+                station_id = None
+            if station_id is None or station_id in native_by_station:
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.unresolvable_alignment_key",
+                        message=f"{provider_id}.station_id: native alignment identities must be non-null and unique",
+                        details={"canonical_column": "station_id"},
+                        provider_id=provider_id,
+                    )
+                )
+                native_by_station = {}
+                native_alignment_valid = False
+                break
+            native_by_station[station_id] = row
+        for row in stations.iter_rows(named=True):
+            station_id = row["station_id"]
+            if station_id is None or station_id in canonical_by_station:
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.unresolvable_alignment_key",
+                        message=f"{provider_id}.station_id: canonical alignment identities must be non-null and unique",
+                        details={"canonical_column": "station_id"},
+                        provider_id=provider_id,
+                    )
+                )
+                canonical_by_station = {}
+                canonical_alignment_valid = False
+                break
+            canonical_by_station[station_id] = row
+        if (
+            native_alignment_valid
+            and canonical_alignment_valid
+            and native_by_station.keys() != canonical_by_station.keys()
+        ):
+            missing = sorted(str(value) for value in native_by_station.keys() - canonical_by_station.keys())
+            unexpected = sorted(str(value) for value in canonical_by_station.keys() - native_by_station.keys())
+            issues.append(
+                Issue(
+                    severity="error",
+                    code="catalogue_origin.station_row_mismatch",
+                    message=f"{provider_id}.station_id: native and canonical station rows are not one-to-one",
+                    details={
+                        "canonical_column": "station_id",
+                        "missing_station_ids": missing,
+                        "unexpected_station_ids": unexpected,
+                    },
+                    provider_id=provider_id,
+                )
+            )
+
     for column in STATION_CATALOG_SCHEMA.columns:
         canonical_column = column.name
         details: dict[str, object] = {"canonical_column": canonical_column}
@@ -154,26 +349,100 @@ def validate_catalogue_origins(
                     Issue(
                         severity="error",
                         code="catalogue_origin.absent_native_column",
-                        message=(f"{provider_id}.{canonical_column}: native column '{native_column}' does not exist"),
+                        message=f"{provider_id}.{canonical_column}: native column '{native_column}' does not exist",
                         details=details,
                         provider_id=provider_id,
                     )
                 )
                 continue
-            if native_station_id is not None and _has_unpropagated_value(
-                canonical_column,
-                native_column,
-                native_station_id,
-                native_table,
-                stations,
-            ):
+            for station_id in native_by_station.keys() & canonical_by_station.keys():
+                try:
+                    expected = _field_value(
+                        canonical_column,
+                        origin,
+                        native_by_station[station_id],
+                    )
+                except (KeyError, TypeError, ValueError):
+                    issues.append(
+                        Issue(
+                            severity="error",
+                            code="catalogue_origin.field_conversion_failed",
+                            message=(
+                                f"{provider_id}.{canonical_column}: declared native field '{native_column}' "
+                                f"cannot undergo {origin.conversion.name} conversion"
+                            ),
+                            details=details,
+                            provider_id=provider_id,
+                        )
+                    )
+                    break
+                actual = canonical_by_station[station_id][canonical_column]
+                if actual != expected:
+                    unpropagated = actual is None and expected is not None
+                    issues.append(
+                        Issue(
+                            severity="error",
+                            code=(
+                                "catalogue_origin.unpropagated_value"
+                                if unpropagated
+                                else "catalogue_origin.field_value_mismatch"
+                            ),
+                            message=(
+                                f"{provider_id}.{canonical_column}: canonical value is null where native column "
+                                f"'{native_column}' has a value"
+                                if unpropagated
+                                else f"{provider_id}.{canonical_column}: emitted value does not reproduce the "
+                                f"declared native field '{native_column}' through {origin.conversion.name}"
+                            ),
+                            details=details,
+                            provider_id=provider_id,
+                        )
+                    )
+                    break
+        elif isinstance(origin, Authored):
+            if canonical_column != "provider_id":
                 issues.append(
                     Issue(
                         severity="error",
-                        code="catalogue_origin.unpropagated_value",
+                        code="catalogue_origin.authored_scope_invalid",
                         message=(
-                            f"{provider_id}.{canonical_column}: canonical value is null where native column "
-                            f"'{native_column}' has a value"
+                            f"{provider_id}.{canonical_column}: Authored origin is permitted only for provider_id"
+                        ),
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif not isinstance(getattr(origin, "value", None), AuthoredValue):
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.malformed_authored_value",
+                        message=f"{provider_id}.{canonical_column}: Authored origin must carry AuthoredValue",
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif origin.value != provider_id:
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.authored_provider_mismatch",
+                        message=(
+                            f"{provider_id}.{canonical_column}: authored value '{origin.value}' must equal "
+                            f"gate provider identity '{provider_id}'"
+                        ),
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif _has_value_other_than(stations, canonical_column, origin.value):
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.authored_value_mismatch",
+                        message=(
+                            f"{provider_id}.{canonical_column}: emitted value does not match authored value "
+                            f"'{origin.value}'"
                         ),
                         details=details,
                         provider_id=provider_id,
@@ -241,7 +510,28 @@ def validate_catalogue_origins(
                         provider_id=provider_id,
                     )
                 )
-        elif not isinstance(origin, NotPublished) or not isinstance(getattr(origin, "evidence", None), Evidence):
+        elif isinstance(origin, NotPublished):
+            if not isinstance(getattr(origin, "evidence", None), Evidence):
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.missing_evidence",
+                        message=f"{provider_id}.{canonical_column}: NotPublished origin must carry Evidence",
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+            elif _has_value_other_than(stations, canonical_column, "unknown"):
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="catalogue_origin.not_published_marker_mismatch",
+                        message=f"{provider_id}.{canonical_column}: NotPublished origin must emit only 'unknown'",
+                        details=details,
+                        provider_id=provider_id,
+                    )
+                )
+        else:
             issues.append(
                 Issue(
                     severity="error",
@@ -267,23 +557,12 @@ def enforce_catalogue_origins(
         raise FatalContractError(issues[0].message, issues=issues)
 
 
-def _has_unpropagated_value(
+def _field_value(
     canonical_column: str,
-    native_column: str,
-    native_station_id: str,
-    native_table: NativeTable,
-    stations: StationCatalog,
-) -> bool:
-    native_values = native_table.data.select(
-        pl.col(native_station_id).alias("station_id"),
-        pl.col(native_column).alias("native_value"),
-    )
-    canonical_values = stations.select(
-        pl.col("station_id"),
-        pl.col(canonical_column).alias("canonical_value"),
-    )
-    aligned = canonical_values.join(native_values, on="station_id", how="left")
-    return aligned.filter(pl.col("native_value").is_not_null() & pl.col("canonical_value").is_null()).height > 0
+    origin: Field,
+    native_row: Mapping[str, object],
+) -> object:
+    return origin.conversion.apply(canonical_column, origin.native_column, native_row)
 
 
 def _resolve_station_id_alignment_key(
@@ -303,7 +582,7 @@ def _resolve_station_id_alignment_key(
 def _has_value_other_than(
     stations: StationCatalog,
     canonical_column: str,
-    documented_value: DocumentedValue,
+    documented_value: str,
 ) -> bool:
     mismatches = stations.select(
         (pl.col(canonical_column) != pl.lit(str(documented_value))).fill_null(True).alias("mismatch")

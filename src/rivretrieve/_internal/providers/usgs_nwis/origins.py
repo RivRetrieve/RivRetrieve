@@ -1,5 +1,6 @@
 """USGS provenance : ∅ → OriginDeclarations × AcquisitionProvenance (pure)."""
 
+from collections.abc import Mapping
 from datetime import datetime
 
 from rivretrieve._internal import catalogue_origins
@@ -19,12 +20,53 @@ from rivretrieve._internal.acquisition_provenance import (
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
+_DATUM_TO_CRS = {
+    "NAD27": "EPSG:4267",
+    "NAD83": "EPSG:4269",
+    "OLDHI": "EPSG:4135",
+    "WGS72": "EPSG:4322",
+    "WGS84": "EPSG:4326",
+}
+
+
+def crs_from_datum(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("invalid USGS coordinate datum")
+    return _DATUM_TO_CRS.get(value, "unknown")
+
+
+class DatumToCrsConversion(catalogue_origins.FieldConversion):
+    """Map a USGS datum code to the canonical CRS vocabulary."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> catalogue_origins.ConversionName:
+        return catalogue_origins.ConversionName("usgs_nwis.datum_to_crs")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: catalogue_origins.NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        if canonical_column != "crs":
+            raise ValueError("USGS datum conversion is only defined for CRS")
+        if native_column != "dec_coord_datum_cd":
+            raise ValueError("USGS datum conversion requires native field 'dec_coord_datum_cd'")
+        return crs_from_datum(native_row[str(native_column)])
+
+
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("site_no")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("site_no")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_lat_va")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_long_va")),
-    "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("dec_lat_va"), catalogue_origins.FloatConversion()
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("dec_long_va"), catalogue_origins.FloatConversion()
+    ),
+    "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd"), DatumToCrsConversion()),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
 NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"

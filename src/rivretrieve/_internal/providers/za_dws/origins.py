@@ -1,5 +1,7 @@
 """South Africa provenance : ∅ → OriginDeclarations × AcquisitionProvenance (pure)."""
 
+import re
+from collections.abc import Mapping
 from datetime import datetime
 
 from rivretrieve._internal import catalogue_origins
@@ -18,14 +20,64 @@ from rivretrieve._internal.acquisition_provenance import (
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
+_UNSIGNED_DMS = re.compile(r"\d{2}:\d{2}:\d{2}")
+
+
+def unsigned_dms_coordinate(value: object, canonical_column: str) -> float:
+    if not isinstance(value, str) or _UNSIGNED_DMS.fullmatch(value) is None:
+        raise ValueError("invalid unsigned DMS coordinate")
+    degrees, minutes, seconds = map(float, value.split(":"))
+    magnitude = degrees + minutes / 60.0 + seconds / 3600.0
+    if canonical_column == "latitude":
+        return -magnitude
+    if canonical_column == "longitude":
+        return magnitude
+    raise ValueError("DWS DMS conversion is only defined for coordinates")
+
+
+def unsigned_dms_coordinates(latitude_dms: object, longitude_dms: object) -> tuple[float, float]:
+    return (
+        unsigned_dms_coordinate(latitude_dms, "latitude"),
+        unsigned_dms_coordinate(longitude_dms, "longitude"),
+    )
+
+
+class UnsignedDmsConversion(catalogue_origins.FieldConversion):
+    """Apply DWS's provider-owned southern/eastern sign policy to unsigned DMS."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> catalogue_origins.ConversionName:
+        return catalogue_origins.ConversionName("za_dws.unsigned_dms")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: catalogue_origins.NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        expected_native_column = {
+            "latitude": "Latitude (dd:mm:ss)",
+            "longitude": "Longitude (dd:mm:ss)",
+        }.get(canonical_column)
+        if expected_native_column is None:
+            raise ValueError("DWS DMS conversion is only defined for coordinates")
+        if native_column != expected_native_column:
+            raise ValueError(f"DWS {canonical_column} conversion requires native field {expected_native_column!r}")
+        return unsigned_dms_coordinate(native_row[str(native_column)], canonical_column)
+
+
 CRS_EVIDENCE_URL = "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf"
 CRS_EVIDENCE_EXPLANATION = "The cited River PDF's own two-line coordinate header reads Latitude / dd:mm:ss and Longitude / dd:mm:ss; this names a representation format but never a datum. A case-insensitive review of all eight River PDFs found zero datum, WGS, ellipsoid, geodetic, projection, or EPSG occurrences. HyCatalogue.aspx is only a link index with no prose or coordinate header and is not CRS evidence."
 DMS_SIGN_CONVENTION = "DWS publishes unsigned DMS magnitudes with no leading sign, hemisphere marker, or hemisphere note; the build applies a southern negative latitude sign and an eastern positive longitude sign that the source does not carry."
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("Station")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("za_dws")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("Station")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("Latitude (dd:mm:ss)")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("Longitude (dd:mm:ss)")),
+    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("Latitude (dd:mm:ss)"), UnsignedDmsConversion()),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("Longitude (dd:mm:ss)"), UnsignedDmsConversion()
+    ),
     "crs": catalogue_origins.NotPublished(catalogue_origins.Evidence(CRS_EVIDENCE_URL)),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet"

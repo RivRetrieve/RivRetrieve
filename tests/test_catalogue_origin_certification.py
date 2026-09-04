@@ -22,13 +22,19 @@ import requests
 from rivretrieve._internal import discovery, transport
 from rivretrieve._internal.catalogue_origins import (
     ORIGIN_GATE_ENROLLED_PROVIDERS,
+    Authored,
+    AuthoredValue,
     CatalogueOrigin,
     Documented,
     DocumentedValue,
     Evidence,
     Field,
+    FieldConversion,
+    FloatConversion,
+    IdentityConversion,
     NativeColumn,
     NotPublished,
+    StructMemberConversion,
     Withheld,
     enforce_catalogue_origins,
     validate_catalogue_origins,
@@ -37,12 +43,16 @@ from rivretrieve._internal.catalogues.native import NativeTable, read_native_tab
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
+from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
+from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
+from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-DEFERRED_PROVIDERS = frozenset({ProviderId("br_ana"), ProviderId("no_nve")})
+DEFERRED_PROVIDERS = frozenset({ProviderId("br_ana")})
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +74,7 @@ class ProviderAdapter:
     def origins_argument(
         self, replacement: Mapping[str, Mapping[str, CatalogueOrigin]] | None = None
     ) -> Mapping[str, object]:
-        maps = {case.identity: dict(case.declarations) for case in self.cases}
+        maps: dict[str, Mapping[str, CatalogueOrigin]] = {case.identity: dict(case.declarations) for case in self.cases}
         if replacement is not None:
             maps.update(replacement)
         if self.provider_id == ProviderId("fr_hubeau"):
@@ -78,7 +88,9 @@ def _module(provider: str, leaf: str) -> ModuleType:
 
 def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapter:
     generator = _module(provider, "generate_catalogue")
-    native_path = Path(generator.__file__).parent / "catalogue/native.parquet"
+    module_path = generator.__file__
+    assert module_path is not None
+    native_path = Path(module_path).parent / "catalogue/native.parquet"
     return ProviderAdapter(
         provider_id=ProviderId(provider),
         native_path=native_path,
@@ -104,6 +116,7 @@ ADAPTERS = {
         "cz_chmi",
         "jp_mlit",
         "lt_lhmt",
+        "no_nve",
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",
@@ -152,8 +165,11 @@ def _case_frames(
 
 
 def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, CatalogueOrigin]]:
-    def field(name: str) -> Field:
-        return Field(NativeColumn(name))
+    def field(name: str, conversion: FieldConversion | None = None) -> Field:
+        return Field(NativeColumn(name), IdentityConversion() if conversion is None else conversion)
+
+    def authored(value: str) -> Authored:
+        return Authored(AuthoredValue(value))
 
     def unpublished(url: str) -> NotPublished:
         return NotPublished(Evidence(url))
@@ -166,91 +182,98 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
 
     return {
         (ProviderId("ba_fhmzbih"), "stations"): {
-            "provider_id": field("metadata_station_no"),
+            "provider_id": authored("ba_fhmzbih"),
             "station_id": field("metadata_station_no"),
-            "latitude": field("metadata_station_latitude"),
-            "longitude": field("metadata_station_longitude"),
+            "latitude": field("metadata_station_latitude", FloatConversion()),
+            "longitude": field("metadata_station_longitude", FloatConversion()),
             "crs": unpublished("https://vodostaji.voda.ba/data/internet/stations/stations.json"),
         },
         (ProviderId("ca_eccc"), "stations"): {
-            "provider_id": field("STATION_NUMBER"),
+            "provider_id": authored("ca_eccc"),
             "station_id": field("STATION_NUMBER"),
-            "latitude": field("geometry.coordinates[1]"),
-            "longitude": field("geometry.coordinates[0]"),
+            "latitude": field("geometry.coordinates[1]", FloatConversion()),
+            "longitude": field("geometry.coordinates[0]", FloatConversion()),
             "crs": documented("https://api.weather.gc.ca/collections/hydrometric-stations?f=json"),
         },
         (ProviderId("ch_foen"), "stations"): {
-            "provider_id": field("name"),
+            "provider_id": authored("ch_foen"),
             "station_id": field("name"),
-            "latitude": field("details.lat"),
-            "longitude": field("details.lon"),
+            "latitude": field("details.lat", FloatConversion()),
+            "longitude": field("details.lon", FloatConversion()),
             "crs": unpublished("https://api.existenz.ch/#hydro"),
         },
         (ProviderId("cz_chmi"), "stations"): {
-            "provider_id": field("objID"),
+            "provider_id": authored("cz_chmi"),
             "station_id": field("objID"),
-            "latitude": field("GEOGR1"),
-            "longitude": field("GEOGR2"),
+            "latitude": field("GEOGR1", FloatConversion()),
+            "longitude": field("GEOGR2", FloatConversion()),
             "crs": unpublished("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf"),
         },
         (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): {
-            "provider_id": field("code_station"),
+            "provider_id": authored("fr_hubeau"),
             "station_id": field("code_station"),
-            "latitude": field("latitude_station"),
-            "longitude": field("longitude_station"),
+            "latitude": field("latitude_station", HydrometryCoordinateConversion()),
+            "longitude": field("longitude_station", HydrometryCoordinateConversion()),
             "crs": documented(
                 "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1011000101&format=geojson"
             ),
         },
         (ProviderId("fr_hubeau"), "temperature/station"): {
-            "provider_id": field("code_station"),
+            "provider_id": authored("fr_hubeau"),
             "station_id": field("code_station"),
-            "latitude": field("latitude"),
-            "longitude": field("longitude"),
+            "latitude": field("latitude", FloatConversion()),
+            "longitude": field("longitude", FloatConversion()),
             "crs": documented("https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json"),
         },
         (ProviderId("jp_mlit"), "stations"): {
-            "provider_id": field("観測所記号"),
+            "provider_id": authored("jp_mlit"),
             "station_id": field("観測所記号"),
-            "latitude": field("世界測地系"),
-            "longitude": field("世界測地系"),
+            "latitude": field("世界測地系", WorldGeodeticDmsConversion()),
+            "longitude": field("世界測地系", WorldGeodeticDmsConversion()),
             "crs": unpublished("http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"),
         },
         (ProviderId("lt_lhmt"), "stations"): {
-            "provider_id": field("code"),
+            "provider_id": authored("lt_lhmt"),
             "station_id": field("code"),
-            "latitude": field("coordinates"),
-            "longitude": field("coordinates"),
+            "latitude": field("coordinates", StructMemberConversion()),
+            "longitude": field("coordinates", StructMemberConversion()),
             "crs": documented("https://api.meteo.lt/"),
         },
+        (ProviderId("no_nve"), "stations"): {
+            "provider_id": authored("no_nve"),
+            "station_id": field("stationId"),
+            "latitude": field("latitude", FloatConversion()),
+            "longitude": field("longitude", FloatConversion()),
+            "crs": unpublished("https://hydapi.nve.no/swagger/v1/swagger.json"),
+        },
         (ProviderId("pl_imgw"), "stations"): {
-            "provider_id": field("gauge_id"),
+            "provider_id": authored("pl_imgw"),
             "station_id": field("gauge_id"),
-            "latitude": field("latitude"),
-            "longitude": field("longitude"),
+            "latitude": field("latitude", FloatConversion()),
+            "longitude": field("longitude", FloatConversion()),
             "crs": withheld(),
         },
         (ProviderId("th_thaiwater"), "stations"): {
-            "provider_id": field("station.id"),
+            "provider_id": authored("th_thaiwater"),
             "station_id": field("station.id"),
-            "latitude": field("station.tele_station_lat"),
-            "longitude": field("station.tele_station_long"),
+            "latitude": field("station.tele_station_lat", FloatConversion()),
+            "longitude": field("station.tele_station_long", FloatConversion()),
             "crs": unpublished(
                 "https://standard.thaiwater.net/docs/การจัดทำมาตรฐานน้ำ-ระยะ/ข้อมูลอ้างอิง-ข้อมูลอ้า/การระบุพิกัดตำแหน่ง/"
             ),
         },
         (ProviderId("usgs_nwis"), "stations"): {
-            "provider_id": field("site_no"),
+            "provider_id": authored("usgs_nwis"),
             "station_id": field("site_no"),
-            "latitude": field("dec_lat_va"),
-            "longitude": field("dec_long_va"),
-            "crs": field("dec_coord_datum_cd"),
+            "latitude": field("dec_lat_va", FloatConversion()),
+            "longitude": field("dec_long_va", FloatConversion()),
+            "crs": field("dec_coord_datum_cd", DatumToCrsConversion()),
         },
         (ProviderId("za_dws"), "stations"): {
-            "provider_id": field("Station"),
+            "provider_id": authored("za_dws"),
             "station_id": field("Station"),
-            "latitude": field("Latitude (dd:mm:ss)"),
-            "longitude": field("Longitude (dd:mm:ss)"),
+            "latitude": field("Latitude (dd:mm:ss)", UnsignedDmsConversion()),
+            "longitude": field("Longitude (dd:mm:ss)", UnsignedDmsConversion()),
             "crs": unpublished(
                 "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf"
             ),
@@ -264,7 +287,7 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
 
     assert frozenset(ADAPTERS) == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered - frozenset(ADAPTERS) == DEFERRED_PROVIDERS, (
-        "br_ana and no_nve must remain registered and BUILDING because neither has a committed full native input"
+        "br_ana must remain registered and BUILDING until it has a committed full native input"
     )
     assert not (DEFERRED_PROVIDERS & ORIGIN_GATE_ENROLLED_PROVIDERS)
     assert all(adapter.native_path.is_file() for adapter in ADAPTERS.values())
@@ -272,7 +295,7 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
     assert {
         (adapter.provider_id, case.identity): case.declarations for adapter, case in CASES
     } == _expected_declarations()
-    assert len(CASES) == 12
+    assert len(CASES) == 13
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
 
@@ -396,7 +419,7 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
     unrecorded = {row["provider_id"] for row in receipts if row["status_record"] == "not_recorded"}
     assert unrecorded == {"ba_fhmzbih", "pl_imgw", "th_thaiwater"}
     local = {row["provider_id"] for row in receipts if row["capture_path"] is not None}
-    assert local == {"ba_fhmzbih", "ch_foen", "cz_chmi", "jp_mlit", "pl_imgw", "th_thaiwater"}
+    assert local == {"ba_fhmzbih", "ch_foen", "cz_chmi", "jp_mlit", "no_nve", "pl_imgw", "th_thaiwater"}
     assert [row["provider_id"] for row in receipts if row["capture_path"] is None] == ["za_dws"]
 
 
@@ -462,10 +485,22 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("fr_hubeau"), "temperature/station"): (869, "EPSG:4326"),
     (ProviderId("jp_mlit"), "stations"): (1_023, "unknown"),
     (ProviderId("lt_lhmt"), "stations"): (97, "EPSG:4326"),
+    (ProviderId("no_nve"), "stations"): (4_902, "unknown"),
     (ProviderId("pl_imgw"), "stations"): (1_301, "unknown"),
     (ProviderId("th_thaiwater"), "stations"): (825, "unknown"),
     (ProviderId("za_dws"), "stations"): (2_905, "unknown"),
 }
+
+
+def test_france_provider_owned_converter_refuses_a_swapped_existing_native_column() -> None:
+    adapter = ADAPTERS[ProviderId("fr_hubeau")]
+    native = read_native_table(adapter.native_path)
+    contradicted = dict(_france_origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS)
+    contradicted["latitude"] = Field(NativeColumn("longitude_station"), HydrometryCoordinateConversion())
+    origins = adapter.origins_argument({"hydrometrie/referentiel/stations": contradicted})
+
+    with pytest.raises(FatalContractError, match="cannot undergo fr_hubeau.projection_31_axis_correction"):
+        _build(adapter, native, origins)
 
 
 @pytest.mark.parametrize(
@@ -506,7 +541,7 @@ def test_real_build_crs_semantics_are_complete_and_reviewed(adapter: ProviderAda
 
 
 def test_not_published_and_documented_count_totals_are_pinned() -> None:
-    assert sum(count for (_, _), (count, value) in EXPECTED_CRS_COUNTS.items() if value == "unknown") == 7_191
+    assert sum(count for (_, _), (count, value) in EXPECTED_CRS_COUNTS.items() if value == "unknown") == 12_093
     assert 6_454 + 869 == 7_323
 
 

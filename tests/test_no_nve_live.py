@@ -14,7 +14,7 @@ import polars as pl
 import pytest
 
 import rivretrieve as rr
-from rivretrieve._internal.discovery import EmptySelectionError
+import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     ObservationRequest,
@@ -259,13 +259,35 @@ def test_an_empty_series_parses_to_no_rows_and_one_missing_data_issue() -> None:
     assert issue.severity == "warning"
 
 
-def test_norway_stays_publicly_unselectable_until_its_catalogue_is_certified() -> None:
+def test_norway_observation_path_is_reachable_from_public_selection() -> None:
     assert _PROVIDER in rr.providers().get_column("provider_id").to_list()
-    selection = rr.find(provider=_PROVIDER)
-    assert selection.series == ()
-    with pytest.raises(EmptySelectionError) as error:
-        rr.fetch(selection, start="2025-07-10", end="2025-07-12")
-    assert "no_nve" in str(error.value)
+    selection = rr.find(provider=_PROVIDER, station=_STATION, product="stage_daily_mean")
+    assert len(selection.series) == 1
+    assert (selection.series[0].provider_id, selection.series[0].station_id, selection.series[0].product_id) == (
+        "no_nve",
+        _STATION,
+        "stage_daily_mean",
+    )
+
+
+def test_public_selected_edge_reaches_recorded_observation_with_credential(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NVE_API_KEY", _SENTINEL)
+    selection = rr.find(provider=_PROVIDER, station=_STATION, product="stage_daily_mean")
+    replay = ReplayTransport(
+        (read_recording(_recording_path(_STATION, ProductId("stage_daily_mean"), "2025-07-08_2025-07-14-eod")),)
+    )
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+
+    result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", on_issue="ignore")
+
+    assert result.data.height == 3
+    assert set(result.data["station_id"]) == {_STATION}
+    assert set(result.data["product_id"]) == {"stage_daily_mean"}
+    assert _SENTINEL not in repr(result)
 
 
 def test_a_bare_date_public_request_renders_an_end_of_day_instant_the_source_accepts() -> None:

@@ -47,17 +47,27 @@ requested), source table
 **Origin**:
 How one [[provider]] fills one catalogue column. Declared per provider rather than per
 column, so the same canonical column is filled one way by one source and left empty by
-another. It takes one of four forms: a column of that provider's [[native table]]; a
-[[documented]] constant; the statement that this source publishes nothing for that
-column, carrying [[evidence]]; or [[native-only]]. Every canonical column carries one for
-every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled provider is explicitly
-outside origin certification rather than treated as compliant. The ways to breach it are
-an undeclared column, an origin naming a native column that was never fetched, a null where
-the native column held a value, a documented constant differing from the emitted value,
-and a documented or not-published claim carrying no evidence. Each fails the build rather
-than shipping.
+another. It takes one of five forms: a column of that provider's [[native table]], with a
+named typed conversion where needed; an [[authored]] provider identity; a [[documented]]
+constant; the evidenced statement that this source publishes nothing for that column; or
+[[native-only]]. Source-specific converters and source vocabulary stay in the provider
+module and are reused by its generator; the generic gate only invokes the conversion
+interface. Every canonical column carries one for every provider in
+`ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled provider is explicitly outside origin
+certification rather than treated as compliant. Missing declarations or rows, extra rows,
+absent native fields, conversion disagreements, invalid authored identity, contradicted
+constants, unevidenced claims, and non-unknown values under `NotPublished` each fail the
+build rather than shipping.
 _Avoid_: mapping, provenance (which names the receipt travelling with a result, not the
 per-column declaration), nullable
+
+**Authored**:
+The [[origin]] used only for canonical `provider_id`, which RivRetrieve owns rather than
+copies from a source. Its exact value and every emitted row must equal the provider
+identity supplied to the origin gate. It cannot stand in for source [[evidence]] on any
+other column.
+_Avoid_: hard-coded, field
+
 
 **Native-only**:
 The [[origin]] for a column this source does publish and we decline to promote, because

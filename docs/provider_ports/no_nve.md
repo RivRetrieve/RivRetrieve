@@ -54,9 +54,36 @@ records station `103.3.0` publishing water temperature at resolution 60 with `me
 (the active station list of 2026-09-03 says the same of its resolution 1440 series), so the check is
 not decorative. The guard is deliberate: a request that includes such a series fails the whole result
 rather than returning the other products with an issue. That is the doctrine (a module dies rather
-than guess), and there is no per-provider isolation point. Per-station product unavailability is a
-catalogue fact that the certified catalogue owned by
-[issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90) must express.
+than guess), and there is no per-provider isolation point. Catalogue availability is narrower:
+the certified native-table build records whether the published parameter-resolution pair exists. It
+does not reinterpret a method or unit contradiction as pair unavailability; the observation parser
+retains authority over that separate response contract.
+
+## Station catalogue acquisition
+
+The certified station catalogue comes from one authorized campaign on 2026-09-04. It issued exactly
+`Stations?Active=1` and `Stations?Active=0`. The complete response bytes are retained as repository audit
+evidence outside the wheel. `Active=1` is the all-station mode. `Active=0` is the active-only mode: every
+returned row is marked `Aktiv`, and every one is also present byte-semantically unchanged in the
+all-station response. The two responses contained 4,902 and 1,893 rows, leaving 4,902 distinct station
+identities with no within-response duplicates. These counts describe this capture. They are not acceptance
+thresholds for a future refresh.
+
+Materialization verifies both envelopes, their `itemCount`, every 98-field station object, every nested
+`seriesList` and `resolutionList` member, raw byte identities, and the attested counts. Identical overlap is
+collapsed. Rows are sorted by exact `stationId`. Each row uses the earliest retrieval instant of a response
+that contained it. Any differing overlap, duplicate identity, malformed member, missing coordinate, or
+unaccounted row refuses the materialization.
+
+The public OpenAPI schema was captured separately and reviewed. It documents `latitude` and `longitude`
+but no coordinate reference system for them. The canonical CRS therefore remains `unknown`; it is not
+inferred from Norway or from the UTM zone-33 fields that the same station object also publishes.
+
+HydAPI publishes `serieFrom` and `serieTo` per series version and `dataFromTime` and `dataToTime` per
+resolution member. A station-product edge can have several such members. The source does not publish one
+edge-level period, and choosing a minimum, maximum, or version would add RivRetrieve judgement. These
+fields remain intact in the native table. Canonical `published_record_start_date` and
+`published_record_end_date` therefore remain null rather than presenting an inferred coverage period.
 
 ## Time semantics
 
@@ -135,14 +162,20 @@ capture ends in the parse refusal the recording exists to prove.
 
 ## Packaged catalogue status
 
-Unchanged by this port. `no_nve` is withheld from certified catalogue generation pending the
-credentialed native acquisition owned by
-[issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90), so the packaged catalogue emits
-empty product, station, and station-product tables and the provider stays publicly unselectable. The
-adapter is nevertheless complete and proven; `rr.find(provider="no_nve", …)` returns an empty
-selection and `rr.fetch` reports the reason before any network access. See
-[`../catalogue-provenance.md`](../catalogue-provenance.md) for the maintenance command and the
-certification boundary.
+The packaged catalogue is certified from the committed complete station capture. It exposes NVE
+stations, the nine declared products, and every station-product edge through public discovery. A
+matching published `(parameter, resTime)` pair establishes catalogue availability. A complete
+`seriesList` without that pair establishes unavailability.
+
+Availability at this layer does not certify every observation response. HydAPI also publishes method
+and unit on the selected series. The observation parser checks those values against the canonical
+product and refuses a contradiction rather than relabelling the source response. Thus a pair-compatible
+edge remains publicly selectable even when a later response supplies a method or unit that cannot be
+parsed as that canonical product.
+
+`rr.find(provider="no_nve", …)` returns matching certified edges. `rr.fetch` then requires the scoped
+credential and applies the observation-path contract. See
+[`../catalogue-provenance.md`](../catalogue-provenance.md) for catalogue evidence and maintenance.
 
 ## Engine friction
 

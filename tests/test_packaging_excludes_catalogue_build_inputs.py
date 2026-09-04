@@ -20,6 +20,18 @@ def test_wheel_excludes_catalogue_build_inputs(tmp_path: Path) -> None:
     assert len(wheels) == 1
 
     with ZipFile(wheels[0]) as wheel:
-        native_inputs = sorted(name for name in wheel.namelist() if name.endswith("/catalogue/native.parquet"))
+        names = wheel.namelist()
+        native_inputs = sorted(name for name in names if name.endswith("/catalogue/native.parquet"))
+        forbidden = [
+            name
+            for name in names
+            if "no_nve_stations_active_" in name
+            or "no_nve_station_catalogue_capture" in name
+            or "no_nve_swagger" in name
+            or name.endswith("/.env")
+        ]
+        payload = b"".join(wheel.read(name) for name in names)
 
     assert native_inputs == []
+    assert forbidden == []
+    assert b"NVE_API_KEY=" not in payload

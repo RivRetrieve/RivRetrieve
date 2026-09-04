@@ -16,15 +16,24 @@ from rivretrieve._internal.acquisition_provenance import (
     Transformation,
     complete_transformed_fact_universe,
 )
-from rivretrieve._internal.catalogue_origins import Documented, DocumentedValue, Evidence, Field, NativeColumn
+from rivretrieve._internal.catalogue_origins import (
+    Authored,
+    AuthoredValue,
+    Documented,
+    DocumentedValue,
+    Evidence,
+    Field,
+    FloatConversion,
+    NativeColumn,
+)
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 CRS_EVIDENCE_URL = "https://api.weather.gc.ca/collections/hydrometric-stations?f=json"
 STATION_CATALOGUE_ORIGINS = {
-    "provider_id": Field(NativeColumn("STATION_NUMBER")),
+    "provider_id": Authored(AuthoredValue("ca_eccc")),
     "station_id": Field(NativeColumn("STATION_NUMBER")),
-    "latitude": Field(NativeColumn("geometry.coordinates[1]")),
-    "longitude": Field(NativeColumn("geometry.coordinates[0]")),
+    "latitude": Field(NativeColumn("geometry.coordinates[1]"), FloatConversion()),
+    "longitude": Field(NativeColumn("geometry.coordinates[0]"), FloatConversion()),
     "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(CRS_EVIDENCE_URL)),
 }
 NATIVE_TABLE_SHA256 = "2f451d5f088b147f5dc81d6b95d124d9fd7f9c5e3e671998b3213a708028f173"

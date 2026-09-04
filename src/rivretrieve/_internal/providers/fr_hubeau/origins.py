@@ -1,5 +1,6 @@
 """France authority : ∅ → EndpointOrigins × AcquisitionProvenance (pure)."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from types import MappingProxyType
 
@@ -22,16 +23,84 @@ from rivretrieve._internal.acquisition_provenance import (
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
+CODE_PROJECTION_31_AXIS_TRANSPOSITION = MappingProxyType(
+    {"latitude": "longitude_station", "longitude": "latitude_station"}
+)
+CODE_PROJECTION_31_METROPOLITAN_BOUNDS = MappingProxyType(
+    {"latitude": (42.4174, 49.989435), "longitude": (-0.616424, 5.593353)}
+)
+
+
+class Projection31PreconditionError(ValueError):
+    """Projection-31 source columns do not have the evidenced transposition signature."""
+
+
+class Projection31BoundsError(ValueError):
+    """Corrected projection-31 coordinates remain outside evidenced bounds."""
+
+
+def hydrometry_coordinates(native_row: Mapping[str, object]) -> tuple[object, object]:
+    latitude = native_row["latitude_station"]
+    longitude = native_row["longitude_station"]
+    if native_row["code_projection"] != 31:
+        return latitude, longitude
+    if native_row["coordonnee_x_station"] != latitude or native_row["coordonnee_y_station"] != longitude:
+        raise Projection31PreconditionError
+    corrected_latitude = longitude
+    corrected_longitude = latitude
+    latitude_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["latitude"]
+    longitude_bounds = CODE_PROJECTION_31_METROPOLITAN_BOUNDS["longitude"]
+    if not (
+        isinstance(corrected_latitude, int | float)
+        and isinstance(corrected_longitude, int | float)
+        and latitude_bounds[0] <= corrected_latitude <= latitude_bounds[1]
+        and longitude_bounds[0] <= corrected_longitude <= longitude_bounds[1]
+    ):
+        raise Projection31BoundsError
+    return corrected_latitude, corrected_longitude
+
+
+class HydrometryCoordinateConversion(catalogue_origins.FieldConversion):
+    """Apply France's evidenced projection-31 axis correction to one coordinate."""
+
+    __slots__ = ()
+
+    @property
+    def name(self) -> catalogue_origins.ConversionName:
+        return catalogue_origins.ConversionName("fr_hubeau.projection_31_axis_correction")
+
+    def apply(
+        self,
+        canonical_column: str,
+        native_column: catalogue_origins.NativeColumn,
+        native_row: Mapping[str, object],
+    ) -> object:
+        expected_native_column = {
+            "latitude": "latitude_station",
+            "longitude": "longitude_station",
+        }.get(canonical_column)
+        if expected_native_column is None:
+            raise ValueError("Hubeau coordinate conversion is only defined for coordinates")
+        if native_column != expected_native_column:
+            raise ValueError(f"Hubeau {canonical_column} conversion requires native field {expected_native_column!r}")
+        latitude, longitude = hydrometry_coordinates(native_row)
+        return latitude if canonical_column == "latitude" else longitude
+
+
 CRS_EVIDENCE_URL = (
     "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1011000101&format=geojson"
 )
 TEMPERATURE_CRS_EVIDENCE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json"
 
 HYDROMETRY_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("fr_hubeau")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("latitude_station")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("longitude_station")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("latitude_station"), HydrometryCoordinateConversion()
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("longitude_station"), HydrometryCoordinateConversion()
+    ),
     "crs": catalogue_origins.Documented(
         catalogue_origins.DocumentedValue("EPSG:4326"),
         catalogue_origins.Evidence(CRS_EVIDENCE_URL),
@@ -39,10 +108,14 @@ HYDROMETRY_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigi
 }
 
 TEMPERATURE_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
-    "provider_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("fr_hubeau")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("code_station")),
-    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("latitude")),
-    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("longitude")),
+    "latitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("latitude"), catalogue_origins.FloatConversion()
+    ),
+    "longitude": catalogue_origins.Field(
+        catalogue_origins.NativeColumn("longitude"), catalogue_origins.FloatConversion()
+    ),
     "crs": catalogue_origins.Documented(
         catalogue_origins.DocumentedValue("EPSG:4326"),
         catalogue_origins.Evidence(TEMPERATURE_CRS_EVIDENCE_URL),
@@ -55,14 +128,6 @@ FRANCE_ORIGIN_DECLARATIONS = MappingProxyType(
         "temperature/station": TEMPERATURE_STATION_CATALOGUE_ORIGINS,
     }
 )
-
-CODE_PROJECTION_31_AXIS_TRANSPOSITION = MappingProxyType(
-    {"latitude": "longitude_station", "longitude": "latitude_station"}
-)
-CODE_PROJECTION_31_METROPOLITAN_BOUNDS = MappingProxyType(
-    {"latitude": (42.4174, 49.989435), "longitude": (-0.616424, 5.593353)}
-)
-
 
 NATIVE_TABLE_SHA256 = "4ff9439d0abd7f479d17b2c608d923d7834ea3df084ed08a3af9cec1d35ab687"
 NATIVE_TABLE_BYTE_SIZE = 1049930

@@ -19,7 +19,14 @@ from rivretrieve._internal.acquisition_provenance import (
     Transformation,
     WithheldFact,
 )
-from rivretrieve._internal.catalogue_origins import Field, NativeColumn, Withheld
+from rivretrieve._internal.catalogue_origins import (
+    Authored,
+    AuthoredValue,
+    Field,
+    FloatConversion,
+    NativeColumn,
+    Withheld,
+)
 from rivretrieve._internal.issues import FatalContractError
 
 CRS_EVIDENCE_URL = "https://danepubliczne.imgw.pl/pl/apiinfo"
@@ -31,10 +38,10 @@ STATION_CSV_URL = (
 )
 
 STATION_CATALOGUE_ORIGINS = {
-    "provider_id": Field(NativeColumn("gauge_id")),
+    "provider_id": Authored(AuthoredValue("pl_imgw")),
     "station_id": Field(NativeColumn("gauge_id")),
-    "latitude": Field(NativeColumn("latitude")),
-    "longitude": Field(NativeColumn("longitude")),
+    "latitude": Field(NativeColumn("latitude"), FloatConversion()),
+    "longitude": Field(NativeColumn("longitude"), FloatConversion()),
     "crs": Withheld(),
 }
 

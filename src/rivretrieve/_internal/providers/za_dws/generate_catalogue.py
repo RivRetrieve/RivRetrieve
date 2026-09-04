@@ -43,6 +43,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.za_dws.origins import unsigned_dms_coordinates
 
 PROVIDER_ID = ProviderId("za_dws")
 PROVIDER_NAME = "Department of Water and Sanitation — Verified Hydrology (DWS, South Africa)"
@@ -73,7 +74,6 @@ _STATION_PATTERN = re.compile(
 )
 
 _PDF_LINK_PATTERN = re.compile(r'href=["\']([^"\']*_River[^"\']*\.pdf)["\']', re.IGNORECASE)
-_DMS_PATTERN = re.compile(r"\d{2}:\d{2}:\d{2}")
 
 NATIVE_SOURCE_SCHEMA = pl.Schema(
     {
@@ -723,19 +723,9 @@ def convert_unsigned_dms_coordinates(
     # hemisphere note. This single representation boundary applies a southern negative
     # latitude sign and an eastern positive longitude sign that the source does not carry.
     try:
-        if _DMS_PATTERN.fullmatch(latitude_dms) is None or _DMS_PATTERN.fullmatch(longitude_dms) is None:
-            raise ValueError
-        latitude_parts = latitude_dms.split(":")
-        longitude_parts = longitude_dms.split(":")
-        if len(latitude_parts) != 3 or len(longitude_parts) != 3:
-            raise ValueError
-        latitude_degrees, latitude_minutes, latitude_seconds = map(float, latitude_parts)
-        longitude_degrees, longitude_minutes, longitude_seconds = map(float, longitude_parts)
+        return unsigned_dms_coordinates(latitude_dms, longitude_dms)
     except ValueError as exc:
         raise FatalContractError(f"za_dws station {station_id} has invalid DMS coordinates") from exc
-    latitude_magnitude = latitude_degrees + latitude_minutes / 60.0 + latitude_seconds / 3600.0
-    longitude_magnitude = longitude_degrees + longitude_minutes / 60.0 + longitude_seconds / 3600.0
-    return -latitude_magnitude, longitude_magnitude
 
 
 # ---------------------------------------------------------------------------

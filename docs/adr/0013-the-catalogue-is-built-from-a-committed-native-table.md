@@ -33,9 +33,10 @@ write. Aborting on any failure is unworkable at Japan's 1,029 requests, and writ
 reintroduces the ambiguity ADR 0012 removes. A failed request is an issue, returned rather
 than printed.
 
-## Consequence: the repository carries each source's data verbatim
+## Superseded distribution consequence: native tables are repository inputs
 
-Native tables ship in the wheel, because the canonical station catalogue of ADR 0015 keeps
-only identity and geometry and the rest would otherwise leave the package entirely. That
-publishes more of each agency's data, in their vocabulary, under our name. Whether we hold
-the rights to do so is unestablished and is tracked as its own Effort ticket.
+The original decision said native tables would ship in the wheel so source-vocabulary facts remained
+available after ADR 0015 reduced the canonical catalogue. The later distribution contract superseded
+that consequence: native tables remain committed repository build inputs but are excluded from wheels.
+The wheel carries the canonical catalogue and its acquisition-provenance identity. It does not expose
+the native table through the public API or package payload.

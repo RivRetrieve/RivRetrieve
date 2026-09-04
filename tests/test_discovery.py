@@ -31,6 +31,8 @@ EXPECTED_PRODUCT_IDS = [
     "stage_instantaneous",
     "stage_reported",
     "water_temperature_daily_mean",
+    "water_temperature_hourly_mean",
+    "water_temperature_instantaneous",
     "water_temperature_reported",
 ]
 
@@ -75,7 +77,17 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "discharge_daily_mean",
         "stage_daily_mean",
     ],
-    "no_nve": [],
+    "no_nve": [
+        "discharge_daily_mean",
+        "discharge_hourly_mean",
+        "discharge_instantaneous",
+        "stage_daily_mean",
+        "stage_hourly_mean",
+        "stage_instantaneous",
+        "water_temperature_daily_mean",
+        "water_temperature_hourly_mean",
+        "water_temperature_instantaneous",
+    ],
     "pl_imgw": [
         "discharge_daily_mean",
         "stage_daily_mean",

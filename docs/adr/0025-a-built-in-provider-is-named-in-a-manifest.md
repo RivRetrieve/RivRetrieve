@@ -74,7 +74,8 @@ kind all refuse loudly at registration rather than degrading to a default.
 
 `ORIGIN_GATE_ENROLLED_PROVIDERS` stays outside the declaration. It records who has been
 audited, not who ships; folding it in would let a new provider certify itself by declaring
-itself. `br_ana` and `no_nve` remain deliberately unenrolled and building.
+itself. `no_nve` later entered the gate after its catalogue was certified; `br_ana`
+remains deliberately unenrolled and building.
 
 The thirteen `module.py` files are deleted. Nine were byte-identical once the provider id
 was substituted, ten providers registered with `provider_module=None`, and ADR 0019 had

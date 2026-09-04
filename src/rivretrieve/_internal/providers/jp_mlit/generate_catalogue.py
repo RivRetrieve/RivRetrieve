@@ -49,7 +49,10 @@ from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.jp_mlit.origins import (
     NATIVE_TABLE_SHA256,
+    ImpossibleWorldGeodeticCoordinateError,
+    WorldGeodeticCoordinateFormatError,
     build_acquisition_provenance,
+    world_geodetic_coordinates,
 )
 
 PROVIDER_ID = ProviderId("jp_mlit")
@@ -86,7 +89,6 @@ NATIVE_COLUMNS = (
 NATIVE_SCHEMA = pl.Schema({**dict.fromkeys(NATIVE_COLUMNS, pl.Utf8), "retrieved_at": pl.Datetime("us", "UTC")})
 _SOURCE_MARKER = "世界測地系".encode("euc-jp")
 _ABSENCE_PATTERN = re.compile(r"指定された観測所記号\((\d{15})\)の観測所諸元は存在しません。")
-_STRICT_DMS_PATTERN = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
 
 
 class CatalogueIssueCode(StrEnum):
@@ -220,29 +222,16 @@ def build_stations(
 ) -> StationCatalog:
     rows: list[dict[str, object]] = []
     for station_id, coordinate in native_table.data.select("観測所記号", "世界測地系").iter_rows():
-        if not isinstance(coordinate, str) or (match := _STRICT_DMS_PATTERN.fullmatch(coordinate)) is None:
+        try:
+            latitude, longitude = world_geodetic_coordinates(coordinate)
+        except WorldGeodeticCoordinateFormatError as exc:
             raise FatalContractError(
                 f"jp_mlit station {station_id}: 世界測地系 has no parseable whole-number DMS coordinate"
-            )
-        (
-            latitude_degrees,
-            latitude_minutes,
-            latitude_seconds,
-            longitude_degrees,
-            longitude_minutes,
-            longitude_seconds,
-        ) = map(int, match.groups())
-        latitude = latitude_degrees + latitude_minutes / 60 + latitude_seconds / 3600
-        longitude = longitude_degrees + longitude_minutes / 60 + longitude_seconds / 3600
-        if (
-            latitude > 90
-            or longitude > 180
-            or latitude_minutes >= 60
-            or longitude_minutes >= 60
-            or latitude_seconds > 60
-            or longitude_seconds > 60
-        ):
-            raise FatalContractError(f"jp_mlit station {station_id}: 世界測地系 contains an impossible DMS coordinate")
+            ) from exc
+        except ImpossibleWorldGeodeticCoordinateError as exc:
+            raise FatalContractError(
+                f"jp_mlit station {station_id}: 世界測地系 contains an impossible DMS coordinate"
+            ) from exc
         rows.append(
             {
                 "provider_id": PROVIDER_ID,
@@ -498,7 +487,9 @@ def refresh_native_table(
         if parsed["観測所記号"] != station_id:
             raise FatalContractError(f"jp_mlit malformed input: station-id-disagreement {station_id}")
         coordinate = parsed["世界測地系"]
-        if not isinstance(coordinate, str) or _STRICT_DMS_PATTERN.fullmatch(coordinate) is None:
+        try:
+            world_geodetic_coordinates(coordinate)
+        except (WorldGeodeticCoordinateFormatError, ImpossibleWorldGeodeticCoordinateError):
             issue = _issue(
                 CatalogueIssueCode.INVALID_STATION_COORDINATES,
                 station_id,

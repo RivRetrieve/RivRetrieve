@@ -88,6 +88,12 @@ for provider_id, station_id, count in (
     groups = provider_selection.acquisition_provenance[0].withheld_facts
     assert len(groups) == count
     assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
+norway = rivretrieve.find(
+    provider="no_nve", station="1.200.0", product="stage_daily_mean"
+)
+assert len(norway.series) == 1
+assert norway.series[0].availability == "available"
+assert norway.acquisition_provenance[0].native_table is not None
 thailand = rivretrieve.find(
     provider="th_thaiwater", station="1", product="stage_reported"
 )
