@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
+from typing import cast
 
 import polars as pl
 import pytest
@@ -21,7 +24,9 @@ from rivretrieve._internal.engine import (
     WindowEndpoint,
     _make_fetch_window,
 )
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
+from rivretrieve._internal.observations import ObservationRequest as PublicObservationRequest
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates, config
 from rivretrieve._internal.providers.no_nve.declaration import declaration
@@ -254,3 +259,123 @@ def test_norway_stays_publicly_unselectable_until_its_catalogue_is_certified() -
     with pytest.raises(EmptySelectionError) as error:
         rr.fetch(selection, start="2025-07-10", end="2025-07-12")
     assert "no_nve" in str(error.value)
+
+
+def test_a_bare_date_public_request_renders_an_end_of_day_instant_the_source_accepts() -> None:
+    product = ProductId("stage_daily_mean")
+    recording = read_recording(_recording_path(_STATION, product, "2025-07-08_2025-07-14-eod"))
+    public = PublicObservationRequest.from_inputs(
+        provider_id=_PROVIDER, stations=(_STATION,), products=(product,), start="2025-07-10", end="2025-07-12"
+    )
+    result = drive(
+        ObservationRequest(
+            provider_id=_PROVIDER,
+            stations=(_STATION,),
+            products=(product,),
+            window=RequestedWindow(start=public.start, end=public.end),
+        ),
+        _STAGES,
+        provenance=ObservationProvenance(source="recording", provider_id=_PROVIDER),
+        transport=_credentialed(recording),
+    )
+
+    (call,) = result.provenance.calls_made
+    parameters = cast("Mapping[str, object]", call["request_parameters"])
+    assert parameters["ReferenceTime"] == "2025-07-08T00:00:00Z/2025-07-14T23:59:59.999999Z"
+    assert call["status_code"] == 200
+    assert result.canonical_rows["time"].to_list() == [
+        datetime(2025, 7, 10, 11),
+        datetime(2025, 7, 11, 11),
+        datetime(2025, 7, 12, 11),
+    ]
+
+
+def _parsed(product: ProductId, station: str, window_name: str, window: RenderedWindow, start: str, end: str):
+    recording = read_recording(_recording_path(station, product, window_name))
+    (payload,) = fetch(
+        (station,),
+        (product,),
+        MappingProxyType({product: (window,)}),
+        _fetch_window(start, end),
+        config(),
+        _credentialed(recording),
+    ).value
+    return payload, parse(payload, config())
+
+
+def test_the_recorded_stop_convention_is_inclusive_on_the_instant_axis() -> None:
+    product = ProductId("stage_daily_mean")
+    _, midnight_end = _parsed(
+        product,
+        _STATION,
+        "2023-03-23_2023-03-27",
+        RenderedWindow("2023-03-23T00:00:00Z", "2023-03-27T00:00:00Z"),
+        "2023-03-23T00:00:00",
+        "2023-03-27T00:00:00",
+    )
+    _, end_of_day = _parsed(
+        product,
+        _STATION,
+        "2023-03-23_2023-03-27-eod",
+        RenderedWindow("2023-03-23T00:00:00Z", "2023-03-27T23:59:59.999999Z"),
+        "2023-03-23T00:00:00",
+        "2023-03-27T23:59:59.999999",
+    )
+
+    assert midnight_end.value["time"].to_list()[-1] == datetime(2023, 3, 26, 11)
+    assert midnight_end.value.height == 4
+    assert end_of_day.value["time"].to_list()[-1] == datetime(2023, 3, 27, 11)
+    assert end_of_day.value.height == 5
+
+
+def test_a_published_null_value_is_carried_as_a_null_reading() -> None:
+    product = ProductId("stage_daily_mean")
+    _, parsed = _parsed(
+        product,
+        _STATION,
+        "2023-03-23_2023-03-27",
+        RenderedWindow("2023-03-23T00:00:00Z", "2023-03-27T00:00:00Z"),
+        "2023-03-23T00:00:00",
+        "2023-03-27T00:00:00",
+    )
+
+    assert parsed.value.height == 4
+    assert parsed.value["value"].null_count() == 4
+    quality = next(issue for issue in parsed.issues if issue.code == "source_quality_code")
+    assert quality.details is not None
+    assert quality.details["source_quality_code"] == 2
+    assert quality.details["count"] == 4
+
+
+def test_a_series_whose_published_method_differs_from_the_product_is_refused() -> None:
+    product = ProductId("water_temperature_hourly_mean")
+    recording = read_recording(_recording_path("103.3.0", product, "2025-07-08_2025-07-14"))
+    (payload,) = fetch(
+        ("103.3.0",),
+        (product,),
+        MappingProxyType({product: (_RECORDED_WINDOW,)}),
+        _fetch_window("2025-07-08T00:00:00", "2025-07-14T00:00:00"),
+        config(),
+        _credentialed(recording),
+    ).value
+
+    with pytest.raises(FatalContractError, match="method differs"):
+        parse(payload, config())
+
+
+def test_a_series_whose_published_unit_differs_from_the_declared_unit_is_refused() -> None:
+    product = ProductId("stage_daily_mean")
+    payload, _ = _parsed(
+        product,
+        _STATION,
+        "2025-07-08_2025-07-14",
+        _RECORDED_WINDOW,
+        "2025-07-08T00:00:00",
+        "2025-07-14T00:00:00",
+    )
+    # Mutated copy of the committed body: the published unit is rewritten from "m" to "cm".
+    assert b'"unit":"m"' in payload.content
+    mutated = replace(payload, content=payload.content.replace(b'"unit":"m"', b'"unit":"cm"', 1))
+
+    with pytest.raises(FatalContractError, match="unit differs"):
+        parse(mutated, config())

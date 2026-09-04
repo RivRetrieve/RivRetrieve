@@ -21,7 +21,9 @@ Observed source behaviour, verified against the live API on 2026-09-03:
 | Missing series | HTTP 404 with an RFC 7807 problem body | `no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json` |
 | Existing series, no observation in window | HTTP 200, `observationCount: 0`, empty `observations` | `no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json` |
 | ISO instants with a `Z` suffix in `ReferenceTime` | Accepted | every committed recording |
-| Stop convention | Inclusive on the instant axis | `.../2023-03-27` returned three daily values ending `2023-03-26T11:00:00Z`; `.../2023-03-27T23:59:59Z` returned four, ending `2023-03-27T11:00:00Z` |
+| Stop convention | Inclusive on the instant axis | `no_nve_1.200.0_1000_1440_2023-03-23_2023-03-27.recording.json` (end `2023-03-27T00:00:00Z`) holds four daily values ending `2023-03-26T11:00:00Z`; `no_nve_1.200.0_1000_1440_2023-03-23_2023-03-27-eod.recording.json` (end `2023-03-27T23:59:59.999999Z`) holds five, ending `2023-03-27T11:00:00Z` |
+| Fractional-second end, the form a bare-date public request renders | Accepted | `no_nve_1.200.0_1000_1440_2025-07-08_2025-07-14-eod.recording.json`, end `2025-07-14T23:59:59.999999Z`, seven daily values ending `2025-07-14T11:00:00Z` |
+| Null values | Published as JSON `null` with a quality code | the two 2023 stage recordings above: every value is `null` with `quality` 2 |
 
 ## Products
 
@@ -47,8 +49,14 @@ boundary probe.
 
 `method` and `unit` are published per series and are checked by parse against the declared product
 statistic and source unit; a mismatch fails loudly rather than being reconciled. HydAPI publishes
-`method` per series rather than per parameter: station `103.3.0` publishes water temperature at
-resolutions 60 and 1440 with `method: "Instantaneous"`, so the check is not decorative.
+`method` per series rather than per parameter: `no_nve_103.3.0_1003_60_2025-07-08_2025-07-14.recording.json`
+records station `103.3.0` publishing water temperature at resolution 60 with `method: "Instantaneous"`
+(the active station list of 2026-09-03 says the same of its resolution 1440 series), so the check is
+not decorative. The guard is deliberate: a request that includes such a series fails the whole result
+rather than returning the other products with an issue. That is the doctrine (a module dies rather
+than guess), and there is no per-provider isolation point. Per-station product unavailability is a
+catalogue fact that the certified catalogue owned by
+[issue 90](https://github.com/RivRetrieve/RivRetrieve/issues/90) must express.
 
 ## Time semantics
 
@@ -73,7 +81,9 @@ Hourly interval anchoring is not published either, so `IntervalDefinition("unkno
 `iso-instant` granularity, `iso-instant` rendering, inclusive stop. `ReferenceTime` is the rendered
 start and stop joined with `/`. The inclusive stop is proven by the live probe recorded in the table
 above, not assumed: a date-only end truncates to midnight and silently drops a daily value stamped
-11:00Z that day, while an instant end includes both endpoints. No provider-owned window arithmetic,
+11:00Z that day, while an instant end includes both endpoints. A bare-date public request ends at
+`23:59:59.999999`, which the renderer emits with microseconds; the source accepts that form, as the
+end-of-day recording shows, so the whole public request shape is exercised. No provider-owned window arithmetic,
 clipping, timezone conversion, unit conversion, retry loop, or result assembly exists; all of it stays
 in the engine.
 
@@ -113,10 +123,15 @@ per product produced the committed evidence; the two other recordings use statio
 `water_temperature_daily_mean` and the same window, and station `1.200.0` with `stage_daily_mean`
 over `--start 1900-01-03T00:00:00 --end 1900-01-05T00:00:00`.
 
-Committed evidence, all captured on 2026-09-03: station `1.200.0` (Lierelv) for all nine series over
+Committed evidence: station `1.200.0` (Lierelv) for all nine series over
 `2025-07-08T00:00:00Z/2025-07-14T00:00:00Z`, the padded fetch window for the closed request window
-2025-07-10 to 2025-07-12; station `12.210.0` for the missing water-temperature daily series; and
-station `1.200.0` stage daily over an 1900 window with no observations.
+2025-07-10 to 2025-07-12 (captured 2026-09-03); station `12.210.0` for the missing water-temperature
+daily series (2026-09-03); station `1.200.0` stage daily over an 1900 window with no observations
+(2026-09-03); the end-of-day stage daily window for the bare-date public request
+`--start 2025-07-10 --end 2025-07-12` (2026-09-04); the two 2023 stop-convention stage daily windows
+for `--start 2023-03-25T00:00:00 --end 2023-03-25T00:00:00` and `--start 2023-03-25 --end 2023-03-25`
+(2026-09-04); and station `103.3.0` water temperature hourly over the July window (2026-09-04), whose
+capture ends in the parse refusal the recording exists to prove.
 
 ## Packaged catalogue status
 

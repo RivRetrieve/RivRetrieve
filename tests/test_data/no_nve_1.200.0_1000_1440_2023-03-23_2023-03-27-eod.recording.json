@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "1.200.0",
+      "Parameter": "1000",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2023-03-23T00:00:00Z/2023-03-27T23:59:59.999999Z"
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-04T08:13:16.089141Z",
+    "content_base64": "eyJjdXJyZW50TGluayI6Imh0dHBzOi8vaHlkYXBpLm52ZS5uby9hcGkvdjEvT2JzZXJ2YXRpb25zP1N0YXRpb25JZD0xLjIwMC4wJlBhcmFtZXRlcj0xMDAwJlJlc29sdXRpb25UaW1lPTE0NDAmUmVmZXJlbmNlVGltZT0yMDIzLTAzLTIzVDAwJTNBMDAlM0EwMFolMkYyMDIzLTAzLTI3VDIzJTNBNTklM0E1OS45OTk5OTlaIiwiYXBpVmVyc2lvbiI6IjEuMCIsImxpY2Vuc2UiOiJodHRwczovL2RhdGEubm9yZ2Uubm8vbmxvZC9lbiIsImNyZWF0ZWRBdCI6IjIwMjYtMDktMDRUMDg6MTM6MTYuMTEwNzc2NloiLCJxdWVyeVRpbWUiOiIwMDowMDowMC4wMDU2NzUxIiwiaXRlbUNvdW50IjoxLCJkYXRhIjpbeyJzdGF0aW9uSWQiOiIxLjIwMC4wIiwic3RhdGlvbk5hbWUiOiJMaWVyZWx2IiwicGFyYW1ldGVyIjoxMDAwLCJwYXJhbWV0ZXJOYW1lIjoiVmFubnN0YW5kIiwicGFyYW1ldGVyTmFtZUVuZyI6IlN0YWdlIiwic2VyaWVWZXJzaW9uTm8iOjEsIm1ldGhvZCI6Ik1lYW4iLCJ1bml0IjoibSIsIm9ic2VydmF0aW9uQ291bnQiOjUsIm9ic2VydmF0aW9ucyI6W3sidGltZSI6IjIwMjMtMDMtMjNUMTE6MDA6MDBaIiwidmFsdWUiOm51bGwsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9LHsidGltZSI6IjIwMjMtMDMtMjRUMTE6MDA6MDBaIiwidmFsdWUiOm51bGwsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9LHsidGltZSI6IjIwMjMtMDMtMjVUMTE6MDA6MDBaIiwidmFsdWUiOm51bGwsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9LHsidGltZSI6IjIwMjMtMDMtMjZUMTE6MDA6MDBaIiwidmFsdWUiOm51bGwsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9LHsidGltZSI6IjIwMjMtMDMtMjdUMTE6MDA6MDBaIiwidmFsdWUiOm51bGwsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9XX1dfQ==",
+    "sha256": "08df2c479cca0f85b053d96159f4ca9c7db404042a4a427a04a460738f1dde54",
+    "prerequisite_calls": []
+  }
+}
