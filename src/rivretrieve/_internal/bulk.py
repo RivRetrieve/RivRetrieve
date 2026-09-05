@@ -81,7 +81,10 @@ def cache_status(provider: str) -> StoreStatus:
 
 
 def clear_cache(provider: str) -> CacheClearResult:
-    """Delete the provider store and its pending download and accumulated-write namespaces.
+    """Delete the compiled observation store or accumulated live store, plus recovery inputs.
+
+    This destructive verb also removes preserved pending publisher downloads and
+    accumulated-write staging/backup directories so the next retrieval can retry.
 
     This explicit destructive verb removes preserved failed-compilation inputs so a
     later ``download()`` can retry. It never follows symlinks, never removes an

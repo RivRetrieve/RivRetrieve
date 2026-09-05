@@ -446,19 +446,22 @@ def drive(
         if isinstance(provider, TransportWindowDeclarationProvider)
         else provider.window_declarations
     )
+    for product_id in request.products:
+        if product_id not in declarations.products:
+            raise FatalContractError(
+                f"Provider {request.provider_id} has no window declaration for requested product {product_id}; "
+                "this is an internal provider contract breach before fetch."
+            )
+    fetch_windows: dict[RequestedInterval, FetchWindow] = {}
+    planned_windows: dict[tuple[ProductId, RequestedInterval], tuple[RenderedWindow, ...]] = {}
+    fetched_series: list[tuple[str, ProductId, RequestedInterval, WithIssues[tuple[Payload, ...]]]] = []
     fetched_payloads: list[Payload] = []
     all_issues: list[Issue] = []
     pending_writes: list[tuple[Rows, CoverageInterval]] = []
     failed_series: set[tuple[str, ProductId]] = set()
     for station_id in request.stations:
         for product_id in request.products:
-            try:
-                declaration = declarations.products[product_id]
-            except KeyError as error:
-                raise FatalContractError(
-                    f"Provider {request.provider_id} has no window declaration for requested product {product_id}; "
-                    "this is an internal provider contract breach before fetch."
-                ) from error
+            declaration = declarations.products[product_id]
             intervals = (
                 remainder(
                     requested[product_id],
@@ -468,12 +471,17 @@ def drive(
                 else (requested[product_id],)
             )
             for interval in intervals:
-                fetch_window = _padded_interval(interval)
+                if interval not in fetch_windows:
+                    fetch_windows[interval] = _padded_interval(interval)
+                fetch_window = fetch_windows[interval]
                 interval_window = RequestedWindow(
                     WindowEndpoint.from_datetime(interval.start), WindowEndpoint.from_datetime(interval.end)
                 )
                 _require_fetch_window_contains_requested(fetch_window, interval_window)
-                rendered_windows = MappingProxyType({product_id: plan_windows(fetch_window, declaration)})
+                key = (product_id, interval)
+                if key not in planned_windows:
+                    planned_windows[key] = plan_windows(fetch_window, declaration)
+                rendered_windows = MappingProxyType({product_id: planned_windows[key]})
                 try:
                     fetched = provider.fetch(
                         (station_id,),
@@ -495,48 +503,47 @@ def drive(
                         )
                     )
                     continue
-                series_issues = list(fetched.issues)
-                parsed: list[Rows] = [pl.DataFrame(schema=RowsSchema.polars_schema)]
+                all_issues.extend(fetched.issues)
                 fetched_payloads.extend(fetched.value)
-                for payload in fetched.value:
-                    if receipts is ReceiptMode.INCLUDE:
-                        receipt_entries.append(
-                            ReceiptEntry(
-                                content=payload.content,
-                                origin=payload.origin,
-                                authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD,
-                            )
-                        )
-                    result = provider.parse(payload, config)
-                    validate_catalogue(result.value, RowsSchema, on_issue="raise")
-                    parsed.append(result.value)
-                    series_issues.extend(result.issues)
-                rows = pl.concat(parsed)
-                if cache != "bypass":
-                    validate_native_rows(rows, config.products)
-                    unexpected = rows.filter(
-                        (pl.col("station_id") != station_id) | (pl.col("product_id") != product_id)
+                fetched_series.append((station_id, product_id, interval, fetched))
+    for station_id, product_id, interval, fetched in fetched_series:
+        series_issues: list[Issue] = []
+        parsed: list[Rows] = [pl.DataFrame(schema=RowsSchema.polars_schema)]
+        for payload in fetched.value:
+            if receipts is ReceiptMode.INCLUDE:
+                receipt_entries.append(
+                    ReceiptEntry(
+                        content=payload.content,
+                        origin=payload.origin,
+                        authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD,
                     )
-                    if not unexpected.is_empty():
-                        raise FatalContractError(
-                            "Parse output contains rows outside the fetched station-product series"
-                        )
-                    rows = rows.filter(
-                        (pl.col("station_id") == station_id)
-                        & (pl.col("product_id") == product_id)
-                        & pl.col("time").is_between(interval.start, interval.end)
-                    )
-                    if any(issue.severity == "error" for issue in series_issues):
-                        failed_series.add((station_id, product_id))
-                    else:
-                        retrieved = tuple(
-                            p.origin.retrieved_at for p in fetched.value if isinstance(p.origin.retrieved_at, datetime)
-                        )
-                        retrieved_at = max(retrieved) if retrieved else datetime.now(UTC)
-                        assert store is not None
-                        pending_writes.append((rows, CoverageInterval(station_id, product_id, interval, retrieved_at)))
-                row_frames.append(rows)
-                all_issues.extend(series_issues)
+                )
+            result = provider.parse(payload, config)
+            validate_catalogue(result.value, RowsSchema, on_issue="raise")
+            parsed.append(result.value)
+            series_issues.extend(result.issues)
+        rows = pl.concat(parsed)
+        if cache != "bypass":
+            validate_native_rows(rows, config.products)
+            unexpected = rows.filter((pl.col("station_id") != station_id) | (pl.col("product_id") != product_id))
+            if not unexpected.is_empty():
+                raise FatalContractError("Parse output contains rows outside the fetched station-product series")
+            rows = rows.filter(
+                (pl.col("station_id") == station_id)
+                & (pl.col("product_id") == product_id)
+                & pl.col("time").is_between(interval.start, interval.end)
+            )
+            if any(issue.severity == "error" for issue in (*fetched.issues, *series_issues)):
+                failed_series.add((station_id, product_id))
+            else:
+                retrieved = tuple(
+                    p.origin.retrieved_at for p in fetched.value if isinstance(p.origin.retrieved_at, datetime)
+                )
+                retrieved_at = max(retrieved) if retrieved else datetime.now(UTC)
+                assert store is not None
+                pending_writes.append((rows, CoverageInterval(station_id, product_id, interval, retrieved_at)))
+        row_frames.append(rows)
+        all_issues.extend(series_issues)
     rows = pl.concat(row_frames)
     converted = convert(rows, config, request.window)
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
@@ -547,7 +554,8 @@ def drive(
             accumulate(store, request.provider_id, native_rows, coverage)
     receipt_payload = Receipts(provider_id=request.provider_id, entries=tuple(receipt_entries))
     enriched_provenance = _provenance_with_payload_origins(provenance, tuple(fetched_payloads))
-    enriched_provenance = enriched_provenance.model_copy(update={"served_intervals": tuple(served)})
+    if served:
+        enriched_provenance = enriched_provenance.model_copy(update={"served_intervals": tuple(served)})
     return assemble(converted.value, enriched_provenance, tuple(all_issues) + converted.issues, receipt_payload)
 
 

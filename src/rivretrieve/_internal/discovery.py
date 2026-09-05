@@ -484,9 +484,11 @@ def cache_status(provider: str):
 
 
 def clear_cache(provider: str):
-    """Delete one provider's observation store and preserved pending publisher downloads.
+    """Delete a provider's compiled observation store or accumulated live store and recovery inputs.
 
-    Use this explicit destructive recovery action to permit a retry after failed bulk compilation.
+    This explicit destructive action removes preserved pending publisher downloads and
+    accumulated-write staging/backup directories, allowing a retry after interrupted
+    retrieval or failed compilation.
     """
     from rivretrieve._internal.bulk import clear_cache as bulk_clear_cache
 
