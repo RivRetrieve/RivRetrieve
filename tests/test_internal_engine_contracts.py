@@ -99,6 +99,8 @@ def test_requested_to_fetch_construction_is_driver_owned_with_injectable_transpo
         "receipts",
         "transport",
         "credential_names",
+        "cache",
+        "store",
     )
     assert signature.parameters["request"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert signature.parameters["provider"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD

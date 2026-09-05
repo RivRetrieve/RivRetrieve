@@ -1,18 +1,20 @@
-"""public retrieval : Selection × WindowInputs × CredentialSources → ObservationResult(s); provider discovery : ProviderDeclarations × CredentialSources → ProviderAccessFrame."""
+"""public retrieval : Selection × WindowInputs × CacheMode × CredentialSources → ObservationResult(s); provider discovery : ProviderDeclarations × CredentialSources → ProviderAccessFrame."""
 
 from __future__ import annotations
 
 import os
 from datetime import date, datetime, time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import polars as pl
 from dotenv import dotenv_values
+from platformdirs import user_cache_dir
 
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.issues import FatalContractError, Issue, MissingCredentialError, apply_on_issue
 from rivretrieve._internal.observations import ObservationRequest, ObservationResult, ReceiptMode, Receipts
+from rivretrieve._internal.primitives import CacheMode
 from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.selection import _as_frame as _selection_as_frame
 from rivretrieve._internal.selection import _EmptyReason, _require_selection, _Selection, _Series
@@ -21,6 +23,7 @@ from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.station_map import StationMap
+from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient, Transport
 
 if TYPE_CHECKING:
@@ -111,8 +114,17 @@ def fetch(
     start: object = None,
     end: object = None,
     receipts: bool = False,
+    cache: CacheMode = "bypass",
     on_issue: OnIssue = "warn",
 ) -> ObservationResult:
+    """Retrieve selected series, optionally reusing or refreshing locally held values.
+
+    ``bypass`` (default) leaves a live provider's cache untouched. ``reuse`` serves
+    covered intervals and fetches the remainder; ``refresh`` replaces the requested
+    interval with the source's current answer. Bulk providers always read their
+    compiled store and require ``download()`` to replace it.
+    """
+    cache = _parse_cache_mode(cache)
     _require_selection(selection)
     if not selection.series:
         reason = selection.empty_reason
@@ -126,6 +138,7 @@ def fetch(
         raise MultiProviderSelectionError(provider_ids)
 
     normalized_start, normalized_end, future_local_date = _normalize_window(selection.series, start=start, end=end)
+    _require_cache_mode_available(provider_ids, cache)
     credential_values = _resolve_credentials(provider_ids, require_all=True)
     provider_id = provider_ids[0]
     receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
@@ -137,6 +150,8 @@ def fetch(
         future_local_date=future_local_date,
         credentials=credential_values[provider_id],
         receipts=receipt_mode,
+        cache=cache,
+        store=_resolve_store_root(provider_id, _registry.get(provider_id)._store_root),
         on_issue=on_issue,
     )
 
@@ -147,14 +162,18 @@ def fetch_by_provider(
     start: object = None,
     end: object = None,
     receipts: bool = False,
+    cache: CacheMode = "bypass",
     on_issue: OnIssue = "warn",
 ) -> dict[str, ObservationResult]:
+    """Retrieve each provider's selected series with the same cache mode as ``fetch``."""
+    cache = _parse_cache_mode(cache)
     _require_selection(selection)
     partitions = _partition_by_provider(selection.series)
     if not partitions:
         return {}
     normalized_start, normalized_end, future_local_date = _normalize_window(selection.series, start=start, end=end)
     provider_ids = tuple(partitions)
+    _require_cache_mode_available(provider_ids, cache)
     credential_values = _resolve_credentials(provider_ids, require_all=True)
     receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
     results = {
@@ -166,6 +185,8 @@ def fetch_by_provider(
             future_local_date=future_local_date,
             credentials=credential_values[provider_id],
             receipts=receipt_mode,
+            cache=cache,
+            store=_resolve_store_root(provider_id, _registry.get(provider_id)._store_root),
             on_issue="ignore",
         )
         for provider_id, series in partitions.items()
@@ -201,6 +222,37 @@ def _normalize_window(
         datetime.fromisoformat(request.end.isoformat()),
         future_local_date,
     )
+
+
+def _parse_cache_mode(value: object) -> CacheMode:
+    if not isinstance(value, str) or value not in ("bypass", "reuse", "refresh"):
+        raise ValueError("cache must be 'bypass', 'reuse', or 'refresh'")
+    return cast(CacheMode, value)
+
+
+def _require_cache_mode_available(provider_ids: tuple[str, ...], cache: CacheMode) -> None:
+    if cache == "refresh":
+        for provider_id in provider_ids:
+            if _registry.get(provider_id)._store_config is not None:
+                raise FatalContractError(
+                    f"Provider {provider_id} uses a compiled store; refresh requires "
+                    f'rivretrieve.download("{provider_id}"). No transfer was started.'
+                )
+
+
+def _resolve_store_root(provider_id: str, registered: StoreRoot | None) -> StoreRoot:
+    """store location : ProviderId × RegisteredStore × Environment × WorkingDotenv → StoreRoot."""
+    name = "RIVRETRIEVE_CACHE_DIR"
+    dotenv = dotenv_values(Path.cwd() / ".env")
+    value = os.environ[name] if name in os.environ else dotenv.get(name)
+    if value is not None:
+        if not value.strip():
+            raise ValueError("RIVRETRIEVE_CACHE_DIR must name a non-empty cache directory")
+        root = Path(value).expanduser().absolute()
+        return StoreRoot(root / provider_id / "store")
+    if registered is not None:
+        return registered
+    return StoreRoot(Path(user_cache_dir("rivretrieve")) / provider_id / "store")
 
 
 def _resolve_credentials(
@@ -263,6 +315,8 @@ def _fetch_provider_series(
     future_local_date: date | None,
     credentials: dict[str, str],
     receipts: ReceiptMode,
+    cache: CacheMode,
+    store: StoreRoot,
     on_issue: OnIssue,
 ) -> ObservationResult:
     handle = _provider_lookup(provider_id)
@@ -279,6 +333,8 @@ def _fetch_provider_series(
             on_issue="ignore",
             receipts=receipts,
             transport=transport,
+            cache=cache,
+            store=store,
         )
         for station_id, product_ids in by_station.items()
     )
@@ -338,6 +394,9 @@ def _merge_provider_results(
             update={
                 "request": merged_request,
                 "calls_made": calls_made,
+                "served_intervals": tuple(
+                    interval for result in results for interval in result.provenance.served_intervals
+                ),
                 "endpoints": endpoints,
                 "retrieved_at": max(retrieved) if retrieved else None,
                 "query": merged_query,
@@ -418,16 +477,18 @@ def download(provider: str):
 
 
 def cache_status(provider: str):
-    """Return the local compiled-store status for one bulk provider."""
+    """Return the local store status, size, and coverage for one provider."""
     from rivretrieve._internal.bulk import cache_status as bulk_cache_status
 
     return bulk_cache_status(provider)
 
 
 def clear_cache(provider: str):
-    """Delete the compiled observation store and preserved pending publisher downloads.
+    """Delete a provider's compiled observation store or accumulated live store and recovery inputs.
 
-    Use this explicit destructive recovery action to permit a retry after failed bulk compilation.
+    This explicit destructive action removes preserved pending publisher downloads and
+    accumulated-write staging/backup directories, allowing a retry after interrupted
+    retrieval or failed compilation.
     """
     from rivretrieve._internal.bulk import clear_cache as bulk_clear_cache
 

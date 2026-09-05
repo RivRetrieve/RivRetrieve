@@ -36,7 +36,7 @@ def test_insufficient_space_refuses_before_http_client_or_cache_creation(tmp_pat
     assert not (tmp_path / "cache").exists()
 
 
-def test_bulk_verbs_refuse_non_bulk_provider(monkeypatch) -> None:
+def test_download_refuses_non_bulk_provider(monkeypatch) -> None:
     monkeypatch.setattr(bulk, "_ensure_default_providers_registered", lambda: None)
 
     class Handle:
@@ -47,7 +47,7 @@ def test_bulk_verbs_refuse_non_bulk_provider(monkeypatch) -> None:
 
     monkeypatch.setattr(bulk._registry, "get", lambda provider: Handle())
     with pytest.raises(bulk.BulkOperationsUnavailableError, match="only for bulk providers"):
-        bulk.cache_status("usgs_nwis")
+        bulk.download("usgs_nwis")
 
 
 def test_clear_cache_is_idempotent_and_confined_to_store(tmp_path, monkeypatch) -> None:
@@ -58,8 +58,8 @@ def test_clear_cache_is_idempotent_and_confined_to_store(tmp_path, monkeypatch) 
     neighbour.write_bytes(b"publisher")
     monkeypatch.setattr(
         bulk,
-        "_bulk_registration",
-        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(1, 1000), store, SimpleNamespace()),
+        "_cache_registration",
+        lambda provider: ("ca_eccc", store),
     )
 
     first = bulk.clear_cache("ca_eccc")
@@ -88,8 +88,8 @@ def test_clear_cache_removes_exact_pending_namespace_without_following_symlinks(
     expected_bytes = 4 + 3 + 5 + link.lstat().st_size
     monkeypatch.setattr(
         bulk,
-        "_bulk_registration",
-        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(2, 1000), store, SimpleNamespace()),
+        "_cache_registration",
+        lambda provider: ("ca_eccc", store),
     )
 
     result = bulk.clear_cache("ca_eccc")
@@ -116,8 +116,8 @@ def test_clear_cache_refuses_unexpected_directory_before_deleting_any_evidence(t
     unexpected.mkdir()
     monkeypatch.setattr(
         bulk,
-        "_bulk_registration",
-        lambda provider: ("pl_imgw", bulk.ObservationStoreConfig(2, 1000), store, SimpleNamespace()),
+        "_cache_registration",
+        lambda provider: ("pl_imgw", store),
     )
 
     with pytest.raises(bulk.BulkArtifactCleanupRefusedError, match="unexpected directory"):
@@ -138,8 +138,8 @@ def test_clear_cache_refuses_symlinked_pending_namespace_root(tmp_path, monkeypa
     store = provider_root / "store"
     monkeypatch.setattr(
         bulk,
-        "_bulk_registration",
-        lambda provider: ("ca_eccc", bulk.ObservationStoreConfig(2, 1000), store, SimpleNamespace()),
+        "_cache_registration",
+        lambda provider: ("ca_eccc", store),
     )
 
     with pytest.raises(bulk.BulkArtifactCleanupRefusedError, match="symlinked pending-download namespace"):

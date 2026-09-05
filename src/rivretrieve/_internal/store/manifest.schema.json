@@ -228,6 +228,80 @@
           }
         }
       ]
+    },
+    "accumulated": {
+      "$anchor": "accumulated",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format_version",
+        "provider_id",
+        "built_at",
+        "coverage",
+        "partition_row_counts"
+      ],
+      "properties": {
+        "format_version": {
+          "const": 4
+        },
+        "provider_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "built_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+        },
+        "coverage": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "station_id",
+              "product_id",
+              "start",
+              "end",
+              "retrieved_at"
+            ],
+            "properties": {
+              "station_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "product_id": {
+                "type": "string",
+                "pattern": "^[^/=]+$"
+              },
+              "start": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}$"
+              },
+              "end": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}$"
+              },
+              "retrieved_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+              }
+            }
+          }
+        },
+        "partition_row_counts": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^product=[^/=]+/year=[0-9]{4}$"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
     }
   },
   "oneOf": [

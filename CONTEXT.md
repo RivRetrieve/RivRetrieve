@@ -27,8 +27,8 @@ and a bulk provider never touches the network on a request. Every receipt declar
 authorship, because the two are not the same kind of thing and only the reader can tell
 which matters: a **publisher payload** is untouched bytes the source itself served, and a
 **store excerpt** is bytes RivRetrieve produced by encoding rows read out of its own
-[[store]]. A store excerpt is exactly as complete as [[compile]] made the store and never
-reconstructs a value the store does not hold.
+[[store]]. A store excerpt contains exactly the selected rows the [[store]] holds, whether compiled
+or accumulated, and never reconstructs a value the store does not hold.
 _Avoid_: raw (the former name; it presented RivRetrieve's own encoding as the source's own
 words), untouched payload (one unzipping step removes it from what the server sent),
 response, blob
@@ -156,11 +156,12 @@ true about that source. An HTTP provider contributes `fetch.py`, `parse.py`, and
 _Avoid_: source, backend, plugin
 
 **Stage**:
-One of fetch, parse, convert, and assemble. An HTTP retrieval passes through all four.
-A bulk retrieval queries the [[store]] and then passes through convert and assemble; it
-passes through neither provider fetch nor provider parse, and no provider code executes
-on its retrieval path. A provider file is named for a stage only when the provider writes
-code for that stage, which is why convert and assemble have no provider file.
+One of fetch, parse, convert, and assemble. A live source retrieval passes through all
+four. Held rows from either kind of [[store]] pass through convert and assemble without
+provider fetch or parse; a mixed retrieval merges held and newly parsed rows before
+convert. A bulk retrieval uses only that store path. A provider file is named for a stage
+only when the provider writes code for that stage, so convert and assemble have no
+provider file.
 _Avoid_: step, phase
 
 **Source coordinates**:
@@ -361,40 +362,32 @@ inferred. A citation RivRetrieve has not yet established is absent, not [[unknow
 ### Stored data
 
 **Cache**:
-Our local copy of a bulk provider's whole national dataset, downloaded because the
-source offers no per-station access. It belongs to the library, is tied to a source
-vintage, and is disposable: refreshing it means downloading the source again.
-_Avoid_: archive, local store
-
-**User cache**:
-Retrieved data a user keeps on their own disk so that asking for the same data again is
-served locally instead of re-fetched. It is the user's, on the user's machine, for the
-user's own reuse, so no redistribution question arises. Distinct from the [[cache]],
-which belongs to the library and is disposable, and from an [[archive]], which is a
-collection prepared for publication.
-_Avoid_: archive, our cache
+The user's local observations for reuse on their own machine, populated in two ways:
+a bulk provider's national dataset is compiled by an explicit `download()`, and a live
+provider's parse output accumulates when retrieval requests `reuse` or `refresh`.
+Both use one root, one [[store]] format family, and one shared reader. Live retrieval
+bypasses the cache by default; reuse serves held [[coverage]] and fetches its remainder,
+while refresh replaces the requested interval with the source's current answer.
+`cache_status` reports either kind and `clear_cache` removes it only when asked.
+_Avoid_: user cache (the retired separate lifecycle), archive, our cache
 
 **Archive**:
 A collection of retrieved river data assembled in order to publish or redistribute it.
 RivRetrieve cannot ship one, because we do not hold redistribution rights to the sources.
-The distinction from a [[user-cache]] is about distribution rights rather than about
-storage: a user keeping their own retrieved data on their own disk raises no such
-question, and both may sit in the same layout on disk.
-_Avoid_: user cache, cache, bundled dataset
+The distinction from a [[cache]] is about distribution rights rather than storage:
+a user keeping retrieved data on their own disk for their own reuse is not publishing it.
+_Avoid_: cache, bundled dataset
 
 **Store**:
-Retrieved observations at rest in RivRetrieve's own layout, together with the
-[[manifest]] describing them. It is the single form ADR 0002 fixes for anything held on
-disk, so a [[cache]] and a [[user-cache]] are both stores. Revision `1` of the compiled-
-store manifest contract is reserved for a store produced by compiling a
-[[publisher-artifact]]. A user-cache store uses a distinct later format revision and does
-not use a reduced revision-`1` manifest. A store holds the source's native values and
-native wall-clock timestamps; unit conversion and clipping happen on read through the
-same convert [[stage]] every provider uses, so standardising the container is not the
-same act as changing the numbers. The layout is authored by RivRetrieve rather than
-owned by a publisher, which is why it carries a format version and why reading one is a
-compatibility obligation rather than an implementation detail.
-_Avoid_: cache (one kind of store, not the category), database, local format
+Native observations at rest in RivRetrieve's own layout, together with the [[manifest]]
+describing them. A [[cache]] holds a compiled store or an accumulated store. Compiled
+stores use revision `2` and retain the source columns declared by [[compile]]; accumulated
+stores use revision `4` and hold live parse output with [[coverage]]. Both hold native
+values and native wall-clock timestamps. The shared reader supplies the same convert
+[[stage]] for unit conversion and clipping, so a cached value is never converted twice.
+The format is authored by RivRetrieve and versioned; an unrecognised revision is refused
+before any observation file is opened, with its path and the explicit recovery action.
+_Avoid_: database, local format
 
 **Publisher artifact**:
 The file a bulk source actually ships — a national database or a set of yearly archives —
@@ -418,31 +411,38 @@ library happens to consume.
 _Avoid_: ingest, import, transform, ETL
 
 **Value state**:
-Which of four distinct things a [[store]] says about one station-product-day: that the
-source published no record for it at all, that it published a record whose value is null,
-that it published a record whose value field is blank, or that it published a value. A
-typed numeric column collapses the first three into one, so the layout carries the state
-beside the value rather than encoding it in the value. The distinction is not decoration:
-"we hold no record" and "the source told us there is nothing here" are different claims
-about the world, and [[compile]] is the last moment either can be observed, because the
-[[publisher-artifact]] is gone afterwards.
+What a [[store]] says about a published observation: a value, a published null, or a
+published blank. Absence of a row represents no published record. Compiled stores retain
+all three published states because [[compile]] sees the source before deleting its
+[[publisher-artifact]]. Accumulated stores retain values and nulls only: live parse output
+has already collapsed blanks into nulls and the store cannot reconstruct the distinction.
+For an accumulated store, [[coverage]] distinguishes an interval never retrieved from an
+interval whose source answer contained no records.
 _Avoid_: null handling, missing value, sentinel
 
 **Source vintage**:
 Which release of a bulk source a [[store]] was compiled from, as the source itself dates
 it, recorded in the [[manifest]] and travelling in provenance on every result the store
-answers. It is a date stamp and never a verdict: RivRetrieve does not compute whether a
-store is old, because a threshold would be a number nobody derived and would replace a
-precise fact — this answer came from that release — with an opinion we invented. A user
-comparing two runs sees the release change; nothing nudges them, by design.
+answers. An accumulated store has no bulk release: retrieval instants on its [[coverage]]
+provide the corresponding traceability, and each served interval carries its own instant.
+Both are date stamps rather than verdicts. RivRetrieve computes no freshness threshold,
+age field, or expiry; a caller wanting current source values explicitly refreshes them.
 _Avoid_: stale, freshness, age, cache expiry
 
+**Coverage**:
+A series and closed native wall-clock interval successfully retrieved from its source,
+paired with the UTC instant of retrieval. It records that the source was asked, not that
+observations exist throughout the interval; a successful empty answer is covered too.
+An accumulated [[store]] uses coverage to serve held intervals and fetch only the remainder.
+Retrieval instants travel with served intervals in provenance without a freshness verdict.
+_Avoid_: published record (a source-stated envelope, not a record of retrieval), continuity
+
 **Manifest**:
-The machine-readable record written beside a [[store]] stating the layout's format version,
-when the store was built, and the [[publisher-artifact]] it was compiled from. It exists so
-a store describes itself to a reader that did not build it, so a version mismatch is
-detected rather than misread, and so a value can be traced to a specific source release
-after the artifact itself is gone.
+The machine-readable record beside a [[store]], stating its format version and build
+instant. For a compiled store it identifies the [[publisher-artifact]] and [[source-vintage]];
+for an accumulated store it records each series' [[coverage]] and retrieval instants.
+Both record partition row counts. A reader validates it before scanning observations,
+so an incompatible or malformed store is refused and every served value remains traceable.
 _Avoid_: metadata, header, index
 
 ### Proof

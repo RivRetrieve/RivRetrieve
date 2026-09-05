@@ -1,5 +1,6 @@
 """convert : Rows × ProviderConfig × RequestedWindow → WithIssues[CanonicalRows]   (pure)"""
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import assert_never
 
@@ -32,14 +33,7 @@ def convert(
     config: ProviderConfig,
     window: RequestedWindow,
 ) -> WithIssues[CanonicalRows]:
-    validate_catalogue(rows, RowsSchema, on_issue="raise")
-
-    product_ids = rows["product_id"].unique().to_list()
-    missing_product_ids = sorted(
-        product_id for product_id in product_ids if ProductId(product_id) not in config.products
-    )
-    if missing_product_ids:
-        raise FatalContractError(f"Rows contain undeclared products: {', '.join(missing_product_ids)}")
+    validate_native_rows(rows, config.products)
 
     supplied_start = window.start
     supplied_end = window.end
@@ -56,26 +50,6 @@ def convert(
         value = row["value"]
         row_zone = row["time_zone"]
         product = config.products[ProductId(product_id)]
-        ZoneValue(row_zone)
-
-        if isinstance(product.semantics, Daily):
-            actual_label = (native_time.hour, native_time.minute, native_time.second, native_time.microsecond)
-            if actual_label != product.semantics.label_time.components:
-                actual = native_time.time().isoformat(timespec="microseconds")
-                raise FatalContractError(
-                    f"Daily row for station {station_id} and product {product_id} must have declared label "
-                    f"{product.semantics.label_time.value}; actual label is {actual}"
-                )
-        elif isinstance(product.semantics, Hourly):
-            if native_time.minute != 0 or native_time.second != 0 or native_time.microsecond != 0:
-                raise FatalContractError(
-                    f"Hourly row for station {station_id} and product {product_id} must have an on-hour label"
-                )
-        elif isinstance(product.semantics, (Instant, UnknownTemporalSupport)):
-            pass
-        else:
-            assert_never(product.semantics)
-
         canonical_records.append(
             {
                 "time": native_time,
@@ -144,3 +118,39 @@ def _convert_value(value: float | None, product: ProductConfig) -> float | None:
         case _ as unreachable:
             assert_never(unreachable)
     return value * factor
+
+
+def validate_native_rows(rows: Rows, products: Mapping[ProductId, ProductConfig]) -> None:
+    """native row contract : Rows × ProductDefinitions → RowsContract (fail on broken assumptions)."""
+    validate_catalogue(rows, RowsSchema, on_issue="raise")
+
+    product_ids = rows["product_id"].unique().to_list()
+    missing_product_ids = sorted(product_id for product_id in product_ids if ProductId(product_id) not in products)
+    if missing_product_ids:
+        raise FatalContractError(f"Rows contain undeclared products: {', '.join(missing_product_ids)}")
+
+    for row in rows.iter_rows(named=True):
+        station_id = row["station_id"]
+        product_id = row["product_id"]
+        native_time = row["time"]
+        row_zone = row["time_zone"]
+        product = products[ProductId(product_id)]
+        ZoneValue(row_zone)
+
+        if isinstance(product.semantics, Daily):
+            actual_label = (native_time.hour, native_time.minute, native_time.second, native_time.microsecond)
+            if actual_label != product.semantics.label_time.components:
+                actual = native_time.time().isoformat(timespec="microseconds")
+                raise FatalContractError(
+                    f"Daily row for station {station_id} and product {product_id} must have declared label "
+                    f"{product.semantics.label_time.value}; actual label is {actual}"
+                )
+        elif isinstance(product.semantics, Hourly):
+            if native_time.minute != 0 or native_time.second != 0 or native_time.microsecond != 0:
+                raise FatalContractError(
+                    f"Hourly row for station {station_id} and product {product_id} must have an on-hour label"
+                )
+        elif isinstance(product.semantics, (Instant, UnknownTemporalSupport)):
+            pass
+        else:
+            assert_never(product.semantics)

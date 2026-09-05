@@ -1,4 +1,4 @@
-"""bulk lifecycle : BulkProvider × CacheRoot → CompiledStoreStatus.
+"""cache lifecycle : ProviderId × CacheRoot → StoreStatus ⊎ CacheClearResult; download : BulkProvider × CacheRoot → ValidatedStore.
 
 This composition root owns consent, paths, disk admission and the download/compile
 sequence. Provider modules retain only publisher-specific transfer and decoding.
@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Protocol
 
-from rivretrieve._internal.discovery import _ensure_default_providers_registered
+from rivretrieve._internal.discovery import _ensure_default_providers_registered, _resolve_store_root
 from rivretrieve._internal.engine import ObservationStoreConfig, ProviderConfig
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
@@ -75,24 +75,30 @@ def download(provider: str) -> ValidatedStore:
 
 
 def cache_status(provider: str) -> StoreStatus:
-    """Report the validated local store for a bulk provider without network access."""
-    provider_id, _config, root, _operations = _bulk_registration(provider)
+    """Report a provider's validated local store without network access."""
+    provider_id, root = _cache_registration(provider)
     return store_status(root, provider_id)
 
 
 def clear_cache(provider: str) -> CacheClearResult:
-    """Delete the compiled store and exact pending-download namespace.
+    """Delete the compiled observation store or accumulated live store, plus recovery inputs.
+
+    This destructive verb also removes preserved pending publisher downloads and
+    accumulated-write staging/backup directories so the next retrieval can retry.
 
     This explicit destructive verb removes preserved failed-compilation inputs so a
     later ``download()`` can retry. It never follows symlinks, never removes an
     unrelated sibling, and refuses a real directory in the pending-file namespace
     before deleting either the store or any pending input.
     """
-    provider_id, _config, root, _operations = _bulk_registration(provider)
+    provider_id, root = _cache_registration(provider)
     path = Path(root)
     pending = _pending_download_paths(path.parent)
     store_existed = path.exists() or path.is_symlink()
-    removed_paths = *((path,) if store_existed else ()), *pending
+    accumulated_pending = tuple(
+        sorted((*path.parent.glob(f".{path.name}.pending-*"), *path.parent.glob(f".{path.name}.backup-*")))
+    )
+    removed_paths = *((path,) if store_existed else ()), *pending, *accumulated_pending
     bytes_freed = sum(_tree_size(item) for item in removed_paths)
     for item in removed_paths:
         if item.is_symlink() or item.is_file():
@@ -172,18 +178,25 @@ def _transfer(client: Transport, url: str, destination: Path) -> None:
     destination.write_bytes(response.content)
 
 
+def _cache_registration(provider: str) -> tuple[ProviderId, StoreRoot]:
+    if not isinstance(provider, str) or not provider:
+        raise TypeError("provider must be a non-empty provider id")
+    _ensure_default_providers_registered()
+    handle = _registry.get(provider)
+    return handle.provider_id, _resolve_store_root(provider, handle._store_root)
+
+
 def _bulk_registration(provider: str) -> tuple[ProviderId, ObservationStoreConfig, StoreRoot, BulkStore]:
     if not isinstance(provider, str) or not provider:
         raise TypeError("provider must be a non-empty provider id")
     _ensure_default_providers_registered()
     handle: _ProviderHandle = _registry.get(provider)
     config: ProviderConfig | None = handle._store_config
-    root = handle._store_root
+    root = _resolve_store_root(provider, handle._store_root)
     operations = handle._bulk_operations
-    if config is None or config.cache is None or config.cache.store is None or root is None or operations is None:
+    if config is None or config.cache is None or config.cache.store is None or operations is None:
         raise BulkOperationsUnavailableError(
-            f"Provider {provider} does not publish bulk observations; "
-            "download(), cache_status() and clear_cache() are available only for bulk providers."
+            f"Provider {provider} does not publish bulk observations; download() is available only for bulk providers."
         )
     return handle.provider_id, config.cache.store, root, operations
 

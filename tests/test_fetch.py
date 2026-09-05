@@ -600,7 +600,7 @@ def test_fetch_functions_require_rivretrieve_selection_and_expose_request_contro
         with pytest.raises(TypeError, match="^selection must be a RivRetrieve selection$"):
             function(object(), start="2026-01-01", end="2026-01-01")
         signature = inspect.signature(function)
-        assert tuple(signature.parameters) == ("selection", "start", "end", "receipts", "on_issue")
+        assert tuple(signature.parameters) == ("selection", "start", "end", "receipts", "cache", "on_issue")
         assert signature.parameters["selection"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
         assert signature.parameters["selection"].default is inspect.Parameter.empty
         for name in ("start", "end"):
@@ -608,6 +608,8 @@ def test_fetch_functions_require_rivretrieve_selection_and_expose_request_contro
             assert signature.parameters[name].default is None
         assert signature.parameters["receipts"].kind is inspect.Parameter.KEYWORD_ONLY
         assert signature.parameters["receipts"].default is False
+        assert signature.parameters["cache"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert signature.parameters["cache"].default == "bypass"
         assert signature.parameters["on_issue"].kind is inspect.Parameter.KEYWORD_ONLY
         assert signature.parameters["on_issue"].default == "warn"
         assert inspect.get_annotations(function, eval_str=False) == {
@@ -615,6 +617,7 @@ def test_fetch_functions_require_rivretrieve_selection_and_expose_request_contro
             "start": "object",
             "end": "object",
             "receipts": "bool",
+            "cache": "CacheMode",
             "on_issue": "OnIssue",
             "return": ("ObservationResult" if function is rr.fetch else "dict[str, ObservationResult]"),
         }

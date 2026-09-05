@@ -17,8 +17,8 @@ and a bulk provider never touches the network on a request. Every receipt declar
 authorship, because the two are not the same kind of thing and only the reader can tell
 which matters: a **publisher payload** is untouched bytes the source itself served, and a
 **store excerpt** is bytes RivRetrieve produced by encoding rows read out of its own
-[[store]]. A store excerpt is exactly as complete as [[compile]] made the store and never
-reconstructs a value the store does not hold.
+[[store]]. A store excerpt contains exactly the selected rows the [[store]] holds, whether compiled
+or accumulated, and never reconstructs a value the store does not hold.
 _Avoid_: raw (the former name; it presented RivRetrieve's own encoding as the source's own
 words), untouched payload (one unzipping step removes it from what the server sent),
 response, blob"""
@@ -46,26 +46,24 @@ true about that source. An HTTP provider contributes `fetch.py`, `parse.py`, and
 _Avoid_: source, backend, plugin"""
 
 STAGE_ENTRY = """**Stage**:
-One of fetch, parse, convert, and assemble. An HTTP retrieval passes through all four.
-A bulk retrieval queries the [[store]] and then passes through convert and assemble; it
-passes through neither provider fetch nor provider parse, and no provider code executes
-on its retrieval path. A provider file is named for a stage only when the provider writes
-code for that stage, which is why convert and assemble have no provider file.
+One of fetch, parse, convert, and assemble. A live source retrieval passes through all
+four. Held rows from either kind of [[store]] pass through convert and assemble without
+provider fetch or parse; a mixed retrieval merges held and newly parsed rows before
+convert. A bulk retrieval uses only that store path. A provider file is named for a stage
+only when the provider writes code for that stage, so convert and assemble have no
+provider file.
 _Avoid_: step, phase"""
 
 STORE_ENTRY = """**Store**:
-Retrieved observations at rest in RivRetrieve's own layout, together with the
-[[manifest]] describing them. It is the single form ADR 0002 fixes for anything held on
-disk, so a [[cache]] and a [[user-cache]] are both stores. Revision `1` of the compiled-
-store manifest contract is reserved for a store produced by compiling a
-[[publisher-artifact]]. A user-cache store uses a distinct later format revision and does
-not use a reduced revision-`1` manifest. A store holds the source's native values and
-native wall-clock timestamps; unit conversion and clipping happen on read through the
-same convert [[stage]] every provider uses, so standardising the container is not the
-same act as changing the numbers. The layout is authored by RivRetrieve rather than
-owned by a publisher, which is why it carries a format version and why reading one is a
-compatibility obligation rather than an implementation detail.
-_Avoid_: cache (one kind of store, not the category), database, local format"""
+Native observations at rest in RivRetrieve's own layout, together with the [[manifest]]
+describing them. A [[cache]] holds a compiled store or an accumulated store. Compiled
+stores use revision `2` and retain the source columns declared by [[compile]]; accumulated
+stores use revision `4` and hold live parse output with [[coverage]]. Both hold native
+values and native wall-clock timestamps. The shared reader supplies the same convert
+[[stage]] for unit conversion and clipping, so a cached value is never converted twice.
+The format is authored by RivRetrieve and versioned; an unrecognised revision is refused
+before any observation file is opened, with its path and the explicit recovery action.
+_Avoid_: database, local format"""
 
 UNKNOWN_ENTRY = """**Unknown**:
 A representable state meaning the source does not tell us. Distinct from zero, from
@@ -121,7 +119,7 @@ def test_bulk_retrieval_skips_provider_fetch_and_parse() -> None:
     assert STAGE_ENTRY in _context()
 
 
-def test_store_revision_one_is_reserved_for_publisher_artifact_stores() -> None:
+def test_store_revisions_distinguish_compiled_and_accumulated_rows() -> None:
     assert STORE_ENTRY in _context()
 
 
@@ -135,3 +133,19 @@ def test_license_distinguishes_pre_research_absence_from_unknown() -> None:
 
 def test_citation_exists_and_distinguishes_pre_research_absence_from_unknown() -> None:
     assert CITATION_ENTRY in _context()
+
+
+def test_one_cache_has_two_population_paths_and_explicit_clear() -> None:
+    context = _context()
+    assert "**User cache**:" not in context
+    assert "[[user-cache]]" not in context
+    assert "a bulk provider's national dataset is compiled" in context
+    assert "provider's parse output accumulates" in context
+    assert "`clear_cache` removes it only when asked" in context
+
+
+def test_coverage_records_empty_answers_and_retrieval_without_freshness_verdict() -> None:
+    context = _context()
+    assert "a successful empty answer is covered too" in context
+    assert "each served interval carries its own instant" in context
+    assert "RivRetrieve computes no freshness threshold" in context

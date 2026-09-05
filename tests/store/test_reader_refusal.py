@@ -19,6 +19,7 @@ from rivretrieve._internal.store import (
     StoreReader,
     StoreRoot,
 )
+from rivretrieve._internal.store.validation import StoreManifest
 
 FIXTURES = Path(__file__).parents[1] / "test_data" / "observation_store_conformance"
 
@@ -103,6 +104,7 @@ def test_status_reports_absence_or_validated_manifest_facts(tmp_path: Path) -> N
     assert present.exists
     assert present.format_version == 2
     assert present.manifest is not None
+    assert isinstance(present.manifest, StoreManifest)
     assert present.compiler_version == present.manifest.compiler_version
     assert present.source_vintage is not None
     assert str(present.publisher_artifact_checksum).startswith("sha256:")

@@ -19,6 +19,7 @@ from rivretrieve._internal.providers.pl_imgw.declaration import declaration
 from rivretrieve._internal.providers.registration import DeclaredProvider
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.store import StoreQuery, StoreRoot, validate_store
+from rivretrieve._internal.store.validation import StoreManifest
 from rivretrieve._internal.transport import HttpMethod, TransportRequest
 
 _RECORDING = Path(__file__).parent / "test_data" / "pl_imgw_codz_2022_01.recording.json"
@@ -65,7 +66,9 @@ def test_exact_monthly_recording_replays_through_compiler_and_three_store_probes
     )
     results = run_manifest_boundary_probes((DeclaredProvider("pl_imgw", declaration),), probes)
     assert len(results) == 3
-    assert validate_store(root, ProviderId("pl_imgw")).manifest.source_vintage == date(2021, 11, 30)
+    compiled_manifest = validate_store(root, ProviderId("pl_imgw")).manifest
+    assert isinstance(compiled_manifest, StoreManifest)
+    assert compiled_manifest.source_vintage == date(2021, 11, 30)
 
 
 def test_monthly_hydrological_mapping_and_source_values_are_not_inferred(tmp_path: Path) -> None:
