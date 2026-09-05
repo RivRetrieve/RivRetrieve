@@ -18,6 +18,7 @@ from rivretrieve._internal.store import (
     source_unit_inventory_fingerprint,
     validate_store,
 )
+from rivretrieve._internal.store.validation import StoreManifest
 from tests.store.certification_support import COLUMNS, artifact_and_request, complete, rows
 
 
@@ -74,6 +75,7 @@ def test_invalid_late_stream_batch_cannot_replace_previous_store_or_delete_artif
 
     assert artifact.exists()
     validated = validate_store(prior.destination, ProviderId("fixture_bulk"))
+    assert isinstance(validated.manifest, StoreManifest)
     assert validated.manifest.publisher_artifact.url == "https://example.test/publisher.zip"
     assert not tuple(tmp_path.glob(".store.staging-*"))
     assert not tuple(tmp_path.glob(".store.previous-*"))
@@ -122,6 +124,7 @@ def test_streaming_readback_detects_exact_value_mutation_and_rolls_back(tmp_path
 
     assert artifact.exists()
     validated = validate_store(prior.destination, ProviderId("fixture_bulk"))
+    assert isinstance(validated.manifest, StoreManifest)
     assert validated.manifest.publisher_artifact.url == "https://example.test/publisher.zip"
 
 
@@ -318,9 +321,9 @@ def test_failed_publication_retries_prior_store_restore_in_outer_rollback(
 
     assert restore_attempts == 2
     assert artifact.exists()
-    assert validate_store(prior.destination, ProviderId("fixture_bulk")).manifest.publisher_artifact.url == (
-        "https://example.test/publisher.zip"
-    )
+    compiled_manifest = validate_store(prior.destination, ProviderId("fixture_bulk")).manifest
+    assert isinstance(compiled_manifest, StoreManifest)
+    assert compiled_manifest.publisher_artifact.url == ("https://example.test/publisher.zip")
     assert not tuple(tmp_path.glob(".store.staging-*"))
     assert not tuple(tmp_path.glob(".store.previous-*"))
     assert not tuple(tmp_path.glob(".publisher-artifacts.rollback-*"))
@@ -350,9 +353,9 @@ def test_non_streaming_staging_cleanup_failure_is_aggregated_without_touching_ar
         certify_store(request, artifact, lambda _path: complete(rows(value=2.0)), writer=write_then_fail)
 
     assert artifact.exists()
-    assert validate_store(prior.destination, ProviderId("fixture_bulk")).manifest.publisher_artifact.url == (
-        "https://example.test/publisher.zip"
-    )
+    compiled_manifest = validate_store(prior.destination, ProviderId("fixture_bulk")).manifest
+    assert isinstance(compiled_manifest, StoreManifest)
+    assert compiled_manifest.publisher_artifact.url == ("https://example.test/publisher.zip")
     assert len(tuple(tmp_path.glob(".store.staging-*"))) == 1
     assert not tuple(tmp_path.glob(".store.previous-*"))
 
@@ -420,9 +423,9 @@ def test_first_backup_rename_failure_leaves_untouched_destination_and_never_atte
 
     assert restore_attempts == 0
     assert artifact.exists()
-    assert validate_store(prior.destination, ProviderId("fixture_bulk")).manifest.publisher_artifact.url == (
-        "https://example.test/publisher.zip"
-    )
+    compiled_manifest = validate_store(prior.destination, ProviderId("fixture_bulk")).manifest
+    assert isinstance(compiled_manifest, StoreManifest)
+    assert compiled_manifest.publisher_artifact.url == ("https://example.test/publisher.zip")
     assert not tuple(tmp_path.glob(".store.staging-*"))
     assert not tuple(tmp_path.glob(".store.previous-*"))
 
@@ -494,9 +497,9 @@ def test_streaming_rollback_link_setup_cleanup_failure_is_aggregated(
         )
 
     assert artifact.exists()
-    assert validate_store(prior.destination, ProviderId("fixture_bulk")).manifest.publisher_artifact.url == (
-        "https://example.test/publisher.zip"
-    )
+    compiled_manifest = validate_store(prior.destination, ProviderId("fixture_bulk")).manifest
+    assert isinstance(compiled_manifest, StoreManifest)
+    assert compiled_manifest.publisher_artifact.url == ("https://example.test/publisher.zip")
     assert len(tuple(tmp_path.glob(".publisher-artifacts.rollback-*"))) == 1
     assert not tuple(tmp_path.glob(".store.staging-*"))
 

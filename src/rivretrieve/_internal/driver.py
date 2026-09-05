@@ -1,9 +1,10 @@
-"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode × Transport × CredentialVariableNames → _AssemblyResult; route_window_declarations : ProviderStages × Transport → ProductWindowDeclarations."""
+"""drive : ObservationRequest × ProviderStages × ObservationProvenance × ReceiptMode × Transport × CredentialVariableNames × CacheMode × StoreRoot → _AssemblyResult × StoreEffects; route_window_declarations : ProviderStages × Transport → ProductWindowDeclarations."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from dataclasses import replace
+from datetime import UTC, datetime, time, timedelta
 from types import MappingProxyType
 from typing import Protocol, assert_never, runtime_checkable
 
@@ -11,7 +12,8 @@ import polars as pl
 
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.conversion import convert
+from rivretrieve._internal.conversion import convert, validate_native_rows
+from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval, remainder, served_coverage
 from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
@@ -43,9 +45,11 @@ from rivretrieve._internal.observations import (
     ReceiptMode,
     Receipts,
 )
-from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.primitives import CacheMode, ProductId, ProviderId
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
+from rivretrieve._internal.store.accumulation import accumulate
 from rivretrieve._internal.store.receipts import encode_store_excerpt
+from rivretrieve._internal.store.validation import AccumulatedStoreManifest, StoreManifest
 from rivretrieve._internal.transport import (
     AuthenticationCapability,
     HttpClient,
@@ -351,6 +355,24 @@ class TransportWindowDeclarationProvider(Protocol):
     def window_declarations_for_transport(transport: Transport) -> ProductWindowDeclarations: ...
 
 
+def _requested_interval(
+    window: RequestedWindow, semantics: Instant | Daily | Hourly | UnknownTemporalSupport | None
+) -> RequestedInterval:
+    start = datetime.fromisoformat(window.start.isoformat())
+    end = datetime.fromisoformat(window.end.isoformat())
+    if isinstance(semantics, Daily):
+        start = datetime.combine(start.date(), time.min)
+        end = datetime.combine(end.date(), time.max)
+    return RequestedInterval(start, end)
+
+
+def _padded_interval(interval: RequestedInterval) -> FetchWindow:
+    return _make_fetch_window(
+        WindowEndpoint.from_datetime(interval.start - _FETCH_WINDOW_PADDING),
+        WindowEndpoint.from_datetime(interval.end + _FETCH_WINDOW_PADDING),
+    )
+
+
 def drive(
     request: ObservationRequest,
     provider: ProviderStages,
@@ -359,106 +381,174 @@ def drive(
     receipts: ReceiptMode = ReceiptMode.OMIT,
     transport: Transport | None = None,
     credential_names: tuple[str, ...] = (),
+    cache: CacheMode = "bypass",
+    store: StoreRoot | None = None,
 ) -> _AssemblyResult:
     if receipts not in (ReceiptMode.OMIT, ReceiptMode.INCLUDE) or not isinstance(receipts, ReceiptMode):
         raise TypeError("receipts must be ReceiptMode.OMIT or ReceiptMode.INCLUDE")
+    if cache not in ("bypass", "reuse", "refresh"):
+        raise ValueError("cache must be bypass, reuse, or refresh")
+    if cache != "bypass" and store is None:
+        raise FatalContractError("Caching requires a resolved store path from the public entry point")
     config = provider.config
-    requested_start = request.window.start
-    requested_end = request.window.end
-    fetch_window = _make_fetch_window(
-        WindowEndpoint.from_datetime(
-            datetime(
-                requested_start.year,
-                requested_start.month,
-                requested_start.day,
-                requested_start.hour,
-                requested_start.minute,
-                requested_start.second,
-                requested_start.microsecond,
-            )
-            - _FETCH_WINDOW_PADDING
-        ),
-        WindowEndpoint.from_datetime(
-            datetime(
-                requested_end.year,
-                requested_end.month,
-                requested_end.day,
-                requested_end.hour,
-                requested_end.minute,
-                requested_end.second,
-                requested_end.microsecond,
-            )
-            + _FETCH_WINDOW_PADDING
-        ),
-    )
-    _require_fetch_window_contains_requested(fetch_window, request.window)
+    requested = {
+        product: _requested_interval(request.window, config.products[product].semantics if cache != "bypass" else None)
+        for product in request.products
+    }
+    held: tuple[CoverageInterval, ...] = ()
+    served: list[CoverageInterval] = []
+    row_frames: list[Rows] = [pl.DataFrame(schema=RowsSchema.polars_schema)]
+    receipt_entries: list[ReceiptEntry] = []
+    if cache != "bypass":
+        assert store is not None
+        status = StoreReader().status(store, request.provider_id)
+        if status.manifest is not None:
+            if not isinstance(status.manifest, AccumulatedStoreManifest):
+                raise FatalContractError(f'Expected an accumulated store at "{store}"')
+            if cache == "reuse":
+                held = status.manifest.coverage
+                for station in request.stations:
+                    for product, interval in requested.items():
+                        served.extend(served_coverage(held, station, product, interval))
+                if served:
+                    read = StoreReader().query(
+                        StoreQuery(
+                            store,
+                            request.provider_id,
+                            request.stations,
+                            request.products,
+                            min(interval.start for interval in requested.values()),
+                            max(interval.end for interval in requested.values()),
+                        )
+                    )
+                    predicate = pl.any_horizontal(
+                        [
+                            (pl.col("product") == product) & pl.col("time").is_between(interval.start, interval.end)
+                            for product, interval in requested.items()
+                        ]
+                    )
+                    physical = read.physical_rows.filter(predicate)
+                    rows = physical.select(
+                        "station_id", pl.col("product").alias("product_id"), "time", "value", "time_zone"
+                    )
+                    read = replace(
+                        read,
+                        physical_rows=physical,
+                        rows=rows,
+                        optimized_plan=read.optimized_plan + "\nFILTER " + str(predicate),
+                    )
+                    row_frames.append(rows)
+                    if receipts is ReceiptMode.INCLUDE:
+                        receipt_entries.append(encode_store_excerpt(read))
     resolved_transport = HttpClient() if transport is None else transport
     declarations = (
         provider.window_declarations_for_transport(resolved_transport)
         if isinstance(provider, TransportWindowDeclarationProvider)
         else provider.window_declarations
     )
-    planned: dict[ProductId, tuple[RenderedWindow, ...]] = {}
-    for product_id in request.products:
-        try:
-            declaration = declarations.products[product_id]
-        except KeyError as error:
-            raise FatalContractError(
-                f"Provider {request.provider_id} has no window declaration for requested product {product_id}; "
-                "this is an internal provider contract breach before fetch."
-            ) from error
-        planned[product_id] = plan_windows(fetch_window, declaration)
     fetched_payloads: list[Payload] = []
-    fetch_issues: list[Issue] = []
+    all_issues: list[Issue] = []
+    pending_writes: list[tuple[Rows, CoverageInterval]] = []
+    failed_series: set[tuple[str, ProductId]] = set()
     for station_id in request.stations:
         for product_id in request.products:
-            rendered_windows = MappingProxyType({product_id: planned[product_id]})
             try:
-                fetched = provider.fetch(
-                    (station_id,),
-                    (product_id,),
-                    rendered_windows,
-                    fetch_window,
-                    config,
-                    _SourceResponseTransport(resolved_transport),
+                declaration = declarations.products[product_id]
+            except KeyError as error:
+                raise FatalContractError(
+                    f"Provider {request.provider_id} has no window declaration for requested product {product_id}; "
+                    "this is an internal provider contract breach before fetch."
+                ) from error
+            intervals = (
+                remainder(
+                    requested[product_id],
+                    tuple(c.interval for c in served if c.station_id == station_id and c.product_id == product_id),
                 )
-            except TransportFailure as failure:
-                fetch_issues.append(
-                    _source_failure_issue(
-                        request.provider_id,
-                        station_id,
-                        product_id,
-                        failure,
-                        credential_names,
-                    )
-                )
-                continue
-            fetch_issues.extend(fetched.issues)
-            fetched_payloads.extend(fetched.value)
-
-    payloads = tuple(fetched_payloads)
-    parsed: list[WithIssues[Rows]] = []
-    receipt_entries: list[ReceiptEntry] = []
-    for payload in payloads:
-        if receipts is ReceiptMode.INCLUDE:
-            receipt_entries.append(
-                ReceiptEntry(
-                    content=payload.content,
-                    origin=payload.origin,
-                    authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD,
-                )
+                if cache == "reuse"
+                else (requested[product_id],)
             )
-        parsed_payload = provider.parse(payload, config)
-        validate_catalogue(parsed_payload.value, RowsSchema, on_issue="raise")
-        parsed.append(parsed_payload)
-    rows = pl.concat([result.value for result in parsed] + [pl.DataFrame(schema=RowsSchema.polars_schema)])
+            for interval in intervals:
+                fetch_window = _padded_interval(interval)
+                interval_window = RequestedWindow(
+                    WindowEndpoint.from_datetime(interval.start), WindowEndpoint.from_datetime(interval.end)
+                )
+                _require_fetch_window_contains_requested(fetch_window, interval_window)
+                rendered_windows = MappingProxyType({product_id: plan_windows(fetch_window, declaration)})
+                try:
+                    fetched = provider.fetch(
+                        (station_id,),
+                        (product_id,),
+                        rendered_windows,
+                        fetch_window,
+                        config,
+                        _SourceResponseTransport(resolved_transport),
+                    )
+                except TransportFailure as failure:
+                    failed_series.add((station_id, product_id))
+                    all_issues.append(
+                        _source_failure_issue(
+                            request.provider_id,
+                            station_id,
+                            product_id,
+                            failure,
+                            credential_names,
+                        )
+                    )
+                    continue
+                series_issues = list(fetched.issues)
+                parsed: list[Rows] = [pl.DataFrame(schema=RowsSchema.polars_schema)]
+                fetched_payloads.extend(fetched.value)
+                for payload in fetched.value:
+                    if receipts is ReceiptMode.INCLUDE:
+                        receipt_entries.append(
+                            ReceiptEntry(
+                                content=payload.content,
+                                origin=payload.origin,
+                                authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD,
+                            )
+                        )
+                    result = provider.parse(payload, config)
+                    validate_catalogue(result.value, RowsSchema, on_issue="raise")
+                    parsed.append(result.value)
+                    series_issues.extend(result.issues)
+                rows = pl.concat(parsed)
+                if cache != "bypass":
+                    validate_native_rows(rows, config.products)
+                    unexpected = rows.filter(
+                        (pl.col("station_id") != station_id) | (pl.col("product_id") != product_id)
+                    )
+                    if not unexpected.is_empty():
+                        raise FatalContractError(
+                            "Parse output contains rows outside the fetched station-product series"
+                        )
+                    rows = rows.filter(
+                        (pl.col("station_id") == station_id)
+                        & (pl.col("product_id") == product_id)
+                        & pl.col("time").is_between(interval.start, interval.end)
+                    )
+                    if any(issue.severity == "error" for issue in series_issues):
+                        failed_series.add((station_id, product_id))
+                    else:
+                        retrieved = tuple(
+                            p.origin.retrieved_at for p in fetched.value if isinstance(p.origin.retrieved_at, datetime)
+                        )
+                        retrieved_at = max(retrieved) if retrieved else datetime.now(UTC)
+                        assert store is not None
+                        pending_writes.append((rows, CoverageInterval(station_id, product_id, interval, retrieved_at)))
+                row_frames.append(rows)
+                all_issues.extend(series_issues)
+    rows = pl.concat(row_frames)
     converted = convert(rows, config, request.window)
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
     _require_canonical_rows_within_requested(converted.value, config, request.window)
-    issues = tuple(fetch_issues) + tuple(issue for result in parsed for issue in result.issues) + converted.issues
+    for native_rows, coverage in pending_writes:
+        if (coverage.station_id, coverage.product_id) not in failed_series:
+            assert store is not None
+            accumulate(store, request.provider_id, native_rows, coverage)
     receipt_payload = Receipts(provider_id=request.provider_id, entries=tuple(receipt_entries))
-    enriched_provenance = _provenance_with_payload_origins(provenance, payloads)
-    return assemble(converted.value, enriched_provenance, issues, receipt_payload)
+    enriched_provenance = _provenance_with_payload_origins(provenance, tuple(fetched_payloads))
+    enriched_provenance = enriched_provenance.model_copy(update={"served_intervals": tuple(served)})
+    return assemble(converted.value, enriched_provenance, tuple(all_issues) + converted.issues, receipt_payload)
 
 
 def drive_store(
@@ -489,6 +579,8 @@ def drive_store(
     converted = convert(read.rows, config, request.window)
     validate_catalogue(converted.value, CanonicalRowsSchema, on_issue="raise")
     _require_canonical_rows_within_requested(converted.value, config, request.window)
+    if not isinstance(read.manifest, StoreManifest):
+        raise FatalContractError(f'Expected a compiled store at "{store}"')
     store_provenance = provenance.model_copy(
         update={
             "source_vintage": read.manifest.source_vintage,

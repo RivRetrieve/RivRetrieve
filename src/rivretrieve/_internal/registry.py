@@ -1,3 +1,5 @@
+"""provider dispatch : ProviderRegistration × ObservationRequest → ObservationResult."""
+
 from __future__ import annotations
 
 import re
@@ -27,7 +29,7 @@ from rivretrieve._internal.observations import (
     Receipts,
 )
 from rivretrieve._internal.observations import ObservationRequest as LegacyObservationRequest
-from rivretrieve._internal.primitives import OnIssue, ProductId, ProviderId
+from rivretrieve._internal.primitives import CacheMode, OnIssue, ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
@@ -110,6 +112,8 @@ class _ProviderHandle:
         on_issue: OnIssue = "warn",
         receipts: ReceiptMode = ReceiptMode.OMIT,
         transport: Transport | None = None,
+        cache: CacheMode = "bypass",
+        store: StoreRoot | None = None,
     ) -> ObservationResult:
         if self._stages is None and self._store_config is None:
             if self._module is not None:
@@ -131,9 +135,18 @@ class _ProviderHandle:
                 self._observation_source,
                 receipts=receipts,
                 transport=transport,
+                cache=cache,
+                store=store,
             )
         elif self._store_config is not None and self._store_root is not None:
-            result = self._drive_store(request, self._store_config, self._store_root, receipts=receipts)
+            if cache == "refresh":
+                raise FatalContractError(
+                    f"Provider {self.provider_id} uses a compiled store; refresh requires "
+                    f'rivretrieve.download("{self.provider_id}"). No transfer was started.'
+                )
+            result = self._drive_store(
+                request, self._store_config, self._store_root if store is None else store, receipts=receipts
+            )
         else:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
         apply_on_issue(result.issues, on_issue)
@@ -147,6 +160,8 @@ class _ProviderHandle:
         *,
         receipts: ReceiptMode = ReceiptMode.OMIT,
         transport: Transport | None = None,
+        cache: CacheMode = "bypass",
+        store: StoreRoot | None = None,
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -208,6 +223,8 @@ class _ProviderHandle:
             receipts=receipts,
             transport=transport,
             credential_names=self.required_credentials,
+            cache=cache,
+            store=store,
         )
         return ObservationResult(
             data=assembled.canonical_rows.select(

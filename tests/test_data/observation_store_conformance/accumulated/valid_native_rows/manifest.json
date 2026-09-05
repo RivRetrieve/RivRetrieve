@@ -1,0 +1,17 @@
+{
+  "format_version": 4,
+  "provider_id": "fixture_live",
+  "built_at": "2026-09-06T12:00:00.000000Z",
+  "coverage": [
+    {
+      "station_id": "a",
+      "product_id": "level",
+      "start": "2020-01-01T00:00:00.000000",
+      "end": "2020-01-31T23:59:59.999999",
+      "retrieved_at": "2026-09-06T11:00:00.000000Z"
+    }
+  ],
+  "partition_row_counts": {
+    "product=level/year=2020": 3
+  }
+}

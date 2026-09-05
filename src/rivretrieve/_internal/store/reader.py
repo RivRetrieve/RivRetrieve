@@ -12,13 +12,18 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.coverage import CoverageInterval
 from rivretrieve._internal.engine import Rows, RowsSchema, WindowEndpoint
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.store.validation import (
+    AccumulatedStoreManifest,
     ArtifactChecksum,
+    ObservationStoreRefusedError,
     PartitionIdentifier,
     SourceSchemaFingerprint,
     StoreManifest,
+    StoreRefusal,
+    StoreRefusalKind,
     StoreRoot,
     validate_store,
 )
@@ -84,7 +89,7 @@ class StoreReadResult:
     store: StoreRoot
     provider_id: ProviderId
     query: StoreQuery
-    manifest: StoreManifest
+    manifest: StoreManifest | AccumulatedStoreManifest
     executed_query: ExecutedStoreQuery
     rows: Rows
     physical_rows: pl.DataFrame
@@ -113,7 +118,8 @@ class StoreStatus:
     store: StoreRoot
     provider_id: ProviderId
     presence: StorePresence
-    manifest: StoreManifest | None = None
+    manifest: StoreManifest | AccumulatedStoreManifest | None = None
+    bytes_on_disk: int = 0
 
     def __post_init__(self) -> None:
         if (self.presence is StorePresence.PRESENT) != (self.manifest is not None):
@@ -133,7 +139,7 @@ class StoreStatus:
 
     @property
     def compiler_version(self) -> str | None:
-        return None if self.manifest is None else self.manifest.compiler_version
+        return self.manifest.compiler_version if isinstance(self.manifest, StoreManifest) else None
 
     @property
     def built_at(self) -> datetime | None:
@@ -141,27 +147,35 @@ class StoreStatus:
 
     @property
     def source_vintage(self) -> date | None:
-        return None if self.manifest is None else self.manifest.source_vintage
+        return self.manifest.source_vintage if isinstance(self.manifest, StoreManifest) else None
 
     @property
     def publisher_artifact_url(self) -> str | None:
-        return None if self.manifest is None else self.manifest.publisher_artifact.url
+        return self.manifest.publisher_artifact.url if isinstance(self.manifest, StoreManifest) else None
 
     @property
     def publisher_artifact_checksum(self) -> ArtifactChecksum | None:
-        return None if self.manifest is None else self.manifest.publisher_artifact.sha256
+        return self.manifest.publisher_artifact.sha256 if isinstance(self.manifest, StoreManifest) else None
 
     @property
     def publisher_artifact_urls(self) -> tuple[str, ...]:
-        return () if self.manifest is None else tuple(item.url for item in self.manifest.publisher_artifacts)
+        return (
+            tuple(item.url for item in self.manifest.publisher_artifacts)
+            if isinstance(self.manifest, StoreManifest)
+            else ()
+        )
 
     @property
     def publisher_artifact_checksums(self) -> tuple[ArtifactChecksum, ...]:
-        return () if self.manifest is None else tuple(item.sha256 for item in self.manifest.publisher_artifacts)
+        return (
+            tuple(item.sha256 for item in self.manifest.publisher_artifacts)
+            if isinstance(self.manifest, StoreManifest)
+            else ()
+        )
 
     @property
     def source_schema_fingerprint(self) -> SourceSchemaFingerprint | None:
-        return None if self.manifest is None else self.manifest.source_schema.fingerprint
+        return self.manifest.source_schema.fingerprint if isinstance(self.manifest, StoreManifest) else None
 
     @property
     def partition_row_counts(self) -> Mapping[PartitionIdentifier, int]:
@@ -169,16 +183,34 @@ class StoreStatus:
             return MappingProxyType({})
         return self.manifest.partition_row_counts
 
+    @property
+    def coverage(self) -> tuple[CoverageInterval, ...]:
+        return self.manifest.coverage if isinstance(self.manifest, AccumulatedStoreManifest) else ()
+
 
 class StoreReader:
-    """The source-neutral reader for revision-2 observation stores."""
+    """The shared reader for compiled and accumulated observation stores."""
 
     def query(self, query: StoreQuery) -> StoreReadResult:
         # Validation deliberately precedes partition selection and construction of any
         # lazy scan. In particular an unknown revision cannot cause a Parquet open.
         validated = validate_store(query.store, query.provider_id)
         executed = _executed_query(query)
-        physical_rows, optimized_plan = _scan(query.store, executed)
+        if validated.partition_files:
+            physical_rows, optimized_plan = _scan(query.store, executed)
+        else:
+            physical_rows = pl.DataFrame(
+                schema={
+                    "station_id": pl.String,
+                    "time": pl.Datetime("us"),
+                    "time_zone": pl.String,
+                    "value": pl.Float64,
+                    "value_state": pl.String,
+                    "product": pl.String,
+                    "year": pl.Int64,
+                }
+            )
+            optimized_plan = "EMPTY STORE: no partitions"
         rows = _engine_rows(physical_rows)
         return StoreReadResult(
             store=query.store,
@@ -196,6 +228,16 @@ class StoreReader:
 
     def status(self, store: StoreRoot, provider_id: ProviderId) -> StoreStatus:
         root = Path(store)
+        backups = tuple(root.parent.glob(f".{root.name}.backup-*"))
+        if backups:
+            raise ObservationStoreRefusedError(
+                StoreRefusal(
+                    StoreRefusalKind.MALFORMED,
+                    store,
+                    provider_id,
+                    f"interrupted store publication: preserve and inspect backup {backups[0]} before recovery",
+                )
+            )
         if not root.exists():
             return StoreStatus(store=store, provider_id=provider_id, presence=StorePresence.ABSENT)
         validated = validate_store(store, provider_id)
@@ -204,6 +246,7 @@ class StoreReader:
             provider_id=provider_id,
             presence=StorePresence.PRESENT,
             manifest=validated.manifest,
+            bytes_on_disk=sum(path.stat().st_size for path in root.rglob("*") if path.is_file()),
         )
 
 

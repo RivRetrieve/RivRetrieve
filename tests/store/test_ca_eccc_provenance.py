@@ -15,6 +15,7 @@ from rivretrieve._internal.providers.ca_eccc.bulk import (
 from rivretrieve._internal.providers.ca_eccc.config import config
 from rivretrieve._internal.registry import ProviderRegistry
 from rivretrieve._internal.store import StoreRoot
+from rivretrieve._internal.store.validation import StoreManifest
 from tests._catalogue import catalogue_path
 
 
@@ -69,6 +70,7 @@ def test_ca_eccc_value_provenance_names_compiled_release(tmp_path: Path) -> None
     )
     assert result.data["value"].to_list() == [12.4]
     assert result.provenance.source_vintage == date(2024, 6, 1)
+    assert isinstance(validated.manifest, StoreManifest)
     assert result.provenance.publisher_artifact_checksum == str(validated.manifest.publisher_artifact.sha256)
     assert result.provenance.publisher_artifact_checksum.startswith("sha256:")
     assert not artifact.exists()

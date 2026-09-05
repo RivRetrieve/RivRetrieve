@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema, validate_catalogue
+from rivretrieve._internal.coverage import CoverageInterval
 from rivretrieve._internal.engine import SourceCallOrigin, WindowEndpoint
 from rivretrieve._internal.issues import (
     FatalContractError,
@@ -91,6 +92,7 @@ class ObservationProvenance(BaseModel):
     query: dict[str, object] | None = None
     response_version: str | None = None
     metadata: str | None = None
+    served_intervals: tuple[CoverageInterval, ...] = ()
     source_vintage: date | None = None
     publisher_artifact_checksum: str | None = None
     publisher_artifact_checksums: tuple[str, ...] = ()
@@ -130,7 +132,7 @@ class StoreExcerptReceipt(ReceiptEntry):
     store_path: StoreRoot
     executed_query: ExecutedStoreQuery
     format_version: int
-    source_vintage: date
+    source_vintage: date | None
 
     def __post_init__(self) -> None:
         ReceiptEntry.__post_init__(self)
@@ -142,7 +144,7 @@ class StoreExcerptReceipt(ReceiptEntry):
             raise TypeError("store excerpt executed query must be ExecutedStoreQuery")
         if type(self.format_version) is not int:
             raise TypeError("store excerpt format version must be an integer")
-        if not isinstance(self.source_vintage, date):
+        if not isinstance(self.source_vintage, date) and not (self.format_version == 4 and self.source_vintage is None):
             raise TypeError("store excerpt source vintage must be a date")
 
 

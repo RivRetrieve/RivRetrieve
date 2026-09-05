@@ -7,6 +7,7 @@ from io import BytesIO
 from rivretrieve._internal.engine import SourceCallOrigin, SourceQuery, UnknownOriginFact
 from rivretrieve._internal.observations import ReceiptAuthorship, StoreExcerptReceipt
 from rivretrieve._internal.store.reader import StoreReadResult
+from rivretrieve._internal.store.validation import StoreManifest
 
 
 def encode_store_excerpt(read: StoreReadResult) -> StoreExcerptReceipt:
@@ -31,5 +32,5 @@ def encode_store_excerpt(read: StoreReadResult) -> StoreExcerptReceipt:
         store_path=read.store,
         executed_query=read.executed_query,
         format_version=read.manifest.format_version,
-        source_vintage=read.manifest.source_vintage,
+        source_vintage=read.manifest.source_vintage if isinstance(read.manifest, StoreManifest) else None,
     )

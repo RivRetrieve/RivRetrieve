@@ -10,8 +10,9 @@ intentionally invalid conformance stores are rooted at
 contract. Their paths are citations only: this document remains meaningful and mergeable
 when the concurrent artifacts are not present.
 
-This revision's manifest contract applies only to stores produced by compiling a
-publisher artifact.
+The revision-2 contract below applies to stores produced by compiling a publisher
+artifact. The accumulated-store revision-4 section specifies live-provider parse output
+and names its separately addressable manifest schema.
 
 This contract specifies data at rest. It does not specify or implement a store reader,
 a compiler, a provider port, a migration, or download behaviour.
@@ -250,11 +251,53 @@ second pass streams contributing rows into the single file for that partition. A
 finalise a partition file or its manifest count while an unread adjacent archive can still contribute.
 This decision does not change revision `2` partitioning.
 
-### User-cache format revision
+### Accumulated-store format revision 4 (normative)
 
-Revision `2` is reserved for stores compiled from publisher artifacts. A future user-cache store MUST
-use a distinct later format revision; it MUST NOT use a reduced revision-`1` manifest. This decision
-defines no user-cache layout or reader.
+Revision `2` remains reserved for compiled publisher artifacts. Revision `3` remains
+unassigned and unsupported. Revision `4` is an accumulated store of live-provider parse
+output. Its normative manifest schema is `manifest.schema.json#accumulated`; the root
+schema continues to describe revision `2`. Readers MUST select a recognised revision
+before opening any Parquet file and MUST refuse unknown revisions without migration,
+naming the store path and `clear_cache` for an accumulated store.
+
+The revision-4 manifest MUST contain exactly `format_version`, `provider_id`, `built_at`,
+`coverage`, and `partition_row_counts`. `built_at` is the UTC instant of the write, with
+six fractional digits and `Z`. Coverage is a nonempty list of records containing exactly
+`station_id`, `product_id`, `start`, `end`, and `retrieved_at`. Endpoints are closed,
+naive native wall-clock timestamps at microsecond precision. Retrieval instants are UTC
+with six fractional digits and `Z`. Each start MUST be no later than its end; coverage
+for one station-product MUST be nonoverlapping. Coverage records successful requested
+intervals, excluding fetch padding. Daily intervals are expanded to the full native date
+axis used by convert. Empty source answers MUST still record coverage. Coverage makes no
+freshness, expiry, or age claim. Adjacent records MAY retain separate retrieval instants.
+
+Partitions retain revision 2's `product=<id>/year=<native-year>` layout, one Parquet file
+per partition, station-id ordering, and exact five-column physical prefix. No provider
+native columns follow that prefix: parse output has already discarded those fields.
+`published_value` denotes a non-null native value and `published_null` a null value;
+`published_blank` is forbidden. Product is reconstructed from the partition. Values MUST
+remain in source units and times MUST remain naive native wall-clock timestamps. Rows
+MUST fall within a coverage record for their station and product. Duplicate source rows
+are retained. The count inventory MAY be empty when all covered answers have no rows.
+
+Reuse subtracts covered intervals on the microsecond axis and requests only remaining
+intervals (with the engine's usual fetch padding). Only rows within those intervals are
+written or merged; padding cannot overwrite held data. Refresh removes all rows and
+coverage in the requested interval before inserting the successful current answer,
+including an empty answer. Both modes preserve rows and coverage outside that interval.
+Failed series MUST NOT modify their held coverage or rows. If any missing interval for
+a series fails, none of that series's new intervals are written. All successful series
+are written after native-row and conversion contracts pass, before issue-policy raising.
+
+There is one writer per provider store. Writes stage a complete candidate beside the
+store, validate it, then replace its directory; partition files are never modified in
+place. A failed stage leaves the previous store intact. A process interruption between
+directory renames may leave a sibling backup requiring manual recovery; it MUST NOT be
+silently deleted. A subsequent reuse or refresh MUST refuse before source access when
+a sibling backup exists; explicit `clear_cache` removes these pending and backup
+namespaces as well as the canonical store. Concurrent readers/writers and automatic recovery are not guaranteed.
+Publisher payload bytes are never stored. A held receipt is a store excerpt re-encoded
+from physical rows, with served coverage and retrieval instants in provenance.
 
 ### Provider-native column collisions
 

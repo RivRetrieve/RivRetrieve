@@ -11,6 +11,7 @@ from rivretrieve._internal.providers.pl_imgw.bulk import (
     download_imgw_history,
     plan_imgw_artifacts,
 )
+from rivretrieve._internal.store.validation import StoreManifest
 
 
 def _official_url(name: str) -> str:
@@ -66,6 +67,7 @@ def test_multi_artifact_compile_publishes_one_union_with_complete_provenance(tmp
         )
     )
 
+    assert isinstance(validated.manifest, StoreManifest)
     assert [item.url for item in validated.manifest.publisher_artifacts] == [item.url for item in artifacts]
     assert all(not item.path.exists() for item in artifacts)
     assert validated.manifest.partition_row_counts == {
@@ -142,7 +144,9 @@ def test_multi_artifact_failure_retains_all_inputs_and_previous_store(tmp_path) 
         )
 
     assert valid.exists() and malformed.exists()
-    assert validate_store(root, ProviderId("pl_imgw")).manifest.publisher_artifact.url == _official_url("codz_2023.zip")
+    compiled_manifest = validate_store(root, ProviderId("pl_imgw")).manifest
+    assert isinstance(compiled_manifest, StoreManifest)
+    assert compiled_manifest.publisher_artifact.url == _official_url("codz_2023.zip")
 
 
 def test_imgw_history_download_removes_partial_current_target_and_refuses_preexisting(tmp_path) -> None:
@@ -222,7 +226,9 @@ def test_second_artifact_unlink_failure_restores_every_artifact_and_previous_sto
         )
 
     assert all(item.path.exists() for item in artifacts)
-    assert validate_store(root, ProviderId("pl_imgw")).manifest.publisher_artifact.url == _official_url("codz_2023.zip")
+    compiled_manifest = validate_store(root, ProviderId("pl_imgw")).manifest
+    assert isinstance(compiled_manifest, StoreManifest)
+    assert compiled_manifest.publisher_artifact.url == _official_url("codz_2023.zip")
     assert not tuple(tmp_path.glob(".publisher-artifacts.rollback-*"))
 
 

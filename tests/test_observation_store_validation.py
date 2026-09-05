@@ -128,7 +128,7 @@ def _validate_then_rewrite(store: Path, transform: object) -> None:
 
 
 def test_discovered_fixture_inventory_exercises_the_production_seam() -> None:
-    paths = {path.name: path for path in FIXTURES.iterdir() if path.is_dir()}
+    paths = {path.name: path for path in FIXTURES.iterdir() if path.is_dir() and path.name != "accumulated"}
     valid_paths = {name: path for name, path in paths.items() if name.startswith("valid_")}
     invalid_paths = {name: path for name, path in paths.items() if name.startswith("invalid_")}
     assert paths.keys() == valid_paths.keys() | invalid_paths.keys()

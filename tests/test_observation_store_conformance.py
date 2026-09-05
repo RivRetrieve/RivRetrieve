@@ -422,7 +422,7 @@ def test_fingerprint_covers_names_and_types(tmp_path: Path) -> None:
 
 
 def test_every_invalid_conformance_store_is_rejected_for_its_named_defect() -> None:
-    names = {path.name for path in FIXTURES.iterdir() if path.is_dir()}
+    names = {path.name for path in FIXTURES.iterdir() if path.is_dir() and path.name != "accumulated"}
     assert names == VALID_NAMES | INVALID_DEFECTS.keys()
     for name, defect in INVALID_DEFECTS.items():
         assert inspect_store(FIXTURES / name, CASE_UNIVERSES[name]) == [defect]

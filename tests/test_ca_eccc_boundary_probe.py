@@ -27,6 +27,7 @@ from rivretrieve._internal.providers.ca_eccc.declaration import declaration
 from rivretrieve._internal.providers.registration import DeclaredProvider
 from rivretrieve._internal.recordings import ReplayTransport, UnmatchedRequestError, read_recording
 from rivretrieve._internal.store import StoreQuery, StoreRoot, read_store
+from rivretrieve._internal.store.validation import StoreManifest
 from rivretrieve._internal.transport import HttpMethod, TransportRequest
 
 _DATA = Path(__file__).parent / "test_data"
@@ -54,6 +55,7 @@ def test_committed_derived_input_replays_through_production_compiler(tmp_path: P
             "0.1.49",
         )
     )
+    assert isinstance(compiled.manifest, StoreManifest)
     assert sum(compiled.manifest.partition_row_counts.values()) == 62
     assert str(compiled.manifest.publisher_artifact.sha256) == f"sha256:{_DERIVED_SHA256}"
     assert compiled.manifest.publisher_artifact.url == _DERIVED_URL
@@ -107,6 +109,7 @@ def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input() -> 
     assert "replayed through ReplayTransport" in attestation["corroboration_recording"]["role"]
     assert "never HYDAT compiler input" in attestation["corroboration_recording"]["role"]
     assert attestation["committed_store"]["compiler_input_committed"] is True
+    assert isinstance(store.manifest, StoreManifest)
     assert store.manifest.publisher_artifact.url == _DERIVED_URL
     fixture_identity = urlsplit(store.manifest.publisher_artifact.url)
     assert fixture_identity.hostname == "raw.githubusercontent.com"

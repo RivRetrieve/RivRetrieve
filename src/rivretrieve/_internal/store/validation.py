@@ -18,8 +18,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from jsonschema import Draft202012Validator, FormatChecker
 
+from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.primitives import ProductId, ProviderId
 
 StoreRoot = NewType("StoreRoot", Path)
 PartitionIdentifier = NewType("PartitionIdentifier", str)
@@ -77,9 +78,21 @@ class StoreManifest:
 
 
 @dataclass(frozen=True, slots=True)
+class AccumulatedStoreManifest:
+    format_version: Literal[4]
+    provider_id: ProviderId
+    built_at: datetime
+    coverage: tuple[CoverageInterval, ...]
+    partition_row_counts: Mapping[PartitionIdentifier, int]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "partition_row_counts", MappingProxyType(dict(self.partition_row_counts)))
+
+
+@dataclass(frozen=True, slots=True)
 class ValidatedStore:
     root: StoreRoot
-    manifest: StoreManifest
+    manifest: StoreManifest | AccumulatedStoreManifest
     partition_files: Mapping[PartitionIdentifier, Path]
 
     def __post_init__(self) -> None:
@@ -111,7 +124,8 @@ class ObservationStoreRefusedError(FatalContractError):
         label = refusal.kind.value.capitalize()
         message = (
             f'{label} observation store at "{refusal.store}": {refusal.defect}. '
-            f"Rebuild it with {refusal.rebuild_instruction}"
+            f"For a compiled store rebuild it with {refusal.rebuild_instruction}; "
+            f'for an accumulated store clear it with rivretrieve.clear_cache("{refusal.provider_id}")'
         )
         super().__init__(message)
 
@@ -189,7 +203,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
     version = raw["format_version"]
     if type(version) is not int:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
-    if version != 2:
+    if version not in (2, 4):
         _refuse(
             StoreRefusalKind.INCOMPATIBLE,
             store,
@@ -218,6 +232,8 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
 def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
+    if raw["format_version"] == 4:
+        schema = schema["$defs"]["accumulated"]
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     errors = sorted(
@@ -359,6 +375,8 @@ def _validate_partition(
     source_columns: tuple[dict[str, str], ...],
     store: StoreRoot,
     provider_id: ProviderId,
+    *,
+    allowed_null_states: tuple[str, ...] = ("published_null", "published_blank"),
 ) -> None:
     try:
         parquet = _open_parquet(path)
@@ -450,7 +468,7 @@ def _validate_partition(
                     )
             for index, (value, state) in enumerate(zip(values, value_states, strict=True), start=row_offset):
                 legal = (state == "published_value" and value is not None) or (
-                    state in {"published_null", "published_blank"} and value is None
+                    state in allowed_null_states and value is None
                 )
                 if not legal:
                     _refuse(
@@ -508,6 +526,8 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     _validate_manifest_schema(raw, store, provider_id)
     if raw["provider_id"] != str(provider_id):
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
+    if raw["format_version"] == 4:
+        return _validate_accumulated(raw, store, provider_id)
     _validate_source_contract(raw, store, provider_id)
     partition_files = _discover_partitions(raw, store, provider_id)
     retained_columns = tuple(
@@ -527,3 +547,58 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
         )
     manifest = _parse_manifest(raw)
     return ValidatedStore(root=store, manifest=manifest, partition_files=partition_files)
+
+
+def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
+    coverage: list[CoverageInterval] = []
+    for index, item in enumerate(raw["coverage"]):
+        try:
+            record = CoverageInterval(
+                item["station_id"],
+                ProductId(item["product_id"]),
+                RequestedInterval(datetime.fromisoformat(item["start"]), datetime.fromisoformat(item["end"])),
+                datetime.fromisoformat(item["retrieved_at"].removesuffix("Z") + "+00:00"),
+            )
+        except ValueError:
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.interval:{index}")
+        if any(
+            previous.station_id == record.station_id
+            and previous.product_id == record.product_id
+            and previous.interval.start <= record.interval.end
+            and previous.interval.end >= record.interval.start
+            for previous in coverage
+        ):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.overlap:{index}")
+        coverage.append(record)
+    partitions = _discover_partitions(raw, store, provider_id)
+    for identifier, path in partitions.items():
+        _validate_partition(
+            identifier,
+            path,
+            raw["partition_row_counts"][identifier],
+            (),
+            (),
+            store,
+            provider_id,
+            allowed_null_states=("published_null",),
+        )
+        product = str(identifier).split("/", 1)[0].removeprefix("product=")
+        for batch in _open_parquet(path).iter_batches(columns=["station_id", "time"]):
+            for station, timestamp in zip(
+                batch.column("station_id").to_pylist(), batch.column("time").to_pylist(), strict=True
+            ):
+                if not any(
+                    c.station_id == station
+                    and c.product_id == product
+                    and c.interval.start <= timestamp <= c.interval.end
+                    for c in coverage
+                ):
+                    _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
+    manifest = AccumulatedStoreManifest(
+        format_version=4,
+        provider_id=provider_id,
+        built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
+        coverage=tuple(coverage),
+        partition_row_counts={PartitionIdentifier(key): value for key, value in raw["partition_row_counts"].items()},
+    )
+    return ValidatedStore(root=store, manifest=manifest, partition_files=partitions)
