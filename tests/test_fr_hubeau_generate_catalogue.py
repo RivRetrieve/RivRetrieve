@@ -1211,6 +1211,7 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
     assert calls == []
     assert NATIVE_PATH.read_bytes() == native_before
     assert {path.name for path in tmp_path.iterdir()} == {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",

@@ -1,0 +1,788 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "@language": null,
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "dct": "http://purl.org/dc/terms/",
+    "rr": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#",
+    "conformsTo": "dct:conformsTo",
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "rr:absence": {
+      "@id": "rr:absence",
+      "@type": "@json"
+    },
+    "recordSet": "cr:recordSet",
+    "field": "cr:field",
+    "source": "cr:source",
+    "fileObject": "cr:fileObject",
+    "extract": "cr:extract",
+    "column": "cr:column",
+    "jsonPath": "cr:jsonPath"
+  },
+  "@type": "sc:Dataset",
+  "name": "rivretrieve-cz_chmi-catalogue",
+  "description": "Packaged provider, product, station and station-product catalogue for cz_chmi.",
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "creator": [
+    {
+      "@type": "sc:Organization",
+      "name": "Czech Hydrometeorological Institute"
+    }
+  ],
+  "license": "Produkty Českého hydrometeorologického ústavu dostupné na těchto webových stránkách podléhají licenci Creative Commons 4.0 CC-BY.",
+  "citation": "Dílo smíte sdílet a upravovat za podmínky uvedení původu (zdroje ČHMÚ).",
+  "distribution": [
+    {
+      "@id": "provider.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "provider.json",
+      "encodingFormat": "application/json",
+      "sha256": "1da1d046e3efce4914b67c48e708d37246285276125388d14950a2c6c5f6bf09",
+      "contentSize": "384 B"
+    },
+    {
+      "@id": "products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "18351b40d4307473aa667ff4cfbb13d4a151dc1f79811b0a344df886620c2b6c",
+      "contentSize": "3650 B"
+    },
+    {
+      "@id": "stations.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "stations.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "7e4bd677d5529820ade95e3110645a5760f1a0f39a4775843081788ccd46305e",
+      "contentSize": "15931 B"
+    },
+    {
+      "@id": "station_products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "fe1d6b16690a213d5f877e7da9e013ec1bad8cb6e1cc75ed131fcfbb6723a59c",
+      "contentSize": "9248 B"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "provider",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provider/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.name"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_stations",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_stations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_station_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_station_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/bulk_observations",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.bulk_observations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/catalogue_version",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.catalogue_version"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/license",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.license"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/citation",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.citation"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/observed_property",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "observed_property"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/frequency",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "frequency"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/statistic",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "statistic"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/period_type",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_type"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/period_anchor",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_anchor"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "unit"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/native_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "native_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "stations",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "stations/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "RivRetrieve-authored provider identity cz_chmi."
+        },
+        {
+          "@id": "stations/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column objID; conversion identity."
+        },
+        {
+          "@id": "stations/latitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "latitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column GEOGR1; conversion float."
+        },
+        {
+          "@id": "stations/longitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "longitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column GEOGR2; conversion float."
+        },
+        {
+          "@id": "stations/crs",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "crs"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Not published; evidence https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf.",
+          "rr:absence": {
+            "kind": "not_published",
+            "evidence": "https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "station_products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability_reason",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability_reason"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_start_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_start_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_end_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_end_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/last_catalogue_check",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "last_catalogue_check"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    }
+  ],
+  "subjectOf": [
+    {
+      "@id": "issuer/cz_chmi",
+      "@type": "sc:CreativeWork",
+      "identifier": "cz_chmi",
+      "name": "Recorded material issued by Czech Hydrometeorological Institute",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "Czech Hydrometeorological Institute"
+      },
+      "hasPart": [
+        {
+          "@id": "acquisition/cz_chmi/catalogue_capture_2026_08_02",
+          "@type": "sc:CreativeWork",
+          "identifier": "catalogue_capture_2026_08_02",
+          "name": "http_request",
+          "description": "Complete 831-row CHMI historical hydrology metadata response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Czech Hydrometeorological Institute"
+          },
+          "license": "Produkty Českého hydrometeorologického ústavu dostupné na těchto webových stránkách podléhají licenci Creative Commons 4.0 CC-BY.",
+          "citation": "Dílo smíte sdílet a upravovat za podmínky uvedení původu (zdroje ČHMÚ).",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "CHMI Open Data"
+          },
+          "url": [
+            "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "Complete 831-row CHMI historical hydrology metadata response",
+            "startDate": "2026-08-02T00:14:31+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/cz_chmi/terms_capture_2026_08_20",
+          "@type": "sc:CreativeWork",
+          "identifier": "terms_capture_2026_08_20",
+          "name": "http_request",
+          "description": "CHMI licensing and attribution HTML recording",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Czech Hydrometeorological Institute"
+          },
+          "license": "Produkty Českého hydrometeorologického ústavu dostupné na těchto webových stránkách podléhají licenci Creative Commons 4.0 CC-BY.",
+          "citation": "Dílo smíte sdílet a upravovat za podmínky uvedení původu (zdroje ČHMÚ).",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "CHMI Open Data"
+          },
+          "url": [
+            "https://www.chmi.cz/vylou%C4%8Den%C3%AD-odpov%C4%9Bdnosti"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "CHMI licensing and attribution HTML recording",
+            "startDate": "2026-08-20T15:24:48+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/cz_chmi/product_semantics_capture_2026_09_02",
+          "@type": "sc:CreativeWork",
+          "identifier": "product_semantics_capture_2026_09_02",
+          "name": "http_request",
+          "description": "CHMI product dictionary establishing HH and QH as hourly means",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Czech Hydrometeorological Institute"
+          },
+          "license": "Produkty Českého hydrometeorologického ústavu dostupné na těchto webových stránkách podléhají licenci Creative Commons 4.0 CC-BY.",
+          "citation": "Dílo smíte sdílet a upravovat za podmínky uvedení původu (zdroje ČHMÚ).",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "CHMI Open Data"
+          },
+          "url": [
+            "https://opendata.chmi.cz/hydrology/historical/metadata/meta2.json"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "CHMI product dictionary establishing HH and QH as hourly means",
+            "startDate": "2026-09-02T14:47:26.717737+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/cz_chmi/observation_request",
+          "@type": "sc:CreativeWork",
+          "identifier": "observation_request",
+          "name": "runtime_http_request",
+          "description": "Exact annual CHMI station-cadence response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Czech Hydrometeorological Institute"
+          },
+          "license": "Produkty Českého hydrometeorologického ústavu dostupné na těchto webových stránkách podléhají licenci Creative Commons 4.0 CC-BY.",
+          "citation": "Dílo smíte sdílet a upravovat za podmínky uvedení původu (zdroje ČHMÚ).",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "CHMI Open Data"
+          },
+          "url": [
+            "https://opendata.chmi.cz/hydrology/historical/"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "runtime",
+            "description": "Exact annual CHMI station-cadence response"
+          }
+        }
+      ],
+      "license": "Produkty Českého hydrometeorologického ústavu dostupné na těchto webových stránkách podléhají licenci Creative Commons 4.0 CC-BY.",
+      "citation": "Dílo smíte sdílet a upravovat za podmínky uvedení původu (zdroje ČHMÚ)."
+    },
+    {
+      "@id": "lineage/catalogue_external",
+      "@type": "sc:CreativeWork",
+      "identifier": "catalogue_external",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/1",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/cz_chmi/catalogue_capture_2026_08_02"
+        }
+      ],
+      "description": "catalogue_external"
+    },
+    {
+      "@id": "lineage/hourly_product_semantics",
+      "@type": "sc:CreativeWork",
+      "identifier": "hourly_product_semantics",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/2",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/cz_chmi/product_semantics_capture_2026_09_02"
+        }
+      ],
+      "description": "hourly_product_semantics"
+    },
+    {
+      "@id": "lineage/canonical_catalogue_carrier",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_catalogue_carrier",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/6",
+      "description": "cz_chmi external facts to RivRetrieve canonical catalogue carriers",
+      "isBasedOn": [
+        {
+          "@id": "lineage/catalogue_external"
+        },
+        {
+          "@id": "lineage/hourly_product_semantics"
+        }
+      ]
+    }
+  ],
+  "version": "2026-08-02",
+  "datePublished": "2026-08-02",
+  "isBasedOn": {
+    "@id": "native-table",
+    "@type": "sc:MediaObject",
+    "name": "Committed native catalogue build input",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/2f97c3a841b3403618126ea7587bffe1908ec6c0/src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+    "sha256": "03c2ce0b1bc686e696fd57a4ff82dfb3bb60c176edeafe2c24b62168d4e60408",
+    "contentSize": "51445 B",
+    "creator": {
+      "@type": "sc:Organization",
+      "name": "RivRetrieve"
+    },
+    "description": "RivRetrieve materialization of the separately attributed source inputs."
+  }
+}

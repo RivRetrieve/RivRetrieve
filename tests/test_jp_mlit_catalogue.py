@@ -979,6 +979,7 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
     )
     assert calls == [] and NATIVE_PATH.read_bytes() == before
     expected_names = {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",

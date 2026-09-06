@@ -1,6 +1,7 @@
 from rivretrieve._internal.discovery import as_frame as as_frame
 from rivretrieve._internal.discovery import cache_status as cache_status
 from rivretrieve._internal.discovery import clear_cache as clear_cache
+from rivretrieve._internal.discovery import describe as describe
 from rivretrieve._internal.discovery import download as download
 from rivretrieve._internal.discovery import fetch as fetch
 from rivretrieve._internal.discovery import fetch_by_provider as fetch_by_provider

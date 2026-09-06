@@ -492,6 +492,7 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
     assert calls == []
     assert NATIVE_PATH.read_bytes() == before_native
     assert {path.name for path in tmp_path.iterdir()} == {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",

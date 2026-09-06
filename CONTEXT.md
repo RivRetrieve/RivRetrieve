@@ -50,7 +50,7 @@ column, so the same canonical column is filled one way by one source and left em
 another. It takes one of five forms: a column of that provider's [[native table]], with a
 named typed conversion where needed; an [[authored]] provider identity; a [[documented]]
 constant; the evidenced statement that this source publishes nothing for that column; or
-[[native-only]]. Source-specific converters and source vocabulary stay in the provider
+[[withheld]]. Source-specific converters and source vocabulary stay in the provider
 module and are reused by its generator; the generic gate only invokes the conversion
 interface. Every canonical column carries one for every provider in
 `ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled provider is explicitly outside origin
@@ -69,14 +69,12 @@ other column.
 _Avoid_: hard-coded, field
 
 
-**Native-only**:
-The [[origin]] for a column this source does publish and we decline to promote, because
-the value cannot be admitted to the column's domain. It is distinct from publishing
-nothing: the cell is empty for a reason that is ours rather than the source's, and the
-source's value remains readable in the [[native table]]. It names the decision that
-withheld it rather than restating the argument, so reversing that decision is one edit.
-_Avoid_: rejected, excluded (both read as a verdict on the source's data), unrepresentable
-(which implies a technical limit rather than a choice), withheld
+**Withheld**:
+A catalogue fact or row RivRetrieve does not expose because its acquisition record is
+not established. It records our evidence gap, not a claim that the source publishes
+nothing. A [[catalogue absence]] carries the recorded reason; an [[origin]] may retain
+the `unknown` carrier marker without turning this gap into source silence.
+_Avoid_: native-only (the retired origin name), not published (a different claim), rejected
 
 **Documented**:
 The [[origin]] for a constant the source states in its documentation rather than carrying
@@ -346,6 +344,26 @@ share a datum, and a gauge's datum can change over time.
 _Avoid_: reference level, zero point
 
 ### Provenance
+
+**Catalogue descriptor**:
+The Croissant 1.0 JSON-LD description shipped beside each [[provider]]'s four catalogue
+tables and read offline by `describe(provider)`. The same reproducible build derives it
+from the tables, [[origin]] declarations, and acquisition provenance. It identifies files
+by digest, traces canonical fields to their issuing bodies, carries their [[license]]
+and [[citation]] words verbatim, and records each [[catalogue absence]]. Its version and
+publication date are the catalogue's recorded date, when established.
+_Avoid_: data card (broader than this catalogue contract), observation descriptor
+
+**Catalogue absence**:
+A deliberate lack of catalogue facts, expressed by the descriptor's sole extension
+property `rr:absence`. A field's extraction source locates its packaged column, even
+when an absence explains why the source fact is unavailable. The `not_published`
+kind names source silence with an [[evidence]] link; the `withheld` kind names our
+acquisition gap with its recorded reason. At record-set grain, withheld rows carry their
+count rather than a list of identifiers. An absent value alone establishes neither kind.
+The `rr:` namespace is
+`https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#`.
+_Avoid_: null reason (a null alone is insufficient), missingness (conflates the two kinds)
 
 **License**:
 A source's own terms, surfaced as a link and, where the source publishes one, its

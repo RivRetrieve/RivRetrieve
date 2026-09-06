@@ -794,6 +794,7 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
     assert generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)]) == 0
     assert NATIVE_PATH.read_bytes() == before
     assert {path.name for path in tmp_path.iterdir()} == {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",

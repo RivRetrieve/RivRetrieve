@@ -217,6 +217,28 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
 
 
 def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> AcquisitionProvenance:
+    term_bindings = tuple(
+        FactBinding(
+            fact_group=f"canonical_provider_{statement.kind}",
+            facts=(f"provider.{statement.kind}",),
+            source_id=None,
+            acquisition_id=None,
+            transformation=Transformation(
+                name=f"Canada verified source {statement.kind} statement to canonical provider carrier",
+                external_inputs=(ExternalFactReference(source_id=source.source_id, fact=statement.fact),),
+            ),
+        )
+        for source in provenance.source_records
+        for statement in source.statements
+        if statement.kind in ("license", "citation") and statement.fact is not None
+    )
+    payload = provenance.model_dump(mode="python")
+    payload["fact_bindings"] = (*provenance.fact_bindings, *term_bindings)
+    payload["fact_universe"] = (
+        *provenance.fact_universe,
+        *(fact for binding in term_bindings for fact in binding.facts),
+    )
+    provenance = AcquisitionProvenance.model_validate(payload)
     msc_facts = tuple(fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith(("provider.", "station.")))
     provenance = complete_transformed_fact_universe(
         provenance,

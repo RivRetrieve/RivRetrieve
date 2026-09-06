@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
 
 _CANONICAL_CATALOGUE_FILES = {
+    "croissant.json",
     "products.parquet",
     "provider.json",
     "station_products.parquet",
@@ -55,12 +57,30 @@ def test_wheel_carries_every_manifest_catalogue(tmp_path: Path) -> None:
         cwd=execution_directory,
     )
 
+    expected_descriptor = json.loads(
+        (repository / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/croissant.json").read_text()
+    )
     verification = f"""
+import json
+import socket
+import sys
+
+def forbid_network(*args, **kwargs):
+    raise AssertionError("Network access during installed-wheel discovery")
+
+socket.socket.connect = forbid_network
+socket.socket.connect_ex = forbid_network
+socket.create_connection = forbid_network
+
 from importlib.resources import files
 
 import rivretrieve
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 
+before_describe = set(sys.modules)
+assert rivretrieve.describe("usgs_nwis") == json.loads({json.dumps(expected_descriptor)!r})
+assert not {{name.split(".")[0] for name in set(sys.modules) - before_describe}} - sys.stdlib_module_names - {{"rivretrieve"}}
+assert "mlcroissant" not in sys.modules
 provider_frame = rivretrieve.providers()
 assert provider_frame.columns == ["provider_id", "credentials", "access"]
 provider_ids = tuple(provider_frame["provider_id"])
@@ -72,6 +92,8 @@ for provider_id in provider_ids:
     assert {_CANONICAL_CATALOGUE_FILES!r} <= packaged_names, (provider_id, packaged_names)
     if provider_id in {_PROVENANCE_PROVIDER_IDS!r}:
         assert "provenance.json" in packaged_names
+    assert "native.parquet" not in packaged_names
+    assert rivretrieve.describe(provider_id) == json.loads(catalogue.joinpath("croissant.json").read_text())
     assert not any(name.endswith((".eml", ".xlsx")) for name in packaged_names)
 
 for provider_id, station_id, count in (

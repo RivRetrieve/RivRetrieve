@@ -517,6 +517,11 @@ def _validate(
 
 
 def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) -> None:
+    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+    from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
+    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+    from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
+
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     (output_path / "provider.json").write_text(
@@ -528,6 +533,12 @@ def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) ->
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
     (output_path / "provenance.json").write_text(
         build_acquisition_provenance().model_dump_json() + "\n", encoding="utf-8"
+    )
+    write_catalogue_descriptor(
+        output_path / "croissant.json",
+        AcquisitionProvenance.model_validate_json((output_path / "provenance.json").read_bytes()),
+        (STATION_CATALOGUE_ORIGINS,),
+        {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
 
 

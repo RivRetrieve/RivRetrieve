@@ -63,7 +63,13 @@ def test_canada_canonical_carriers_are_rivretrieve_transformations() -> None:
         if binding.transformation is not None
         for reference in binding.transformation.external_inputs
     }
-    assert lineage_sources == {"ca_eccc_msc"}
+    assert lineage_sources == {"ca_eccc_msc", "ca_eccc_wsc"}
+    for kind, source_id in (("license", "ca_eccc_msc"), ("citation", "ca_eccc_wsc")):
+        binding = next(binding for binding in canonical if f"provider.{kind}" in binding.facts)
+        assert binding.transformation is not None
+        assert [(reference.source_id, reference.fact) for reference in binding.transformation.external_inputs] == [
+            (source_id, f"source.provider.{kind}_statement")
+        ]
 
 
 def test_external_fact_references_reject_dangling_and_misattributed_lineage() -> None:

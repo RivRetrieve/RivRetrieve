@@ -1,0 +1,739 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "@language": null,
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "dct": "http://purl.org/dc/terms/",
+    "rr": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#",
+    "conformsTo": "dct:conformsTo",
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "rr:absence": {
+      "@id": "rr:absence",
+      "@type": "@json"
+    },
+    "recordSet": "cr:recordSet",
+    "field": "cr:field",
+    "source": "cr:source",
+    "fileObject": "cr:fileObject",
+    "extract": "cr:extract",
+    "column": "cr:column",
+    "jsonPath": "cr:jsonPath"
+  },
+  "@type": "sc:Dataset",
+  "name": "rivretrieve-lt_lhmt-catalogue",
+  "description": "Packaged provider, product, station and station-product catalogue for lt_lhmt.",
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "creator": [
+    {
+      "@type": "sc:Organization",
+      "name": "Lithuanian Hydrometeorological Service"
+    }
+  ],
+  "license": "Per Meteo LT API teikiami duomenys (toliau – duomenys) yra viešai prieinami ir nemokami visuomeniniam naudojimui, platinimui ir tolimesniam apdorojimui, laikantis šių duomenų naudojimo sąlygų: 1) duomenys, jeigu nenustatyta kitaip, teikiami pagal Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) tarptautinę duomenų naudojimo licenciją, būtina susipažinti su licencijos sąlygomis;",
+  "citation": "5) publikuojant, pakartotinai atkartojant ar kitaip naudojant duomenis, būtina nurodyti, kad duomenų šaltinis yra Tarnyba. Nenurodant duomenų šaltinio, gali būti nutraukta prieiga prie duomenų.",
+  "distribution": [
+    {
+      "@id": "provider.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "provider.json",
+      "encodingFormat": "application/json",
+      "sha256": "566edbfe60a72f482f565e763bea287f75ffcfbdadc7c3bc00529ddcd1b9bba4",
+      "contentSize": "390 B"
+    },
+    {
+      "@id": "products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "c6e8b74acc8b17d168caa18110f95e76543a862b01938ca63adee0e83f955a17",
+      "contentSize": "3561 B"
+    },
+    {
+      "@id": "stations.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "stations.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "47a5c3d68ccb81b821de91d72d82ce04eaf54ccf7470c45953f0ffe6e7f7a1be",
+      "contentSize": "4190 B"
+    },
+    {
+      "@id": "station_products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "345db712e2f0f616c6d8896855ca69d24116b9941fe5d9dd3b3fe3f35a83f394",
+      "contentSize": "4836 B"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "provider",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provider/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.name"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_stations",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_stations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_station_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_station_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/bulk_observations",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.bulk_observations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/catalogue_version",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.catalogue_version"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/license",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.license"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/citation",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.citation"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/observed_property",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "observed_property"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/frequency",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "frequency"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/statistic",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "statistic"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/period_type",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_type"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/period_anchor",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_anchor"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "unit"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/native_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "native_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "stations",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "stations/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "RivRetrieve-authored provider identity lt_lhmt."
+        },
+        {
+          "@id": "stations/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column code; conversion identity."
+        },
+        {
+          "@id": "stations/latitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "latitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column coordinates; conversion struct_member."
+        },
+        {
+          "@id": "stations/longitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "longitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column coordinates; conversion struct_member."
+        },
+        {
+          "@id": "stations/crs",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "crs"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Documented value EPSG:4326; evidence https://api.meteo.lt/."
+        }
+      ]
+    },
+    {
+      "@id": "station_products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability_reason",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability_reason"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_start_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_start_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_end_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_end_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/last_catalogue_check",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "last_catalogue_check"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    }
+  ],
+  "subjectOf": [
+    {
+      "@id": "issuer/lt_lhmt",
+      "@type": "sc:CreativeWork",
+      "identifier": "lt_lhmt",
+      "name": "Recorded material issued by Lithuanian Hydrometeorological Service",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "Lithuanian Hydrometeorological Service"
+      },
+      "hasPart": [
+        {
+          "@id": "acquisition/lt_lhmt/catalogue_capture_2026_08_01",
+          "@type": "sc:CreativeWork",
+          "identifier": "catalogue_capture_2026_08_01",
+          "name": "http_request",
+          "description": "Complete 97-station Meteo LT hydro-stations response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Lithuanian Hydrometeorological Service"
+          },
+          "license": "Per Meteo LT API teikiami duomenys (toliau – duomenys) yra viešai prieinami ir nemokami visuomeniniam naudojimui, platinimui ir tolimesniam apdorojimui, laikantis šių duomenų naudojimo sąlygų: 1) duomenys, jeigu nenustatyta kitaip, teikiami pagal Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) tarptautinę duomenų naudojimo licenciją, būtina susipažinti su licencijos sąlygomis;",
+          "citation": "5) publikuojant, pakartotinai atkartojant ar kitaip naudojant duomenis, būtina nurodyti, kad duomenų šaltinis yra Tarnyba. Nenurodant duomenų šaltinio, gali būti nutraukta prieiga prie duomenų.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "Meteo LT API"
+          },
+          "url": [
+            "https://api.meteo.lt/v1/hydro-stations"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "Complete 97-station Meteo LT hydro-stations response",
+            "startDate": "2026-08-01T18:31:08+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/lt_lhmt/terms_capture_2026_08_21",
+          "@type": "sc:CreativeWork",
+          "identifier": "terms_capture_2026_08_21",
+          "name": "http_request",
+          "description": "Meteo LT API data-use conditions HTML recording",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Lithuanian Hydrometeorological Service"
+          },
+          "license": "Per Meteo LT API teikiami duomenys (toliau – duomenys) yra viešai prieinami ir nemokami visuomeniniam naudojimui, platinimui ir tolimesniam apdorojimui, laikantis šių duomenų naudojimo sąlygų: 1) duomenys, jeigu nenustatyta kitaip, teikiami pagal Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) tarptautinę duomenų naudojimo licenciją, būtina susipažinti su licencijos sąlygomis;",
+          "citation": "5) publikuojant, pakartotinai atkartojant ar kitaip naudojant duomenis, būtina nurodyti, kad duomenų šaltinis yra Tarnyba. Nenurodant duomenų šaltinio, gali būti nutraukta prieiga prie duomenų.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "Meteo LT API"
+          },
+          "url": [
+            "https://api.meteo.lt/"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "Meteo LT API data-use conditions HTML recording",
+            "startDate": "2026-08-21T08:27:13+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/lt_lhmt/observation_request",
+          "@type": "sc:CreativeWork",
+          "identifier": "observation_request",
+          "name": "runtime_http_request",
+          "description": "Exact monthly Meteo LT station observation response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Lithuanian Hydrometeorological Service"
+          },
+          "license": "Per Meteo LT API teikiami duomenys (toliau – duomenys) yra viešai prieinami ir nemokami visuomeniniam naudojimui, platinimui ir tolimesniam apdorojimui, laikantis šių duomenų naudojimo sąlygų: 1) duomenys, jeigu nenustatyta kitaip, teikiami pagal Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) tarptautinę duomenų naudojimo licenciją, būtina susipažinti su licencijos sąlygomis;",
+          "citation": "5) publikuojant, pakartotinai atkartojant ar kitaip naudojant duomenis, būtina nurodyti, kad duomenų šaltinis yra Tarnyba. Nenurodant duomenų šaltinio, gali būti nutraukta prieiga prie duomenų.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "Meteo LT API"
+          },
+          "url": [
+            "https://api.meteo.lt/v1/hydro-stations/{station}/observations/historical/{YYYY-MM}"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "runtime",
+            "description": "Exact monthly Meteo LT station observation response"
+          }
+        }
+      ],
+      "license": "Per Meteo LT API teikiami duomenys (toliau – duomenys) yra viešai prieinami ir nemokami visuomeniniam naudojimui, platinimui ir tolimesniam apdorojimui, laikantis šių duomenų naudojimo sąlygų: 1) duomenys, jeigu nenustatyta kitaip, teikiami pagal Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) tarptautinę duomenų naudojimo licenciją, būtina susipažinti su licencijos sąlygomis;",
+      "citation": "5) publikuojant, pakartotinai atkartojant ar kitaip naudojant duomenis, būtina nurodyti, kad duomenų šaltinis yra Tarnyba. Nenurodant duomenų šaltinio, gali būti nutraukta prieiga prie duomenų."
+    },
+    {
+      "@id": "lineage/catalogue_external",
+      "@type": "sc:CreativeWork",
+      "identifier": "catalogue_external",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/1",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/lt_lhmt/catalogue_capture_2026_08_01"
+        }
+      ],
+      "description": "catalogue_external"
+    },
+    {
+      "@id": "lineage/canonical_catalogue_carrier",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_catalogue_carrier",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/5",
+      "description": "lt_lhmt external facts to RivRetrieve canonical catalogue carriers",
+      "isBasedOn": [
+        {
+          "@id": "lineage/catalogue_external"
+        }
+      ]
+    }
+  ],
+  "version": "2026-08-01",
+  "datePublished": "2026-08-01",
+  "isBasedOn": {
+    "@id": "native-table",
+    "@type": "sc:MediaObject",
+    "name": "Committed native catalogue build input",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/7b71c51715f92085ea5d83c9e862c2b67d0b742e/src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+    "sha256": "f1ddebed42b911d1417f22e22abebc5904652db4d5fc6da0bd0bed666d321b8d",
+    "contentSize": "6156 B",
+    "creator": {
+      "@type": "sc:Organization",
+      "name": "RivRetrieve"
+    },
+    "description": "RivRetrieve materialization of the separately attributed source inputs."
+  }
+}

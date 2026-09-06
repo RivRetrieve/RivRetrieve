@@ -407,6 +407,10 @@ def generate_withheld_catalogue(*, catalogue_date: date) -> GeneratedBrAnaCatalo
 
 
 def write_catalogue(catalogue: GeneratedBrAnaCatalogue, out_dir: Path | str) -> None:
+    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+    from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
+    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+
     if catalogue.acquisition_provenance is None:
         raise FatalContractError(f"{PROVIDER_ID} catalogue writing requires acquisition provenance")
     gated = packaged_catalogue_artifact_from_components(
@@ -428,6 +432,13 @@ def write_catalogue(catalogue: GeneratedBrAnaCatalogue, out_dir: Path | str) -> 
     (output_path / "provenance.json").write_text(
         catalogue.acquisition_provenance.model_dump_json(exclude_none=False) + "\n",
         encoding="utf-8",
+    )
+
+    write_catalogue_descriptor(
+        output_path / "croissant.json",
+        AcquisitionProvenance.model_validate_json((output_path / "provenance.json").read_bytes()),
+        (),
+        {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
 
 

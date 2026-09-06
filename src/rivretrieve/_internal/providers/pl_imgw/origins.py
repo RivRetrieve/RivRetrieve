@@ -46,6 +46,7 @@ STATION_CATALOGUE_ORIGINS = {
 }
 
 NATIVE_TABLE_SHA256 = "46b162f8f28e31db1a5e3caec1e5ead7f23cd07cfbc5c3975ca5e9af783b76fe"
+NATIVE_TABLE_BYTE_SIZE = 49670
 NATIVE_TABLE_REVISION = "c9c81934bb1773b0286c968f4fd7323f724c71ac"
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet"
 NATIVE_TABLE_SEMANTIC_SHA256 = "c7fb3582edcc4b66a154d5dac52acd22d2847cd04ed54f5ee94fbf7c8bc6d9ec"
@@ -182,6 +183,7 @@ def build_acquisition_provenance(
             repository_path=NATIVE_TABLE_REPOSITORY_PATH,
             revision=NATIVE_TABLE_REVISION,
             sha256=NATIVE_TABLE_SHA256,
+            byte_size=NATIVE_TABLE_BYTE_SIZE,
             semantic_digest=SemanticDigest(
                 name="pl_imgw.native_table_content_sha256",
                 sha256=NATIVE_TABLE_SEMANTIC_SHA256,
