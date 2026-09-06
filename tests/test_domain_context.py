@@ -149,3 +149,16 @@ def test_coverage_records_empty_answers_and_retrieval_without_freshness_verdict(
     assert "a successful empty answer is covered too" in context
     assert "each served interval carries its own instant" in context
     assert "RivRetrieve computes no freshness threshold" in context
+
+
+def test_catalogue_descriptor_records_source_silence_and_our_acquisition_gap() -> None:
+    context = _context()
+    assert "**Catalogue descriptor**:" in context
+    assert "**Catalogue absence**:" in context
+    assert "A field's extraction source locates its packaged column" in context
+    assert "an absence explains why the source fact is unavailable" in context
+    assert "kind names source silence with an [[evidence]] link" in context
+    assert "acquisition gap with its recorded reason" in context
+    assert "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#" in context
+    assert "**Withheld**:" in context
+    assert "**Native-only**:" not in context

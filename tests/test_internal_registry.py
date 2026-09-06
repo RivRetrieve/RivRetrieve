@@ -5,6 +5,7 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import fields, is_dataclass, replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import polars as pl
 import polars.testing as pl_testing
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 import rivretrieve._internal.driver as driver_module
+from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.engine import (
     CanonicalRows,
@@ -51,7 +53,7 @@ from rivretrieve._internal.observations import (
     ObservationResult,
     Receipts,
 )
-from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.primitives import OnIssue, ProductId, ProviderId
 from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValidationError
 from rivretrieve._internal.providers.ca_eccc.config import config as ca_eccc_config
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle, _registry
@@ -301,7 +303,7 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
     ]
 
 
-def test_registry_reads_packaged_license_and_citation_into_observation_provenance(
+def test_registry_ignores_unverified_provider_info_words(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
     registry = ProviderRegistry()
@@ -336,16 +338,19 @@ def test_registry_reads_packaged_license_and_citation_into_observation_provenanc
         on_issue="ignore",
     )
 
-    assert result.provenance.license == "https://terms.example.test/provider-license"
-    assert result.provenance.citation == "Example Hydrology Agency (2026), Gauge observations."
-    assert result.issues == ()
+    assert result.provenance.license is None
+    assert result.provenance.citation is None
+    assert {issue.code for issue in result.issues} == {
+        "provenance.license_not_established",
+        "provenance.citation_not_established",
+    }
 
 
 @pytest.mark.parametrize("on_issue", ("warn", "raise"))
 def test_registry_null_license_and_citation_are_silent_info_issues(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
     capsys: pytest.CaptureFixture[str],
-    on_issue: str,
+    on_issue: OnIssue,
 ) -> None:
     registry = ProviderRegistry()
     stub_artifact = stub_packaged_catalogue_artifact("test_provider")
@@ -1038,3 +1043,37 @@ def test_observation_result_carries_shared_acquisition_provenance(
 
     assert result.provenance.acquisition_provenance == shared
     assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+
+
+@pytest.mark.parametrize("provider_id", ("usgs_nwis", "za_dws", "ca_eccc", "ch_foen", "fr_hubeau", "pl_imgw", "br_ana"))
+def test_registry_terms_come_from_verified_acquisition_statements(
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    provider_id: str,
+) -> None:
+    provenance = AcquisitionProvenance.model_validate_json(
+        (
+            Path(__file__).parents[1]
+            / "src/rivretrieve/_internal/providers"
+            / provider_id
+            / "catalogue/provenance.json"
+        ).read_text()
+    )
+    artifact = replace(stub_packaged_catalogue_artifact(provider_id), acquisition_provenance=provenance)
+    handle = ProviderRegistry().register(provider_id, artifact, engine_provider_module=_InfoOnlyEngineModule)
+    result = handle.observations(
+        stations="station-1", products="level", start="2026-01-01", end="2026-01-02", on_issue="ignore"
+    )
+    expected = {
+        statement.kind: statement.exact_text
+        for source in provenance.source_records
+        if source.source_id != "ch_existenz" and provider_id not in ("pl_imgw", "br_ana")
+        for statement in source.statements
+        if statement.kind in ("license", "citation")
+    }
+    assert result.provenance.license == expected.get("license")
+    assert result.provenance.citation == expected.get("citation")
+    assert {issue.code for issue in result.issues} == (
+        {"provenance.license_not_established", "provenance.citation_not_established"}
+        if provider_id in ("za_dws", "pl_imgw", "br_ana")
+        else set()
+    )

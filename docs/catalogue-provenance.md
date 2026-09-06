@@ -1,14 +1,14 @@
 # Catalogue provenance and maintenance
 
-This document owns the maintenance conventions for packaged provider catalogues. The architecture is
-owned by [ADR 0012](adr/0012-a-catalogue-column-declares-its-origin.md) and
-[ADR 0013](adr/0013-the-catalogue-is-built-from-a-committed-native-table.md): each canonical column
-declares its origin, and each certified canonical catalogue is a pure, network-free build from a
-committed native table and those declarations. This document does not restate those decisions.
+This document owns the maintenance conventions for packaged provider catalogues. The
+[domain glossary](../CONTEXT.md) defines origins, native tables and catalogue descriptors;
+[`catalogue_origins.py`](../src/rivretrieve/_internal/catalogue_origins.py) enforces the
+origin contract. Each certified canonical catalogue is a reproducible, network-free build
+from a committed native table and its declarations.
 
 ## Evidence ownership
 
-Catalogue evidence has three complementary homes:
+Catalogue evidence has four complementary homes:
 
 - `src/rivretrieve/_internal/providers/<provider>/catalogue/provenance.json` binds packaged facts to
   source records and the committed native table.
@@ -16,6 +16,15 @@ Catalogue evidence has three complementary homes:
   digest, schema, count, and semantic-frame checks.
 - [`provider_ports/`](provider_ports/) holds provider-specific rationale, source limitations, and
   capture evidence that is needed for human audit but is not represented by the structured records.
+- The generated Croissant descriptor beside each catalogue exposes its tables, issuing bodies,
+  verbatim terms, file identities and [deliberate absences](catalogue-absence.md#absence) to machines.
+  `rivretrieve.describe(provider)` reads this packaged document without network access.
+
+The pure construction is in
+[`catalogues/descriptor.py`](../src/rivretrieve/_internal/catalogues/descriptor.py).
+Each provider's existing writer emits `croissant.json` from the exact packaged file bytes
+and the provenance it just wrote. Extraction points to packaged columns, while standard
+provenance relationships retain acquisition inputs and separate corroborating evidence.
 
 A native-table acquisition record must identify every exact non-secret request, its UTC retrieval
 instant, accepted row and station counts, deterministic canonicalization and ordering, SHA-256
@@ -58,14 +67,33 @@ uv run python src/rivretrieve/_internal/providers/<provider>/generate_catalogue.
   --out src/rivretrieve/_internal/providers/<provider>/catalogue/
 ```
 
-Commit `provider.json`, `products.parquet`, `stations.parquet`, `station_products.parquet`, and
-`provenance.json`. Test fixtures must not republish legacy uncertified catalogue values.
+Commit `provider.json`, `products.parquet`, `stations.parquet`, `station_products.parquet`,
+`provenance.json`, and the generated Croissant descriptor. Test fixtures must not republish
+legacy uncertified catalogue values.
 
 ## Provider maintenance
 
 After changing provider catalogue code or tests, run that provider's network-free build from its
 committed native table and origins, then commit the resulting canonical artefacts with the change.
 Never substitute a live or fixture-backed canonical build.
+
+The descriptor is a build output; do not edit it by hand. Rebuild it whenever its tables,
+origins or acquisition provenance change. Packaged file digests identify the emitted bytes;
+native-table identities retain the recorded commit, digest and byte size. Private evidence
+is identified by digest and is never copied into a distribution. Each issuing body's terms
+stay on that body's material. A dataset with several issuing bodies does not acquire a
+single combined licence or citation.
+
+Runtime `license` and `citation` scalars follow their canonical provider-field bindings
+to verified source statements. Explicit withholding and absence markers remain in force;
+the runtime does not select an unrelated contributor's words to fill a scalar. Full
+per-source statements remain available in acquisition provenance and in the descriptor.
+
+Run the reference `mlcroissant` validator through the test suite for all thirteen outputs,
+including the descriptor of Brazil's withheld catalogue. The validator is a development
+dependency; reading a descriptor from an installed wheel must not import it. Catalogue
+version and publication date come from the recorded catalogue date, and acquisition dates
+remain source facts. No build clock enters the descriptor.
 
 ## Observation evidence
 

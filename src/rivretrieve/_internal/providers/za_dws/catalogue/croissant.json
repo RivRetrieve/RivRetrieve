@@ -1,0 +1,794 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "@language": null,
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "dct": "http://purl.org/dc/terms/",
+    "rr": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#",
+    "conformsTo": "dct:conformsTo",
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "rr:absence": {
+      "@id": "rr:absence",
+      "@type": "@json"
+    },
+    "recordSet": "cr:recordSet",
+    "field": "cr:field",
+    "source": "cr:source",
+    "fileObject": "cr:fileObject",
+    "extract": "cr:extract",
+    "column": "cr:column",
+    "jsonPath": "cr:jsonPath"
+  },
+  "@type": "sc:Dataset",
+  "name": "rivretrieve-za_dws-catalogue",
+  "description": "Packaged provider, product, station and station-product catalogue for za_dws.",
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "creator": [
+    {
+      "@type": "sc:Organization",
+      "name": "South African Department of Water and Sanitation"
+    }
+  ],
+  "distribution": [
+    {
+      "@id": "provider.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "provider.json",
+      "encodingFormat": "application/json",
+      "sha256": "e3122301bb3a7f82b2b988807daa2fe6293ac9d0c5d4d67d17a47b02d4c7e096",
+      "contentSize": "476 B"
+    },
+    {
+      "@id": "products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "29a190af40ec4296b7025be91148020ba2e77ea37d3251087ce5758558a963fa",
+      "contentSize": "3628 B"
+    },
+    {
+      "@id": "stations.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "stations.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "549b87b19b59d987b49916bf52858e6f0c78e3ce7aec03c8d438059f50583021",
+      "contentSize": "26825 B"
+    },
+    {
+      "@id": "station_products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "65299f956641cad41cb4fffae8e16ee0dacc00f05797aaa3782a4159ccdf02ae",
+      "contentSize": "17777 B"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "provider",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provider/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.name"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_stations",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_stations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_station_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_station_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/bulk_observations",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.bulk_observations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/catalogue_version",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.catalogue_version"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/license",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.license"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/citation",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.citation"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/observed_property",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "observed_property"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/frequency",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "frequency"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/statistic",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "statistic"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/period_type",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_type"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/period_anchor",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_anchor"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "unit"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "products/native_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "native_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "stations",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "stations/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "RivRetrieve-authored provider identity za_dws."
+        },
+        {
+          "@id": "stations/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column Station; conversion identity."
+        },
+        {
+          "@id": "stations/latitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "latitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column Latitude (dd:mm:ss); conversion za_dws.unsigned_dms."
+        },
+        {
+          "@id": "stations/longitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "longitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Native column Longitude (dd:mm:ss); conversion za_dws.unsigned_dms."
+        },
+        {
+          "@id": "stations/crs",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "crs"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          },
+          "description": "Not published; evidence https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf.",
+          "rr:absence": {
+            "kind": "not_published",
+            "evidence": "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "station_products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability_reason",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability_reason"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_start_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_start_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_end_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_end_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "station_products/last_catalogue_check",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "last_catalogue_check"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_catalogue_carrier"
+          }
+        }
+      ]
+    }
+  ],
+  "subjectOf": [
+    {
+      "@id": "issuer/za_dws",
+      "@type": "sc:CreativeWork",
+      "identifier": "za_dws",
+      "name": "Recorded material issued by South African Department of Water and Sanitation",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "South African Department of Water and Sanitation"
+      },
+      "hasPart": [
+        {
+          "@id": "acquisition/za_dws/verified_hydrology_archive_campaign_2026_08_02",
+          "@type": "sc:CreativeWork",
+          "identifier": "verified_hydrology_archive_campaign_2026_08_02",
+          "name": "http_campaign",
+          "description": "Internet Archive intermediary capture of DWS Verified Hydrology HyCatalogue.aspx and all eight linked WMA River PDFs; 2,905 stations",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "South African Department of Water and Sanitation"
+          },
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "DWS Verified Hydrology"
+          },
+          "url": [
+            "http://web.archive.org/web/20260311133455id_/https://www.dws.gov.za/hydrology/Verified/HyCatalogue.aspx",
+            "http://web.archive.org/web/20251122081546id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf",
+            "http://web.archive.org/web/20251127140120id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA2_Inkomati-Usuthu_River.pdf",
+            "http://web.archive.org/web/20251127181748id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA3_Pongola-Mtamvuna_River.pdf",
+            "http://web.archive.org/web/20251126040946id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA4_Vaal-Orange_River.pdf",
+            "http://web.archive.org/web/20251127142153id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA5_Mzimvubu-Tsitsikamma_River.pdf",
+            "http://web.archive.org/web/20251121090856id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA6_Breede-Olifants_River.pdf",
+            "http://web.archive.org/web/20251121161554id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA7_Eswatini_River.pdf",
+            "http://web.archive.org/web/20251121113702id_/https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA8_Lesotho_River.pdf"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval_interval",
+            "description": "Internet Archive intermediary capture of DWS Verified Hydrology HyCatalogue.aspx and all eight linked WMA River PDFs; 2,905 stations",
+            "startDate": "2026-08-02T18:47:00+00:00",
+            "endDate": "2026-08-02T18:47:09+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/za_dws/observation_request",
+          "@type": "sc:CreativeWork",
+          "identifier": "observation_request",
+          "name": "runtime_http_request",
+          "description": "Exact DWS Verified Hydrology HyData.aspx request and response retained at runtime",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "South African Department of Water and Sanitation"
+          },
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "DWS Verified Hydrology"
+          },
+          "url": [
+            "https://www.dws.gov.za/hydrology/Verified/HyData.aspx"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "runtime",
+            "description": "Exact DWS Verified Hydrology HyData.aspx request and response retained at runtime"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "lineage/provider_identity",
+      "@type": "sc:CreativeWork",
+      "identifier": "provider_identity",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/0",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/za_dws/verified_hydrology_archive_campaign_2026_08_02"
+        }
+      ],
+      "description": "provider_identity"
+    },
+    {
+      "@id": "lineage/station_identity",
+      "@type": "sc:CreativeWork",
+      "identifier": "station_identity",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/1",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/za_dws/verified_hydrology_archive_campaign_2026_08_02"
+        }
+      ],
+      "description": "station_identity"
+    },
+    {
+      "@id": "lineage/station_location",
+      "@type": "sc:CreativeWork",
+      "identifier": "station_location",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/2",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/za_dws/verified_hydrology_archive_campaign_2026_08_02"
+        }
+      ],
+      "description": "station_location"
+    },
+    {
+      "@id": "lineage/product_identity",
+      "@type": "sc:CreativeWork",
+      "identifier": "product_identity",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/3",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/za_dws/verified_hydrology_archive_campaign_2026_08_02"
+        }
+      ],
+      "description": "product_identity"
+    },
+    {
+      "@id": "lineage/station_product_availability",
+      "@type": "sc:CreativeWork",
+      "identifier": "station_product_availability",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/4",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/za_dws/verified_hydrology_archive_campaign_2026_08_02"
+        }
+      ],
+      "description": "station_product_availability"
+    },
+    {
+      "@id": "lineage/canonical_catalogue_carrier",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_catalogue_carrier",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/6",
+      "description": "za_dws external facts to RivRetrieve canonical catalogue carriers",
+      "isBasedOn": [
+        {
+          "@id": "lineage/provider_identity"
+        },
+        {
+          "@id": "lineage/station_identity"
+        },
+        {
+          "@id": "lineage/station_location"
+        },
+        {
+          "@id": "lineage/product_identity"
+        },
+        {
+          "@id": "lineage/station_product_availability"
+        }
+      ]
+    }
+  ],
+  "version": "2026-08-02",
+  "datePublished": "2026-08-02",
+  "isBasedOn": {
+    "@id": "native-table",
+    "@type": "sc:MediaObject",
+    "name": "Committed native catalogue build input",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/bfeb825a6f3b3aad4982649625d570c070b4ee32/src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+    "sha256": "6d122a3ae50e9bdb61599bce488bcf1045649cec2ec4b848177eccc328f56efd",
+    "contentSize": "67655 B",
+    "creator": {
+      "@type": "sc:Organization",
+      "name": "RivRetrieve"
+    },
+    "description": "RivRetrieve materialization of the separately attributed source inputs."
+  }
+}

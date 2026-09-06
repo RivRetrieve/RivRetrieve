@@ -269,8 +269,13 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
     assert result.provenance.source == "recording://usgs_nwis"
     assert result.provenance.provider_id == ProviderId("usgs_nwis")
     assert result.provenance.catalogue_version == "2026.01"
-    assert result.provenance.license == "https://licenses.test/usgs_nwis"
-    assert result.provenance.citation == "Citation usgs_nwis"
+    acquisition = result.provenance.acquisition_provenance
+    assert acquisition is not None
+    expected_terms = {
+        statement.kind: statement.exact_text for source in acquisition.source_records for statement in source.statements
+    }
+    assert result.provenance.license == expected_terms["license"]
+    assert result.provenance.citation == expected_terms["citation"]
     assert result.provenance.request == {
         "series": [
             {"station_id": "station-1", "product_id": "level"},
@@ -322,8 +327,15 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
         assert result.provenance.source == f"recording://{provider_id}"
         assert result.provenance.provider_id == ProviderId(provider_id)
         assert result.provenance.catalogue_version == "2026.01"
-        assert result.provenance.license == f"https://licenses.test/{provider_id}"
-        assert result.provenance.citation == f"Citation {provider_id}"
+        acquisition = result.provenance.acquisition_provenance
+        assert acquisition is not None
+        expected_terms = {
+            statement.kind: statement.exact_text
+            for source in acquisition.source_records
+            for statement in source.statements
+        }
+        assert result.provenance.license == expected_terms["license"]
+        assert result.provenance.citation == expected_terms["citation"]
         assert result.provenance.request == {
             "series": [{"station_id": "station-1", "product_id": "level"}],
             "start": "2026-01-01T00:00:00",

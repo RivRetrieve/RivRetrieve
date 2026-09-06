@@ -289,6 +289,7 @@ def test_canonical_cli_writes_only_five_canonical_artifacts(tmp_path: Path) -> N
 
     assert result == 0
     assert {path.name for path in tmp_path.iterdir()} == {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",

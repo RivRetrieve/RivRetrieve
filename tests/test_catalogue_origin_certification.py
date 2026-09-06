@@ -690,12 +690,33 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "croissant.json",
     }
     assert committed_names == rebuilt_names == expected_names
     for name in committed_names:
         committed = (catalogue_dir / name).read_bytes()
         rebuilt = (output / name).read_bytes()
-        if name.endswith(".json"):
+        if name.endswith(".json") and name != "croissant.json":
             assert _normalized_built_at(rebuilt) == _normalized_built_at(committed)
         else:
             assert rebuilt == committed
+
+
+def test_withheld_catalogue_descriptor_rebuilds_without_network(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    generator = _module("br_ana", "generate_catalogue")
+
+    def denied(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Withheld catalogue build attempted network access")
+
+    monkeypatch.setattr(socket.socket, "connect", denied)
+    monkeypatch.setattr(transport.HttpClient, "send", denied)
+    monkeypatch.setattr(generator, "generate_catalogue_from_live", denied)
+    output = tmp_path / "br_ana"
+    assert generator.main(["--withhold-uncertified", "--catalogue-date", "2000-01-01", "--out", str(output)]) == 0
+    committed = ROOT / "src/rivretrieve/_internal/providers/br_ana/catalogue/croissant.json"
+    assert (output / "croissant.json").read_bytes() == committed.read_bytes()
+    document = json.loads(committed.read_bytes())
+    assert "datePublished" not in document
+    assert "version" not in document

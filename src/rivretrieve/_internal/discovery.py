@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import date, datetime, time
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -32,6 +34,22 @@ if TYPE_CHECKING:
     from rivretrieve._internal.primitives import OnIssue
 
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
+
+
+def describe(provider: str) -> dict[str, object]:
+    """Return a provider's packaged Croissant JSON-LD descriptor without network access.
+
+    describe : ProviderId × PackagedCatalogueDescriptor → JSONLDMapping.
+    """
+    from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+
+    if provider not in BUILTIN_PROVIDER_IDS:
+        raise UnknownProviderError(provider)
+    descriptor = files("rivretrieve._internal.providers").joinpath(provider, "catalogue", "croissant.json")
+    document = json.loads(descriptor.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise FatalContractError(f"Catalogue descriptor for {provider} must be a JSON object")
+    return document
 
 
 def providers() -> pl.DataFrame:

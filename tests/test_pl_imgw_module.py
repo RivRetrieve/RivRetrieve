@@ -31,6 +31,7 @@ def test_pl_imgw_products_offline() -> None:
 def test_pl_imgw_station_products_and_artifacts() -> None:
     assert catalogue_reader("pl_imgw").read_station_products().data.height > 0
     assert {path.name for path in catalogue_path("pl_imgw").iterdir()} == {
+        "croissant.json",
         "native.parquet",
         "provider.json",
         "products.parquet",

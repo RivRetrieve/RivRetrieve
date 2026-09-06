@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import verified_provider_terms
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.driver import ProviderStages, drive, drive_store
@@ -53,6 +54,23 @@ class UnknownProviderError(FatalContractError):
         super().__init__(f"Provider is not registered: {provider_id}")
 
 
+def _unestablished_terms_issues(
+    provider_id: ProviderId, license: str | None, citation: str | None
+) -> tuple[Issue, ...]:
+    """unestablished terms : ProviderId × OptionalLicense × OptionalCitation → Issues (pure)."""
+    return tuple(
+        Issue(
+            severity="info",
+            code=f"provenance.{kind}_not_established",
+            message=f"RivRetrieve has not yet established the {kind} for provider {provider_id}.",
+            details={"field": kind},
+            provider_id=provider_id,
+        )
+        for kind, value in (("license", license), ("citation", citation))
+        if value is None
+    )
+
+
 @dataclass(frozen=True)
 class _ProviderHandle:
     provider_id: ProviderId
@@ -67,7 +85,17 @@ class _ProviderHandle:
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
 
     def info(self) -> ProviderInfo:
-        return ProviderInfo.from_row(self._artifact.provider_info)
+        provenance = self._artifact.acquisition_provenance
+        terms = (
+            verified_provider_terms(provenance.source_records, provenance.fact_bindings, provenance.withheld_facts)
+            if provenance is not None
+            else {}
+        )
+        return replace(
+            ProviderInfo.from_row(self._artifact.provider_info),
+            license=terms.get("license"),
+            citation=terms.get("citation"),
+        )
 
     def products(
         self,
@@ -174,34 +202,7 @@ class _ProviderHandle:
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
-        provenance_issues: tuple[Issue, ...] = (
-            *(
-                (
-                    Issue(
-                        severity="info",
-                        code="provenance.license_not_established",
-                        message=f"RivRetrieve has not yet established the license for provider {self.provider_id}.",
-                        details={"field": "license"},
-                        provider_id=self.provider_id,
-                    ),
-                )
-                if provider_info.license is None
-                else ()
-            ),
-            *(
-                (
-                    Issue(
-                        severity="info",
-                        code="provenance.citation_not_established",
-                        message=f"RivRetrieve has not yet established the citation for provider {self.provider_id}.",
-                        details={"field": "citation"},
-                        provider_id=self.provider_id,
-                    ),
-                )
-                if provider_info.citation is None
-                else ()
-            ),
-        )
+        provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
         assembled = drive(
             engine_request,
             stages,
@@ -288,7 +289,10 @@ class _ProviderHandle:
                         "end": request.end.isoformat(),
                     },
                 ),
-                issues=(issue,),
+                issues=(
+                    issue,
+                    *_unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation),
+                ),
                 receipts=Receipts(provider_id=self.provider_id, entries=()),
             )
         assembled = drive_store(
@@ -312,34 +316,7 @@ class _ProviderHandle:
             ),
             receipts=receipts,
         )
-        provenance_issues = (
-            *(
-                (
-                    Issue(
-                        severity="info",
-                        code="provenance.license_not_established",
-                        message=f"RivRetrieve has not yet established the license for provider {self.provider_id}.",
-                        details={"field": "license"},
-                        provider_id=self.provider_id,
-                    ),
-                )
-                if provider_info.license is None
-                else ()
-            ),
-            *(
-                (
-                    Issue(
-                        severity="info",
-                        code="provenance.citation_not_established",
-                        message=f"RivRetrieve has not yet established the citation for provider {self.provider_id}.",
-                        details={"field": "citation"},
-                        provider_id=self.provider_id,
-                    ),
-                )
-                if provider_info.citation is None
-                else ()
-            ),
-        )
+        provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
         return ObservationResult(
             data=assembled.canonical_rows.select("time", "time_zone", "station_id", "product_id", "value"),
             provenance=assembled.provenance,

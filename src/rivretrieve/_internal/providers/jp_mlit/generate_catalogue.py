@@ -312,6 +312,10 @@ def _validate(
 
 
 def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) -> None:
+    from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
+    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+    from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as f:
@@ -323,6 +327,13 @@ def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) ->
     (output_path / "provenance.json").write_text(
         serialize_acquisition_provenance(catalogue.acquisition_provenance) + "\n",
         encoding="utf-8",
+    )
+
+    write_catalogue_descriptor(
+        output_path / "croissant.json",
+        AcquisitionProvenance.model_validate_json((output_path / "provenance.json").read_bytes()),
+        (STATION_CATALOGUE_ORIGINS,),
+        {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
 
 

@@ -19,6 +19,7 @@ import polars as pl
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     serialize_acquisition_provenance,
+    verified_provider_terms,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import (
@@ -224,9 +225,6 @@ _STATION_NULLABLE_NUMBERS = tuple(
         "seriesList",
     }
 )
-
-_LICENSE = "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0)."
-_CITATION = "When using data from this service, if possible, please refer to this service as origin of data."
 
 
 class StationActivityFilter(IntEnum):
@@ -761,6 +759,10 @@ def build_station_products(native_table: NativeTable) -> StationProductCatalog:
 
 
 def build_provider_info(catalogue_date: date) -> dict[str, object]:
+    from rivretrieve._internal.providers.no_nve.origins import build_acquisition_provenance
+
+    provenance = build_acquisition_provenance()
+    terms = verified_provider_terms(provenance.source_records, provenance.fact_bindings, provenance.withheld_facts)
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -769,8 +771,8 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
         "live_station_products": False,
         "bulk_observations": "true: credentialed NVE HydAPI LiveStages observation retrieval",
         "catalogue_version": catalogue_date.isoformat(),
-        "license": _LICENSE,
-        "citation": _CITATION,
+        "license": terms["license"],
+        "citation": terms["citation"],
     }
 
 
@@ -795,6 +797,11 @@ def validate_generated_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> None:
+    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+    from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
+    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+    from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS
+
     output = Path(out_dir)
     output.mkdir(parents=True, exist_ok=True)
     (output / "provider.json").write_text(
@@ -806,6 +813,12 @@ def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> 
     catalogue.public_artifact.station_products.write_parquet(output / "station_products.parquet")
     (output / "provenance.json").write_text(
         serialize_acquisition_provenance(catalogue.acquisition_provenance) + "\n", encoding="utf-8"
+    )
+    write_catalogue_descriptor(
+        output / "croissant.json",
+        AcquisitionProvenance.model_validate_json((output / "provenance.json").read_bytes()),
+        (STATION_CATALOGUE_ORIGINS,),
+        {name: (output / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
 
 

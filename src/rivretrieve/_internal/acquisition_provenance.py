@@ -310,6 +310,30 @@ class SourceRecord(_ProvenanceModel):
         return value
 
 
+def verified_source_terms(source_records: tuple[SourceRecord, ...]) -> dict[str, str]:
+    """verified source terms : SourceRecords → VerbatimLicenseAndCitation (pure).
+
+    Aggregate terms belong only to one issuer. Private verification does not
+    make private words public, and different statements cannot be merged by guess.
+    """
+    if len({source.issuer for source in source_records}) != 1:
+        return {}
+    terms: dict[str, str] = {}
+    for source in source_records:
+        for statement in source.statements:
+            if statement.kind not in ("license", "citation"):
+                continue
+            if statement.verification_status != "verified_public_recording":
+                continue
+            text = statement.exact_text
+            if text is None:
+                raise FatalContractError("Verified public source statement has no exact text")
+            if statement.kind in terms and terms[statement.kind] != text:
+                raise FatalContractError(f"Conflicting verified {statement.kind} statements for {source.issuer}")
+            terms[statement.kind] = text
+    return terms
+
+
 class ExternalFactReference(_ProvenanceModel):
     """Reference an attributed external fact, including a withheld source fact."""
 
@@ -421,6 +445,38 @@ class WithheldFact(_ProvenanceModel):
         if len(located_identities) != len(self.catalogue_rows) or located_identities != scoped_identities:
             raise ValueError("catalogue row locators must correspond one-to-one with every scoped fact identity")
         return self
+
+
+def verified_provider_terms(
+    source_records: tuple[SourceRecord, ...],
+    fact_bindings: tuple[FactBinding, ...],
+    withheld_facts: tuple[WithheldFact, ...],
+) -> dict[str, str]:
+    """provider terms : SourceRecords × FactBindings × WithheldFacts → VerbatimLicenseAndCitation (pure).
+
+    Canonical provider-field lineage selects the issuing service. Catalogue
+    contributors do not acquire authority over that service's terms. Explicit
+    absence markers and withheld fields retain their established absence.
+    """
+    terms: dict[str, str] = {}
+    for kind in ("license", "citation"):
+        fact = f"provider.{kind}"
+        if any(fact in group.facts for group in withheld_facts):
+            continue
+        bindings = tuple(binding for binding in fact_bindings if fact in binding.facts)
+        if not bindings:
+            continue
+        if len(bindings) != 1:
+            raise FatalContractError(f"Multiple bindings for {fact}")
+        transformation = bindings[0].transformation
+        if transformation is None or transformation.kind != "derived_value":
+            continue
+        source_ids = {reference.source_id for reference in transformation.external_inputs}
+        sources = tuple(source for source in source_records if source.source_id in source_ids)
+        value = verified_source_terms(sources).get(kind)
+        if value is not None:
+            terms[kind] = value
+    return terms
 
 
 class SemanticDigest(_ProvenanceModel):

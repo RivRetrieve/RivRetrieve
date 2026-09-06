@@ -1,0 +1,867 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "@language": null,
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "dct": "http://purl.org/dc/terms/",
+    "rr": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#",
+    "conformsTo": "dct:conformsTo",
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "rr:absence": {
+      "@id": "rr:absence",
+      "@type": "@json"
+    },
+    "recordSet": "cr:recordSet",
+    "field": "cr:field",
+    "source": "cr:source",
+    "fileObject": "cr:fileObject",
+    "extract": "cr:extract",
+    "column": "cr:column",
+    "jsonPath": "cr:jsonPath"
+  },
+  "@type": "sc:Dataset",
+  "name": "rivretrieve-ca_eccc-catalogue",
+  "description": "Packaged provider, product, station and station-product catalogue for ca_eccc.",
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "creator": [
+    {
+      "@type": "sc:Organization",
+      "name": "Environment and Climate Change Canada, Meteorological Service of Canada"
+    },
+    {
+      "@type": "sc:Organization",
+      "name": "Environment and Climate Change Canada, Water Survey of Canada"
+    }
+  ],
+  "distribution": [
+    {
+      "@id": "provider.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "provider.json",
+      "encodingFormat": "application/json",
+      "sha256": "9c01533eb50aae3b8c1f26df3e9f305c61c1977161a84736d5e775c8c78e78ab",
+      "contentSize": "564 B"
+    },
+    {
+      "@id": "products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "7f0f057dd4526b092c3c77320ee64ee8c1d81f711ba5303f3271b07b765fc168",
+      "contentSize": "2502 B"
+    },
+    {
+      "@id": "stations.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "stations.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "2dd7132dfe74d00efd6cf3f394dc0be7cc031a308cf7011ece9b8ab4c2b33eaa",
+      "contentSize": "70992 B"
+    },
+    {
+      "@id": "station_products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "7fb28f8e48d0cea087cb9776bb919a0214423e703718987511c4e2d22dc6d40a",
+      "contentSize": "44501 B"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "provider",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provider/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.name"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_stations",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_stations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/live_station_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_station_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/bulk_observations",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.bulk_observations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/catalogue_version",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.catalogue_version"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          }
+        },
+        {
+          "@id": "provider/license",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.license"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_provider_license"
+          }
+        },
+        {
+          "@id": "provider/citation",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.citation"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_provider_citation"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/observed_property",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "observed_property"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/frequency",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "frequency"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/statistic",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "statistic"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/period_type",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_type"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/period_anchor",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_anchor"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "unit"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        },
+        {
+          "@id": "products/native_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "native_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_product_carrier"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "stations",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "stations/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          },
+          "description": "RivRetrieve-authored provider identity ca_eccc."
+        },
+        {
+          "@id": "stations/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          },
+          "description": "Native column STATION_NUMBER; conversion identity."
+        },
+        {
+          "@id": "stations/latitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "latitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          },
+          "description": "Native column geometry.coordinates[1]; conversion float."
+        },
+        {
+          "@id": "stations/longitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "longitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          },
+          "description": "Native column geometry.coordinates[0]; conversion float."
+        },
+        {
+          "@id": "stations/crs",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "crs"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_msc_catalogue_carrier"
+          },
+          "description": "Documented value EPSG:4326; evidence https://api.weather.gc.ca/collections/hydrometric-stations?f=json."
+        }
+      ]
+    },
+    {
+      "@id": "station_products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        },
+        {
+          "@id": "station_products/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        },
+        {
+          "@id": "station_products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        },
+        {
+          "@id": "station_products/availability_reason",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability_reason"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_start_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_start_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        },
+        {
+          "@id": "station_products/published_record_end_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_end_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        },
+        {
+          "@id": "station_products/last_catalogue_check",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "last_catalogue_check"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_wsc_station_product_carrier"
+          }
+        }
+      ]
+    }
+  ],
+  "subjectOf": [
+    {
+      "@id": "issuer/ca_eccc_msc",
+      "@type": "sc:CreativeWork",
+      "identifier": "ca_eccc_msc",
+      "name": "Recorded material issued by Environment and Climate Change Canada, Meteorological Service of Canada",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "Environment and Climate Change Canada, Meteorological Service of Canada"
+      },
+      "hasPart": [
+        {
+          "@id": "acquisition/ca_eccc_msc/station_registry_capture_2026_08_02",
+          "@type": "sc:CreativeWork",
+          "identifier": "station_registry_capture_2026_08_02",
+          "name": "http_campaign",
+          "description": "Nine complete GeoMet pages assembled into 8,057 station features",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Environment and Climate Change Canada, Meteorological Service of Canada"
+          },
+          "license": "Use of any Information indicates your acceptance of the terms below. The Information Provider grants you a worldwide, royalty-free, perpetual, non-exclusive licence to use the Information, including for commercial purposes, subject to the terms below.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "MSC GeoMet"
+          },
+          "url": [
+            "https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&limit=1000&offset={offset}"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval_interval",
+            "description": "Nine complete GeoMet pages assembled into 8,057 station features",
+            "startDate": "2026-08-02T01:09:10+00:00",
+            "endDate": "2026-08-02T01:09:20+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/ca_eccc_msc/msc_licence_capture_2026_08_20",
+          "@type": "sc:CreativeWork",
+          "identifier": "msc_licence_capture_2026_08_20",
+          "name": "http_request",
+          "description": "ECCC Data Servers End-use Licence response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Environment and Climate Change Canada, Meteorological Service of Canada"
+          },
+          "license": "Use of any Information indicates your acceptance of the terms below. The Information Provider grants you a worldwide, royalty-free, perpetual, non-exclusive licence to use the Information, including for commercial purposes, subject to the terms below.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "MSC GeoMet"
+          },
+          "url": [
+            "https://eccc-msc.github.io/open-data/licence/readme_en/"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "ECCC Data Servers End-use Licence response",
+            "startDate": "2026-08-20T12:31:14+00:00"
+          }
+        }
+      ],
+      "license": "Use of any Information indicates your acceptance of the terms below. The Information Provider grants you a worldwide, royalty-free, perpetual, non-exclusive licence to use the Information, including for commercial purposes, subject to the terms below."
+    },
+    {
+      "@id": "issuer/ca_eccc_wsc",
+      "@type": "sc:CreativeWork",
+      "identifier": "ca_eccc_wsc",
+      "name": "Recorded material issued by Environment and Climate Change Canada, Water Survey of Canada",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "Environment and Climate Change Canada, Water Survey of Canada"
+      },
+      "hasPart": [
+        {
+          "@id": "acquisition/ca_eccc_wsc/hydat_observation_artifact",
+          "@type": "sc:CreativeWork",
+          "identifier": "hydat_observation_artifact",
+          "name": "runtime_http_request",
+          "description": "HYDAT SQLite ZIP artifact retained with exact URL, digest, and acquisition instant",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Environment and Climate Change Canada, Water Survey of Canada"
+          },
+          "citation": "For real-time data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Real-time Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/real_time_data_index_e.html) on [DATE]” For historical data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Historical Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/historical_data_index_e.html) on [DATE]” For historical data retrieved from the MDB file:“Extracted from Environment and Climate Change Canada’s HYDAT.mdb, released on [DATE]”",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "HYDAT"
+          },
+          "url": [
+            "https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/Hydat_sqlite3_<vintage>.zip"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "runtime",
+            "description": "HYDAT SQLite ZIP artifact retained with exact URL, digest, and acquisition instant"
+          }
+        },
+        {
+          "@id": "acquisition/ca_eccc_wsc/wsc_citation_capture_2026_08_20",
+          "@type": "sc:CreativeWork",
+          "identifier": "wsc_citation_capture_2026_08_20",
+          "name": "http_request",
+          "description": "Wateroffice hydrometric citation instructions response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Environment and Climate Change Canada, Water Survey of Canada"
+          },
+          "citation": "For real-time data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Real-time Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/real_time_data_index_e.html) on [DATE]” For historical data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Historical Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/historical_data_index_e.html) on [DATE]” For historical data retrieved from the MDB file:“Extracted from Environment and Climate Change Canada’s HYDAT.mdb, released on [DATE]”",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "HYDAT"
+          },
+          "url": [
+            "https://wateroffice.ec.gc.ca/contactus/faq_e.html"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "Wateroffice hydrometric citation instructions response",
+            "startDate": "2026-08-20T12:31:16+00:00"
+          }
+        }
+      ],
+      "citation": "For real-time data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Real-time Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/real_time_data_index_e.html) on [DATE]” For historical data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Historical Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/historical_data_index_e.html) on [DATE]” For historical data retrieved from the MDB file:“Extracted from Environment and Climate Change Canada’s HYDAT.mdb, released on [DATE]”"
+    },
+    {
+      "@id": "lineage/msc_licence_statement",
+      "@type": "sc:CreativeWork",
+      "identifier": "msc_licence_statement",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/0",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/ca_eccc_msc/msc_licence_capture_2026_08_20"
+        }
+      ],
+      "description": "msc_licence_statement"
+    },
+    {
+      "@id": "lineage/canonical_provider_license",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_provider_license",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/5",
+      "description": "Canada verified source license statement to canonical provider carrier",
+      "isBasedOn": [
+        {
+          "@id": "lineage/msc_licence_statement"
+        }
+      ]
+    },
+    {
+      "@id": "lineage/wsc_citation_statement",
+      "@type": "sc:CreativeWork",
+      "identifier": "wsc_citation_statement",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/1",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/ca_eccc_wsc/wsc_citation_capture_2026_08_20"
+        }
+      ],
+      "description": "wsc_citation_statement"
+    },
+    {
+      "@id": "lineage/canonical_provider_citation",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_provider_citation",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/6",
+      "description": "Canada verified source citation statement to canonical provider carrier",
+      "isBasedOn": [
+        {
+          "@id": "lineage/wsc_citation_statement"
+        }
+      ]
+    },
+    {
+      "@id": "lineage/station_registry",
+      "@type": "sc:CreativeWork",
+      "identifier": "station_registry",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/2",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/ca_eccc_msc/station_registry_capture_2026_08_02"
+        }
+      ],
+      "description": "station_registry"
+    },
+    {
+      "@id": "lineage/canonical_msc_catalogue_carrier",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_msc_catalogue_carrier",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/7",
+      "description": "Canada station registry facts to canonical provider and station carriers",
+      "isBasedOn": [
+        {
+          "@id": "lineage/station_registry"
+        }
+      ]
+    },
+    {
+      "@id": "lineage/canonical_wsc_product_carrier",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_wsc_product_carrier",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/8",
+      "description": "RivRetrieve code-defined HYDAT product definitions"
+    },
+    {
+      "@id": "lineage/canonical_wsc_station_product_carrier",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_wsc_station_product_carrier",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/9",
+      "description": "Canada station registry membership to canonical station-product carrier",
+      "isBasedOn": [
+        {
+          "@id": "lineage/station_registry"
+        }
+      ]
+    }
+  ],
+  "version": "2026-08-02",
+  "datePublished": "2026-08-02",
+  "isBasedOn": {
+    "@id": "native-table",
+    "@type": "sc:MediaObject",
+    "name": "Committed native catalogue build input",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/a74ad90d2799546c16f049a2b437d9038294f2aa/src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
+    "sha256": "2f451d5f088b147f5dc81d6b95d124d9fd7f9c5e3e671998b3213a708028f173",
+    "contentSize": "244106 B",
+    "creator": {
+      "@type": "sc:Organization",
+      "name": "RivRetrieve"
+    },
+    "description": "RivRetrieve materialization of the separately attributed source inputs."
+  }
+}

@@ -727,6 +727,7 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
 def test_canonical_cli_writes_only_four_native_built_artifacts(tmp_path: Path) -> None:
     assert generator.main(["--native", str(_NATIVE_TABLE), "--out", str(tmp_path)]) == 0
     assert {path.name for path in tmp_path.iterdir()} == {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",
@@ -753,6 +754,7 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
     assert attempts == []
     assert _NATIVE_TABLE.read_bytes() == native_bytes
     assert {path.name for path in tmp_path.iterdir()} == {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",

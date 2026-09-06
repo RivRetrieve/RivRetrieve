@@ -1,0 +1,895 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "@language": null,
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "dct": "http://purl.org/dc/terms/",
+    "rr": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#",
+    "conformsTo": "dct:conformsTo",
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "rr:absence": {
+      "@id": "rr:absence",
+      "@type": "@json"
+    },
+    "recordSet": "cr:recordSet",
+    "field": "cr:field",
+    "source": "cr:source",
+    "fileObject": "cr:fileObject",
+    "extract": "cr:extract",
+    "column": "cr:column",
+    "jsonPath": "cr:jsonPath"
+  },
+  "@type": "sc:Dataset",
+  "name": "rivretrieve-no_nve-catalogue",
+  "description": "Packaged provider, product, station and station-product catalogue for no_nve.",
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "creator": [
+    {
+      "@type": "sc:Organization",
+      "name": "Norwegian Water Resources and Energy Directorate (NVE)"
+    }
+  ],
+  "license": "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+  "citation": "When using data from this service, if possible, please refer to this service as origin of data.",
+  "distribution": [
+    {
+      "@id": "provider.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "provider.json",
+      "encodingFormat": "application/json",
+      "sha256": "fd98dbb17f0c826ed61bd77c0fde0a8e3525b5ce748f6d6526dd42de127f29d4",
+      "contentSize": "578 B"
+    },
+    {
+      "@id": "products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "4e1eeab4d097da12fec49aa835c99333454fa1c9de397e83afdec922cca7434e",
+      "contentSize": "3850 B"
+    },
+    {
+      "@id": "stations.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "stations.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "4c7b92bfa79ad1fb05ce78aaff5e509280ce4ce231aef895460298bfc7bab8b0",
+      "contentSize": "69835 B"
+    },
+    {
+      "@id": "station_products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "447651231f090319a571f813cb4b9c9ae9b5490ed4fd5b782a6dcc9d73cd4ca1",
+      "contentSize": "34762 B"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "provider",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provider/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_provider_constants"
+          }
+        },
+        {
+          "@id": "provider/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.name"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_provider_source_facts"
+          }
+        },
+        {
+          "@id": "provider/live_stations",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_stations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_provider_constants"
+          }
+        },
+        {
+          "@id": "provider/live_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_provider_constants"
+          }
+        },
+        {
+          "@id": "provider/live_station_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_station_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_provider_constants"
+          }
+        },
+        {
+          "@id": "provider/bulk_observations",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.bulk_observations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_provider_constants"
+          }
+        },
+        {
+          "@id": "provider/catalogue_version",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.catalogue_version"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_provider_constants"
+          }
+        },
+        {
+          "@id": "provider/license",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.license"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_provider_source_facts"
+          }
+        },
+        {
+          "@id": "provider/citation",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.citation"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_provider_source_facts"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/observed_property",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "observed_property"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/frequency",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "frequency"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/statistic",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "statistic"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/period_type",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_type"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/period_anchor",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_anchor"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "unit"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        },
+        {
+          "@id": "products/native_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "native_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_products"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "stations",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "stations/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_stations"
+          },
+          "description": "RivRetrieve-authored provider identity no_nve."
+        },
+        {
+          "@id": "stations/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_stations"
+          },
+          "description": "Native column stationId; conversion identity."
+        },
+        {
+          "@id": "stations/latitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "latitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_stations"
+          },
+          "description": "Native column latitude; conversion float."
+        },
+        {
+          "@id": "stations/longitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "longitude"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_stations"
+          },
+          "description": "Native column longitude; conversion float."
+        },
+        {
+          "@id": "stations/crs",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "crs"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_stations"
+          },
+          "description": "Not published; evidence https://hydapi.nve.no/swagger/v1/swagger.json.",
+          "rr:absence": {
+            "kind": "not_published",
+            "evidence": "https://hydapi.nve.no/swagger/v1/swagger.json"
+          }
+        }
+      ]
+    },
+    {
+      "@id": "station_products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        },
+        {
+          "@id": "station_products/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        },
+        {
+          "@id": "station_products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        },
+        {
+          "@id": "station_products/availability",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        },
+        {
+          "@id": "station_products/availability_reason",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability_reason"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        },
+        {
+          "@id": "station_products/published_record_start_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_start_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        },
+        {
+          "@id": "station_products/published_record_end_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_end_date"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        },
+        {
+          "@id": "station_products/last_catalogue_check",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "last_catalogue_check"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/canonical_station_products"
+          }
+        }
+      ]
+    }
+  ],
+  "subjectOf": [
+    {
+      "@id": "issuer/no_nve.nve_hydapi",
+      "@type": "sc:CreativeWork",
+      "identifier": "no_nve.nve_hydapi",
+      "name": "Recorded material issued by Norwegian Water Resources and Energy Directorate (NVE)",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "Norwegian Water Resources and Energy Directorate (NVE)"
+      },
+      "hasPart": [
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/terms_capture_2026_08_21",
+          "@type": "sc:CreativeWork",
+          "identifier": "terms_capture_2026_08_21",
+          "name": "http_request",
+          "description": "NVE HydAPI public user-documentation terms response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Norwegian Water Resources and Energy Directorate (NVE)"
+          },
+          "license": "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+          "citation": "When using data from this service, if possible, please refer to this service as origin of data.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "hydapi.nve.no"
+          },
+          "url": [
+            "https://hydapi.nve.no/UserDocumentation/"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "NVE HydAPI public user-documentation terms response",
+            "startDate": "2026-08-21T09:19:38+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/station_schema_capture_2026_09_04",
+          "@type": "sc:MediaObject",
+          "identifier": "station_schema_capture_2026_09_04",
+          "name": "no_nve_swagger.json",
+          "description": "NVE OpenAPI station schema reviewed for the absence of a latitude/longitude CRS declaration",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Norwegian Water Resources and Energy Directorate (NVE)"
+          },
+          "license": "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+          "citation": "When using data from this service, if possible, please refer to this service as origin of data.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "hydapi.nve.no"
+          },
+          "url": [
+            "https://hydapi.nve.no/swagger/v1/swagger.json"
+          ],
+          "sha256": "6f30fa885e55ca4600e974de702ac818a14e6b236f11c968ecb511da3b9a0516",
+          "contentSize": "78385 B",
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "NVE OpenAPI station schema reviewed for the absence of a latitude/longitude CRS declaration",
+            "startDate": "2026-09-04T17:48:13+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/stations_active_1_capture_2026_09_04",
+          "@type": "sc:MediaObject",
+          "identifier": "stations_active_1_capture_2026_09_04",
+          "name": "no_nve_stations_active_1.json",
+          "description": "Complete credentialed NVE Stations Active=1 response: 4,902 response and accepted rows, 4,902 distinct stations",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Norwegian Water Resources and Energy Directorate (NVE)"
+          },
+          "license": "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+          "citation": "When using data from this service, if possible, please refer to this service as origin of data.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "hydapi.nve.no"
+          },
+          "url": [
+            "https://hydapi.nve.no/api/v1/Stations?Active=1"
+          ],
+          "sha256": "048a947ca05c9850cabdd76e90d8e010a3384ad03b08af19e7080915aae9c7c9",
+          "contentSize": "13865773 B",
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "Complete credentialed NVE Stations Active=1 response: 4,902 response and accepted rows, 4,902 distinct stations",
+            "startDate": "2026-09-04T18:59:57.133119+00:00"
+          }
+        },
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/stations_active_0_capture_2026_09_04",
+          "@type": "sc:MediaObject",
+          "identifier": "stations_active_0_capture_2026_09_04",
+          "name": "no_nve_stations_active_0.json",
+          "description": "Complete credentialed NVE Stations Active=0 response: 1,893 response and accepted rows, 1,893 distinct stations; all overlap identically with Active=1",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Norwegian Water Resources and Energy Directorate (NVE)"
+          },
+          "license": "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+          "citation": "When using data from this service, if possible, please refer to this service as origin of data.",
+          "provider": {
+            "@type": "sc:Organization",
+            "name": "hydapi.nve.no"
+          },
+          "url": [
+            "https://hydapi.nve.no/api/v1/Stations?Active=0"
+          ],
+          "sha256": "87ffaf3a633a0f4b40bc43bed0d047a66c061f7816b314e7a89db1b5ca370233",
+          "contentSize": "6114369 B",
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "Complete credentialed NVE Stations Active=0 response: 1,893 response and accepted rows, 1,893 distinct stations; all overlap identically with Active=1",
+            "startDate": "2026-09-04T18:59:58.038985+00:00"
+          }
+        }
+      ],
+      "license": "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
+      "citation": "When using data from this service, if possible, please refer to this service as origin of data."
+    },
+    {
+      "@id": "lineage/rivretrieve_provider_constants",
+      "@type": "sc:CreativeWork",
+      "identifier": "rivretrieve_provider_constants",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/4",
+      "description": "RivRetrieve provider identifiers and capabilities"
+    },
+    {
+      "@id": "lineage/public_terms",
+      "@type": "sc:CreativeWork",
+      "identifier": "public_terms",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/0",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/terms_capture_2026_08_21"
+        }
+      ],
+      "description": "public_terms"
+    },
+    {
+      "@id": "lineage/active_1_station_response",
+      "@type": "sc:CreativeWork",
+      "identifier": "active_1_station_response",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/2",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/stations_active_1_capture_2026_09_04"
+        }
+      ],
+      "description": "active_1_station_response"
+    },
+    {
+      "@id": "lineage/canonical_provider_source_facts",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_provider_source_facts",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/5",
+      "description": "NVE identity and exact public terms to canonical provider facts",
+      "isBasedOn": [
+        {
+          "@id": "lineage/public_terms"
+        },
+        {
+          "@id": "lineage/active_1_station_response"
+        }
+      ]
+    },
+    {
+      "@id": "lineage/canonical_products",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_products",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/6",
+      "description": "NVE parameter-resolution-unit vocabulary to canonical products",
+      "isBasedOn": [
+        {
+          "@id": "lineage/active_1_station_response"
+        }
+      ]
+    },
+    {
+      "@id": "lineage/active_0_station_response",
+      "@type": "sc:CreativeWork",
+      "identifier": "active_0_station_response",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/3",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/stations_active_0_capture_2026_09_04"
+        }
+      ],
+      "description": "active_0_station_response"
+    },
+    {
+      "@id": "lineage/coordinate_schema_review",
+      "@type": "sc:CreativeWork",
+      "identifier": "coordinate_schema_review",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/1",
+      "isBasedOn": [
+        {
+          "@id": "acquisition/no_nve.nve_hydapi/station_schema_capture_2026_09_04"
+        }
+      ],
+      "description": "coordinate_schema_review"
+    },
+    {
+      "@id": "lineage/canonical_stations",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_stations",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/7",
+      "description": "Complete NVE station response union to canonical identity and geometry",
+      "isBasedOn": [
+        {
+          "@id": "lineage/active_1_station_response"
+        },
+        {
+          "@id": "lineage/active_0_station_response"
+        },
+        {
+          "@id": "lineage/coordinate_schema_review"
+        }
+      ]
+    },
+    {
+      "@id": "lineage/canonical_station_products",
+      "@type": "sc:CreativeWork",
+      "identifier": "canonical_station_products",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/8",
+      "description": "Complete NVE seriesList parameter-resolution pairs to canonical station-product availability",
+      "isBasedOn": [
+        {
+          "@id": "lineage/active_1_station_response"
+        },
+        {
+          "@id": "lineage/active_0_station_response"
+        }
+      ]
+    }
+  ],
+  "version": "2026-09-04",
+  "datePublished": "2026-09-04",
+  "isBasedOn": {
+    "@id": "native-table",
+    "@type": "sc:MediaObject",
+    "name": "Committed native catalogue build input",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/0ce05667a7cddc3aca877dc5b687f0c97986cca1/src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+    "sha256": "26b9f113fb85a81b89690db8c3bd5b1bf2c4eebc1472d21eae193a6f5c7409bc",
+    "contentSize": "809226 B",
+    "creator": {
+      "@type": "sc:Organization",
+      "name": "RivRetrieve"
+    },
+    "description": "RivRetrieve materialization of the separately attributed source inputs."
+  }
+}

@@ -681,6 +681,7 @@ def test_native_cli_writes_five_artifacts_without_touching_native(tmp_path: Path
     assert result == 0
     assert NATIVE_PATH.read_bytes() == native_bytes
     assert {path.name for path in tmp_path.iterdir()} == {
+        "croissant.json",
         "provider.json",
         "products.parquet",
         "stations.parquet",

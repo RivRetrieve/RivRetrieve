@@ -1,0 +1,714 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "@language": null,
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "dct": "http://purl.org/dc/terms/",
+    "rr": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#",
+    "conformsTo": "dct:conformsTo",
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "rr:absence": {
+      "@id": "rr:absence",
+      "@type": "@json"
+    },
+    "recordSet": "cr:recordSet",
+    "field": "cr:field",
+    "source": "cr:source",
+    "fileObject": "cr:fileObject",
+    "extract": "cr:extract",
+    "column": "cr:column",
+    "jsonPath": "cr:jsonPath"
+  },
+  "@type": "sc:Dataset",
+  "name": "rivretrieve-br_ana-catalogue",
+  "description": "Packaged provider, product, station and station-product catalogue for br_ana.",
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "creator": [
+    {
+      "@type": "sc:Organization",
+      "name": "Agência Nacional de Águas e Saneamento Básico (ANA)"
+    }
+  ],
+  "license": "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle.",
+  "distribution": [
+    {
+      "@id": "provider.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "provider.json",
+      "encodingFormat": "application/json",
+      "sha256": "24d035cb53cd08a77b9686631cdc2ec7743ad4a2d545cf0f5b9a092899676470",
+      "contentSize": "374 B"
+    },
+    {
+      "@id": "products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "6f283dc8f096b69959b08673af4d052cf32d31aaf942a4e568176955296e673a",
+      "contentSize": "985 B"
+    },
+    {
+      "@id": "stations.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "stations.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "9c71c8aaf3fca5c0ec36e23bd2c1daf13ad1a3a0f4bfe7db4f9d0eab08d4e2fe",
+      "contentSize": "597 B"
+    },
+    {
+      "@id": "station_products.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_products.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "b9e28ecae1f3fc330e259eb11145c1afd30fe2bd75bd07404e700bb8d6a9d3c4",
+      "contentSize": "1218 B"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "provider",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provider/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.provider_id"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_authored_provider_registration"
+          }
+        },
+        {
+          "@id": "provider/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.name"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_authored_provider_registration"
+          }
+        },
+        {
+          "@id": "provider/live_stations",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_stations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_authored_provider_registration"
+          }
+        },
+        {
+          "@id": "provider/live_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_authored_provider_registration"
+          }
+        },
+        {
+          "@id": "provider/live_station_products",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.live_station_products"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_authored_provider_registration"
+          }
+        },
+        {
+          "@id": "provider/bulk_observations",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.bulk_observations"
+            }
+          },
+          "subjectOf": {
+            "@id": "lineage/rivretrieve_authored_provider_registration"
+          }
+        },
+        {
+          "@id": "provider/catalogue_version",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.catalogue_version"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "provider/license",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.license"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "provider/citation",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provider.json"
+            },
+            "extract": {
+              "jsonPath": "$.citation"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        }
+      ],
+      "rr:absence": {
+        "kind": "withheld",
+        "reason": "no_acquisition_record_established",
+        "fields": [
+          "catalogue_version",
+          "license",
+          "citation"
+        ]
+      }
+    },
+    {
+      "@id": "products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/observed_property",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "observed_property"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/frequency",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "frequency"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/statistic",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "statistic"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/period_type",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_type"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/period_anchor",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "period_anchor"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "unit"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "products/native_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "products.parquet"
+            },
+            "extract": {
+              "column": "native_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        }
+      ],
+      "rr:absence": {
+        "kind": "withheld",
+        "reason": "no_acquisition_record_established",
+        "fields": [
+          "provider_id",
+          "product_id",
+          "observed_property",
+          "frequency",
+          "statistic",
+          "period_type",
+          "period_anchor",
+          "unit",
+          "native_id"
+        ]
+      }
+    },
+    {
+      "@id": "stations",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "stations/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "stations/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "stations/latitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "latitude"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "stations/longitude",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "longitude"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "stations/crs",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "stations.parquet"
+            },
+            "extract": {
+              "column": "crs"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        }
+      ],
+      "rr:absence": {
+        "kind": "withheld",
+        "reason": "no_acquisition_record_established",
+        "fields": [
+          "provider_id",
+          "station_id",
+          "latitude",
+          "longitude",
+          "crs"
+        ]
+      }
+    },
+    {
+      "@id": "station_products",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_products/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "station_products/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "station_products/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "station_products/availability",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "station_products/availability_reason",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "availability_reason"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "station_products/published_record_start_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_start_date"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "station_products/published_record_end_date",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "published_record_end_date"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        },
+        {
+          "@id": "station_products/last_catalogue_check",
+          "@type": "cr:Field",
+          "dataType": "sc:Date",
+          "source": {
+            "fileObject": {
+              "@id": "station_products.parquet"
+            },
+            "extract": {
+              "column": "last_catalogue_check"
+            }
+          },
+          "rr:absence": {
+            "kind": "withheld",
+            "reason": "no_acquisition_record_established"
+          }
+        }
+      ],
+      "rr:absence": {
+        "kind": "withheld",
+        "reason": "no_acquisition_record_established",
+        "fields": [
+          "provider_id",
+          "station_id",
+          "product_id",
+          "availability",
+          "availability_reason",
+          "published_record_start_date",
+          "published_record_end_date",
+          "last_catalogue_check"
+        ]
+      }
+    }
+  ],
+  "subjectOf": [
+    {
+      "@id": "issuer/br_ana.terms",
+      "@type": "sc:CreativeWork",
+      "identifier": "br_ana.terms",
+      "name": "Recorded material issued by Agência Nacional de Águas e Saneamento Básico (ANA)",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "Agência Nacional de Águas e Saneamento Básico (ANA)"
+      },
+      "hasPart": [
+        {
+          "@id": "acquisition/br_ana.terms/public_terms_capture_2026_08_21",
+          "@type": "sc:CreativeWork",
+          "identifier": "public_terms_capture_2026_08_21",
+          "name": "http_request",
+          "description": "ANA institutional open-data terms HTML response",
+          "creator": {
+            "@type": "sc:Organization",
+            "name": "Agência Nacional de Águas e Saneamento Básico (ANA)"
+          },
+          "license": "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle.",
+          "url": [
+            "https://www.gov.br/ana/pt-br/acesso-a-informacao/dados-abertos"
+          ],
+          "subjectOf": {
+            "@type": "sc:Event",
+            "name": "retrieval",
+            "description": "ANA institutional open-data terms HTML response",
+            "startDate": "2026-08-21T09:30:30+00:00"
+          }
+        }
+      ],
+      "license": "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle."
+    },
+    {
+      "@id": "lineage/rivretrieve_authored_provider_registration",
+      "@type": "sc:CreativeWork",
+      "identifier": "rivretrieve_authored_provider_registration",
+      "creator": {
+        "@type": "sc:Organization",
+        "name": "RivRetrieve"
+      },
+      "url": "provenance.json#/fact_bindings/0",
+      "description": "RivRetrieve code-defined provider registration and capabilities"
+    }
+  ]
+}
