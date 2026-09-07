@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph",
+    "parameters": {
+      "station_type": "tele_waterlevel",
+      "station_id": "1373273",
+      "start_date": "2026-09-06",
+      "end_date": "2026-09-05"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-07T15:35:42.717750Z",
+    "content_base64": "eyJyZXN1bHQiOiJPSyIsImRhdGEiOnsiZ3JhcGhfZGF0YSI6W10sIm1pbl9iYW5rIjo5Ljc4OSwid2FybmluZ19sZXZlbCI6bnVsbCwiY3JpdGljYWxfbGV2ZWwiOm51bGwsImdyb3VuZF9sZXZlbCI6Mi4wMDUsInFtYXgiOm51bGx9fQ==",
+    "sha256": "e2c75871803ee927be434339f056c9bf7a30a610fae9a5eb068b641f36b01df8"
+  }
+}
