@@ -28,6 +28,16 @@ values establish **1,096 series across the 825-station baseline**.
 Discharge is a strict subset of stage: no station publishes discharge without also publishing stage.
 Zero access failures and zero uninvestigated pairs.
 
+Per station, across the three combinations issue #224 asks for:
+
+| Combination | Stations |
+| --- | --- |
+| stage **and** discharge | 283 |
+| stage only | 530 |
+| neither (complete grid, no non-null value for either product over 90 days) | 12 |
+
+No station publishes discharge alone.
+
 The station-by-station breakdown is in [STATION_TABLE.md](STATION_TABLE.md); the machine-readable
 form is `inventory/station_product_evidence.csv`.
 
@@ -115,6 +125,12 @@ build rather than dropping rows. But absence from a snapshot is not absence of a
 the 25 were probed on the graph route and all three answer `result: "OK"`, one still publishing
 values. Every live row carries telemetry from the preceding week, consistent with the endpoint
 returning currently reporting stations rather than a stable registry.
+
+Every changed id is enumerated in `inventory/population_churn.csv` — 605 rows marked
+`added_since_baseline` with the identity the source publishes for each, and 25 marked
+`absent_from_latest_snapshot` with the identity the committed baseline holds. The reconciliation
+closes arithmetically: 825 − 25 + 605 = 1,405. The committed list is shown as changed, never
+silently replaced.
 
 The existing port notes already record comparable churn ("87 new IDs are present and 16 legacy IDs
 are absent"), so this is a continuing property of the source. This survey scopes its inventory to the

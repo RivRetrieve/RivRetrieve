@@ -41,6 +41,7 @@ or stored.
 | [`inventory/graph_sweep.csv`](inventory/graph_sweep.csv) | 825 | First pass: per-station non-null counts over the 7-day window. |
 | [`inventory/widened_90d.csv`](inventory/widened_90d.csv) | 549 | Re-probe over 90 days of every station with an empty product. |
 | [`inventory/widened_empty.csv`](inventory/widened_empty.csv) | 26 | Earlier re-probe of stations empty for both products. |
+| [`inventory/population_churn.csv`](inventory/population_churn.csv) | 630 | Every station added to or absent from the source list since the baseline capture, enumerated. |
 | [`inventory/window_limit_probe.csv`](inventory/window_limit_probe.csv) | 7 | Requested vs returned spans establishing the 365-day clamp. |
 | [`inventory/window_truncation_observation.json`](inventory/window_truncation_observation.json) | - | The clamp's measured consequence at the public surface. |
 
@@ -51,6 +52,7 @@ uv run python research/station-coverage/th_thaiwater/scripts/sweep_availability.
 uv run python research/station-coverage/th_thaiwater/scripts/widen_all_empty.py
 uv run python research/station-coverage/th_thaiwater/scripts/probe_window_limit.py
 uv run python research/station-coverage/th_thaiwater/scripts/reproduce_window_truncation.py
+uv run python research/station-coverage/th_thaiwater/scripts/build_churn_reconciliation.py
 uv run python research/station-coverage/th_thaiwater/scripts/build_inventory.py
 uv run python research/station-coverage/th_thaiwater/scripts/build_station_table.py
 uv run python research/station-coverage/th_thaiwater/scripts/build_evidence_index.py

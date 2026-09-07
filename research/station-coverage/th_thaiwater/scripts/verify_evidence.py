@@ -91,6 +91,23 @@ def main() -> None:
         "every available row cites the graph route, never catalogue metadata",
     )
 
+    churn = pd.read_csv(HERE / "inventory" / "population_churn.csv", dtype=str)
+    added = int((churn.change == "added_since_baseline").sum())
+    absent = int((churn.change == "absent_from_latest_snapshot").sum())
+    live_total = len(baseline) - absent + added
+    check(
+        live_total == 1405,
+        f"population churn reconciles: {len(baseline)} baseline - {absent} absent + {added} added = {live_total} live",
+    )
+    check(
+        set(churn[churn.change == "absent_from_latest_snapshot"].station_id) <= baseline,
+        "every station listed as absent comes from the committed baseline",
+    )
+    check(
+        not (set(churn[churn.change == "added_since_baseline"].station_id) & baseline),
+        "no station listed as added is already in the committed baseline",
+    )
+
     print(f"\n{checks - len(failures)}/{checks} checks passed")
     if failures:
         print("FAILURES:", *failures, sep="\n  - ")
