@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/4024/Q/",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 403,
+    "content_type": "text/html; charset=iso-8859-1",
+    "retrieved_at": "2026-09-07T09:06:45.207547Z",
+    "content_base64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT40MDMgRm9yYmlkZGVuPC90aXRsZT4KPC9oZWFkPjxib2R5Pgo8aDE+Rm9yYmlkZGVuPC9oMT4KPHA+WW91IGRvbid0IGhhdmUgcGVybWlzc2lvbiB0byBhY2Nlc3MgL2RhdGEvaW50ZXJuZXQvc3RhdGlvbnMvNC80MDI0L1EvCm9uIHRoaXMgc2VydmVyLjwvcD4KPC9ib2R5PjwvaHRtbD4K",
+    "sha256": "1c8090b99e8d24ac9cb6ce79a674c167950ac5bd019c401c041885e1546b04e6"
+  }
+}
