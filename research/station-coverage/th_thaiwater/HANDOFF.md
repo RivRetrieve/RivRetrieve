@@ -55,9 +55,28 @@ reproducible with `scripts/reproduce_window_truncation.py`): a request for
 `2023-01-01 .. 2026-09-06` returns 2025-09-08 .. 2026-09-06 — **27% of the requested period**, with
 no issue or warning naming the shortfall. The two issues emitted are unrelated provenance notices.
 
-**What retrieval must therefore do.** Requests spanning more than 365 days have to be split into
-chunks of **at most 365 days** and the results concatenated, in the same spirit as the existing
-`br_ana` 30-day and `ca_eccc` chunking. Two constraints established by probing:
+**The engine already owns this.** ADR 0017 makes window splitting engine-owned and names "a capped
+response size" as one of the two reasons a provider declares a granularity. `window_planning.py`
+registers a `capped-span` planner that takes a size in days and splits the fetch window into chunks
+of that size; `tests/test_internal_window_planning.py` exercises it with `size=365`.
+
+`th_thaiwater/config.py` currently declares:
+
+```python
+WindowDeclaration(
+    granularity=WindowGranularity("date"),
+    rendering=WindowRenderingVocabulary.DATE,
+    stop_convention=StopConvention.INCLUSIVE,
+)
+```
+
+which renders one request for the whole window and never splits. The source's cap is real, so the
+declaration under-states it. The declaration that matches the measured behaviour is `capped-span`
+with `size=365` and the same rendering and stop convention. No new engine capability is required and
+no provider-side arithmetic is involved — the granularity is a fact about the source, the splitting
+is the engine's.
+
+Two constraints established by probing:
 
 - The clamp is anchored at `end_date`, so each chunk must carry its own `end_date` and walk
   backwards. Holding `end_date` fixed and moving `start_date` earlier changes nothing.
@@ -67,8 +86,13 @@ chunks of **at most 365 days** and the results concatenated, in the same spirit 
 Walking `end_date` backwards does reach older data: station `1117894` yielded a continuous record
 from 2023-02-02 to 2026-09-06 through four consecutive yearly windows.
 
-The design decision — chunk size, whether to emit an issue when a request is split, and whether to
-surface the source's cap to callers — is the delivery owner's, not this survey's.
+What remains a decision — whether to emit an issue when a request is split, and whether to surface
+the source's cap to callers — is the delivery owner's, not this survey's.
+
+Worth checking beyond this provider: no provider in `src/rivretrieve/_internal/providers/` currently
+declares `capped-span` or `n-year-chunk`, and none sets `size`. Both planners are implemented and
+unit-tested but unused. Whether other sources cap their windows and are similarly under-declared was
+not surveyed here.
 
 ## 4. Availability basis
 

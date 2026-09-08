@@ -13,4 +13,4 @@ from rivretrieve._internal.discovery import products as products
 from rivretrieve._internal.discovery import providers as providers
 from rivretrieve._internal.utc import to_utc as to_utc
 
-__version__ = "0.1.52"
+__version__ = "0.1.53"
