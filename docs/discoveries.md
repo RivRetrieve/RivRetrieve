@@ -225,3 +225,55 @@ Closeout status for prior notes:
 - D5 remains a post-V1 public-surface hygiene candidate. `test_deferred_public_names_remain_absent_after_provider_handle_promotion` and `test_provider_handle_protocol_declares_exactly_seven_public_methods` still guard accidental public expansion.
 - D6 remains resolved by keeping provider implementation packages under `rivretrieve._internal.providers`.
 - D7 and D9 did not fire during M4/M5 map work. Keep them as provider-code review probes when future provider parsing or Pydantic extras work actually triggers them, not as permanent architecture lenses.
+
+## D11 — A source may cap a requested window silently; the provider must declare it, not absorb it
+
+**Found during:** `th_thaiwater` station-coverage research (issue #224).
+
+**The fact:** ThaiWater's `waterlevel_graph` route clamps `start_date` to `end_date` minus 365 days.
+Requests of 7, 90, 364 and 365 days are honoured exactly; 366 days, 15 months and 3 years all return
+the identical one-year span. The clamp is **silent** — HTTP 200, `result: "OK"`, and a response
+indistinguishable in shape from an honoured request.
+
+`th_thaiwater` declared `WindowGranularity("date")`, which renders one request for the whole window
+and never splits. Measured through the public surface, `rr.fetch(..., start="2023-01-01",
+end="2026-09-06")` returned 2025-09-08 .. 2026-09-06 — 27% of the requested period — with no issue
+or warning naming the shortfall.
+
+**Why it matters:** nothing in the response says a window was shortened. A caller receives a
+plausible frame that is silently incomplete, and neither the status code, the payload shape, nor the
+issue list distinguishes it from a complete one. A provider whose source caps and whose declaration
+does not say so returns quietly wrong results for every request longer than the cap.
+
+This is not a missing capability. [ADR 0017](adr/0017-the-engine-owns-every-window-arithmetic.md)
+already makes splitting engine-owned and names "a capped response size" as one of the two reasons a
+provider declares a granularity. `src/rivretrieve/_internal/window_planning.py` registers a
+`capped-span` planner that takes a size in days, and `tests/test_internal_window_planning.py`
+exercises it with `size=365`. The gap is in the declaration, not the engine.
+
+At the time of writing, **no provider declares `capped-span` or `n-year-chunk`, and none sets
+`size`** — both planners are implemented and unit-tested but unused across all built-in providers.
+
+**How to apply going forward:**
+
+1. **When porting a provider,** do not assume the source honours the window you send. Request a span
+   deliberately longer than you expect to be allowed, then **compare the returned span against the
+   requested one**. Record both. A cap that is never probed is a cap that ships.
+
+2. **If a cap exists,** declare it: `WindowGranularity("capped-span")` with `size` in days, and let
+   the engine split. Never write splitting arithmetic in the provider — ADR 0017 exists so that this
+   class of defect cannot be written locally.
+
+3. **Establish where the cap is anchored.** ThaiWater clamps relative to `end_date`, so chunks must
+   each carry their own `end_date` and walk backwards; holding `end_date` fixed and moving
+   `start_date` earlier changes nothing. Another source may anchor at `start_date` instead.
+
+4. **Do not assume a calendar year is a safe chunk.** ThaiWater honours 365 days and clamps 366, so
+   "one calendar year" fails in leap years. Express the cap in days.
+
+5. **Record the absence too.** If probing establishes that a source has no cap, say so in the
+   provider port notes with the tested span. "No cap is claimed" and "no cap was found by probing"
+   are different statements, and only the second is evidence.
+
+6. **Reviewers:** treat a provider that renders one unsplit request over an unbounded window as
+   unverified until the port notes state the span that was tested.
