@@ -985,7 +985,7 @@ wheels = [
 
 [[package]]
 name = "rivretrieve"
-version = "0.1.55"
+version = "0.1.56"
 source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },

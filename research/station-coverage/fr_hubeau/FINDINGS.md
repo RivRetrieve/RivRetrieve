@@ -146,6 +146,28 @@ connection, and only genuinely answered rows kept. **No inventory row rests on t
 **A route comparison was framed before it was measured.** `observations_tr` being alive was initially
 described as though switching were the obvious conclusion. Measurement showed the opposite.
 
+## 9a. Relation to the withheld facts
+
+The packaged `provenance.json` withholds **47,773 fact groups**, every one for
+`no_acquisition_record_established`. Unlike Thailand, France withholds **station identities as well as
+availability** — the groups include `withheld_station:<code>` alongside the candidate
+station-product availability facts.
+
+This survey supplies acquisition records against both categories:
+
+- **Identity** — the two Sandre WFS captures carry the official identity and position of 5,431 of the
+  6,454 hydrometry stations and all 869 temperature stations, alongside the producing body.
+- **Availability** — the whole-record counts settle the four daily and temperature products for every
+  station; the instantaneous products are settled where the evidence reaches, and explicitly
+  `uninvestigated` where it does not.
+
+The committed provenance already names four source records: Hub'Eau / SCHAPI as platform, and DEAL
+Guadeloupe, DREAL Occitanie and Agence de l'Eau Artois-Picardie as issuing bodies for the three
+certified stations. This survey extends that from three named bodies to 66 (59 hydrometry, 7
+temperature) without changing the operator-versus-producer distinction the port already draws.
+
+Converting any of this into catalogue rows is implementation work and belongs to the delivery owner.
+
 ## 10. Contents
 
 | Path | What it is |

@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+    "parameters": {
+      "code_entite": "01004000",
+      "grandeur_hydro_elab": "QmnJ",
+      "size": "1",
+      "fields": "code_station"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-09T08:24:39.517259Z",
+    "content_base64": "eyJjb3VudCI6MCwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic19lbGFiP2NvZGVfZW50aXRlPTAxMDA0MDAwJmdyYW5kZXVyX2h5ZHJvX2VsYWI9UW1uSiZmaWVsZHM9Y29kZV9zdGF0aW9uJmN1cnNvcj0mc2l6ZT0xIiwicHJldiI6bnVsbCwibmV4dCI6bnVsbCwiYXBpX3ZlcnNpb24iOiIyLjAuMSIsImRhdGEiOltdfQ==",
+    "sha256": "9582634d3c50bdfcae6db2a5a023bd9d58f4dd5a84729d0fe05dbc97548119ec"
+  }
+}
