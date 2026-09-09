@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "evidence_kind": "response_recording",
+  "station_no": "1010",
+  "product_code": "Q",
+  "attempted_variant": "directory_listing",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/1/1010/Q/",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 403,
+    "content_type": "text/html; charset=iso-8859-1",
+    "retrieved_at": "2026-09-09T15:51:03.085833Z",
+    "byte_size": 234,
+    "response_sha256": "cd31801be81d417c748a92fb5f0df0cbb3e1fd821eaf007c91bbb6ddec4a75fa",
+    "content_base64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT40MDMgRm9yYmlkZGVuPC90aXRsZT4KPC9oZWFkPjxib2R5Pgo8aDE+Rm9yYmlkZGVuPC9oMT4KPHA+WW91IGRvbid0IGhhdmUgcGVybWlzc2lvbiB0byBhY2Nlc3MgL2RhdGEvaW50ZXJuZXQvc3RhdGlvbnMvMS8xMDEwL1EvCm9uIHRoaXMgc2VydmVyLjwvcD4KPC9ib2R5PjwvaHRtbD4K"
+  },
+  "retention": "full response bytes retained; this response carries no observation values"
+}

@@ -1,0 +1,42 @@
+{
+  "format_version": 2,
+  "station_no": "8001",
+  "product_id": "water_temperature_reported",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/8001/WT/Tvode_1Y.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrieved_at": "2026-09-09T15:55:02.768218Z",
+    "byte_size": 3656,
+    "response_sha256": "6f8ec53922f2ce7adc3a442203a2e675085d39bfe1e32d221e23b039e0d8ffae",
+    "content_base64": "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"
+  },
+  "evidence_kind": "response_recording",
+  "retention": "full response bytes retained; this response carries no observation values",
+  "reading": {
+    "status": "no_data_rows",
+    "evidence_basis": "publisher declares #Rows = 0 while still declaring parameter 'Temperatura vode' and unit '°C'",
+    "declared_rows": 0,
+    "data_rows": 0,
+    "populated_measurements": 0,
+    "declared_unit": "°C",
+    "declared_parameter": "Temperatura vode",
+    "declared_station_name": "HS Modrac - akumulacija - JP Spreca d.d. Tuzla",
+    "declared_station_number": "8001",
+    "timeseries_name": "81 Web Kontinuirani",
+    "observed_window_start": "",
+    "observed_window_end": "",
+    "measurement_cells_read_from": "xl/worksheets/sheet1.xml cell elements"
+  },
+  "excerpt": {
+    "note": "derived from the response, not the response itself. Measurement values are NOT retained: each row records only whether the publisher's cell carried a value. 'head' is the opening data rows; 'witness' is rows whose measurement cell was populated, which is what substantiates a measurements_present classification.",
+    "head": [],
+    "witness": [],
+    "excerpt_sha256": "a683096011db3975a1e401e33b0047d1f2677a11efe85ef12806f016ae039795"
+  }
+}

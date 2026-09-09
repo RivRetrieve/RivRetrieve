@@ -1,0 +1,123 @@
+{
+  "format_version": 2,
+  "station_no": "4062",
+  "product_id": "stage_reported",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/4062/H/H_1Y.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrieved_at": "2026-09-09T15:54:07.043443Z",
+    "byte_size": 429140,
+    "response_sha256": "5503dd921e5085b7c3ef39b8ffd9d1c337c761a11fb20e3274c4a4c8c903b244"
+  },
+  "evidence_kind": "response_digest",
+  "retention": "full response bytes not retained: this workbook holds a year of the publisher's observations. Issue #223 forbids downloading whole observation histories to prove access, and the source records no redistribution grant. The digest above is over the exact response; the excerpt below is derived and carries its own separate digest. The source is a rolling window, so the response digest will not reproduce on a later fetch.",
+  "reading": {
+    "status": "measurements_present",
+    "evidence_basis": "34754 populated measurement cells across 34754 timestamped rows",
+    "declared_rows": 34754,
+    "data_rows": 34754,
+    "populated_measurements": 34754,
+    "declared_unit": "cm",
+    "declared_parameter": "Vodostaj",
+    "declared_station_name": "HS Maglaj Grad",
+    "declared_station_number": "4062",
+    "timeseries_name": "81 Web Kontinuirani",
+    "observed_window_start": "2025-09-10 00:00:00",
+    "observed_window_end": "2026-09-09 12:00:00",
+    "measurement_cells_read_from": "xl/worksheets/sheet1.xml cell elements"
+  },
+  "excerpt": {
+    "note": "derived from the response, not the response itself. Measurement values are NOT retained: each row records only whether the publisher's cell carried a value. 'head' is the opening data rows; 'witness' is rows whose measurement cell was populated, which is what substantiates a measurements_present classification.",
+    "head": [
+      {
+        "timestamp": "2025-09-10 00:00:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 00:15:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 00:30:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 00:45:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:00:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:15:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:30:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:45:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 02:00:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 02:15:00",
+        "has_value": true
+      }
+    ],
+    "witness": [
+      {
+        "timestamp": "2025-09-10 00:00:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 00:15:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 00:30:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 00:45:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:00:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:15:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:30:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 01:45:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 02:00:00",
+        "has_value": true
+      },
+      {
+        "timestamp": "2025-09-10 02:15:00",
+        "has_value": true
+      }
+    ],
+    "excerpt_sha256": "e88f789405e058fc5888e6b05a65c14104a1ce656d94e709a2f298f883912264"
+  }
+}

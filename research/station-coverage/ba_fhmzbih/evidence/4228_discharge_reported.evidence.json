@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "station_no": "4228",
+  "product_id": "discharge_reported",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/4228/Q/Q_1Y.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 404,
+    "content_type": "text/html; charset=iso-8859-1",
+    "retrieved_at": "2026-09-09T15:54:30.442632Z",
+    "byte_size": 239,
+    "response_sha256": "a5dadfd503b87f64aa73778b8f778ceb3b78367d16d6f27a5c15e8f4f8f1d0a2",
+    "content_base64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT40MDQgTm90IEZvdW5kPC90aXRsZT4KPC9oZWFkPjxib2R5Pgo8aDE+Tm90IEZvdW5kPC9oMT4KPHA+VGhlIHJlcXVlc3RlZCBVUkwgL2RhdGEvaW50ZXJuZXQvc3RhdGlvbnMvNC80MjI4L1EvUV8xWS54bHN4IHdhcyBub3QgZm91bmQgb24gdGhpcyBzZXJ2ZXIuPC9wPgo8L2JvZHk+PC9odG1sPgo="
+  },
+  "evidence_kind": "response_recording",
+  "retention": "full response bytes retained; this response carries no observation values",
+  "note": "publisher served no workbook at this route (HTTP 404)"
+}

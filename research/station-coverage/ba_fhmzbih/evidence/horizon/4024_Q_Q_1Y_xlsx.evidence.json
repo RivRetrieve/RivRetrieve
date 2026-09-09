@@ -1,0 +1,28 @@
+{
+  "format_version": 2,
+  "evidence_kind": "response_recording",
+  "station_no": "4024",
+  "product_code": "Q",
+  "attempted_variant": "Q_1Y.xlsx",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/4024/Q/Q_1Y.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrieved_at": "2026-09-09T15:50:52.789342Z",
+    "byte_size": 133530,
+    "response_sha256": "e5d74db0c19b25c2e0ca8081fd1bef3efd891709c5abbec071a29437c7f65ee5"
+  },
+  "retention": "full response bytes not retained: this route served observations. The digest is over the exact response; the reading below is derived.",
+  "reading": {
+    "declared_rows": 8346,
+    "data_rows": 8346,
+    "populated_measurements": 8346,
+    "observed_window_start": "2025-09-10 00:00:00",
+    "observed_window_end": "2026-09-09 12:00:00"
+  }
+}

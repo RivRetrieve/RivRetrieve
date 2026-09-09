@@ -1,0 +1,47 @@
+{
+  "format_version": 2,
+  "station_no": "9130",
+  "product_id": "discharge_reported",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/9130/Q/Q_1Y.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrieved_at": "2026-09-09T15:55:29.041658Z",
+    "byte_size": 3747,
+    "response_sha256": "ae2741f61f2fc8d656b459f858d903fe23758c10ab5fbb559620673b6d20a17d",
+    "content_base64": "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"
+  },
+  "evidence_kind": "response_recording",
+  "retention": "full response bytes retained; this response carries no observation values",
+  "reading": {
+    "status": "timestamped_without_measurements",
+    "evidence_basis": "1 timestamped rows, every measurement cell published empty (no <v> child); parameter 'Proticaj' and unit 'm³/s' still declared",
+    "declared_rows": 1,
+    "data_rows": 1,
+    "populated_measurements": 0,
+    "declared_unit": "m³/s",
+    "declared_parameter": "Proticaj",
+    "declared_station_name": "HS Tešanjka",
+    "declared_station_number": "9130",
+    "timeseries_name": "81 Web Kontinuirani",
+    "observed_window_start": "2026-09-09 13:00:00",
+    "observed_window_end": "2026-09-09 13:00:00",
+    "measurement_cells_read_from": "xl/worksheets/sheet1.xml cell elements"
+  },
+  "excerpt": {
+    "note": "derived from the response, not the response itself. Measurement values are NOT retained: each row records only whether the publisher's cell carried a value. 'head' is the opening data rows; 'witness' is rows whose measurement cell was populated, which is what substantiates a measurements_present classification.",
+    "head": [
+      {
+        "timestamp": "2026-09-09 13:00:00",
+        "has_value": false
+      }
+    ],
+    "witness": [],
+    "excerpt_sha256": "23673b5fd24cb612f19d88b996d67b33374e692de7589f0e3457684ec37dde72"
+  }
+}
