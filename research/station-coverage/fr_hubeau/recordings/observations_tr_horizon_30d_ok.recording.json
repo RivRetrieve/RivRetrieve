@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
+    "parameters": {
+      "code_entite": "Y251002001",
+      "grandeur_hydro": "H",
+      "date_debut_obs": "2026-08-09T00:00:00Z",
+      "size": "1"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 206,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-08T11:50:48.167766Z",
+    "content_base64": "eyJjb3VudCI6NTE5NiwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic2VydmF0aW9uc190cj9jb2RlX2VudGl0ZT1ZMjUxMDAyMDAxJmdyYW5kZXVyX2h5ZHJvPUgmZGF0ZV9kZWJ1dF9vYnM9MjAyNi0wOC0wOVQwMDowMDowMFomY3Vyc29yPSZzaXplPTEiLCJwcmV2IjpudWxsLCJuZXh0IjoiaHR0cHM6Ly9odWJlYXUuZWF1ZnJhbmNlLmZyL2FwaS92Mi9oeWRyb21ldHJpZS9vYnNlcnZhdGlvbnNfdHI/Y29kZV9lbnRpdGU9WTI1MTAwMjAwMSZncmFuZGV1cl9oeWRybz1IJmRhdGVfZGVidXRfb2JzPTIwMjYtMDgtMDlUMDA6MDA6MDBaJmN1cnNvcj1Bb0p3Nkt1MHdLQURQd3BaTWpVeE1EQXlNRjlaTWpVeE1EQXlNREF4WDBoZk1qQXlOaTB3T1Mwd09GUXhNVG8wTURvd01BJTNEJTNEJnNpemU9MSIsImFwaV92ZXJzaW9uIjoiMi4wLjEiLCJkYXRhIjpbeyJjb2RlX3NpdGUiOiJZMjUxMDAyMCIsImNvZGVfc3RhdGlvbiI6IlkyNTEwMDIwMDEiLCJncmFuZGV1cl9oeWRybyI6IkgiLCJkYXRlX2RlYnV0X3NlcmllIjoiMjAyNi0wOS0wOFQwMDowMDowMFoiLCJkYXRlX2Zpbl9zZXJpZSI6IjIwMjYtMDktMDhUMTE6NDA6MDBaIiwiY29kZV9zeXN0ZW1lX2FsdGlfc2VyaWUiOjMxLCJkYXRlX29icyI6IjIwMjYtMDktMDhUMTE6NDA6MDBaIiwicmVzdWx0YXRfb2JzIjotMzI3LjAsImNvZGVfbWV0aG9kZV9vYnMiOjAsImxpYmVsbGVfbWV0aG9kZV9vYnMiOiJNZXN1csOpZSIsImNvZGVfcXVhbGlmaWNhdGlvbl9vYnMiOjE2LCJsaWJlbGxlX3F1YWxpZmljYXRpb25fb2JzIjoiTm9uIHF1YWxpZmnDqWUiLCJsb25naXR1ZGUiOjMuMTU3MjgyMzQ0LCJsYXRpdHVkZSI6NDMuNjE2MDI5ODE1LCJjb2RlX3N0YXR1dCI6NCwibGliZWxsZV9zdGF0dXQiOiJCcnV0ZSIsImNvZGVfY29udGludWl0ZSI6MCwibGliZWxsZV9jb250aW51aXRlIjoiQ29udGludWUifV19",
+    "sha256": "3e3cbeb87e7211567746b310ea66e3274bf098f40a234c6eb7b923dd8daeeea7"
+  }
+}

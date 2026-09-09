@@ -1,6 +1,6 @@
 [project]
 name = "rivretrieve"
-version = "0.1.49"
+version = "0.1.55"
 description = "A Python package for downloading global river gauge data"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -100,7 +100,7 @@ addopts = ["--strict-markers", "--strict-config", "-ra"]
 # Bump My Version
 # -----------------------
 [tool.bumpversion]
-current_version = "0.1.49"
+current_version = "0.1.55"
 commit = false
 tag = false
 allow_dirty = true
