@@ -151,7 +151,7 @@ explained rather than assumed to be missing stations. This entry is that explana
 
 ---
 
-## 8. Retention: no observation values are committed — REPORTED, NO DECISION NEEDED
+## 8. Retention of workbook bytes — YOUR ACCEPTANCE REQUIRED
 
 Every response carrying **no** observation values is committed in full: all 35 blank-only pairs,
 all 82 empty pairs, all 7 access failures, all 64 historical-access attempts (180 files). Those
@@ -162,10 +162,20 @@ media type, acquisition instant, byte size and full-response SHA-256, plus a der
 per-row record of whether each cell carried a value. No measurement value is stored anywhere;
 `verify_evidence.py` fails if one appears.
 
-This follows the ticket rather than departing from it: #223 says "do not download whole observation
-histories merely to prove access", and the review states it "does not require downloading complete
-histories". The source records `"license": None` (`generate_catalogue.py:403`) and no
-redistribution grant, so republishing the agency's observations was never an option.
+**This does not meet your bullet literally.** You asked to "retain the exact non-secret request,
+response bytes, HTTP status, media type, actual acquisition time and digest". Everything in that
+list is retained except **response bytes, for the 173 workbooks that carry measurements**.
+
+Your own next sentence — that the correction "does not require downloading complete histories" —
+suggests this is what you meant, and #223 says the same ("do not download whole observation
+histories merely to prove access"). The source also records `"license": None`
+(`generate_catalogue.py:403`) and no redistribution grant. But none of that is you saying the gap
+is closed, so it stays open here.
+
+**Needed.** Your explicit acceptance that request + HTTP status + media type + acquisition instant
++ full-response digest + a per-row populated/empty record is sufficient evidence for a workbook
+that carries measurements. If it is not sufficient, say what would be — noting that committing the
+observations themselves is not available to us: this project does not redistribute source data.
 
 **Consequence, stated plainly.** A digest over bytes that are not retained cannot be recomputed
 later: the source serves a rolling window, so a re-fetch returns different bytes. The digest fixes
