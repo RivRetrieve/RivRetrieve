@@ -230,15 +230,34 @@ Closeout status for prior notes:
 
 **Found during:** `th_thaiwater` station-coverage research (issue #224).
 
-**The fact:** ThaiWater's `waterlevel_graph` route clamps `start_date` to `end_date` minus 365 days.
-Requests of 7, 90, 364 and 365 days are honoured exactly; 366 days, 15 months and 3 years all return
-the identical one-year span. The clamp is **silent** — HTTP 200, `result: "OK"`, and a response
-indistinguishable in shape from an honoured request.
+**The fact:** ThaiWater's `waterlevel_graph` route silently shortens long requests. Day counts here
+are **inclusive calendar dates** (both endpoints counted; elapsed days = dates − 1). For station
+`1373273` with `end_date=2026-09-06` (recorded 2026-09-07,
+`research/station-coverage/th_thaiwater/inventory/window_limit_readings.csv`):
+
+| Requested | Dates | Returned | Dates |
+| --- | --- | --- | --- |
+| 2026-08-31 .. 2026-09-06 | 7 | as requested | 7 |
+| 2026-06-08 .. 2026-09-06 | 91 | as requested | 91 |
+| 2025-09-08 .. 2026-09-06 | 364 | as requested | 364 |
+| 2025-09-07 .. 2026-09-06 | 365 | as requested | 365 |
+| 2025-09-06 .. 2026-09-06 | 366 | as requested | 366 |
+| 2025-06-06 .. 2026-09-06 | 458 | 2025-09-06 .. 2026-09-06 | 366 |
+| 2023-09-06 .. 2026-09-06 | 1,097 | 2025-09-06 .. 2026-09-06 | 366 |
+
+The shortening is **silent** — HTTP 200, `result: "OK"`, and a response indistinguishable in shape
+from an honoured request.
+
+What this does **not** establish is the source's exact rule. `2025-09-06` is both `end_date` minus
+365 elapsed days and `end_date` minus one calendar year; these endpoints cannot tell the two apart,
+and no tested window contains 29 February. Requests of 367–457 dates were not tested. The largest
+request demonstrated to be honoured is 366 dates ending 2026-09-06; that is a demonstrated working
+size, not a measured general maximum.
 
 `th_thaiwater` declared `WindowGranularity("date")`, which renders one request for the whole window
 and never splits. Measured through the public surface, `rr.fetch(..., start="2023-01-01",
-end="2026-09-06")` returned 2025-09-08 .. 2026-09-06 — 27% of the requested period — with no issue
-or warning naming the shortfall.
+end="2026-09-06")` — 1,345 dates — returned rows from 2025-09-08 through 2026-09-06, 364 dates or 27%
+of the requested period, with no issue or warning naming the shortfall.
 
 **Why it matters:** nothing in the response says a window was shortened. A caller receives a
 plausible frame that is silently incomplete, and neither the status code, the payload shape, nor the
@@ -248,8 +267,9 @@ does not say so returns quietly wrong results for every request longer than the 
 This is not a missing capability. [ADR 0017](adr/0017-the-engine-owns-every-window-arithmetic.md)
 already makes splitting engine-owned and names "a capped response size" as one of the two reasons a
 provider declares a granularity. `src/rivretrieve/_internal/window_planning.py` registers a
-`capped-span` planner that takes a size in days, and `tests/test_internal_window_planning.py`
-exercises it with `size=365`. The gap is in the declaration, not the engine.
+`capped-span` planner whose `size` is the number of inclusive calendar dates per chunk (a chunk runs
+from `cursor` to `cursor + size − 1` days), and `tests/test_internal_window_planning.py` exercises it
+with `size=365`. The gap is in the declaration, not the engine.
 
 At the time of writing, **no provider declares `capped-span` or `n-year-chunk`, and none sets
 `size`** — both planners are implemented and unit-tested but unused across all built-in providers.
@@ -260,16 +280,22 @@ At the time of writing, **no provider declares `capped-span` or `n-year-chunk`, 
    deliberately longer than you expect to be allowed, then **compare the returned span against the
    requested one**. Record both. A cap that is never probed is a cap that ships.
 
-2. **If a cap exists,** declare it: `WindowGranularity("capped-span")` with `size` in days, and let
-   the engine split. Never write splitting arithmetic in the provider — ADR 0017 exists so that this
-   class of defect cannot be written locally.
+2. **If a cap exists,** declare it: `WindowGranularity("capped-span")` with `size` in inclusive
+   calendar dates, and let the engine split. Never write splitting arithmetic in the provider — ADR
+   0017 exists so that this class of defect cannot be written locally.
 
 3. **Establish where the cap is anchored.** ThaiWater clamps relative to `end_date`, so chunks must
    each carry their own `end_date` and walk backwards; holding `end_date` fixed and moving
    `start_date` earlier changes nothing. Another source may anchor at `start_date` instead.
 
-4. **Do not assume a calendar year is a safe chunk.** ThaiWater honours 365 days and clamps 366, so
-   "one calendar year" fails in leap years. Express the cap in days.
+4. **Separate a size demonstrated to work from the source's maximum.** Record the exact requested and
+   returned dates and say whether a count means elapsed days or inclusive dates. ThaiWater's recorded
+   comparison shows 366 inclusive dates ending 2026-09-06 honoured and longer requests shortened to
+   that span; it does not distinguish "`end_date` minus 365 days" from "`end_date` minus one calendar
+   year", and no tested window contains 29 February, so it supports no rule about leap years. A
+   smaller chunk (for example `size=365`, one date fewer than demonstrated) is a conservative working
+   choice, not a measured maximum — say which one a declaration is. Where the exact maximum matters,
+   probe windows that distinguish the candidate rules before relying on it.
 
 5. **Record the absence too.** If probing establishes that a source has no cap, say so in the
    provider port notes with the tested span. "No cap is claimed" and "no cap was found by probing"
