@@ -14,7 +14,9 @@
     "status_code": 200,
     "content_type": "application/json; charset=utf-8",
     "retrieved_at": "2026-09-07T15:35:43.911887Z",
-    "content_base64": "eyJyZXN1bHQiOiJOTyIsImRhdGEiOiI0MjI6ICBObyBzdGF0aW9uIGlkIn0=",
-    "sha256": "fc48a1f0efaa7efdeacd7d06572086071a1c56eeed40d41aa1821d48a15fbd18"
+    "response_bytes": 44,
+    "sha256": "fc48a1f0efaa7efdeacd7d06572086071a1c56eeed40d41aa1821d48a15fbd18",
+    "body_retained": true,
+    "content_base64": "eyJyZXN1bHQiOiJOTyIsImRhdGEiOiI0MjI6ICBObyBzdGF0aW9uIGlkIn0="
   }
 }

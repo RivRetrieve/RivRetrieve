@@ -1,8 +1,9 @@
 """Record what a multi-year request returns through the current public surface.
 
-The graph route clamps start_date to end_date minus one year (established in
-inventory/window_limit_probe.csv). This script records the observable consequence at the public
-surface, so the handoff states a measured behaviour rather than a predicted one.
+The graph route silently shortens long requests (inventory/window_limit_readings.csv; the exact
+rule is not established). This script records the observable consequence at the public surface, so
+the handoff states a measured behaviour rather than a predicted one. `requested_days` and
+`returned_days` in its output are elapsed days (end - start), not inclusive dates.
 
 Research only: this script changes nothing. It performs one live request.
 

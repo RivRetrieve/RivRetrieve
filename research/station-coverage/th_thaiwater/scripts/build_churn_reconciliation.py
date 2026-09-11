@@ -4,14 +4,17 @@ Issue #224 requires that a changed station list be shown station by station rath
 replacing the committed baseline. This lists each added and removed id with the identity the source
 publishes for it, so the difference is inspectable rather than a count.
 
+The live list is read from recordings/waterlevel_load_live.stations.csv - the per-station identity
+fields of the 2026-09-07 waterlevel_load response, whose observation-bearing bytes are not retained
+(see strip_observation_bytes.py).
+
 Usage: uv run python research/station-coverage/th_thaiwater/scripts/build_churn_reconciliation.py
 Output: inventory/population_churn.csv
 """
 
 from __future__ import annotations
 
-import base64
-import json
+import csv
 import pathlib
 
 import pandas as pd
@@ -22,14 +25,8 @@ NATIVE = ROOT / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/nati
 
 
 def main() -> None:
-    snapshot = json.loads(
-        base64.b64decode(
-            json.loads((HERE / "recordings" / "waterlevel_load_live.recording.json").read_text())["response"][
-                "content_base64"
-            ]
-        )
-    )
-    live = {str(row["station"]["id"]): row for row in snapshot["waterlevel_data"]["data"]}
+    with (HERE / "recordings" / "waterlevel_load_live.stations.csv").open(newline="", encoding="utf-8") as handle:
+        live = {row["station_id"]: row for row in csv.DictReader(handle)}
 
     native = pd.read_parquet(NATIVE)
     baseline_meta = {
@@ -59,17 +56,16 @@ def main() -> None:
 
     for station_id in sorted(live.keys() - baseline, key=lambda value: (len(value), value)):
         row = live[station_id]
-        station = row.get("station") or {}
         records.append(
             {
                 "station_id": station_id,
                 "change": "added_since_baseline",
-                "name_th": (station.get("tele_station_name") or {}).get("th", ""),
-                "name_en": (station.get("tele_station_name") or {}).get("en", ""),
-                "river": row.get("river_name", ""),
-                "agency": (row.get("agency") or {}).get("agency_name", {}).get("en", ""),
-                "basin": (row.get("basin") or {}).get("basin_name", {}).get("en", ""),
-                "latest_reading_at": row.get("waterlevel_datetime", ""),
+                "name_th": row["name_th"],
+                "name_en": row["name_en"],
+                "river": row["river_name"],
+                "agency": row["agency_en"],
+                "basin": row["basin_en"],
+                "latest_reading_at": row["waterlevel_datetime"],
                 "note": "present in the 2026-09-07 waterlevel_load response, absent from the 2026-08-02 baseline capture",
             }
         )

@@ -5,14 +5,18 @@ Research for [#224](https://github.com/RivRetrieve/RivRetrieve/issues/224). Rese
 
 Research only. No production adapter, canonical catalogue artifact or provenance check is modified.
 
+Day counts in this folder are **inclusive calendar dates** (both endpoints counted; elapsed days =
+dates − 1).
+
 | | |
 | --- | --- |
 | Baseline commit | `67796ab8d793867aaaaf9c6fb55bec208adaeab8` |
 | Native table captured | `2026-08-02T12:42:03Z` (825 stations) |
-| This survey captured | `2026-09-07` |
-| Recordings | 21, all hash-verified |
-| Inventory | 1,650 rows = 825 stations × 2 products, none omitted |
-| Verification | `scripts/verify_evidence.py` — 13/13 checks pass |
+| Catalogue snapshot, window probe, recordings | `2026-09-07` |
+| Availability evidence | replacement capture `2026-09-11T07:55:50Z` .. `2026-09-11T09:38:16Z`, 1,377 receipts (§3) |
+| Recordings | 21: 8 kept whole, 13 stripped of observation values with their digests kept |
+| Inventory | 1,650 rows = 825 stations × 2 products, none omitted, each citing its own response |
+| Verification | `scripts/verify_evidence.py` — 34/34 checks pass |
 
 ## 1. Headline
 
@@ -26,7 +30,8 @@ values establish **1,096 series across the 825-station baseline**.
 | **total series** | **1,096** | |
 
 Discharge is a strict subset of stage: no station publishes discharge without also publishing stage.
-Zero access failures and zero uninvestigated pairs.
+There are zero access failures and zero uninvestigated pairs in the final inventory. Three requests
+failed on first attempt and succeeded on retry (§3).
 
 Per station, across the three combinations issue #224 asks for:
 
@@ -34,62 +39,124 @@ Per station, across the three combinations issue #224 asks for:
 | --- | --- |
 | stage **and** discharge | 283 |
 | stage only | 530 |
-| neither (complete grid, no non-null value for either product over 90 days) | 12 |
+| neither (complete grid, no non-null value for either product over 91 dates) | 12 |
 
 No station publishes discharge alone.
 
 The station-by-station breakdown is in [STATION_TABLE.md](STATION_TABLE.md); the machine-readable
-form is `inventory/station_product_evidence.csv`.
+form is `inventory/station_product_evidence.csv`. Every number in this section is generated in
+`inventory/inventory_summary.json`.
 
-## 2. Catalogue metadata cannot establish availability
+## 2. What the catalogue snapshot can and cannot establish
 
-Issue #224 asks whether official metadata can answer this for the whole population. It cannot, and
-relying on it would produce wrong answers for 19 stations.
+Issue #224 asks whether official metadata can establish availability for the whole population.
 
-The `waterlevel_load` snapshot carries a `discharge` field. Compared against what the graph route
-actually publishes across all 825 baseline stations, it agrees only **97.7%** of the time:
+**Compared.** The `discharge` field of the `waterlevel_load` snapshot acquired
+`2026-09-07T15:08:00Z` was compared with each baseline station's graph discharge status in the final
+inventory. For 276 stations that status rests on 7 dates (2026-08-31 .. 2026-09-06); for 549 it rests
+on 91 dates (2026-06-08 .. 2026-09-06). The graph responses were acquired 2026-09-11.
+`scripts/build_metadata_comparison.py` writes the per-station classes to
+`inventory/metadata_vs_graph.csv` and the counts to `inventory/metadata_vs_graph_summary.json`.
 
-- **15 stations** where the snapshot field is null but the graph route publishes discharge — these
-  would have been wrongly excluded.
-- **4 stations** where the snapshot carries a value but the graph route publishes none — these would
-  have been wrongly included.
+A baseline station absent from the snapshot response is counted separately from one present with a
+null `discharge` field. No present station carries a blank string; "null" means JSON `null`.
 
-For stage the metadata is not merely imprecise but empty: `waterlevel_m` is **null for all 825
-stations** in both the baseline and the live capture. `waterlevel_msl` is populated for every
-station, but it is a different quantity (mean sea level datum) and is not evidence for the graph's
-`value` field.
+| Baseline station in the snapshot | graph publishes discharge | graph publishes none | total |
+| --- | --- | --- | --- |
+| present, `discharge` set | 261 | 4 | 265 |
+| present, `discharge` null | 18 | 517 | 535 |
+| absent from the snapshot | 4 | 21 | 25 |
+| **total** | **283** | **542** | **825** |
+
+- **Among the 800 present stations**, the field agrees with the graph window for 778 (97.25%) and
+  disagrees for 22. For 18 of those the field is null but the graph publishes discharge; for 4 it is
+  set but the graph publishes none.
+- **The 25 absent stations** are ones the snapshot says nothing about; 4 of them publish discharge on
+  the graph route.
+- Counting absent stations as null, as an earlier version of this comparison did, gives 22 + 4 = 26
+  disagreements over all 825 baseline stations.
+
+An earlier version of this section reported 19 disagreements (15 + 4, 97.7%). That figure came from
+an earlier comparison and did not match the final inventory. The figures above are recomputed from
+the final inventory, with the method stated.
+
+**What this supports.** The snapshot records each station's latest reading at one instant. The graph
+answers whether any value exists in a 7- or 91-date window ending 2026-09-06. Those are different time
+questions. The comparison therefore shows that this snapshot cannot by itself establish the
+window-based availability the inventory records. It is not evidence that the source's metadata is
+wrong.
+
+For stage the snapshot offers nothing to compare. `waterlevel_m` is null for all 1,405 stations in
+the live snapshot and all 825 in the baseline capture. `waterlevel_msl` is populated for every
+station, but it is a different quantity and is not evidence for the graph's `value` field.
 
 Availability is therefore taken from the graph route per station, and `verify_evidence.py` asserts
-that every `available` row cites the route rather than metadata.
+that every `available` row cites the route rather than metadata. An early 8-station hypothesis sample
+(`recordings/hypo_*`) agreed 8/8; only the population comparison shows the disagreements.
 
-An early 8-station sample agreed 8/8, which would have looked like confirmation. The full sweep is
-what exposed the 19 disagreements.
+## 3. Evidence behind each result
 
-## 3. Window length changes the answer
+**What was corrected.** The original survey (2026-09-07) kept derived counts and discarded every
+response body. Its inventory had two linkage defects:
 
-A station with no values in a short window may simply report rarely, so a negative claim is only as
-strong as the window behind it.
+- 1,098 rows combined a widened count with the earlier short request's grid rows and acquisition
+  instant; in 538 of them the non-null count exceeded the stated grid rows.
+- Every row linked to one of two example recordings from other stations.
 
-The first pass used a 7-day window and found 26 stations with no values for either product. Widening
-to 90 days recovered **14 of those 26** — thirteen gained thousands of stage values, one gained both
-products.
+**Replacement capture.** `scripts/acquire_graph_evidence.py` re-requested the same explicit windows
+between `2026-09-11T07:55:50Z` and `2026-09-11T09:38:16Z`. It asked all 825 baseline stations over 7
+dates (2026-08-31 .. 2026-09-06), then the 549 stations with a product empty on 7 dates over 91 dates
+(2026-06-08 .. 2026-09-06).
 
-That recovery rate exposed a hole in the method: stations empty for *discharge only* had not been
-re-probed. All 549 stations with at least one empty product were then re-probed over 90 days,
-recovering **7 further discharge stations**. Every negative claim in the inventory now rests on the
-90-day window, which `verify_evidence.py` asserts.
+There are 1,377 receipts in `evidence/graph_receipts.csv`: 1,374 requests plus 3 retries.
 
-Reporting is genuinely sparse: cadence is 10-minute for 424 baseline stations and hourly for 401, and
-even reporting stations leave gaps — station `1117894` averages 13 non-null hourly observations
-against a 24-slot day.
+- Station `1109499` first answered HTTP 200 with
+  `{"result":"NO","data":"500:  Internal Database Error ...pq: out of shared memory"}`.
+- Stations `1109525` and `1117431` timed out after 300 s.
+- Each retry returned a full grid. The failed attempts remain in the receipt table.
+
+These are new responses, identified by their own acquisition instants. They are not the original
+survey's answers, whose counts remain in git history at `e5c8907`.
+
+**Linkage.** Every inventory row cites one receipt by `request_id` and copies that receipt's window,
+grid rows, non-null count, HTTP status, media type, acquisition instant, byte size and SHA-256. Both
+products of a station cite the same response, which serves both and is receipted once.
+
+**Result.** The replacement reproduces the original survey's counts exactly: identical grid rows and
+non-null counts for all 825 7-date and all 549 91-date requests, and identical status and non-null
+count for all 1,650 inventory rows. What changed is linkage. 1,098 rows now report the grid rows of
+the 91-date response they rest on. Station `1` stage, for example, is now 13,069 non-null values in
+13,104 rows over 91 dates; it was previously shown against the 1,008 rows of a 7-date request. No row
+reports more non-null values than grid rows.
+
+**Retention.** This project does not redistribute source observations.
+
+- **Every response keeps:** request URL, HTTP status, media type, UTC acquisition instant, byte size
+  and SHA-256 of the full response, plus counts and grid endpoints.
+- **Kept whole:** the 39 responses carrying no observation value, in
+  `evidence/graph_bodies_without_observations.zip` (129,554 B). They are the all-null grids and error
+  bodies.
+- **Not kept:** the 1,336 responses carrying observations, 500,847,708 B in total (25,874,399 B
+  gzip-6). Their digests cannot be recomputed from this repository. See
+  [UNRESOLVED.md](UNRESOLVED.md) §7.
+
+**Window length.** A station with no values in a short window may simply report rarely. Of 26
+stations empty for both products on 7 dates, 14 published a value on 91 dates. Across all re-probed
+stations, 14 gained stage and 7 gained discharge on 91 dates. Every empty row rests on the 91-date
+response, which `verify_evidence.py` asserts.
+
+Grid cadence differs per station: over 7 dates, 424 baseline stations returned 144 rows per date
+(10-minute) and 401 returned 24 (hourly).
 
 ## 4. The route publishes a full grid of nulls rather than an error
 
-All 825 sweep requests returned HTTP 200 with `result: "OK"`, including stations with no data at all.
-The route answers an unknown or silent station with a complete time grid of null values, so neither
-the status code nor the response shape carries an availability signal.
+All 825 7-date requests and 546 of the 549 first 91-date attempts returned HTTP 200 with
+`result: "OK"`, including stations with no data at all. The route answers a silent station with a
+complete time grid of null values, so neither the status code nor the response shape carries an
+availability signal.
 
-Recorded error behaviour (`recordings/error_*.recording.json`):
+Recorded error behaviour (`recordings/error_*.recording.json`, and one receipted body in the
+evidence bundle):
 
 | Condition | Response |
 | --- | --- |
@@ -97,23 +164,48 @@ Recorded error behaviour (`recordings/error_*.recording.json`):
 | Unknown `station_type` | HTTP **500**, Go panic stack trace, not JSON |
 | Missing `station_id` | HTTP **200**, body `{"result":"NO","data":"422:  No station id"}` |
 | `end_date` before `start_date` | HTTP **200**, `result: "OK"`, zero rows |
+| Source database error (station `1109499`, 2026-09-11; retry succeeded) | HTTP **200**, body `{"result":"NO","data":"500:  Internal Database Error ...pq: out of shared memory"}` |
 
-## 5. The source silently caps windows at 365 days
+## 5. The source silently shortens long requests
 
-The port notes state that no publisher cap is claimed. This survey establishes one
-(`inventory/window_limit_probe.csv`): `start_date` is clamped to `end_date` minus 365 days. Requests
-of 7, 90, 364 and 365 days are honoured exactly; 366 days, 15 months and 3 years all return the
-identical one-year span — with HTTP 200, `result: "OK"`, and nothing in the response indicating a
-clamp.
+The port notes state that no publisher cap is claimed. This survey recorded one for station
+`1373273` on 2026-09-07 (`inventory/window_limit_probe.csv`; day counts derived from its dates in
+`inventory/window_limit_readings.csv`). Every request ends on 2026-09-06:
+
+| Requested | Dates | Returned | Dates | Rows |
+| --- | --- | --- | --- | --- |
+| 2026-08-31 .. 2026-09-06 | 7 | as requested | 7 | 1,008 |
+| 2026-06-08 .. 2026-09-06 | 91 | as requested | 91 | 13,104 |
+| 2025-09-08 .. 2026-09-06 | 364 | as requested | 364 | 52,416 |
+| 2025-09-07 .. 2026-09-06 | 365 | as requested | 365 | 52,560 |
+| 2025-09-06 .. 2026-09-06 | 366 | as requested | 366 | 52,704 |
+| 2025-06-06 .. 2026-09-06 | 458 | 2025-09-06 .. 2026-09-06 | 366 | 52,704 |
+| 2023-09-06 .. 2026-09-06 | 1,097 | 2025-09-06 .. 2026-09-06 | 366 | 52,704 |
+
+Every response is HTTP 200 with `result: "OK"`, and nothing in a shortened response indicates that it
+was shortened. An earlier version of this section said the 366-date request was clamped. It was not:
+2025-09-06 .. 2026-09-06 came back exactly as requested.
+
+**Demonstrated:** requests of up to 366 dates ending 2026-09-06 are honoured, and both longer requests
+are returned from 2025-09-06.
+
+**Not established: the exact rule.** 2025-09-06 is both `end_date` minus 365 elapsed days and
+`end_date` minus one calendar year, so these endpoints cannot tell the two apart. No tested window
+contains 29 February, and requests of 367–457 dates were not tested. No conclusion about leap years
+or calendar-year chunks follows from this evidence. See [UNRESOLVED.md](UNRESOLVED.md) §1.
 
 **Measured at the public surface** (`inventory/window_truncation_observation.json`, reproducible via
-`scripts/reproduce_window_truncation.py`): a request for `2023-01-01 .. 2026-09-06` returns
-2025-09-08 .. 2026-09-06 — **27% of the requested period** — with no issue or warning naming the
-shortfall. The two issues emitted are unrelated provenance notices.
+`scripts/reproduce_window_truncation.py`): `rr.fetch(..., start="2023-01-01", end="2026-09-06")` — 1,345
+dates — returned rows from 2025-09-08 00:00 through 2026-09-06 23:50: 364 dates, **27% of the requested
+period**, with no issue or warning naming the shortfall. The two issues emitted are unrelated
+provenance notices. That file's `requested_days` and `returned_days` fields are elapsed days (1,344
+and 363). It does not record the request the adapter sent, so why its first row is 2025-09-08 rather
+than the 2025-09-06 seen in the direct probe is not established.
 
-The data is reachable: walking `end_date` backwards a year at a time retrieved a continuous
-2023-02-02 .. 2026-09-06 record for station `1117894`. `HANDOFF.md` §3 records the two constraints a
-fix must satisfy; the design decision is the delivery owner's.
+The original survey reported walking `end_date` backwards a year at a time to retrieve a continuous
+2023-02-02 .. 2026-09-06 record for station `1117894`. No recording or table of that walk is
+committed, so this folder does not evidence it. `HANDOFF.md` §3 records what a fix must respect; the
+design decision is the delivery owner's.
 
 ## 6. Population churn
 
@@ -162,21 +254,23 @@ The packaged `provenance.json` withholds **1,648 fact groups**, every one
 Station identities are not withheld — consistent with #224's framing that this is principally a
 measurement-availability gap.
 
-This survey supplies recorded acquisitions covering per-station-per-product availability across the
-whole baseline, which is the evidence those 1,648 groups were waiting on. Converting them into
-catalogue rows is implementation work and belongs to the delivery owner.
+This survey supplies an acquisition receipt for every station × product availability result across
+the whole baseline, which is the evidence those 1,648 groups were waiting on. The bytes of responses
+carrying observations are not retained (§3). Converting the results into catalogue rows is
+implementation work and belongs to the delivery owner.
 
 ## 10. Contents
 
 | Path | What it is |
 | --- | --- |
 | [`FINDINGS.md`](FINDINGS.md) | This document |
-| [`STATION_TABLE.md`](STATION_TABLE.md) | The station list: one row per station with per-product status |
+| [`STATION_TABLE.md`](STATION_TABLE.md) | The station list: one row per station with per-product status and window |
 | [`HANDOFF.md`](HANDOFF.md) | Route, window limit, fields, units, availability basis, error behaviour |
 | [`UNRESOLVED.md`](UNRESOLVED.md) | Unresolved cases and the decisions required |
-| [`EVIDENCE_INDEX.md`](EVIDENCE_INDEX.md) | Every recording with integrity fields and what it establishes |
-| `inventory/station_product_evidence.csv` | The 1,650-row inventory |
-| `recordings/` | 21 recordings in the repository's existing convention |
+| [`EVIDENCE_INDEX.md`](EVIDENCE_INDEX.md) | The evidence package and every recording, with integrity fields |
+| `evidence/` | Receipts for every graph request; whole bodies of responses carrying no observation |
+| `inventory/` | The 1,650-row inventory, generated summaries, comparison, churn and window-limit tables |
+| `recordings/` | 21 recordings in the repository's recording convention |
 | `scripts/` | Acquisition, composition and verification scripts |
 
 ## 11. Checks run
@@ -185,17 +279,27 @@ catalogue rows is implementation work and belongs to the delivery owner.
 uv run python research/station-coverage/th_thaiwater/scripts/verify_evidence.py
 ```
 
-**13/13 pass**, offline: recording hash integrity (21/21); required recording fields; no
-credential-like request parameters; inventory 1,650 rows = 825 × 2; all 825 baseline stations
-accounted for; no duplicate pairs; statuses within the declared vocabulary; no `unsupported` claim;
-HTTP 200 not treated as availability; all 1,096 available rows citing at least one non-null
-observation; all 554 empty rows citing zero; all 554 empty rows resting on the 90-day window; every
-available row citing the graph route rather than catalogue metadata.
+**34/34 pass**, offline. They cover:
 
-`uv run ruff format`, `uv run ruff check`, `uv run ty check` clean.
+- **Recordings:** fields, digests and sizes.
+- **Retention:** no committed file holds a measurement value.
+- **Receipts:** unique ids; each URL names its own station and window; no count exceeds grid rows;
+  every grid spans exactly its requested dates at 24 or 144 rows per date.
+- **Retained bodies:** all 39 reproduce digest, size and every derived reading; every response
+  carrying no observation is retained.
+- **Inventory completeness.**
+- **Linkage:** every row cites a receipt for its own station and copies it exactly.
+- **Statuses:** every status reproduces from its receipt; both products share one response; empty
+  rows rest on 91 dates.
+- **Churn:** it reconciles.
+- **Snapshot state:** per row, with absent kept distinct from null.
+- **Reproduction:** the metadata comparison reproduces from the final inventory, and the
+  window-limit readings reproduce from the recorded probe.
+
+`tests/test_th_thaiwater_research_stores_no_observation_values.py` runs the same retention scan in
+the test suite, so a stored measurement value fails `uv run pytest`.
 
 **Access etiquette:** all requests were unauthenticated GET against public routes with a descriptive
-User-Agent and 0.35 s spacing. Only derived counts were retained from the sweeps — response bodies
-were not accumulated, so no observation history was downloaded merely to establish support.
-Representative responses are recorded separately. No credentials, cookies or tokens were sent or
-stored.
+User-Agent and 0.35 s spacing. Response bodies carrying observations were read in memory to derive
+counts and never written to disk. No observation history beyond the stated windows was downloaded.
+No credentials, cookies or tokens were sent or stored.

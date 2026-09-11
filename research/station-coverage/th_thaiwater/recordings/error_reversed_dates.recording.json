@@ -15,7 +15,18 @@
     "status_code": 200,
     "content_type": "application/json; charset=utf-8",
     "retrieved_at": "2026-09-07T15:35:42.717750Z",
+    "response_bytes": 133,
+    "sha256": "e2c75871803ee927be434339f056c9bf7a30a610fae9a5eb068b641f36b01df8",
+    "body_retained": true,
     "content_base64": "eyJyZXN1bHQiOiJPSyIsImRhdGEiOnsiZ3JhcGhfZGF0YSI6W10sIm1pbl9iYW5rIjo5Ljc4OSwid2FybmluZ19sZXZlbCI6bnVsbCwiY3JpdGljYWxfbGV2ZWwiOm51bGwsImdyb3VuZF9sZXZlbCI6Mi4wMDUsInFtYXgiOm51bGx9fQ==",
-    "sha256": "e2c75871803ee927be434339f056c9bf7a30a610fae9a5eb068b641f36b01df8"
+    "reading": {
+      "result": "OK",
+      "grid_rows": 0,
+      "nonnull_value": 0,
+      "nonnull_discharge": 0,
+      "nonnull_value_out": 0,
+      "grid_first": "",
+      "grid_last": ""
+    }
   }
 }

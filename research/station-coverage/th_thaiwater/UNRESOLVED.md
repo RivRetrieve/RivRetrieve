@@ -6,24 +6,41 @@ research.
 
 ---
 
-## 1. Multi-year requests return one year without saying so — DECISION REQUIRED
+## 1. Long requests are shortened without saying so; exact limit not established — DECISION REQUIRED
 
-**Established.** The graph route silently clamps `start_date` to `end_date` minus 365 days
-(`inventory/window_limit_probe.csv`). Measured at the public surface, a request for
-`2023-01-01 .. 2026-09-06` returns 2025-09-08 .. 2026-09-06 — 27% of the requested period — with no
-issue or warning naming the shortfall (`inventory/window_truncation_observation.json`, reproducible
-with `scripts/reproduce_window_truncation.py`).
+Day counts are inclusive calendar dates (both endpoints counted; elapsed days = dates − 1).
 
-**Established that the data is reachable.** Walking `end_date` backwards a year at a time retrieved a
-continuous 2023-02-02 .. 2026-09-06 record for station `1117894`.
+**Established** (`inventory/window_limit_readings.csv`, station `1373273`, recorded 2026-09-07).
+Requests ending 2026-09-06 of 7, 91, 364, 365 and 366 dates came back exactly as requested. Requests
+of 458 dates (from 2025-06-06) and 1,097 dates (from 2023-09-06) both came back as
+2025-09-06 .. 2026-09-06, 366 dates, with HTTP 200, `result: "OK"` and no indication of the
+shortening. At the public surface, `rr.fetch` for `2023-01-01 .. 2026-09-06` (1,345 dates) returned
+rows from 2025-09-08 to 2026-09-06, 364 dates or 27% of the period, with no issue or warning naming
+the shortfall (`inventory/window_truncation_observation.json`).
 
-**Exact remaining question.** Should retrieval split requests into ≤365-day chunks (the repository
-already does this for `br_ana` and `ca_eccc`), and should a split or a source-side cap be surfaced to
-callers as an issue?
+**Corrected.** Earlier text said the 366-date request was clamped and that calendar-year chunks
+would therefore fail in leap years. The 366-date request was honoured, and the leap-year conclusion
+does not follow from this evidence; both are withdrawn.
+
+**Not established — the exact maximum.** The clamped start 2025-09-06 is both `end_date` − 365
+elapsed days and `end_date` − one calendar year; these endpoints cannot distinguish the two. No
+tested window contains 29 February, and 367–457 dates were not tested. The largest size demonstrated
+to work is 366 dates ending 2026-09-06; that is not a measured general maximum. A request whose two
+candidate starts differ — for example one ending 2024-03-01, where end − 365 days is 2023-03-02 and
+end − one year is 2023-03-01 — would distinguish them. It was not run.
+
+**Reported but not evidenced here.** The original survey reported walking `end_date` backwards a year
+at a time to a continuous 2023-02-02 .. 2026-09-06 record for station `1117894`. No recording or table
+of that walk is committed.
+
+**Exact remaining question.** Should retrieval split requests with `capped-span`, and at what `size`?
+The planner's `size` counts inclusive dates; 366 is the largest demonstrated, and a smaller size such
+as 365 is a conservative choice, not a measured limit. Should a split or a source-side shortening be
+surfaced to callers as an issue? Is the distinguishing probe above wanted before choosing?
 
 **Needed.** A decision from the delivery owner. This survey changes no retrieval code. `HANDOFF.md`
-§3 records the two constraints a fix must satisfy: chunks must carry their own `end_date` because the
-clamp is anchored there, and 365 days is the safe maximum because 366 is already clamped.
+§3 records what a fix must respect: the shortening keeps `end_date` and moves `start_date`, so each
+chunk must carry its own `end_date`.
 
 ---
 
@@ -51,15 +68,17 @@ The 605 additional stations are **not** surveyed and **not** merged.
 
 ---
 
-## 3. Twelve stations empty over 90 days — REPORTED, NO DECISION NEEDED
+## 3. Twelve stations empty over 91 dates — REPORTED, NO DECISION NEEDED
 
 Twelve stations return a complete time grid with no non-null value for either product over
-2026-06-08 .. 2026-09-06: `11688546`, `11688685`, `11688715`, `11688749`, `11688817`, `11688823`,
-`11688849`, `11689002`, `11689003`, `11689067`, `11689072`, `11689150`.
+2026-06-08 .. 2026-09-06 (91 dates): `11688546`, `11688685`, `11688715`, `11688749`, `11688817`,
+`11688823`, `11688849`, `11689002`, `11689003`, `11689067`, `11689072`, `11689150`. Each response is
+kept whole in `evidence/graph_bodies_without_observations.zip`, under the `request_id` its inventory
+rows cite.
 
 They form a contiguous id block, which is consistent with a batch of registered stations not yet
 reporting. Recorded as `empty_in_tested_window`, never as unsupported — the source states nothing
-about whether they can supply a measurement. A longer window than 90 days was not tested.
+about whether they can supply a measurement. A window longer than 91 dates was not tested.
 
 ---
 
@@ -89,3 +108,57 @@ product is interpreted.
 Resolved before this survey and confirmed by it. Four issuing agencies with HII additionally
 operating the platform; `origins.py` binds every station to its agency and fails the build on
 disagreement. No further research needed. See `HANDOFF.md` §8.
+
+---
+
+## 7. Retention of response bytes — YOUR ACCEPTANCE REQUIRED
+
+**This does not meet your request literally.** You asked to "Preserve the actual source responses
+supporting each availability conclusion" and to retain "the exact non-secret request, HTTP status,
+media type, actual acquisition date and integrity hash with the response". Everything in that list
+is retained for every response **except the response bytes of the 1,336 graph responses that carry
+observations**, and of the 13 recordings that carried them.
+
+**Retained, for all 1,377 graph requests** (`evidence/graph_receipts.csv`):
+
+- exact request URL, HTTP status, media type, UTC acquisition instant, byte size and SHA-256 of the
+  full response;
+- derived readings: grid rows, non-null counts per field, grid endpoints and the `result` field.
+
+Whole bytes are retained for the 39 responses carrying no observation value
+(`evidence/graph_bodies_without_observations.zip`, 129,554 B) and for 8 recordings. Every inventory
+row links to its own receipt.
+
+**Why the rest is not.** This project does not redistribute source observations, so committing them
+is not available to us.
+
+**Consequence, stated plainly.**
+
+- **What offline verification can check:** every inventory row against its receipt, and, for the 39
+  retained bodies, digest, size and every derived reading.
+- **What it cannot do:** for the other 1,336 responses it cannot recompute the digest or re-derive a
+  count. The digest fixes what was received, but it cannot be checked against bytes from this
+  repository.
+- **Why a re-fetch settles nothing:** re-fetching the same URL is not guaranteed to return the same
+  bytes. The 2026-09-11 replacement did reproduce the 2026-09-07 counts exactly for all 1,374
+  requests, but bytes could not be compared, because the original survey recorded no digests.
+
+**Size estimate for retaining everything, and a proposed handoff — for agreement before any
+arrangement.** Your review asked for this if preserving the required responses would be too large.
+
+- **Measured size:** the 1,374 successful graph responses total 504,130,869 B (25,998,678 B gzip-6).
+  The 1,336 carrying observations total 500,847,708 B (25,874,399 B gzip-6).
+- **What exists now:** these bodies were read in memory to derive the receipts and were never written
+  to disk, so no copy exists.
+- **What a handoff would take:** retaining them would mean a further acquisition, identified by its
+  own dates, held outside this repository under access the project controls. That has not been done
+  and will not be without your agreement. It would still be a copy of the agency's observations, so
+  the redistribution question applies to it too.
+
+**History.** The 13 stripped recordings' observation-bearing bytes remain in this branch's history
+(commits `67ed409` .. `e5c8907`) unless the branch is squash-merged or rewritten. That is a
+repository decision, noted here so it is not assumed to be settled.
+
+**Needed.** Your explicit acceptance that request, status, media type, acquisition instant, byte
+size, full-response digest and derived readings — with whole bytes only for responses carrying no
+observation — are sufficient evidence for this survey. If they are not, say what would be.
