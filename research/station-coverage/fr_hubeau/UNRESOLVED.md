@@ -131,6 +131,14 @@ products re-derives offline from the stored response.
 responses with points (the 61 available and the site/station comparison captures), and the illustrative
 sample-row recordings. For those, the digest and readings stand in for the bytes.
 
+**One conservatism, disclosed rather than tuned away.** The scanner refuses any body carrying a
+numeric `v`, and HydroPortail puts `t`/`v` pairs in `correctionCurves` — rating-correction offsets,
+not observations of the river. Five empty-window responses are therefore receipted rather than kept,
+although they contain no observation value and were safe to preserve. Their receipts, digests and
+point counts are intact, so nothing rests on unverifiable evidence; this is a small shortfall against
+"preserve the actual source responses", not a policy limit. Narrowing the rule to `series.data`
+values and the statistics block would recover them, at the cost of loosening a redistribution check.
+
 **Why.** This project does not commit source observation data to the repository. No agency here grants
 redistribution, and the rule is enforced mechanically by `scripts/observation_scan.py` and
 `tests/test_fr_hubeau_research_stores_no_observation_values.py`.
