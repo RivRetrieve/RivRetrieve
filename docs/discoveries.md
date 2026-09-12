@@ -259,6 +259,16 @@ and never splits. Measured through the public surface, `rr.fetch(..., start="202
 end="2026-09-06")` — 1,345 dates — returned rows from 2025-09-08 through 2026-09-06, 364 dates or 27%
 of the requested period, with no issue or warning naming the shortfall.
 
+That public-surface capture disagrees with the direct probe about **where** the shortening lands. It
+was recorded at 15:48 on the same day as the probe, sends the same `end_date`, and yet its first row
+is 2025-09-08 — two dates later than the 2025-09-06 floor that the 15:35 recording and the 15:38
+probe both returned for that `end_date`. The provider renders one request from the fetch window
+unchanged and the parser keeps null rows, so neither explains the difference; the observation does
+not record the request the adapter sent. **The floor is therefore not a stable function of
+`end_date` in this evidence, and the discrepancy is unexplained** — see `FINDINGS.md` §5 in the
+`th_thaiwater` research folder (#229). Treat the returned span, not the requested one, as the only
+thing a capture establishes.
+
 **Why it matters:** nothing in the response says a window was shortened. A caller receives a
 plausible frame that is silently incomplete, and neither the status code, the payload shape, nor the
 issue list distinguishes it from a complete one. A provider whose source caps and whose declaration
@@ -284,9 +294,14 @@ At the time of writing, **no provider declares `capped-span` or `n-year-chunk`, 
    calendar dates, and let the engine split. Never write splitting arithmetic in the provider — ADR
    0017 exists so that this class of defect cannot be written locally.
 
-3. **Establish where the cap is anchored.** ThaiWater clamps relative to `end_date`, so chunks must
-   each carry their own `end_date` and walk backwards; holding `end_date` fixed and moving
-   `start_date` earlier changes nothing. Another source may anchor at `start_date` instead.
+3. **Establish where the cap is anchored — and do not assume the anchor is stable.** In ThaiWater's
+   probe series, holding `end_date` fixed and moving `start_date` earlier than 2025-09-06 returned
+   the same 2025-09-06 .. 2026-09-06 span, which is consistent with an `end_date` anchor; the
+   conservative operational reading is that each chunk carries its own `end_date` and walks
+   backwards. But a capture ten minutes later, with the same `end_date`, came back floored two dates
+   later, so **this evidence does not establish the anchor** and no rule should be declared from it
+   without a probe that reproduces the floor across repeated captures. Another source may anchor at
+   `start_date` instead.
 
 4. **Separate a size demonstrated to work from the source's maximum.** Record the exact requested and
    returned dates and say whether a count means elapsed days or inclusive dates. ThaiWater's recorded
