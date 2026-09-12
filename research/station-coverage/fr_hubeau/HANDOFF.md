@@ -1,63 +1,114 @@
 # fr_hubeau implementation handoff
 
 For the implementing agent. Everything below is established by a recording in `recordings/` or a
-probe table in `inventory/` unless it appears under "not established".
+receipt in `evidence/`, unless it appears under "not established". Figures for availability are
+generated into `inventory/inventory_summary.json`; they are not repeated here so they cannot drift.
 
 Baseline commit `67796ab8d793867aaaaf9c6fb55bec208adaeab8` · native table captured
-`2026-08-02T17:33Z` (7,323 stations) · this survey `2026-09-08`/`09`.
+`2026-08-02T17:33Z` (7,323 stations) · first survey `2026-09-08`/`09` · replacement captures
+`2026-09-11` (the acquisition instant of every receipt is in its bundle).
 
-**Read [`ROUTE_DECISIONS.md`](ROUTE_DECISIONS.md) first** — it records which route serves what and
-why, including why the instantaneous products should stay on HydroPortail.
+Read [`ROUTE_DECISIONS.md`](ROUTE_DECISIONS.md) for what each route was measured to do.
 
 ## 1. Two disjoint populations
-
-The baseline is the union of two referentials with **no overlapping station codes**:
 
 | Endpoint | Stations | Products |
 | --- | --- | --- |
 | `hydrometrie/referentiel/stations` | 6,454 | the five hydrometric products |
 | `temperature/station` | 869 | `water_temperature_reported` only |
 
-A temperature station carries no `code_site`, `en_service` or `type_station`. Do not expect the five
-hydrometric products to apply to it.
+No station code appears in both. A temperature station carries no `code_site`, `en_service` or
+`type_station`.
 
-## 2. Identity, and the mapping that is already published
+## 2. Identity
 
-`code_station` is the identity for every product. `code_site` is the entity for
-`discharge_instantaneous` only.
+`code_station` identifies every station. `code_site` is published for all 6,454 hydrometry stations,
+non-null, in the committed native table and `hydrometrie/referentiel/stations`
+(`recordings/referentiel_stations_code_site`). For `Y251002001` it is `Y2510020`, the value
+`_HYDROPORTAIL_IDENTITIES` hard-codes.
 
-**`code_site` is published for all 6,454 hydrometry stations** in the committed native table and in
-`hydrometrie/referentiel/stations`. For `Y251002001` it is `Y2510020` — exactly the value
-`_HYDROPORTAIL_IDENTITIES` hard-codes. There is no need for a hard-coded map.
+**Do not derive the site code.** It equals `code_station[:-2]` for all 6,454, but that is an
+observation about the published field, not a rule; Sandre states only that a station's code "is
+attached to" its site (`recordings/doc_sandre_stationhydro`).
 
-**Do not derive the site code.** It equals `code_station[:-2]` for 100% of the 6,454 with no
-exceptions, but that is corroboration of the published field, not a rule to compute with. Station
-codes are 10 characters and site codes 8, but a station added later need not follow that.
+The mapping is many-to-one: 5,505 sites, of which 755 carry 1,704 stations, up to eight on one site.
 
-**The mapping is many-to-one.** 5,505 distinct sites; 755 of them carry 1,704 stations between them,
-up to eight on one site. Stations sharing a site share a discharge series. See
-`UNRESOLVED.md` §3.
+## 3. Station-level and site-level instantaneous discharge
 
-## 3. Availability basis, and why it differs by product
+### What the source says
 
-**Daily and temperature — whole-record totals.** `obs_elab` and `temperature/chronique` return a
-`count` field. Requested with `size=1` and **no date filter**, that count is the station's total for
-that product over its whole record. Availability therefore rests on a published total, not on whether
-data happens to fall inside a tested window, and a zero is a published fact recorded as
-`empty_no_data_published`.
+| Statement | Source |
+| --- | --- |
+| A site may carry several stations, **at most one active at a time, and that one produces the site's discharge** | `recordings/doc_hydroportail_station_hydrometrique` |
+| Stations on a site may succeed one another or alternate; the site's activation table traces **which station supplies the site's data** | `recordings/doc_hydroportail_calendrier_site` |
+| A site is the carrier of discharge data; a station may carry stage and/or discharge | `recordings/doc_hubeau_api_hydrometrie` (receipted: the page embeds example observations) |
 
-**Instantaneous — window-bounded.** No whole-record total is available. `observations_tr` gives a
-count over its rolling 30 days only; HydroPortail returns the series itself and takes ~6.8 s per
-request. Negatives there are therefore window-bounded and are recorded as `empty_in_tested_window`,
-or as `uninvestigated` where the survey did not reach them. Neither is a claim that the station lacks
-the product.
+### What the preserved responses show
+
+Same window, same variable (`Q`), site route and station routes (`evidence/station_site_comparison.json`):
+
+| Site | Window | Site series | Station series |
+| --- | --- | --- | --- |
+| `25210001` | 1–2 Sep 2026 | 576 points | `2521000101`: 576 points, equal to the site at **1** of 576 instants · `2521000102`: 576 points, equal to the site at **all 576** |
+| `12320001` | 1–8 Jun 2026 | **no point** | `1232000101`: 282 points · `1232000102`: no point |
+
+`observations_tr` addressed by the site code returns rows for each linked station **and** rows whose
+`code_station` is null; addressed by a station code it returns that station only
+(`recordings/observations_tr_Q_*_identities`).
+
+These are consistent with the source's statement: the site series is one series, supplied by the
+station active at each instant, and linked stations carry their own discharge series, which can
+differ from it. Two matching or differing samples do not prove the relationship holds everywhere;
+the statement is the source's, the samples illustrate it.
+
+### Implications
+
+- **The site route returns the site's series, not each linked station's measurements.** It must not
+  be presented as independent measurements from every station on the site.
+- **Two discharge series exist for a station on a shared site**: its own
+  (`/stationhydro/ajax/{code_station}/series`, `Q`) and its site's
+  (`/sitehydro/ajax/{code_site}/series`). Which one a station selection should return is a product
+  decision for the delivery owner. The existing site route is appropriate if the product is the site's
+  discharge; it is not a station's own series.
+- **Identity that must stay visible**: for a site series, `code_site`, and that it is supplied by
+  whichever station is active; for a station series, `code_station`.
+- **Every `discharge_instantaneous` row in the inventory is a station-level finding**
+  (`tested_entity_kind = station`, `site_series_relation =
+  station_series_tested_site_series_not_established`). Site-level availability was not surveyed for
+  the population.
+
+### Not established
+
+- The activation calendar of any site (which station supplied the site series, when). HydroPortail
+  documents it; no route for it was captured.
+- How `observations_tr`'s null-`code_station` rows relate to HydroPortail's site series beyond sharing
+  the site code; only identities were captured.
+- Site-level instantaneous availability for any site other than the two above.
+
+## 4. Availability basis, by product
+
+| Product | Instrument | Entity | What a zero means |
+| --- | --- | --- | --- |
+| `discharge_daily_mean`, `discharge_daily_max`, `stage_daily_max` | `obs_elab` `count`, `size=1`, `fields=code_station`, no date filter | station | the publisher's whole-record total is zero |
+| `water_temperature_reported` | `temperature/chronique` `count`, same shape | station | as above |
+| `stage_instantaneous`, `discharge_instantaneous` | `observations_tr` `count` (rolling 30 days), then for a fixed sample HydroPortail station series over two windows | station | nothing in the windows tested — never whole-history absence |
+
+The statuses are defined in `scripts/build_inventory.py`. A request settles only if the publisher
+answered it: HTTP 200/206 with a parseable count, or HTTP 200 with a parseable series. A failed attempt
+never supplies a count or a point total, so it can never become an empty result.
 
 **Catalogue metadata cannot establish availability.** `referentiel/sites` publishes `grandeur_hydro`,
-which looks like a declaration and is not: it is `Q` for **all 9,284 sites**.
-`date_premiere_donnee_dispo_site` is empty for all of them. `referentiel/stations` has no
-availability or measurand field among its 39. Do not build on either.
+which is `Q` for all 9,284 sites, and `date_premiere_donnee_dispo_site`, empty for all
+(`recordings/hubeau_sites_grandeur_declaration`).
 
-## 4. Request shape, pagination, limits
+**Zero counts and entities.** `obs_elab` answers an unknown entity with a count of 0 exactly as it
+answers a known one with no data: `recordings/obs_elab_QmnJ_zero_count` asks for temperature station
+`01004000` and reads 0. A zero is therefore used only where the request addresses the row's own
+station, in the right population, with the product's own filter; `verify_evidence.py` checks that for
+every cited request. `recordings/obs_elab_QmnJ_zero_count_valid_hydrometry_station` is a valid example:
+hydrometry station `1232000102` reads 0 for `QmnJ` and 237 for `HIXnJ`, returning its own code.
+
+## 5. Request shape, pagination, limits
 
 | Route | Parameters |
 | --- | --- |
@@ -65,57 +116,53 @@ availability or measurand field among its 39. Do not build on either.
 | `temperature/chronique` v1 | `code_station`, `date_debut_mesure`, `date_fin_mesure` |
 | HydroPortail | `hydro_series[startAt]`, `hydro_series[endAt]`, `hydro_series[variableType]`, `hydro_series[simpleAndInterpolatedAndHourlyVariable]`, `hydro_series[statusData]` |
 
-- **`code_entite` accepts up to 100 comma-separated codes**, and supports patterns such as `K*`. The
-  returned `count` is the **aggregate** across them, so batching cannot attribute rows to a station.
-  Per-station facts need per-station requests.
-- **HydroPortail dates are `DD/MM/YYYY` with slashes.** Hyphens are rejected with
-  `"Veuillez entrer une date valide."` — a validation error, not a source limitation.
-- **Pagination** on Hub'Eau follows the response `next` URL as a new request without re-appending the
-  original parameters, as the port notes already record.
-- **No rate limit is published**: no `X-RateLimit` or `Retry-After` headers, nothing in the OpenAPI
-  spec. This survey sustained roughly 1.7 requests per second against Hub'Eau without refusal, and
-  found HydroPortail far slower at about 6.8 s per request.
+- `code_entite` accepts several comma-separated codes, and the `count` is the aggregate across them.
+- HydroPortail dates are `DD/MM/YYYY` with slashes; hyphens are rejected as an invalid date.
+- Hub'Eau pagination follows the response's `next` URL as a new request.
+- No rate limit is published. The replacement capture ran one connection with a 0.1 s pause and was
+  not refused.
 
-## 5. Client behaviour that matters
+## 6. Organisation fields
 
-Opening a new connection per request exhausted the local DNS resolver during this survey and produced
-566 spurious `URLError: nodename nor servname provided` failures against HydroPortail — which, taken
-at face value, would have looked like a station having no data. **Reuse one connection.** A session
-with keep-alive removed the failures entirely.
+Two Sandre layers supply an organisation name per station. **Neither field is established as the
+producer or issuing body of the series RivRetrieve retrieves.** The inventory keeps each name under
+its source field and a scope code.
 
-Any sweep must also treat a transport failure as retryable rather than settled: a resumable run that
-skips "already recorded" rows must skip only rows that carry a result.
+| | Hydrometry: `NomIntervenant` (`sa:StationHydro`) | Temperature: `ProducteurDuJeu` (`sa:StationMesureEauxSurface`) |
+| --- | --- | --- |
+| Stations with a name | 5,366 of 6,454 (1,023 absent from the layer, 65 blank) | 869 of 869 |
+| What the source says the field is | an organisation's name (`doc_sandre_nomintervenant`); the layer schema declares no role (`sandre_wfs_hyd_describe_stationhydro`); the layer is collected yearly from SCHAPI (`doc_sandre_hyd_layer_metadata`) | sits beside `DateDuJeuDeDonnee` (`sandre_wfs_stq_describe_stationmesure`); the referential is collected "auprès des producteurs (Agences de l'eau et Offices de l'Eau)", and station information falls under "the owners of the measurement networks" (`doc_sandre_stq_dataset_metadata`) |
+| Role established | none — an organisation associated with the station record | producer of the station-referential dataset |
+| Scope code in the inventory | `nomintervenant_role_unstated` | `producteurdujeu_station_dataset_producer` |
 
-## 6. Producer
+Related HydroPortail terms, recorded so they are not conflated: an *intervenant* is an organisation
+(`doc_hydroportail_glossaire`); a station's *gestionnaires* (generally the UH) administer its
+referential; an *administrative responsibility* is the collection arrangement under which an entity's
+data is communicated (`doc_hydroportail_responsabilites_administratives`). The Sandre layer does not
+say which of these `NomIntervenant` holds.
 
-Established for **6,235 of 7,323 stations** from two bulk requests, not per-station lookups:
+Roles kept apart:
 
-| Population | Source | Field | Covered |
-| --- | --- | --- | --- |
-| Hydrometry | `services.sandre.eaufrance.fr/geo/hyd`, `sa:StationHydro` | `NomIntervenant` | 5,366 / 6,454 |
-| Temperature | `services.sandre.eaufrance.fr/geo/stq`, `sa:StationMesureEauxSurface` | `ProducteurDuJeu` | **869 / 869** |
+- **Organisation associated with a station** — what both fields establish.
+- **Operator / distributor** — Hub'Eau and HydroPortail transport the data; SCHAPI supplies the
+  hydrometric layer to Sandre.
+- **Producer or issuing body of a retrieved series** — not established by either field.
 
-These WFS layers return the same properties as the per-station `id.eaufrance.fr` lookups already in
-the repository — same station, same `NomIntervenant` — so that endpoint is a single-record view of
-this layer. `sa:StationHydro` is the exact union of its six regional layers.
-
-Hub'Eau publishes no producer field, so Sandre is the only bulk route. 1,088 hydrometry stations
-remain without a producer; see `UNRESOLVED.md` §2.
-
-Producers are transports-versus-producers distinct: Hub'Eau and HydroPortail are operators, the
-DREAL/DEAL units and Agences de l'Eau are the producing bodies, as the port notes already state.
+Limits: a name is a present-day attribute of a station record. It is not extended to the station's
+historical measurements, and it does not identify the supplier of a shared site's series (§3).
 
 ## 7. Time semantics
 
-Unchanged and deliberately not extended. `obs_elab` and `temperature/chronique` establish no zone, so
-`unknown` stands. `observations_tr` and HydroPortail both publish UTC, which says nothing about the
-daily products. Temporal support for temperature remains unknown per the recorded OpenAPI contract.
+Unchanged. `obs_elab` and `temperature/chronique` establish no zone, so `unknown` stands.
+`observations_tr` and HydroPortail publish UTC. Temperature temporal support remains unknown.
 
 ## 8. Things that must not be done
 
-- Do not treat `grandeur_hydro` in `referentiel/sites` as a per-site declaration; it is a constant.
-- Do not derive `code_site` from `code_station` by truncation; use the published field.
-- Do not treat an instantaneous zero as absence — the 30-day route cannot see further back.
-- Do not treat a transport failure as absence, and do not let a resumable sweep settle on one.
+- Do not treat a failed request as a count, a zero, or an empty window.
+- Do not treat two empty windows as whole-history absence.
+- Do not present a site series as each linked station's measurements, or transfer a station's
+  discharge availability to its site.
+- Do not treat `NomIntervenant` or `ProducteurDuJeu` as the producer of a retrieved series.
+- Do not use a zero count whose request addressed another entity.
+- Do not derive `code_site` by truncation, or treat `grandeur_hydro` as a per-site declaration.
 - Do not assume the five hydrometric products apply to the 869 temperature stations.
-- Do not infer a timezone or record bounds for the daily products.

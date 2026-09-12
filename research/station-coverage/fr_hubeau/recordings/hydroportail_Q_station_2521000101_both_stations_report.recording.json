@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hydro.eaufrance.fr/stationhydro/ajax/2521000101/series",
+    "parameters": {
+      "hydro_series[startAt]": "01/09/2026",
+      "hydro_series[endAt]": "02/09/2026",
+      "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
+      "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "Q",
+      "hydro_series[statusData]": "raw"
+    },
+    "body": null,
+    "sent_url": "https://hydro.eaufrance.fr/stationhydro/ajax/2521000101/series?hydro_series%5BstartAt%5D=01%2F09%2F2026&hydro_series%5BendAt%5D=02%2F09%2F2026&hydro_series%5BvariableType%5D=simple_and_interpolated_and_hourly_variable&hydro_series%5BsimpleAndInterpolatedAndHourlyVariable%5D=Q&hydro_series%5BstatusData%5D=raw"
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-11T13:38:49.030776Z",
+    "response_bytes": 171932,
+    "sha256": "cc6370808e667caf7a359add0e2b6a082a0dbf095a373867bd2fec13d9704ad8",
+    "body_retained": false,
+    "reading": {
+      "parse": "hydroportail_series",
+      "series_code": "2521000101",
+      "series_metric": "Q",
+      "series_title": "Débit instantané - Données brutes de l'entité - 2521 0001 01 - La Lézarde au Lamentin [Pont RN1] - 1 - du 01/09/2026 00:00 au 02/09/2026 23:59 (TU)",
+      "range": [
+        "2026-09-01T00:00:00Z",
+        "2026-09-02T23:59:59Z"
+      ],
+      "timezone": "UTC",
+      "points": 576,
+      "point_fields": [
+        "c",
+        "m",
+        "md",
+        "q",
+        "s",
+        "t",
+        "v"
+      ],
+      "first_t": "2026-09-01T00:00:00Z",
+      "last_t": "2026-09-02T23:55:00Z",
+      "statistics_state": "populated"
+    }
+  }
+}

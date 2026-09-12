@@ -1,0 +1,75 @@
+{
+  "rows": 33139,
+  "stations": 7323,
+  "by_product_status": {
+    "discharge_daily_max": {
+      "available": 4206,
+      "empty_no_data_published": 2248
+    },
+    "discharge_daily_mean": {
+      "available": 4942,
+      "empty_no_data_published": 1512
+    },
+    "discharge_instantaneous": {
+      "available": 2462,
+      "empty_in_both_history_windows": 323,
+      "history_check_failed": 86,
+      "recent_window_empty_history_unchecked": 3583
+    },
+    "stage_daily_max": {
+      "available": 5266,
+      "empty_no_data_published": 1188
+    },
+    "stage_instantaneous": {
+      "available": 3221,
+      "empty_in_both_history_windows": 202,
+      "history_check_failed": 10,
+      "recent_window_empty_history_unchecked": 3021
+    },
+    "water_temperature_reported": {
+      "available": 869
+    }
+  },
+  "instantaneous_by_en_service_status": {
+    "discharge_instantaneous": {
+      "False": {
+        "recent_window_empty_history_unchecked": 2314
+      },
+      "True": {
+        "available": 2462,
+        "empty_in_both_history_windows": 323,
+        "history_check_failed": 86,
+        "recent_window_empty_history_unchecked": 1269
+      }
+    },
+    "stage_instantaneous": {
+      "False": {
+        "recent_window_empty_history_unchecked": 2314
+      },
+      "True": {
+        "available": 3221,
+        "empty_in_both_history_windows": 202,
+        "history_check_failed": 10,
+        "recent_window_empty_history_unchecked": 707
+      }
+    }
+  },
+  "history_sample_pairs": 682,
+  "remaining_historical_uncertainty": {
+    "recent_window_empty_history_unchecked_in_service": 1976,
+    "recent_window_empty_history_unchecked_out_of_service": 4628,
+    "history_check_failed": 96,
+    "empty_in_both_history_windows": 525,
+    "two_window_probe_request_upper_bound": 13400,
+    "hydroportail_median_seconds_between_requests": 3.52,
+    "two_window_probe_hours_upper_bound": 13.1
+  },
+  "hubeau_attempts": 33162,
+  "hubeau_attempts_unanswered": 23,
+  "history_attempts": 2296,
+  "history_attempts_unanswered": 1150,
+  "stations_with_organisation_name": {
+    "NomIntervenant": 5366,
+    "ProducteurDuJeu": 869
+  }
+}

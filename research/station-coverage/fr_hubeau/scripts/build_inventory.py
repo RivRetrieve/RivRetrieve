@@ -1,222 +1,337 @@
-"""Compose the station x product evidence inventory for fr_hubeau.
+"""Compose the station x product evidence inventory for fr_hubeau from the preserved receipts.
 
-Sources, in the order they settle a pair:
+    compose : (Baseline, HubEauReceipts, HistoryReceipts, HistorySample, StationLayers) -> Inventory   (pure)
 
-  daily and temperature  - the publisher's own `count` from obs_elab / temperature/chronique with no
-                           date filter, so the figure is that station's whole record rather than a
-                           sampled window
-  instantaneous          - `observations_tr` count over its rolling 30-day window, then, for pairs
-                           reading zero at an in-service station, a HydroPortail probe over two
-                           windows outside that horizon
+Every row is derived from receipts in `evidence/*.tar.xz` and names them in `evidence_refs`, so each
+conclusion traces to the exact request and response that produced it. A receipt settles a request
+only if the publisher answered it: HTTP 200/206 with a parseable count (Hub'Eau) or HTTP 200 with a
+parseable series (HydroPortail). A failed attempt never contributes a count or a point total.
 
 Status vocabulary (non-interchangeable, per issue #222):
-  available                - the publisher reports at least one observation for the pair
-  empty_no_data_published  - the publisher reports a total of zero over the station's whole record
-  empty_in_tested_window   - zero within a tested window, where no whole-record total is available
-  uninvestigated           - not resolved by this survey; never a claim about the source
-  access_failed            - the request did not complete; never a claim about the source
+  available                              at least one observation reported: a count above zero (whole
+                                         record, or observations_tr's rolling 30 days), or HydroPortail
+                                         series points in a tested window
+  empty_no_data_published                whole-record count of zero (daily and temperature products)
+  empty_in_both_history_windows          30-day count of zero, and both HydroPortail windows answered
+                                         HTTP 200 with no point; emptiness in those two windows only
+  history_check_failed                   30-day count of zero, at least one HydroPortail window never
+                                         answered, and none returned points; no claim about the source
+  recent_window_empty_history_unchecked  30-day count of zero; never checked against history
+  access_failed                          no attempt at the Hub'Eau count was answered; no claim
 
-There is deliberately no "unsupported" status: no recorded evidence states that a station cannot
-supply a measurement.
+There is no `unsupported` status: no recorded evidence states that a station cannot supply a product.
+
+Instantaneous scope: the tested entity is the STATION for H and for Q. Production requests the SITE
+series for discharge_instantaneous; a station result is not transferred to it (`site_series_relation`).
+
+Organisation columns carry the Sandre layer's own field name and a scope code; neither field is
+established as the producer of the series retrieved. See HANDOFF.md section 6.
+
+Usage: uv run python research/station-coverage/fr_hubeau/scripts/build_inventory.py
+Output: inventory/station_product_evidence.csv, inventory/inventory_summary.json
 """
 
 from __future__ import annotations
 
 import base64
+import collections
+import csv
 import json
 import pathlib
+import statistics
+import sys
+from datetime import datetime
 
 import pandas as pd
 
-HERE = pathlib.Path(__file__).resolve().parents[1]
-ROOT = pathlib.Path(__file__).resolve().parents[3].parent
-NATIVE = ROOT / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
-INVENTORY = HERE / "inventory"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from evidence_bundle import receipts  # noqa: E402
+
+DAILY = ("discharge_daily_mean", "discharge_daily_max", "stage_daily_max")
+TEMPERATURE = "water_temperature_reported"
+INSTANT = ("stage_instantaneous", "discharge_instantaneous")
+HYDRO_PRODUCTS = (*DAILY, *INSTANT)
+WHOLE_RECORD = "whole record (no date filter)"
+HISTORY_WINDOWS = "HydroPortail station series 01/06/2026-08/06/2026 and 01/06/2023-08/06/2023"
+Q_RELATION = "station_series_tested_site_series_not_established"
+COLUMNS = [
+    "code_station",
+    "code_site",
+    "en_service",
+    "product_id",
+    "status",
+    "observations",
+    "evidence_basis",
+    "window_tested",
+    "tested_entity_kind",
+    "tested_entity_code",
+    "site_series_relation",
+    "station_organisation_field",
+    "station_organisation_name",
+    "organisation_scope_note",
+    "evidence_refs",
+]
+LAYERS = (
+    # (recording, code field, organisation field, note when named, note when blank)
+    ("sandre_wfs_stationhydro_all", "CdStationHydro", "NomIntervenant", "nomintervenant_role_unstated", "nomintervenant_blank"),
+    (
+        "sandre_wfs_stationmesure_producers",
+        "CdStationMesureEauxSurface",
+        "ProducteurDuJeu",
+        "producteurdujeu_station_dataset_producer",
+        "producteurdujeu_blank",
+    ),
+)  # fmt: skip
 
 
-def _producers() -> dict[str, str]:
-    """Map station code to its producing body, from the two Sandre WFS captures."""
-    producers: dict[str, str] = {}
-    for name, code_field, producer_field in (
-        ("sandre_wfs_stationhydro_all", "CdStationHydro", "NomIntervenant"),
-        ("sandre_wfs_stationmesure_producers", "CdStationMesureEauxSurface", "ProducteurDuJeu"),
-    ):
-        document = json.loads((HERE / "recordings" / f"{name}.recording.json").read_text())
+def hubeau_settled(receipt: dict[str, str]) -> bool:
+    return receipt["http_status"] in ("200", "206") and receipt["count"] != "" and not receipt["request_error"]
+
+
+def history_settled(receipt: dict[str, str]) -> bool:
+    return receipt["http_status"] == "200" and receipt["points"] != "" and not receipt["request_error"]
+
+
+def failures(attempts: list[dict[str, str]]) -> str:
+    tally = collections.Counter(attempt["request_error"] or f"HTTP {attempt['http_status']}" for attempt in attempts)
+    return ", ".join(f"{reason} x{count}" for reason, count in sorted(tally.items()))
+
+
+def organisations(recordings: pathlib.Path) -> dict[str, tuple[str, str, str]]:
+    """Station code -> (source field, organisation name, scope code), from the two Sandre layers."""
+    out: dict[str, tuple[str, str, str]] = {}
+    for name, code_field, field, named, blank in LAYERS:
+        document = json.loads((recordings / f"{name}.recording.json").read_text(encoding="utf-8"))
         payload = json.loads(base64.b64decode(document["response"]["content_base64"]))
-        for feature in payload.get("features") or []:
-            properties = feature.get("properties") or {}
-            code = str(properties.get(code_field) or "")
-            value = properties.get(producer_field)
-            if code and value and str(value).strip():
-                producers[code] = str(value).strip()
-    return producers
+        for feature in payload["features"]:
+            properties = feature["properties"]
+            value = str(properties.get(field) or "").strip()
+            out[str(properties[code_field])] = (field, value, named if value else blank)
+    return out
 
 
-def _text(value: object) -> str:
-    """Cell text with pandas' NaN treated as empty. `str(nan)` is "nan", which is truthy."""
-    if value is None or (isinstance(value, float) and value != value):
-        return ""
-    text = str(value).strip()
-    return "" if text.lower() == "nan" else text
+def classify(
+    station: str,
+    product: str,
+    attempts: list[dict[str, str]],
+    windows: dict[str, list[dict[str, str]]],
+    sampled: bool,
+) -> dict[str, object]:
+    if not attempts:
+        raise SystemExit(f"{station} {product}: no Hub'Eau receipt; run acquire_hubeau_counts.py")
+    settled = [attempt for attempt in attempts if hubeau_settled(attempt)]
+    whole = product not in INSTANT
+    if not settled:
+        return {
+            "status": "access_failed",
+            "observations": "",
+            "evidence_basis": f"no attempt answered: {failures(attempts)}",
+            "window_tested": WHOLE_RECORD if whole else "observations_tr rolling 30 days",
+            "evidence_refs": [f"hubeau:{attempt['request_id']}" for attempt in attempts],
+        }
+    receipt = settled[-1]
+    count = int(receipt["count"])
+    refs = [f"hubeau:{receipt['request_id']}"]
+    if whole:
+        status = "available" if count > 0 else "empty_no_data_published"
+        return {
+            "status": status,
+            "observations": count,
+            "evidence_basis": f"count {count} over whole record",
+            "window_tested": WHOLE_RECORD,
+            "evidence_refs": refs,
+        }
+    recent = f"observations_tr rolling 30 days before {receipt['retrieved_at'][:10]}"
+    if count > 0:
+        return {
+            "status": "available",
+            "observations": count,
+            "evidence_basis": f"observations_tr count {count} in rolling 30 days",
+            "window_tested": recent,
+            "evidence_refs": refs,
+        }
+    if not sampled:
+        return {
+            "status": "recent_window_empty_history_unchecked",
+            "observations": 0,
+            "evidence_basis": "observations_tr count 0 in rolling 30 days; no history check",
+            "window_tested": recent,
+            "evidence_refs": refs,
+        }
+
+    outcome: dict[str, tuple[dict[str, str] | None, list[dict[str, str]]]] = {}
+    for window in ("1", "2"):
+        tries = windows.get(window, [])
+        answered = [attempt for attempt in tries if history_settled(attempt)]
+        outcome[window] = (answered[-1] if answered else None, tries)
+    first, first_tries = outcome["1"]
+    if not first_tries:
+        raise SystemExit(f"{station} {product}: sampled pair never attempted in window 1")
+    if (first is None or int(first["points"]) == 0) and not outcome["2"][1]:
+        raise SystemExit(f"{station} {product}: window 2 required but never attempted")
+    for answered, tries in outcome.values():
+        cited = [answered] if answered is not None else tries
+        refs += [f"hydroportail:{attempt['request_id']}" for attempt in cited]
+    window_tested = f"{recent}; {HISTORY_WINDOWS}"
+    positive = [
+        (window, answered) for window, (answered, _) in outcome.items() if answered and int(answered["points"]) > 0
+    ]
+    if positive:
+        window, answered = positive[0]
+        points = int(answered["points"])
+        return {
+            "status": "available",
+            "observations": points,
+            "evidence_basis": f"30-day count 0; HydroPortail station series {points} points in window {window}",
+            "window_tested": window_tested,
+            "evidence_refs": refs,
+        }
+    if outcome["1"][0] is not None and outcome["2"][0] is not None:
+        return {
+            "status": "empty_in_both_history_windows",
+            "observations": 0,
+            "evidence_basis": "30-day count 0; HydroPortail windows 1 and 2 answered HTTP 200 with 0 points",
+            "window_tested": window_tested,
+            "evidence_refs": refs,
+        }
+    described = "; ".join(
+        f"window {window} " + ("HTTP 200, 0 points" if answered else f"never answered ({failures(tries)})")
+        for window, (answered, tries) in outcome.items()
+    )
+    return {
+        "status": "history_check_failed",
+        "observations": "",
+        "evidence_basis": f"30-day count 0; HydroPortail {described}",
+        "window_tested": window_tested,
+        "evidence_refs": refs,
+    }
 
 
-def _number(value: object) -> float | None:
-    """Cell value as a float, with NaN and blanks treated as absent."""
-    if value is None or (isinstance(value, float) and value != value):
-        return None
-    try:
-        return float(str(value))
-    except (TypeError, ValueError):
-        return None
+def compose(
+    native: pd.DataFrame,
+    hubeau: list[dict[str, str]],
+    history: list[dict[str, str]],
+    sample: list[dict[str, str]],
+    orgs: dict[str, tuple[str, str, str]],
+) -> list[dict[str, object]]:
+    by_pair: dict[tuple[str, str], list[dict[str, str]]] = collections.defaultdict(list)
+    for receipt in hubeau:
+        by_pair[(receipt["code_station"], receipt["product_id"])].append(receipt)
+    by_window: dict[tuple[str, str], dict[str, list[dict[str, str]]]] = collections.defaultdict(
+        lambda: collections.defaultdict(list)
+    )
+    for receipt in history:
+        by_window[(receipt["code_station"], receipt["product_id"])][receipt["window"]].append(receipt)
+    sampled = {(row["code_station"], row["product_id"]) for row in sample}
+
+    records: list[dict[str, object]] = []
+    for population, field, products in (
+        ("hydrometrie/referentiel/stations", "NomIntervenant", HYDRO_PRODUCTS),
+        ("temperature/station", "ProducteurDuJeu", (TEMPERATURE,)),
+    ):
+        for row in native[native.source_endpoint == population].itertuples():
+            station = str(row.code_station)
+            hydrometry = population.startswith("hydrometrie")
+            organisation = orgs.get(station, (field, "", "station_absent_from_sandre_layer"))
+            for product in products:
+                pair = (station, product)
+                records.append(
+                    {
+                        "code_station": station,
+                        "code_site": str(row.code_site) if hydrometry else "",
+                        "en_service": str(row.en_service) if hydrometry else "",
+                        "product_id": product,
+                        **classify(station, product, by_pair.get(pair, []), by_window.get(pair, {}), pair in sampled),
+                        "tested_entity_kind": "station",
+                        "tested_entity_code": station,
+                        "site_series_relation": Q_RELATION
+                        if product == "discharge_instantaneous"
+                        else "not_applicable",
+                        "station_organisation_field": organisation[0],
+                        "station_organisation_name": organisation[1],
+                        "organisation_scope_note": organisation[2],
+                    }
+                )
+    for record in records:
+        refs = record["evidence_refs"]
+        assert isinstance(refs, list)
+        record["evidence_refs"] = " ".join(str(ref) for ref in refs)
+    return sorted(records, key=lambda record: (str(record["code_station"]), str(record["product_id"])))
 
 
-def _settled(frame: pd.DataFrame) -> pd.DataFrame:
-    """Keep one row per pair, preferring a row that carries a count."""
-    frame = frame.copy()
-    frame["n"] = pd.to_numeric(frame["count"], errors="coerce")
-    frame["has_count"] = frame.n.notna()
-    frame = frame.sort_values("has_count").drop_duplicates(["code_station", "product_id"], keep="last")
-    return frame
+def summarise(
+    records: list[dict[str, object]], hubeau: list[dict[str, str]], history: list[dict[str, str]], sample_size: int
+) -> dict[str, object]:
+    frame = pd.DataFrame(records)
+    by_product = {
+        product: {status: int(n) for status, n in group.status.value_counts().sort_index().items()}
+        for product, group in frame.groupby("product_id")
+    }
+    instant = frame[frame.product_id.isin(INSTANT)]
+    by_service = {
+        product: {
+            service: {status: int(n) for status, n in grp.status.value_counts().sort_index().items()}
+            for service, grp in group.groupby("en_service")
+        }
+        for product, group in instant.groupby("product_id")
+    }
+    unchecked = instant[instant.status == "recent_window_empty_history_unchecked"]
+    instants = sorted(datetime.fromisoformat(r["retrieved_at"].replace("Z", "+00:00")) for r in history)
+    gaps = [(b - a).total_seconds() for a, b in zip(instants, instants[1:], strict=False)]
+    pacing = statistics.median(gap for gap in gaps if gap < 600) if gaps else 0.0
+    never_checked = len(unchecked)
+    failed = int((instant.status == "history_check_failed").sum())
+    requests_upper = 2 * (never_checked + failed)
+    names = frame.drop_duplicates("code_station")
+    return {
+        "rows": len(frame),
+        "stations": int(frame.code_station.nunique()),
+        "by_product_status": by_product,
+        "instantaneous_by_en_service_status": by_service,
+        "history_sample_pairs": sample_size,
+        "remaining_historical_uncertainty": {
+            "recent_window_empty_history_unchecked_in_service": int((unchecked.en_service == "True").sum()),
+            "recent_window_empty_history_unchecked_out_of_service": int((unchecked.en_service == "False").sum()),
+            "history_check_failed": failed,
+            "empty_in_both_history_windows": int((instant.status == "empty_in_both_history_windows").sum()),
+            "two_window_probe_request_upper_bound": requests_upper,
+            "hydroportail_median_seconds_between_requests": round(pacing, 2),
+            "two_window_probe_hours_upper_bound": round(requests_upper * pacing / 3600, 1),
+        },
+        "hubeau_attempts": len(hubeau),
+        "hubeau_attempts_unanswered": sum(not hubeau_settled(r) for r in hubeau),
+        "history_attempts": len(history),
+        "history_attempts_unanswered": sum(not history_settled(r) for r in history),
+        "stations_with_organisation_name": {
+            field: int(((names.station_organisation_field == field) & (names.station_organisation_name != "")).sum())
+            for field in ("NomIntervenant", "ProducteurDuJeu")
+        },
+    }
 
 
 def main() -> None:
-    native = pd.read_parquet(NATIVE)
-    hydro = native[native.source_endpoint == "hydrometrie/referentiel/stations"]
-    temperature = native[native.source_endpoint == "temperature/station"]
-    meta: dict[str, dict[str, str]] = {
-        _text(row.code_station): {
-            "code_site": _text(row.code_site),
-            "libelle_station": _text(row.libelle_station),
-            "libelle_cours_eau": _text(row.libelle_cours_eau),
-            "libelle_departement": _text(row.libelle_departement),
-            "en_service": _text(row.en_service),
-            "endpoint": _text(row.source_endpoint),
-        }
-        for row in native.itertuples()
-    }
-    producers = _producers()
+    here = pathlib.Path(__file__).resolve().parents[1]
+    native = pd.read_parquet(here.parents[2] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
+    hubeau = receipts(here / "evidence" / "hubeau_counts.tar.xz")
+    history = receipts(here / "evidence" / "hydroportail_history.tar.xz")
+    with (here / "inventory" / "history_sample.csv").open(newline="", encoding="utf-8") as handle:
+        sample = list(csv.DictReader(handle))
+    records = compose(native, hubeau, history, sample, organisations(here / "recordings"))
 
-    daily = _settled(pd.read_csv(INVENTORY / "hubeau_counts.csv", dtype=str))
-    instant = _settled(pd.read_csv(INVENTORY / "instantaneous_counts.csv", dtype=str))
-    history_path = INVENTORY / "instantaneous_history.csv"
-    history: dict[tuple[str, str], tuple[float, str]] = {}
-    if history_path.exists():
-        for row in pd.read_csv(history_path, dtype=str).itertuples():
-            first = _number(row.points_window_1)
-            second = _number(row.points_window_2)
-            if _text(row.request_error):
-                continue
-            points = (first or 0.0) + (second or 0.0)
-            history[(_text(row.code_station), _text(row.product_id))] = (points, _text(row.windows))
-
-    records: list[dict[str, object]] = []
-
-    for row in daily.itertuples():
-        station = _text(row.code_station)
-        info = meta.get(station, {})
-        observations = _number(row.n)
-        if _text(row.request_error) or observations is None:
-            status, basis = "access_failed", f"request did not complete: {row.request_error}"
-        elif observations > 0:
-            status = "available"
-            basis = f"publisher reports {int(observations)} observations over the station's whole record"
-        else:
-            status = "empty_no_data_published"
-            basis = "publisher reports a total of zero over the station's whole record (no date filter applied)"
-        records.append(
-            {
-                "code_station": station,
-                "code_site": info.get("code_site", ""),
-                "station_name": info.get("libelle_station", ""),
-                "river": info.get("libelle_cours_eau", ""),
-                "departement": info.get("libelle_departement", ""),
-                "en_service": info.get("en_service", ""),
-                "producer": producers.get(station, ""),
-                "product_id": _text(row.product_id),
-                "native_field": _text(row.native_field),
-                "route": _text(row.route),
-                "status": status,
-                "evidence_basis": basis,
-                "observations": "" if observations is None else int(observations),
-                "window": "whole record (no date filter)",
-                "probed_at": _text(row.probed_at),
-            }
-        )
-
-    for row in instant.itertuples():
-        station = _text(row.code_station)
-        info = meta.get(station, {})
-        probed = history.get((station, _text(row.product_id)))
-        observed: int | None = None
-        observations = _number(row.n)
-        if _text(row.request_error) or observations is None:
-            status, basis, window = (
-                "access_failed",
-                f"request did not complete: {_text(row.request_error)}",
-                _text(row.window),
-            )
-        elif observations > 0:
-            status = "available"
-            basis = f"observations_tr reports {int(observations)} observations in its rolling 30-day window"
-            window = _text(row.window)
-        elif probed is not None:
-            probed_points, probed_windows = probed
-            window = f"30-day real-time window, then HydroPortail {probed_windows}"
-            if probed_points > 0:
-                status = "available"
-                observed = int(probed_points)
-                basis = f"zero on the 30-day route, but HydroPortail returned {observed} points outside that horizon"
-            else:
-                status = "empty_in_tested_window"
-                basis = (
-                    "zero on the 30-day route and no points from HydroPortail in either probed window; "
-                    "the source states nothing about support"
-                )
-        elif info.get("en_service") == "False":
-            status = "empty_in_tested_window"
-            basis = (
-                "zero in the 30-day real-time window at a station the referential marks out of service; "
-                "not probed against HydroPortail and not a claim about the source"
-            )
-            window = _text(row.window)
-        else:
-            status = "uninvestigated"
-            basis = (
-                "zero in the 30-day real-time window at an in-service station, outside the bounded "
-                "HydroPortail sample; unresolved, and deliberately not recorded as absence"
-            )
-            window = _text(row.window)
-        records.append(
-            {
-                "code_station": station,
-                "code_site": info.get("code_site", ""),
-                "station_name": info.get("libelle_station", ""),
-                "river": info.get("libelle_cours_eau", ""),
-                "departement": info.get("libelle_departement", ""),
-                "en_service": info.get("en_service", ""),
-                "producer": producers.get(station, ""),
-                "product_id": _text(row.product_id),
-                "native_field": _text(row.native_field),
-                "route": _text(row.route),
-                "status": status,
-                "evidence_basis": basis,
-                "observations": observed
-                if observed is not None
-                else ("" if observations is None else int(observations)),
-                "window": window,
-                "probed_at": _text(row.probed_at),
-            }
-        )
-
-    frame = pd.DataFrame(records).sort_values(["code_station", "product_id"])
-    path = INVENTORY / "station_product_evidence.csv"
-    frame.to_csv(path, index=False)
-
-    expected = len(hydro) * 5 + len(temperature)
-    assert len(frame) == expected, f"expected {expected} rows, got {len(frame)}"
-    assert set(frame.code_station) == set(native.code_station.astype(str)), "every baseline station must appear"
-    print(f"wrote {len(frame)} rows / {frame.code_station.nunique()} stations -> {path.name}\n")
-    print(pd.crosstab(frame.product_id, frame.status).to_string())
+    expected = int((native.source_endpoint == "hydrometrie/referentiel/stations").sum()) * 5 + int(
+        (native.source_endpoint == "temperature/station").sum()
+    )
+    if len(records) != expected:
+        raise SystemExit(f"expected {expected} rows, composed {len(records)}")
+    with (here / "inventory" / "station_product_evidence.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=COLUMNS, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(records)
+    summary = summarise(records, hubeau, history, len(sample))
+    (here / "inventory" / "inventory_summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {len(records)} rows")
+    print(json.dumps(summary["by_product_status"], indent=1))
+    print(json.dumps(summary["remaining_historical_uncertainty"], indent=1))
 
 
 if __name__ == "__main__":

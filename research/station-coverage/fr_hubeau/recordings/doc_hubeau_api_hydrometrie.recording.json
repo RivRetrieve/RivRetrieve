@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/page/api-hydrometrie",
+    "parameters": null,
+    "body": null,
+    "sent_url": "https://hubeau.eaufrance.fr/page/api-hydrometrie"
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "text/html; charset=UTF-8",
+    "retrieved_at": "2026-09-11T13:38:46.370497Z",
+    "response_bytes": 46117,
+    "sha256": "0fac4526c51ea72921747e23726024359991c25fb5781b32bc368c9cc9ded509",
+    "body_retained": false,
+    "reading": {
+      "parse": "page_text",
+      "quotes": [
+        "Un site peut posséder une ou plusieurs stations ; il est support de données de débit (Q).",
+        "Une station peut porter des observations de hauteur et/ou de débit (directement mesurés ou calculés à partir d'une courbe de tarage)."
+      ]
+    }
+  }
+}

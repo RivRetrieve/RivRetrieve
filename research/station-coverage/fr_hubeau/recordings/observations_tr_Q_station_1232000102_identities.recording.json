@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
+    "parameters": {
+      "code_entite": "1232000102",
+      "grandeur_hydro": "Q",
+      "size": "20",
+      "fields": "code_site,code_station,date_obs"
+    },
+    "body": null,
+    "sent_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=1232000102&grandeur_hydro=Q&size=20&fields=code_site%2Ccode_station%2Cdate_obs"
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-11T13:38:53.701109Z",
+    "response_bytes": 235,
+    "sha256": "dbee7988e54bbc50223cc862ce02255bfeede0c65f0a8fe23459f0632faa74b2",
+    "body_retained": true,
+    "content_base64": "eyJjb3VudCI6MCwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic2VydmF0aW9uc190cj9jb2RlX2VudGl0ZT0xMjMyMDAwMTAyJmdyYW5kZXVyX2h5ZHJvPVEmZmllbGRzPWNvZGVfc2l0ZSxjb2RlX3N0YXRpb24sZGF0ZV9vYnMmY3Vyc29yPSZzaXplPTIwIiwicHJldiI6bnVsbCwibmV4dCI6bnVsbCwiYXBpX3ZlcnNpb24iOiIyLjAuMSIsImRhdGEiOltdfQ==",
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 0,
+      "rows": 0,
+      "row_fields": [],
+      "returned_code_station": [],
+      "returned_code_site": []
+    }
+  }
+}

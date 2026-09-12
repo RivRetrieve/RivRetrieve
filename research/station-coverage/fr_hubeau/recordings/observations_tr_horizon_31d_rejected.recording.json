@@ -15,7 +15,14 @@
     "status_code": 400,
     "content_type": "application/json",
     "retrieved_at": "2026-09-08T11:50:49.252431Z",
+    "response_bytes": 173,
+    "sha256": "be2c2f997e3ef0788eff4cf6dbf2e0071a786447169356a6f25b14efeb369083",
+    "body_retained": true,
     "content_base64": "eyJjb2RlIjoiSW52YWxpZFJlcXVlc3QiLCJtZXNzYWdlIjoiSW52YWxpZCBzaXRlcyByZXF1ZXN0IiwiZmllbGRfZXJyb3JzIjpbeyJjb2RlIjoiVmFsaWRhdGVEYXRlTWluIiwibWVzc2FnZSI6ImRhdGUgY2FuJ3QgYmUgPCAxIG1vbnRoIGZyb20gbm93IiwiZmllbGQiOiJkYXRlX2RlYnV0X29icyJ9XX0=",
-    "sha256": "be2c2f997e3ef0788eff4cf6dbf2e0071a786447169356a6f25b14efeb369083"
+    "reading": {
+      "parse": "hubeau_error",
+      "code": "InvalidRequest",
+      "message": "Invalid sites request"
+    }
   }
 }

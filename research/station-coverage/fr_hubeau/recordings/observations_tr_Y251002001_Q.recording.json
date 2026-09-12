@@ -14,7 +14,12 @@
     "status_code": 503,
     "content_type": "text/html; charset=iso-8859-1",
     "retrieved_at": "2026-09-08T08:45:17.286312Z",
+    "response_bytes": 299,
+    "sha256": "5764fed31b533e202f88d735a531f70a4ee3f66bb856afa4277872a758e6b578",
+    "body_retained": true,
     "content_base64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT41MDMgU2VydmljZSBVbmF2YWlsYWJsZTwvdGl0bGU+CjwvaGVhZD48Ym9keT4KPGgxPlNlcnZpY2UgVW5hdmFpbGFibGU8L2gxPgo8cD5UaGUgc2VydmVyIGlzIHRlbXBvcmFyaWx5IHVuYWJsZSB0byBzZXJ2aWNlIHlvdXIKcmVxdWVzdCBkdWUgdG8gbWFpbnRlbmFuY2UgZG93bnRpbWUgb3IgY2FwYWNpdHkKcHJvYmxlbXMuIFBsZWFzZSB0cnkgYWdhaW4gbGF0ZXIuPC9wPgo8L2JvZHk+PC9odG1sPgo=",
-    "sha256": "5764fed31b533e202f88d735a531f70a4ee3f66bb856afa4277872a758e6b578"
+    "reading": {
+      "parse": "not_json"
+    }
   }
 }

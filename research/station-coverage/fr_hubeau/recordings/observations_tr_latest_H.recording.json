@@ -15,7 +15,41 @@
     "status_code": 206,
     "content_type": "application/json",
     "retrieved_at": "2026-09-08T12:26:24.183068Z",
-    "content_base64": "eyJjb3VudCI6NTIwMCwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic2VydmF0aW9uc190cj9jb2RlX2VudGl0ZT1ZMjUxMDAyMDAxJmdyYW5kZXVyX2h5ZHJvPUgmc29ydD1kZXNjJmN1cnNvcj0mc2l6ZT0xIiwicHJldiI6bnVsbCwibmV4dCI6Imh0dHBzOi8vaHViZWF1LmVhdWZyYW5jZS5mci9hcGkvdjIvaHlkcm9tZXRyaWUvb2JzZXJ2YXRpb25zX3RyP2NvZGVfZW50aXRlPVkyNTEwMDIwMDEmZ3JhbmRldXJfaHlkcm89SCZzb3J0PWRlc2MmY3Vyc29yPUFvSndtcTI4d0tBRFB3cFpNalV4TURBeU1GOVpNalV4TURBeU1EQXhYMGhmTWpBeU5pMHdPUzB3T0ZReE1qb3hOVG93TUElM0QlM0Qmc2l6ZT0xIiwiYXBpX3ZlcnNpb24iOiIyLjAuMSIsImRhdGEiOlt7ImNvZGVfc2l0ZSI6IlkyNTEwMDIwIiwiY29kZV9zdGF0aW9uIjoiWTI1MTAwMjAwMSIsImdyYW5kZXVyX2h5ZHJvIjoiSCIsImRhdGVfZGVidXRfc2VyaWUiOiIyMDI2LTA5LTA4VDAwOjAwOjAwWiIsImRhdGVfZmluX3NlcmllIjoiMjAyNi0wOS0wOFQxMjoxNTowMFoiLCJjb2RlX3N5c3RlbWVfYWx0aV9zZXJpZSI6MzEsImRhdGVfb2JzIjoiMjAyNi0wOS0wOFQxMjoxNTowMFoiLCJyZXN1bHRhdF9vYnMiOi0zMjIuMCwiY29kZV9tZXRob2RlX29icyI6MCwibGliZWxsZV9tZXRob2RlX29icyI6Ik1lc3Vyw6llIiwiY29kZV9xdWFsaWZpY2F0aW9uX29icyI6MTYsImxpYmVsbGVfcXVhbGlmaWNhdGlvbl9vYnMiOiJOb24gcXVhbGlmacOpZSIsImxvbmdpdHVkZSI6My4xNTcyODIzNDQsImxhdGl0dWRlIjo0My42MTYwMjk4MTUsImNvZGVfc3RhdHV0Ijo0LCJsaWJlbGxlX3N0YXR1dCI6IkJydXRlIiwiY29kZV9jb250aW51aXRlIjowLCJsaWJlbGxlX2NvbnRpbnVpdGUiOiJDb250aW51ZSJ9XX0=",
-    "sha256": "bba1935f7265e66ef070c52b0d2e762a2757e71e968737d7bd81e4ffd477fe07"
+    "response_bytes": 917,
+    "sha256": "bba1935f7265e66ef070c52b0d2e762a2757e71e968737d7bd81e4ffd477fe07",
+    "body_retained": false,
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 5200,
+      "rows": 1,
+      "row_fields": [
+        "code_continuite",
+        "code_methode_obs",
+        "code_qualification_obs",
+        "code_site",
+        "code_station",
+        "code_statut",
+        "code_systeme_alti_serie",
+        "date_debut_serie",
+        "date_fin_serie",
+        "date_obs",
+        "grandeur_hydro",
+        "latitude",
+        "libelle_continuite",
+        "libelle_methode_obs",
+        "libelle_qualification_obs",
+        "libelle_statut",
+        "longitude",
+        "resultat_obs"
+      ],
+      "returned_code_station": [
+        "Y251002001"
+      ],
+      "returned_code_site": [
+        "Y2510020"
+      ],
+      "date_obs_min": "2026-09-08T12:15:00Z",
+      "date_obs_max": "2026-09-08T12:15:00Z"
+    }
   }
 }

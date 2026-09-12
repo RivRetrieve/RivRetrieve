@@ -14,7 +14,41 @@
     "status_code": 206,
     "content_type": "application/json",
     "retrieved_at": "2026-09-08T08:50:20.517619Z",
-    "content_base64": "eyJjb3VudCI6NTE3NCwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic2VydmF0aW9uc190cj9jb2RlX2VudGl0ZT1ZMjUxMDAyMDAxJmdyYW5kZXVyX2h5ZHJvPVEmY3Vyc29yPSZzaXplPTIiLCJwcmV2IjpudWxsLCJuZXh0IjoiaHR0cHM6Ly9odWJlYXUuZWF1ZnJhbmNlLmZyL2FwaS92Mi9oeWRyb21ldHJpZS9vYnNlcnZhdGlvbnNfdHI/Y29kZV9lbnRpdGU9WTI1MTAwMjAwMSZncmFuZGV1cl9oeWRybz1RJmN1cnNvcj1Bb0p3OHYlMkJKd0tBRFB3cFpNalV4TURBeU1GOVpNalV4TURBeU1EQXhYMUZmTWpBeU5pMHdPUzB3T0ZRd09Eb3pOVG93TUElM0QlM0Qmc2l6ZT0yIiwiYXBpX3ZlcnNpb24iOiIyLjAuMSIsImRhdGEiOlt7ImNvZGVfc2l0ZSI6IlkyNTEwMDIwIiwiY29kZV9zdGF0aW9uIjoiWTI1MTAwMjAwMSIsImdyYW5kZXVyX2h5ZHJvIjoiUSIsImRhdGVfZGVidXRfc2VyaWUiOiIyMDI2LTA5LTA4VDAwOjAwOjAwWiIsImRhdGVfZmluX3NlcmllIjoiMjAyNi0wOS0wOFQwODo0MDowMFoiLCJjb2RlX3N5c3RlbWVfYWx0aV9zZXJpZSI6MzEsImRhdGVfb2JzIjoiMjAyNi0wOS0wOFQwODo0MDowMFoiLCJyZXN1bHRhdF9vYnMiOjk2Ni4wLCJjb2RlX21ldGhvZGVfb2JzIjo4LCJsaWJlbGxlX21ldGhvZGVfb2JzIjoiQ2FsY3Vsw6llIiwiY29kZV9xdWFsaWZpY2F0aW9uX29icyI6MTIsImxpYmVsbGVfcXVhbGlmaWNhdGlvbl9vYnMiOiJEb3V0ZXVzZSIsImxvbmdpdHVkZSI6My4xNTcyODIzNDQsImxhdGl0dWRlIjo0My42MTYwMjk4MTUsImNvZGVfc3RhdHV0Ijo0LCJsaWJlbGxlX3N0YXR1dCI6IkJydXRlIiwiY29kZV9jb250aW51aXRlIjowLCJsaWJlbGxlX2NvbnRpbnVpdGUiOiJDb250aW51ZSJ9LHsiY29kZV9zaXRlIjoiWTI1MTAwMjAiLCJjb2RlX3N0YXRpb24iOiJZMjUxMDAyMDAxIiwiZ3JhbmRldXJfaHlkcm8iOiJRIiwiZGF0ZV9kZWJ1dF9zZXJpZSI6IjIwMjYtMDktMDhUMDA6MDA6MDBaIiwiZGF0ZV9maW5fc2VyaWUiOiIyMDI2LTA5LTA4VDA4OjM1OjAwWiIsImNvZGVfc3lzdGVtZV9hbHRpX3NlcmllIjozMSwiZGF0ZV9vYnMiOiIyMDI2LTA5LTA4VDA4OjM1OjAwWiIsInJlc3VsdGF0X29icyI6OTY0LjAsImNvZGVfbWV0aG9kZV9vYnMiOjgsImxpYmVsbGVfbWV0aG9kZV9vYnMiOiJDYWxjdWzDqWUiLCJjb2RlX3F1YWxpZmljYXRpb25fb2JzIjoxMiwibGliZWxsZV9xdWFsaWZpY2F0aW9uX29icyI6IkRvdXRldXNlIiwibG9uZ2l0dWRlIjozLjE1NzI4MjM0NCwibGF0aXR1ZGUiOjQzLjYxNjAyOTgxNSwiY29kZV9zdGF0dXQiOjQsImxpYmVsbGVfc3RhdHV0IjoiQnJ1dGUiLCJjb2RlX2NvbnRpbnVpdGUiOjAsImxpYmVsbGVfY29udGludWl0ZSI6IkNvbnRpbnVlIn1dfQ==",
-    "sha256": "2d9f0d6421cbda091896a77bd4924b803162c3a4712256a696242602fde1e100"
+    "response_bytes": 1396,
+    "sha256": "2d9f0d6421cbda091896a77bd4924b803162c3a4712256a696242602fde1e100",
+    "body_retained": false,
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 5174,
+      "rows": 2,
+      "row_fields": [
+        "code_continuite",
+        "code_methode_obs",
+        "code_qualification_obs",
+        "code_site",
+        "code_station",
+        "code_statut",
+        "code_systeme_alti_serie",
+        "date_debut_serie",
+        "date_fin_serie",
+        "date_obs",
+        "grandeur_hydro",
+        "latitude",
+        "libelle_continuite",
+        "libelle_methode_obs",
+        "libelle_qualification_obs",
+        "libelle_statut",
+        "longitude",
+        "resultat_obs"
+      ],
+      "returned_code_station": [
+        "Y251002001"
+      ],
+      "returned_code_site": [
+        "Y2510020"
+      ],
+      "date_obs_min": "2026-09-08T08:35:00Z",
+      "date_obs_max": "2026-09-08T08:40:00Z"
+    }
   }
 }

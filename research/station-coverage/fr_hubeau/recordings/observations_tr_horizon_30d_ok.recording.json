@@ -15,7 +15,41 @@
     "status_code": 206,
     "content_type": "application/json",
     "retrieved_at": "2026-09-08T11:50:48.167766Z",
-    "content_base64": "eyJjb3VudCI6NTE5NiwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic2VydmF0aW9uc190cj9jb2RlX2VudGl0ZT1ZMjUxMDAyMDAxJmdyYW5kZXVyX2h5ZHJvPUgmZGF0ZV9kZWJ1dF9vYnM9MjAyNi0wOC0wOVQwMDowMDowMFomY3Vyc29yPSZzaXplPTEiLCJwcmV2IjpudWxsLCJuZXh0IjoiaHR0cHM6Ly9odWJlYXUuZWF1ZnJhbmNlLmZyL2FwaS92Mi9oeWRyb21ldHJpZS9vYnNlcnZhdGlvbnNfdHI/Y29kZV9lbnRpdGU9WTI1MTAwMjAwMSZncmFuZGV1cl9oeWRybz1IJmRhdGVfZGVidXRfb2JzPTIwMjYtMDgtMDlUMDA6MDA6MDBaJmN1cnNvcj1Bb0p3Nkt1MHdLQURQd3BaTWpVeE1EQXlNRjlaTWpVeE1EQXlNREF4WDBoZk1qQXlOaTB3T1Mwd09GUXhNVG8wTURvd01BJTNEJTNEJnNpemU9MSIsImFwaV92ZXJzaW9uIjoiMi4wLjEiLCJkYXRhIjpbeyJjb2RlX3NpdGUiOiJZMjUxMDAyMCIsImNvZGVfc3RhdGlvbiI6IlkyNTEwMDIwMDEiLCJncmFuZGV1cl9oeWRybyI6IkgiLCJkYXRlX2RlYnV0X3NlcmllIjoiMjAyNi0wOS0wOFQwMDowMDowMFoiLCJkYXRlX2Zpbl9zZXJpZSI6IjIwMjYtMDktMDhUMTE6NDA6MDBaIiwiY29kZV9zeXN0ZW1lX2FsdGlfc2VyaWUiOjMxLCJkYXRlX29icyI6IjIwMjYtMDktMDhUMTE6NDA6MDBaIiwicmVzdWx0YXRfb2JzIjotMzI3LjAsImNvZGVfbWV0aG9kZV9vYnMiOjAsImxpYmVsbGVfbWV0aG9kZV9vYnMiOiJNZXN1csOpZSIsImNvZGVfcXVhbGlmaWNhdGlvbl9vYnMiOjE2LCJsaWJlbGxlX3F1YWxpZmljYXRpb25fb2JzIjoiTm9uIHF1YWxpZmnDqWUiLCJsb25naXR1ZGUiOjMuMTU3MjgyMzQ0LCJsYXRpdHVkZSI6NDMuNjE2MDI5ODE1LCJjb2RlX3N0YXR1dCI6NCwibGliZWxsZV9zdGF0dXQiOiJCcnV0ZSIsImNvZGVfY29udGludWl0ZSI6MCwibGliZWxsZV9jb250aW51aXRlIjoiQ29udGludWUifV19",
-    "sha256": "3e3cbeb87e7211567746b310ea66e3274bf098f40a234c6eb7b923dd8daeeea7"
+    "response_bytes": 969,
+    "sha256": "3e3cbeb87e7211567746b310ea66e3274bf098f40a234c6eb7b923dd8daeeea7",
+    "body_retained": false,
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 5196,
+      "rows": 1,
+      "row_fields": [
+        "code_continuite",
+        "code_methode_obs",
+        "code_qualification_obs",
+        "code_site",
+        "code_station",
+        "code_statut",
+        "code_systeme_alti_serie",
+        "date_debut_serie",
+        "date_fin_serie",
+        "date_obs",
+        "grandeur_hydro",
+        "latitude",
+        "libelle_continuite",
+        "libelle_methode_obs",
+        "libelle_qualification_obs",
+        "libelle_statut",
+        "longitude",
+        "resultat_obs"
+      ],
+      "returned_code_station": [
+        "Y251002001"
+      ],
+      "returned_code_site": [
+        "Y2510020"
+      ],
+      "date_obs_min": "2026-09-08T11:40:00Z",
+      "date_obs_max": "2026-09-08T11:40:00Z"
+    }
   }
 }

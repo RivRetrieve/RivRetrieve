@@ -13,7 +13,61 @@
     "status_code": 200,
     "content_type": "application/json",
     "retrieved_at": "2026-09-09T08:24:42.197220Z",
+    "response_bytes": 1749,
+    "sha256": "ab5a280b51306aa4dbf1c36aff9cd4613994135761169343ffdcee90c7e1ee84",
+    "body_retained": true,
     "content_base64": "eyJjb3VudCI6MSwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL3JlZmVyZW50aWVsL3N0YXRpb25zP2NvZGVfc3RhdGlvbj1ZMjUxMDAyMDAxJnBhZ2U9MSZzaXplPTEiLCJsYXN0IjpudWxsLCJwcmV2IjpudWxsLCJuZXh0IjpudWxsLCJhcGlfdmVyc2lvbiI6IjIuMC4xIiwiZGF0YSI6W3siY29kZV9zaXRlIjoiWTI1MTAwMjAiLCJsaWJlbGxlX3NpdGUiOiJMJ09yYiDDoCBCw6lkYXJpZXV4IiwiY29kZV9zdGF0aW9uIjoiWTI1MTAwMjAwMSIsImxpYmVsbGVfc3RhdGlvbiI6IkwnT3JiIMOgIELDqWRhcmlldXgiLCJ0eXBlX3N0YXRpb24iOiJTVEQiLCJjb29yZG9ubmVlX3hfc3RhdGlvbiI6NzEyNzAwLjAsImNvb3Jkb25uZWVfeV9zdGF0aW9uIjo2Mjc5Njc3LjAsImNvZGVfcHJvamVjdGlvbiI6MjYsImxvbmdpdHVkZV9zdGF0aW9uIjozLjE1NzI4MjM0NCwibGF0aXR1ZGVfc3RhdGlvbiI6NDMuNjE2MDI5ODE1LCJpbmZsdWVuY2VfbG9jYWxlX3N0YXRpb24iOjIsImNvbW1lbnRhaXJlX3N0YXRpb24iOiJTdGF0aW9uIGFudMOpcmlldXJlIGRhdGFudCBkZSAxOTY1LiBBbmNpZW5uZSBzdGF0aW9uIFNBQyAzNC4gUmVtaXNlIGVuIGdlc3Rpb24gOiBESVJFTiBMUiBlbiBqdWlsbGV0IDIwMDUuIiwiYWx0aXR1ZGVfcmVmX2FsdGlfc3RhdGlvbiI6MC4xOTIwMTgsImNvZGVfc3lzdGVtZV9hbHRpX3NpdGUiOjEsImNvZGVfY29tbXVuZV9zdGF0aW9uIjoiMzQwMjgiLCJsaWJlbGxlX2NvbW11bmUiOiJCRURBUklFVVgiLCJjb2RlX2RlcGFydGVtZW50IjoiMzQiLCJjb2RlX3JlZ2lvbiI6Ijc2IiwibGliZWxsZV9yZWdpb24iOiJPQ0NJVEFOSUUiLCJjb2RlX2NvdXJzX2VhdSI6IlkyNS0wNDAwIiwibGliZWxsZV9jb3Vyc19lYXUiOiJMJ09yYiIsInVyaV9jb3Vyc19lYXUiOiJodHRwOi8vaWQuZWF1ZnJhbmNlLmZyL0NFQS9ZMjUtMDQwMCIsImRlc2NyaXB0aWZfc3RhdGlvbiI6bnVsbCwiZGF0ZV9tYWpfc3RhdGlvbiI6IjIwMjUtMDQtMTVUMDA6MDA6MDBaIiwiZGF0ZV9vdXZlcnR1cmVfc3RhdGlvbiI6IjE5ODAtMDEtMDFUMDA6MDA6MDBaIiwiZGF0ZV9mZXJtZXR1cmVfc3RhdGlvbiI6bnVsbCwiY29tbWVudGFpcmVfaW5mbHVlbmNlX2xvY2FsZV9zdGF0aW9uIjpudWxsLCJjb2RlX3JlZ2ltZV9zdGF0aW9uIjoxLCJxdWFsaWZpY2F0aW9uX2Rvbm5lZXNfc3RhdGlvbiI6MTIsImNvZGVfZmluYWxpdGVfc3RhdGlvbiI6IjIiLCJ0eXBlX2NvbnRleHRlX2xvaV9zdGF0X3N0YXRpb24iOjEsInR5cGVfbG9pX3N0YXRpb24iOjEsImNvZGVfc2FuZHJlX3Jlc2VhdV9zdGF0aW9uIjpbIlBPSDEwMCIsIlJJQzAxMCIsIlBPSDAxMiIsIlJJQzMwOSIsIlBPSDA0MSIsIlBPSDkwMCJdLCJkYXRlX2RlYnV0X3JlZl9hbHRpX3N0YXRpb24iOiIyMDEwLTA3LTE1VDAwOjAwOjAwWiIsImRhdGVfYWN0aXZhdGlvbl9yZWZfYWx0aV9zdGF0aW9uIjoiMjAyMC0wMi0wM1QwMDowMDowMFoiLCJkYXRlX21hal9yZWZfYWx0aV9zdGF0aW9uIjoiMjAyMS0wNS0wNVQwMDowMDowMFoiLCJsaWJlbGxlX2RlcGFydGVtZW50IjoiSEVSQVVMVCIsImVuX3NlcnZpY2UiOnRydWUsImdlb21ldHJ5Ijp7InR5cGUiOiJQb2ludCIsImNycyI6eyJ0eXBlIjoibmFtZSIsInByb3BlcnRpZXMiOnsibmFtZSI6InVybjpvZ2M6ZGVmOmNyczpPR0M6MS4zOkNSUzg0In19LCJjb29yZGluYXRlcyI6WzMuMTU3MjgyMzQ0MDM5NjE1LDQzLjYxNjAyOTgxNTIwODA5NF19fV19",
-    "sha256": "ab5a280b51306aa4dbf1c36aff9cd4613994135761169343ffdcee90c7e1ee84"
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 1,
+      "rows": 1,
+      "row_fields": [
+        "altitude_ref_alti_station",
+        "code_commune_station",
+        "code_cours_eau",
+        "code_departement",
+        "code_finalite_station",
+        "code_projection",
+        "code_regime_station",
+        "code_region",
+        "code_sandre_reseau_station",
+        "code_site",
+        "code_station",
+        "code_systeme_alti_site",
+        "commentaire_influence_locale_station",
+        "commentaire_station",
+        "coordonnee_x_station",
+        "coordonnee_y_station",
+        "date_activation_ref_alti_station",
+        "date_debut_ref_alti_station",
+        "date_fermeture_station",
+        "date_maj_ref_alti_station",
+        "date_maj_station",
+        "date_ouverture_station",
+        "descriptif_station",
+        "en_service",
+        "geometry",
+        "influence_locale_station",
+        "latitude_station",
+        "libelle_commune",
+        "libelle_cours_eau",
+        "libelle_departement",
+        "libelle_region",
+        "libelle_site",
+        "libelle_station",
+        "longitude_station",
+        "qualification_donnees_station",
+        "type_contexte_loi_stat_station",
+        "type_loi_station",
+        "type_station",
+        "uri_cours_eau"
+      ],
+      "returned_code_station": [
+        "Y251002001"
+      ],
+      "returned_code_site": [
+        "Y2510020"
+      ]
+    }
   }
 }

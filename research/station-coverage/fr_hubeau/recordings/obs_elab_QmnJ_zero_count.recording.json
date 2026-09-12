@@ -15,7 +15,17 @@
     "status_code": 200,
     "content_type": "application/json",
     "retrieved_at": "2026-09-09T08:24:39.517259Z",
+    "response_bytes": 214,
+    "sha256": "9582634d3c50bdfcae6db2a5a023bd9d58f4dd5a84729d0fe05dbc97548119ec",
+    "body_retained": true,
     "content_base64": "eyJjb3VudCI6MCwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic19lbGFiP2NvZGVfZW50aXRlPTAxMDA0MDAwJmdyYW5kZXVyX2h5ZHJvX2VsYWI9UW1uSiZmaWVsZHM9Y29kZV9zdGF0aW9uJmN1cnNvcj0mc2l6ZT0xIiwicHJldiI6bnVsbCwibmV4dCI6bnVsbCwiYXBpX3ZlcnNpb24iOiIyLjAuMSIsImRhdGEiOltdfQ==",
-    "sha256": "9582634d3c50bdfcae6db2a5a023bd9d58f4dd5a84729d0fe05dbc97548119ec"
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 0,
+      "rows": 0,
+      "row_fields": [],
+      "returned_code_station": [],
+      "returned_code_site": []
+    }
   }
 }
