@@ -83,6 +83,8 @@ DOCUMENTS = (
         (
             "Un site peut posséder une ou plusieurs stations ; il est support de données de débit (Q).",
             "Une station peut porter des observations de hauteur et/ou de débit (directement mesurés ou calculés à partir d'une courbe de tarage).",
+            'Les données de l\'API "Hydrométrie" sont issues de la plate-forme HYDRO Centrale (PHyC), opérée par le Service Central Vigicrues',
+            "Les données diffusées par Hub'Eau sont les mesures quasi temps-réel provenant du réseau de mesure français (environ 5000 stations hydrométriques) opéré par les Directions Régionales de l’Environnement de l’Aménagement et du Logement (DREAL) et autres producteurs",
         ),
     ),
     (

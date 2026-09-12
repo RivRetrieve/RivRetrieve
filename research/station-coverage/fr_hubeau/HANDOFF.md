@@ -144,8 +144,12 @@ say which of these `NomIntervenant` holds.
 Roles kept apart:
 
 - **Organisation associated with a station** — what both fields establish.
-- **Operator / distributor** — Hub'Eau and HydroPortail transport the data; SCHAPI supplies the
-  hydrometric layer to Sandre.
+- **Operator / distributor** — Hub'Eau *diffuses*, and says so: the hydrometry data comes from the
+  PHyC platform "opérée par le Service Central Vigicrues", and the measurement network itself is
+  "opéré par les Directions Régionales de l'Environnement de l'Aménagement et du Logement (DREAL) et
+  autres producteurs" (`recordings/doc_hubeau_api_hydrometrie`, quotes verified at capture). So the
+  network is run by many bodies, not one; Hub'Eau and HydroPortail carry the data, and SCHAPI supplies
+  the hydrometric layer to Sandre (`doc_sandre_hyd_layer_metadata`).
 - **Producer or issuing body of a retrieved series** — not established by either field.
 
 Limits: a name is a present-day attribute of a station record. It is not extended to the station's
