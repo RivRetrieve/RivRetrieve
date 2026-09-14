@@ -13,9 +13,10 @@ import polars as pl
 
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
-from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.th_thaiwater.config import ThThaiWaterSourceCoordinates
+from rivretrieve._internal.providers.th_thaiwater.issue_codes import ThThaiWaterObservationIssueCodes
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
@@ -27,7 +28,28 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     station = next(iter(stations))
     coordinates = {product: _coordinates(product, provider_config) for _, product in payload.station_products}
     document = _document(payload.content)
-    entries = _entries(document, station)
+    if document.get("result") == "NO":
+        source_message = document.get("data")
+        if not isinstance(source_message, str) or not source_message.strip():
+            raise FatalContractError("th_thaiwater source failure must carry a non-empty data message")
+        return WithIssues(
+            value=pl.DataFrame(schema=RowsSchema.polars_schema),
+            issues=(
+                Issue(
+                    severity="error",
+                    code=ThThaiWaterObservationIssueCodes.SOURCE_REQUEST_FAILED,
+                    message=f"ThaiWater reported a source failure for station {station}: {source_message}",
+                    details={
+                        "station_id": station,
+                        "product_ids": [str(product) for product in coordinates],
+                        "source_result": "NO",
+                        "source_message": source_message,
+                    },
+                    provider_id=ProviderId("th_thaiwater"),
+                ),
+            ),
+        )
+    entries = _entries(document)
 
     rows: list[dict[str, object]] = []
     for index, raw_entry in enumerate(entries):
@@ -76,8 +98,7 @@ def _document(content: bytes) -> dict[str, object]:
     return cast("dict[str, object]", value)
 
 
-def _entries(document: dict[str, object], station: str) -> list[object]:
-    del station
+def _entries(document: dict[str, object]) -> list[object]:
     if document.get("result") != "OK":
         raise FatalContractError("th_thaiwater payload result must be 'OK'")
     data = document.get("data")

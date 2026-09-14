@@ -47,10 +47,14 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
+from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
+THAI_AVAILABILITY_EVIDENCE_PATH = (
+    ROOT / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+)
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
@@ -94,6 +98,10 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     assert module_path is not None
     native_path = Path(module_path).parent / "catalogue/native.parquet"
     build = generator.build_catalogue
+    if provider == "th_thaiwater":
+        build = partial(
+            build, availability_evidence=GraphAvailabilityEvidence(THAI_AVAILABILITY_EVIDENCE_PATH.read_bytes())
+        )
     if provider == "ba_fhmzbih":
         workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
             (ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
@@ -677,6 +685,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "tests/test_data/jp_mlit_terms_citation.pdf",
             )
         )
+    elif adapter.provider_id == "th_thaiwater":
+        arguments.extend(("--availability-evidence", str(THAI_AVAILABILITY_EVIDENCE_PATH)))
     elif adapter.provider_id == "pl_imgw":
         committed_provenance = json.loads((adapter.native_path.parent / "provenance.json").read_text())
         grdc = next(source for source in committed_provenance["source_records"] if source["source_id"] == "sr.pl.grdc")

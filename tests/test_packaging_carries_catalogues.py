@@ -127,10 +127,9 @@ assert norway.acquisition_provenance[0].native_table is not None
 thailand = rivretrieve.find(
     provider="th_thaiwater", station="1", product="stage_reported"
 )
-assert rivretrieve.as_frame(thailand).is_empty()
+assert rivretrieve.as_frame(thailand).height == 1
 groups = thailand.acquisition_provenance[0].withheld_facts
-assert len(groups) == 1_648
-assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
+assert groups == ()
 """
     clean_environment = os.environ.copy()
     clean_environment.pop("PYTHONPATH", None)

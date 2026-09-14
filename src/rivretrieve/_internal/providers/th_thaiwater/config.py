@@ -49,12 +49,16 @@ _CONFIG = ProviderConfig(
     },
     cache=None,
 )
-_DATE_WINDOW = WindowDeclaration(
-    granularity=WindowGranularity("date"),
+# Complete normal and leap-containing captures honour 365 inclusive SOURCE dates.
+# This conservative working size is not a measured source maximum. The engine pads
+# the user request before planning; the provider never adds or splits dates.
+_GRAPH_WINDOW = WindowDeclaration(
+    granularity=WindowGranularity("capped-span"),
     rendering=WindowRenderingVocabulary.DATE,
     stop_convention=StopConvention.INCLUSIVE,
+    size=365,
 )
-_WINDOWS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _DATE_WINDOW))
+_WINDOWS = ProductWindowDeclarations(products=dict.fromkeys(_CONFIG.products, _GRAPH_WINDOW))
 
 
 def config() -> ProviderConfig:
