@@ -96,3 +96,17 @@ inspect the provider implementation or its output. Committed
 [recording provenance](../../tests/test_data/fr_hydroportail_station_Q_provenance.md)
 identifies exact bytes, dates and the independent literals. The older site-Q captures
 remain historical evidence; they are not substituted into station-own tests.
+
+## Catalogue load cost
+
+The complete per-pair acquisition account is large: the generated Croissant descriptor
+is 102,402,010 bytes and provenance is 55,085,081 bytes. No legitimate acquisition
+binding is omitted to reduce these sizes. The compressed wheel measured 9,468,867 bytes.
+
+The existing eager catalogue loader can load France provenance even for a different
+provider selection. An independent fresh-process probe selecting three USGS pairs
+reported peak RSS 989,364,224 bytes on macOS and about 2.33 seconds. A separate France
+selection followed by `describe` reported peak RSS 1,357,758,464 bytes. These are local
+measurements, not performance guarantees. The cost is therefore not limited to France
+users. This is an explicit release-verification risk for #9; no shared resolver or
+serialization redesign is included in this provider change.
