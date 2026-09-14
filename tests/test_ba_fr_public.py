@@ -83,13 +83,19 @@ def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(monkeyp
             assert b'"s":4' in contents and b'"q":' in contents and b'"m":' in contents and b'"c":0' in contents
 
 
-def test_sparse_catalogues_do_not_invent_cross_products():
-    ba = rr.as_frame(rr.find(provider="ba_fhmzbih"))
+def test_bosnia_public_selection_exposes_all_acquired_pairs_including_unknown():
+    selection = rr.find(provider="ba_fhmzbih")
+    ba = rr.as_frame(selection)
+    assert ba.height == 180
+    assert ba["station_id"].n_unique() == 60
+    assert sum(series.availability == "available" for series in selection.series) == 132
+    assert sum(series.availability == "unknown" for series in selection.series) == 48
+    unknown = rr.find(provider="ba_fhmzbih", station="2101-B", product="water_temperature_reported")
+    assert len(unknown.series) == 1
+    assert unknown.series[0].availability == "unknown"
+
+
+def test_france_sparse_catalogue_does_not_invent_cross_products():
     fr = rr.as_frame(rr.find(provider="fr_hubeau"))
-    assert set(zip(ba["station_id"], ba["product_id"], strict=True)) == {
-        ("4024", "discharge_reported"),
-        ("4024", "stage_reported"),
-        ("4110", "water_temperature_reported"),
-    }
     assert fr.height == 6
     assert rr.as_frame(rr.find(provider="fr_hubeau", station="01001336", product="stage_instantaneous")).is_empty()

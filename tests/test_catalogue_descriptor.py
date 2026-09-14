@@ -145,7 +145,6 @@ def test_field_absences_distinguish_documented_silence_and_missing_acquisition()
     [
         ("fr_hubeau", "stations", 7320),
         ("fr_hubeau", "station_products", 33133),
-        ("ba_fhmzbih", "stations", 58),
         ("th_thaiwater", "station_products", 1648),
     ],
 )
@@ -303,6 +302,13 @@ def test_generator_rejects_mixed_withheld_and_established_origins():
     second = {**origins[0], "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://example.org/evidence"))}
     with pytest.raises(FatalContractError, match="mixes established and withheld"):
         build_catalogue_descriptor(provenance, (*origins, second), files)
+
+
+def test_bosnia_record_sets_have_no_withheld_baseline_rows():
+    descriptor = _descriptor("ba_fhmzbih")
+    for record in descriptor["recordSet"]:
+        if record["@id"] in {"stations", "station_products"}:
+            assert "rr:absence" not in record
 
 
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)

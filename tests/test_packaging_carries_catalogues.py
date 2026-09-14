@@ -97,7 +97,6 @@ for provider_id in provider_ids:
     assert not any(name.endswith((".eml", ".xlsx")) for name in packaged_names)
 
 for provider_id, station_id, count in (
-    ("ba_fhmzbih", "1010", 293),
     ("fr_hubeau", "01010000", 47_773),
 ):
     try:
@@ -110,6 +109,15 @@ for provider_id, station_id, count in (
     groups = provider_selection.acquisition_provenance[0].withheld_facts
     assert len(groups) == count
     assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
+bosnia = rivretrieve.find(provider="ba_fhmzbih")
+assert len(bosnia.series) == 180
+assert len({{series.station_id for series in bosnia.series}}) == 60
+assert sum(series.availability == "available" for series in bosnia.series) == 132
+assert sum(series.availability == "unknown" for series in bosnia.series) == 48
+assert bosnia.acquisition_provenance[0].withheld_facts == ()
+unknown_bosnia = rivretrieve.find(provider="ba_fhmzbih", station="2101-B", product="water_temperature_reported")
+assert len(unknown_bosnia.series) == 1 and unknown_bosnia.series[0].availability == "unknown"
+assert not provider_root.joinpath("ba_fhmzbih", "catalogue", "baseline_workbook_access.json").is_file()
 norway = rivretrieve.find(
     provider="no_nve", station="1.200.0", product="stage_daily_mean"
 )
