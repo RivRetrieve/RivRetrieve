@@ -1,4 +1,4 @@
-"""Bosnia catalogue maintenance : refresh(WiskiLayerSnapshot, RetrievedAt, RefreshInputKind) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedBaFhmzbihCatalogue."""
+"""Bosnia catalogue maintenance : refresh(WiskiLayerSnapshot, RetrievedAt, RefreshInputKind) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations, WorkbookAccessLedger) → GeneratedBaFhmzbihCatalogue."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import cast
 
 import polars as pl
+from pydantic import TypeAdapter
 
 from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -44,18 +45,16 @@ from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ba_fhmzbih.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SHA256,
+    WorkbookAccessLedger,
     build_acquisition_provenance,
 )
 
 PROVIDER_ID = ProviderId("ba_fhmzbih")
 EXPECTED_NATIVE_STATION_COUNT = 60
-PROVIDER_NAME = "FHMZBiH — Federal Hydrometeorological Institute of Bosnia and Herzegovina (vodostaji.voda.ba)"
+PROVIDER_NAME = "Agencija za vodno područje rijeke Save (AVP Sava; vodostaji.voda.ba)"
 
 METADATA_URL = "https://vodostaji.voda.ba/data/internet/layers/20/index.json"
 WORKBOOK_URL_TEMPLATE = "https://vodostaji.voda.ba/data/internet/stations/{group}/{station_id}/{code}/{file}"
-
-AVAILABILITY_REASON = "FHMZBiH metadata snapshot does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 
 MIN_LIVE_STATIONS = 30
 
@@ -268,6 +267,7 @@ def _canonical_json_value(value: object) -> object:
 def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
+    workbook_access: WorkbookAccessLedger,
 ) -> GeneratedBaFhmzbihCatalogue:
     if native_table.data.is_empty():
         raise FatalContractError("ba_fhmzbih native table must not be empty")
@@ -275,23 +275,25 @@ def build_catalogue(
     products = build_products()
     stations = build_stations(native_table)
     enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
-    station_dates = native_table.data.select(
-        pl.col("metadata_station_no").alias("station_id"),
-        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
-    )
-    station_products = build_station_products(station_dates)
+    native_sites = dict(native_table.data.select("metadata_station_no", "metadata_site_no").iter_rows())
+    expected_pairs = {(station, product) for station in native_sites for product in EXPECTED_PRODUCT_IDS}
+    actual_pairs = {(pair.station_no, pair.product_id) for pair in workbook_access.pairs}
+    if actual_pairs != expected_pairs:
+        raise FatalContractError("workbook ledger has missing or extra native station/product pairs")
+    if any(native_sites[pair.station_no] != pair.site_no for pair in workbook_access.pairs):
+        raise FatalContractError("workbook ledger site_no differs from native metadata")
+    station_products = build_station_products(workbook_access)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("ba_fhmzbih native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
-    acquisition_provenance = build_acquisition_provenance()
+    acquisition_provenance = build_acquisition_provenance(workbook_access)
     artifact = validate_generated_catalogue(
         provider_info,
         products,
         stations,
         station_products,
         acquisition_provenance,
-        allow_missing_withheld_rows=native_table.data.height != EXPECTED_NATIVE_STATION_COUNT,
     )
     return GeneratedBaFhmzbihCatalogue(
         provider_info=provider_info,
@@ -334,55 +336,24 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
         raise FatalContractError("ba_fhmzbih native table has invalid station columns") from exc
 
 
-def build_station_products(
-    station_dates: pl.DataFrame,
-) -> StationProductCatalog:
-    rows = []
-    for station_id, retrieved_date in station_dates.iter_rows():
-        if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
-            raise FatalContractError("station retrieval date must pair a string identifier with a date")
-        for d in PRODUCT_DEFINITIONS:
-            rows.append(
-                {
-                    "provider_id": PROVIDER_ID,
-                    "station_id": station_id,
-                    "product_id": d.product_id,
-                    "availability": (
-                        "available"
-                        if (station_id, d.product_id)
-                        in {
-                            ("4024", "discharge_reported"),
-                            ("4024", "stage_reported"),
-                            ("4110", "water_temperature_reported"),
-                        }
-                        else "unknown"
-                    ),
-                    "availability_reason": (
-                        "Non-empty source workbook recorded on 2026-09-02"
-                        if (station_id, d.product_id)
-                        in {
-                            ("4024", "discharge_reported"),
-                            ("4024", "stage_reported"),
-                            ("4110", "water_temperature_reported"),
-                        }
-                        else AVAILABILITY_REASON
-                    ),
-                    "published_record_start_date": None,
-                    "published_record_end_date": None,
-                    "last_catalogue_check": (
-                        date(2026, 9, 2)
-                        if (station_id, d.product_id)
-                        in {
-                            ("4024", "discharge_reported"),
-                            ("4024", "stage_reported"),
-                            ("4110", "water_temperature_reported"),
-                        }
-                        else retrieved_date
-                    ),
-                }
-            )
-    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
-        pl.col("availability").cast(AvailabilityDtype)
+def build_station_products(workbook_access: WorkbookAccessLedger) -> StationProductCatalog:
+    rows = [
+        {
+            "provider_id": PROVIDER_ID,
+            "station_id": pair.station_no,
+            "product_id": pair.product_id,
+            "availability": pair.availability,
+            "availability_reason": pair.availability_reason,
+            "published_record_start_date": None,
+            "published_record_end_date": None,
+            "last_catalogue_check": pair.retrieved_at.date(),
+        }
+        for pair in workbook_access.pairs
+    ]
+    return (
+        pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+        .with_columns(pl.col("availability").cast(AvailabilityDtype))
+        .sort("station_id", "product_id")
     )
 
 
@@ -397,7 +368,8 @@ def build_provider_info(
         "live_station_products": False,
         "bulk_observations": (
             "true: per (station, parameter) workbook fetch; partial failures reported as "
-            "recoverable issues; only a rolling ~1-year window of history is available from the source"
+            "recoverable issues; configured yearly rolling workbooks, with a known monthly example; "
+            "longer-history access is not established and old requested windows may return no rows"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
@@ -411,8 +383,6 @@ def validate_generated_catalogue(
     stations: StationCatalog,
     station_products: StationProductCatalog,
     acquisition_provenance: AcquisitionProvenance,
-    *,
-    allow_missing_withheld_rows: bool = False,
 ) -> PackagedCatalogArtifact:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
@@ -425,7 +395,6 @@ def validate_generated_catalogue(
         stations,
         station_products,
         acquisition_provenance=acquisition_provenance,
-        withheld_rows_already_applied=allow_missing_withheld_rows,
         on_issue="raise",
     )
 
@@ -642,6 +611,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
     parser.add_argument("--native-input-kind", choices=RefreshInputKind)
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
+    parser.add_argument("--workbook-access-ledger", type=Path, help="Reviewed workbook access JSON ledger.")
     args = parser.parse_args(argv)
 
     if args.native_payload is not None and (args.native is not None or args.out is not None):
@@ -658,6 +628,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--retrieved-at requires --native-payload")
     if args.native_input_kind is not None and args.native_payload is None:
         parser.error("--native-input-kind requires --native-payload")
+    if args.native is not None and args.workbook_access_ledger is None:
+        parser.error("--native requires --workbook-access-ledger")
+    if args.native_payload is not None and args.workbook_access_ledger is not None:
+        parser.error("--workbook-access-ledger is only valid with --native")
     if args.native is not None and args.out is None:
         parser.error("--native requires --out")
     if args.out is not None and args.native is None:
@@ -683,12 +657,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ba_fhmzbih native table content SHA-256: {digest}")
         return 0
 
-    verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
+    workbook_access = TypeAdapter(WorkbookAccessLedger).validate_json(args.workbook_access_ledger.read_bytes())
+    verify_provenance_recordings(build_acquisition_provenance(workbook_access), Path(__file__).resolve().parents[5])
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
 
     catalogue = build_catalogue(
         read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE),
         STATION_CATALOGUE_ORIGINS,
+        workbook_access,
     )
     write_catalogue(catalogue, args.out)
     return 0

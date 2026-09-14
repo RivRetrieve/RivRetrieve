@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 import polars as pl
 import pytest
 import requests
+from pydantic import TypeAdapter
 
 from rivretrieve._internal import discovery, transport
 from rivretrieve._internal.catalogue_origins import (
@@ -101,6 +102,11 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         build = partial(
             build, availability_evidence=GraphAvailabilityEvidence(THAI_AVAILABILITY_EVIDENCE_PATH.read_bytes())
         )
+    if provider == "ba_fhmzbih":
+        workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
+            (ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
+        )
+        build = partial(build, workbook_access=workbook_access)
     return ProviderAdapter(
         provider_id=ProviderId(provider),
         native_path=native_path,
@@ -663,7 +669,14 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     native_before = adapter.native_path.read_bytes()
     output = tmp_path / str(adapter.provider_id)
     arguments = ["--native", str(adapter.native_path), "--out", str(output)]
-    if adapter.provider_id == "jp_mlit":
+    if adapter.provider_id == "ba_fhmzbih":
+        arguments.extend(
+            (
+                "--workbook-access-ledger",
+                str(ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json"),
+            )
+        )
+    elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (
                 "--license-recording",

@@ -372,8 +372,12 @@ def test_missing_terms_do_not_block_traced_values_and_do_not_explain_current_ret
     }
     bosnia_withheld = {fact for group in bosnia["withheld_facts"] for fact in group["facts"]}
     assert bosnia_statement_facts.isdisjoint(bosnia_withheld)
-    assert any(fact.startswith("station:") for fact in bosnia_withheld)
-    assert any(fact.startswith("station_product:") for fact in bosnia_withheld)
+    assert bosnia_withheld == set()
+    bosnia_bound = {
+        fact for binding in AcquisitionProvenance.model_validate(bosnia).fact_bindings for fact in binding.facts
+    }
+    assert "source.station:2101-B.identity_location" in bosnia_bound
+    assert "station_product:2101-B:water_temperature_reported.availability" in bosnia_bound
 
     thailand = _document("th_thaiwater")
     assert [statement for source in thailand["source_records"] for statement in source["statements"]] == []

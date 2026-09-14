@@ -149,6 +149,8 @@ def _source_description(source: SourceRecord) -> dict[str, object]:
 def _lineage(
     provenance: AcquisitionProvenance,
 ) -> tuple[dict[str, FactBinding], dict[str, dict[str, object]], dict[str, str]]:
+    # AcquisitionProvenance guarantees unique fact groups; retain serialized tuple positions.
+    binding_positions = {binding.fact_group: index for index, binding in enumerate(provenance.fact_bindings)}
     bindings = {fact: binding for binding in provenance.fact_bindings for fact in binding.facts}
     withheld: dict[str, str] = {fact: item.reason for item in provenance.withheld_facts for fact in item.facts}
     acquisitions = {
@@ -172,7 +174,7 @@ def _lineage(
             "@type": "sc:CreativeWork",
             "identifier": binding.fact_group,
             "creator": _organization("RivRetrieve"),
-            "url": f"provenance.json#/fact_bindings/{provenance.fact_bindings.index(binding)}",
+            "url": f"provenance.json#/fact_bindings/{binding_positions[binding.fact_group]}",
         }
         if binding.transformation is None:
             assert binding.source_id is not None and binding.acquisition_id is not None

@@ -35,12 +35,12 @@ def test_certified_provider_refuses_missing_provenance(provider_id: str, tmp_pat
         load_packaged_catalogue_artifact(tmp_path)
 
 
-def test_bosnia_loader_executes_station_and_availability_withholding() -> None:
+def test_bosnia_loader_admits_acquired_baseline_without_withholding() -> None:
     artifact = load_packaged_catalogue_artifact(bosnia.catalogue)
-    assert artifact.stations["station_id"].to_list() == ["4024", "4110"]
-    assert artifact.station_products.height == 3
+    assert artifact.stations.height == 60
+    assert artifact.station_products.height == 180
     assert artifact.acquisition_provenance is not None
-    assert len(artifact.acquisition_provenance.withheld_facts) == 293
+    assert artifact.acquisition_provenance.withheld_facts == ()
 
 
 def test_france_loader_executes_all_unmapped_sie_withholding() -> None:
@@ -61,10 +61,7 @@ def test_thailand_loader_retains_every_acquired_pair() -> None:
 
 
 def test_public_find_excludes_withheld_rows_and_keeps_reasons() -> None:
-    for provider_id, station_id, count in (
-        ("ba_fhmzbih", "1010", 293),
-        ("fr_hubeau", "01010000", 47_773),
-    ):
+    for provider_id, station_id, count in (("fr_hubeau", "01010000", 47_773),):
         with pytest.raises(Exception, match="Station is not registered") as raised:
             rr.find(provider=provider_id, station=station_id)
         assert raised.type.__name__ == "UnknownStationError"
