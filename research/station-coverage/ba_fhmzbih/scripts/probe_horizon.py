@@ -72,7 +72,7 @@ def main() -> None:
             status_code, content_type, raw, transport_error = fetch(url)
             reading = read_workbook(raw) if status_code == 200 and variant.endswith(".xlsx") else None
             label = variant or "directory_listing"
-            document = {
+            document: dict = {
                 "format_version": 2,
                 "evidence_kind": "response_recording",
                 "station_no": station_no,
