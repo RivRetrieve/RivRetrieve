@@ -19,7 +19,6 @@ from rivretrieve._internal.providers.registration import LiveStages, load_manife
 from rivretrieve._internal.providers.th_thaiwater.declaration import declaration
 from rivretrieve._internal.recordings import RecordingEnvelope, ReplayTransport, read_recording
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
-from rivretrieve._internal.window_planning import plan_windows
 
 _PROVIDER = ProviderId("th_thaiwater")
 _PRODUCTS = (ProductId("discharge_reported"), ProductId("stage_reported"))
@@ -94,8 +93,8 @@ def test_thaiwater_declares_only_the_source_proven_date_request_contract() -> No
     declarations = _STAGES.window_declarations.products
 
     assert set(declarations) == set(_STAGES.config.products)
-    assert {item.granularity for item in declarations.values()} == {"date"}
-    assert {item.size for item in declarations.values()} == {None}
+    assert {item.granularity for item in declarations.values()} == {"capped-span"}
+    assert {item.size for item in declarations.values()} == {365}
 
 
 class _CountingReplay(ReplayTransport):
@@ -108,7 +107,7 @@ class _CountingReplay(ReplayTransport):
         return super().send(request)
 
 
-def test_accepted_366_date_window_is_one_exact_unsplit_request() -> None:
+def test_historical_366_date_response_remains_parseable_without_claiming_current_window_policy() -> None:
     recording = read_recording(
         Path(__file__).parent / "test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json"
     )
@@ -117,9 +116,8 @@ def test_accepted_366_date_window_is_one_exact_unsplit_request() -> None:
         WindowEndpoint.from_datetime(datetime(2025, 1, 1)),
         WindowEndpoint.from_datetime(datetime(2026, 1, 1, 23, 50)),
     )
-    rendered = {
-        product: plan_windows(fetch_window, _STAGES.window_declarations.products[product]) for product in _PRODUCTS
-    }
+    # Replay the historical source request exactly; production now plans capped spans.
+    rendered = dict.fromkeys(_PRODUCTS, (RenderedWindow("2025-01-01", "2026-01-01"),))
 
     fetched = _STAGES.fetch(
         ("1373273",),

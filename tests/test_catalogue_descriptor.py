@@ -140,20 +140,11 @@ def test_field_absences_distinguish_documented_silence_and_missing_acquisition()
     )
 
 
-@pytest.mark.parametrize(
-    ("provider", "record_set", "count"),
-    [
-        ("ba_fhmzbih", "stations", 58),
-        ("th_thaiwater", "station_products", 1648),
-    ],
-)
-def test_record_set_absence_counts_exact_withheld_row_locators(provider: str, record_set: str, count: int):
+@pytest.mark.parametrize("provider", ("ba_fhmzbih", "fr_hubeau", "th_thaiwater"))
+@pytest.mark.parametrize("record_set", ("stations", "station_products"))
+def test_evidenced_baseline_record_sets_do_not_report_withheld_rows(provider: str, record_set: str):
     record = next(record for record in _descriptor(provider)["recordSet"] if record["@id"] == record_set)
-    assert record["rr:absence"] == {
-        "kind": "withheld",
-        "reason": "no_acquisition_record_established",
-        "rowCount": count,
-    }
+    assert "rr:absence" not in record
 
 
 def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch):
@@ -303,8 +294,13 @@ def test_generator_rejects_mixed_withheld_and_established_origins():
         build_catalogue_descriptor(provenance, (*origins, second), files)
 
 
-def test_france_admitted_baseline_record_sets_have_no_missing_acquisition_absence():
-    descriptor = _descriptor("fr_hubeau")
+def test_thailand_governing_acquisitions_leave_no_withheld_relation_absence():
+    record = next(record for record in _descriptor("th_thaiwater")["recordSet"] if record["@id"] == "station_products")
+    assert "rr:absence" not in record
+
+
+def test_bosnia_record_sets_have_no_withheld_baseline_rows():
+    descriptor = _descriptor("ba_fhmzbih")
     for record in descriptor["recordSet"]:
         if record["@id"] in {"stations", "station_products"}:
             assert "rr:absence" not in record
@@ -335,3 +331,10 @@ def test_descriptor_preserves_exact_contents_without_binding_position_scans(prov
 
     assert descriptor == _descriptor(provider)
     assert position_scans == 0, f"descriptor scanned binding positions {position_scans} times"
+
+
+def test_france_admitted_baseline_record_sets_have_no_missing_acquisition_absence():
+    descriptor = _descriptor("fr_hubeau")
+    for record in descriptor["recordSet"]:
+        if record["@id"] in {"stations", "station_products"}:
+            assert "rr:absence" not in record

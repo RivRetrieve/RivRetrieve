@@ -1,21 +1,33 @@
-"""ThaiWater catalogue maintenance : refresh(ThaiWaterWaterlevelEnvelope, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedThThaiWaterCatalogue."""
+"""ThaiWater catalogue maintenance : admit(ReviewedLedgerBytes) → GraphAvailabilityEvidence; refresh(ThaiWaterWaterlevelEnvelope, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations, GraphAvailabilityEvidence) → GeneratedThThaiWaterCatalogue.
+
+The pinned availability ledger was accepted after private full-body verification.
+Parsing it checks metadata identity, not source bodies. Updating the pin requires
+renewed source-body acceptance. No controlled review corpus is a public recording.
+"""
 
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
+import io
 import json
 import re
 import urllib.request
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass, field
 from datetime import UTC, date, datetime
-from pathlib import Path
-from typing import cast
+from pathlib import Path, PurePosixPath
+from typing import Literal, cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    AcquisitionRecord,
+    MaterialIdentity,
+    verify_provenance_recordings,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import (
     PackagedCatalogArtifact,
@@ -41,13 +53,87 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.primitives import ProductId, ProviderId
 
 PROVIDER_ID = ProviderId("th_thaiwater")
 PROVIDER_NAME = "ThaiWater public API / Hydro-Informatics Institute (HII)"
 METADATA_URL = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
 VERTICAL_DATUM = "MSL"
 STATION_TYPE_FILTER = "tele_waterlevel"
+
+# Accepted governing station/product ledger, September 11 and 13, 2026.
+REVIEWED_LEDGER_SHA256 = "f96e89c7fa62380ff24bc32bceda8a1075e804b29d004f0c33c6f8d013c23fed"
+
+
+@dataclass(frozen=True)
+class GraphProductEvidence:
+    station_id: str
+    product_id: ProductId
+    source_id: str
+    native_field: str
+    window_start: date
+    window_end: date
+    nonnull_observations: int
+    availability: Literal["available", "unknown"]
+    acquisition: AcquisitionRecord
+
+    @property
+    def availability_reason(self) -> str:
+        conclusion = (
+            f"{self.nonnull_observations} non-null {self.native_field} measurements"
+            if self.availability == "available"
+            else f"null-only {self.native_field}; availability outside the tested window is unknown"
+        )
+        return (
+            f"ThaiWater graph {self.acquisition.acquisition_id}: {conclusion}; "
+            f"tested {self.window_start} through {self.window_end} inclusive"
+        )
+
+
+@dataclass(frozen=True)
+class GraphAvailabilityEvidence:
+    reviewed_ledger: InitVar[bytes]
+    pairs: tuple[GraphProductEvidence, ...] = field(init=False)
+
+    def __post_init__(self, reviewed_ledger: bytes) -> None:
+        if hashlib.sha256(reviewed_ledger).hexdigest() != REVIEWED_LEDGER_SHA256:
+            raise FatalContractError("ThaiWater availability evidence digest mismatch: not the reviewed ledger")
+        pairs = []
+        for row in csv.DictReader(io.StringIO(reviewed_ledger.decode("utf-8"))):
+            acquisition = AcquisitionRecord(
+                acquisition_id=row["request_id"],
+                method="http_request",
+                instant_type="retrieval",
+                description=(
+                    f"Complete ThaiWater graph for station {row['station_id']}, "
+                    f"{row['window_start']} through {row['window_end']} inclusive; "
+                    "supplied through HII's platform by the native station agency. "
+                    "This does not identify every historical original measurement producer. "
+                    "Private source bytes verified at research acceptance; metadata binding only in public CI."
+                ),
+                requested_from=(row["request_url"],),
+                retrieved_at_start=datetime.fromisoformat(row["retrieved_at"]),
+                material=MaterialIdentity(
+                    filename=PurePosixPath(row["evidence_body"]).name,
+                    byte_count=int(row["response_bytes"]),
+                    sha256=row["response_sha256"],
+                ),
+            )
+            pairs.append(
+                GraphProductEvidence(
+                    station_id=row["station_id"],
+                    product_id=ProductId(row["product_id"]),
+                    source_id=row["source_id"],
+                    native_field=row["native_field"],
+                    window_start=date.fromisoformat(row["window_start"]),
+                    window_end=date.fromisoformat(row["window_end"]),
+                    nonnull_observations=int(row["nonnull_observations"]),
+                    availability=cast('Literal["available", "unknown"]', row["availability"]),
+                    acquisition=acquisition,
+                )
+            )
+        object.__setattr__(self, "pairs", tuple(pairs))
+
 
 NATIVE_SOURCE_SCHEMA = pl.Schema(
     {
@@ -373,12 +459,13 @@ def _flatten_native_row(row: dict[str, object]) -> dict[str, object]:
 def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
+    availability_evidence: GraphAvailabilityEvidence,
 ) -> GeneratedThThaiWaterCatalogue:
     _validate_canonical_native_table(native_table)
     products = build_products()
     stations = build_stations(native_table)
     enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
-    station_products = build_station_products(stations)
+    station_products = build_station_products(stations, availability_evidence)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("ThaiWater native table has no valid retrieved_at values")
@@ -386,7 +473,7 @@ def build_catalogue(
 
     from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisition_provenance
 
-    acquisition_provenance = build_acquisition_provenance(native_table)
+    acquisition_provenance = build_acquisition_provenance(native_table, availability_evidence)
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedThThaiWaterCatalogue(
         provider_info,
@@ -452,25 +539,33 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
     ).sort("station_id")
 
 
-def build_station_products(stations: StationCatalog) -> StationProductCatalog:
-    if stations.filter(pl.col("station_id") == "1373273").height != 1:
-        raise FatalContractError("ThaiWater certified station-product station 1373273 is absent from the native table")
-    recording_date = date(2026, 9, 2)
-    rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "station_id": "1373273",
-            "product_id": definition.product_id,
-            "availability": "available",
-            "availability_reason": "Recorded ThaiWater graph response published a non-null native field",
-            "published_record_start_date": None,
-            "published_record_end_date": None,
-            "last_catalogue_check": recording_date,
-        }
-        for definition in PRODUCT_DEFINITIONS
-    ]
-    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
-        pl.col("availability").cast(AvailabilityDtype)
+def build_station_products(
+    stations: StationCatalog,
+    availability_evidence: GraphAvailabilityEvidence,
+) -> StationProductCatalog:
+    if {pair.station_id for pair in availability_evidence.pairs} != set(stations["station_id"]):
+        raise FatalContractError("ThaiWater availability evidence station population differs from native table")
+    rows = []
+    for pair in availability_evidence.pairs:
+        retrieved_at = pair.acquisition.retrieved_at_start
+        if retrieved_at is None:
+            raise FatalContractError("ThaiWater graph acquisition has no retrieval instant")
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": pair.station_id,
+                "product_id": pair.product_id,
+                "availability": pair.availability,
+                "availability_reason": pair.availability_reason,
+                "published_record_start_date": None,
+                "published_record_end_date": None,
+                "last_catalogue_check": retrieved_at.date(),
+            }
+        )
+    return (
+        pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+        .with_columns(pl.col("availability").cast(AvailabilityDtype))
+        .sort("station_id", "product_id")
     )
 
 
@@ -484,7 +579,9 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: one date-rendered request per station-window; co-published products share one source call"
+            "true: graph responses co-publish stage and discharge fields; "
+            "public retrieval requests each product and source sub-window separately, "
+            "with at most 365 inclusive calendar dates per source request"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
@@ -572,6 +669,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Refresh or build the packaged th_thaiwater catalogue.")
     parser.add_argument("--fixture", type=Path, help="Path to a ThaiWater waterlevel_load JSON fixture.")
     parser.add_argument("--live", action="store_true", help="Fetch the live ThaiWater metadata endpoint.")
+    parser.add_argument(
+        "--availability-evidence", type=Path, help="Required reviewed graph availability ledger for build mode."
+    )
     parser.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
@@ -590,6 +690,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--out requires --native")
         if args.retrieved_at is not None:
             parser.error("--retrieved-at is only valid with refresh mode")
+        if args.availability_evidence is None:
+            parser.error("--out requires --availability-evidence")
         from rivretrieve._internal.providers.th_thaiwater.origins import (
             NATIVE_TABLE_BYTE_SIZE,
             NATIVE_TABLE_SHA256,
@@ -601,11 +703,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_sha256=NATIVE_TABLE_SHA256,
             expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
         )
-        catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
+        availability_evidence = GraphAvailabilityEvidence(args.availability_evidence.read_bytes())
+        catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS, availability_evidence)
         verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
         write_catalogue(catalogue, args.out)
         return 0
 
+    if args.availability_evidence is not None:
+        parser.error("--availability-evidence is only valid with build mode")
     if args.native is not None:
         parser.error("--native cannot be used with --native-out")
     if (args.fixture is None) == (not args.live):

@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 import polars as pl
 import pytest
 import requests
+from pydantic import TypeAdapter
 
 from rivretrieve._internal import discovery, transport
 from rivretrieve._internal.catalogue_origins import (
@@ -48,10 +49,14 @@ from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
+from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
+THAI_AVAILABILITY_EVIDENCE_PATH = (
+    ROOT / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+)
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
@@ -99,6 +104,15 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
         build = partial(build, availability=availability)
+    if provider == "th_thaiwater":
+        build = partial(
+            build, availability_evidence=GraphAvailabilityEvidence(THAI_AVAILABILITY_EVIDENCE_PATH.read_bytes())
+        )
+    if provider == "ba_fhmzbih":
+        workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
+            (ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
+        )
+        build = partial(build, workbook_access=workbook_access)
     return ProviderAdapter(
         provider_id=ProviderId(provider),
         native_path=native_path,
@@ -661,7 +675,14 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     native_before = adapter.native_path.read_bytes()
     output = tmp_path / str(adapter.provider_id)
     arguments = ["--native", str(adapter.native_path), "--out", str(output)]
-    if adapter.provider_id == "jp_mlit":
+    if adapter.provider_id == "ba_fhmzbih":
+        arguments.extend(
+            (
+                "--workbook-access-ledger",
+                str(ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json"),
+            )
+        )
+    elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (
                 "--license-recording",
@@ -677,6 +698,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 str(ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"),
             )
         )
+    elif adapter.provider_id == "th_thaiwater":
+        arguments.extend(("--availability-evidence", str(THAI_AVAILABILITY_EVIDENCE_PATH)))
     elif adapter.provider_id == "pl_imgw":
         committed_provenance = json.loads((adapter.native_path.parent / "provenance.json").read_text())
         grdc = next(source for source in committed_provenance["source_records"] if source["source_id"] == "sr.pl.grdc")

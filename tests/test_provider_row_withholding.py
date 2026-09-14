@@ -35,12 +35,12 @@ def test_certified_provider_refuses_missing_provenance(provider_id: str, tmp_pat
         load_packaged_catalogue_artifact(tmp_path)
 
 
-def test_bosnia_loader_executes_station_and_availability_withholding() -> None:
+def test_bosnia_loader_admits_acquired_baseline_without_withholding() -> None:
     artifact = load_packaged_catalogue_artifact(bosnia.catalogue)
-    assert artifact.stations["station_id"].to_list() == ["4024", "4110"]
-    assert artifact.station_products.height == 3
+    assert artifact.stations.height == 60
+    assert artifact.station_products.height == 180
     assert artifact.acquisition_provenance is not None
-    assert len(artifact.acquisition_provenance.withheld_facts) == 293
+    assert artifact.acquisition_provenance.withheld_facts == ()
 
 
 def test_france_loader_admits_all_evidenced_baseline_pairs() -> None:
@@ -51,28 +51,22 @@ def test_france_loader_admits_all_evidenced_baseline_pairs() -> None:
     assert not artifact.acquisition_provenance.withheld_facts
 
 
-def test_thailand_loader_executes_availability_withholding_only() -> None:
+def test_thailand_loader_retains_every_acquired_pair() -> None:
     artifact = load_packaged_catalogue_artifact(thailand.catalogue)
     assert artifact.stations.height == 825
-    assert artifact.station_products.select("station_id", "product_id").sort("product_id").rows() == [
-        ("1373273", "discharge_reported"),
-        ("1373273", "stage_reported"),
-    ]
+    assert artifact.station_products.height == 1650
+    assert set(artifact.station_products["station_id"]) == set(artifact.stations["station_id"])
     assert artifact.acquisition_provenance is not None
-    assert len(artifact.acquisition_provenance.withheld_facts) == 1_648
+    assert artifact.acquisition_provenance.withheld_facts == ()
 
 
-def test_public_find_excludes_withheld_rows_and_keeps_reasons() -> None:
-    for provider_id, station_id, count in (("ba_fhmzbih", "1010", 293),):
-        with pytest.raises(Exception, match="Station is not registered") as raised:
-            rr.find(provider=provider_id, station=station_id)
-        assert raised.type.__name__ == "UnknownStationError"
-        provenance = rr.find(provider=provider_id).acquisition_provenance[0]
-        assert len(provenance.withheld_facts) == count
-        assert {group.reason for group in provenance.withheld_facts} == {"no_acquisition_record_established"}
+def test_public_find_admits_previously_withheld_baseline_stations() -> None:
+    for provider_id, station_id in (("ba_fhmzbih", "1010"), ("fr_hubeau", "01010000")):
+        selection = rr.find(provider=provider_id, station=station_id)
+        assert selection.series
+        assert not selection.acquisition_provenance[0].withheld_facts
 
     selection = rr.find(provider="th_thaiwater", station="1", product="stage_reported")
-    assert rr.as_frame(selection).is_empty()
+    assert rr.as_frame(selection).height == 1
     provenance = selection.acquisition_provenance[0]
-    assert len(provenance.withheld_facts) == 1_648
-    assert {group.reason for group in provenance.withheld_facts} == {"no_acquisition_record_established"}
+    assert provenance.withheld_facts == ()

@@ -302,3 +302,32 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
         rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="raise")
     status = rr.cache_status("usgs_nwis")
     assert tuple(item.station_id for item in status.coverage) == ("07374000",)
+
+
+def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_coverage(tmp_path: Path) -> None:
+    """Engine WithIssues contract, not a claim that this source returned the authored issue."""
+    from rivretrieve._internal.issues import Issue
+
+    class ParseIssueControl(ParseOutputControl):
+        def parse(self, payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+            parsed = _STAGES.parse(payload, config)
+            return WithIssues(
+                parsed.value,
+                (
+                    *parsed.issues,
+                    Issue(
+                        severity="error",
+                        code="contract_test.parse_error",
+                        message="Authored stage issue for the engine WithIssues contract test",
+                        provider_id=_PROVIDER,
+                    ),
+                ),
+            )
+
+    store = tmp_path / "store"
+    transport = CountedReplay(_INSTANT)
+    result = _drive(store, transport, control=ParseIssueControl(10))
+    assert not result.canonical_rows.is_empty()
+    assert len(transport.calls) == 1
+    assert any(issue.code == "contract_test.parse_error" for issue in result.issues)
+    assert not store.exists()

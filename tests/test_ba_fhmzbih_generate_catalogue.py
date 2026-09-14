@@ -10,6 +10,7 @@ from pathlib import Path
 import polars as pl
 import polars.testing as pl_testing
 import pytest
+from pydantic import TypeAdapter
 
 from rivretrieve._internal.catalogue_origins import Evidence, NotPublished
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
@@ -21,10 +22,12 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ba_fhmzbih import generate_catalogue
+from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger
 
 _TEST_DATA_DIR = Path(__file__).parent / "test_data"
 _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
 _NATIVE_TABLE = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
+_LEDGER = Path(__file__).parents[1] / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json"
 _CATALOGUE_DIR = _NATIVE_TABLE.parent
 _CRS_EVIDENCE = _TEST_DATA_DIR / "ba_fhmzbih_crs_evidence_stations.json"
 _PROVIDER_NOTES = Path(__file__).parents[1] / "docs/provider_ports/ba_fhmzbih.md"
@@ -107,8 +110,12 @@ def _origins():
     return STATION_CATALOGUE_ORIGINS
 
 
+def _access():
+    return TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes())
+
+
 def _catalogue():
-    return generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), _origins())
+    return generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), _origins(), _access())
 
 
 def _json_objects(values: pl.Series) -> list[dict[str, object]]:
@@ -158,7 +165,12 @@ def test_native_build_has_exact_counts_dates_and_schemas() -> None:
     assert set(catalogue.products["product_id"]).isdisjoint(withdrawn_product_ids)
     assert set(catalogue.station_products["product_id"]).isdisjoint(withdrawn_product_ids)
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
-    assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2), date(2026, 9, 2)}
+    assert set(catalogue.station_products["last_catalogue_check"]) == {
+        date(2026, 9, 2),
+        date(2026, 9, 7),
+        date(2026, 9, 9),
+        date(2026, 9, 13),
+    }
     assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert catalogue.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert catalogue.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
@@ -169,7 +181,7 @@ def test_native_build_has_exact_counts_dates_and_schemas() -> None:
 
 def test_native_build_is_exact_source_projection_and_preserves_native_material() -> None:
     native = read_native_table(_NATIVE_TABLE)
-    actual = generate_catalogue.build_catalogue(native, _origins()).stations
+    actual = generate_catalogue.build_catalogue(native, _origins(), _access()).stations
     expected = native.data.select(
         pl.lit("ba_fhmzbih").cast(pl.String).alias("provider_id"),
         pl.col("metadata_station_no").cast(pl.String).alias("station_id"),
@@ -254,16 +266,16 @@ def test_publisher_capture_and_attestation_support_not_published_crs() -> None:
 
 def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
     assert hashlib.sha256((_CATALOGUE_DIR / "provider.json").read_bytes()).hexdigest() == (
-        "125a679c7be9f8c731fa205a2c6146d0ff1803f163caee678430569316b9ba92"
+        "8318095cfc19d2fa67dece6c2ce2a0313032870ffa9c290fc8ec9dae110382be"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
         "6f4c7541f4bfd4bef499fb29e4ac83ca8c32196dba4dd92f812e850ea65a1a6b"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
-        "4e62fd566f09c7e6f719a83895fbe310bcc8877a556f7376187a1537172e1798"
+        "761a93315a093b1cad5a4ce1e0480a6e36430a32d28467c9fe689f0257c053a4"
     )
     assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
-        "19322b1ba939fc51a82bd621a5f7bc54d64e65769b70b7e42cac8d1d95c68526"
+        "28edacb26f29db827d746eef084c53592f7c33e2a93f018a9297aba08296a51b"
     )
 
 
@@ -271,14 +283,14 @@ def test_native_build_enforces_origins_before_writing(tmp_path: Path) -> None:
     broken = dict(_origins())
     del broken["longitude"]
     with pytest.raises(FatalContractError, match=r"ba_fhmzbih\.longitude: canonical column has no origin declaration"):
-        generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), broken)
+        generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), broken, _access())
     assert list(tmp_path.iterdir()) == []
 
 
 def test_native_build_rejects_empty_and_malformed_retrieval_timestamps() -> None:
     native = read_native_table(_NATIVE_TABLE)
     with pytest.raises(FatalContractError, match="native table must not be empty"):
-        generate_catalogue.build_catalogue(NativeTable(native.data.clear()), _origins())
+        generate_catalogue.build_catalogue(NativeTable(native.data.clear()), _origins(), _access())
     malformed = object.__new__(NativeTable)
     object.__setattr__(
         malformed,
@@ -286,10 +298,10 @@ def test_native_build_rejects_empty_and_malformed_retrieval_timestamps() -> None
         native.data.with_columns(pl.lit(None).cast(pl.Datetime("us", "UTC")).alias("retrieved_at")),
     )
     with pytest.raises(FatalContractError, match="retrieved_at"):
-        generate_catalogue.build_catalogue(malformed, _origins())
+        generate_catalogue.build_catalogue(malformed, _origins(), _access())
 
 
-def test_native_build_uses_per_station_dates_and_maximum_provider_date() -> None:
+def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date() -> None:
     native = read_native_table(_NATIVE_TABLE)
     mixed = native.data.head(2).with_columns(
         pl.Series(
@@ -298,14 +310,27 @@ def test_native_build_uses_per_station_dates_and_maximum_provider_date() -> None
             dtype=pl.Datetime("us", "UTC"),
         )
     )
-    catalogue = generate_catalogue.build_catalogue(NativeTable(mixed), _origins())
+    catalogue = generate_catalogue.build_catalogue(
+        NativeTable(mixed),
+        _origins(),
+        TypeAdapter(WorkbookAccessLedger).validate_python(
+            {
+                **json.loads(_LEDGER.read_bytes()),
+                "pairs": [
+                    pair
+                    for pair in json.loads(_LEDGER.read_bytes())["pairs"]
+                    if pair["station_no"] in mixed["metadata_station_no"]
+                ],
+            }
+        ),
+    )
     station_dates = {
         station_id: set(group["last_catalogue_check"])
         for (station_id,), group in catalogue.station_products.group_by("station_id", maintain_order=True)
     }
     assert station_dates == {
-        mixed["metadata_station_no"].item(0): {date(2026, 7, 31)},
-        mixed["metadata_station_no"].item(1): {date(2026, 8, 2)},
+        mixed["metadata_station_no"].item(0): {date(2026, 9, 9), date(2026, 9, 13)},
+        mixed["metadata_station_no"].item(1): {date(2026, 9, 7), date(2026, 9, 13)},
     }
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
@@ -575,7 +600,7 @@ def test_main_raises_returned_issue_without_writing(tmp_path: Path) -> None:
             ["--native-input-kind", "fixture"],
             "--native-input-kind requires --native-payload",
         ),
-        (["--native", "native.parquet"], "--native requires --out"),
+        (["--native", "native.parquet"], "--native requires --workbook-access-ledger"),
         (["--out", "catalogue"], "--out requires --native"),
         ([], "one of --native or --native-payload is required"),
     ],
@@ -606,10 +631,113 @@ def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
     monkeypatch.setattr(urllib.request, "urlopen", fail_network)
     first = tmp_path / "first"
     second = tmp_path / "second"
-    argv = ["--native", str(_NATIVE_TABLE), "--out"]
+    argv = ["--native", str(_NATIVE_TABLE), "--workbook-access-ledger", str(_LEDGER), "--out"]
     assert generate_catalogue.main([*argv, str(first)]) == 0
     assert generate_catalogue.main([*argv, str(second)]) == 0
     assert calls == []
     for artifact in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (first / artifact).read_bytes() == (second / artifact).read_bytes()
         assert (first / artifact).read_bytes() == (_CATALOGUE_DIR / artifact).read_bytes()
+
+
+def test_public_artifact_exposes_evidenced_baseline() -> None:
+    artifact = _catalogue().public_artifact
+    assert artifact.stations.height == 60
+    assert artifact.station_products.height == 180
+    assert artifact.station_products.filter(pl.col("availability") == "available").height == 132
+    assert artifact.station_products.filter(pl.col("availability") == "unknown").height == 48
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("station_no", 1010),
+        ("site_no", 1),
+        ("source_code", "WT"),
+        ("source_unit", "cm"),
+        ("workbook", "H_1Y.xlsx"),
+        ("url", "https://vodostaji.voda.ba/wrong.xlsx"),
+        ("http_status", 404),
+        ("method", "POST"),
+        ("parameters", {"date": "2000"}),
+        ("numerical_rows", 0),
+        ("blank_rows", 1),
+        ("availability", "unknown"),
+        ("status", "no_data_rows"),
+        ("observed_window_start", None),
+        ("response_sha256", "bad"),
+        ("byte_size", 0),
+    ],
+)
+def test_workbook_ledger_rejects_inconsistent_pair(field, value) -> None:
+    from pydantic import ValidationError
+
+    document = json.loads(_LEDGER.read_bytes())
+    document["pairs"][0][field] = value
+    with pytest.raises(ValidationError):
+        TypeAdapter(WorkbookAccessLedger).validate_python(document)
+
+
+@pytest.mark.parametrize("mutation", ["duplicate", "missing", "extra", "site", "native_hash", "empty_status"])
+def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(mutation) -> None:
+    from pydantic import ValidationError
+
+    document = json.loads(_LEDGER.read_bytes())
+    if mutation == "duplicate":
+        document["pairs"].append(document["pairs"][0])
+    elif mutation == "missing":
+        document["pairs"].pop()
+    elif mutation == "native_hash":
+        document["baseline_native_sha256"] = "0" * 64
+    elif mutation == "empty_status":
+        pair = next(pair for pair in document["pairs"] if pair["status"] == "no_data_rows")
+        pair["availability"] = "available"
+    else:
+        pair = document["pairs"][0]
+        if mutation == "extra":
+            pair["station_no"] = "not-a-baseline-station"
+        else:
+            pair["site_no"] = "999"
+        pair["url"] = (
+            f"https://vodostaji.voda.ba/data/internet/stations/{pair['site_no']}/{pair['station_no']}/{pair['source_code']}/{pair['workbook']}"
+        )
+    with pytest.raises((ValidationError, FatalContractError)):
+        generate_catalogue.build_catalogue(
+            read_native_table(_NATIVE_TABLE), _origins(), TypeAdapter(WorkbookAccessLedger).validate_python(document)
+        )
+
+
+def test_workbook_dates_reasons_and_unknown_published_bounds_are_preserved() -> None:
+    catalogue = _catalogue()
+    expected = _access()
+    for pair in expected.pairs:
+        row = catalogue.station_products.filter(
+            (pl.col("station_id") == pair.station_no) & (pl.col("product_id") == pair.product_id)
+        ).row(0, named=True)
+        assert row["availability"] == pair.availability
+        assert row["last_catalogue_check"] == pair.retrieved_at.date()
+        assert pair.retrieved_at.isoformat() in row["availability_reason"]
+        assert row["published_record_start_date"] is None
+        assert row["published_record_end_date"] is None
+        if pair.status == "no_data_rows":
+            assert "zero data rows" in row["availability_reason"]
+    assert catalogue.stations.filter(pl.col("station_id") == "2101-B").height == 1
+
+
+@pytest.mark.parametrize("field", ["observed_window_start", "observed_window_end"])
+def test_workbook_ledger_rejects_zoned_source_wall_clock(field) -> None:
+    from pydantic import ValidationError
+
+    document = json.loads(_LEDGER.read_bytes())
+    document["pairs"][0][field] += "+00:00"
+    with pytest.raises(ValidationError, match="timezone"):
+        TypeAdapter(WorkbookAccessLedger).validate_python(document)
+
+
+def test_workbook_ledger_requires_utc_retrieval_instant() -> None:
+    from pydantic import ValidationError
+
+    document = json.loads(_LEDGER.read_bytes())
+    document["pairs"][0]["retrieved_at"] = "2026-09-13T23:57:40+05:00"
+    with pytest.raises(ValidationError, match="UTC"):
+        TypeAdapter(WorkbookAccessLedger).validate_python(document)
