@@ -7,8 +7,11 @@ whole-record count zeros, 524 two-window empties, 97 failures, 6,604 unchecked).
 Receipt-only historical anecdotes are not full-body-certified facts.
 
 Baseline commit `67796ab8d793867aaaaf9c6fb55bec208adaeab8` · native table captured
-`2026-08-02T17:33Z` (7,323 stations) · first survey `2026-09-08`/`09` · replacement captures
-`2026-09-11` (the acquisition instant of every receipt is in its bundle).
+`2026-08-02T17:33Z` (7,323 stations). The original survey ran on September 8–9;
+replacement count/history captures ran on September 11–12. Final governing witnesses
+and replacement checks were acquired on September 13. Supplementary padded-request
+recordings were acquired on September 14. Each governing acquisition retains its actual
+instant in the ledger and corresponding receipt; this is not a simultaneous snapshot.
 
 Read [`ROUTE_DECISIONS.md`](ROUTE_DECISIONS.md) for what each route was measured to do.
 

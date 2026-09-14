@@ -149,9 +149,12 @@ for the 59 governing one-day witnesses. Their acquisition dates must remain thei
 They do not recover discarded comparison bytes, backdate evidence or certify retired
 precise historical totals.
 
-The accepted source-only independent report is
-`.worktrees/source-boundaries/FRANCE-SOURCE-REPORT.md` (relative to the repository
-root). It verifies 611 source rows spanning May 30–June 2 in the second capture.
+The accepted source-only independent report is held in the private local handoff at
+`.worktrees/source-boundaries/FRANCE-SOURCE-REPORT.md` (relative to the discovery
+machine's repository root). This is not a durable public reference and is not available
+in a fresh clone. Production tests must preserve reviewed source-only literal provenance
+in committed test/review records, not depend on this local path. The local report verifies
+611 source rows spanning May 30–June 2 in the second capture.
 For the user window June 1–2, it establishes **282 rows**, first
 **2026-06-01T00:00:00 UTC**, last **2026-06-02T18:00:00 UTC**. This closes the
 positive padded midnight evidence gap. Use the exact second private recording for
