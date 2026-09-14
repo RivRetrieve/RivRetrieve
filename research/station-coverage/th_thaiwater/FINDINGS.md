@@ -241,8 +241,8 @@ were not tested. A subsequent complete null-grid capture for 2023-03-03 .. 2024-
 honoured 365 inclusive dates including 29 February, without resolving the maximum. No conclusion about leap years
 or calendar-year chunks follows from this evidence. See [UNRESOLVED.md](UNRESOLVED.md) §1.
 
-**Measured at the public surface** (`inventory/window_truncation_observation.json`, reproducible via
-`scripts/reproduce_window_truncation.py`): `rr.fetch(..., start="2023-01-01", end="2026-09-06")` — 1,345
+**Measured at the public surface** (`inventory/window_truncation_observation.json`; the historical acquisition script
+`scripts/reproduce_window_truncation.py` is now retired): `rr.fetch(..., start="2023-01-01", end="2026-09-06")` — 1,345
 dates — returned rows from 2025-09-08 00:00 through 2026-09-06 23:50: 364 dates, **27% of the requested
 period**, with no issue or warning naming the shortfall. The two issues emitted are unrelated
 provenance notices. That file's `requested_days` and `returned_days` fields are elapsed days (1,344

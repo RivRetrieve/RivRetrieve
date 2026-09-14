@@ -137,3 +137,49 @@ def test_station_table_does_not_label_general_source_failure_as_http404() -> Non
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.LABEL["access_failed"] == "access failed"
+
+
+def test_each_station_acquisition_is_verified_when_body_path_is_reused() -> None:
+    """Reproduce the independent review's coordinated second-station receipt forgery."""
+    import os
+
+    configured = os.environ.get("THAIWATER_REVIEW_EVIDENCE_ROOT")
+    if configured is None:
+        pytest.skip("controlled private bodies are required; mandatory acceptance check")
+    evidence_root = Path(configured)
+    root = Path(__file__).resolve().parents[1]
+    module = _governing_module(root)
+    rows = module.read_ledger(
+        root / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    )
+    agencies = module.station_agencies(
+        root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+    )
+    first_station = rows[0]["station_id"]
+    second_station = next(row["station_id"] for row in rows if row["station_id"] != first_station)
+    first = [dict(row) for row in rows if row["station_id"] == first_station]
+    second = [dict(row) for row in rows if row["station_id"] == second_station]
+    for row in second:
+        source = next(item for item in first if item["product_id"] == row["product_id"])
+        for field in (
+            "evidence_body",
+            "nonnull_observations",
+            "grid_rows",
+            "window_dates",
+            "window_start",
+            "window_end",
+            "status",
+            "availability",
+            "grid_first",
+            "grid_last",
+        ):
+            row[field] = source[field]
+        row["evidence_receipt"] = "receipts/NONEXISTENT-FORGED.json"
+        row["request_url"] = source["request_url"].replace(
+            f"station_id={first_station}&", f"station_id={second_station}&"
+        )
+    forged = first + second
+    module.verify_ledger(forged, {station: agencies[station] for station in (first_station, second_station)})
+    # Each station's own acquisition must be checked even when bytes are cached.
+    with pytest.raises((FileNotFoundError, ValueError)):
+        module.verify_bodies(forged, evidence_root)

@@ -174,13 +174,11 @@ def verify_response(row: dict[str, str], receipt: dict[str, object], raw: bytes)
 
 
 def verify_bodies(rows: list[dict[str, str]], evidence_root: Path) -> None:
-    verified = {}
+    """Verify every fact's acquisition; repeated material paths cannot skip receipts."""
     for row in rows:
-        key = row["evidence_body"]
-        if key not in verified:
-            receipt = json.loads((evidence_root / row["evidence_receipt"]).read_text())
-            verified[key] = verify_response(row, receipt, (evidence_root / key).read_bytes())
-        if verified[key][row["native_field"]] != int(row["nonnull_observations"]):
+        receipt = json.loads((evidence_root / row["evidence_receipt"]).read_text())
+        counts = verify_response(row, receipt, (evidence_root / row["evidence_body"]).read_bytes())
+        if counts[row["native_field"]] != int(row["nonnull_observations"]):
             raise ValueError(
                 f"source measurement count disagrees with conclusion: {row['station_id']}/{row['product_id']}"
             )

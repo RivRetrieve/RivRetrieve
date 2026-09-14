@@ -41,7 +41,8 @@ array, and each metadata snapshot is one body. This is not an exhaustive source 
 Use existing engine-owned `capped-span` with `size=365`, DATE rendering and inclusive
 stop. This is a conservative working size per **SOURCE request**, not an exact maximum.
 The engine widens the user's window by two days at each end before planning; a
-365-date user request therefore needs two source requests. Do not add a 361-date
+365-date user request therefore needs two source requests per product under the current
+driver contract. Do not add a 361-date
 public restriction, provider padding or date arithmetic. Each sub-window carries its
 own start and end. Backwards traversal is not required.
 
@@ -52,7 +53,8 @@ honoured 365 dates for both 2025-09-09 .. 2026-09-08 and leap-containing
 not evidence of historical measurements or a universal leap-year source rule.
 
 The earlier public request 2023-01-01 .. 2026-09-06 was padded to actual source bounds
-2022-12-30 .. 2026-09-08. Its complete source response begins 2025-09-08; clipping to
+2022-12-30 .. 2026-09-08. A complete response to the equivalent padded request, newly acquired on September 13,
+begins 2025-09-08; it is not a recovery of the earlier discarded bytes. Clipping to
 the user end produces 52,416 ten-minute grid rows per product through 2026-09-06.
 The direct probe used source end 2026-09-06 instead. The two-day difference is explained
 by padding and clipping, not an unstable source floor. Correct D11 accordingly.
@@ -205,7 +207,7 @@ uv run python research/station-coverage/th_thaiwater/scripts/verify_governing_ev
   --evidence-root "$THAIWATER_EVIDENCE_ROOT"
 ```
 
-The command reads each exact body/receipt once, checks all graph timestamps and both
+The command verifies every pair against its own exact body/receipt, checks all graph timestamps and both
 native numeric-or-null fields, and derives every count. It fails if input is absent,
 changed or inconsistent. It performs no network requests and writes nothing. Public
 CI cannot claim this private-body certification. The retained discovery verifier that
@@ -215,3 +217,14 @@ The two historical count stores could formerly be forged together while all 34 c
 passed. A regression reproduces that path. A separate test forges positive availability
 against an unchanged genuine null-response body and requires rejection. The corrected
 metadata checks are still not a substitute for this required full-body acceptance pass.
+
+A coordinated cross-station regression also runs against the untouched private corpus:
+
+```
+THAIWATER_REVIEW_EVIDENCE_ROOT="$THAIWATER_EVIDENCE_ROOT" uv run pytest \
+  tests/test_thaiwater_governing_evidence.py -q
+```
+
+Without that explicit private input, this one test is skipped in public CI. Full body
+certification remains mandatory at acceptance and integration. Reusing a material path
+must never skip a later station's own receipt, URL, hash, date or conclusion checks.
