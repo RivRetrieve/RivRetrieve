@@ -13,12 +13,12 @@ import ipaddress
 import json
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from enum import StrEnum
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal, Protocol, Self
 from urllib.parse import urlsplit  # noqa: TID251  # Structural parsing only; no network access.
 
 from pydantic import BaseModel, ConfigDict, PositiveInt, StringConstraints, field_validator, model_validator
@@ -310,7 +310,17 @@ class SourceRecord(_ProvenanceModel):
         return value
 
 
-def verified_source_terms(source_records: tuple[SourceRecord, ...]) -> dict[str, str]:
+class SourceTerms(Protocol):
+    """The issuing identity and established words needed for terms resolution."""
+
+    @property
+    def issuer(self) -> str: ...
+
+    @property
+    def statements(self) -> tuple[SourceStatement, ...]: ...
+
+
+def verified_source_terms(source_records: Sequence[SourceTerms]) -> dict[str, str]:
     """verified source terms : SourceRecords → VerbatimLicenseAndCitation (pure).
 
     Aggregate terms belong only to one issuer. Private verification does not

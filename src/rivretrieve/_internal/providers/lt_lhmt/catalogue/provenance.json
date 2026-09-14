@@ -1,1 +1,109 @@
-{"schema_version":2,"provider_id":"lt_lhmt","native_table":{"repository_path":"src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet","revision":"7b71c51715f92085ea5d83c9e862c2b67d0b742e","sha256":"f1ddebed42b911d1417f22e22abebc5904652db4d5fc6da0bd0bed666d321b8d","byte_size":6156,"semantic_digest":null},"fact_universe":["source.provider.service","source.product.native_fields","source.station.native_identity","source.station.native_location","source.station.crs_documentation","source.station_product.availability_not_published","source.observation.native_value","source.observation.native_quality","canonical.provider_id","canonical.product_identity","canonical.product_unit","canonical.product_period","canonical.station_identity","canonical.station_location","canonical.station.crs","canonical.observation.value","source.meteo_lt.license_statement","source.meteo_lt.citation_statement","provider.provider_id","provider.name","provider.live_stations","provider.live_products","provider.live_station_products","provider.bulk_observations","provider.catalogue_version","provider.license","provider.citation","product.provider_id","product.product_id","product.observed_property","product.frequency","product.statistic","product.period_type","product.period_anchor","product.unit","product.native_id","station.provider_id","station.station_id","station.latitude","station.longitude","station.crs","station_product.provider_id","station_product.station_id","station_product.product_id","station_product.availability","station_product.availability_reason","station_product.published_record_start_date","station_product.published_record_end_date","station_product.last_catalogue_check"],"source_records":[{"source_id":"lt_lhmt","issuer":"Lithuanian Hydrometeorological Service","operator":"Meteo LT API","acquisitions":[{"acquisition_id":"catalogue_capture_2026_08_01","method":"http_request","instant_type":"retrieval","description":"Complete 97-station Meteo LT hydro-stations response","requested_from":["https://api.meteo.lt/v1/hydro-stations"],"retrieved_at_start":"2026-08-01T18:31:08Z","retrieved_at_end":null,"recording_ids":[],"material":null},{"acquisition_id":"terms_capture_2026_08_21","method":"http_request","instant_type":"retrieval","description":"Meteo LT API data-use conditions HTML recording","requested_from":["https://api.meteo.lt/"],"retrieved_at_start":"2026-08-21T08:27:13Z","retrieved_at_end":null,"recording_ids":["lt_lhmt_terms"],"material":null},{"acquisition_id":"observation_request","method":"runtime_http_request","instant_type":"runtime","description":"Exact monthly Meteo LT station observation response","requested_from":["https://api.meteo.lt/v1/hydro-stations/{station}/observations/historical/{YYYY-MM}"],"retrieved_at_start":null,"retrieved_at_end":null,"recording_ids":[],"material":null}],"evidence":[{"evidence_id":"lt_lhmt_terms","description":"Meteo LT API data-use conditions","recording":{"recording_id":"lt_lhmt_terms","repository_path":"tests/test_data/lt_lhmt_terms_licence.html","source_url":"https://api.meteo.lt/","retrieved_at":"2026-08-21T08:27:13Z","media_type":"text/html; charset=UTF-8","sha256":"bf8f893026a8c744136818d47da37e8c7b231b891c74c85e0f6192ac4a8d8645"}}],"statements":[{"kind":"license","exact_text":"Per Meteo LT API teikiami duomenys (toliau – duomenys) yra viešai prieinami ir nemokami visuomeniniam naudojimui, platinimui ir tolimesniam apdorojimui, laikantis šių duomenų naudojimo sąlygų: 1) duomenys, jeigu nenustatyta kitaip, teikiami pagal Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) tarptautinę duomenų naudojimo licenciją, būtina susipažinti su licencijos sąlygomis;","recording_id":"lt_lhmt_terms","fact":"source.meteo_lt.license_statement","verification_status":"verified_public_recording"},{"kind":"citation","exact_text":"5) publikuojant, pakartotinai atkartojant ar kitaip naudojant duomenis, būtina nurodyti, kad duomenų šaltinis yra Tarnyba. Nenurodant duomenų šaltinio, gali būti nutraukta prieiga prie duomenų.","recording_id":"lt_lhmt_terms","fact":"source.meteo_lt.citation_statement","verification_status":"verified_public_recording"}]}],"fact_bindings":[{"fact_group":"terms_statements","facts":["source.meteo_lt.license_statement","source.meteo_lt.citation_statement"],"source_id":"lt_lhmt","acquisition_id":"terms_capture_2026_08_21"},{"fact_group":"catalogue_external","facts":["source.provider.service","source.product.native_fields","source.station.native_identity","source.station.native_location","source.station.crs_documentation","source.station_product.availability_not_published"],"source_id":"lt_lhmt","acquisition_id":"catalogue_capture_2026_08_01"},{"fact_group":"observation_external","facts":["source.observation.native_value","source.observation.native_quality"],"source_id":"lt_lhmt","acquisition_id":"observation_request"},{"fact_group":"canonical_catalogue","facts":["canonical.provider_id","canonical.product_identity","canonical.product_unit","canonical.product_period","canonical.station_identity","canonical.station_location","canonical.station.crs"],"source_id":null,"acquisition_id":null,"transformation":{"name":"rivretrieve_lithuania_catalogue_harmonisation","external_inputs":[{"source_id":"lt_lhmt","fact":"source.provider.service"},{"source_id":"lt_lhmt","fact":"source.product.native_fields"},{"source_id":"lt_lhmt","fact":"source.station.native_identity"},{"source_id":"lt_lhmt","fact":"source.station.native_location"},{"source_id":"lt_lhmt","fact":"source.station.crs_documentation"},{"source_id":"lt_lhmt","fact":"source.station_product.availability_not_published"}]}},{"fact_group":"canonical_observation","facts":["canonical.observation.value"],"source_id":null,"acquisition_id":null,"transformation":{"name":"rivretrieve_lithuania_observation_harmonisation","external_inputs":[{"source_id":"lt_lhmt","fact":"source.observation.native_value"},{"source_id":"lt_lhmt","fact":"source.observation.native_quality"}]}},{"fact_group":"canonical_catalogue_carrier","facts":["provider.provider_id","provider.name","provider.live_stations","provider.live_products","provider.live_station_products","provider.bulk_observations","provider.catalogue_version","provider.license","provider.citation","product.provider_id","product.product_id","product.observed_property","product.frequency","product.statistic","product.period_type","product.period_anchor","product.unit","product.native_id","station.provider_id","station.station_id","station.latitude","station.longitude","station.crs","station_product.provider_id","station_product.station_id","station_product.product_id","station_product.availability","station_product.availability_reason","station_product.published_record_start_date","station_product.published_record_end_date","station_product.last_catalogue_check"],"source_id":null,"acquisition_id":null,"transformation":{"name":"lt_lhmt external facts to RivRetrieve canonical catalogue carriers","external_inputs":[{"source_id":"lt_lhmt","fact":"source.provider.service"},{"source_id":"lt_lhmt","fact":"source.product.native_fields"},{"source_id":"lt_lhmt","fact":"source.station.native_identity"},{"source_id":"lt_lhmt","fact":"source.station.native_location"},{"source_id":"lt_lhmt","fact":"source.station.crs_documentation"},{"source_id":"lt_lhmt","fact":"source.station_product.availability_not_published"}]}}],"withheld_facts":[]}
+{
+  "schema_version": 3,
+  "provider_id": "lt_lhmt",
+  "native_table": {
+    "repository_path": "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+    "revision": "7b71c51715f92085ea5d83c9e862c2b67d0b742e",
+    "sha256": "f1ddebed42b911d1417f22e22abebc5904652db4d5fc6da0bd0bed666d321b8d",
+    "byte_size": 6156,
+    "semantic_digest": null
+  },
+  "source_records": [
+    {
+      "source_id": "lt_lhmt",
+      "issuer": "Lithuanian Hydrometeorological Service",
+      "operator": "Meteo LT API",
+      "evidence": [
+        {
+          "evidence_id": "lt_lhmt_terms",
+          "description": "Meteo LT API data-use conditions",
+          "recording": {
+            "recording_id": "lt_lhmt_terms",
+            "repository_path": "tests/test_data/lt_lhmt_terms_licence.html",
+            "source_url": "https://api.meteo.lt/",
+            "retrieved_at": "2026-08-21T08:27:13Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "bf8f893026a8c744136818d47da37e8c7b231b891c74c85e0f6192ac4a8d8645"
+          }
+        }
+      ],
+      "statements": [
+        {
+          "kind": "license",
+          "exact_text": "Per Meteo LT API teikiami duomenys (toliau – duomenys) yra viešai prieinami ir nemokami visuomeniniam naudojimui, platinimui ir tolimesniam apdorojimui, laikantis šių duomenų naudojimo sąlygų: 1) duomenys, jeigu nenustatyta kitaip, teikiami pagal Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) tarptautinę duomenų naudojimo licenciją, būtina susipažinti su licencijos sąlygomis;",
+          "recording_id": "lt_lhmt_terms",
+          "fact": "source.meteo_lt.license_statement",
+          "verification_status": "verified_public_recording"
+        },
+        {
+          "kind": "citation",
+          "exact_text": "5) publikuojant, pakartotinai atkartojant ar kitaip naudojant duomenis, būtina nurodyti, kad duomenų šaltinis yra Tarnyba. Nenurodant duomenų šaltinio, gali būti nutraukta prieiga prie duomenų.",
+          "recording_id": "lt_lhmt_terms",
+          "fact": "source.meteo_lt.citation_statement",
+          "verification_status": "verified_public_recording"
+        }
+      ]
+    }
+  ],
+  "descriptions": [
+    "Complete 97-station Meteo LT hydro-stations response",
+    "Meteo LT API data-use conditions HTML recording",
+    "Exact monthly Meteo LT station observation response"
+  ],
+  "transformations": [
+    {
+      "name": "rivretrieve_lithuania_catalogue_harmonisation",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "rivretrieve_lithuania_observation_harmonisation",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "lt_lhmt external facts to RivRetrieve canonical catalogue carriers",
+      "kind": "derived_value",
+      "marker_value": null
+    }
+  ],
+  "withheld_facts": [],
+  "row_locator_requirements": [],
+  "files": {
+    "provenance_facts.parquet": {
+      "path": "provenance_facts.parquet",
+      "sha256": "df22db07a247eb47d42461ddccb7a18e07ff762bee7a1f1ba33e1b80303aa88c",
+      "byte_count": 2690,
+      "row_count": 49,
+      "schema_version": 3
+    },
+    "provenance_acquisitions.parquet": {
+      "path": "provenance_acquisitions.parquet",
+      "sha256": "ab04cae4172e0acad07505d0b9965744768fdc49a33d98ec74aee9dcc899e718",
+      "byte_count": 6133,
+      "row_count": 3,
+      "schema_version": 3
+    },
+    "provenance_bindings.parquet": {
+      "path": "provenance_bindings.parquet",
+      "sha256": "a59dc09f02e842032833950cf216429108503b985f5b3e3b2415bd8e0dde8954",
+      "byte_count": 2128,
+      "row_count": 6,
+      "schema_version": 3
+    },
+    "provenance_binding_facts.parquet": {
+      "path": "provenance_binding_facts.parquet",
+      "sha256": "7b2a4cbb4d38acc8fcd4979c0507c9682588a627ad2a0542c23b44f4ec21517b",
+      "byte_count": 1372,
+      "row_count": 49,
+      "schema_version": 3
+    },
+    "provenance_external_inputs.parquet": {
+      "path": "provenance_external_inputs.parquet",
+      "sha256": "b75c8fc689fab0c48e0d377bf4e04c9a7c536e0e96d9d6e7679b6a09bb535ddf",
+      "byte_count": 1561,
+      "row_count": 14,
+      "schema_version": 3
+    }
+  }
+}

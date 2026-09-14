@@ -158,7 +158,16 @@ def test_catalogue_only_provider_directory_retains_declared_surface(
     assert catalogue_path(provider_id).exists()
     artifact_names = {"provider.json", "stations.parquet", "products.parquet", "station_products.parquet"}
     if provider_id in {"br_ana", "jp_mlit", "no_nve"}:
-        artifact_names.add("provenance.json")
+        artifact_names.update(
+            {
+                "provenance.json",
+                "provenance_facts.parquet",
+                "provenance_acquisitions.parquet",
+                "provenance_bindings.parquet",
+                "provenance_binding_facts.parquet",
+                "provenance_external_inputs.parquet",
+            }
+        )
     for artifact_name in artifact_names:
         assert (catalogue_path(provider_id) / artifact_name).exists()
 

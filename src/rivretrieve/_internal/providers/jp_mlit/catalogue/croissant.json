@@ -21,12 +21,17 @@
     "fileObject": "cr:fileObject",
     "extract": "cr:extract",
     "column": "cr:column",
-    "jsonPath": "cr:jsonPath"
+    "jsonPath": "cr:jsonPath",
+    "references": "cr:references",
+    "key": "cr:key",
+    "isArray": "cr:isArray",
+    "arrayShape": "cr:arrayShape"
   },
   "@type": "sc:Dataset",
   "name": "rivretrieve-jp_mlit-catalogue",
   "description": "Packaged provider, product, station and station-product catalogue for jp_mlit.",
   "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "schemaVersion": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
   "creator": [
     {
       "@type": "sc:Organization",
@@ -67,6 +72,54 @@
       "encodingFormat": "application/x-parquet",
       "sha256": "901913b9d73f4dd9cb833e458bef806fbfe0a75ff0349bff4022adefbd130da6",
       "contentSize": "9045 B"
+    },
+    {
+      "@id": "provenance.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "provenance.json",
+      "encodingFormat": "application/json",
+      "sha256": "a62486e354f62dfe5e9594620ca65628c17cf8744c326fe9cd22526bea8f0e4f",
+      "contentSize": "11062 B"
+    },
+    {
+      "@id": "provenance_facts.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "provenance_facts.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "9821168c4f481ab6a6d332852eda29872abd46e2db8134845ad097c74bec8824",
+      "contentSize": "2608 B"
+    },
+    {
+      "@id": "provenance_acquisitions.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "provenance_acquisitions.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "7b4c9a0df8777eaa90a3f163429e7aeac1a584fe2b781eaf535227e0efdba2f5",
+      "contentSize": "7057 B"
+    },
+    {
+      "@id": "provenance_bindings.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "provenance_bindings.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "d063bae4aef7e49e587e5de8327cc6c1895979daca8ef845808ac4f3ba280d3d",
+      "contentSize": "2344 B"
+    },
+    {
+      "@id": "provenance_binding_facts.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "provenance_binding_facts.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "12ffaf915fee7ba0fbae87c5f205b01fa6382e02be91a4c56cf78de4d121e065",
+      "contentSize": "1379 B"
+    },
+    {
+      "@id": "provenance_external_inputs.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "provenance_external_inputs.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "703507c57788e5838084e9ed5933c77b8c4a47c9a1fb34380bee5084137eae52",
+      "contentSize": "1561 B"
     }
   ],
   "recordSet": [
@@ -87,7 +140,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_identity"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.provider_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -103,7 +160,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_identity"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.name",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -119,7 +180,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_rivretrieve_carrier"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.live_stations",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -135,7 +200,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_rivretrieve_carrier"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.live_products",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -151,7 +220,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_rivretrieve_carrier"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.live_station_products",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -167,7 +240,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_rivretrieve_carrier"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.bulk_observations",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -183,7 +260,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_rivretrieve_carrier"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.catalogue_version",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -199,7 +280,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_license"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.license",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -215,10 +300,21 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/provider_citation"
+            "@type": "sc:CreativeWork",
+            "identifier": "provider.citation",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         }
-      ]
+      ],
+      "subjectOf": {
+        "@type": "sc:CreativeWork",
+        "identifier": "provider",
+        "name": "Exact catalogue fact locator relation",
+        "url": "provenance_facts.parquet",
+        "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
+      }
     },
     {
       "@id": "products",
@@ -237,7 +333,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.provider_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -253,7 +353,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.product_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -269,7 +373,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.observed_property",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -285,7 +393,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.frequency",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -301,7 +413,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.statistic",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -317,7 +433,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.period_type",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -333,7 +453,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.period_anchor",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -349,7 +473,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.unit",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -365,10 +493,21 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "product.native_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         }
-      ]
+      ],
+      "subjectOf": {
+        "@type": "sc:CreativeWork",
+        "identifier": "product",
+        "name": "Exact catalogue fact locator relation",
+        "url": "provenance_facts.parquet",
+        "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
+      }
     },
     {
       "@id": "stations",
@@ -387,7 +526,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station.provider_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           },
           "description": "RivRetrieve-authored provider identity jp_mlit."
         },
@@ -404,7 +547,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station.station_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           },
           "description": "Native column 観測所記号; conversion identity."
         },
@@ -421,7 +568,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station.latitude",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           },
           "description": "Native column 世界測地系; conversion jp_mlit.world_geodetic_dms."
         },
@@ -438,7 +589,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station.longitude",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           },
           "description": "Native column 世界測地系; conversion jp_mlit.world_geodetic_dms."
         },
@@ -455,7 +610,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station.crs",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           },
           "description": "Not published; evidence http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010.",
           "rr:absence": {
@@ -463,7 +622,14 @@
             "evidence": "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"
           }
         }
-      ]
+      ],
+      "subjectOf": {
+        "@type": "sc:CreativeWork",
+        "identifier": "station",
+        "name": "Exact catalogue fact locator relation",
+        "url": "provenance_facts.parquet",
+        "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
+      }
     },
     {
       "@id": "station_products",
@@ -482,7 +648,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.provider_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -498,7 +668,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.station_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -514,7 +688,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.product_id",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -530,7 +708,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.availability",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -546,7 +728,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.availability_reason",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -562,7 +748,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.published_record_start_date",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -578,7 +768,11 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.published_record_end_date",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
         },
         {
@@ -594,351 +788,550 @@
             }
           },
           "subjectOf": {
-            "@id": "lineage/station_product_catalogue"
+            "@type": "sc:CreativeWork",
+            "identifier": "station_product.last_catalogue_check",
+            "url": "provenance_facts.parquet",
+            "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
+            "description": "Select the exact name key in provenance_facts."
           }
+        }
+      ],
+      "subjectOf": {
+        "@type": "sc:CreativeWork",
+        "identifier": "station_product",
+        "name": "Exact catalogue fact locator relation",
+        "url": "provenance_facts.parquet",
+        "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
+      }
+    },
+    {
+      "@id": "provenance_facts",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provenance_facts/fact_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "fact_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_facts/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        },
+        {
+          "@id": "provenance_facts/carrier",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "carrier"
+            }
+          }
+        },
+        {
+          "@id": "provenance_facts/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_facts/product_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "product_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_facts/locator_role",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "locator_role"
+            }
+          }
+        }
+      ],
+      "key": [
+        {
+          "@id": "provenance_facts/fact_id"
+        }
+      ]
+    },
+    {
+      "@id": "provenance_acquisitions",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provenance_acquisitions/acquisition_key",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "acquisition_key"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/source_ordinal",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "source_ordinal"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/acquisition_ordinal",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "acquisition_ordinal"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/acquisition_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "acquisition_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/method",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "method"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/instant_type",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "instant_type"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/description_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "description_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/requested_from",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "requested_from"
+            }
+          },
+          "isArray": true,
+          "arrayShape": "-1"
+        },
+        {
+          "@id": "provenance_acquisitions/retrieved_at_start",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "retrieved_at_start"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/retrieved_at_end",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "retrieved_at_end"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/recording_ids",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "recording_ids"
+            }
+          },
+          "isArray": true,
+          "arrayShape": "-1"
+        },
+        {
+          "@id": "provenance_acquisitions/material_filename",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "material_filename"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/material_sha256",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "material_sha256"
+            }
+          }
+        },
+        {
+          "@id": "provenance_acquisitions/material_byte_count",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "material_byte_count"
+            }
+          }
+        }
+      ],
+      "key": [
+        {
+          "@id": "provenance_acquisitions/acquisition_key"
+        }
+      ]
+    },
+    {
+      "@id": "provenance_bindings",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provenance_bindings/binding_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_bindings.parquet"
+            },
+            "extract": {
+              "column": "binding_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_bindings/fact_group",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_bindings.parquet"
+            },
+            "extract": {
+              "column": "fact_group"
+            }
+          }
+        },
+        {
+          "@id": "provenance_bindings/source_ordinal",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_bindings.parquet"
+            },
+            "extract": {
+              "column": "source_ordinal"
+            }
+          }
+        },
+        {
+          "@id": "provenance_bindings/acquisition_key",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_bindings.parquet"
+            },
+            "extract": {
+              "column": "acquisition_key"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_acquisitions.parquet"
+            },
+            "extract": {
+              "column": "acquisition_key"
+            }
+          }
+        },
+        {
+          "@id": "provenance_bindings/transformation_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_bindings.parquet"
+            },
+            "extract": {
+              "column": "transformation_id"
+            }
+          }
+        }
+      ],
+      "key": [
+        {
+          "@id": "provenance_bindings/binding_id"
+        }
+      ]
+    },
+    {
+      "@id": "provenance_binding_facts",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provenance_binding_facts/binding_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_binding_facts.parquet"
+            },
+            "extract": {
+              "column": "binding_id"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_bindings.parquet"
+            },
+            "extract": {
+              "column": "binding_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_binding_facts/position",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_binding_facts.parquet"
+            },
+            "extract": {
+              "column": "position"
+            }
+          }
+        },
+        {
+          "@id": "provenance_binding_facts/fact_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_binding_facts.parquet"
+            },
+            "extract": {
+              "column": "fact_id"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "fact_id"
+            }
+          }
+        }
+      ],
+      "key": [
+        {
+          "@id": "provenance_binding_facts/binding_id"
+        },
+        {
+          "@id": "provenance_binding_facts/position"
+        }
+      ]
+    },
+    {
+      "@id": "provenance_external_inputs",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "provenance_external_inputs/binding_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_external_inputs.parquet"
+            },
+            "extract": {
+              "column": "binding_id"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_bindings.parquet"
+            },
+            "extract": {
+              "column": "binding_id"
+            }
+          }
+        },
+        {
+          "@id": "provenance_external_inputs/position",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_external_inputs.parquet"
+            },
+            "extract": {
+              "column": "position"
+            }
+          }
+        },
+        {
+          "@id": "provenance_external_inputs/source_ordinal",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_external_inputs.parquet"
+            },
+            "extract": {
+              "column": "source_ordinal"
+            }
+          }
+        },
+        {
+          "@id": "provenance_external_inputs/fact_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "source": {
+            "fileObject": {
+              "@id": "provenance_external_inputs.parquet"
+            },
+            "extract": {
+              "column": "fact_id"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "fact_id"
+            }
+          }
+        }
+      ],
+      "key": [
+        {
+          "@id": "provenance_external_inputs/binding_id"
+        },
+        {
+          "@id": "provenance_external_inputs/position"
         }
       ]
     }
   ],
-  "subjectOf": [
-    {
-      "@id": "issuer/jp_mlit",
-      "@type": "sc:CreativeWork",
-      "identifier": "jp_mlit",
-      "name": "Recorded material issued by Ministry of Land, Infrastructure, Transport and Tourism",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "Ministry of Land, Infrastructure, Transport and Tourism"
-      },
-      "hasPart": [
-        {
-          "@id": "acquisition/jp_mlit/station_register_capture_2026_08_02",
-          "@type": "sc:CreativeWork",
-          "identifier": "station_register_capture_2026_08_02",
-          "name": "http_campaign",
-          "description": "1,024 requests seeded by the legacy packaged station identifiers; 1,023 accepted MLIT station-detail responses and one source-confirmed absence",
-          "creator": {
-            "@type": "sc:Organization",
-            "name": "Ministry of Land, Infrastructure, Transport and Tourism"
-          },
-          "license": "水文水質データベースをご利用いただく際、掲載しているデータの利用について、許可等は必要ありません。 「公共データ利用規約（第1.0版）」に従い、データをご利用ください。",
-          "citation": "出典： 国土交通省 水文水質データベース （https://www1.river.go.jp/）（○年○月○日に参 照）、PDL1.0（http://www1.river.go.jp/）",
-          "provider": {
-            "@type": "sc:Organization",
-            "name": "MLIT Water Information System"
-          },
-          "url": [
-            "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=<station_id>"
-          ],
-          "subjectOf": {
-            "@type": "sc:Event",
-            "name": "retrieval_interval",
-            "description": "1,024 requests seeded by the legacy packaged station identifiers; 1,023 accepted MLIT station-detail responses and one source-confirmed absence",
-            "startDate": "2026-08-02T19:35:42+00:00",
-            "endDate": "2026-08-02T19:50:45+00:00"
-          }
-        },
-        {
-          "@id": "acquisition/jp_mlit/license_terms_capture_2026_08_21",
-          "@type": "sc:CreativeWork",
-          "identifier": "license_terms_capture_2026_08_21",
-          "name": "http_request",
-          "description": "MLIT Water Information System terms page EUC-JP HTML recording",
-          "creator": {
-            "@type": "sc:Organization",
-            "name": "Ministry of Land, Infrastructure, Transport and Tourism"
-          },
-          "license": "水文水質データベースをご利用いただく際、掲載しているデータの利用について、許可等は必要ありません。 「公共データ利用規約（第1.0版）」に従い、データをご利用ください。",
-          "citation": "出典： 国土交通省 水文水質データベース （https://www1.river.go.jp/）（○年○月○日に参 照）、PDL1.0（http://www1.river.go.jp/）",
-          "provider": {
-            "@type": "sc:Organization",
-            "name": "MLIT Water Information System"
-          },
-          "url": [
-            "http://www1.river.go.jp/caution.html"
-          ],
-          "subjectOf": {
-            "@type": "sc:Event",
-            "name": "retrieval",
-            "description": "MLIT Water Information System terms page EUC-JP HTML recording",
-            "startDate": "2026-08-21T09:46:54+00:00"
-          }
-        },
-        {
-          "@id": "acquisition/jp_mlit/citation_terms_capture_2026_08_21",
-          "@type": "sc:CreativeWork",
-          "identifier": "citation_terms_capture_2026_08_21",
-          "name": "http_request",
-          "description": "MLIT Public Data License 1.0 citation PDF recording",
-          "creator": {
-            "@type": "sc:Organization",
-            "name": "Ministry of Land, Infrastructure, Transport and Tourism"
-          },
-          "license": "水文水質データベースをご利用いただく際、掲載しているデータの利用について、許可等は必要ありません。 「公共データ利用規約（第1.0版）」に従い、データをご利用ください。",
-          "citation": "出典： 国土交通省 水文水質データベース （https://www1.river.go.jp/）（○年○月○日に参 照）、PDL1.0（http://www1.river.go.jp/）",
-          "provider": {
-            "@type": "sc:Organization",
-            "name": "MLIT Water Information System"
-          },
-          "url": [
-            "http://www1.river.go.jp/WDBrules_20251210.pdf"
-          ],
-          "subjectOf": {
-            "@type": "sc:Event",
-            "name": "retrieval",
-            "description": "MLIT Public Data License 1.0 citation PDF recording",
-            "startDate": "2026-08-21T09:47:00+00:00"
-          }
-        },
-        {
-          "@id": "acquisition/jp_mlit/observation_contract_capture_2026_09_02",
-          "@type": "sc:CreativeWork",
-          "identifier": "observation_contract_capture_2026_09_02",
-          "name": "http_campaign",
-          "description": "Four official KIND chains captured exact EUC-JP HTML and publisher-minted Shift-JIS DAT responses establishing quantity, cadence, labels, units, and native flag legends",
-          "creator": {
-            "@type": "sc:Organization",
-            "name": "Ministry of Land, Infrastructure, Transport and Tourism"
-          },
-          "license": "水文水質データベースをご利用いただく際、掲載しているデータの利用について、許可等は必要ありません。 「公共データ利用規約（第1.0版）」に従い、データをご利用ください。",
-          "citation": "出典： 国土交通省 水文水質データベース （https://www1.river.go.jp/）（○年○月○日に参 照）、PDL1.0（http://www1.river.go.jp/）",
-          "provider": {
-            "@type": "sc:Organization",
-            "name": "MLIT Water Information System"
-          },
-          "url": [
-            "http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
-            "http://www1.river.go.jp/dat/dload/download/published-file.dat"
-          ],
-          "subjectOf": {
-            "@type": "sc:Event",
-            "name": "retrieval_interval",
-            "description": "Four official KIND chains captured exact EUC-JP HTML and publisher-minted Shift-JIS DAT responses establishing quantity, cadence, labels, units, and native flag legends",
-            "startDate": "2026-09-02T15:38:50.958378+00:00",
-            "endDate": "2026-09-02T15:38:58.658831+00:00"
-          }
-        },
-        {
-          "@id": "acquisition/jp_mlit/observation_request",
-          "@type": "sc:CreativeWork",
-          "identifier": "observation_request",
-          "name": "runtime_http_request",
-          "description": "Observation requests retain ordered EUC-JP HTML and publisher-minted Shift-JIS DAT calls; KIND 2/3/6/7 titles establish quantity and cadence but not a mean statistic, anchor, or zone",
-          "creator": {
-            "@type": "sc:Organization",
-            "name": "Ministry of Land, Infrastructure, Transport and Tourism"
-          },
-          "license": "水文水質データベースをご利用いただく際、掲載しているデータの利用について、許可等は必要ありません。 「公共データ利用規約（第1.0版）」に従い、データをご利用ください。",
-          "citation": "出典： 国土交通省 水文水質データベース （https://www1.river.go.jp/）（○年○月○日に参 照）、PDL1.0（http://www1.river.go.jp/）",
-          "provider": {
-            "@type": "sc:Organization",
-            "name": "MLIT Water Information System"
-          },
-          "url": [
-            "http://www1.river.go.jp/cgi-bin/DspWaterData.exe",
-            "http://www1.river.go.jp/dat/dload/download/published-file.dat"
-          ],
-          "subjectOf": {
-            "@type": "sc:Event",
-            "name": "runtime",
-            "description": "Observation requests retain ordered EUC-JP HTML and publisher-minted Shift-JIS DAT calls; KIND 2/3/6/7 titles establish quantity and cadence but not a mean statistic, anchor, or zone"
-          }
-        }
-      ],
-      "license": "水文水質データベースをご利用いただく際、掲載しているデータの利用について、許可等は必要ありません。 「公共データ利用規約（第1.0版）」に従い、データをご利用ください。",
-      "citation": "出典： 国土交通省 水文水質データベース （https://www1.river.go.jp/）（○年○月○日に参 照）、PDL1.0（http://www1.river.go.jp/）"
-    },
-    {
-      "@id": "lineage/mlit_service_identity",
-      "@type": "sc:CreativeWork",
-      "identifier": "mlit_service_identity",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/0",
-      "isBasedOn": [
-        {
-          "@id": "acquisition/jp_mlit/station_register_capture_2026_08_02"
-        }
-      ],
-      "description": "mlit_service_identity"
-    },
-    {
-      "@id": "lineage/provider_identity",
-      "@type": "sc:CreativeWork",
-      "identifier": "provider_identity",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/5",
-      "description": "MLIT service identity to RivRetrieve provider identity carrier",
-      "isBasedOn": [
-        {
-          "@id": "lineage/mlit_service_identity"
-        }
-      ]
-    },
-    {
-      "@id": "lineage/provider_rivretrieve_carrier",
-      "@type": "sc:CreativeWork",
-      "identifier": "provider_rivretrieve_carrier",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/6",
-      "description": "RivRetrieve Japan provider carrier semantics"
-    },
-    {
-      "@id": "lineage/mlit_license_terms",
-      "@type": "sc:CreativeWork",
-      "identifier": "mlit_license_terms",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/1",
-      "isBasedOn": [
-        {
-          "@id": "acquisition/jp_mlit/license_terms_capture_2026_08_21"
-        }
-      ],
-      "description": "mlit_license_terms"
-    },
-    {
-      "@id": "lineage/provider_license",
-      "@type": "sc:CreativeWork",
-      "identifier": "provider_license",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/7",
-      "description": "MLIT exact licence terms to RivRetrieve provider license carrier",
-      "isBasedOn": [
-        {
-          "@id": "lineage/mlit_license_terms"
-        }
-      ]
-    },
-    {
-      "@id": "lineage/mlit_citation_instruction",
-      "@type": "sc:CreativeWork",
-      "identifier": "mlit_citation_instruction",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/2",
-      "isBasedOn": [
-        {
-          "@id": "acquisition/jp_mlit/citation_terms_capture_2026_08_21"
-        }
-      ],
-      "description": "mlit_citation_instruction"
-    },
-    {
-      "@id": "lineage/provider_citation",
-      "@type": "sc:CreativeWork",
-      "identifier": "provider_citation",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/8",
-      "description": "MLIT exact citation instruction to RivRetrieve provider citation carrier",
-      "isBasedOn": [
-        {
-          "@id": "lineage/mlit_citation_instruction"
-        }
-      ]
-    },
-    {
-      "@id": "lineage/mlit_product_kind_semantics",
-      "@type": "sc:CreativeWork",
-      "identifier": "mlit_product_kind_semantics",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/3",
-      "isBasedOn": [
-        {
-          "@id": "acquisition/jp_mlit/observation_contract_capture_2026_09_02"
-        }
-      ],
-      "description": "mlit_product_kind_semantics"
-    },
-    {
-      "@id": "lineage/product_catalogue",
-      "@type": "sc:CreativeWork",
-      "identifier": "product_catalogue",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/9",
-      "description": "MLIT native KIND semantics to RivRetrieve product carrier",
-      "isBasedOn": [
-        {
-          "@id": "lineage/mlit_product_kind_semantics"
-        }
-      ]
-    },
-    {
-      "@id": "lineage/mlit_station_catalogue_inputs",
-      "@type": "sc:CreativeWork",
-      "identifier": "mlit_station_catalogue_inputs",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/4",
-      "isBasedOn": [
-        {
-          "@id": "acquisition/jp_mlit/station_register_capture_2026_08_02"
-        }
-      ],
-      "description": "mlit_station_catalogue_inputs"
-    },
-    {
-      "@id": "lineage/station_catalogue",
-      "@type": "sc:CreativeWork",
-      "identifier": "station_catalogue",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/10",
-      "description": "MLIT station register fields to RivRetrieve station carrier",
-      "isBasedOn": [
-        {
-          "@id": "lineage/mlit_station_catalogue_inputs"
-        }
-      ]
-    },
-    {
-      "@id": "lineage/station_product_catalogue",
-      "@type": "sc:CreativeWork",
-      "identifier": "station_product_catalogue",
-      "creator": {
-        "@type": "sc:Organization",
-        "name": "RivRetrieve"
-      },
-      "url": "provenance.json#/fact_bindings/11",
-      "description": "MLIT station and product facts to RivRetrieve station-product carrier",
-      "isBasedOn": [
-        {
-          "@id": "lineage/mlit_product_kind_semantics"
-        },
-        {
-          "@id": "lineage/mlit_station_catalogue_inputs"
-        }
-      ]
-    }
-  ],
+  "subjectOf": {
+    "@type": "sc:CreativeWork",
+    "url": "provenance.json",
+    "name": "Issuing sources, exact statements and evidence declarations",
+    "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
+  },
   "version": "2026-08-02",
   "datePublished": "2026-08-02",
   "isBasedOn": {

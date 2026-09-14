@@ -811,6 +811,11 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
     }
 
 
@@ -838,6 +843,11 @@ def test_fresh_build_matches_all_committed_artefact_bytes(tmp_path: Path) -> Non
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
         "croissant.json",
     ):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

@@ -38,6 +38,11 @@ def test_pl_imgw_station_products_and_artifacts() -> None:
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
     }
 
 

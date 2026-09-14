@@ -12,10 +12,12 @@ from rivretrieve._internal.acquisition_provenance import (
     verified_provider_terms,
     verified_source_terms,
 )
+from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.registry import UnknownProviderError
+from tests._provenance import legacy_document
 
 _ROOT = Path(__file__).parents[1]
 _PROVIDERS = _ROOT / "src/rivretrieve/_internal/providers"
@@ -43,9 +45,9 @@ def test_recorded_usgs_fetch_carries_exact_verified_source_words(monkeypatch: py
         end="2020-07-01T23:00:00",
         on_issue="ignore",
     )
-    source = AcquisitionProvenance.model_validate_json(
-        (_PROVIDERS / "usgs_nwis/catalogue/provenance.json").read_text()
-    ).source_records[0]
+    evidence = load_packaged_catalogue_artifact(_PROVIDERS / "usgs_nwis/catalogue").acquisition_provenance
+    assert evidence is not None
+    source = evidence.header.source_records[0]
     expected = {statement.kind: statement.exact_text for statement in source.statements}
     assert result.provenance.license == expected["license"]
     assert result.provenance.citation == expected["citation"]
@@ -54,8 +56,8 @@ def test_recorded_usgs_fetch_carries_exact_verified_source_words(monkeypatch: py
 
 
 def test_verified_terms_do_not_combine_issuers_or_rewrite_conflicts() -> None:
-    source = AcquisitionProvenance.model_validate_json(
-        (_PROVIDERS / "usgs_nwis/catalogue/provenance.json").read_text()
+    source = AcquisitionProvenance.model_validate(
+        legacy_document(_PROVIDERS / "usgs_nwis/catalogue/provenance.json")
     ).source_records[0]
     assert verified_source_terms(()) == {}
     assert verified_source_terms((source, source.model_copy(update={"issuer": "Another issuer"}))) == {}
@@ -64,19 +66,17 @@ def test_verified_terms_do_not_combine_issuers_or_rewrite_conflicts() -> None:
     conflicting = source.model_copy(update={"statements": (statement,)})
     with pytest.raises(FatalContractError, match="Conflicting verified"):
         verified_source_terms((source, conflicting))
-    private = AcquisitionProvenance.model_validate_json((_PROVIDERS / "pl_imgw/catalogue/provenance.json").read_text())
+    private = AcquisitionProvenance.model_validate(legacy_document(_PROVIDERS / "pl_imgw/catalogue/provenance.json"))
     assert verified_source_terms(private.source_records) == {}
 
 
 def test_provider_terms_do_not_promote_an_explicit_absence_or_unbound_statement() -> None:
-    provenance = AcquisitionProvenance.model_validate_json(
-        (_PROVIDERS / "pl_imgw/catalogue/provenance.json").read_text()
-    )
+    provenance = AcquisitionProvenance.model_validate(legacy_document(_PROVIDERS / "pl_imgw/catalogue/provenance.json"))
     assert verified_provider_terms(provenance.source_records, provenance.fact_bindings, provenance.withheld_facts) == {}
     imgw = next(source for source in provenance.source_records if source.source_id == "sr.pl.imgw")
     assert set(verified_source_terms((imgw,))) == {"license", "citation"}
     assert verified_provider_terms((imgw,), (), ()) == {}
-    brazil = AcquisitionProvenance.model_validate_json((_PROVIDERS / "br_ana/catalogue/provenance.json").read_text())
+    brazil = AcquisitionProvenance.model_validate(legacy_document(_PROVIDERS / "br_ana/catalogue/provenance.json"))
     assert "license" in verified_source_terms(brazil.source_records)
     assert verified_provider_terms(brazil.source_records, brazil.fact_bindings, brazil.withheld_facts) == {}
 

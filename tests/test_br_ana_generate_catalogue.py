@@ -13,6 +13,7 @@ from rivretrieve._internal.catalogues.schemas import (
     STATION_PRODUCT_CATALOG_SCHEMA,
 )
 from rivretrieve._internal.providers.br_ana.generate_catalogue import generate_catalogue_from_fixture
+from tests._provenance import legacy_document
 
 _METADATA_FIXTURE = Path(__file__).parent / "test_data" / "br_ana_metadata.json"
 
@@ -76,7 +77,7 @@ def test_projected_national_artifacts_have_pinned_complete_content() -> None:
     assert pl.read_parquet(catalogue / "products.parquet").is_empty()
     assert pl.read_parquet(catalogue / "stations.parquet").is_empty()
     assert pl.read_parquet(catalogue / "station_products.parquet").is_empty()
-    provenance = json.loads((catalogue / "provenance.json").read_text(encoding="utf-8"))
+    provenance = legacy_document(catalogue / "provenance.json")
     assert provenance["native_table"] is None
     assert {statement["kind"] for source in provenance["source_records"] for statement in source["statements"]} == {
         "license"

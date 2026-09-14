@@ -40,7 +40,7 @@ def test_bosnia_loader_admits_acquired_baseline_without_withholding() -> None:
     assert artifact.stations.height == 60
     assert artifact.station_products.height == 180
     assert artifact.acquisition_provenance is not None
-    assert artifact.acquisition_provenance.withheld_facts == ()
+    assert artifact.acquisition_provenance.header.withheld_facts == ()
 
 
 def test_france_loader_admits_all_evidenced_baseline_pairs() -> None:
@@ -48,7 +48,7 @@ def test_france_loader_admits_all_evidenced_baseline_pairs() -> None:
     assert artifact.stations.height == 7_323
     assert artifact.station_products.height == 33_139
     assert artifact.acquisition_provenance is not None
-    assert not artifact.acquisition_provenance.withheld_facts
+    assert not artifact.acquisition_provenance.header.withheld_facts
 
 
 def test_thailand_loader_retains_every_acquired_pair() -> None:
@@ -57,16 +57,16 @@ def test_thailand_loader_retains_every_acquired_pair() -> None:
     assert artifact.station_products.height == 1650
     assert set(artifact.station_products["station_id"]) == set(artifact.stations["station_id"])
     assert artifact.acquisition_provenance is not None
-    assert artifact.acquisition_provenance.withheld_facts == ()
+    assert artifact.acquisition_provenance.header.withheld_facts == ()
 
 
 def test_public_find_admits_previously_withheld_baseline_stations() -> None:
     for provider_id, station_id in (("ba_fhmzbih", "1010"), ("fr_hubeau", "01010000")):
         selection = rr.find(provider=provider_id, station=station_id)
         assert selection.series
-        assert not selection.acquisition_provenance[0].withheld_facts
+        assert not selection.acquisition_provenance[0].header.withheld_facts
 
     selection = rr.find(provider="th_thaiwater", station="1", product="stage_reported")
     assert rr.as_frame(selection).height == 1
     provenance = selection.acquisition_provenance[0]
-    assert provenance.withheld_facts == ()
+    assert provenance.header.withheld_facts == ()

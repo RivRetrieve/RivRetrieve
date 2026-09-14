@@ -687,6 +687,11 @@ def test_native_cli_writes_five_artifacts_without_touching_native(tmp_path: Path
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
     }
 
 

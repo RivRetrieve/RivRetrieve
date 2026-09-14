@@ -41,6 +41,13 @@ from rivretrieve._internal.providers.pl_imgw.origins import (
     STATION_CATALOGUE_ORIGINS,
     build_acquisition_provenance,
 )
+from tests._provenance import (
+    assert_evidence_equal,
+    legacy_document,
+    remove_binding_fact,
+    remove_external_inputs,
+    write_evidence_table,
+)
 
 CATALOGUE = Path("src/rivretrieve/_internal/providers/pl_imgw/catalogue")
 NATIVE = CATALOGUE / "native.parquet"
@@ -175,12 +182,26 @@ def test_packaged_poland_rejects_absence_marker_carrier_mismatches(tmp_path: Pat
 def test_packaged_poland_rejects_external_direct_canonical_station_ownership(tmp_path: Path) -> None:
     mutated = tmp_path / "catalogue"
     shutil.copytree(CATALOGUE, mutated)
-    document = json.loads((mutated / "provenance.json").read_text())
-    binding = next(item for item in document["fact_bindings"] if item["fact_group"] == "rivretrieve_station_catalogue")
-    binding["source_id"] = "sr.pl.grdc"
-    binding["acquisition_id"] = "recovered_upstream_import_f67f6d8"
-    del binding["transformation"]
-    (mutated / "provenance.json").write_text(json.dumps(document))
+    header = json.loads((mutated / "provenance.json").read_text())
+    source_ordinal = next(i for i, source in enumerate(header["source_records"]) if source["source_id"] == "sr.pl.grdc")
+    acquisitions = pl.read_parquet(mutated / "provenance_acquisitions.parquet")
+    acquisition_key = acquisitions.filter(
+        (pl.col("source_ordinal") == source_ordinal) & (pl.col("acquisition_id") == "recovered_upstream_import_f67f6d8")
+    )["acquisition_key"].item()
+    remove_external_inputs(mutated, ("rivretrieve_station_catalogue",))
+    bindings = pl.read_parquet(mutated / "provenance_bindings.parquet")
+    changed = bindings.with_columns(
+        pl.when(pl.col("fact_group") == "rivretrieve_station_catalogue")
+        .then(pl.lit(value, dtype=pl.UInt32))
+        .otherwise(pl.col(name))
+        .alias(name)
+        for name, value in {
+            "source_ordinal": source_ordinal,
+            "acquisition_key": acquisition_key,
+            "transformation_id": None,
+        }.items()
+    )
+    write_evidence_table(mutated, "provenance_bindings.parquet", changed)
 
     with pytest.raises(CorruptCatalogArtifactError, match="external direct bindings must name source or native facts"):
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
@@ -245,7 +266,7 @@ def test_poland_terms_are_verified_in_real_generation_path(tmp_path: Path) -> No
     assert (
         generate_catalogue.main(["--native", str(NATIVE), "--out", str(tmp_path), "--terms-recording", str(TERMS)]) == 0
     )
-    provenance = json.loads((tmp_path / "provenance.json").read_text())
+    provenance = legacy_document(tmp_path / "provenance.json")
     imgw = next(source for source in provenance["source_records"] if source["source_id"] == "sr.pl.imgw")
     assert {statement["kind"] for statement in imgw["statements"]} == {"license", "citation"}
     grdc = next(source for source in provenance["source_records"] if source["source_id"] == "sr.pl.grdc")
@@ -410,7 +431,7 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
     generated = load_packaged_catalogue_artifact(output, on_issue="raise")
     assert generated.acquisition_provenance is not None
     grdc = next(
-        source for source in generated.acquisition_provenance.source_records if source.source_id == "sr.pl.grdc"
+        source for source in generated.acquisition_provenance.header.source_records if source.source_id == "sr.pl.grdc"
     )
     statement = grdc.statements[0]
     assert statement.verification_status == "verified_private_forwarded_copy"
@@ -421,7 +442,9 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
 def test_committed_poland_private_statement_is_redacted_forwarded_evidence() -> None:
     artifact = load_packaged_catalogue_artifact(declaration.catalogue, on_issue="raise")
     assert artifact.acquisition_provenance is not None
-    grdc = next(source for source in artifact.acquisition_provenance.source_records if source.source_id == "sr.pl.grdc")
+    grdc = next(
+        source for source in artifact.acquisition_provenance.header.source_records if source.source_id == "sr.pl.grdc"
+    )
     statement = grdc.statements[0]
     assert statement.verification_status == "verified_private_forwarded_copy"
     assert statement.private_verification is not None
@@ -433,11 +456,12 @@ def test_committed_poland_private_statement_is_redacted_forwarded_evidence() -> 
 def test_packaged_poland_provenance_propagates_without_frame_changes() -> None:
     artifact = load_packaged_catalogue_artifact(declaration.catalogue, on_issue="raise")
     assert artifact.acquisition_provenance is not None
-    assert len(artifact.acquisition_provenance.source_records) == 2
+    assert len(artifact.acquisition_provenance.header.source_records) == 2
     result = CatalogueReader(artifact, ProviderId("pl_imgw")).read_stations(on_issue="raise")
     selection = rr.find(provider="pl_imgw", station="149180010", product="discharge_daily_mean")
-    assert result.provenance.acquisition_provenance == artifact.acquisition_provenance
-    assert selection.acquisition_provenance == (artifact.acquisition_provenance,)
+    assert result.provenance.acquisition_provenance is artifact.acquisition_provenance
+    assert len(selection.acquisition_provenance) == 1
+    assert_evidence_equal(selection.acquisition_provenance[0], artifact.acquisition_provenance)
     assert rr.as_frame(selection).columns == [
         "provider_id",
         "station_id",
@@ -467,7 +491,7 @@ def test_poland_observation_result_propagates_two_sources_with_five_columns() ->
 
     assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
     assert result.provenance.acquisition_provenance is not None
-    assert [source.source_id for source in result.provenance.acquisition_provenance.source_records] == [
+    assert [source.source_id for source in result.provenance.acquisition_provenance.header.source_records] == [
         "sr.pl.imgw",
         "sr.pl.grdc",
     ]
@@ -483,11 +507,7 @@ def test_enrolled_poland_refuses_missing_provenance(tmp_path: Path) -> None:
 def test_packaged_poland_rejects_evidence_free_absence_markers(tmp_path: Path) -> None:
     mutated = tmp_path / "catalogue"
     shutil.copytree(CATALOGUE, mutated)
-    document = json.loads((mutated / "provenance.json").read_text())
-    for group in ("rivretrieve_provider_terms_compatibility", "rivretrieve_crs_knowledge_state"):
-        binding = next(item for item in document["fact_bindings"] if item["fact_group"] == group)
-        binding["transformation"]["external_inputs"] = []
-    (mutated / "provenance.json").write_text(json.dumps(document))
+    remove_external_inputs(mutated, ("rivretrieve_provider_terms_compatibility", "rivretrieve_crs_knowledge_state"))
     with pytest.raises(CorruptCatalogArtifactError, match="external inputs"):
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
 
@@ -496,8 +516,8 @@ def test_packaged_poland_rejects_exposed_withheld_provider_scalar(tmp_path: Path
     mutated = tmp_path / "catalogue"
     shutil.copytree(CATALOGUE, mutated)
     document = json.loads((mutated / "provenance.json").read_text())
-    provider_binding = next(item for item in document["fact_bindings"] if "provider.name" in item["facts"])
-    provider_binding["facts"].remove("provider.name")
+    remove_binding_fact(mutated, "provider.name")
+    document = json.loads((mutated / "provenance.json").read_text())
     document["withheld_facts"].append(
         {
             "fact_group": "withheld_provider_name",

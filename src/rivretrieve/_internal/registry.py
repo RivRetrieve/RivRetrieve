@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING, Protocol
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import verified_provider_terms
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+from rivretrieve._internal.catalogues.terms import verified_catalogue_terms
 from rivretrieve._internal.driver import ProviderStages, drive, drive_store
 from rivretrieve._internal.engine import CanonicalRowsSchema, ProductWindowDeclarations, ProviderConfig, RequestedWindow
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
@@ -86,11 +86,7 @@ class _ProviderHandle:
 
     def info(self) -> ProviderInfo:
         provenance = self._artifact.acquisition_provenance
-        terms = (
-            verified_provider_terms(provenance.source_records, provenance.fact_bindings, provenance.withheld_facts)
-            if provenance is not None
-            else {}
-        )
+        terms = verified_catalogue_terms(provenance) if provenance is not None else {}
         return replace(
             ProviderInfo.from_row(self._artifact.provider_info),
             license=terms.get("license"),

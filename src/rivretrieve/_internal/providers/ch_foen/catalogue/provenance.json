@@ -1,1 +1,208 @@
-{"schema_version":2,"provider_id":"ch_foen","native_table":{"repository_path":"src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet","revision":"7fe7997d95b7ba2efc294ed4c4bf5910c9f93950","sha256":"71b0a329568df9ad031339d3b77b4c692762c6feab6659c20751bebfbea18b48","byte_size":17765,"semantic_digest":null},"fact_universe":["source.provider.canonical_identity","source.station.native_identity","source.station.native_geometry","source.product.native_id","source.product.native_physics","source.observation.value","source.observation.quality","source.product.temporal_support_not_identified","source.station.crs_not_published","source.station_product.availability_not_published","source.observation.transport","observation.canonical_five_column_shape","source.provider.bafu_license_statement","source.provider.bafu_citation_statement","source.provider.existenz_terms_statement","source.provider.existenz_citation_statement","provider.provider_id","provider.name","provider.live_stations","provider.live_products","provider.live_station_products","provider.bulk_observations","provider.catalogue_version","provider.license","provider.citation","product.provider_id","product.product_id","product.observed_property","product.frequency","product.statistic","product.period_type","product.period_anchor","product.unit","product.native_id","station.provider_id","station.station_id","station.latitude","station.longitude","station.crs","station_product.provider_id","station_product.station_id","station_product.product_id","station_product.availability","station_product.availability_reason","station_product.published_record_start_date","station_product.published_record_end_date","station_product.last_catalogue_check"],"source_records":[{"source_id":"ch_bafu","issuer":"Federal Office for the Environment (BAFU/FOEN)","operator":null,"acquisitions":[{"acquisition_id":"existenz_catalogue_capture_2026_08_02","method":"http_request","instant_type":"retrieval","description":"Complete 246-station Existenz hydro locations response carrying BAFU data","requested_from":["https://api.existenz.ch/apiv1/hydro/locations"],"retrieved_at_start":"2026-08-02T00:14:31Z","retrieved_at_end":null,"recording_ids":[],"material":null},{"acquisition_id":"existenz_parameters_capture_2026_09_02","method":"http_request","instant_type":"retrieval","description":"Exact Existenz parameter dictionary response","requested_from":["https://api.existenz.ch/apiv1/hydro/parameters"],"retrieved_at_start":"2026-09-02T15:41:56.950701Z","retrieved_at_end":null,"recording_ids":["ch_foen_parameters_2026_09_02"],"material":null},{"acquisition_id":"existenz_observations_capture_2026_09_02","method":"http_request","instant_type":"retrieval_interval","description":"Exact recent REST and older Flux observation requests and responses","requested_from":["https://api.existenz.ch/apiv1/hydro/daterange","https://influx.konzept.space/api/v2/query"],"retrieved_at_start":"2026-09-02T15:42:05.306549Z","retrieved_at_end":"2026-09-02T16:47:23.700173Z","recording_ids":["ch_foen_rest_observations_2026_09_02","ch_foen_flux_observations_2026_09_02"],"material":null},{"acquisition_id":"bafu_terms_capture_2026_08_20","method":"http_request","instant_type":"retrieval","description":"BAFU hydrology terms and source-wording response","requested_from":["https://www.hydrodaten.admin.ch/de/fragen"],"retrieved_at_start":"2026-08-20T13:12:57Z","retrieved_at_end":null,"recording_ids":["ch_foen_terms_bafu"],"material":null},{"acquisition_id":"bafu_temporal_audit_2026_09_02","method":"http_request","instant_type":"retrieval_interval","description":"Official update-cadence and distinct temporal-product evidence","requested_from":["https://www.bafu.admin.ch/de/aktuelle-hydrologische-daten-beziehen","https://www.bafu.admin.ch/de/datenservice-hydrologie-fuer-fliessgewaesser-und-seen"],"retrieved_at_start":"2026-09-02T17:04:52.348247Z","retrieved_at_end":"2026-09-02T17:04:52.675158Z","recording_ids":["ch_foen_bafu_current_data_2026_09_02","ch_foen_bafu_data_service_2026_09_02"],"material":null}],"evidence":[{"evidence_id":"bafu_hydrology_terms","description":"BAFU hydrology terms and source wording","recording":{"recording_id":"ch_foen_terms_bafu","repository_path":"tests/test_data/ch_foen_terms_bafu.html","source_url":"https://www.hydrodaten.admin.ch/de/fragen","retrieved_at":"2026-08-20T13:12:57Z","media_type":"text/html; charset=utf-8","sha256":"d2ad98f7f12463cf9d67e0f72848185219557818814a5df02c86ed72138f7d66"}},{"evidence_id":"bafu_current_data_update_cadence","description":"Official current-data update cadence without exact Existenz temporal binding","recording":{"recording_id":"ch_foen_bafu_current_data_2026_09_02","repository_path":"tests/test_data/ch_foen_bafu_current_hydrological_data.html","source_url":"https://www.bafu.admin.ch/de/aktuelle-hydrologische-daten-beziehen","retrieved_at":"2026-09-02T17:04:52.348247Z","media_type":"text/html;charset=utf-8","sha256":"5aa90c7c311a155c1c3b9df7f5d403497fdb4552039ea24b6b787bdac601d94c"}},{"evidence_id":"bafu_continuous_data_product_variants","description":"Official distinct support-point and mean products","recording":{"recording_id":"ch_foen_bafu_data_service_2026_09_02","repository_path":"tests/test_data/ch_foen_bafu_hydrology_data_service.html","source_url":"https://www.bafu.admin.ch/de/datenservice-hydrologie-fuer-fliessgewaesser-und-seen","retrieved_at":"2026-09-02T17:04:52.675158Z","media_type":"text/html;charset=utf-8","sha256":"425dbcf44abca31b65061b0652f46d02b6750aefb16ade4da9471c9f0326f082"}},{"evidence_id":"existenz_parameter_dictionary","description":"Exact native fields and units carried for BAFU data","recording":{"recording_id":"ch_foen_parameters_2026_09_02","repository_path":"tests/test_data/ch_foen_parameters_2026-09-02.recording.json","source_url":"https://api.existenz.ch/apiv1/hydro/parameters","retrieved_at":"2026-09-02T15:41:56.950701Z","media_type":"application/vnd.rivretrieve.recording+json","sha256":"592c9fdee1992551d0a3eec01ed5150ccf3668ce1e9162c45e0b2c2bebeba0e4"}},{"evidence_id":"existenz_recent_observations","description":"Exact recent REST observation interaction","recording":{"recording_id":"ch_foen_rest_observations_2026_09_02","repository_path":"tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json","source_url":"https://api.existenz.ch/apiv1/hydro/daterange","retrieved_at":"2026-09-02T16:47:23.700173Z","media_type":"application/vnd.rivretrieve.recording+json","sha256":"68823a7be35d9cf435515522e2275b761d2a15a7ea28ec40b0b7eaa9bb9569bd"}},{"evidence_id":"existenz_flux_observations","description":"Exact older Flux observation interaction","recording":{"recording_id":"ch_foen_flux_observations_2026_09_02","repository_path":"tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json","source_url":"https://influx.konzept.space/api/v2/query","retrieved_at":"2026-09-02T15:42:05.306549Z","media_type":"application/vnd.rivretrieve.recording+json","sha256":"9b9007164e9e58e4c1d144d6db22dce6e6cab7984c91ab504022eea9c746e62c"}}],"statements":[{"kind":"license","exact_text":"Die Daten können frei genutzt werden. Die Angabe der Quelle wird empfohlen.","recording_id":"ch_foen_terms_bafu","fact":"source.provider.bafu_license_statement","verification_status":"verified_public_recording"},{"kind":"citation","exact_text":"Vorschlag für die Quellenangabe: Daten Oberflächengewässer: Abteilung Hydrologie, Bundesamt für Umwelt BAFU (Bezugsdatum).","recording_id":"ch_foen_terms_bafu","fact":"source.provider.bafu_citation_statement","verification_status":"verified_public_recording"}]},{"source_id":"ch_existenz","issuer":"Christian Studer, Bureau für digitale Existenz","operator":"api.existenz.ch","acquisitions":[{"acquisition_id":"existenz_catalogue_capture_2026_08_02","method":"http_request","instant_type":"retrieval","description":"Complete 246-station Existenz hydro locations response carrying BAFU data","requested_from":["https://api.existenz.ch/apiv1/hydro/locations"],"retrieved_at_start":"2026-08-02T00:14:31Z","retrieved_at_end":null,"recording_ids":[],"material":null},{"acquisition_id":"existenz_runtime_observation_surfaces","method":"runtime_http_request","instant_type":"runtime","description":"Recent REST and older Flux intermediary observation surfaces","requested_from":["https://api.existenz.ch/apiv1/hydro/daterange","https://influx.konzept.space/api/v2/query"],"retrieved_at_start":null,"retrieved_at_end":null,"recording_ids":[],"material":null},{"acquisition_id":"existenz_terms_capture_2026_08_20","method":"http_request","instant_type":"retrieval","description":"Existenz API conditions and BAFU credit response","requested_from":["https://api.existenz.ch/"],"retrieved_at_start":"2026-08-20T13:12:58Z","retrieved_at_end":null,"recording_ids":["ch_foen_terms_existenz"],"material":null}],"evidence":[{"evidence_id":"existenz_api_terms","description":"Intermediary API conditions and BAFU credit statement","recording":{"recording_id":"ch_foen_terms_existenz","repository_path":"tests/test_data/ch_foen_terms_existenz.html","source_url":"https://api.existenz.ch/","retrieved_at":"2026-08-20T13:12:58Z","media_type":"text/html; charset=UTF-8","sha256":"488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df"}}],"statements":[{"kind":"terms","exact_text":"These APIs with weather and water data for Switzerland are free for public and non-commercial use, lovingly handcrafted by Christian Studer (Bureau für digitale Existenz).","recording_id":"ch_foen_terms_existenz","fact":"source.provider.existenz_terms_statement","verification_status":"verified_public_recording"},{"kind":"citation","exact_text":"BAFU data needs to be credited and linked to the BAFU.","recording_id":"ch_foen_terms_existenz","fact":"source.provider.existenz_citation_statement","verification_status":"verified_public_recording"}]}],"fact_bindings":[{"fact_group":"bafu_terms_statements","facts":["source.provider.bafu_license_statement","source.provider.bafu_citation_statement"],"source_id":"ch_bafu","acquisition_id":"bafu_terms_capture_2026_08_20"},{"fact_group":"bafu_temporal_support_not_identified","facts":["source.product.temporal_support_not_identified"],"source_id":"ch_bafu","acquisition_id":"bafu_temporal_audit_2026_09_02"},{"fact_group":"existenz_terms_statements","facts":["source.provider.existenz_terms_statement","source.provider.existenz_citation_statement"],"source_id":"ch_existenz","acquisition_id":"existenz_terms_capture_2026_08_20"},{"fact_group":"bafu_station_values","facts":["source.provider.canonical_identity","source.station.native_identity","source.station.native_geometry"],"source_id":"ch_bafu","acquisition_id":"existenz_catalogue_capture_2026_08_02"},{"fact_group":"bafu_product_values","facts":["source.product.native_id","source.product.native_physics"],"source_id":"ch_bafu","acquisition_id":"existenz_parameters_capture_2026_09_02"},{"fact_group":"bafu_observation_values","facts":["source.observation.value","source.observation.quality"],"source_id":"ch_bafu","acquisition_id":"existenz_observations_capture_2026_09_02"},{"fact_group":"existenz_absence","facts":["source.station.crs_not_published","source.station_product.availability_not_published"],"source_id":"ch_existenz","acquisition_id":"existenz_catalogue_capture_2026_08_02"},{"fact_group":"existenz_transport","facts":["source.observation.transport"],"source_id":"ch_existenz","acquisition_id":"existenz_runtime_observation_surfaces"},{"fact_group":"canonical_observation_shape","facts":["observation.canonical_five_column_shape"],"source_id":null,"acquisition_id":null,"transformation":{"name":"BAFU observations to RivRetrieve five-column result shape","external_inputs":[{"source_id":"ch_bafu","fact":"source.observation.value"},{"source_id":"ch_bafu","fact":"source.observation.quality"}]}},{"fact_group":"canonical_bafu_catalogue_carrier","facts":["provider.provider_id","provider.name","provider.live_stations","provider.live_products","provider.live_station_products","provider.bulk_observations","provider.catalogue_version","provider.license","provider.citation","product.provider_id","product.product_id","product.observed_property","product.frequency","product.statistic","product.period_type","product.period_anchor","product.unit","product.native_id","station.provider_id","station.station_id","station.latitude","station.longitude"],"source_id":null,"acquisition_id":null,"transformation":{"name":"BAFU source facts to canonical provider, product, and station carriers","external_inputs":[{"source_id":"ch_bafu","fact":"source.provider.canonical_identity"},{"source_id":"ch_bafu","fact":"source.station.native_identity"},{"source_id":"ch_bafu","fact":"source.product.native_physics"},{"source_id":"ch_bafu","fact":"source.product.temporal_support_not_identified"}]}},{"fact_group":"canonical_existenz_catalogue_carrier","facts":["station.crs","station_product.provider_id","station_product.station_id","station_product.product_id","station_product.availability","station_product.availability_reason","station_product.published_record_start_date","station_product.published_record_end_date","station_product.last_catalogue_check"],"source_id":null,"acquisition_id":null,"transformation":{"name":"Existenz documented absence facts to canonical CRS and availability carriers","external_inputs":[{"source_id":"ch_existenz","fact":"source.station.crs_not_published"},{"source_id":"ch_existenz","fact":"source.station_product.availability_not_published"}]}}],"withheld_facts":[]}
+{
+  "schema_version": 3,
+  "provider_id": "ch_foen",
+  "native_table": {
+    "repository_path": "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "revision": "7fe7997d95b7ba2efc294ed4c4bf5910c9f93950",
+    "sha256": "71b0a329568df9ad031339d3b77b4c692762c6feab6659c20751bebfbea18b48",
+    "byte_size": 17765,
+    "semantic_digest": null
+  },
+  "source_records": [
+    {
+      "source_id": "ch_bafu",
+      "issuer": "Federal Office for the Environment (BAFU/FOEN)",
+      "operator": null,
+      "evidence": [
+        {
+          "evidence_id": "bafu_hydrology_terms",
+          "description": "BAFU hydrology terms and source wording",
+          "recording": {
+            "recording_id": "ch_foen_terms_bafu",
+            "repository_path": "tests/test_data/ch_foen_terms_bafu.html",
+            "source_url": "https://www.hydrodaten.admin.ch/de/fragen",
+            "retrieved_at": "2026-08-20T13:12:57Z",
+            "media_type": "text/html; charset=utf-8",
+            "sha256": "d2ad98f7f12463cf9d67e0f72848185219557818814a5df02c86ed72138f7d66"
+          }
+        },
+        {
+          "evidence_id": "bafu_current_data_update_cadence",
+          "description": "Official current-data update cadence without exact Existenz temporal binding",
+          "recording": {
+            "recording_id": "ch_foen_bafu_current_data_2026_09_02",
+            "repository_path": "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
+            "source_url": "https://www.bafu.admin.ch/de/aktuelle-hydrologische-daten-beziehen",
+            "retrieved_at": "2026-09-02T17:04:52.348247Z",
+            "media_type": "text/html;charset=utf-8",
+            "sha256": "5aa90c7c311a155c1c3b9df7f5d403497fdb4552039ea24b6b787bdac601d94c"
+          }
+        },
+        {
+          "evidence_id": "bafu_continuous_data_product_variants",
+          "description": "Official distinct support-point and mean products",
+          "recording": {
+            "recording_id": "ch_foen_bafu_data_service_2026_09_02",
+            "repository_path": "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
+            "source_url": "https://www.bafu.admin.ch/de/datenservice-hydrologie-fuer-fliessgewaesser-und-seen",
+            "retrieved_at": "2026-09-02T17:04:52.675158Z",
+            "media_type": "text/html;charset=utf-8",
+            "sha256": "425dbcf44abca31b65061b0652f46d02b6750aefb16ade4da9471c9f0326f082"
+          }
+        },
+        {
+          "evidence_id": "existenz_parameter_dictionary",
+          "description": "Exact native fields and units carried for BAFU data",
+          "recording": {
+            "recording_id": "ch_foen_parameters_2026_09_02",
+            "repository_path": "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
+            "source_url": "https://api.existenz.ch/apiv1/hydro/parameters",
+            "retrieved_at": "2026-09-02T15:41:56.950701Z",
+            "media_type": "application/vnd.rivretrieve.recording+json",
+            "sha256": "592c9fdee1992551d0a3eec01ed5150ccf3668ce1e9162c45e0b2c2bebeba0e4"
+          }
+        },
+        {
+          "evidence_id": "existenz_recent_observations",
+          "description": "Exact recent REST observation interaction",
+          "recording": {
+            "recording_id": "ch_foen_rest_observations_2026_09_02",
+            "repository_path": "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
+            "source_url": "https://api.existenz.ch/apiv1/hydro/daterange",
+            "retrieved_at": "2026-09-02T16:47:23.700173Z",
+            "media_type": "application/vnd.rivretrieve.recording+json",
+            "sha256": "68823a7be35d9cf435515522e2275b761d2a15a7ea28ec40b0b7eaa9bb9569bd"
+          }
+        },
+        {
+          "evidence_id": "existenz_flux_observations",
+          "description": "Exact older Flux observation interaction",
+          "recording": {
+            "recording_id": "ch_foen_flux_observations_2026_09_02",
+            "repository_path": "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
+            "source_url": "https://influx.konzept.space/api/v2/query",
+            "retrieved_at": "2026-09-02T15:42:05.306549Z",
+            "media_type": "application/vnd.rivretrieve.recording+json",
+            "sha256": "9b9007164e9e58e4c1d144d6db22dce6e6cab7984c91ab504022eea9c746e62c"
+          }
+        }
+      ],
+      "statements": [
+        {
+          "kind": "license",
+          "exact_text": "Die Daten können frei genutzt werden. Die Angabe der Quelle wird empfohlen.",
+          "recording_id": "ch_foen_terms_bafu",
+          "fact": "source.provider.bafu_license_statement",
+          "verification_status": "verified_public_recording"
+        },
+        {
+          "kind": "citation",
+          "exact_text": "Vorschlag für die Quellenangabe: Daten Oberflächengewässer: Abteilung Hydrologie, Bundesamt für Umwelt BAFU (Bezugsdatum).",
+          "recording_id": "ch_foen_terms_bafu",
+          "fact": "source.provider.bafu_citation_statement",
+          "verification_status": "verified_public_recording"
+        }
+      ]
+    },
+    {
+      "source_id": "ch_existenz",
+      "issuer": "Christian Studer, Bureau für digitale Existenz",
+      "operator": "api.existenz.ch",
+      "evidence": [
+        {
+          "evidence_id": "existenz_api_terms",
+          "description": "Intermediary API conditions and BAFU credit statement",
+          "recording": {
+            "recording_id": "ch_foen_terms_existenz",
+            "repository_path": "tests/test_data/ch_foen_terms_existenz.html",
+            "source_url": "https://api.existenz.ch/",
+            "retrieved_at": "2026-08-20T13:12:58Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df"
+          }
+        }
+      ],
+      "statements": [
+        {
+          "kind": "terms",
+          "exact_text": "These APIs with weather and water data for Switzerland are free for public and non-commercial use, lovingly handcrafted by Christian Studer (Bureau für digitale Existenz).",
+          "recording_id": "ch_foen_terms_existenz",
+          "fact": "source.provider.existenz_terms_statement",
+          "verification_status": "verified_public_recording"
+        },
+        {
+          "kind": "citation",
+          "exact_text": "BAFU data needs to be credited and linked to the BAFU.",
+          "recording_id": "ch_foen_terms_existenz",
+          "fact": "source.provider.existenz_citation_statement",
+          "verification_status": "verified_public_recording"
+        }
+      ]
+    }
+  ],
+  "descriptions": [
+    "Complete 246-station Existenz hydro locations response carrying BAFU data",
+    "Exact Existenz parameter dictionary response",
+    "Exact recent REST and older Flux observation requests and responses",
+    "BAFU hydrology terms and source-wording response",
+    "Official update-cadence and distinct temporal-product evidence",
+    "Recent REST and older Flux intermediary observation surfaces",
+    "Existenz API conditions and BAFU credit response"
+  ],
+  "transformations": [
+    {
+      "name": "BAFU observations to RivRetrieve five-column result shape",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "BAFU source facts to canonical provider, product, and station carriers",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Existenz documented absence facts to canonical CRS and availability carriers",
+      "kind": "derived_value",
+      "marker_value": null
+    }
+  ],
+  "withheld_facts": [],
+  "row_locator_requirements": [],
+  "files": {
+    "provenance_facts.parquet": {
+      "path": "provenance_facts.parquet",
+      "sha256": "8200c128fa73060614d4472f20beb95c3b6848b78d7c8233ea6ea26dce2cbd1d",
+      "byte_count": 2750,
+      "row_count": 47,
+      "schema_version": 3
+    },
+    "provenance_acquisitions.parquet": {
+      "path": "provenance_acquisitions.parquet",
+      "sha256": "2d03f197a2f8261f8f6881ee4dde978c76acbcdbbd040f66f24d4edb36e67d85",
+      "byte_count": 6983,
+      "row_count": 8,
+      "schema_version": 3
+    },
+    "provenance_bindings.parquet": {
+      "path": "provenance_bindings.parquet",
+      "sha256": "ad389d5c403b4e55f14224b2030dc52d3a978bd9d755526806dbd5b718fb27e7",
+      "byte_count": 2285,
+      "row_count": 11,
+      "schema_version": 3
+    },
+    "provenance_binding_facts.parquet": {
+      "path": "provenance_binding_facts.parquet",
+      "sha256": "e995f8e144d530923702ca781ff01a31774a39f9bded35b8bee07879440cf4c9",
+      "byte_count": 1371,
+      "row_count": 47,
+      "schema_version": 3
+    },
+    "provenance_external_inputs.parquet": {
+      "path": "provenance_external_inputs.parquet",
+      "sha256": "27d44fb1d2ab2fc079d516a4063ea6438f37b066ebb9b911d7515f6d966f6e09",
+      "byte_count": 1549,
+      "row_count": 8,
+      "schema_version": 3
+    }
+  }
+}

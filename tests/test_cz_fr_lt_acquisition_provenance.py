@@ -8,6 +8,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
 from rivretrieve._internal.issues import FatalContractError
+from tests._provenance import legacy_provenance
 
 
 @pytest.mark.parametrize(
@@ -25,6 +26,8 @@ def test_provider_provenance_is_packaged_and_terms_are_verified(
 ) -> None:
     selection = rr.find(provider=provider_id)
     provenance = selection.acquisition_provenance[0]
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
 
     assert provenance.provider_id == provider_id
     assert provenance.source_records[0].issuer == issuer
@@ -56,6 +59,8 @@ def test_production_provenance_rejects_changed_recording(
     shutil.copy2(Path("tests/test_data") / terms_file, evidence_dir / terms_file)
     (evidence_dir / terms_file).write_bytes((evidence_dir / terms_file).read_bytes() + b"changed")
     provenance = rr.find(provider=provider_id).acquisition_provenance[0]
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
 
     with pytest.raises(FatalContractError, match="source recording .* digest mismatch"):
         verify_provenance_recordings(provenance, tmp_path)
@@ -106,6 +111,8 @@ def test_native_cli_rejects_raw_byte_substitution(tmp_path: Path, provider_id: s
 
 def test_france_binds_official_publication_without_original_producer_overclaims() -> None:
     provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     assert not provenance.withheld_facts
     bound_station_facts = {
         fact for binding in provenance.fact_bindings for fact in binding.facts if fact.startswith("source.station.")
@@ -131,6 +138,8 @@ def test_france_binds_official_publication_without_original_producer_overclaims(
 
 def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
     provenance = rr.find(provider="lt_lhmt").acquisition_provenance[0]
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     runtime = next(
         acquisition
         for source in provenance.source_records
@@ -145,6 +154,8 @@ def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
 
 def test_france_temperature_openapi_is_bound_without_instantaneous_inference() -> None:
     provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     source = next(record for record in provenance.source_records if record.source_id == "fr_hubeau")
     evidence = next(item for item in source.evidence if item.evidence_id == "fr_hubeau_temperature_openapi")
     binding = next(item for item in provenance.fact_bindings if item.fact_group == "temperature_product_external")

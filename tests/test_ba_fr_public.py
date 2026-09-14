@@ -144,4 +144,4 @@ def test_france_unknown_pairs_remain_selectable(station, product):
     selection = rr.find(provider="fr_hubeau", station=station, product=product)
     assert len(selection.series) == 1
     assert selection.series[0].availability == "unknown"
-    assert not selection.acquisition_provenance[0].withheld_facts
+    assert not selection.acquisition_provenance[0].header.withheld_facts

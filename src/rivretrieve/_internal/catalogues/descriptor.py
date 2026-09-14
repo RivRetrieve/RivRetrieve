@@ -1,4 +1,4 @@
-"""catalogue descriptor : AcquisitionProvenance × OriginDeclarations × CatalogueFiles → JSONLD (pure); publication : JSONLD × DescriptorPath → File."""
+"""catalogue descriptor : CatalogueEvidence × OriginDeclarations × CatalogueFiles → JSONLD (pure); publication : JSONLD × DescriptorPath → File."""
 
 from __future__ import annotations
 
@@ -11,14 +11,7 @@ from typing import Literal, TypedDict
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import (
-    AcquisitionProvenance,
-    AcquisitionRecord,
-    FactBinding,
-    SourceRecord,
-    _catalogue_fact_identity,
-    verified_source_terms,
-)
+from rivretrieve._internal.acquisition_provenance import verified_source_terms
 from rivretrieve._internal.catalogue_origins import (
     Authored,
     Documented,
@@ -28,10 +21,68 @@ from rivretrieve._internal.catalogue_origins import (
     Withheld,
 )
 from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
-from rivretrieve._internal.catalogues.schemas import PROVIDER_INFO_CATALOG_SCHEMA
+from rivretrieve._internal.catalogues.evidence import EVIDENCE_FILENAMES, EVIDENCE_SCHEMAS, CatalogueEvidence
+from rivretrieve._internal.catalogues.schemas import PROVIDER_INFO_CATALOG_SCHEMA, CatalogueDtype
 from rivretrieve._internal.issues import FatalContractError
 
 ABSENCE_NAMESPACE = "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#"
+
+
+PROFILE_URI = "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
+
+
+def _fact_locator(fact: str) -> dict[str, object]:
+    return {
+        "@type": "sc:CreativeWork",
+        "identifier": fact,
+        "url": "provenance_facts.parquet",
+        "conformsTo": PROFILE_URI,
+        "description": "Select the exact name key in provenance_facts.",
+    }
+
+
+def _evidence_record_sets() -> list[dict[str, object]]:
+    keys = {
+        "facts": ("fact_id",),
+        "acquisitions": ("acquisition_key",),
+        "bindings": ("binding_id",),
+        "binding_facts": ("binding_id", "position"),
+        "external_inputs": ("binding_id", "position"),
+    }
+    targets = {"fact_id": "facts", "binding_id": "bindings", "acquisition_key": "acquisitions"}
+    records: list[dict[str, object]] = []
+    for relation, schema in EVIDENCE_SCHEMAS.items():
+        identity = f"provenance_{relation}"
+        fields: list[dict[str, object]] = []
+        for column, dtype in schema.items():
+            array = isinstance(dtype, pl.List)
+            field: dict[str, object] = {
+                "@id": f"{identity}/{column}",
+                "@type": "cr:Field",
+                "dataType": _data_type(
+                    pl.Schema({"item": dtype.inner})["item"] if isinstance(dtype, pl.List) else dtype
+                ),
+                "source": {"fileObject": _reference(EVIDENCE_FILENAMES[relation]), "extract": {"column": column}},
+            }
+            if array:
+                field.update(isArray=True, arrayShape="-1")
+            if column in targets and targets[column] != relation:
+                # Croissant's standard physical-column reference avoids the reference
+                # loader's cross-RecordSet generator join; the exact FK is unchanged.
+                field["references"] = {
+                    "fileObject": _reference(EVIDENCE_FILENAMES[targets[column]]),
+                    "extract": {"column": column},
+                }
+            fields.append(field)
+        records.append(
+            {
+                "@id": identity,
+                "@type": "cr:RecordSet",
+                "field": fields,
+                "key": [_reference(f"{identity}/{column}") for column in keys[relation]],
+            }
+        )
+    return records
 
 
 class WithheldAbsence(TypedDict):
@@ -57,7 +108,19 @@ def _context() -> dict[str, object]:
         "rr:absence": {"@id": "rr:absence", "@type": "@json"},
         **{
             name: f"cr:{name}"
-            for name in ("recordSet", "field", "source", "fileObject", "extract", "column", "jsonPath")
+            for name in (
+                "recordSet",
+                "field",
+                "source",
+                "fileObject",
+                "extract",
+                "column",
+                "jsonPath",
+                "references",
+                "key",
+                "isArray",
+                "arrayShape",
+            )
         },
     }
 
@@ -68,156 +131,6 @@ def _organization(name: str) -> dict[str, str]:
 
 def _reference(identity: str) -> dict[str, object]:
     return {"@id": identity}
-
-
-def _source_terms(source: SourceRecord) -> dict[str, object]:
-    terms: dict[str, object] = dict(verified_source_terms((source,)))
-    usage = [
-        {"@type": "sc:CreativeWork", "name": statement.kind, "text": statement.exact_text}
-        for statement in source.statements
-        if statement.kind in {"terms", "access"} and statement.verification_status == "verified_public_recording"
-    ]
-    if usage:
-        terms["usageInfo"] = usage
-    return terms
-
-
-def _source_identity(source: SourceRecord, acquisition: AcquisitionRecord) -> str:
-    return f"acquisition/{source.source_id}/{acquisition.acquisition_id}"
-
-
-def _acquired_material(source: SourceRecord, acquisition: AcquisitionRecord) -> dict[str, object]:
-    """Describe acquired material without turning a receipt into a download claim."""
-    node: dict[str, object] = {
-        "@id": _source_identity(source, acquisition),
-        "@type": "sc:MediaObject" if acquisition.material is not None else "sc:CreativeWork",
-        "identifier": acquisition.acquisition_id,
-        "name": acquisition.method,
-        "description": acquisition.description,
-        "creator": _organization(source.issuer),
-        **_source_terms(source),
-    }
-    if source.operator is not None:
-        node["provider"] = _organization(source.operator)
-    public_locations = [url for url in acquisition.requested_from if url.startswith(("http://", "https://"))]
-    if public_locations:
-        node["url"] = public_locations
-    if acquisition.material is not None:
-        node.update(
-            name=acquisition.material.filename,
-            sha256=acquisition.material.sha256,
-            contentSize=f"{acquisition.material.byte_count} B",
-        )
-    event: dict[str, object] = {
-        "@type": "sc:Event",
-        "name": acquisition.instant_type,
-        "description": acquisition.description,
-    }
-    if acquisition.retrieved_at_start is not None:
-        event["startDate"] = acquisition.retrieved_at_start.isoformat()
-    if acquisition.retrieved_at_end is not None:
-        event["endDate"] = acquisition.retrieved_at_end.isoformat()
-    node["subjectOf"] = event
-    return node
-
-
-def _source_description(source: SourceRecord) -> dict[str, object]:
-    historical = [
-        _acquired_material(source, item) for item in source.acquisitions if item.method != "corroborating_receipt"
-    ]
-    corroboration = [
-        _acquired_material(source, item) for item in source.acquisitions if item.method == "corroborating_receipt"
-    ]
-    description: dict[str, object] = {
-        "@id": f"issuer/{source.source_id}",
-        "@type": "sc:CreativeWork",
-        "identifier": source.source_id,
-        "name": f"Recorded material issued by {source.issuer}",
-        "creator": _organization(source.issuer),
-        "hasPart": historical,
-        **_source_terms(source),
-    }
-    if corroboration:
-        description["subjectOf"] = {
-            "@type": "sc:CreativeWork",
-            "name": "Separate corroborating material; not the historical acquisition",
-            "citation": corroboration,
-        }
-    return description
-
-
-def _lineage(
-    provenance: AcquisitionProvenance,
-) -> tuple[dict[str, FactBinding], dict[str, dict[str, object]], dict[str, str]]:
-    # AcquisitionProvenance guarantees unique fact groups; retain serialized tuple positions.
-    binding_positions = {binding.fact_group: index for index, binding in enumerate(provenance.fact_bindings)}
-    bindings = {fact: binding for binding in provenance.fact_bindings for fact in binding.facts}
-    withheld: dict[str, str] = {fact: item.reason for item in provenance.withheld_facts for fact in item.facts}
-    acquisitions = {
-        (source.source_id, acquisition.acquisition_id): _source_identity(source, acquisition)
-        for source in provenance.source_records
-        for acquisition in source.acquisitions
-        if acquisition.method != "corroborating_receipt"
-    }
-    documents: dict[str, dict[str, object]] = {}
-    visiting: set[str] = set()
-
-    def resolve(binding: FactBinding) -> str:
-        identity = f"lineage/{binding.fact_group}"
-        if identity in documents:
-            return identity
-        if identity in visiting:
-            raise FatalContractError(f"Cyclic catalogue lineage: {binding.fact_group}")
-        visiting.add(identity)
-        node: dict[str, object] = {
-            "@id": identity,
-            "@type": "sc:CreativeWork",
-            "identifier": binding.fact_group,
-            "creator": _organization("RivRetrieve"),
-            "url": f"provenance.json#/fact_bindings/{binding_positions[binding.fact_group]}",
-        }
-        if binding.transformation is None:
-            assert binding.source_id is not None and binding.acquisition_id is not None
-            key = (binding.source_id, binding.acquisition_id)
-            if key not in acquisitions:
-                raise FatalContractError(f"Catalogue lineage is not an established historical acquisition: {key}")
-            node["isBasedOn"] = [_reference(acquisitions[key])]
-            node["description"] = binding.fact_group
-        else:
-            node["description"] = binding.transformation.name
-            inputs: list[dict[str, object]] = []
-            seen: set[str] = set()
-            for external in binding.transformation.external_inputs:
-                if external.fact in withheld:
-                    input_id = f"withheld/{external.fact}"
-                    if input_id not in seen:
-                        inputs.append(
-                            {
-                                "@id": input_id,
-                                "@type": "sc:CreativeWork",
-                                "identifier": external.fact,
-                                "name": "Withheld source fact",
-                                "description": withheld[external.fact],
-                            }
-                        )
-                elif external.fact in bindings:
-                    input_id = resolve(bindings[external.fact])
-                    if input_id not in seen:
-                        inputs.append(_reference(input_id))
-                else:
-                    raise FatalContractError(f"Catalogue lineage has no acquisition or absence for {external.fact}")
-                seen.add(input_id)
-            if inputs:
-                node["isBasedOn"] = inputs
-        visiting.remove(identity)
-        documents[identity] = node
-        return identity
-
-    canonical = {"provider", "product", "station", "station_product"}
-    for fact, binding in bindings.items():
-        if fact.partition(".")[0] in canonical or _catalogue_fact_identity(fact) is not None:
-            resolve(binding)
-    return bindings, documents, withheld
 
 
 def _origin_description(origin: object) -> str:
@@ -234,7 +147,7 @@ def _origin_description(origin: object) -> str:
     raise FatalContractError(f"Unsupported catalogue origin: {origin!r}")
 
 
-def _data_type(dtype: pl.DataType) -> str:
+def _data_type(dtype: CatalogueDtype) -> str:
     if dtype == pl.Boolean:
         return "sc:Boolean"
     if dtype.is_float():
@@ -249,17 +162,26 @@ def _data_type(dtype: pl.DataType) -> str:
 
 
 def build_catalogue_descriptor(
-    provenance: AcquisitionProvenance,
+    evidence: CatalogueEvidence,
     origins: Sequence[OriginDeclarations],
     files: Mapping[str, bytes],
 ) -> dict[str, object]:
     """Describe exact packaged bytes and their recorded historical inputs, without IO."""
-    if set(files) != set(REQUIRED_ARTIFACT_FILES):
-        raise FatalContractError("Descriptor requires exactly the four packaged catalogue files")
-    if provenance.native_table is not None and not origins:
+    expected_files = (*REQUIRED_ARTIFACT_FILES, "provenance.json", *EVIDENCE_FILENAMES.values())
+    if set(files) != set(expected_files):
+        raise FatalContractError("Descriptor requires exactly the ten public catalogue and evidence files")
+    if evidence.header.native_table is not None and not origins:
         raise FatalContractError("Certified catalogue descriptor requires station origins")
+    if evidence.header.native_table is not None and evidence.header.native_table.byte_size is None:
+        raise FatalContractError("Native table byte size must be established before describing it")
+    if json.loads(files["provenance.json"]) != evidence.header.model_dump(mode="json"):
+        raise FatalContractError("Descriptor evidence header disagrees with supplied provenance.json")
+    for filename, identity in evidence.header.files.items():
+        content = files[filename]
+        if sha256(content).hexdigest() != identity.sha256 or len(content) != identity.byte_count:
+            raise FatalContractError(f"Descriptor evidence file identity disagrees: {filename}")
     provider = json.loads(files["provider.json"])
-    if provider["provider_id"] != provenance.provider_id:
+    if provider["provider_id"] != evidence.header.provider_id:
         raise FatalContractError("Descriptor provider identity disagrees with acquisition provenance")
     tables = {
         "provider": pl.DataFrame([provider], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
@@ -268,7 +190,19 @@ def build_catalogue_descriptor(
             for name in ("products", "stations", "station_products")
         },
     }
-    bindings, lineage, withheld = _lineage(provenance)
+    withheld = {fact: item.reason for item in evidence.header.withheld_facts for fact in item.facts}
+    canonical_names = [
+        f"{carrier}.{column}"
+        for carrier, table in zip(("provider", "product", "station", "station_product"), tables.values(), strict=True)
+        for column in table.columns
+    ]
+    canonical_facts = evidence.facts.filter(pl.col("name").is_in(canonical_names))
+    bindings = {
+        row["name"]: row
+        for row in canonical_facts.join(evidence.binding_facts, on="fact_id")
+        .join(evidence.bindings, on="binding_id")
+        .iter_rows(named=True)
+    }
     distributions = [
         {
             "@id": name,
@@ -278,7 +212,7 @@ def build_catalogue_descriptor(
             "sha256": sha256(contents).hexdigest(),
             "contentSize": f"{len(contents)} B",
         }
-        for name in REQUIRED_ARTIFACT_FILES
+        for name in expected_files
         for contents in (files[name],)
     ]
     record_sets: list[dict[str, object]] = []
@@ -302,10 +236,9 @@ def build_catalogue_descriptor(
                     "extract": {"jsonPath": f"$.{column}"} if carrier == "provider" else {"column": column},
                 },
             }
-            if fact in bindings:
-                field["subjectOf"] = _reference(f"lineage/{bindings[fact].fact_group}")
-            elif fact not in withheld:
+            if fact not in bindings and fact not in withheld:
                 raise FatalContractError(f"Canonical column has no lineage or withheld fact: {fact}")
+            field["subjectOf"] = _fact_locator(fact)
             if fact in withheld:
                 field["rr:absence"] = WithheldAbsence(kind="withheld", reason=withheld[fact])
             if carrier == "station" and origins:
@@ -317,9 +250,9 @@ def build_catalogue_descriptor(
                 if not_published:
                     if len(not_published) != len(declared):
                         raise FatalContractError(f"Station column mixes published and absent origins: {column}")
-                    evidence = list(dict.fromkeys(str(origin.evidence) for origin in not_published))
+                    references = list(dict.fromkeys(str(origin.evidence) for origin in not_published))
                     field["rr:absence"] = NotPublishedAbsence(
-                        kind="not_published", evidence=evidence[0] if len(evidence) == 1 else evidence
+                        kind="not_published", evidence=references[0] if len(references) == 1 else references
                     )
                 if any(isinstance(origin, Withheld) for origin in declared):
                     if not all(isinstance(origin, Withheld) for origin in declared):
@@ -328,25 +261,27 @@ def build_catalogue_descriptor(
                         fields.append(field)
                         continue
                     binding = bindings[fact]
-                    transformation = binding.transformation
-                    if transformation is None:
+                    if binding["transformation_id"] is None:
                         raise FatalContractError(f"Withheld origin has no recorded transformation: {fact}")
-                    reasons = {withheld[item.fact] for item in transformation.external_inputs if item.fact in withheld}
+                    input_names = evidence.external_inputs.filter(pl.col("binding_id") == binding["binding_id"]).join(
+                        evidence.facts.select("fact_id", "name"), on="fact_id"
+                    )["name"]
+                    reasons = {withheld[name] for name in input_names if name in withheld}
                     if len(reasons) != 1:
                         raise FatalContractError(f"Withheld origin has no unique recorded reason: {fact}")
                     field["rr:absence"] = WithheldAbsence(kind="withheld", reason=next(iter(reasons)))
             fields.append(field)
         record: dict[str, object] = {"@id": table_name, "@type": "cr:RecordSet", "field": fields}
-        row_bindings = {
-            f"lineage/{binding.fact_group}"
-            for fact, binding in bindings.items()
-            if (identity := _catalogue_fact_identity(fact)) is not None and identity[0] == carrier
+        record["subjectOf"] = {
+            "@type": "sc:CreativeWork",
+            "identifier": carrier,
+            "name": "Exact catalogue fact locator relation",
+            "url": "provenance_facts.parquet",
+            "conformsTo": PROFILE_URI,
         }
-        if row_bindings:
-            record["subjectOf"] = [_reference(identity) for identity in sorted(row_bindings)]
         row_locators = {
             locator
-            for item in provenance.withheld_facts
+            for item in evidence.header.withheld_facts
             for locator in item.catalogue_rows
             if locator.carrier == carrier
         }
@@ -357,7 +292,7 @@ def build_catalogue_descriptor(
                     iter(
                         {
                             item.reason
-                            for item in provenance.withheld_facts
+                            for item in evidence.header.withheld_facts
                             if any(locator.carrier == carrier for locator in item.catalogue_rows)
                         }
                     )
@@ -371,24 +306,31 @@ def build_catalogue_descriptor(
                 "fields": [fact.partition(".")[2] for fact in withheld if fact.startswith(f"{carrier}.")],
             }
         record_sets.append(record)
-    source_descriptions = [_source_description(source) for source in provenance.source_records]
+    record_sets.extend(_evidence_record_sets())
     descriptor: dict[str, object] = {
         "@context": _context(),
         "@type": "sc:Dataset",
-        "name": f"rivretrieve-{provenance.provider_id}-catalogue",
-        "description": f"Packaged provider, product, station and station-product catalogue for {provenance.provider_id}.",
+        "name": f"rivretrieve-{evidence.header.provider_id}-catalogue",
+        "description": f"Packaged provider, product, station and station-product catalogue for {evidence.header.provider_id}.",
         "conformsTo": "http://mlcommons.org/croissant/1.0",
+        "schemaVersion": PROFILE_URI,
         "creator": [
-            _organization(issuer) for issuer in dict.fromkeys(source.issuer for source in provenance.source_records)
+            _organization(issuer)
+            for issuer in dict.fromkeys(source.issuer for source in evidence.header.source_records)
         ],
-        **verified_source_terms(provenance.source_records),
+        **verified_source_terms(evidence.header.source_records),
         "distribution": distributions,
         "recordSet": record_sets,
-        "subjectOf": [*source_descriptions, *lineage.values()],
+        "subjectOf": {
+            "@type": "sc:CreativeWork",
+            "url": "provenance.json",
+            "name": "Issuing sources, exact statements and evidence declarations",
+            "conformsTo": PROFILE_URI,
+        },
     }
     if provider["catalogue_version"] is not None:
         descriptor.update(version=provider["catalogue_version"], datePublished=provider["catalogue_version"])
-    native = provenance.native_table
+    native = evidence.header.native_table
     if native is not None:
         if native.byte_size is None:
             raise FatalContractError("Native table byte size must be established before describing it")
@@ -407,9 +349,9 @@ def build_catalogue_descriptor(
 
 def write_catalogue_descriptor(
     destination: Path,
-    provenance: AcquisitionProvenance,
+    evidence: CatalogueEvidence,
     origins: Sequence[OriginDeclarations],
     files: Mapping[str, bytes],
 ) -> None:
-    descriptor = build_catalogue_descriptor(provenance, origins, files)
+    descriptor = build_catalogue_descriptor(evidence, origins, files)
     destination.write_text(json.dumps(descriptor, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

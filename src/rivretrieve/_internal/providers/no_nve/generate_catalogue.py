@@ -18,7 +18,6 @@ import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
-    serialize_acquisition_provenance,
     verified_provider_terms,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -797,9 +796,8 @@ def validate_generated_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> None:
-    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
-    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS
 
     output = Path(out_dir)
@@ -811,15 +809,13 @@ def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> 
     catalogue.public_artifact.products.write_parquet(output / "products.parquet")
     catalogue.public_artifact.stations.write_parquet(output / "stations.parquet")
     catalogue.public_artifact.station_products.write_parquet(output / "station_products.parquet")
-    (output / "provenance.json").write_text(
-        serialize_acquisition_provenance(catalogue.acquisition_provenance) + "\n", encoding="utf-8"
-    )
-    write_catalogue_descriptor(
-        output / "croissant.json",
-        AcquisitionProvenance.model_validate_json((output / "provenance.json").read_bytes()),
+    metadata = build_catalogue_metadata(
+        catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
+    for name, content in metadata.items():
+        (output / name).write_bytes(content)
 
 
 def capture_station_catalogue(

@@ -1177,9 +1177,8 @@ def validate_generated_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) -> None:
-    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
-    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
     output_path = Path(out_dir)
@@ -1190,16 +1189,13 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
     catalogue.public_artifact.products.write_parquet(output_path / "products.parquet")
     catalogue.public_artifact.stations.write_parquet(output_path / "stations.parquet")
     catalogue.public_artifact.station_products.write_parquet(output_path / "station_products.parquet")
-    (output_path / "provenance.json").write_text(
-        catalogue.acquisition_provenance.model_dump_json() + "\n", encoding="utf-8"
-    )
-
-    write_catalogue_descriptor(
-        output_path / "croissant.json",
-        AcquisitionProvenance.model_validate_json((output_path / "provenance.json").read_bytes()),
+    metadata = build_catalogue_metadata(
+        catalogue.acquisition_provenance,
         tuple(FRANCE_ORIGIN_DECLARATIONS.values()),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
+    for name, content in metadata.items():
+        (output_path / name).write_bytes(content)
 
 
 # ---------------------------------------------------------------------------

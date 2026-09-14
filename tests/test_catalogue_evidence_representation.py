@@ -63,11 +63,16 @@ def test_real_france_generator_does_not_render_national_acquisition_graph(
     previous = sys.getprofile()
     sys.setprofile(observe)
     try:
-        result = main([
-            "--native", str(CATALOGUE / "native.parquet"),
-            "--availability-ledger", str(ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"),
-            "--out", str(tmp_path / "catalogue"),
-        ])
+        result = main(
+            [
+                "--native",
+                str(CATALOGUE / "native.parquet"),
+                "--availability-ledger",
+                str(ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"),
+                "--out",
+                str(tmp_path / "catalogue"),
+            ]
+        )
     finally:
         sys.setprofile(previous)
     assert result == 0

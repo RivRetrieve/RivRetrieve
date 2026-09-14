@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 
 import polars as pl
+import polars.testing as pl_testing
 import pytest
 from pydantic import ValidationError
 
@@ -20,6 +21,7 @@ from rivretrieve._internal.catalogues.artifact import (
 )
 from rivretrieve._internal.discovery import EmptySelectionError
 from tests._catalogue import catalogue_path, catalogue_reader
+from tests._provenance import legacy_provenance
 
 DEFERRED_PROVIDERS = {"br_ana": (10_429, 52_145)}
 
@@ -43,6 +45,7 @@ def test_deferred_provider_packaged_source_facts_are_hard_withheld(
 
     provenance = artifact.acquisition_provenance
     assert provenance is not None
+    provenance = legacy_provenance(provenance)
     assert provenance.native_table is None
     assert provenance.source_records
     assert len(provenance.fact_bindings) == 2
@@ -78,7 +81,7 @@ def test_deferred_provenance_distinguishes_withheld_from_null_and_not_published(
     deferred = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise")
     withheld = deferred.acquisition_provenance
     assert withheld is not None
-    assert any(group.reason == "no_acquisition_record_established" for group in withheld.withheld_facts)
+    assert any(group.reason == "no_acquisition_record_established" for group in withheld.header.withheld_facts)
 
     japan = load_packaged_catalogue_artifact(catalogue_path("jp_mlit"), on_issue="raise")
     assert japan.provider_info["license"] is None
@@ -87,7 +90,7 @@ def test_deferred_provenance_distinguishes_withheld_from_null_and_not_published(
 
     raw = json.loads((catalogue_path("br_ana") / "provider.json").read_text(encoding="utf-8"))
     assert raw["license"] is None
-    assert withheld.withheld_facts
+    assert withheld.header.withheld_facts
 
 
 @pytest.mark.parametrize("provider_id", DEFERRED_PROVIDERS)
@@ -110,8 +113,8 @@ def test_deferred_provider_selection_retains_reason_and_fails_truthfully(provide
     assert selection.series == ()
     assert len(selection.acquisition_provenance) == 1
     provenance = selection.acquisition_provenance[0]
-    assert provenance.provider_id == provider_id
-    assert provenance.withheld_facts
+    assert provenance.header.provider_id == provider_id
+    assert provenance.header.withheld_facts
     assert selection.empty_reason is not None
     assert selection.empty_reason.code == "no_catalogue_edge"
     with pytest.raises(EmptySelectionError, match=r"fetch\(\) cannot retrieve an empty selection"):
@@ -144,32 +147,38 @@ def test_maintainer_withholding_operation_is_network_free_and_deterministic(
     assert generated.stations.is_empty()
     assert generated.station_products.is_empty()
     assert generated.acquisition_provenance is not None
-    assert generated.acquisition_provenance.native_table is None
+    assert generated.acquisition_provenance.header.native_table is None
     for artifact_name in (
         "provider.json",
         "products.parquet",
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
     ):
         assert (tmp_path / artifact_name).read_bytes() == (catalogue_path(provider_id) / artifact_name).read_bytes()
 
 
-def test_acquisition_provenance_v2_is_the_only_accepted_packaged_schema(tmp_path: Path) -> None:
+def test_packaged_evidence_rejects_retired_schema(tmp_path: Path) -> None:
     copied = tmp_path / "jp_mlit"
     shutil.copytree(catalogue_path("jp_mlit"), copied)
     payload = json.loads((copied / "provenance.json").read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     payload["schema_version"] = 1
     (copied / "provenance.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(CorruptCatalogArtifactError, match="Input should be 2"):
+    with pytest.raises(CorruptCatalogArtifactError, match="schema|version"):
         load_packaged_catalogue_artifact(copied, on_issue="raise")
 
 
 def test_acquisition_provenance_v2_rejects_legacy_and_mixed_withheld_shapes() -> None:
     provenance = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise").acquisition_provenance
     assert provenance is not None
+    provenance = legacy_provenance(provenance)
     payload = provenance.model_dump(mode="json")
     assert payload["schema_version"] == 2
     assert payload["withheld_facts"]
@@ -213,10 +222,10 @@ def test_deferred_public_terms_are_traced_without_republishing_catalogue_values(
                 and not artifact.stations.is_empty()
                 and not artifact.station_products.is_empty()
             )
-        statements = [statement for source in provenance.source_records for statement in source.statements]
+        statements = [statement for source in provenance.header.source_records for statement in source.statements]
         assert {statement.kind for statement in statements} == kinds
         assert all(statement.verification_status == "verified_public_recording" for statement in statements)
-        verify_provenance_recordings(provenance, Path.cwd())
+        verify_provenance_recordings(legacy_provenance(provenance), Path.cwd())
 
 
 @pytest.mark.parametrize(
@@ -252,6 +261,7 @@ def test_deferred_terms_match_completed_survey_exactly(
 ) -> None:
     provenance = load_packaged_catalogue_artifact(catalogue_path(provider_id), on_issue="raise").acquisition_provenance
     assert provenance is not None
+    provenance = legacy_provenance(provenance)
     source = provenance.source_records[0]
     acquisition = source.acquisitions[0]
     recording = source.evidence[0].recording
@@ -261,3 +271,19 @@ def test_deferred_terms_match_completed_survey_exactly(
     assert recording.source_url == expected_url
     assert recording.sha256 == expected_sha256
     assert {statement.fact: statement.exact_text for statement in source.statements} == expected_statements
+
+
+def test_packaged_reader_normalizes_genuine_v2_to_the_same_evidence(tmp_path: Path) -> None:
+    """Exercise the deliberate v2 file compatibility boundary, not a runtime facade."""
+    copied = tmp_path / "jp_mlit"
+    shutil.copytree(catalogue_path("jp_mlit"), copied)
+    expected = load_packaged_catalogue_artifact(copied, on_issue="raise").acquisition_provenance
+    assert expected is not None
+    (copied / "provenance.json").write_text(legacy_provenance(expected).model_dump_json())
+    actual = load_packaged_catalogue_artifact(copied, on_issue="raise").acquisition_provenance
+    assert actual is not None
+    assert actual.header.schema_version == 3
+    # Encoded file identities may differ from a freshly normalized v2 value.
+    assert legacy_provenance(actual).model_dump(mode="json") == legacy_provenance(expected).model_dump(mode="json")
+    for name in ("facts", "acquisitions", "bindings", "binding_facts", "external_inputs"):
+        pl_testing.assert_frame_equal(getattr(actual, name), getattr(expected, name), check_exact=True)

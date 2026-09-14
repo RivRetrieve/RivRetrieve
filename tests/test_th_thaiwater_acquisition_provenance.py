@@ -19,6 +19,7 @@ from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
 from rivretrieve._internal.providers.th_thaiwater.declaration import declaration
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisition_provenance
+from tests._provenance import legacy_provenance
 
 LEDGER_PATH = (
     Path(__file__).parents[1]
@@ -32,6 +33,8 @@ def _evidence() -> GraphAvailabilityEvidence:
 
 def test_thailand_provenance_maps_every_row_to_its_exact_native_agency() -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     assert provenance is not None
     station_bindings = [b for b in provenance.fact_bindings if b.fact_group.startswith("station:")]
     observation_bindings = [b for b in provenance.fact_bindings if b.fact_group.startswith("observation:")]
@@ -57,6 +60,8 @@ def test_thailand_provenance_maps_every_row_to_its_exact_native_agency() -> None
 def test_thailand_product_meanings_and_units_are_source_bound_while_period_is_unknown() -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
     assert provenance is not None
+    provenance = legacy_provenance(provenance)
+    assert provenance is not None
     source = next(item for item in provenance.source_records if item.source_id == "th_agency_9")
     evidence_ids = {item.evidence_id for item in source.evidence}
     assert {"th_thaiwater_graph_field_mapping", "th_thaiwater_graph_page"} <= evidence_ids
@@ -72,6 +77,8 @@ def test_thailand_product_meanings_and_units_are_source_bound_while_period_is_un
 
 def test_thailand_canonical_product_definition_is_rivretrieve_owned() -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     assert provenance is not None
     assert not any(binding.fact_group == "product_identity" for binding in provenance.fact_bindings)
     canonical = next(
@@ -90,6 +97,8 @@ def test_thailand_canonical_product_definition_is_rivretrieve_owned() -> None:
 def test_every_governing_pair_is_bound_to_its_actual_acquisition_and_agency() -> None:
     artifact = load_packaged_catalogue_artifact(declaration.catalogue)
     provenance = artifact.acquisition_provenance
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     assert provenance is not None
     assert provenance.withheld_facts == ()
     ledger = list(csv.DictReader(io.StringIO(LEDGER_PATH.read_text())))

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from tests._provenance import legacy_document
 
 
 def _acquisition(provider: str, acquisition_id: str) -> dict[str, object]:
     path = Path("src/rivretrieve/_internal/providers") / provider / "catalogue" / "provenance.json"
-    document = json.loads(path.read_text())
+    document = legacy_document(path)
     return next(
         a for s in document["source_records"] for a in s["acquisitions"] if a["acquisition_id"] == acquisition_id
     )
@@ -49,7 +50,7 @@ def test_france_catalogue_capture_names_all_exact_recorded_requests() -> None:
     path = Path("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance.json")
     bindings = {
         fact: item["acquisition_id"]
-        for item in json.loads(path.read_text())["fact_bindings"]
+        for item in legacy_document(path)["fact_bindings"]
         for fact in item["facts"]
         if item.get("acquisition_id")
     }
