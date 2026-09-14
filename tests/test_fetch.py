@@ -272,7 +272,9 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
     acquisition = result.provenance.acquisition_provenance
     assert acquisition is not None
     expected_terms = {
-        statement.kind: statement.exact_text for source in acquisition.source_records for statement in source.statements
+        statement.kind: statement.exact_text
+        for source in acquisition.header.source_records
+        for statement in source.statements
     }
     assert result.provenance.license == expected_terms["license"]
     assert result.provenance.citation == expected_terms["citation"]
@@ -331,7 +333,7 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
         assert acquisition is not None
         expected_terms = {
             statement.kind: statement.exact_text
-            for source in acquisition.source_records
+            for source in acquisition.header.source_records
             for statement in source.statements
         }
         assert result.provenance.license == expected_terms["license"]

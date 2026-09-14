@@ -1,1 +1,115 @@
-{"schema_version":2,"provider_id":"usgs_nwis","native_table":{"repository_path":"src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet","revision":"bfeb825a6f3b3aad4982649625d570c070b4ee32","sha256":"90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701","byte_size":14093302,"semantic_digest":{"name":"usgs_nwis.native_table_content_sha256","sha256":"e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"}},"fact_universe":["source.usgs.license_statement","source.usgs.citation_statement","source.provider.usgs_agency_identity","source.station.nwis_identity_location_datum","source.product.nwis_parameter_statistic_data_type_codes","source.station_product.nwis_series_availability_and_coverage","source.observation.nwis_values_qualifiers_and_timestamps","provider.provider_id","provider.name","provider.live_stations","provider.live_products","provider.live_station_products","provider.bulk_observations","provider.catalogue_version","provider.license","provider.citation","product.provider_id","product.product_id","product.observed_property","product.frequency","product.statistic","product.period_type","product.period_anchor","product.unit","product.native_id","station.provider_id","station.station_id","station.latitude","station.longitude","station.crs","station_product.provider_id","station_product.station_id","station_product.product_id","station_product.availability","station_product.availability_reason","station_product.published_record_start_date","station_product.published_record_end_date","station_product.last_catalogue_check"],"source_records":[{"source_id":"usgs_nwis","issuer":"U.S. Geological Survey","operator":"National Water Information System","acquisitions":[{"acquisition_id":"national_site_campaign_2026_08_02","method":"http_campaign","instant_type":"retrieval","description":"102 NWIS site-service requests for the fixed 50-state-plus-DC scope; 26,258 sites and 2,036,546 series rows","requested_from":["https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=<51-code>&seriesCatalogOutput=true","https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=<51-code>&siteOutput=expanded"],"retrieved_at_start":"2026-08-02T01:14:11Z","retrieved_at_end":null,"recording_ids":[],"material":null},{"acquisition_id":"observation_request","method":"runtime_http_request","instant_type":"runtime","description":"Exact NWIS daily-value or instantaneous-value request and response retained at runtime","requested_from":["https://waterservices.usgs.gov/nwis/dv/","https://waterservices.usgs.gov/nwis/iv/"],"retrieved_at_start":null,"retrieved_at_end":null,"recording_ids":[],"material":null},{"acquisition_id":"public_domain_capture_2026_08_20","method":"http_request","instant_type":"retrieval","description":"Agency-wide USGS copyright and credits HTML recording","requested_from":["https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"],"retrieved_at_start":"2026-08-20T08:46:24Z","retrieved_at_end":null,"recording_ids":["usgs_nwis_terms_licence"],"material":null},{"acquisition_id":"citation_capture_2026_08_20","method":"http_request","instant_type":"retrieval","description":"Water Data for the Nation citation HTML recording","requested_from":["https://waterdata.usgs.gov/citation/"],"retrieved_at_start":"2026-08-20T15:56:47Z","retrieved_at_end":null,"recording_ids":["usgs_nwis_terms_citation"],"material":null}],"evidence":[{"evidence_id":"usgs_public_domain_statement","description":"Agency-wide USGS copyright and credits recording","recording":{"recording_id":"usgs_nwis_terms_licence","repository_path":"tests/test_data/usgs_nwis_terms_licence-1.html","source_url":"https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits","retrieved_at":"2026-08-20T08:46:24Z","media_type":"text/html; charset=UTF-8","sha256":"a6f640805e5783765fb350d4d60d06a5dbef8ffa3b219fa7713885e5dff9580c"}},{"evidence_id":"usgs_water_data_citation","description":"Water Data for the Nation citation recording","recording":{"recording_id":"usgs_nwis_terms_citation","repository_path":"tests/test_data/usgs_nwis_terms_citation-1.html","source_url":"https://waterdata.usgs.gov/citation/","retrieved_at":"2026-08-20T15:56:47Z","media_type":"text/html; charset=utf-8","sha256":"11be7513f1f383b3db9856d55afd91324920c954ba9f00eb5032294b2cf81ce3"}}],"statements":[{"kind":"license","exact_text":"USGS-authored or produced data and information are considered to be in the U.S. Public Domain.","recording_id":"usgs_nwis_terms_licence","fact":"source.usgs.license_statement","verification_status":"verified_public_recording"},{"kind":"citation","exact_text":"Example of how to cite USGS Water Data for the Nation in general: U.S. Geological Survey, [2024], USGS Water Data for the Nation: U.S. Geological Survey National Water Information System database, accessed [April 8, 2024], at https://doi.org/10.5066/F7P55KJN.","recording_id":"usgs_nwis_terms_citation","fact":"source.usgs.citation_statement","verification_status":"verified_public_recording"}]}],"fact_bindings":[{"fact_group":"license_statement","facts":["source.usgs.license_statement"],"source_id":"usgs_nwis","acquisition_id":"public_domain_capture_2026_08_20"},{"fact_group":"citation_statement","facts":["source.usgs.citation_statement"],"source_id":"usgs_nwis","acquisition_id":"citation_capture_2026_08_20"},{"fact_group":"provider_identity","facts":["source.provider.usgs_agency_identity"],"source_id":"usgs_nwis","acquisition_id":"national_site_campaign_2026_08_02"},{"fact_group":"station_identity_location_crs","facts":["source.station.nwis_identity_location_datum"],"source_id":"usgs_nwis","acquisition_id":"national_site_campaign_2026_08_02"},{"fact_group":"product_identity","facts":["source.product.nwis_parameter_statistic_data_type_codes"],"source_id":"usgs_nwis","acquisition_id":"national_site_campaign_2026_08_02"},{"fact_group":"station_product_availability","facts":["source.station_product.nwis_series_availability_and_coverage"],"source_id":"usgs_nwis","acquisition_id":"national_site_campaign_2026_08_02"},{"fact_group":"observation_values","facts":["source.observation.nwis_values_qualifiers_and_timestamps"],"source_id":"usgs_nwis","acquisition_id":"observation_request"},{"fact_group":"canonical_catalogue_carrier","facts":["provider.provider_id","provider.name","provider.live_stations","provider.live_products","provider.live_station_products","provider.bulk_observations","provider.catalogue_version","provider.license","provider.citation","product.provider_id","product.product_id","product.observed_property","product.frequency","product.statistic","product.period_type","product.period_anchor","product.unit","product.native_id","station.provider_id","station.station_id","station.latitude","station.longitude","station.crs","station_product.provider_id","station_product.station_id","station_product.product_id","station_product.availability","station_product.availability_reason","station_product.published_record_start_date","station_product.published_record_end_date","station_product.last_catalogue_check"],"source_id":null,"acquisition_id":null,"transformation":{"name":"usgs_nwis external facts to RivRetrieve canonical catalogue carriers","external_inputs":[{"source_id":"usgs_nwis","fact":"source.provider.usgs_agency_identity"},{"source_id":"usgs_nwis","fact":"source.station.nwis_identity_location_datum"},{"source_id":"usgs_nwis","fact":"source.product.nwis_parameter_statistic_data_type_codes"},{"source_id":"usgs_nwis","fact":"source.station_product.nwis_series_availability_and_coverage"}]}}],"withheld_facts":[]}
+{
+  "schema_version": 3,
+  "provider_id": "usgs_nwis",
+  "native_table": {
+    "repository_path": "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "revision": "bfeb825a6f3b3aad4982649625d570c070b4ee32",
+    "sha256": "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701",
+    "byte_size": 14093302,
+    "semantic_digest": {
+      "name": "usgs_nwis.native_table_content_sha256",
+      "sha256": "e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"
+    }
+  },
+  "source_records": [
+    {
+      "source_id": "usgs_nwis",
+      "issuer": "U.S. Geological Survey",
+      "operator": "National Water Information System",
+      "evidence": [
+        {
+          "evidence_id": "usgs_public_domain_statement",
+          "description": "Agency-wide USGS copyright and credits recording",
+          "recording": {
+            "recording_id": "usgs_nwis_terms_licence",
+            "repository_path": "tests/test_data/usgs_nwis_terms_licence-1.html",
+            "source_url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+            "retrieved_at": "2026-08-20T08:46:24Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "a6f640805e5783765fb350d4d60d06a5dbef8ffa3b219fa7713885e5dff9580c"
+          }
+        },
+        {
+          "evidence_id": "usgs_water_data_citation",
+          "description": "Water Data for the Nation citation recording",
+          "recording": {
+            "recording_id": "usgs_nwis_terms_citation",
+            "repository_path": "tests/test_data/usgs_nwis_terms_citation-1.html",
+            "source_url": "https://waterdata.usgs.gov/citation/",
+            "retrieved_at": "2026-08-20T15:56:47Z",
+            "media_type": "text/html; charset=utf-8",
+            "sha256": "11be7513f1f383b3db9856d55afd91324920c954ba9f00eb5032294b2cf81ce3"
+          }
+        }
+      ],
+      "statements": [
+        {
+          "kind": "license",
+          "exact_text": "USGS-authored or produced data and information are considered to be in the U.S. Public Domain.",
+          "recording_id": "usgs_nwis_terms_licence",
+          "fact": "source.usgs.license_statement",
+          "verification_status": "verified_public_recording"
+        },
+        {
+          "kind": "citation",
+          "exact_text": "Example of how to cite USGS Water Data for the Nation in general: U.S. Geological Survey, [2024], USGS Water Data for the Nation: U.S. Geological Survey National Water Information System database, accessed [April 8, 2024], at https://doi.org/10.5066/F7P55KJN.",
+          "recording_id": "usgs_nwis_terms_citation",
+          "fact": "source.usgs.citation_statement",
+          "verification_status": "verified_public_recording"
+        }
+      ]
+    }
+  ],
+  "descriptions": [
+    "102 NWIS site-service requests for the fixed 50-state-plus-DC scope; 26,258 sites and 2,036,546 series rows",
+    "Exact NWIS daily-value or instantaneous-value request and response retained at runtime",
+    "Agency-wide USGS copyright and credits HTML recording",
+    "Water Data for the Nation citation HTML recording"
+  ],
+  "transformations": [
+    {
+      "name": "usgs_nwis external facts to RivRetrieve canonical catalogue carriers",
+      "kind": "derived_value",
+      "marker_value": null
+    }
+  ],
+  "withheld_facts": [],
+  "row_locator_requirements": [],
+  "files": {
+    "provenance_facts.parquet": {
+      "path": "provenance_facts.parquet",
+      "sha256": "2fbae30ff9f7597d2895c246e391ca4af3b072b0b2e048012503cf4fdc4274e9",
+      "byte_count": 2576,
+      "row_count": 38,
+      "schema_version": 3
+    },
+    "provenance_acquisitions.parquet": {
+      "path": "provenance_acquisitions.parquet",
+      "sha256": "94896d3e3066d9f1110347a384c0dfe2ebab2b1c42931c5a9c78ea1acb821725",
+      "byte_count": 6539,
+      "row_count": 4,
+      "schema_version": 3
+    },
+    "provenance_bindings.parquet": {
+      "path": "provenance_bindings.parquet",
+      "sha256": "cdbf509e9f698e05b52741079008765e5d059a16f53dc38b8b98b3d49d255675",
+      "byte_count": 2247,
+      "row_count": 8,
+      "schema_version": 3
+    },
+    "provenance_binding_facts.parquet": {
+      "path": "provenance_binding_facts.parquet",
+      "sha256": "a477f013f5ef31476125a46212f1b565858f9b31b7f6d624fff5bee64f52def7",
+      "byte_count": 1335,
+      "row_count": 38,
+      "schema_version": 3
+    },
+    "provenance_external_inputs.parquet": {
+      "path": "provenance_external_inputs.parquet",
+      "sha256": "56fa9eda8999921f06cc002dac970304063cf460f244b1cc37b7166addc192af",
+      "byte_count": 1515,
+      "row_count": 4,
+      "schema_version": 3
+    }
+  }
+}

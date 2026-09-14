@@ -878,9 +878,8 @@ def validate_generated_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) -> None:
-    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
-    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -891,19 +890,15 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-    (output_path / "provenance.json").write_text(
-        __import__("rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["build_acquisition_provenance"])
-        .build_acquisition_provenance()
-        .model_dump_json()
-        + "\n",
-        encoding="utf-8",
-    )
-    write_catalogue_descriptor(
-        output_path / "croissant.json",
-        AcquisitionProvenance.model_validate_json((output_path / "provenance.json").read_bytes()),
+    metadata = build_catalogue_metadata(
+        __import__(
+            "rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["build_acquisition_provenance"]
+        ).build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
+    for name, content in metadata.items():
+        (output_path / name).write_bytes(content)
 
 
 def _read_fixture_json(path: Path) -> list[object]:

@@ -15,20 +15,22 @@ from rivretrieve._internal.catalogues.artifact import (
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.jp_mlit.declaration import declaration
 from rivretrieve._internal.providers.jp_mlit.origins import build_acquisition_provenance
+from tests._provenance import assert_evidence_equal, legacy_provenance, remove_binding_fact
 
 
 def test_japan_provenance_is_shared_by_catalogue_result_and_selection() -> None:
     artifact = load_packaged_catalogue_artifact(declaration.catalogue)
     assert artifact.acquisition_provenance is not None
-    result = CatalogueReader(artifact, ProviderId(artifact.acquisition_provenance.provider_id)).read_stations()
+    result = CatalogueReader(artifact, ProviderId(artifact.acquisition_provenance.header.provider_id)).read_stations()
     selection = rr.find(
         provider="jp_mlit",
         station="301011281104010",
         product="discharge_daily_mean",
     )
 
-    assert result.provenance.acquisition_provenance == artifact.acquisition_provenance
-    assert selection.acquisition_provenance == (artifact.acquisition_provenance,)
+    assert result.provenance.acquisition_provenance is artifact.acquisition_provenance
+    assert len(selection.acquisition_provenance) == 1
+    assert_evidence_equal(selection.acquisition_provenance[0], artifact.acquisition_provenance)
     assert rr.as_frame(selection).columns == [
         "provider_id",
         "station_id",
@@ -53,7 +55,7 @@ def test_japan_provenance_is_shared_by_catalogue_result_and_selection() -> None:
 
 def test_japan_source_and_fact_groups_are_externally_observable() -> None:
     selection = rr.find(provider="jp_mlit", station="301011281104010")
-    provenance = selection.acquisition_provenance[0]
+    provenance = legacy_provenance(selection.acquisition_provenance[0])
 
     source = provenance.source_records[0]
     assert source.source_id == "jp_mlit"
@@ -93,6 +95,11 @@ def test_packaged_catalogue_rejects_mismatched_provenance_provider(tmp_path: Pat
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
     ):
         shutil.copy2(declaration.catalogue / name, tmp_path / name)
     payload = json.loads((tmp_path / "provenance.json").read_text())
@@ -109,7 +116,16 @@ def test_packaged_catalogue_rejects_mismatched_provenance_provider(tmp_path: Pat
 def _copy_japan_catalogue(destination: Path, *, include_provenance: bool = True) -> None:
     names = ["provider.json", "products.parquet", "stations.parquet", "station_products.parquet"]
     if include_provenance:
-        names.append("provenance.json")
+        names.extend(
+            (
+                "provenance.json",
+                "provenance_facts.parquet",
+                "provenance_acquisitions.parquet",
+                "provenance_bindings.parquet",
+                "provenance_binding_facts.parquet",
+                "provenance_external_inputs.parquet",
+            )
+        )
     for name in names:
         shutil.copy2(declaration.catalogue / name, destination / name)
 
@@ -124,8 +140,8 @@ def test_enrolled_japan_catalogue_refuses_missing_provenance(tmp_path: Path) -> 
 def test_withheld_japan_fact_is_removed_from_exposed_catalogue(tmp_path: Path) -> None:
     _copy_japan_catalogue(tmp_path)
     payload = json.loads((tmp_path / "provenance.json").read_text())
-    product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
-    product_binding["facts"].remove("product.native_id")
+    remove_binding_fact(tmp_path, "product.native_id")
+    payload = json.loads((tmp_path / "provenance.json").read_text())
     payload["withheld_facts"].append(
         {
             "fact_group": "withheld_product_native_id",
@@ -139,7 +155,7 @@ def test_withheld_japan_fact_is_removed_from_exposed_catalogue(tmp_path: Path) -
 
     assert artifact.products["native_id"].null_count() == artifact.products.height
     assert artifact.acquisition_provenance is not None
-    assert {fact for group in artifact.acquisition_provenance.withheld_facts for fact in group.facts} == {
+    assert {fact for group in artifact.acquisition_provenance.header.withheld_facts for fact in group.facts} == {
         "product.native_id"
     }
 
@@ -147,8 +163,8 @@ def test_withheld_japan_fact_is_removed_from_exposed_catalogue(tmp_path: Path) -
 def test_enrolled_japan_catalogue_refuses_unbound_declared_fact(tmp_path: Path) -> None:
     _copy_japan_catalogue(tmp_path)
     payload = json.loads((tmp_path / "provenance.json").read_text())
-    product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
-    product_binding["facts"].remove("product.unit")
+    remove_binding_fact(tmp_path, "product.unit")
+    payload = json.loads((tmp_path / "provenance.json").read_text())
     (tmp_path / "provenance.json").write_text(json.dumps(payload))
 
     with pytest.raises(
@@ -161,8 +177,8 @@ def test_enrolled_japan_catalogue_refuses_unbound_declared_fact(tmp_path: Path) 
 def test_withheld_required_japan_fact_removes_affected_rows_and_edges(tmp_path: Path) -> None:
     _copy_japan_catalogue(tmp_path)
     payload = json.loads((tmp_path / "provenance.json").read_text())
-    product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
-    product_binding["facts"].remove("product.unit")
+    remove_binding_fact(tmp_path, "product.unit")
+    payload = json.loads((tmp_path / "provenance.json").read_text())
     payload["withheld_facts"].append(
         {
             "fact_group": "withheld_product_unit",

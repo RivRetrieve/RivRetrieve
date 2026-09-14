@@ -346,12 +346,16 @@ _Avoid_: reference level, zero point
 ### Provenance
 
 **Catalogue descriptor**:
-The Croissant 1.0 JSON-LD description shipped beside each [[provider]]'s four catalogue
-tables and read offline by `describe(provider)`. The same reproducible build derives it
-from the tables, [[origin]] declarations, and acquisition provenance. It identifies files
-by digest, traces canonical fields to their issuing bodies, carries their [[license]]
-and [[citation]] words verbatim, and records each [[catalogue absence]]. Its version and
-publication date are the catalogue's recorded date, when established.
+The Croissant 1.0 JSON-LD description shipped beside each [[provider]]'s four canonical
+catalogue tables and five normalized evidence relations, read offline by
+`describe(provider)`. The same reproducible build derives it from the tables,
+[[origin]] declarations, and acquisition evidence. It identifies files by digest,
+declares typed extraction and exact evidence joins, carries established [[license]]
+and [[citation]] words verbatim, and records each [[catalogue absence]]. Individual
+fact lineage is resolved explicitly from the local evidence relations, not repeated
+as a national graph inside the descriptor. Its version and publication date are the
+catalogue's recorded date, when established; its schemaVersion separately identifies
+the versioned evidence profile.
 _Avoid_: data card (broader than this catalogue contract), observation descriptor
 
 **Catalogue absence**:

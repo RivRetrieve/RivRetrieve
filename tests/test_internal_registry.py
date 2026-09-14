@@ -5,7 +5,6 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import fields, is_dataclass, replace
 from datetime import UTC, datetime
-from pathlib import Path
 
 import polars as pl
 import polars.testing as pl_testing
@@ -15,8 +14,7 @@ from pydantic import BaseModel
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 import rivretrieve._internal.driver as driver_module
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
-from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, load_packaged_catalogue_artifact
 from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
@@ -1023,9 +1021,11 @@ def test_registered_runtime_catalogue_methods_have_registered_provider_provenanc
 def test_observation_result_carries_shared_acquisition_provenance(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
-    from rivretrieve._internal.providers.jp_mlit.origins import build_acquisition_provenance
+    from tests._catalogue import catalogue_path
 
-    shared = build_acquisition_provenance().model_copy(update={"provider_id": "test_provider"})
+    original = load_packaged_catalogue_artifact(catalogue_path("jp_mlit")).acquisition_provenance
+    assert original is not None
+    shared = original.model_copy(update={"header": original.header.model_copy(update={"provider_id": "test_provider"})})
     artifact = replace(
         stub_packaged_catalogue_artifact("test_provider"),
         acquisition_provenance=shared,
@@ -1041,31 +1041,25 @@ def test_observation_result_carries_shared_acquisition_provenance(
         on_issue="ignore",
     )
 
-    assert result.provenance.acquisition_provenance == shared
+    assert result.provenance.acquisition_provenance is shared
     assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
 
 
 @pytest.mark.parametrize("provider_id", ("usgs_nwis", "za_dws", "ca_eccc", "ch_foen", "fr_hubeau", "pl_imgw", "br_ana"))
 def test_registry_terms_come_from_verified_acquisition_statements(
-    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+    source_terms_catalogue_artifact: Callable[[str], PackagedCatalogArtifact],
     provider_id: str,
 ) -> None:
-    provenance = AcquisitionProvenance.model_validate_json(
-        (
-            Path(__file__).parents[1]
-            / "src/rivretrieve/_internal/providers"
-            / provider_id
-            / "catalogue/provenance.json"
-        ).read_text()
-    )
-    artifact = replace(stub_packaged_catalogue_artifact(provider_id), acquisition_provenance=provenance)
+    artifact = source_terms_catalogue_artifact(provider_id)
+    provenance = artifact.acquisition_provenance
+    assert provenance is not None
     handle = ProviderRegistry().register(provider_id, artifact, engine_provider_module=_InfoOnlyEngineModule)
     result = handle.observations(
         stations="station-1", products="level", start="2026-01-01", end="2026-01-02", on_issue="ignore"
     )
     expected = {
         statement.kind: statement.exact_text
-        for source in provenance.source_records
+        for source in provenance.header.source_records
         if source.source_id != "ch_existenz" and provider_id not in ("pl_imgw", "br_ana")
         for statement in source.statements
         if statement.kind in ("license", "citation")

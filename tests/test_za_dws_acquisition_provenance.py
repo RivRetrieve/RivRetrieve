@@ -7,10 +7,13 @@ from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_ar
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.za_dws import generate_catalogue
 from rivretrieve._internal.providers.za_dws.declaration import declaration
+from tests._provenance import legacy_provenance
 
 
 def test_south_africa_provenance_separates_dws_issuer_from_archive_route() -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     assert provenance is not None
     source = provenance.source_records[0]
     assert source.issuer == "South African Department of Water and Sanitation"
@@ -25,6 +28,8 @@ def test_south_africa_provenance_separates_dws_issuer_from_archive_route() -> No
 
 def test_south_africa_provenance_exposes_unsigned_dms_transformation() -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
+    assert provenance is not None
+    provenance = legacy_provenance(provenance)
     assert provenance is not None
     location = next(binding for binding in provenance.fact_bindings if binding.fact_group == "station_location")
     assert "source.station.dws_unsigned_dms" in location.facts

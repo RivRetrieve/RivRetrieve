@@ -728,6 +728,11 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
         "croissant.json",
     }
     assert committed_names == rebuilt_names == expected_names

@@ -2,6 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
+import polars as pl
 import pytest
 from pydantic import ValidationError
 
@@ -15,6 +16,7 @@ from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactErro
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ca_eccc.generate_catalogue import main
 from rivretrieve._internal.providers.ca_eccc.origins import build_acquisition_provenance
+from tests._provenance import remove_external_inputs, write_evidence_table
 
 
 def test_canada_provenance_separates_geomet_from_hydat() -> None:
@@ -111,17 +113,20 @@ def test_canada_real_loader_rejects_empty_acquisition_and_carrier_lineage(tmp_pa
     for mutation in ("acquisition", "carrier"):
         copied = tmp_path / mutation
         shutil.copytree(source, copied)
-        document = json.loads((copied / "provenance.json").read_text())
         if mutation == "acquisition":
-            acquisition = document["source_records"][0]["acquisitions"][0]
-            acquisition["description"] = ""
-            acquisition["requested_from"] = []
-        else:
-            binding = next(
-                item for item in document["fact_bindings"] if item["fact_group"] == "canonical_msc_catalogue_carrier"
+            acquisitions = pl.read_parquet(copied / "provenance_acquisitions.parquet")
+            changed = acquisitions.with_columns(
+                pl.when(pl.col("acquisition_key") == 0)
+                .then(pl.lit([], dtype=pl.List(pl.String)))
+                .otherwise(pl.col("requested_from"))
+                .alias("requested_from")
             )
-            binding["transformation"]["external_inputs"] = []
-        (copied / "provenance.json").write_text(json.dumps(document))
+            write_evidence_table(copied, "provenance_acquisitions.parquet", changed)
+            document = json.loads((copied / "provenance.json").read_text())
+            document["descriptions"][0] = ""
+            (copied / "provenance.json").write_text(json.dumps(document))
+        else:
+            remove_external_inputs(copied, ("canonical_msc_catalogue_carrier",))
         with pytest.raises(CorruptCatalogArtifactError, match="description|requested_from|external inputs"):
             load_packaged_catalogue_artifact(copied, on_issue="raise")
 
@@ -130,13 +135,33 @@ def test_canada_real_loader_rejects_runtime_lineage_for_a_packaged_product(tmp_p
     source = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue")
     mutated = tmp_path / "catalogue"
     shutil.copytree(source, mutated)
-    document = json.loads((mutated / "provenance.json").read_text())
-    product = next(item for item in document["fact_bindings"] if item["fact_group"] == "canonical_wsc_product_carrier")
-    product["transformation"] = {
+    bindings = pl.read_parquet(mutated / "provenance_bindings.parquet")
+    binding_id = bindings.filter(pl.col("fact_group") == "canonical_wsc_product_carrier")["binding_id"].item()
+    facts = pl.read_parquet(mutated / "provenance_facts.parquet")
+    fact_id = facts.filter(pl.col("name") == "source.observation.value")["fact_id"].item()
+    header = json.loads((mutated / "provenance.json").read_text())
+    transformation_id = bindings.filter(pl.col("binding_id") == binding_id)["transformation_id"].item()
+    assert bindings.filter(pl.col("transformation_id") == transformation_id).height == 1
+    header["transformations"][transformation_id] = {
         "name": "invalid runtime-derived product",
-        "external_inputs": [{"source_id": "ca_eccc_wsc", "fact": "source.observation.value"}],
+        "kind": "derived_value",
+        "marker_value": None,
     }
-    (mutated / "provenance.json").write_text(json.dumps(document))
+    (mutated / "provenance.json").write_text(json.dumps(header))
+    source_ordinal = next(
+        i for i, source in enumerate(header["source_records"]) if source["source_id"] == "ca_eccc_wsc"
+    )
+    inputs = pl.read_parquet(mutated / "provenance_external_inputs.parquet")
+    changed = pl.concat(
+        [
+            inputs.filter(pl.col("binding_id") != binding_id),
+            pl.DataFrame(
+                {"binding_id": [binding_id], "position": [0], "source_ordinal": [source_ordinal], "fact_id": [fact_id]},
+                schema=inputs.schema,
+            ),
+        ]
+    ).sort("binding_id", "position")
+    write_evidence_table(mutated, "provenance_external_inputs.parquet", changed)
 
     with pytest.raises(CorruptCatalogArtifactError, match="runtime acquisition ancestor"):
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
@@ -205,9 +230,14 @@ def test_canada_real_loader_rejects_malformed_acquisition_locations(tmp_path: Pa
     source = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue")
     mutated = tmp_path / str(abs(hash(location)))
     shutil.copytree(source, mutated)
-    document = json.loads((mutated / "provenance.json").read_text())
-    document["source_records"][0]["acquisitions"][0]["requested_from"] = [location]
-    (mutated / "provenance.json").write_text(json.dumps(document))
+    acquisitions = pl.read_parquet(mutated / "provenance_acquisitions.parquet")
+    changed = acquisitions.with_columns(
+        pl.when(pl.col("acquisition_key") == 0)
+        .then(pl.lit([location], dtype=pl.List(pl.String)))
+        .otherwise(pl.col("requested_from"))
+        .alias("requested_from")
+    )
+    write_evidence_table(mutated, "provenance_acquisitions.parquet", changed)
 
     with pytest.raises(CorruptCatalogArtifactError, match="requested_from|location"):
         load_packaged_catalogue_artifact(mutated, on_issue="raise")

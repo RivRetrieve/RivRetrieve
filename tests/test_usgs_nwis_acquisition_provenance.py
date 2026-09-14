@@ -15,12 +15,12 @@ from rivretrieve._internal.providers.usgs_nwis.origins import build_acquisition_
 def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
     assert provenance is not None
-    source = provenance.source_records[0]
+    source = provenance.header.source_records[0]
     assert source.issuer == "U.S. Geological Survey"
     assert {statement.kind for statement in source.statements} == {"license", "citation"}
-    assert provenance.native_table.sha256 == "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
-    assert provenance.native_table.byte_size == 14_093_302
-    assert provenance.withheld_facts == ()
+    assert provenance.header.native_table.sha256 == "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
+    assert provenance.header.native_table.byte_size == 14_093_302
+    assert provenance.header.withheld_facts == ()
 
 
 def test_usgs_build_rejects_changed_terms_recording(tmp_path: Path) -> None:

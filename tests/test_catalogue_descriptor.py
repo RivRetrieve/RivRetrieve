@@ -15,7 +15,15 @@ from rdflib import RDF, Graph, Literal, Namespace, URIRef
 
 from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
-from rivretrieve._internal.catalogues.descriptor import ABSENCE_NAMESPACE, build_catalogue_descriptor
+from rivretrieve._internal.catalogues.descriptor import ABSENCE_NAMESPACE, PROFILE_URI, build_catalogue_descriptor
+from rivretrieve._internal.catalogues.evidence import (
+    EVIDENCE_FILENAMES,
+    EVIDENCE_SCHEMAS,
+    EvidenceHeader,
+    normalize_provenance,
+)
+from rivretrieve._internal.catalogues.evidence_encoding import encode_catalogue_evidence, parse_catalogue_evidence
+from rivretrieve._internal.catalogues.evidence_graph import FactSelection, resolve_evidence
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 
@@ -34,7 +42,25 @@ def _descriptor(provider: str) -> dict:
 
 def _inputs(provider: str):
     directory = _path(provider)
-    provenance = AcquisitionProvenance.model_validate_json((directory / "provenance.json").read_bytes())
+    payload = (directory / "provenance.json").read_bytes()
+    canonical = {name: (directory / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
+    if json.loads(payload)["schema_version"] == 2:
+        legacy = AcquisitionProvenance.model_validate_json(payload)
+        provenance = normalize_provenance(
+            legacy,
+            stations=pl.read_parquet(directory / "stations.parquet"),
+            station_products=pl.read_parquet(directory / "station_products.parquet"),
+        )
+        evidence_files = encode_catalogue_evidence(provenance)
+    else:
+        evidence_files = {
+            "provenance.json": payload,
+            **{name: (directory / name).read_bytes() for name in EVIDENCE_FILENAMES.values()},
+        }
+        provenance = parse_catalogue_evidence(
+            EvidenceHeader.model_validate_json(payload),
+            {name: evidence_files[name] for name in EVIDENCE_FILENAMES.values()},
+        )
     if provider == "br_ana":
         origins = ()
     else:
@@ -44,8 +70,17 @@ def _inputs(provider: str):
             if provider == "fr_hubeau"
             else (module.STATION_CATALOGUE_ORIGINS,)
         )
-    files = {name: (directory / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
+    files = {**canonical, **evidence_files}
     return provenance, origins, files
+
+
+def _record_sets(value: object) -> list[dict]:
+    assert isinstance(value, list)
+    records: list[dict] = []
+    for record in value:
+        assert isinstance(record, dict)
+        records.append(record)
+    return records
 
 
 def _field(descriptor: dict, identity: str) -> dict:
@@ -64,14 +99,16 @@ def _deny_network(*args, **kwargs):
 def test_every_committed_descriptor_passes_reference_validator_without_network(provider: str, monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
     dataset = mlc.Dataset(_path(provider) / "croissant.json")
-    assert len(dataset.metadata.record_sets) == 4
+    assert len(dataset.metadata.record_sets) == 9
+    assert _descriptor(provider)["schemaVersion"] == PROFILE_URI
     descriptor = _descriptor(provider)
     for distribution in descriptor["distribution"]:
         assert distribution["sha256"] == sha256((_path(provider) / distribution["contentUrl"]).read_bytes()).hexdigest()
     for record in descriptor["recordSet"]:
         for field in record["field"]:
             assert "source" in field
-            assert "subjectOf" in field or "rr:absence" in field
+            if not record["@id"].startswith("provenance_"):
+                assert "subjectOf" in field or "rr:absence" in field
 
 
 @pytest.mark.parametrize("provider", tuple(BUILTIN_PROVIDER_IDS))
@@ -91,10 +128,15 @@ def test_jsonld_uses_only_standard_properties_and_preserves_absence_literals(pro
 
 
 def test_poland_historical_derivation_retains_both_issuers_and_separate_corroboration():
-    graph = _graph("pl_imgw")
+    evidence, _, _ = _inputs("pl_imgw")
+    graph = Graph().parse(
+        data=json.dumps(resolve_evidence(evidence, FactSelection(names=("station.latitude", "station.station_id")))),
+        format="json-ld",
+        publicID=BASE,
+    )
     for column in ("latitude", "station_id"):
-        field = URIRef(BASE + "stations/" + column)
-        lineage = next(graph.objects(field, SC.subjectOf))
+        field = next(graph.subjects(SC.identifier, Literal("station." + column)))
+        lineage = next(graph.objects(field, SC.isBasedOn))
         inputs = set(graph.transitive_objects(lineage, SC.isBasedOn))
         recovered = next(
             subject
@@ -176,11 +218,13 @@ def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch):
 
 def test_brazil_preserves_terms_without_inventing_date_or_native_identity():
     descriptor = _descriptor("br_ana")
-    provenance = AcquisitionProvenance.model_validate_json((_path("br_ana") / "provenance.json").read_bytes())
-    assert descriptor["license"] == provenance.source_records[0].statements[0].exact_text
+    provenance, _, _ = _inputs("br_ana")
+    assert descriptor["license"] == provenance.header.source_records[0].statements[0].exact_text
     assert not {"version", "datePublished", "isBasedOn"}.intersection(descriptor)
-    assert all("rr:absence" in record for record in descriptor["recordSet"])
-    assert all("rowCount" not in record["rr:absence"] for record in descriptor["recordSet"])
+    assert all(
+        "rr:absence" in record for record in descriptor["recordSet"] if not record["@id"].startswith("provenance_")
+    )
+    assert all("rowCount" not in record["rr:absence"] for record in descriptor["recordSet"] if "rr:absence" in record)
 
 
 def test_generator_rejects_missing_origins_and_unattributed_canonical_column():
@@ -191,33 +235,27 @@ def test_generator_rejects_missing_origins_and_unattributed_canonical_column():
     del damaged["latitude"]
     with pytest.raises(FatalContractError, match="Station column has no origin"):
         build_catalogue_descriptor(provenance, (damaged,), files)
-    bindings = tuple(
-        binding.model_copy(update={"facts": tuple(fact for fact in binding.facts if fact != "station.latitude")})
-        for binding in provenance.fact_bindings
+    damaged_evidence = provenance.model_copy(
+        update={
+            "binding_facts": provenance.binding_facts.join(
+                provenance.facts.filter(pl.col("name") == "station.latitude").select("fact_id"),
+                on="fact_id",
+                how="anti",
+            )
+        }
     )
     with pytest.raises(FatalContractError, match="Canonical column has no lineage or withheld fact"):
-        build_catalogue_descriptor(provenance.model_copy(update={"fact_bindings": bindings}), origins, files)
+        build_catalogue_descriptor(damaged_evidence, origins, files)
 
 
-def test_generator_rejects_missing_acquisition_and_native_byte_identity():
-    provenance, origins, files = _inputs("pl_imgw")
-    bindings = tuple(
-        binding.model_copy(update={"acquisition_id": "does-not-exist"})
-        if binding.source_id == "sr.pl.grdc"
-        else binding
-        for binding in provenance.fact_bindings
+def test_generator_rejects_native_byte_identity_without_size():
+    evidence, origins, files = _inputs("pl_imgw")
+    assert evidence.header.native_table is not None
+    header = evidence.header.model_copy(
+        update={"native_table": evidence.header.native_table.model_copy(update={"byte_size": None})}
     )
-    with pytest.raises(FatalContractError, match="not an established historical acquisition"):
-        build_catalogue_descriptor(provenance.model_copy(update={"fact_bindings": bindings}), origins, files)
-    assert provenance.native_table is not None
     with pytest.raises(FatalContractError, match="Native table byte size"):
-        build_catalogue_descriptor(
-            provenance.model_copy(
-                update={"native_table": provenance.native_table.model_copy(update={"byte_size": None})}
-            ),
-            origins,
-            files,
-        )
+        build_catalogue_descriptor(evidence.model_copy(update={"header": header}), origins, files)
 
 
 def test_verbatim_source_terms_remain_separate_and_uninterpreted():
@@ -225,24 +263,24 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
     provenance, _, _ = _inputs("usgs_nwis")
     for kind in ("license", "citation"):
         assert descriptor[kind] == next(
-            statement.exact_text for statement in provenance.source_records[0].statements if statement.kind == kind
+            statement.exact_text
+            for statement in provenance.header.source_records[0].statements
+            if statement.kind == kind
         )
     for provider in ("ch_foen", "ca_eccc", "pl_imgw", "fr_hubeau", "th_thaiwater"):
         assert "license" not in _descriptor(provider) and "citation" not in _descriptor(provider)
     bosnia = _descriptor("ba_fhmzbih")
     provenance, _, _ = _inputs("ba_fhmzbih")
-    source = next(node for node in bosnia["subjectOf"] if node["@id"].startswith("issuer/"))
-    assert source["usageInfo"][0]["text"] == next(
-        statement.exact_text for statement in provenance.source_records[0].statements if statement.kind == "terms"
-    )
-    assert "license" not in source
+    assert bosnia["subjectOf"]["url"] == "provenance.json"
+    source = provenance.header.source_records[0]
+    assert any(statement.kind == "terms" and statement.exact_text for statement in source.statements)
 
 
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
 def test_native_material_identity_matches_committed_provenance_and_bytes(provider: str):
     descriptor = _descriptor(provider)
-    provenance = AcquisitionProvenance.model_validate_json((_path(provider) / "provenance.json").read_bytes())
-    native = provenance.native_table
+    provenance, _, _ = _inputs(provider)
+    native = provenance.header.native_table
     assert all(item["contentUrl"] != "native.parquet" for item in descriptor["distribution"])
     assert "private://" not in json.dumps(descriptor)
     if native is None:
@@ -307,30 +345,13 @@ def test_bosnia_record_sets_have_no_withheld_baseline_rows():
 
 
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
-def test_descriptor_preserves_exact_contents_without_binding_position_scans(provider: str):
-    import sys
-
-    provenance, origins, files = _inputs(provider)
-    position_scans = 0
-
-    def count_position_scans(frame, event, arg):
-        nonlocal position_scans
-        if (
-            event == "c_call"
-            and getattr(arg, "__name__", None) == "index"
-            and getattr(arg, "__self__", None) is provenance.fact_bindings
-        ):
-            position_scans += 1
-
-    previous_profile = sys.getprofile()
-    sys.setprofile(count_position_scans)
-    try:
-        descriptor = build_catalogue_descriptor(provenance, origins, files)
-    finally:
-        sys.setprofile(previous_profile)
-
+def test_descriptor_preserves_exact_bounded_contents(provider: str):
+    evidence, origins, files = _inputs(provider)
+    descriptor = build_catalogue_descriptor(evidence, origins, files)
     assert descriptor == _descriptor(provider)
-    assert position_scans == 0, f"descriptor scanned binding positions {position_scans} times"
+    serialized = json.dumps(descriptor)
+    assert len(serialized.encode()) <= 262_144
+    assert "lineage/" not in serialized and "acquisition/" not in serialized
 
 
 def test_france_admitted_baseline_record_sets_have_no_missing_acquisition_absence():
@@ -338,3 +359,84 @@ def test_france_admitted_baseline_record_sets_have_no_missing_acquisition_absenc
     for record in descriptor["recordSet"]:
         if record["@id"] in {"stations", "station_products"}:
             assert "rr:absence" not in record
+
+
+@pytest.mark.parametrize("provider", ("br_ana", "pl_imgw", "fr_hubeau", "ba_fhmzbih", "th_thaiwater"))
+def test_reference_loader_extracts_all_five_evidence_relations(provider, monkeypatch):
+    monkeypatch.setattr(socket.socket, "connect", _deny_network)
+    dataset = mlc.Dataset(_path(provider) / "croissant.json")
+    for relation, schema in EVIDENCE_SCHEMAS.items():
+
+        def decode(value):
+            if isinstance(value, bytes):
+                return value.decode()
+            if hasattr(value, "tolist"):
+                return [decode(item) for item in value.tolist()]
+            if isinstance(value, list):
+                return [decode(item) for item in value]
+            return value
+
+        rows = [
+            {key.partition("/")[2]: decode(value) for key, value in row.items()}
+            for row in dataset.records(f"provenance_{relation}")
+        ]
+        actual = pl.DataFrame(rows, schema=schema)
+        expected = pl.read_parquet(_path(provider) / EVIDENCE_FILENAMES[relation])
+        pl_testing.assert_frame_equal(actual, expected)
+
+
+def test_descriptor_rejects_unexpected_file_authority():
+    evidence, origins, files = _inputs("pl_imgw")
+    for name in ("native.parquet", "../private.parquet", "https://example.org/input"):
+        with pytest.raises(FatalContractError, match="exactly the ten"):
+            build_catalogue_descriptor(evidence, origins, {**files, name: b"unexpected"})
+
+
+def test_evidence_recordsets_declare_exact_keys_and_physical_foreign_keys():
+    evidence, origins, files = _inputs("pl_imgw")
+    descriptor = build_catalogue_descriptor(evidence, origins, files)
+    records = {record["@id"]: record for record in _record_sets(descriptor["recordSet"])}
+    targets = {"fact_id": "facts", "binding_id": "bindings", "acquisition_key": "acquisitions"}
+    keys = {
+        "facts": ("fact_id",),
+        "acquisitions": ("acquisition_key",),
+        "bindings": ("binding_id",),
+        "binding_facts": ("binding_id", "position"),
+        "external_inputs": ("binding_id", "position"),
+    }
+    for relation, schema in EVIDENCE_SCHEMAS.items():
+        record = records[f"provenance_{relation}"]
+        assert record["key"] == [{"@id": f"provenance_{relation}/{column}"} for column in keys[relation]]
+        assert [field["@id"].partition("/")[2] for field in record["field"]] == list(schema)
+        for field in record["field"]:
+            column = field["@id"].partition("/")[2]
+            if column in targets and targets[column] != relation:
+                assert field["references"] == {
+                    "fileObject": {"@id": EVIDENCE_FILENAMES[targets[column]]},
+                    "extract": {"column": column},
+                }
+            if isinstance(schema[column], pl.List):
+                assert field["isArray"] is True and field["arrayShape"] == "-1"
+
+
+def test_descriptor_rejects_header_and_relation_byte_disagreement():
+    evidence, origins, files = _inputs("pl_imgw")
+    filename = EVIDENCE_FILENAMES["facts"]
+    with pytest.raises(FatalContractError, match="evidence file identity"):
+        build_catalogue_descriptor(evidence, origins, {**files, filename: files[filename] + b"changed"})
+    header = json.loads(files["provenance.json"])
+    header["provider_id"] = "other"
+    with pytest.raises(FatalContractError, match="evidence header"):
+        build_catalogue_descriptor(evidence, origins, {**files, "provenance.json": json.dumps(header).encode()})
+
+
+@pytest.mark.parametrize("provider", tuple(BUILTIN_PROVIDER_IDS))
+def test_record_keys_expand_to_croissant_vocabulary(provider: str):
+    evidence, origins, files = _inputs(provider)
+    descriptor = build_catalogue_descriptor(evidence, origins, files)
+    graph = Graph().parse(data=json.dumps(descriptor), format="json-ld", publicID=BASE)
+    croissant = Namespace("http://mlcommons.org/croissant/")
+    assert not list(graph.triples((None, SC.key, None)))
+    for record in _record_sets(descriptor["recordSet"]):
+        if "key" in record:
+            assert list(graph.objects(URIRef(BASE + record["@id"]), croissant.key))

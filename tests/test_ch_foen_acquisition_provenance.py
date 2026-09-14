@@ -1,7 +1,7 @@
-import json
 import shutil
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
@@ -9,6 +9,7 @@ from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactErro
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ch_foen.generate_catalogue import main
 from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
+from tests._provenance import write_evidence_table
 
 
 def test_swiss_provenance_separates_bafu_from_existenz() -> None:
@@ -60,16 +61,19 @@ def test_swiss_real_loader_rejects_runtime_capture_for_catalogue_facts(tmp_path:
     source = Path("src/rivretrieve/_internal/providers/ch_foen/catalogue")
     copied = tmp_path / "catalogue"
     shutil.copytree(source, copied)
-    document = json.loads((copied / "provenance.json").read_text())
-    acquisition = document["source_records"][0]["acquisitions"][0]
-    acquisition.update(
-        {
+    acquisitions = pl.read_parquet(copied / "provenance_acquisitions.parquet")
+    changed = acquisitions.with_columns(
+        pl.when(pl.col("acquisition_key") == 0)
+        .then(pl.lit(value, dtype=acquisitions.schema[name]))
+        .otherwise(pl.col(name))
+        .alias(name)
+        for name, value in {
             "method": "runtime_http_request",
             "instant_type": "runtime",
             "retrieved_at_start": None,
             "retrieved_at_end": None,
-        }
+        }.items()
     )
-    (copied / "provenance.json").write_text(json.dumps(document))
+    write_evidence_table(copied, "provenance_acquisitions.parquet", changed)
     with pytest.raises(CorruptCatalogArtifactError, match="runtime acquisitions may bind only runtime observation"):
         load_packaged_catalogue_artifact(copied, on_issue="raise")

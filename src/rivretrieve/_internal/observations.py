@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Self, cast
 import polars as pl
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema, validate_catalogue
 from rivretrieve._internal.coverage import CoverageInterval
 from rivretrieve._internal.engine import SourceCallOrigin, WindowEndpoint
@@ -97,7 +97,7 @@ class ObservationProvenance(BaseModel):
     publisher_artifact_checksum: str | None = None
     publisher_artifact_checksums: tuple[str, ...] = ()
     publisher_artifact_urls: tuple[str, ...] = ()
-    acquisition_provenance: AcquisitionProvenance | None = None
+    acquisition_provenance: CatalogueEvidence | None = None
 
 
 class ReceiptMode(StrEnum):

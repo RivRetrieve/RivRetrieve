@@ -24,7 +24,6 @@ import polars.testing as pl_testing
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
-    serialize_acquisition_provenance,
     verify_acquisition_provenance_statements,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -313,7 +312,7 @@ def _validate(
 
 def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
-    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -324,17 +323,13 @@ def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) ->
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-    (output_path / "provenance.json").write_text(
-        serialize_acquisition_provenance(catalogue.acquisition_provenance) + "\n",
-        encoding="utf-8",
-    )
-
-    write_catalogue_descriptor(
-        output_path / "croissant.json",
-        AcquisitionProvenance.model_validate_json((output_path / "provenance.json").read_bytes()),
+    metadata = build_catalogue_metadata(
+        catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
     )
+    for name, content in metadata.items():
+        (output_path / name).write_bytes(content)
 
 
 class _NativeTdParser(HTMLParser):

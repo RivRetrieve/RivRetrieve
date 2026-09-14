@@ -146,6 +146,11 @@ def test_build_is_network_free_and_byte_identical(tmp_path: Path, monkeypatch: p
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
     ):
         assert (output / name).read_bytes() == (_CATALOGUE / name).read_bytes()
 

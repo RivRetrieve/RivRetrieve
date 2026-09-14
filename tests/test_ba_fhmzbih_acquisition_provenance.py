@@ -2,6 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
+import polars as pl
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
@@ -10,6 +11,7 @@ from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactErro
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue import main
 from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger, build_acquisition_provenance
+from tests._provenance import legacy_document, write_evidence_table
 
 _LEDGER = Path("research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json")
 
@@ -19,7 +21,7 @@ def _provenance():
 
 
 def _withheld_document():
-    document = json.loads(Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/provenance.json").read_text())
+    document = legacy_document(Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/provenance.json"))
     document["withheld_facts"].append(
         {
             "fact_group": "test_withheld_station",
@@ -30,6 +32,32 @@ def _withheld_document():
     )
     document["fact_universe"].append("station:1010.identity_location")
     return document
+
+
+def _withheld_v3_document(directory: Path) -> dict:
+    facts = pl.read_parquet(directory / "provenance_facts.parquet")
+    added = pl.DataFrame(
+        {
+            "fact_id": [facts.height],
+            "name": ["station:1010.identity_location"],
+            "carrier": [None],
+            "station_id": [None],
+            "product_id": [None],
+            "locator_role": [None],
+        },
+        schema=facts.schema,
+    )
+    write_evidence_table(directory, "provenance_facts.parquet", pl.concat([facts, added]))
+    header = json.loads((directory / "provenance.json").read_text())
+    header["withheld_facts"].append(
+        {
+            "fact_group": "test_withheld_station",
+            "facts": ["station:1010.identity_location"],
+            "reason": "no_acquisition_record_established",
+            "catalogue_rows": [{"carrier": "station", "station_id": "1010", "product_id": None}],
+        }
+    )
+    return header
 
 
 def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
@@ -79,7 +107,7 @@ def test_bosnia_row_scoped_fact_rejects_a_detached_locator_in_real_loader(tmp_pa
     source = Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue")
     mutated = tmp_path / "catalogue"
     shutil.copytree(source, mutated)
-    document = _withheld_document()
+    document = _withheld_v3_document(mutated)
     withheld = next(item for item in document["withheld_facts"] if item["facts"] == ["station:1010.identity_location"])
     withheld["catalogue_rows"][0]["station_id"] = "DOES_NOT_EXIST"
     (mutated / "provenance.json").write_text(json.dumps(document))
@@ -110,7 +138,7 @@ def test_bosnia_real_loader_rejects_exposed_row_when_withheld_locator_is_removed
     source = Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue")
     mutated = tmp_path / "catalogue"
     shutil.copytree(source, mutated)
-    document = _withheld_document()
+    document = _withheld_v3_document(mutated)
     withheld = next(item for item in document["withheld_facts"] if item["facts"] == ["station:1010.identity_location"])
     withheld["catalogue_rows"] = []
     (mutated / "provenance.json").write_text(json.dumps(document))

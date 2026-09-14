@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -14,13 +14,14 @@ from rivretrieve._internal.acquisition_provenance import (
     FactBinding,
     Transformation,
 )
+from tests._provenance import legacy_document
 
 _PROVIDER_ROOT = Path("src/rivretrieve/_internal/providers")
 _PROVENANCE_PATHS = tuple(sorted(_PROVIDER_ROOT.glob("*/catalogue/provenance.json")))
 
 
-def _document(provider_id: str) -> dict[str, object]:
-    return json.loads((_PROVIDER_ROOT / provider_id / "catalogue" / "provenance.json").read_text())
+def _document(provider_id: str) -> dict[str, Any]:
+    return legacy_document(_PROVIDER_ROOT / provider_id / "catalogue" / "provenance.json")
 
 
 def _model_payload(provenance: AcquisitionProvenance) -> dict[str, object]:
@@ -29,7 +30,7 @@ def _model_payload(provenance: AcquisitionProvenance) -> dict[str, object]:
 
 def test_every_v2_acquisition_has_exact_typed_instant_semantics() -> None:
     for path in _PROVENANCE_PATHS:
-        document = json.loads(path.read_text())
+        document = legacy_document(path)
         assert document["schema_version"] == 2
         for source in document["source_records"]:
             for acquisition in source["acquisitions"]:
@@ -198,7 +199,7 @@ def test_v2_artifacts_do_not_attribute_rivretrieve_canonical_facts_to_external_i
     canonical_prefixes = ("provider.", "product.", "station.", "station_product.", "canonical.")
     violations: list[tuple[Path, str, str]] = []
     for path in _PROVENANCE_PATHS:
-        document = json.loads(path.read_text())
+        document = legacy_document(path)
         for binding in document["fact_bindings"]:
             if binding.get("source_id") is None:
                 continue
@@ -310,7 +311,7 @@ def test_acquisition_accepts_runtime_templates_and_narrow_private_location() -> 
 
 def test_every_public_statement_is_bound_to_its_recording_acquisition() -> None:
     for path in _PROVENANCE_PATHS:
-        document = json.loads(path.read_text())
+        document = legacy_document(path)
         bindings = {
             (binding.get("source_id"), fact): binding.get("acquisition_id")
             for binding in document["fact_bindings"]

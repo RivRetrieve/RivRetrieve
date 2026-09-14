@@ -8,9 +8,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
-from pydantic import ValidationError
 
 from rivretrieve._internal.acquisition_provenance import AbsenceMarkerValue, AcquisitionProvenance
+from rivretrieve._internal.catalogues.evidence import (
+    CatalogueEvidence,
+    EvidenceHeader,
+    normalize_provenance,
+    validate_catalogue_locators,
+)
+from rivretrieve._internal.catalogues.evidence_encoding import parse_catalogue_evidence
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -71,7 +77,7 @@ class PackagedCatalogArtifact:
     products: pl.DataFrame
     stations: pl.DataFrame
     station_products: pl.DataFrame
-    acquisition_provenance: AcquisitionProvenance | None = None
+    acquisition_provenance: CatalogueEvidence | None = None
 
 
 def load_packaged_catalogue_artifact(
@@ -105,7 +111,7 @@ def packaged_catalogue_artifact_from_components(
     stations: pl.DataFrame,
     station_products: pl.DataFrame,
     *,
-    acquisition_provenance: AcquisitionProvenance | None = None,
+    acquisition_provenance: AcquisitionProvenance | CatalogueEvidence | None = None,
     withheld_rows_already_applied: bool = False,
     on_issue: OnIssue = "warn",
 ) -> PackagedCatalogArtifact:
@@ -117,7 +123,7 @@ def packaged_catalogue_artifact_from_components(
         if provider_id in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS and acquisition_provenance is None:
             raise FatalContractError(f"{provider_id} acquisition provenance is required")
         if acquisition_provenance is not None:
-            if acquisition_provenance.provider_id != provider_id:
+            if _provenance_header(acquisition_provenance).provider_id != provider_id:
                 raise FatalContractError("provenance.json provider_id does not match provider.json provider_id")
             _validate_catalogue_fact_universe(acquisition_provenance)
             provider_info, products, stations, station_products = _apply_withheld_facts(
@@ -149,6 +155,16 @@ def packaged_catalogue_artifact_from_components(
     except pl.exceptions.PolarsError as exc:
         raise CorruptCatalogArtifactError("Packaged catalogue artifact has invalid data") from exc
 
+    try:
+        if isinstance(acquisition_provenance, AcquisitionProvenance):
+            acquisition_provenance = normalize_provenance(
+                acquisition_provenance, stations=stations, station_products=station_products
+            )
+        if acquisition_provenance is not None:
+            validate_catalogue_locators(acquisition_provenance, stations=stations, station_products=station_products)
+    except (ValueError, FatalContractError, pl.exceptions.PolarsError) as exc:
+        raise CorruptCatalogArtifactError(f"Catalogue evidence does not match canonical tables: {exc}") from exc
+
     return PackagedCatalogArtifact(
         provider_info=provider_info_df.row(0, named=True),
         products=products,
@@ -158,19 +174,25 @@ def packaged_catalogue_artifact_from_components(
     )
 
 
-def _validate_catalogue_fact_universe(provenance: AcquisitionProvenance) -> None:
+def _provenance_header(provenance: AcquisitionProvenance | CatalogueEvidence) -> AcquisitionProvenance | EvidenceHeader:
+    return provenance if isinstance(provenance, AcquisitionProvenance) else provenance.header
+
+
+def _validate_catalogue_fact_universe(provenance: AcquisitionProvenance | CatalogueEvidence) -> None:
     expected = set(CATALOGUE_FACT_UNIVERSE)
-    declared = set(provenance.fact_universe)
+    declared = set(
+        provenance.fact_universe if isinstance(provenance, AcquisitionProvenance) else provenance.facts["name"]
+    )
     missing = expected - declared
     if missing:
         raise FatalContractError(
-            f"{provenance.provider_id} acquisition provenance does not declare catalogue facts: {sorted(missing)!r}"
+            f"{_provenance_header(provenance).provider_id} acquisition provenance does not declare catalogue facts: {sorted(missing)!r}"
         )
     catalogue_prefixes = {prefix for prefix, _ in _CATALOGUE_FACT_SCHEMAS}
     unsupported = {fact for fact in declared - expected if fact.partition(".")[0] in catalogue_prefixes}
     if unsupported:
         raise FatalContractError(
-            f"{provenance.provider_id} acquisition provenance declares unknown catalogue facts: {sorted(unsupported)!r}"
+            f"{_provenance_header(provenance).provider_id} acquisition provenance declares unknown catalogue facts: {sorted(unsupported)!r}"
         )
 
 
@@ -179,7 +201,7 @@ def _validate_absence_marker_values(
     products: pl.DataFrame,
     stations: pl.DataFrame,
     station_products: pl.DataFrame,
-    provenance: AcquisitionProvenance,
+    provenance: AcquisitionProvenance | CatalogueEvidence,
 ) -> None:
     """Require declared absence markers to equal their canonical carrier values."""
     tables = {
@@ -188,6 +210,34 @@ def _validate_absence_marker_values(
         "station": stations,
         "station_product": station_products,
     }
+    if isinstance(provenance, CatalogueEvidence):
+        for transformation_id, transformation in enumerate(provenance.header.transformations):
+            if transformation.kind != "absence_marker":
+                continue
+            marker = transformation.marker_value
+            if marker is None:
+                raise FatalContractError("absence-marker transformation has no marker value")
+            outputs = (
+                provenance.bindings.filter(pl.col("transformation_id") == transformation_id)
+                .select("binding_id")
+                .join(provenance.binding_facts, on="binding_id")
+                .join(provenance.facts.select("fact_id", "name"), on="fact_id")
+            )
+            for fact in outputs["name"]:
+                carrier, separator, column = fact.partition(".")
+                if not separator or carrier not in tables or column not in tables[carrier].columns:
+                    raise FatalContractError(f"absence marker output {fact!r} does not resolve to a catalogue carrier")
+                mismatch = (
+                    pl.col(column).is_not_null()
+                    if marker == AbsenceMarkerValue.NULL
+                    else pl.col(column) != marker.value
+                )
+                mismatches = tables[carrier].filter(mismatch).height
+                if mismatches:
+                    raise FatalContractError(
+                        f"absence marker output {fact} must be exactly {marker.value}; found {mismatches} mismatching rows"
+                    )
+        return
     for binding in provenance.fact_bindings:
         transformation = binding.transformation
         if transformation is None or transformation.kind != "absence_marker":
@@ -216,7 +266,7 @@ def _apply_withheld_facts(
     products: pl.DataFrame,
     stations: pl.DataFrame,
     station_products: pl.DataFrame,
-    provenance: AcquisitionProvenance,
+    provenance: AcquisitionProvenance | CatalogueEvidence,
     *,
     allow_missing_rows: bool,
 ) -> tuple[dict[str, object], pl.DataFrame, pl.DataFrame, pl.DataFrame]:
@@ -229,13 +279,13 @@ def _apply_withheld_facts(
     schemas = dict(_CATALOGUE_FACT_SCHEMAS)
     station_row_ids: list[str] = []
     station_product_row_keys: list[tuple[str, str]] = []
-    for withheld_group in provenance.withheld_facts:
+    for withheld_group in _provenance_header(provenance).withheld_facts:
         for locator in withheld_group.catalogue_rows:
             if locator.carrier == "station":
                 matches = stations.filter(pl.col("station_id") == locator.station_id).height
                 if matches != 1 and not (allow_missing_rows and matches == 0):
                     raise FatalContractError(
-                        f"{provenance.provider_id} withheld station row {locator.station_id!r} "
+                        f"{_provenance_header(provenance).provider_id} withheld station row {locator.station_id!r} "
                         f"matched {matches} catalogue rows"
                     )
                 station_row_ids.append(locator.station_id)
@@ -245,13 +295,13 @@ def _apply_withheld_facts(
                 ).height
                 if matches != 1 and not (allow_missing_rows and matches == 0):
                     raise FatalContractError(
-                        f"{provenance.provider_id} withheld station-product row "
+                        f"{_provenance_header(provenance).provider_id} withheld station-product row "
                         f"{locator.station_id!r}/{locator.product_id!r} matched {matches} catalogue rows"
                     )
                 if locator.product_id is None:  # pragma: no cover - rejected by the model
                     raise AssertionError("station-product locator has no product id")
                 station_product_row_keys.append((locator.station_id, locator.product_id))
-    for withheld_group in provenance.withheld_facts:
+    for withheld_group in _provenance_header(provenance).withheld_facts:
         for withheld_fact in withheld_group.facts:
             prefix, separator, column_name = withheld_fact.partition(".")
             if not separator or prefix not in schemas:
@@ -264,7 +314,7 @@ def _apply_withheld_facts(
                     normalized_provider[column_name] = None
                 elif value is not None:
                     raise FatalContractError(
-                        f"{provenance.provider_id} withheld provider.{column_name} remains exposed"
+                        f"{_provenance_header(provenance).provider_id} withheld provider.{column_name} remains exposed"
                     )
                 continue
             table = tables[prefix]
@@ -298,17 +348,39 @@ def _apply_withheld_facts(
     return normalized_provider, products, stations, station_products
 
 
-def _read_provenance_json(path: Path) -> AcquisitionProvenance | None:
+def _read_provenance_json(path: Path) -> AcquisitionProvenance | CatalogueEvidence | None:
     if not path.exists():
         return None
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        return AcquisitionProvenance.model_validate(value)
+        if not isinstance(value, dict):
+            raise CorruptCatalogArtifactError(f"Acquisition provenance file must contain an object: {path}")
+        version = value.get("schema_version")
+        if version == 2:
+            return AcquisitionProvenance.model_validate(value)
+        if version != 3:
+            raise CorruptCatalogArtifactError(
+                f"Unsupported acquisition provenance schema_version {version!r}: {path}; "
+                "install a compatible RivRetrieve catalogue or rebuild it with the current catalogue generator"
+            )
+        header = EvidenceHeader.model_validate(value)
+        # The strict header permits only the five fixed relative evidence basenames.
+        table_bytes = {}
+        for filename in header.files:
+            table_path = path.parent / filename
+            if table_path.is_symlink():
+                raise CorruptCatalogArtifactError(f"Evidence files cannot be symlinks: {table_path}")
+            table_bytes[filename] = table_path.read_bytes()
+        return parse_catalogue_evidence(header, table_bytes)
     except OSError as exc:
         raise CorruptCatalogArtifactError(f"Unable to read acquisition provenance file: {path}") from exc
     except json.JSONDecodeError as exc:
         raise CorruptCatalogArtifactError(f"Acquisition provenance file is not valid JSON: {path}") from exc
-    except ValidationError as exc:
+    except (ValueError, pl.exceptions.PolarsError) as exc:
+        raise CorruptCatalogArtifactError(f"Acquisition provenance file is invalid: {path}: {exc}") from exc
+    except FatalContractError as exc:
+        if isinstance(exc, CorruptCatalogArtifactError):
+            raise
         raise CorruptCatalogArtifactError(f"Acquisition provenance file is invalid: {exc}") from exc
 
 

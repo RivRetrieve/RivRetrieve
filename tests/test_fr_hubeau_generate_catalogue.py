@@ -1310,6 +1310,11 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
     }
     for artifact in (
         "provider.json",
@@ -1317,6 +1322,11 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "provenance_facts.parquet",
+        "provenance_acquisitions.parquet",
+        "provenance_bindings.parquet",
+        "provenance_binding_facts.parquet",
+        "provenance_external_inputs.parquet",
         "croissant.json",
     ):
         assert (tmp_path / artifact).read_bytes() == (NATIVE_PATH.parent / artifact).read_bytes()

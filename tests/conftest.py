@@ -8,17 +8,18 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import (
     ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS,
     PackagedCatalogArtifact,
+    load_packaged_catalogue_artifact,
     packaged_catalogue_artifact_from_components,
 )
+from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
 
 
-def _packaged_provenance(provider_id: str) -> AcquisitionProvenance | None:
+def _packaged_provenance(provider_id: str) -> CatalogueEvidence | None:
     if provider_id not in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS:
         return None
     path = (
@@ -31,7 +32,7 @@ def _packaged_provenance(provider_id: str) -> AcquisitionProvenance | None:
         / "catalogue"
         / "provenance.json"
     )
-    return AcquisitionProvenance.model_validate_json(path.read_text())
+    return load_packaged_catalogue_artifact(path.parent, on_issue="raise").acquisition_provenance
 
 
 @dataclass(frozen=True)
@@ -325,3 +326,24 @@ def registered_stub(
     artifact = stub_provider.build_artifact(stub_packaged_catalogue_artifact)
     handle = fresh_registry.register("stub_provider", artifact, provider_module=stub_provider)
     return RegisteredStub(registry=fresh_registry, handle=handle)
+
+
+@pytest.fixture
+def source_terms_catalogue_artifact() -> Callable[[str], PackagedCatalogArtifact]:
+    """Wire real verified source terms to synthetic engine rows, not certify a catalogue.
+
+    Only registry source-terms unit tests use this direct contract carrier. Ordinary
+    stub catalogues continue through the shared component validator. The real
+    metadata keeps all its national locator requirements unchanged.
+    """
+
+    def build(provider_id: str) -> PackagedCatalogArtifact:
+        return PackagedCatalogArtifact(
+            provider_info=_provider_info(provider_id, "2026.01"),
+            products=_products(provider_id),
+            stations=_stations(provider_id),
+            station_products=_station_products(provider_id),
+            acquisition_provenance=_packaged_provenance(provider_id),
+        )
+
+    return build

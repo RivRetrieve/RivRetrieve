@@ -27,6 +27,7 @@ def test_catalogue_admits_full_evidenced_native_inventory() -> None:
         (row["station_id"], row["product_id"]): row for row in artifact.station_products.iter_rows(named=True)
     }
     provenance = catalogue.acquisition_provenance
+    assert provenance is not None
     bindings = {fact: binding for binding in provenance.fact_bindings for fact in binding.facts}
     acquisitions = {
         (source.source_id, acquisition.acquisition_id): acquisition

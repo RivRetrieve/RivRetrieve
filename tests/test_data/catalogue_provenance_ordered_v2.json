@@ -1,0 +1,58 @@
+{
+  "revision": "6f0edf6a455735cb1f8c858a1a9f35d4245cf209",
+  "serialization": "AcquisitionProvenance.model_dump(mode=json), ensure_ascii=False, separators=(comma,colon); all array order preserved",
+  "providers": {
+    "ba_fhmzbih": {
+      "source_sha256": "55984ba0622e71eea47074dfbaae0fbb31b5cc077b513a8b1f7f946ce3069307",
+      "ordered_model_sha256": "1bdbb299e1bab930c4321998fb3d642725356fbbfa7b0c12d6ff95dfb283c198"
+    },
+    "br_ana": {
+      "source_sha256": "aefb34d6582bc53b6463f3cec882b6395ee96aa99fcf118f41f862f9af07173e",
+      "ordered_model_sha256": "f7583dba500310dd2b339f686200a9f51cf54f6a4fa17892400f3cde3831de73"
+    },
+    "ca_eccc": {
+      "source_sha256": "f9bdb7d62bbfa67926bb2a63d2f7fa2304b9eaa942dcb74dacf1b37791bd7848",
+      "ordered_model_sha256": "278b82ae45e2bac9344e2292ffa49a9553ff96567761f1dbf6a0fc722624e2c1"
+    },
+    "ch_foen": {
+      "source_sha256": "a8cc32630174c14d93de5d5361c38ef99a9729bed8595fd1be0220c9e38a17bc",
+      "ordered_model_sha256": "d89deb4b20b97465763c9eabed1477e0a99b9af3cdc80d2b9b32695940b93c03"
+    },
+    "cz_chmi": {
+      "source_sha256": "a858d6ac00416867148525efa3b8a046bc99cbcd5e0b45071e48c9bce2f8bccb",
+      "ordered_model_sha256": "1320dbcbb8091d305b9d645a00b9c53bd94123607069c927281a6fb5e4db09ac"
+    },
+    "fr_hubeau": {
+      "source_sha256": "172427cd2a859594a3da9c2f81d078aa456bcb9c48559207bdaa971ac35b61f0",
+      "ordered_model_sha256": "d82c3e9136f2a1151c9a2e2ee06a7055a06169dbeb880f9b9fb04c14e44200dd"
+    },
+    "jp_mlit": {
+      "source_sha256": "deb456d61d5c57ec210156e148ab3e130602d7e4b87fd6dfc8599f746ae6f317",
+      "ordered_model_sha256": "5046a2e559d8100c66c9bf47cbb992e9c6ee32db02215dc89b046e7297fb4346"
+    },
+    "lt_lhmt": {
+      "source_sha256": "9c11a121672ba9724b802bcf28fb579a2a8710b77033ea523e223738f0de4fda",
+      "ordered_model_sha256": "ef14a0d4335e0e9767a12184c2444cf03f8b79ff1572f9080e97ca590cd1fd49"
+    },
+    "no_nve": {
+      "source_sha256": "d63d81671bd3ceee80d195f961c89678b35f6e67ade66a87b59c271c4270d217",
+      "ordered_model_sha256": "b62c2503b54a65114f879157e290ca1ae23a68b5d7838d5c671d50a87790e931"
+    },
+    "pl_imgw": {
+      "source_sha256": "f2c130e1e32817877ddc3eba1566aa4a7e7d322cb1f4a2101208f62a98146a5a",
+      "ordered_model_sha256": "fe0462014b31995a1a9f641d40352401ec04b412615b991c872005176b6c7301"
+    },
+    "th_thaiwater": {
+      "source_sha256": "5ca8990c76da7f6445a4b3339c72af5e5493cfe89d4d529173908d1f76dce43a",
+      "ordered_model_sha256": "1b3aa6efd01aa796159adaaa5ffe4e71a41a1f6847279e77817b8fee68df79cb"
+    },
+    "usgs_nwis": {
+      "source_sha256": "aa2633a24911905752e8772d882838dd7b26c6900fca5d1d96277af1fb08e061",
+      "ordered_model_sha256": "28e9cc34f71f4fd3712c69cc205c30b8c70d55270cfc04f90e991a55121450a0"
+    },
+    "za_dws": {
+      "source_sha256": "90b3bd6a6b1e5954048d0ad12589b0736ac39e9c55a4f920baa6a0f639967669",
+      "ordered_model_sha256": "f0ac3c4b201fc88a8a828ac82408d410c5c072f1343095ed2834b97951d38987"
+    }
+  }
+}

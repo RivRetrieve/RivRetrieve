@@ -11,7 +11,7 @@ from a committed native table and its declarations.
 Catalogue evidence has four complementary homes:
 
 - `src/rivretrieve/_internal/providers/<provider>/catalogue/provenance.json` binds packaged facts to
-  source records and the committed native table.
+  source records, the committed native table, and five digest-bound public evidence relations.
 - Provider generators, acquisition manifests, receipts, and tests hold machine-verifiable request,
   digest, schema, count, and semantic-frame checks.
 - [`provider_ports/`](provider_ports/) holds provider-specific rationale, source limitations, and
@@ -22,8 +22,8 @@ Catalogue evidence has four complementary homes:
 
 The pure construction is in
 [`catalogues/descriptor.py`](../src/rivretrieve/_internal/catalogues/descriptor.py).
-Each provider's existing writer emits `croissant.json` from the exact packaged file bytes
-and the provenance it just wrote. Extraction points to packaged columns, while standard
+Each provider's existing writer emits schema-v3 evidence and `croissant.json` from the exact packaged file bytes
+and the verified build provenance. Extraction points to packaged columns, while standard
 provenance relationships retain acquisition inputs and separate corroborating evidence.
 
 A native-table acquisition record must identify every exact non-secret request, its UTC retrieval
@@ -68,7 +68,7 @@ uv run python src/rivretrieve/_internal/providers/<provider>/generate_catalogue.
 ```
 
 Commit `provider.json`, `products.parquet`, `stations.parquet`, `station_products.parquet`,
-`provenance.json`, and the generated Croissant descriptor. Test fixtures must not republish
+`provenance.json`, all five `provenance_*.parquet` relations, and the generated Croissant descriptor. Test fixtures must not republish
 legacy uncertified catalogue values.
 
 ## Provider maintenance
@@ -100,3 +100,30 @@ remain source facts. No build clock enters the descriptor.
 Observation fixtures follow [ADR 0024](adr/0024-an-observation-fixture-is-a-recording.md). That ADR,
 not this catalogue procedure, owns exact request replay and the rule against treating constructed
 payloads or retired implementations as source evidence.
+
+## Public metadata migration: schema version 3
+
+[ADR 0028](adr/0028-catalogue-evidence-is-normalized-once.md) and the
+[versioned evidence profile](catalogue-evidence.md#profile-3) document the explicit
+metadata migration. The descriptor is now bounded: it describes exact relational
+files rather than repeating the national acquisition graph as JSON-LD nodes.
+Resolving an individual fact or pair is an explicit offline relation traversal.
+
+The nested Python `acquisition_provenance` value is now `CatalogueEvidence`:
+
+- A selection carries a tuple in selected-provider order.
+- An observation/catalogue provenance carries one value, or genuine `None`.
+- `evidence.header` holds provider/native identity, source statements and withholding.
+- `evidence.facts`, `.acquisitions`, `.bindings`, `.binding_facts`, and
+  `.external_inputs` are typed Polars tables.
+
+Old `.fact_bindings` and `.source_records[*].acquisitions` tuple access is not an
+alias or an implicit full-graph projection. Use the profile's exact keys and joins.
+Python model dumps retain Polars carriers; explicitly requested JSON dumps use the
+normalized column-oriented representation. This changes metadata representation,
+not the discovery/fetch signatures, returned observations or evidence conclusions.
+
+The reader explicitly supports old schema-v2 catalogue files by validating and
+normalizing them. The returned metadata type is the same for both file versions.
+Unknown versions fail rather than falling back. V2 parsing and transitional generator
+builds still pay the old object cost; v3 runtime reading does not reconstruct v2.

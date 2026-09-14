@@ -9,8 +9,8 @@ from typing import Literal, Protocol
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
@@ -101,7 +101,7 @@ class _Series:
 class _Selection:
     series: tuple[_Series, ...]
     empty_reason: _EmptyReason | None = None
-    acquisition_provenance: tuple[AcquisitionProvenance, ...] = ()
+    acquisition_provenance: tuple[CatalogueEvidence, ...] = ()
 
     def __post_init__(self) -> None:
         keys = tuple(_series_key(row) for row in self.series)
@@ -374,7 +374,7 @@ def _ordered_unique(values: Iterable[str]) -> tuple[str, ...]:
 def _acquisition_provenance(
     records: Sequence[_CatalogueRecord],
     provider_ids: Sequence[str],
-) -> tuple[AcquisitionProvenance, ...]:
+) -> tuple[CatalogueEvidence, ...]:
     selected = set(provider_ids)
     return tuple(
         provenance
@@ -387,7 +387,7 @@ def _acquisition_provenance(
 def _selection_from_edge_frame(
     frame: pl.DataFrame,
     *,
-    acquisition_provenance: tuple[AcquisitionProvenance, ...] = (),
+    acquisition_provenance: tuple[CatalogueEvidence, ...] = (),
 ) -> _Selection:
     sorted_frame = frame.sort(*_IDENTITY_COLUMNS)
     return _Selection(

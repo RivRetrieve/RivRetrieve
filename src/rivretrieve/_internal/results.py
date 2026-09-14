@@ -3,7 +3,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProviderId
 
@@ -25,7 +25,7 @@ class CatalogProvenance(BaseModel):
     endpoints: tuple[str, ...] = ()
     query: dict[str, object] | None = None
     response_version: str | None = None
-    acquisition_provenance: AcquisitionProvenance | None = None
+    acquisition_provenance: CatalogueEvidence | None = None
 
 
 class CatalogResult(BaseModel, Generic[T]):  # noqa: UP046
