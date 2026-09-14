@@ -1,9 +1,10 @@
 """Bosnia catalogue authority : WorkbookAccessLedger → AcquisitionProvenance (pure)."""
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, NaiveDatetime, StrictInt, StrictStr, model_validator
+from pydantic import AwareDatetime, NaiveDatetime, StrictInt, StrictStr
 from pydantic import Field as ModelField
 
 from rivretrieve._internal.acquisition_provenance import (
@@ -46,10 +47,10 @@ NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/ba_fhmzbih/c
 DATA_STANDING_TEXT = "Svi podaci koji se prikazuju i koji se dobiju kao rezultat pretrage su informativnog karaktera i ne mogu služiti kao zvanični podaci."
 
 
-class WorkbookAccess(BaseModel):
+@dataclass(frozen=True)
+class WorkbookAccess:
     """One reviewed station/product workbook acquisition and availability conclusion."""
 
-    model_config = ConfigDict(frozen=True)
     station_no: StrictStr
     site_no: StrictStr
     product_id: Literal["discharge_reported", "stage_reported", "water_temperature_reported"]
@@ -73,8 +74,7 @@ class WorkbookAccess(BaseModel):
     observed_window_start: NaiveDatetime | None
     observed_window_end: NaiveDatetime | None
 
-    @model_validator(mode="after")
-    def consistent_workbook(self) -> Self:
+    def __post_init__(self) -> None:
         if self.retrieved_at.utcoffset() != timedelta(0):
             raise ValueError("workbook retrieval instant must be UTC")
         physics = {
@@ -106,7 +106,6 @@ class WorkbookAccess(BaseModel):
             or self.observed_window_end is not None
         ):
             raise ValueError("empty workbook requires zero rows, unknown availability and no observed window")
-        return self
 
     @property
     def acquisition_id(self) -> str:
@@ -123,21 +122,19 @@ class WorkbookAccess(BaseModel):
         return f"Workbook contained {self.numerical_rows} numerical measurement rows at {self.retrieved_at.isoformat()}"
 
 
-class WorkbookAccessLedger(BaseModel):
+@dataclass(frozen=True)
+class WorkbookAccessLedger:
     """Reviewed workbook conclusions tied to the approved native inventory."""
 
-    model_config = ConfigDict(frozen=True)
     schema_version: Literal[1]
     publisher: Literal["Agencija za vodno područje rijeke Save"]
     baseline_native_sha256: Literal["abcbc2d2234ea1751d638307f89fba4cba4feca96c9cd1d77c728b87a0fea77a"]
     pairs: tuple[WorkbookAccess, ...]
 
-    @model_validator(mode="after")
-    def unique_pairs(self) -> Self:
+    def __post_init__(self) -> None:
         keys = {(pair.station_no, pair.product_id) for pair in self.pairs}
         if not keys or len(keys) != len(self.pairs):
             raise ValueError("workbook ledger has empty or duplicate pairs")
-        return self
 
 
 def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger) -> AcquisitionProvenance:

@@ -192,7 +192,11 @@ def test_ba_fhmzbih_daily_mean_absent_and_corrupting_request_refused_by_name() -
         rr.fetch(selection, start="2025-03-23", end="2025-03-26")
 
     assert exc_info.value.reason.product_ids == (product_id,)
-    assert exc_info.value.reason.published_products == ("discharge_reported", "stage_reported")
+    assert exc_info.value.reason.published_products == (
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
+    )
 
 
 def test_probe_that_does_not_replay_its_recording_is_refused() -> None:

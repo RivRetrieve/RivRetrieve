@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactError, load_packaged_catalogue_artifact
@@ -15,7 +15,7 @@ _LEDGER = Path("research/station-coverage/ba_fhmzbih/inventory/baseline_workbook
 
 
 def _provenance():
-    return build_acquisition_provenance(WorkbookAccessLedger.model_validate_json(_LEDGER.read_bytes()))
+    return build_acquisition_provenance(TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes()))
 
 
 def _withheld_document():
@@ -42,7 +42,7 @@ def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
     assert set(provenance.fact_universe) == bound
     workbook_acquisitions = {a.acquisition_id: a for a in provenance.source_records[0].acquisitions if a.material}
     assert len(workbook_acquisitions) == 180
-    ledger = WorkbookAccessLedger.model_validate_json(_LEDGER.read_bytes())
+    ledger = TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes())
     for pair in ledger.pairs:
         acquisition = workbook_acquisitions[pair.acquisition_id]
         assert acquisition.recording_ids == ()

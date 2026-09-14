@@ -11,6 +11,7 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from types import ModuleType
 from urllib.parse import urlparse
@@ -18,6 +19,7 @@ from urllib.parse import urlparse
 import polars as pl
 import pytest
 import requests
+from pydantic import TypeAdapter
 
 from rivretrieve._internal import discovery, transport
 from rivretrieve._internal.catalogue_origins import (
@@ -91,12 +93,18 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     module_path = generator.__file__
     assert module_path is not None
     native_path = Path(module_path).parent / "catalogue/native.parquet"
+    build = generator.build_catalogue
+    if provider == "ba_fhmzbih":
+        workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
+            (ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
+        )
+        build = partial(build, workbook_access=workbook_access)
     return ProviderAdapter(
         provider_id=ProviderId(provider),
         native_path=native_path,
         generator=generator,
         main=generator.main,
-        build=generator.build_catalogue,
+        build=build,
         cases=cases,
     )
 

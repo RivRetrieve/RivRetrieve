@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import cast
 
 import polars as pl
+from pydantic import TypeAdapter
 
 from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -656,7 +657,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ba_fhmzbih native table content SHA-256: {digest}")
         return 0
 
-    workbook_access = WorkbookAccessLedger.model_validate_json(args.workbook_access_ledger.read_bytes())
+    workbook_access = TypeAdapter(WorkbookAccessLedger).validate_json(args.workbook_access_ledger.read_bytes())
     verify_provenance_recordings(build_acquisition_provenance(workbook_access), Path(__file__).resolve().parents[5])
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
 

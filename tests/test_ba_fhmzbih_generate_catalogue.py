@@ -10,6 +10,7 @@ from pathlib import Path
 import polars as pl
 import polars.testing as pl_testing
 import pytest
+from pydantic import TypeAdapter
 
 from rivretrieve._internal.catalogue_origins import Evidence, NotPublished
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
@@ -110,7 +111,7 @@ def _origins():
 
 
 def _access():
-    return WorkbookAccessLedger.model_validate_json(_LEDGER.read_bytes())
+    return TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes())
 
 
 def _catalogue():
@@ -312,7 +313,7 @@ def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date() -
     catalogue = generate_catalogue.build_catalogue(
         NativeTable(mixed),
         _origins(),
-        WorkbookAccessLedger.model_validate(
+        TypeAdapter(WorkbookAccessLedger).validate_python(
             {
                 **json.loads(_LEDGER.read_bytes()),
                 "pairs": [
@@ -674,7 +675,7 @@ def test_workbook_ledger_rejects_inconsistent_pair(field, value) -> None:
     document = json.loads(_LEDGER.read_bytes())
     document["pairs"][0][field] = value
     with pytest.raises(ValidationError):
-        WorkbookAccessLedger.model_validate(document)
+        TypeAdapter(WorkbookAccessLedger).validate_python(document)
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "missing", "extra", "site", "native_hash", "empty_status"])
@@ -702,7 +703,7 @@ def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(mutation) -> No
         )
     with pytest.raises((ValidationError, FatalContractError)):
         generate_catalogue.build_catalogue(
-            read_native_table(_NATIVE_TABLE), _origins(), WorkbookAccessLedger.model_validate(document)
+            read_native_table(_NATIVE_TABLE), _origins(), TypeAdapter(WorkbookAccessLedger).validate_python(document)
         )
 
 
@@ -730,7 +731,7 @@ def test_workbook_ledger_rejects_zoned_source_wall_clock(field) -> None:
     document = json.loads(_LEDGER.read_bytes())
     document["pairs"][0][field] += "+00:00"
     with pytest.raises(ValidationError, match="timezone"):
-        WorkbookAccessLedger.model_validate(document)
+        TypeAdapter(WorkbookAccessLedger).validate_python(document)
 
 
 def test_workbook_ledger_requires_utc_retrieval_instant() -> None:
@@ -739,4 +740,4 @@ def test_workbook_ledger_requires_utc_retrieval_instant() -> None:
     document = json.loads(_LEDGER.read_bytes())
     document["pairs"][0]["retrieved_at"] = "2026-09-13T23:57:40+05:00"
     with pytest.raises(ValidationError, match="UTC"):
-        WorkbookAccessLedger.model_validate(document)
+        TypeAdapter(WorkbookAccessLedger).validate_python(document)
