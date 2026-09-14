@@ -31,6 +31,15 @@ The [machine-readable coverage account](fr_hubeau_coverage.json) and reviewed
 retain the counts and exact acquisition identities. Acquisition dates are mixed,
 not a simultaneous snapshot. The offline catalogue build takes that reviewed ledger
 as an explicit composition-root input. It does not open research files at runtime.
+Rebuild offline from the repository root:
+
+```sh
+uv run python -m rivretrieve._internal.providers.fr_hubeau.generate_catalogue \
+  --native src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet \
+  --availability-ledger research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz \
+  --out src/rivretrieve/_internal/providers/fr_hubeau/catalogue
+```
+
 Public ledger consistency is not private source-body verification. Acceptance also
 checks all retained private bodies against their receipts, exact request identities
 and source contents. The private verification corpus is not distributed in wheels.

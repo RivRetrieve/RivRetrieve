@@ -20,13 +20,13 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau import generate_catalogue as generator
-from rivretrieve._internal.providers.fr_hubeau.availability import FranceAvailability
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     HYDRO_PRODUCT_DEFS,
     NATIVE_SCHEMA,
     NATIVE_SOURCE_COLUMNS,
     TEMP_PRODUCT_DEFS,
     build_catalogue,
+    decode_availability,
     native_table_content_digest,
     refresh_native_table,
     refresh_native_table_from_fixtures,
@@ -56,7 +56,7 @@ NATIVE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/f
 
 def _availability():
     path = Path(__file__).parents[1] / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
-    return FranceAvailability.model_validate_json(lzma.decompress(path.read_bytes()))
+    return decode_availability(lzma.decompress(path.read_bytes()))
 
 
 def _full_payload(path: Path) -> dict[str, object]:

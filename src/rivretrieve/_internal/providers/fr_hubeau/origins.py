@@ -1,8 +1,11 @@
 """France authority : NativeStationPartitions × FranceAvailability → AcquisitionProvenance (pure)."""
 
+from __future__ import annotations
+
 from collections.abc import Mapping
 from datetime import datetime
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from rivretrieve._internal import catalogue_origins
 from rivretrieve._internal.acquisition_provenance import (
@@ -20,7 +23,9 @@ from rivretrieve._internal.acquisition_provenance import (
     complete_transformed_fact_universe,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
-from rivretrieve._internal.providers.fr_hubeau.availability import FranceAvailability
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import FranceAvailability
 
 CODE_PROJECTION_31_AXIS_TRANSPOSITION = MappingProxyType(
     {"latitude": "longitude_station", "longitude": "latitude_station"}

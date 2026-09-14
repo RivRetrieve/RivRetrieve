@@ -45,7 +45,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, read_native_tab
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.fr_hubeau.availability import FranceAvailability
+from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
 from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
@@ -97,7 +97,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     build = generator.build_catalogue
     if provider == "fr_hubeau":
         ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
-        availability = FranceAvailability.model_validate_json(lzma.decompress(ledger.read_bytes()))
+        availability = decode_availability(lzma.decompress(ledger.read_bytes()))
         build = partial(build, availability=availability)
     return ProviderAdapter(
         provider_id=ProviderId(provider),
