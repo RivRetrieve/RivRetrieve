@@ -1,21 +1,24 @@
-"""Bosnia catalogue authority : ∅ → OriginDeclarations × AcquisitionProvenance (pure)."""
+"""Bosnia catalogue authority : WorkbookAccessLedger → AcquisitionProvenance (pure)."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Annotated, Literal, Self
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, NaiveDatetime, StrictInt, StrictStr, model_validator
+from pydantic import Field as ModelField
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     AcquisitionRecord,
-    CatalogueRowLocator,
     EvidenceReference,
     ExternalFactReference,
     FactBinding,
+    MaterialIdentity,
     NativeTableIdentity,
     RecordingReference,
     SemanticDigest,
     SourceRecord,
     SourceStatement,
     Transformation,
-    WithheldFact,
     complete_transformed_fact_universe,
 )
 from rivretrieve._internal.catalogue_origins import (
@@ -42,72 +45,102 @@ NATIVE_TABLE_REVISION = "f805d2556a72617644f9bf90de2e3438e743b888"
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
 DATA_STANDING_TEXT = "Svi podaci koji se prikazuju i koji se dobiju kao rezultat pretrage su informativnog karaktera i ne mogu služiti kao zvanični podaci."
 
-_STATION_IDS = (
-    "1010",
-    "1020",
-    "1114",
-    "2010",
-    "2020",
-    "2030",
-    "2035",
-    "2050",
-    "2060",
-    "2101-B",
-    "2103",
-    "2110",
-    "2120",
-    "2210",
-    "2310",
-    "2320",
-    "3010",
-    "3020",
-    "3030",
-    "3040",
-    "4010",
-    "4020",
-    "4024",
-    "4030",
-    "4042",
-    "4050",
-    "4055",
-    "4060",
-    "4061",
-    "4062",
-    "4070",
-    "4110",
-    "4111",
-    "4121",
-    "4130",
-    "4142",
-    "4150",
-    "4170",
-    "4220",
-    "4240",
-    "4310",
-    "4340",
-    "4410",
-    "4411",
-    "4412",
-    "4420",
-    "4430",
-    "4450",
-    "4510",
-    "4610",
-    "4620",
-    "4630",
-    "5010",
-    "5101",
-    "9017",
-    "9018",
-    "9019",
-    "9030",
-    "9044",
-    "9045",
-)
-_PRODUCT_IDS = ("discharge_reported", "stage_reported", "water_temperature_reported")
+
+class WorkbookAccess(BaseModel):
+    """One reviewed station/product workbook acquisition and availability conclusion."""
+
+    model_config = ConfigDict(frozen=True)
+    station_no: StrictStr
+    site_no: StrictStr
+    product_id: Literal["discharge_reported", "stage_reported", "water_temperature_reported"]
+    source_code: StrictStr
+    workbook: StrictStr
+    method: Literal["GET"]
+    url: StrictStr
+    parameters: None
+    retrieved_at: AwareDatetime
+    http_status: Literal[200]
+    media_type: Literal["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
+    response_sha256: Annotated[str, ModelField(pattern=r"^[0-9a-f]{64}$")]
+    byte_size: Annotated[StrictInt, ModelField(gt=0)]
+    parameter: StrictStr
+    source_unit: StrictStr
+    status: Literal["measurements_present", "no_data_rows"]
+    availability: Literal["available", "unknown"]
+    data_rows: Annotated[StrictInt, ModelField(ge=0)]
+    numerical_rows: Annotated[StrictInt, ModelField(ge=0)]
+    blank_rows: Annotated[StrictInt, ModelField(ge=0)]
+    observed_window_start: NaiveDatetime | None
+    observed_window_end: NaiveDatetime | None
+
+    @model_validator(mode="after")
+    def consistent_workbook(self) -> Self:
+        if self.retrieved_at.utcoffset() != timedelta(0):
+            raise ValueError("workbook retrieval instant must be UTC")
+        physics = {
+            "discharge_reported": ("Q", "Q_1Y.xlsx", "Proticaj", "m³/s"),
+            "stage_reported": ("H", "H_1Y.xlsx", "Vodostaj", "cm"),
+            "water_temperature_reported": ("WT", "Tvode_1Y.xlsx", "Temperatura vode", "°C"),
+        }
+        if (self.source_code, self.workbook, self.parameter, self.source_unit) != physics[self.product_id]:
+            raise ValueError("workbook product identity or physics mismatch")
+        expected_url = (
+            "https://vodostaji.voda.ba/data/internet/stations/"
+            f"{self.site_no}/{self.station_no}/{self.source_code}/{self.workbook}"
+        )
+        if not self.station_no or not self.site_no or self.url != expected_url:
+            raise ValueError("workbook station/site request mismatch")
+        if self.data_rows != self.numerical_rows + self.blank_rows:
+            raise ValueError("workbook row counts disagree")
+        if self.status == "measurements_present":
+            if self.availability != "available" or self.numerical_rows == 0:
+                raise ValueError("positive workbook status requires numerical rows and available conclusion")
+            if self.observed_window_start is None or self.observed_window_end is None:
+                raise ValueError("positive workbook requires observed window")
+            if self.observed_window_start > self.observed_window_end:
+                raise ValueError("observed window is reversed")
+        elif (
+            self.availability != "unknown"
+            or self.data_rows != 0
+            or self.observed_window_start is not None
+            or self.observed_window_end is not None
+        ):
+            raise ValueError("empty workbook requires zero rows, unknown availability and no observed window")
+        return self
+
+    @property
+    def acquisition_id(self) -> str:
+        return f"workbook:{self.station_no}:{self.product_id}"
+
+    @property
+    def source_fact(self) -> str:
+        return f"source.workbook:{self.station_no}:{self.product_id}.availability"
+
+    @property
+    def availability_reason(self) -> str:
+        if self.status == "no_data_rows":
+            return f"Valid station/parameter/unit-matched workbook contained zero data rows at {self.retrieved_at.isoformat()}; availability remains unknown"
+        return f"Workbook contained {self.numerical_rows} numerical measurement rows at {self.retrieved_at.isoformat()}"
 
 
-def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
+class WorkbookAccessLedger(BaseModel):
+    """Reviewed workbook conclusions tied to the approved native inventory."""
+
+    model_config = ConfigDict(frozen=True)
+    schema_version: Literal[1]
+    publisher: Literal["Agencija za vodno područje rijeke Save"]
+    baseline_native_sha256: Literal["abcbc2d2234ea1751d638307f89fba4cba4feca96c9cd1d77c728b87a0fea77a"]
+    pairs: tuple[WorkbookAccess, ...]
+
+    @model_validator(mode="after")
+    def unique_pairs(self) -> Self:
+        keys = {(pair.station_no, pair.product_id) for pair in self.pairs}
+        if not keys or len(keys) != len(self.pairs):
+            raise ValueError("workbook ledger has empty or duplicate pairs")
+        return self
+
+
+def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger) -> AcquisitionProvenance:
     absence = RecordingReference(
         recording_id="ba_fhmzbih_terms_absence",
         repository_path="tests/test_data/ba_fhmzbih_terms_absence.html",
@@ -118,55 +151,15 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
     )
     provider_facts = ("source.provider.service_operator", "source.provider.station_service_identity")
     product_facts = ("source.product.native_identifiers", "source.product.native_physics")
-    bound_stations = ("source.station:4024.identity_location", "source.station:4110.identity_location")
-    bound_observations = ("source.observation:4024.values_quality", "source.observation:4110.values_quality")
-    established_availability = {
-        ("4024", "discharge_reported"),
-        ("4024", "stage_reported"),
-        ("4110", "water_temperature_reported"),
-    }
-    withheld_stations = tuple(
-        WithheldFact(
-            fact_group=f"withheld_station:{station_id}",
-            facts=(f"station:{station_id}.identity_location",),
-            reason="no_acquisition_record_established",
-            catalogue_rows=(CatalogueRowLocator(carrier="station", station_id=station_id),),
-        )
-        for station_id in _STATION_IDS
-        if station_id not in {"4024", "4110"}
+    station_ids = sorted({pair.station_no for pair in workbook_access.pairs})
+    bound_stations = tuple(f"source.station:{station}.identity_location" for station in station_ids)
+    bound_observations = tuple(f"source.observation:{station}.values_quality" for station in station_ids)
+    workbook_facts = tuple(pair.source_fact for pair in workbook_access.pairs)
+    availability_facts = tuple(
+        f"station_product:{pair.station_no}:{pair.product_id}.availability" for pair in workbook_access.pairs
     )
-    withheld_observations = tuple(
-        WithheldFact(
-            fact_group=f"withheld_observation:{station_id}",
-            facts=(f"observation:{station_id}.values_quality",),
-            reason="no_acquisition_record_established",
-        )
-        for station_id in _STATION_IDS
-        if station_id not in {"4024", "4110"}
-    )
-    withheld_availability = tuple(
-        WithheldFact(
-            fact_group=f"withheld_availability:{station_id}:{product_id}",
-            facts=(f"station_product:{station_id}:{product_id}.availability",),
-            reason="no_acquisition_record_established",
-            catalogue_rows=(
-                CatalogueRowLocator(carrier="station_product", station_id=station_id, product_id=product_id),
-            ),
-        )
-        for station_id in _STATION_IDS
-        for product_id in _PRODUCT_IDS
-        if (station_id, product_id) not in established_availability
-    )
-    withheld = withheld_stations + withheld_observations + withheld_availability
     universe = (
-        provider_facts
-        + product_facts
-        + bound_stations
-        + bound_observations
-        + tuple(
-            f"station_product:{station}:{product}.availability" for station, product in sorted(established_availability)
-        )
-        + tuple(fact for group in withheld for fact in group.facts)
+        provider_facts + product_facts + bound_stations + bound_observations + workbook_facts + availability_facts
     )
     return AcquisitionProvenance(
         schema_version=2,
@@ -213,6 +206,24 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                             "https://vodostaji.voda.ba/data/internet/stations/{group}/{station_id}/{code}/{file}",
                         ),
                     ),
+                )
+                + tuple(
+                    AcquisitionRecord(
+                        acquisition_id=pair.acquisition_id,
+                        method="http_request",
+                        instant_type="retrieval",
+                        description=(
+                            f"GET station/parameter/unit-matched rolling workbook; {pair.availability_reason}. "
+                            f"Observed capture span: {pair.observed_window_start} to {pair.observed_window_end}. "
+                            "Private response body retained for review; original measurement producer not established."
+                        ),
+                        requested_from=(pair.url,),
+                        retrieved_at_start=pair.retrieved_at,
+                        material=MaterialIdentity(
+                            filename=pair.workbook, byte_count=pair.byte_size, sha256=pair.response_sha256
+                        ),
+                    )
+                    for pair in workbook_access.pairs
                 ),
                 evidence=(
                     EvidenceReference(
@@ -251,43 +262,48 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 acquisition_id="catalogue_capture_2026_08_02",
             ),
             FactBinding(
-                fact_group="stations_4024_4110",
+                fact_group="station_identities",
                 facts=bound_stations,
                 source_id="ba_avp_sava",
                 acquisition_id="catalogue_capture_2026_08_02",
             ),
             FactBinding(
-                fact_group="observations_4024_4110",
+                fact_group="runtime_observations",
                 facts=bound_observations,
                 source_id="ba_avp_sava",
                 acquisition_id="observation_request",
             ),
+        )
+        + tuple(
             FactBinding(
-                fact_group="recorded_availability",
-                facts=tuple(
-                    f"station_product:{station}:{product}.availability"
-                    for station, product in sorted(established_availability)
-                ),
+                fact_group=pair.acquisition_id,
+                facts=(pair.source_fact,),
+                source_id="ba_avp_sava",
+                acquisition_id=pair.acquisition_id,
+            )
+            for pair in workbook_access.pairs
+        )
+        + tuple(
+            FactBinding(
+                fact_group=f"availability:{pair.station_no}:{pair.product_id}",
+                facts=(f"station_product:{pair.station_no}:{pair.product_id}.availability",),
                 source_id=None,
                 acquisition_id=None,
                 transformation=Transformation(
-                    name="non-empty recorded workbook to available catalogue edge",
-                    external_inputs=tuple(
-                        ExternalFactReference(
-                            source_id="ba_avp_sava",
-                            fact=f"source.observation:{station}.values_quality",
-                        )
-                        for station in ("4024", "4110")
-                    ),
+                    name="reviewed workbook numerical/empty conclusion to selectable availability",
+                    external_inputs=(ExternalFactReference(source_id="ba_avp_sava", fact=pair.source_fact),),
                 ),
-            ),
+            )
+            for pair in workbook_access.pairs
         ),
-        withheld_facts=withheld,
+        withheld_facts=(),
         fact_universe=universe + ("source.provider.terms_absence_statement",),
     )
 
 
-def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> AcquisitionProvenance:
+def _complete_catalogue_carrier(
+    provenance: AcquisitionProvenance, workbook_access: WorkbookAccessLedger
+) -> AcquisitionProvenance:
     return complete_transformed_fact_universe(
         provenance,
         CATALOGUE_FACT_UNIVERSE,
@@ -300,14 +316,16 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
                     "source.provider.station_service_identity",
                     "source.product.native_identifiers",
                     "source.product.native_physics",
-                    "source.station:4024.identity_location",
-                    "source.station:4110.identity_location",
+                )
+                + tuple(
+                    f"source.station:{station}.identity_location"
+                    for station in sorted({pair.station_no for pair in workbook_access.pairs})
                 )
             ),
         ),
     )
 
 
-def build_acquisition_provenance() -> AcquisitionProvenance:
+def build_acquisition_provenance(workbook_access: WorkbookAccessLedger) -> AcquisitionProvenance:
     """Build closed ba_fhmzbih acquisition provenance."""
-    return _complete_catalogue_carrier(_build_provider_acquisition_provenance())
+    return _complete_catalogue_carrier(_build_provider_acquisition_provenance(workbook_access), workbook_access)

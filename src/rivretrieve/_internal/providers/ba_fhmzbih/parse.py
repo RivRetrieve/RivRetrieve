@@ -51,11 +51,11 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
         rows = []
         invalid_count = 0
         for timestamp, value, *_ in sheet.iter_rows(min_row=9, values_only=True):
-            if not isinstance(timestamp, datetime) or value is None:
+            if not isinstance(timestamp, datetime):
                 invalid_count += 1
                 continue
             try:
-                native_value = float(value)
+                native_value = None if value is None else float(value)
             except (TypeError, ValueError):
                 invalid_count += 1
                 continue
