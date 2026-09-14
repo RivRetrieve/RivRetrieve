@@ -35,8 +35,15 @@ def _descriptor(provider: str) -> dict:
 def _inputs(provider: str):
     directory = _path(provider)
     provenance = AcquisitionProvenance.model_validate_json((directory / "provenance.json").read_bytes())
-    module = importlib.import_module(f"rivretrieve._internal.providers.{provider}.origins")
-    origins = (module.STATION_CATALOGUE_ORIGINS,)
+    if provider == "br_ana":
+        origins = ()
+    else:
+        module = importlib.import_module(f"rivretrieve._internal.providers.{provider}.origins")
+        origins = (
+            (module.HYDROMETRY_STATION_CATALOGUE_ORIGINS, module.TEMPERATURE_STATION_CATALOGUE_ORIGINS)
+            if provider == "fr_hubeau"
+            else (module.STATION_CATALOGUE_ORIGINS,)
+        )
     files = {name: (directory / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
     return provenance, origins, files
 
@@ -296,3 +303,30 @@ def test_generator_rejects_mixed_withheld_and_established_origins():
     second = {**origins[0], "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://example.org/evidence"))}
     with pytest.raises(FatalContractError, match="mixes established and withheld"):
         build_catalogue_descriptor(provenance, (*origins, second), files)
+
+
+@pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
+def test_descriptor_preserves_exact_contents_without_binding_position_scans(provider: str):
+    import sys
+
+    provenance, origins, files = _inputs(provider)
+    position_scans = 0
+
+    def count_position_scans(frame, event, arg):
+        nonlocal position_scans
+        if (
+            event == "c_call"
+            and getattr(arg, "__name__", None) == "index"
+            and getattr(arg, "__self__", None) is provenance.fact_bindings
+        ):
+            position_scans += 1
+
+    previous_profile = sys.getprofile()
+    sys.setprofile(count_position_scans)
+    try:
+        descriptor = build_catalogue_descriptor(provenance, origins, files)
+    finally:
+        sys.setprofile(previous_profile)
+
+    assert descriptor == _descriptor(provider)
+    assert position_scans == 0, f"descriptor scanned binding positions {position_scans} times"
