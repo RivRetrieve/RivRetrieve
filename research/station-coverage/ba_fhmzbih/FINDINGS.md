@@ -243,7 +243,7 @@ upload the private corpus or selected files from it.
 | `inventory/population_sweep.csv` | Raw sweep output, one row per pair |
 | `inventory/horizon_probe.csv` | Every historical-access attempt |
 | `evidence/` | Per-station-per-product evidence, and the horizon attempts |
-| `recordings/` | 28 response-shape examples, in the repository's existing convention |
+| `recordings/` | 24 complete response recordings and 4 historical digest-only summaries; see `EVIDENCE_INDEX.md` |
 | `scripts/` | Acquisition, composition and verification scripts |
 
 ## 13. Verification boundaries
