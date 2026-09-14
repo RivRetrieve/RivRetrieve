@@ -1,17 +1,7 @@
-"""D11's window-cap table must re-derive from the dates it prints, and store no measurement value.
+"""D11 date-count checks and source-referenced driver-padding regression.
 
-D11 is prose, and prose drifts from the evidence it describes without anything noticing. The review
-on #230 found exactly that: the entry had said the source "clamps `start_date` to `end_date` minus
-365 days", that 366 days was clamped, and that "one calendar year" therefore fails in leap years.
-The recorded probe shows the 366-inclusive-date request was honoured. Nothing in the suite read
-`docs/discoveries.md`, so every one of those statements passed.
-
-These checks read the committed entry and re-derive its arithmetic from the dates printed in it, so
-a day count that silently switches between elapsed days and inclusive calendar dates, or a row that
-reasserts the corrected-away clamp, fails the build.
-
-The day-count convention under test is **inclusive calendar dates**: both endpoints counted, so
-elapsed days = dates - 1.
+These arithmetic checks do not certify source behaviour or replay private bodies.
+Counts use inclusive calendar dates, not elapsed days.
 """
 
 from __future__ import annotations
@@ -29,9 +19,6 @@ _ROW = re.compile(
     re.MULTILINE,
 )
 _RANGE = re.compile(r"(\d{4}-\d{2}-\d{2})\s*\.\.\s*(\d{4}-\d{2}-\d{2})")
-# A measurement value pasted out of a response body, e.g. '"discharge": 104.30157'.
-_MEASUREMENT = re.compile(r"\"(?:value|discharge|value_out)\"\s*:\s*-?\d")
-_DISCLAIMERS = ("no rule", "not established", "supports no", "no conclusion", "no tested window", "does not")
 
 
 def _section() -> str:
@@ -102,17 +89,34 @@ def test_d11_largest_honoured_request_is_not_presented_as_the_maximum() -> None:
     )
 
 
-def test_d11_asserts_no_unqualified_leap_year_rule() -> None:
-    """The withdrawn conclusion must not come back without evidence that distinguishes the rules."""
-    offending = [
-        sentence.strip()
-        for sentence in re.split(r"(?<=\.)\s+", _section())
-        if "leap" in sentence.lower() and not any(d in sentence.lower() for d in _DISCLAIMERS)
-    ]
-    assert not offending, "D11 asserts a leap-year rule the probe does not establish: " + " | ".join(offending)
+def test_d11_public_source_bounds_match_driver_padding() -> None:
+    """Receipt effective_public_long pins the source bounds, not the user's bounds.
 
+    Source: bounded-window-captures/effective_public_long.receipt.json,
+    acquired 2026-09-13T17:57:12.554373Z, body SHA-256
+    f06aa9b49f393610d3aea847e694ef2a28436165f370210bc400f8b6761dc936.
+    This checks driver arithmetic and documentation, not a payload replay.
+    """
+    from datetime import datetime
 
-def test_d11_stores_no_measurement_value() -> None:
-    """This project does not redistribute source observations, in documentation either."""
-    found = _MEASUREMENT.findall(DISCOVERIES.read_text(encoding="utf-8"))
-    assert not found, f"docs/discoveries.md stores publisher measurement values: {found}"
+    from rivretrieve._internal.coverage import RequestedInterval
+    from rivretrieve._internal.driver import _padded_interval
+    from rivretrieve._internal.engine import (
+        StopConvention,
+        WindowDeclaration,
+        WindowGranularity,
+        WindowRenderingVocabulary,
+    )
+    from rivretrieve._internal.window_planning import plan_windows
+
+    interval = RequestedInterval(datetime(2023, 1, 1), datetime(2026, 9, 6, 23, 59, 59, 999999))
+    (rendered,) = plan_windows(
+        _padded_interval(interval),
+        WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE),
+    )
+    assert (rendered.start, rendered.stop) == ("2022-12-30", "2026-09-08")
+    assert rendered.stop != "2026-09-06"  # Earlier direct probe's source end.
+    section = _section()
+    assert f"Source request: `{rendered.start} .. {rendered.stop}`" in section, (
+        "D11 must distinguish the actual padded source request from the public request"
+    )

@@ -245,76 +245,82 @@ are **inclusive calendar dates** (both endpoints counted; elapsed days = dates �
 | 2025-06-06 .. 2026-09-06 | 458 | 2025-09-06 .. 2026-09-06 | 366 |
 | 2023-09-06 .. 2026-09-06 | 1,097 | 2025-09-06 .. 2026-09-06 | 366 |
 
-The shortening is **silent** — HTTP 200, `result: "OK"`, and a response indistinguishable in shape
-from an honoured request.
+The shortening is **silent**: HTTP 200 and `result: "OK"` do not identify the shortfall.
+The historical comparison demonstrates that 366 inclusive dates ending 2026-09-06
+were honoured. This is not a measured general maximum. Its endpoints cannot
+distinguish subtraction of 365 elapsed days from subtraction of one calendar year.
 
-What this does **not** establish is the source's exact rule. `2025-09-06` is both `end_date` minus
-365 elapsed days and `end_date` minus one calendar year; these endpoints cannot tell the two apart,
-and no tested window contains 29 February. Requests of 367–457 dates were not tested. The largest
-request demonstrated to be honoured is 366 dates ending 2026-09-06; that is a demonstrated working
-size, not a measured general maximum.
+### Public bounds are not source bounds
 
-`th_thaiwater` declared `WindowGranularity("date")`, which renders one request for the whole window
-and never splits. Measured through the public surface, `rr.fetch(..., start="2023-01-01",
-end="2026-09-06")` — 1,345 dates — returned rows from 2025-09-08 through 2026-09-06, 364 dates or 27%
-of the requested period, with no issue or warning naming the shortfall.
+The earlier public request `rr.fetch(..., start="2023-01-01", end="2026-09-06")`
+contains 1,345 inclusive user dates. The engine adds two days at each end **before**
+planning source requests, then clips returned rows to the user's requested window.
+For the unsplit declaration used by that capture:
 
-That public-surface capture disagrees with the direct probe about **where** the shortening lands. It
-was recorded at 15:48 on the same day as the probe, sends the same `end_date`, and yet its first row
-is 2025-09-08 — two dates later than the 2025-09-06 floor that the 15:35 recording and the 15:38
-probe both returned for that `end_date`. The provider renders one request from the fetch window
-unchanged and the parser keeps null rows, so neither explains the difference; the observation does
-not record the request the adapter sent. **The floor is therefore not a stable function of
-`end_date` in this evidence, and the discrepancy is unexplained** — see `FINDINGS.md` §5 in the
-`th_thaiwater` research folder (#229). Treat the returned span, not the requested one, as the only
-thing a capture establishes.
+- User request: `2023-01-01 .. 2026-09-06`.
+- Source request: `2022-12-30 .. 2026-09-08` (1,349 inclusive dates).
+- Preserved source response: `2025-09-08 .. 2026-09-08` (366 dates,
+  52,704 ten-minute grid entries).
+- Final clip: `2025-09-08 .. 2026-09-06` (364 dates,
+  52,416 ten-minute grid entries per product, including nulls).
 
-**Why it matters:** nothing in the response says a window was shortened. A caller receives a
-plausible frame that is silently incomplete, and neither the status code, the payload shape, nor the
-issue list distinguishes it from a complete one. A provider whose source caps and whose declaration
-does not say so returns quietly wrong results for every request longer than the cap.
+The earlier direct probes ended at source date **2026-09-06**, not **2026-09-08**.
+They therefore did not send the same end date as the public path. The retained
+September 13 capture of the effective public source request explains the two-day
+shift through padding and final clipping. The earlier public summary did not retain
+its outgoing request; this later capture is not a recovery of those earlier bytes.
+The prior inference of an unstable source floor is withdrawn. No general anchor rule
+or exact maximum follows from these examples.
 
-This is not a missing capability. [ADR 0017](adr/0017-the-engine-owns-every-window-arithmetic.md)
-already makes splitting engine-owned and names "a capped response size" as one of the two reasons a
-provider declares a granularity. `src/rivretrieve/_internal/window_planning.py` registers a
-`capped-span` planner whose `size` is the number of inclusive calendar dates per chunk (a chunk runs
-from `cursor` to `cursor + size − 1` days), and `tests/test_internal_window_planning.py` exercises it
-with `size=365`. The gap is in the declaration, not the engine.
+### Conservative source-request size
 
-At the time of writing, **no provider declares `capped-span` or `n-year-chunk`, and none sets
-`size`** — both planners are implemented and unit-tested but unused across all built-in providers.
+Retained bounded captures for station `1373273` directly honour both of these
+**365-inclusive-source-date** requests:
 
-**How to apply going forward:**
+| Requested | Dates | Returned | Dates |
+| --- | --- | --- | --- |
+| 2025-09-09 .. 2026-09-08 | 365 | as requested | 365 |
+| 2023-03-03 .. 2024-03-01 | 365 | as requested | 365 |
 
-1. **When porting a provider,** do not assume the source honours the window you send. Request a span
-   deliberately longer than you expect to be allowed, then **compare the returned span against the
-   requested one**. Record both. A cap that is never probed is a cap that ships.
+Each response contains 52,560 ten-minute grid entries. The second contains 29 February
+and is a complete null grid for both products. It proves the span was honoured, not
+that historical measurements exist. These captures support a conservative working
+size of 365 inclusive source dates, not an exact maximum or a universal leap-year rule.
 
-2. **If a cap exists,** declare it: `WindowGranularity("capped-span")` with `size` in inclusive
-   calendar dates, and let the engine split. Never write splitting arithmetic in the provider — ADR
-   0017 exists so that this class of defect cannot be written locally.
+The controlled review evidence is retained privately under
+`th_thaiwater/bounded-window-captures/` in the Effort #225 evidence corpus.
+Each named capture has `.receipt.json`, `.reading.json` and `.body` companions:
 
-3. **Establish where the cap is anchored — and do not assume the anchor is stable.** In ThaiWater's
-   probe series, holding `end_date` fixed and moving `start_date` earlier than 2025-09-06 returned
-   the same 2025-09-06 .. 2026-09-06 span, which is consistent with an `end_date` anchor; the
-   conservative operational reading is that each chunk carries its own `end_date` and walks
-   backwards. But a capture ten minutes later, with the same `end_date`, came back floored two dates
-   later, so **this evidence does not establish the anchor** and no rule should be declared from it
-   without a probe that reproduces the floor across repeated captures. Another source may anchor at
-   `start_date` instead.
+| Capture | Acquired (UTC, 2026-09-13) | Body bytes | Body SHA-256 |
+| --- | --- | --- | --- |
+| `normal365` | 17:57:07.244961 | 4,336,225 | `aa1738c851b47d382de5adb9557fa8af91317d530f1e2b5bb1cac29c916d401b` |
+| `leap365` | 17:57:09.771255 | 4,152,372 | `538b2afa9cc22e0f67190985efbf4589461c24632f637f07e16d57039843b0e7` |
+| `effective_public_long` | 17:57:12.554373 | 4,347,594 | `f06aa9b49f393610d3aea847e694ef2a28436165f370210bc400f8b6761dc936` |
 
-4. **Separate a size demonstrated to work from the source's maximum.** Record the exact requested and
-   returned dates and say whether a count means elapsed days or inclusive dates. ThaiWater's recorded
-   comparison shows 366 inclusive dates ending 2026-09-06 honoured and longer requests shortened to
-   that span; it does not distinguish "`end_date` minus 365 days" from "`end_date` minus one calendar
-   year", and no tested window contains 29 February, so it supports no rule about leap years. A
-   smaller chunk (for example `size=365`, one date fewer than demonstrated) is a conservative working
-   choice, not a measured maximum — say which one a declaration is. Where the exact maximum matters,
-   probe windows that distinguish the candidate rules before relying on it.
+These identifiers locate review inputs, not public downloads. Bodies remain private;
+arithmetic tests do not replace verification of the retained source responses.
+See [Effort #225](https://github.com/RivRetrieve/RivRetrieve/issues/225#issuecomment-5655285384)
+for the completed verification account.
 
-5. **Record the absence too.** If probing establishes that a source has no cap, say so in the
-   provider port notes with the tested span. "No cap is claimed" and "no cap was found by probing"
-   are different statements, and only the second is evidence.
+### Application
 
-6. **Reviewers:** treat a provider that renders one unsplit request over an unbounded window as
-   unverified until the port notes state the span that was tested.
+[ADR 0017](adr/0017-the-engine-owns-every-window-arithmetic.md) assigns all padding
+and splitting to the engine. Its existing `capped-span` planner accepts a `size` in
+inclusive source dates. Thailand's unsplit `WindowGranularity("date")` declaration
+at research time was a declaration gap, not a missing planner.
+
+1. Declare `WindowGranularity("capped-span")`, DATE rendering, inclusive stop and
+   `size=365` for both ThaiWater products. This documents the required correction;
+   this research change does not implement the production declaration.
+2. Pad the user interval first, then plan each source sub-window with its own start
+   and end. The provider consumes those bounds unchanged. Backwards traversal is
+   not required. A 365-date user request spans 369 source dates after padding and
+   can require multiple requests. Do not introduce a public 361-date restriction.
+3. Keep the tested working size distinct from the source's unknown exact maximum.
+   The retained normal and leap-containing captures already support this choice;
+   a repeated floor survey is not a prerequisite. For other sources, record exact
+   tested source bounds and limitations rather than assuming unlimited access.
+4. Verify the actual public fetch and cache reuse/refresh paths, not only planner
+   arithmetic. Silent shortening can otherwise cause accumulated-cache coverage
+   to claim a requested interval whose earlier source dates were discarded.
+   A successful null grid is source records, not proof of unsupported products.
