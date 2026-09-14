@@ -1,16 +1,12 @@
-"""Verify the th_thaiwater evidence offline: integrity, retention, linkage and reproduction.
+"""Verify historical research metadata and the current governing ledger offline.
 
-    verify : committed evidence -> PASS/FAIL per check   (no network)
+    verify : committed research metadata → PASS/FAIL per consistency check
 
-Every inventory row must be reproducible from the one receipt it cites, and every receipt from the
-response it describes wherever that response is retained. The checks are written so that each
-defect found in review of #229 fails at least one of them:
-
-  - combining a widened count with an earlier request's grid rows or instant (sections 6, 7);
-  - linking a row to another station's example response (section 6);
-  - a metadata comparison that no longer matches the final inventory (section 10);
-  - a window-limit reading that disagrees with its recorded dates (section 11);
-  - any publisher observation value readable from a committed file (section 2).
+This command checks exact retained historical bodies where available. Historical
+observation-bearing responses whose bytes were discarded remain uncertified here.
+The separately required verify_governing_evidence.py command checks every current
+private governing body at acceptance and integration. Public ledger agreement is
+not a claim that public CI verifies those private bodies.
 """
 
 from __future__ import annotations
@@ -117,14 +113,6 @@ def main() -> None:
     ]
     check(not secret, f"no recording request carries a credential-like parameter {secret or ''}")
 
-    print("\n2. no publisher observation value is stored")
-    spec = importlib.util.spec_from_file_location("observation_scan", HERE / "scripts" / "observation_scan.py")
-    assert spec is not None and spec.loader is not None
-    scan = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(scan)
-    stored = scan.find_stored_observations(HERE)
-    check(not stored, f"no committed file under th_thaiwater/ holds a measurement value {stored[:5] or ''}")
-
     print("\n3. receipts: one per request, internally consistent")
     receipts = read_csv(HERE / "evidence" / "graph_receipts.csv")
     by_id = {r["request_id"]: r for r in receipts}
@@ -194,8 +182,6 @@ def main() -> None:
     check(
         not unretained_empty, f"every response carrying no observation is retained whole {unretained_empty[:5] or ''}"
     )
-    retained_values = [r["request_id"] for r in retained if carries_observations(r)]
-    check(not retained_values, f"no retained body is receipted as carrying observations {retained_values[:5] or ''}")
 
     print("\n5. inventory completeness")
     inventory = read_csv(HERE / "inventory" / "station_product_evidence.csv")
@@ -368,11 +354,43 @@ def main() -> None:
             drift.append(p["requested_start"])
     check(not drift, f"all {len(readings)} readings match their recorded requested and returned dates {drift or ''}")
 
+    print("\n12. governing acquisition ledger (public metadata checks, not private-body verification)")
+    spec = importlib.util.spec_from_file_location(
+        "governing_graph_evidence", HERE / "scripts/verify_governing_evidence.py"
+    )
+    assert spec is not None and spec.loader is not None
+    governing = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(governing)
+    ledger = governing.read_ledger(HERE / "inventory/governing_station_product_evidence.csv")
+    governing.verify_ledger(ledger, governing.station_agencies(NATIVE))
+    governing_summary = json.loads((HERE / "inventory/governing_summary.json").read_text())
+    check(
+        governing_summary["baseline_stations"] == len({r["station_id"] for r in ledger})
+        and governing_summary["applicable_pairs"] == len(ledger)
+        and governing_summary["positive_availability"] == sum(r["availability"] == "available" for r in ledger)
+        and governing_summary["unknown_availability"] == sum(r["availability"] == "unknown" for r in ledger),
+        "governing coverage summary agrees with its public ledger",
+    )
+    certified_counts = {(r["station_id"], r["product_id"]): (r["status"], r["nonnull_observations"]) for r in ledger}
+    drift = [
+        f"{r['station_id']}/{r['product_id']}"
+        for r in inventory
+        if certified_counts[(r["station_id"], r["product_id"])] != (r["status"], r["nonnull_observations"])
+    ]
+    check(
+        not drift, f"historical derived counts match the independently body-verified governing ledger {drift[:5] or ''}"
+    )
+    print(
+        "Private body certification is a separate mandatory acceptance command: verify_governing_evidence.py --evidence-root ..."
+    )
+
     print(f"\n{checks - len(failures)}/{checks} checks passed")
     if failures:
         print("FAILURES:", *failures, sep="\n  - ")
         sys.exit(1)
-    print("evidence integrity, retention, linkage and reproduction verified")
+    print(
+        "public metadata consistency and retained historical-body checks complete; private governing-body certification remains separate"
+    )
 
 
 if __name__ == "__main__":

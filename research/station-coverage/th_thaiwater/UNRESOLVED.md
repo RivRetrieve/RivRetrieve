@@ -6,45 +6,22 @@ research.
 
 ---
 
-## 1. Long requests are shortened without saying so; exact limit not established — DECISION REQUIRED
+## 1. Conservative source window — SETTLED; exact maximum remains unknown
 
-Day counts are inclusive calendar dates (both endpoints counted; elapsed days = dates − 1).
+The agreed vision selects 365 inclusive source dates per `capped-span` request. Complete
+normal 2025-09-09 .. 2026-09-08 and leap-containing 2023-03-03 .. 2024-03-01 captures
+honoured that size. The leap response is null-only and supports no history claim.
+The older 366-inclusive-date example was honoured too, not shortened. These captures do
+not measure the source's exact maximum or a universal leap-year rule.
 
-**Established** (`inventory/window_limit_readings.csv`, station `1373273`, recorded 2026-09-07).
-Requests ending 2026-09-06 of 7, 91, 364, 365 and 366 dates came back exactly as requested. Requests
-of 458 dates (from 2025-06-06) and 1,097 dates (from 2023-09-06) both came back as
-2025-09-06 .. 2026-09-06, 366 dates, with HTTP 200, `result: "OK"` and no indication of the
-shortening. At the public surface, `rr.fetch` for `2023-01-01 .. 2026-09-06` (1,345 dates) returned
-rows from 2025-09-08 to 2026-09-06, 364 dates or 27% of the period, with no issue or warning naming
-the shortfall (`inventory/window_truncation_observation.json`).
-
-**Corrected.** Earlier text said the 366-date request was clamped and that calendar-year chunks
-would therefore fail in leap years. The 366-date request was honoured, and the leap-year conclusion
-does not follow from this evidence; both are withdrawn.
-
-**Not established — the exact maximum.** The clamped start 2025-09-06 is both `end_date` − 365
-elapsed days and `end_date` − one calendar year; these endpoints cannot distinguish the two. No
-tested window contains 29 February, and 367–457 dates were not tested. The largest size demonstrated
-to work is 366 dates ending 2026-09-06; that is not a measured general maximum. A request whose two
-candidate starts differ — for example one ending 2024-03-01, where end − 365 days is 2023-03-02 and
-end − one year is 2023-03-01 — would distinguish them. It was not run.
-
-**Reported but not evidenced here.** The original survey reported walking `end_date` backwards a year
-at a time to a continuous 2023-02-02 .. 2026-09-06 record for station `1117894`. No recording or table
-of that walk is committed.
-
-**Exact remaining question.** Should retrieval split requests with `capped-span`, and at what `size`?
-The planner's `size` counts inclusive dates; 366 is the largest demonstrated, and a smaller size such
-as 365 is a conservative choice, not a measured limit. Should a split or a source-side shortening be
-surfaced to callers as an issue? Is the distinguishing probe above wanted before choosing?
-
-**Needed.** A decision from the delivery owner. This survey changes no retrieval code. `HANDOFF.md`
-§3 records what a fix must respect: the shortening keeps `end_date` and moves `start_date`, so each
-chunk must carry its own `end_date`.
+Engine padding precedes splitting; no 361-date public restriction or backwards walk
+is required. The source end of the earlier public fetch was 2026-09-08 after padding,
+not the direct probe's 2026-09-06. Its two-day shift is explained by padding and clipping.
+D11's unstable-floor inference is withdrawn. No new survey is a prerequisite.
 
 ---
 
-## 2. Population churn between captures — DECISION REQUIRED
+## 2. Population churn between captures — BASELINE SCOPE SETTLED
 
 `waterlevel_load` returned 825 stations on 2026-08-02 and 1,405 on 2026-09-07: 605 present now that
 were not in the baseline, and 25 baseline stations not present today.
@@ -62,9 +39,9 @@ two from two captures five weeks apart. The existing port notes already record c
 ("87 new IDs are present and 16 legacy IDs are absent"), so this is a continuing property of the
 source rather than a new anomaly.
 
-**Needed.** A scope decision on whether coverage extends to the 1,405-station live population. This
-survey deliberately scopes its inventory to the committed 825-station baseline, as issue #224 does.
-The 605 additional stations are **not** surveyed and **not** merged.
+**Settled scope.** Keep the original 825 station identities, including the 25 absent from
+this later snapshot. The 605 additional stations are not part of this outcome. No new
+live station discovery or investigation of platform onboarding is required.
 
 ---
 
@@ -76,9 +53,9 @@ Twelve stations return a complete time grid with no non-null value for either pr
 kept whole in `evidence/graph_bodies_without_observations.zip`, under the `request_id` its inventory
 rows cite.
 
-They form a contiguous id block, which is consistent with a batch of registered stations not yet
-reporting. Recorded as `empty_in_tested_window`, never as unsupported — the source states nothing
-about whether they can supply a measurement. A window longer than 91 dates was not tested.
+They are recorded as `empty_in_tested_window` for those acquired windows and map to
+selectable `unknown`, never unsupported. Their numeric ID proximity is not evidence
+of onboarding state. Longer history was not established by those responses.
 
 ---
 
@@ -103,62 +80,40 @@ product is interpreted.
 
 ---
 
-## 6. Producer — CLOSED
+## 6. Supplying agencies and platform — SCOPE SETTLED
 
-Resolved before this survey and confirmed by it. Four issuing agencies with HII additionally
-operating the platform; `origins.py` binds every station to its agency and fails the build on
-disagreement. No further research needed. See `HANDOFF.md` §8.
+Retain the verified per-station supplying agencies and HII's distinct platform role.
+`origins.py` rejects mismatched station/agency IDs. These bindings do not reconstruct
+all original measurement producers or historical operators; that limit remains explicit.
+No upstream-producer inquiry is a prerequisite. See `HANDOFF.md` §8.
 
 ---
 
-## 7. Retention of response bytes — YOUR ACCEPTANCE REQUIRED
+## 7. Private body verification and research publication — REVIEW REQUIRED
 
-**This does not meet your request literally.** You asked to "Preserve the actual source responses
-supporting each availability conclusion" and to retain "the exact non-secret request, HTTP status,
-media type, actual acquisition date and integrity hash with the response". Everything in that list
-is retained for every response **except the response bytes of the 1,336 graph responses that carry
-observations**, and of the 13 recordings that carried them.
+The September 11 research revision discarded 1,336 observation-bearing graph bodies and
+stripped 13 example recordings. Those historical facts remain disclosed in FINDINGS;
+hashes and derived readings alone do not certify the missing bytes.
 
-**Retained, for all 1,377 graph requests** (`evidence/graph_receipts.csv`):
+Nicolas subsequently preserved complete governing answers for all 825 baseline stations:
+813 September 13 replacement responses and 12 reused complete September 11 null responses.
+The final 1650 counts/statuses match the revised research; their actual dates/material
+identities now live in `inventory/governing_station_product_evidence.csv`. Agreement of
+counts does not recover discarded original bytes or certify adaptive-survey anecdotes.
 
-- exact request URL, HTTP status, media type, UTC acquisition instant, byte size and SHA-256 of the
-  full response;
-- derived readings: grid rows, non-null counts per field, grid endpoints and the `result` field.
+The controlled full bundle is 25,582,314 bytes, SHA-256
+`46320ee0fa6b908c6009f223f59d6daa94f836bdfe3bbf82fee6d4354779c73f`.
+Keep it private and out of distributions. A portable explicit-root verifier reads the
+full bodies at acceptance and final integration; public CI verifies ledger/binding
+consistency only. See HANDOFF §10. Missing controlled inputs require arranging an
+authorized handoff, not repeating the survey or passing a hash-only check.
 
-Whole bytes are retained for the 39 responses carrying no observation value
-(`evidence/graph_bodies_without_observations.zip`, 129,554 B) and for 8 recordings. Every inventory
-row links to its own receipt.
+This does not create a rule banning measurement values from genuine source recordings.
+The new blanket scanners/stripping script are not adopted. Minimal recorded-test inputs
+must follow existing review and recording conventions; no corpus upload is authorized.
+Source terms/citation words stay verbatim, without licence classification or a legal
+inference about publication permission.
 
-**Why the rest is not.** This project does not redistribute source observations, so committing them
-is not available to us.
-
-**Consequence, stated plainly.**
-
-- **What offline verification can check:** every inventory row against its receipt, and, for the 39
-  retained bodies, digest, size and every derived reading.
-- **What it cannot do:** for the other 1,336 responses it cannot recompute the digest or re-derive a
-  count. The digest fixes what was received, but it cannot be checked against bytes from this
-  repository.
-- **Why a re-fetch settles nothing:** re-fetching the same URL is not guaranteed to return the same
-  bytes. The 2026-09-11 replacement did reproduce the 2026-09-07 counts exactly for all 1,374
-  requests, but bytes could not be compared, because the original survey recorded no digests.
-
-**Size estimate for retaining everything, and a proposed handoff — for agreement before any
-arrangement.** Your review asked for this if preserving the required responses would be too large.
-
-- **Measured size:** the 1,374 successful graph responses total 504,130,869 B (25,998,678 B gzip-6).
-  The 1,336 carrying observations total 500,847,708 B (25,874,399 B gzip-6).
-- **What exists now:** these bodies were read in memory to derive the receipts and were never written
-  to disk, so no copy exists.
-- **What a handoff would take:** retaining them would mean a further acquisition, identified by its
-  own dates, held outside this repository under access the project controls. That has not been done
-  and will not be without your agreement. It would still be a copy of the agency's observations, so
-  the redistribution question applies to it too.
-
-**History.** The 13 stripped recordings' observation-bearing bytes remain in this branch's history
-(commits `67ed409` .. `e5c8907`) unless the branch is squash-merged or rewritten. That is a
-repository decision, noted here so it is not assumed to be settled.
-
-**Needed.** Your explicit acceptance that request, status, media type, acquisition instant, byte
-size, full-response digest and derived readings — with whole bytes only for responses carrying no
-observation — are sufficient evidence for this survey. If they are not, say what would be.
+The older stripped recordings remain in branch history. Nicolas chooses the normal
+reviewed merge strategy explicitly. No branch history is rewritten here. Research
+acceptance and merged-input conditions remain open until reviewed delivery is complete.

@@ -8,6 +8,49 @@ Research only. No production adapter, canonical catalogue artifact or provenance
 Day counts in this folder are **inclusive calendar dates** (both endpoints counted; elapsed days =
 dates − 1).
 
+## Governing verification and implementation handoff (2026-09-14)
+
+Nicolas completed the remaining source verification under Effort #225. The earlier
+research capture described below is retained as dated history, not substituted for
+newly acquired bytes. The governing input is
+[`inventory/governing_station_product_evidence.csv`](inventory/governing_station_product_evidence.csv):
+825 original station IDs and all 1,650 source-evidenced product pairs. It binds each
+pair to its own graph URL, complete-body material identity, actual acquisition date,
+window and existing supplying agency. Both products of a station share one acquisition.
+
+The final account is **1,096 positive pairs and 554 selectable unknown pairs**:
+stage 813 positive / 12 unknown, discharge 283 positive / 542 unknown. An all-null
+window does not establish unsupported products. The observations establish these
+counts in the adopted 7- or 91-date windows, not whole-history or future availability.
+
+Complete governing bodies are held privately: 813 replacement responses acquired
+September 13 and 12 reused complete null responses from September 11. The controlled
+bundle is 25,582,314 bytes, SHA-256
+`46320ee0fa6b908c6009f223f59d6daa94f836bdfe3bbf82fee6d4354779c73f`.
+All 1,650 current counts/statuses agree with the historical derived inventory below;
+the discarded earlier bytes were not recovered by that agreement. The original
+adaptive short-to-long recovery anecdotes were not independently recertified.
+
+Public CI checks the committed ledger, exact native identities/agency bindings and
+deterministic metadata consistency. It does **not** verify unavailable private bodies.
+Acceptance and final integration require the explicit-root offline command in
+[HANDOFF.md](HANDOFF.md), which hashes and reads every complete governing response.
+No automatic reacquisition or private-corpus publication is part of that command.
+
+The accepted retrieval declaration is conservative `capped-span`, size **365 inclusive
+SOURCE dates**, with engine padding before planning. Direct preserved normal and
+leap-containing windows honour that size; the leap case contains only nulls and does
+not prove historical observations. This is not the source's exact maximum. The original
+825-ID baseline stays unchanged, including the 25 IDs absent from a later snapshot.
+The additional 605 IDs are outside scope. A 365-date user request can split after the
+engine adds two days to each end. No 361-date public limit is introduced.
+
+The earlier value-stripping choices are historical packaging facts, not an approved
+project-wide measurement-value policy. Existing genuine recorded-source test conventions
+remain in force. Nicolas owns research acceptance and delivery; this correction does
+not itself constitute merged implementation or acceptance of the entire research PR.
+
+
 | | |
 | --- | --- |
 | Baseline commit | `67796ab8d793867aaaaf9c6fb55bec208adaeab8` |
@@ -18,10 +61,11 @@ dates − 1).
 | Inventory | 1,650 rows = 825 stations × 2 products, none omitted, each citing its own response |
 | Verification | `scripts/verify_evidence.py` — 34/34 checks pass |
 
-## 1. Headline
+## 1. Historical research headline (September 11 capture)
 
 Users can request measurements from **1 station / 2 series** today. The graph route's published
-values establish **1,096 series across the 825-station baseline**.
+values provide positive evidence for **1,096 pairs across the 825-station baseline**;
+all 1,650 governing pairs are selectable as available or unknown after integration.
 
 | Product | available | empty in tested window |
 | --- | --- | --- |
@@ -29,7 +73,7 @@ values establish **1,096 series across the 825-station baseline**.
 | `discharge_reported` | **283** / 825 | 542 |
 | **total series** | **1,096** | |
 
-Discharge is a strict subset of stage: no station publishes discharge without also publishing stage.
+In the adopted windows, every discharge-positive station was also stage-positive.
 There are zero access failures and zero uninvestigated pairs in the final inventory. Three requests
 failed on first attempt and succeeded on retry (§3).
 
@@ -41,7 +85,7 @@ Per station, across the three combinations issue #224 asks for:
 | stage only | 530 |
 | neither (complete grid, no non-null value for either product over 91 dates) | 12 |
 
-No station publishes discharge alone.
+No station had a discharge-positive/stage-empty combination in the adopted windows.
 
 The station-by-station breakdown is in [STATION_TABLE.md](STATION_TABLE.md); the machine-readable
 form is `inventory/station_product_evidence.csv`. Every number in this section is generated in
@@ -87,8 +131,9 @@ window-based availability the inventory records. It is not evidence that the sou
 wrong.
 
 For stage the snapshot offers nothing to compare. `waterlevel_m` is null for all 1,405 stations in
-the live snapshot and all 825 in the baseline capture. `waterlevel_msl` is populated for every
-station, but it is a different quantity and is not evidence for the graph's `value` field.
+the live snapshot and all 825 in the baseline capture. `waterlevel_msl` is populated for every station, but its snapshot presence does not
+establish graph-window availability. The graph `value` field meaning comes from the
+recorded official application mapping, not an inferred equivalence of metadata names.
 
 Availability is therefore taken from the graph route per station, and `verify_evidence.py` asserts
 that every `available` row cites the route rather than metadata. An early 8-station hypothesis sample
@@ -129,7 +174,8 @@ the 91-date response they rest on. Station `1` stage, for example, is now 13,069
 13,104 rows over 91 dates; it was previously shown against the 1,008 rows of a 7-date request. No row
 reports more non-null values than grid rows.
 
-**Retention.** This project does not redistribute source observations.
+**Historical retention.** This research revision discarded observation-bearing bodies.
+This records what happened, not a rule forbidding genuine recorded test inputs.
 
 - **Every response keeps:** request URL, HTTP status, media type, UTC acquisition instant, byte size
   and SHA-256 of the full response, plus counts and grid endpoints.
@@ -189,9 +235,10 @@ was shortened. An earlier version of this section said the 366-date request was 
 **Demonstrated:** requests of up to 366 dates ending 2026-09-06 are honoured, and both longer requests
 are returned from 2025-09-06.
 
-**Not established: the exact rule.** 2025-09-06 is both `end_date` minus 365 elapsed days and
-`end_date` minus one calendar year, so these endpoints cannot tell the two apart. No tested window
-contains 29 February, and requests of 367–457 dates were not tested. No conclusion about leap years
+**Historical probe limitation: the exact rule was not established.** 2025-09-06 is both `end_date` minus 365 elapsed days and
+`end_date` minus one calendar year, so these endpoints cannot tell the two apart. That historical comparison contained no 29 February, and requests of 367–457 dates
+were not tested. A subsequent complete null-grid capture for 2023-03-03 .. 2024-03-01
+honoured 365 inclusive dates including 29 February, without resolving the maximum. No conclusion about leap years
 or calendar-year chunks follows from this evidence. See [UNRESOLVED.md](UNRESOLVED.md) §1.
 
 **Measured at the public surface** (`inventory/window_truncation_observation.json`, reproducible via
@@ -199,8 +246,12 @@ or calendar-year chunks follows from this evidence. See [UNRESOLVED.md](UNRESOLV
 dates — returned rows from 2025-09-08 00:00 through 2026-09-06 23:50: 364 dates, **27% of the requested
 period**, with no issue or warning naming the shortfall. The two issues emitted are unrelated
 provenance notices. That file's `requested_days` and `returned_days` fields are elapsed days (1,344
-and 363). It does not record the request the adapter sent, so why its first row is 2025-09-08 rather
-than the 2025-09-06 seen in the direct probe is not established.
+and 363). The historical artifact did not record the adapter request. The retained follow-up
+`effective_public_long` captured the actual padded source bounds 2022-12-30 .. 2026-09-08.
+The response begins 2025-09-08; final clipping to the user end gives 52,416 rows per
+product through 2026-09-06. The direct probe instead used source end 2026-09-06.
+These are not the same source request end, so the two-day difference is explained by
+padding and clipping, not evidence of an unstable source floor.
 
 The original survey reported walking `end_date` backwards a year at a time to retrieve a continuous
 2023-02-02 .. 2026-09-06 record for station `1117894`. No recording or table of that walk is
@@ -229,7 +280,7 @@ are absent"), so this is a continuing property of the source. This survey scopes
 committed 825-station baseline, as #224 does; the 605 additional stations are not surveyed and not
 merged. See [UNRESOLVED.md](UNRESOLVED.md) §2.
 
-## 7. Producer
+## 7. Supplying agencies and platform
 
 Already established in the committed provenance and confirmed here: four issuing agencies —
 Electricity Generating Authority of Thailand, Hydro–Informatics Institute, Royal Irrigation
@@ -237,7 +288,9 @@ Department, and Friend in Need (of "Pa") Volunteers Foundation — with HII addi
 ThaiWater API platform. `origins.py` binds every station to its agency and fails the build when
 `agency.id` and `station.agency_id` disagree.
 
-The producer/operator distinction needs no further research for this provider. The live platform
+The verified per-station supplying-agency bindings remain distinct from HII platform
+operation. These bindings do not establish every original measurement producer or
+historical sensor operator; no new upstream-producer inquiry is a prerequisite. The live platform
 lists ten agencies; the baseline draws on four.
 
 ## 8. Time semantics
@@ -254,10 +307,11 @@ The packaged `provenance.json` withholds **1,648 fact groups**, every one
 Station identities are not withheld — consistent with #224's framing that this is principally a
 measurement-availability gap.
 
-This survey supplies an acquisition receipt for every station × product availability result across
-the whole baseline, which is the evidence those 1,648 groups were waiting on. The bytes of responses
-carrying observations are not retained (§3). Converting the results into catalogue rows is
-implementation work and belongs to the delivery owner.
+The governing ledger now supplies an actual complete-body acquisition for every pair.
+Its 554 null-only results remain unknown availability, not acquisition withholding.
+The older receipt-only inputs in §3 are not the admission basis. Catalogue/provenance
+changes must bind the exact final acquisition before removing the 1,648 withholdings;
+that implementation belongs to Nicolas.
 
 ## 10. Contents
 
@@ -279,10 +333,11 @@ implementation work and belongs to the delivery owner.
 uv run python research/station-coverage/th_thaiwater/scripts/verify_evidence.py
 ```
 
-**34/34 pass**, offline. They cover:
+The historical revision reported **34/34**, offline. Its limits and current checks are
+separate from mandatory full governing-body verification. The historical checks covered:
 
 - **Recordings:** fields, digests and sizes.
-- **Retention:** no committed file holds a measurement value.
+- **Historical retention:** exact bytes are checked only for retained historical bodies.
 - **Receipts:** unique ids; each URL names its own station and window; no count exceeds grid rows;
   every grid spans exactly its requested dates at 24 or 144 rows per date.
 - **Retained bodies:** all 39 reproduce digest, size and every derived reading; every response
@@ -296,8 +351,9 @@ uv run python research/station-coverage/th_thaiwater/scripts/verify_evidence.py
 - **Reproduction:** the metadata comparison reproduces from the final inventory, and the
   window-limit readings reproduce from the recorded probe.
 
-`tests/test_th_thaiwater_research_stores_no_observation_values.py` runs the same retention scan in
-the test suite, so a stored measurement value fails `uv run pytest`.
+The unapproved blanket measurement-value scanner was removed. Genuine recorded-source
+tests remain valid. The new governing verifier checks actual complete bodies rather
+than comparing two derived assertions.
 
 **Access etiquette:** all requests were unauthenticated GET against public routes with a descriptive
 User-Agent and 0.35 s spacing. Response bodies carrying observations were read in memory to derive

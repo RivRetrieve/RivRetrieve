@@ -1,4 +1,12 @@
-# th_thaiwater — station list with established coverage
+# th_thaiwater — historical station-window availability account
+
+The counts below are the historical September 11 research account. Current admission
+uses `inventory/governing_station_product_evidence.csv`, with complete private graph
+responses acquired September 11/13. All final counts/statuses agree with this table,
+but acquisition dates and hashes must come from each governing row, not this history.
+The destination is all 1,650 selectable pairs: 1,096 positive and 554 unknown. Null-only
+results do not exclude stations or products. Full-body verification is required at
+acceptance and integration; public CI verifies metadata consistency only.
 
 One row per station in the committed 825-station baseline. Generated from
 `inventory/station_product_evidence.csv` by `scripts/build_station_table.py`; no station is omitted.

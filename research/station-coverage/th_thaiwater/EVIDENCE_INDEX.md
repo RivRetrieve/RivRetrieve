@@ -3,12 +3,17 @@
 Every route surveyed is public and unauthenticated. No credentials, cookies or tokens were sent
 or stored.
 
-**Retention.** This project does not redistribute source observations. Every response keeps its
-exact request URL, HTTP status, media type, UTC acquisition instant, byte size and the SHA-256 of
-the full response, plus derived readings (grid rows, non-null counts, grid endpoints). A response
-carrying no observation value — an all-null grid, an error body — is kept whole. A response
-carrying observations is not kept; its digest cannot be recomputed from this repository. See
-UNRESOLVED.md §7.
+**Current governing input.** `inventory/governing_station_product_evidence.csv` binds
+all 1,650 baseline pairs to complete privately retained source answers. It preserves
+actual September 11/13 acquisition instants, URLs, source fields, body material hashes,
+byte sizes and supplying agencies. The bundle and mandatory read-only full-body
+verification command are documented in HANDOFF §10. The private corpus is not a public
+recording URL or part of distributions; public CI checks metadata consistency only.
+
+**Historical retention below.** The September 11 research kept 39 null/error bodies and
+discarded observation-bearing bodies. Those older receipts/examples remain dated history.
+This is not a policy forbidding genuine recorded-source test inputs. Discarded historical
+bodies are not certified by agreeing receipt/count summaries.
 
 ## Availability evidence package
 
@@ -21,8 +26,9 @@ Acquired 2026-09-11T07:55:50.882871Z .. 2026-09-11T09:38:16.858951Z. The 1336 re
 
 ## Recordings
 
-Recordings of distinct response shapes and boundary cases, in the repository's recording
-convention. `Body` says whether the response bytes are kept.
+Historical captures of distinct response shapes and boundary cases. Only rows with a
+complete body remain genuine replayable recordings; stripped files are historical
+request/reading summaries, not observation fixtures. `Body` says whether bytes are kept.
 
 | Recording | Status | Bytes | Body | SHA-256 (first 16) | Retrieved (UTC) | Establishes |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -52,7 +58,9 @@ convention. `Body` says whether the response bytes are kept.
 
 | File | Contents |
 | --- | --- |
-| [`inventory/station_product_evidence.csv`](inventory/station_product_evidence.csv) | Final inventory: 1,650 station × product rows, each copying its cited receipt. |
+| [`inventory/governing_station_product_evidence.csv`](inventory/governing_station_product_evidence.csv) | Current admission ledger: 1,650 pairs, exact complete-body material and acquisition bindings. |
+| [`inventory/governing_summary.json`](inventory/governing_summary.json) | Current selectable/positive/unknown counts and mixed acquisition dates. |
+| [`inventory/station_product_evidence.csv`](inventory/station_product_evidence.csv) | Historical September 11 inventory: 1,650 rows copying that capture's receipts. |
 | [`inventory/inventory_summary.json`](inventory/inventory_summary.json) | Every sweep number quoted in the prose, generated. |
 | [`inventory/metadata_vs_graph.csv`](inventory/metadata_vs_graph.csv) | Per-station snapshot discharge state vs graph discharge status; absent kept distinct from null. |
 | [`inventory/metadata_vs_graph_summary.json`](inventory/metadata_vs_graph_summary.json) | Counts, denominators, snapshot instant and graph windows of that comparison. |
@@ -62,19 +70,21 @@ convention. `Body` says whether the response bytes are kept.
 | [`inventory/window_limit_readings.csv`](inventory/window_limit_readings.csv) | The same probe with elapsed days and inclusive dates derived from the recorded dates. |
 | [`inventory/window_truncation_observation.json`](inventory/window_truncation_observation.json) | The shortening's measured consequence at the public surface. |
 
-## Reproduction
+## Offline verification and historical acquisition tools
 
-```bash
-uv run python research/station-coverage/th_thaiwater/scripts/acquire_graph_evidence.py   # network
-uv run python research/station-coverage/th_thaiwater/scripts/build_inventory.py
-uv run python research/station-coverage/th_thaiwater/scripts/build_metadata_comparison.py
-uv run python research/station-coverage/th_thaiwater/scripts/build_churn_reconciliation.py
-uv run python research/station-coverage/th_thaiwater/scripts/build_window_limit_readings.py
-uv run python research/station-coverage/th_thaiwater/scripts/build_station_table.py
-uv run python research/station-coverage/th_thaiwater/scripts/build_evidence_index.py
-uv run python research/station-coverage/th_thaiwater/scripts/verify_evidence.py          # offline
+```
+uv run python research/station-coverage/th_thaiwater/scripts/verify_evidence.py
 ```
 
-`probe_window_limit.py`, `reproduce_window_truncation.py` and `capture.py` are the network scripts
-that produced the probe table, the public-surface observation and the recordings;
-`strip_observation_bytes.py` removed observation-bearing bytes from those recordings.
+That command checks public metadata consistency and retained historical bodies. It
+does not certify the private governing body corpus. Run the mandatory explicit-root
+`verify_governing_evidence.py` command in HANDOFF §10 for acceptance and final integration.
+It reads all current full responses and writes nothing.
+
+The other builders reproduce historical September 11 research artifacts, not the new
+governing ledger. `acquire_graph_evidence.py`, `probe_window_limit.py`,
+and `capture.py` are historical network acquisition scripts. Do not run them as part
+of verification or automatically repeat the survey. `reproduce_window_truncation.py`
+is retired and refuses before discovery or network access.
+Their earlier body-discarding behavior is not an approved retention policy. The
+blanket scanner and stripping script are not adopted.
