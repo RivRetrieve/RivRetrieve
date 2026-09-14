@@ -653,7 +653,14 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     native_before = adapter.native_path.read_bytes()
     output = tmp_path / str(adapter.provider_id)
     arguments = ["--native", str(adapter.native_path), "--out", str(output)]
-    if adapter.provider_id == "jp_mlit":
+    if adapter.provider_id == "ba_fhmzbih":
+        arguments.extend(
+            (
+                "--workbook-access-ledger",
+                str(ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json"),
+            )
+        )
+    elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (
                 "--license-recording",
