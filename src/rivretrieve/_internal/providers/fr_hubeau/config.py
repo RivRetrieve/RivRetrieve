@@ -30,35 +30,34 @@ from rivretrieve._internal.primitives import ProductId
 class FrHubeauSourceCoordinates:
     family: Literal["daily", "temperature", "hydroportail"]
     field: str
-    entity_kind: Literal["station", "site"]
 
 
 _CONFIG = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={
         ProductId("discharge_instantaneous"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "Q", "site")), Unit.L_S, Instant()
+            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "Q")), Unit.L_S, Instant()
         ),
         ProductId("stage_instantaneous"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "H", "station")), Unit.MM, Instant()
+            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "H")), Unit.MM, Instant()
         ),
         ProductId("discharge_daily_mean"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("daily", "QmnJ", "station")),
+            SourceCoordinates(FrHubeauSourceCoordinates("daily", "QmnJ")),
             Unit.L_S,
             Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("discharge_daily_max"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("daily", "QIXnJ", "station")),
+            SourceCoordinates(FrHubeauSourceCoordinates("daily", "QIXnJ")),
             Unit.L_S,
             Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("stage_daily_max"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("daily", "HIXnJ", "station")),
+            SourceCoordinates(FrHubeauSourceCoordinates("daily", "HIXnJ")),
             Unit.MM,
             Daily(DayDefinition("unknown"), DailyLabelTime("00:00")),
         ),
         ProductId("water_temperature_reported"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("temperature", "resultat", "station")),
+            SourceCoordinates(FrHubeauSourceCoordinates("temperature", "resultat")),
             Unit.DEG_C,
             UnknownTemporalSupport(),
         ),

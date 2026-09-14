@@ -14,7 +14,7 @@ from rivretrieve._internal.issues import FatalContractError
     ("provider_id", "issuer", "terms_file"),
     [
         ("cz_chmi", "Czech Hydrometeorological Institute", "cz_chmi_terms_licence.html"),
-        ("fr_hubeau", "Hub’Eau / SCHAPI", "fr_hubeau_terms_licence.html"),
+        ("fr_hubeau", "Hub’Eau", "fr_hubeau_terms_licence.html"),
         ("lt_lhmt", "Lithuanian Hydrometeorological Service", "lt_lhmt_terms_licence.html"),
     ],
 )
@@ -78,7 +78,10 @@ def test_native_cli_invokes_shared_recording_verifier(
         calls.append(provider_id)
 
     monkeypatch.setattr(generator, "verify_provenance_recordings", record_call)
-    assert generator.main(["--native", str(native), "--out", str(tmp_path)]) == 0
+    args = ["--native", str(native), "--out", str(tmp_path)]
+    if provider_id == "fr_hubeau":
+        args += ["--availability-ledger", "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"]
+    assert generator.main(args) == 0
     assert calls == [provider_id]
 
 
@@ -92,26 +95,38 @@ def test_native_cli_rejects_raw_byte_substitution(tmp_path: Path, provider_id: s
     changed.write_bytes(source.read_bytes() + b"changed")
 
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
-        generator.main(["--native", str(changed), "--out", str(tmp_path / "out")])
+        args = ["--native", str(changed), "--out", str(tmp_path / "out")]
+        if provider_id == "fr_hubeau":
+            args += [
+                "--availability-ledger",
+                "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz",
+            ]
+        generator.main(args)
 
 
-def test_france_withholds_facts_whose_sie_issuer_is_not_established() -> None:
+def test_france_binds_official_publication_without_original_producer_overclaims() -> None:
     provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
-
-    facts = {fact for item in provenance.withheld_facts for fact in item.facts}
-    assert sum(fact.startswith("source.station.") for fact in facts) == 7_320
-    assert sum(fact.startswith("source.observation.") for fact in facts) == 7_320
-    assert sum(fact.startswith("station_product:") for fact in facts) == 33_133
-    assert len(facts) == 47_773
-    assert {item.reason for item in provenance.withheld_facts} == {"no_acquisition_record_established"}
+    assert not provenance.withheld_facts
     bound_station_facts = {
         fact for binding in provenance.fact_bindings for fact in binding.facts if fact.startswith("source.station.")
     }
-    assert bound_station_facts == {
-        "source.station.01001336.identity_location_crs",
-        "source.station.1011000101.identity_location_crs",
-        "source.station.Y251002001.identity_location_crs",
+    assert len(bound_station_facts) == 7323
+    assert {source.source_id for source in provenance.source_records} == {"fr_hubeau", "fr_hydroportail"}
+    acquisitions = {
+        (source.source_id, acquisition.acquisition_id): acquisition
+        for source in provenance.source_records
+        for acquisition in source.acquisitions
     }
+    values = [
+        binding
+        for binding in provenance.fact_bindings
+        if any(fact.startswith("source.observation.") and fact.endswith(".values_quality") for fact in binding.facts)
+    ]
+    assert sum(len(binding.facts) for binding in values) == 33139
+    for binding in values:
+        assert binding.source_id is not None
+        assert binding.acquisition_id is not None
+        assert acquisitions[binding.source_id, binding.acquisition_id].method == "runtime_http_request"
 
 
 def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:

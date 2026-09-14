@@ -24,7 +24,6 @@ from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequ
 _DAILY_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab"
 _TEMPERATURE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/chronique"
 _HYDROPORTAIL_ROOT = "https://hydro.eaufrance.fr"
-_HYDROPORTAIL_IDENTITIES = {"Y251002001": {"station": "Y251002001", "site": "Y2510020"}}
 
 
 def fetch(
@@ -71,17 +70,11 @@ def fetch(
                     {"Accept": "application/json"},
                 )
             else:
-                identities = _HYDROPORTAIL_IDENTITIES.get(station)
-                if identities is None:
-                    raise FatalContractError(
-                        f"fr_hubeau has no evidenced HydroPortail entity mapping for station {station}"
-                    )
-                entity = identities[coordinates.entity_kind]
                 start = window.start
                 stop = window.stop
                 request = TransportRequest(
                     HttpMethod.GET,
-                    f"{_HYDROPORTAIL_ROOT}/{coordinates.entity_kind}hydro/ajax/{entity}/series",
+                    f"{_HYDROPORTAIL_ROOT}/stationhydro/ajax/{station}/series",
                     {
                         "hydro_series[startAt]": start,
                         "hydro_series[endAt]": stop,

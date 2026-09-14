@@ -1,0 +1,58 @@
+"""France catalogue admission preserves every evidenced native station/product pair."""
+
+import lzma
+from pathlib import Path
+
+from rivretrieve._internal.catalogues.native import read_native_table
+from rivretrieve._internal.providers.fr_hubeau.availability import FranceAvailability
+from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import build_catalogue
+from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
+
+
+def test_catalogue_admits_full_evidenced_native_inventory() -> None:
+    native_path = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+    native = read_native_table(native_path)
+    ledger_path = Path(__file__).parents[1] / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+    availability = FranceAvailability.model_validate_json(lzma.decompress(ledger_path.read_bytes()))
+    catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability)
+    artifact = catalogue.public_artifact
+    assert artifact.stations.height == 7323
+    assert artifact.station_products.height == 33139
+    assert set(artifact.stations["station_id"]) == set(native.data["code_station"])
+    assert dict(artifact.station_products.group_by("availability").len().iter_rows()) == {
+        "available": 20966,
+        "unknown": 12173,
+    }
+
+    catalogue_rows = {
+        (row["station_id"], row["product_id"]): row for row in artifact.station_products.iter_rows(named=True)
+    }
+    provenance = catalogue.acquisition_provenance
+    bindings = {fact: binding for binding in provenance.fact_bindings for fact in binding.facts}
+    acquisitions = {
+        (source.source_id, acquisition.acquisition_id): acquisition
+        for source in provenance.source_records
+        for acquisition in source.acquisitions
+    }
+    for pair in availability.pairs:
+        row = catalogue_rows[pair.code_station, pair.product_id]
+        assert row["last_catalogue_check"] == max(a.retrieved_at_start for a in pair.acquisitions).date()
+        assert row["availability_reason"] == pair.reason
+        assert row["published_record_start_date"] is None
+        assert row["published_record_end_date"] is None
+        availability_binding = bindings[f"station_product:{pair.code_station}:{pair.product_id}.availability"]
+        assert availability_binding.transformation is not None
+        references = availability_binding.transformation.external_inputs
+        assert len(references) == len(pair.acquisitions)
+        for reference, expected in zip(references, pair.acquisitions, strict=True):
+            binding = bindings[reference.fact]
+            assert binding.source_id is not None
+            assert binding.acquisition_id is not None
+            actual = acquisitions[binding.source_id, binding.acquisition_id]
+            assert actual.material == expected.material
+            assert actual.requested_from == expected.requested_from
+            assert actual.retrieved_at_start == expected.retrieved_at_start
+        values_binding = bindings[f"source.observation.{pair.code_station}.{pair.product_id}.values_quality"]
+        assert values_binding.source_id is not None
+        assert values_binding.acquisition_id is not None
+        assert acquisitions[values_binding.source_id, values_binding.acquisition_id].instant_type == "runtime"

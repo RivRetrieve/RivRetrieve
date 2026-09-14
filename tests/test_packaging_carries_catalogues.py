@@ -98,7 +98,6 @@ for provider_id in provider_ids:
 
 for provider_id, station_id, count in (
     ("ba_fhmzbih", "1010", 293),
-    ("fr_hubeau", "01010000", 47_773),
 ):
     try:
         rivretrieve.find(provider=provider_id, station=station_id)
@@ -110,6 +109,9 @@ for provider_id, station_id, count in (
     groups = provider_selection.acquisition_provenance[0].withheld_facts
     assert len(groups) == count
     assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
+france = rivretrieve.find(provider="fr_hubeau")
+assert len(france.series) == 33_139
+assert not france.acquisition_provenance[0].withheld_facts
 norway = rivretrieve.find(
     provider="no_nve", station="1.200.0", product="stage_daily_mean"
 )

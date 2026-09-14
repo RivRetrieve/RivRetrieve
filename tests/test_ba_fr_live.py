@@ -19,6 +19,7 @@ from rivretrieve._internal.providers.ba_fhmzbih.declaration import declaration a
 from rivretrieve._internal.providers.fr_hubeau.declaration import declaration as fr_declaration
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from tests.test_fr_hydroportail_station import STATION_DISCHARGE_PROBE
 
 DATA = Path(__file__).parent / "test_data"
 assert isinstance(ba_declaration.observations, LiveStages)
@@ -138,15 +139,7 @@ PROBES = (
         ("fr_hydroportail_historical_H.recording.json",),
         (576, "2020-01-01T00:00:00", "2020-01-02T23:55:00", "+00:00"),
     ),
-    _probe(
-        "fr_hubeau",
-        "Y251002001",
-        "discharge_instantaneous",
-        "2020-01-01",
-        "2020-01-02",
-        ("fr_hydroportail_historical_Q.recording.json",),
-        (576, "2020-01-01T00:00:00", "2020-01-02T23:55:00", "+00:00"),
-    ),
+    STATION_DISCHARGE_PROBE,
 )
 
 

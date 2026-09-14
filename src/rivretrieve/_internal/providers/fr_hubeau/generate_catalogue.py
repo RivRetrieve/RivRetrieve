@@ -1,10 +1,11 @@
-"""refresh : HubeauHydrometryStations × RetrievedAt × HubeauTemperatureStations × RetrievedAt → WithIssues[NativeTable]; build : NativeTable × FranceOriginDeclarations → GeneratedFrHubeauCatalogue (pure)."""
+"""refresh : HubeauHydrometryStations × RetrievedAt × HubeauTemperatureStations × RetrievedAt → WithIssues[NativeTable]; build : NativeTable × FranceOriginDeclarations × FranceAvailability → GeneratedFrHubeauCatalogue (pure)."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import lzma
 import math
 import urllib.request
 from collections.abc import Mapping, Sequence
@@ -34,7 +35,6 @@ from rivretrieve._internal.catalogues.schemas import (
     PROVIDER_INFO_CATALOG_SCHEMA,
     STATION_CATALOG_SCHEMA,
     STATION_PRODUCT_CATALOG_SCHEMA,
-    AvailabilityDtype,
     ProductCatalog,
     StationCatalog,
     StationProductCatalog,
@@ -43,6 +43,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.fr_hubeau.availability import FranceAvailability
 from rivretrieve._internal.providers.fr_hubeau.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SHA256,
@@ -53,7 +54,7 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
 )
 
 PROVIDER_ID = ProviderId("fr_hubeau")
-PROVIDER_NAME = "Hubeau / SCHAPI — French national hydrometric network"
+PROVIDER_NAME = "Hub’Eau / HydroPortail — French hydrometry and water temperature"
 
 HYDRO_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations"
 HYDRO_STATIONS_PARAMS = "format=json&size=5000&in_use=true"
@@ -61,8 +62,6 @@ HYDRO_SITES_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/si
 TEMP_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/station"
 TEMP_STATIONS_PARAMS = "size=5000"
 
-AVAILABILITY_REASON = "Hubeau catalogue does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 MIN_LIVE_HYDRO_STATIONS = 500
 MIN_LIVE_TEMP_STATIONS = 50
 
@@ -579,6 +578,7 @@ def _failed_native_refresh(issue: Issue) -> WithIssues[NativeTable]:
 def build_catalogue(
     native_table: NativeTable,
     origins: Mapping[str, OriginDeclarations],
+    availability: FranceAvailability,
 ) -> GeneratedFrHubeauCatalogue:
     endpoints = native_table.data["source_endpoint"].unique().sort().to_list()
     expected = frozenset({"hydrometrie/referentiel/stations", "temperature/station"})
@@ -605,23 +605,29 @@ def build_catalogue(
     enforce_catalogue_origins(PROVIDER_ID, hydro_origins, hydro, hydro_stations)
     enforce_catalogue_origins(PROVIDER_ID, temperature_origins, temperature, temperature_stations)
     stations: StationCatalog = pl.concat([hydro_stations, temperature_stations]).sort("station_id")
-    hydro_dates = hydro.data.select(
-        pl.col("code_station").cast(pl.String).alias("station_id"),
-        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
-    ).sort("station_id")
-    temperature_dates = temperature.data.select(
-        pl.col("code_station").cast(pl.String).alias("station_id"),
-        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
-    ).sort("station_id")
+    hydro_ids = tuple(hydro.data["code_station"].to_list())
+    temperature_ids = tuple(temperature.data["code_station"].to_list())
+    expected_pairs = {(station, d.product_id) for station in hydro_ids for d in HYDRO_PRODUCT_DEFS}
+    expected_pairs.update((station, d.product_id) for station in temperature_ids for d in TEMP_PRODUCT_DEFS)
+    if {(pair.code_station, pair.product_id) for pair in availability.pairs} != expected_pairs:
+        raise FatalContractError("France availability must match the exact native applicable station/product pairs")
+    identity = availability.native_table
+    if (identity.sha256, identity.byte_count, identity.filename) != (
+        NATIVE_TABLE_SHA256,
+        NATIVE_TABLE_BYTE_SIZE,
+        "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    ):
+        raise FatalContractError("France availability native material identity mismatch")
     products = build_products()
-    station_products = build_station_products(hydro_dates, temperature_dates)
+    station_products = build_station_products(availability)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("fr_hubeau native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
     acquisition_provenance = build_acquisition_provenance(
-        station_ids=tuple(stations.get_column("station_id").cast(pl.String).to_list()),
-        station_product_keys=tuple(station_products.select("station_id", "product_id").iter_rows()),
+        hydrometry_station_ids=hydro_ids,
+        temperature_station_ids=temperature_ids,
+        availability=availability,
     )
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedFrHubeauCatalogue(
@@ -709,118 +715,21 @@ def build_temp_stations(native_table: NativeTable) -> StationCatalog:
     )
 
 
-def build_station_products(
-    hydro_station_dates: pl.DataFrame,
-    temperature_station_dates: pl.DataFrame,
-) -> StationProductCatalog:
-    rows: list[dict[str, object]] = []
-    for station_id, catalogue_date in hydro_station_dates.iter_rows():
-        if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
-            raise FatalContractError("hydrometry station retrieval date must pair a string identifier with a date")
-        for d in HYDRO_PRODUCT_DEFS:
-            rows.append(
-                {
-                    "provider_id": PROVIDER_ID,
-                    "station_id": station_id,
-                    "product_id": d.product_id,
-                    "availability": (
-                        "available"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else "unknown"
-                    ),
-                    "availability_reason": (
-                        "Non-empty official source recording"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else AVAILABILITY_REASON
-                    ),
-                    "published_record_start_date": None,
-                    "published_record_end_date": None,
-                    "last_catalogue_check": date(2026, 9, 2)
-                    if (station_id, d.product_id)
-                    in {
-                        ("1011000101", "discharge_daily_mean"),
-                        ("1011000101", "discharge_daily_max"),
-                        ("1011000101", "stage_daily_max"),
-                        ("Y251002001", "discharge_instantaneous"),
-                        ("Y251002001", "stage_instantaneous"),
-                        ("01001336", "water_temperature_reported"),
-                    }
-                    else catalogue_date,
-                }
-            )
-
-    for station_id, catalogue_date in temperature_station_dates.iter_rows():
-        if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
-            raise FatalContractError("temperature station retrieval date must pair a string identifier with a date")
-        for d in TEMP_PRODUCT_DEFS:
-            rows.append(
-                {
-                    "provider_id": PROVIDER_ID,
-                    "station_id": station_id,
-                    "product_id": d.product_id,
-                    "availability": (
-                        "available"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else "unknown"
-                    ),
-                    "availability_reason": (
-                        "Non-empty official source recording"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else AVAILABILITY_REASON
-                    ),
-                    "published_record_start_date": None,
-                    "published_record_end_date": None,
-                    "last_catalogue_check": date(2026, 9, 2)
-                    if (station_id, d.product_id)
-                    in {
-                        ("1011000101", "discharge_daily_mean"),
-                        ("1011000101", "discharge_daily_max"),
-                        ("1011000101", "stage_daily_max"),
-                        ("Y251002001", "discharge_instantaneous"),
-                        ("Y251002001", "stage_instantaneous"),
-                        ("01001336", "water_temperature_reported"),
-                    }
-                    else catalogue_date,
-                }
-            )
-
-    return (
-        pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
-        .with_columns(pl.col("availability").cast(AvailabilityDtype))
-        .sort("station_id", "product_id")
-    )
+def build_station_products(availability: FranceAvailability) -> StationProductCatalog:
+    rows = [
+        {
+            "provider_id": PROVIDER_ID,
+            "station_id": pair.code_station,
+            "product_id": pair.product_id,
+            "availability": pair.availability,
+            "availability_reason": pair.reason,
+            "published_record_start_date": None,
+            "published_record_end_date": None,
+            "last_catalogue_check": max(a.retrieved_at_start for a in pair.acquisitions).date(),
+        }
+        for pair in availability.pairs
+    ]
+    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).sort("station_id", "product_id")
 
 
 def build_provider_info(
@@ -949,6 +858,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to a Hubeau temperature/station JSON fixture (used with --hydro-fixture).",
     )
     parser.add_argument("--native", type=Path, help="Committed native Parquet input for canonical build.")
+    parser.add_argument(
+        "--availability-ledger", type=Path, help="Reviewed compressed France station-product availability ledger."
+    )
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--hydro-retrieved-at", type=_parse_retrieved_at)
@@ -970,6 +882,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--native build mode cannot be combined with refresh sources or retrieval instants")
         if args.out is None:
             parser.error("--out is required for canonical build")
+        if args.availability_ledger is None:
+            parser.error("--availability-ledger is required for canonical build")
+        availability = FranceAvailability.model_validate_json(lzma.decompress(args.availability_ledger.read_bytes()))
         from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
         catalogue = build_catalogue(
@@ -979,6 +894,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
             ),
             FRANCE_ORIGIN_DECLARATIONS,
+            availability,
         )
         verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
         write_catalogue(catalogue, args.out)

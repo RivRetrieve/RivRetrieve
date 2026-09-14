@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import lzma
 import re
 import socket
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from types import ModuleType
 from urllib.parse import urlparse
@@ -43,6 +45,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, read_native_tab
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.fr_hubeau.availability import FranceAvailability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
 from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
@@ -91,12 +94,17 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     module_path = generator.__file__
     assert module_path is not None
     native_path = Path(module_path).parent / "catalogue/native.parquet"
+    build = generator.build_catalogue
+    if provider == "fr_hubeau":
+        ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+        availability = FranceAvailability.model_validate_json(lzma.decompress(ledger.read_bytes()))
+        build = partial(build, availability=availability)
     return ProviderAdapter(
         provider_id=ProviderId(provider),
         native_path=native_path,
         generator=generator,
         main=generator.main,
-        build=generator.build_catalogue,
+        build=build,
         cases=cases,
     )
 
@@ -660,6 +668,13 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
                 "--citation-recording",
                 "tests/test_data/jp_mlit_terms_citation.pdf",
+            )
+        )
+    elif adapter.provider_id == "fr_hubeau":
+        arguments.extend(
+            (
+                "--availability-ledger",
+                str(ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"),
             )
         )
     elif adapter.provider_id == "pl_imgw":
