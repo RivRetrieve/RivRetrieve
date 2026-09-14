@@ -3,7 +3,7 @@
 Program: https://github.com/RivRetrieve/RivRetrieve/issues/6
 Effort: https://github.com/RivRetrieve/RivRetrieve/issues/225
 
-Status: Implementation vision. Remote publication, Effort linkage and verification on `main` remain pending.
+Status: Agreed implementation vision. Publication and implementation progress are tracked on Effort #225.
 
 ## Outcome
 
@@ -329,8 +329,8 @@ for #225; do not create a competing vision for the same outcome.
 The repository ignores new `planning/*` files. This vision is explicitly tracked as
 an exception; do not change the ignore policy or stage unrelated planning material.
 
-Before substantive work, `implement-vision` must publish and verify this vision
-through the appropriate Effort-linked workflow, including its matching Program/Effort
-provenance, durable commit-pinned linkage and exact target-branch copy. Do not describe
-it as durable or implementation-ready until those publication checks succeed. This
-invocation does not start implementation or merge any PR.
+Before substantive work, `implement-vision` must verify this vision's matching
+Program/Effort provenance, durable commit-pinned issue linkage and exact copy on the
+intended target branch. Complete any missing publication step before implementation;
+do not create or publish a competing vision when those checks already pass. Publishing
+this vision does not itself start implementation or merge any research PR.
