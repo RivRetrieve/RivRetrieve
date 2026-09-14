@@ -323,7 +323,9 @@ def apply_governing_evidence(records: list[dict[str, object]], governing: dict) 
         evidence = indexed[(row["code_station"], row["product_id"])]
         row["legacy_evidence_refs"] = row["evidence_refs"]
         row["status"] = evidence["status"]
-        row["observations"] = evidence["published_count_or_new_witness_points"]
+        row["observations"] = (
+            "" if evidence["status"] == "history_check_failed" else evidence["published_count_or_new_witness_points"]
+        )
         row["evidence_refs"] = " ".join("governing:" + a["reference"] for a in evidence["acquisitions"])
         row["evidence_basis"] = (
             evidence["basis"] + "; " + evidence["availability"] + "; dated source outcome, not whole-history absence"

@@ -240,7 +240,9 @@ def verify_inventory(folder: pathlib.Path, native: pd.DataFrame, hub_rows, hist_
         refs = ["governing:" + a["reference"] for a in expected["acquisitions"]]
         if (row["status"], row["observations"], row["evidence_refs"].split()) != (
             expected["status"],
-            str(expected["published_count_or_new_witness_points"]),
+            ""
+            if expected["status"] == "history_check_failed"
+            else str(expected["published_count_or_new_witness_points"]),
             refs,
         ):
             differing.append(key)
