@@ -1,4 +1,4 @@
-"""Generate EVIDENCE_INDEX.md: every piece of evidence, grouped by what it may be used to establish.
+"""Generate a historical index, not the accepted EVIDENCE_INDEX.md: every piece of evidence, grouped by what it may be used to establish.
 
     render : (Bundles, Recordings) -> Markdown   (pure)
 
@@ -139,7 +139,7 @@ def main() -> None:
             )
         lines.append("")
     lines += [
-        "## Reproduction",
+        "## Historical procedure (not current verification or authority to acquire)",
         "",
         "```bash",
         "uv run python research/station-coverage/fr_hubeau/scripts/acquire_hubeau_counts.py <staging.zip>",
@@ -152,12 +152,13 @@ def main() -> None:
         "uv run python research/station-coverage/fr_hubeau/scripts/verify_evidence.py",
         "```",
         "",
-        "Both acquisition scripts resume from the packed bundle. A request settles only when answered",
+        "Do not rerun these acquisition steps for delivery. Use verify_governing_evidence.py with the retained corpus.",
+        "Historically, both acquisition scripts resumed from the packed bundle. A request settled only when answered",
         "(HTTP 200/206 with a parseable count, or HTTP 200 with a parseable series); every other attempt",
         "stays in the receipts as evidence and is attempted again on the next run.",
     ]
-    (here / "EVIDENCE_INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"wrote EVIDENCE_INDEX.md covering {len(recordings)} recordings and 2 bundles")
+    (here / "evidence/HISTORICAL_INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"wrote evidence/HISTORICAL_INDEX.md covering {len(recordings)} recordings and 2 bundles")
 
 
 if __name__ == "__main__":

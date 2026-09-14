@@ -1,8 +1,10 @@
 # fr_hubeau implementation handoff
 
-For the implementing agent. Everything below is established by a recording in `recordings/` or a
-receipt in `evidence/`, unless it appears under "not established". Figures for availability are
-generated into `inventory/inventory_summary.json`; they are not repeated here so they cannot drift.
+For the implementing agent. The agreed Effort #225 vision supersedes the earlier
+open research decisions. `inventory/governing_evidence.json.xz` binds all 33,139 pairs
+to their governing acquisitions. Available: 20,966. Unknown: 12,173 (4,948 publisher
+whole-record count zeros, 524 two-window empties, 97 failures, 6,604 unchecked).
+Receipt-only historical anecdotes are not full-body-certified facts.
 
 Baseline commit `67796ab8d793867aaaaf9c6fb55bec208adaeab8` · native table captured
 `2026-08-02T17:33Z` (7,323 stations) · first survey `2026-09-08`/`09` · replacement captures
@@ -43,47 +45,24 @@ The mapping is many-to-one: 5,505 sites, of which 755 carry 1,704 stations, up t
 | Stations on a site may succeed one another or alternate; the site's activation table traces **which station supplies the site's data** | `recordings/doc_hydroportail_calendrier_site` |
 | A site is the carrier of discharge data; a station may carry stage and/or discharge | `recordings/doc_hubeau_api_hydrometrie` (receipted: the page embeds example observations) |
 
-### What the preserved responses show
+### Settled implementation decision
 
-Same window, same variable (`Q`), site route and station routes (`evidence/station_site_comparison.json`):
+Return the selected station's own Q using
+`/stationhydro/ajax/{code_station}/series`, not its shared site's series. The complete
+private `station_Q_1232000101.body` and receipt verify station identity, Q, UTC,
+series unit `l` and numerical values for 1 June 2026 only. The actual series unit,
+not top-level display preference `unitQ=m3`, controls conversion from litres/second.
 
-| Site | Window | Site series | Station series |
-| --- | --- | --- | --- |
-| `25210001` | 1–2 Sep 2026 | 576 points | `2521000101`: 576 points, equal to the site at **1** of 576 instants · `2521000102`: 576 points, equal to the site at **all 576** |
-| `12320001` | 1–8 Jun 2026 | **no point** | `1232000101`: 282 points · `1232000102`: no point |
+Remove the one-station identity gate and hard-coded site-Q response identity.
+Validate response entity, metric, unit and timezone before iterating rows, including
+valid empty responses. Keep source site mappings visible in native evidence without
+using them to substitute site measurements for station measurements.
 
-`observations_tr` addressed by the site code returns rows for each linked station **and** rows whose
-`code_station` is null; addressed by a station code it returns that station only
-(`recordings/observations_tr_Q_*_identities`).
-
-These are consistent with the source's statement: the site series is one series, supplied by the
-station active at each instant, and linked stations carry their own discharge series, which can
-differ from it. Two matching or differing samples do not prove the relationship holds everywhere;
-the statement is the source's, the samples illustrate it.
-
-### Implications
-
-- **The site route returns the site's series, not each linked station's measurements.** It must not
-  be presented as independent measurements from every station on the site.
-- **Two discharge series exist for a station on a shared site**: its own
-  (`/stationhydro/ajax/{code_station}/series`, `Q`) and its site's
-  (`/sitehydro/ajax/{code_site}/series`). Which one a station selection should return is a product
-  decision for the delivery owner. The existing site route is appropriate if the product is the site's
-  discharge; it is not a station's own series.
-- **Identity that must stay visible**: for a site series, `code_site`, and that it is supplied by
-  whichever station is active; for a station series, `code_station`.
-- **Every `discharge_instantaneous` row in the inventory is a station-level finding**
-  (`tested_entity_kind = station`, `site_series_relation =
-  station_series_tested_site_series_not_established`). Site-level availability was not surveyed for
-  the population.
-
-### Not established
-
-- The activation calendar of any site (which station supplied the site series, when). HydroPortail
-  documents it; no route for it was captured.
-- How `observations_tr`'s null-`code_station` rows relate to HydroPortail's site series beyond sharing
-  the site code; only identities were captured.
-- Site-level instantaneous availability for any site other than the two above.
+The old `evidence/station_site_comparison.json` is retained as historical unsupported
+derived anecdotes. Its 576-point comparisons and 282-point total lack retained full
+comparison bodies; the new one-day witness does not certify them. Source documentation,
+not those figures, establishes the distinction between site and station objects.
+Site-level access and activation-calendar research are outside this outcome.
 
 ## 4. Availability basis, by product
 
@@ -93,7 +72,7 @@ the statement is the source's, the samples illustrate it.
 | `water_temperature_reported` | `temperature/chronique` `count`, same shape | station | as above |
 | `stage_instantaneous`, `discharge_instantaneous` | `observations_tr` `count` (rolling 30 days), then for a fixed sample HydroPortail station series over two windows | station | nothing in the windows tested — never whole-history absence |
 
-The statuses are defined in `scripts/build_inventory.py`. A request settles only if the publisher
+The final classifications and acquisitions are in `inventory/governing_evidence.json.xz`. A request settles only if the publisher
 answered it: HTTP 200/206 with a parseable count, or HTTP 200 with a parseable series. A failed attempt
 never supplies a count or a point total, so it can never become an empty result.
 
@@ -119,13 +98,12 @@ hydrometry station `1232000102` reads 0 for `QmnJ` and 237 for `HIXnJ`, returnin
 - `code_entite` accepts several comma-separated codes, and the `count` is the aggregate across them.
 - HydroPortail dates are `DD/MM/YYYY` with slashes; hyphens are rejected as an invalid date.
 - Hub'Eau pagination follows the response's `next` URL as a new request.
-- No rate limit is published. The replacement capture ran one connection with a 0.1 s pause and was
+- No rate-limit statement was established in the inspected/captured evidence. The replacement capture ran one connection with a 0.1 s pause and was
   not refused.
 
 ## 6. Organisation fields
 
-Two Sandre layers supply an organisation name per station. **Neither field is established as the
-producer or issuing body of the series RivRetrieve retrieves.** The inventory keeps each name under
+Two Sandre layers supply an organisation name per station. **Neither field establishes measurement production or series publication.** The inventory keeps each name under
 its source field and a scope code.
 
 | | Hydrometry: `NomIntervenant` (`sa:StationHydro`) | Temperature: `ProducteurDuJeu` (`sa:StationMesureEauxSurface`) |
@@ -150,10 +128,31 @@ Roles kept apart:
   autres producteurs" (`recordings/doc_hubeau_api_hydrometrie`, quotes verified at capture). So the
   network is run by many bodies, not one; Hub'Eau and HydroPortail carry the data, and SCHAPI supplies
   the hydrometric layer to Sandre (`doc_sandre_hyd_layer_metadata`).
-- **Producer or issuing body of a retrieved series** — not established by either field.
+- **Original measurement producer** — not established by either field. Official
+  publication is established separately, as described below.
 
 Limits: a name is a present-day attribute of a station record. It is not extended to the station's
 historical measurements, and it does not identify the supplier of a shared site's series (§3).
+
+
+### Official publication and citation
+
+Official retained legal/about documents identify Service Central Vigicrues (SCV,
+ex-SCHAPI) as HydroPortail editor and manager of PHyC. Content comes from the
+Vigicrues network and external hydrometric producers. Hub'Eau terms name OFB, SCV
+and BRGM as editors. Publication, platform operation, referential production,
+collection and original measurement production are distinct roles.
+
+This establishes traceable official publication, not authorship of every historical
+measurement. The earlier three-station assertion that identity lookups name the
+“producing SIE body” exceeds those fields' evidence and needs correction in production
+provenance. No new original-producer inquiry is required before expansion.
+
+Retain the source's citation words verbatim:
+“L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.”
+The dataset-author citation question remains unresolved; an SCV/Hub'Eau publisher
+label does not settle it. Retain source terms without classifying licences or inferring
+redistribution permission.
 
 ## 7. Time semantics
 
@@ -170,3 +169,37 @@ Unchanged. `obs_elab` and `temperature/chronique` establish no zone, so `unknown
 - Do not use a zero count whose request addressed another entity.
 - Do not derive `code_site` by truncation, or treat `grandeur_hydro` as a per-site declaration.
 - Do not assume the five hydrometric products apply to the 869 temperature stations.
+
+## 9. Governing history and portable verification
+
+`inventory/retired_historical_totals.json` retires 59 precise historical totals.
+The replacement numerical witnesses are exact one-day requests; do not attach old
+eight-day URLs or totals to their bodies. `J783301020` Q returned HTTP 500 for
+1–8 June 2026 and an empty 1–8 June 2023 response. Its governing status is failed.
+No survey, retry pass or original-producer enquiry is required for this outcome.
+Unknown availability remains selectable; failed/empty/unchecked are distinct reasons.
+
+From the repository root, run explicit private full-body verification:
+
+```bash
+uv run python research/station-coverage/fr_hubeau/scripts/verify_governing_evidence.py --native src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet --ledger research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz --evidence-root /authorised/private/fr_hubeau
+```
+
+Replace `/authorised/private/fr_hubeau` with the authorised retained France evidence
+root. `--native` and `--ledger` are required. Public deterministic consistency checks
+use the same command with `--evidence-root` and its path omitted. The controlled corpus stays private; an absent corpus requires
+an authorised handoff, not automatic reacquisition. Public deterministic ledger checks
+do not re-verify source bytes. No blanket measurement-value scanner or legal inference
+is an approved prerequisite. Preserve genuine-recording requirements.
+
+One-day positive Q witnesses cannot replay a normal public request padded by two days
+on each side or establish a midnight-straddling boundary probe. Two supplementary,
+narrowly authorised padded station-Q captures are now retained privately, including
+a 30 May–4 June 2026 source request for a June 1–2 user window. See
+`EVIDENCE_INDEX.md` for their scope and material identity. The accepted source-only
+independent report verifies that the second capture supplies the positive padded
+midnight evidence. Use that exact private recording for later production tests, not
+the governing one-day witnesses. This does not assert that production tests pass or
+that recording publication is approved. These captures do not replace or backdate
+the 59 governing one-day witnesses.
+Never relabel site-Q recordings or replay one-day bytes for a longer request.

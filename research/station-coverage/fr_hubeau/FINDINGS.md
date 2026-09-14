@@ -12,27 +12,32 @@ Research only. No production adapter, canonical catalogue artifact or provenance
 | First survey | `2026-09-08` / `09` |
 | Replacement captures (this revision) | `2026-09-11` / `12` |
 | Inventory | 33,139 rows = 6,454 × 5 + 869 |
-| Verification | `scripts/verify_evidence.py` — 30/30 checks pass, offline |
+| Final reconciliation | 2026-09-13 governing acquisitions; see §10 |
 
 ## 1. Headline
 
-Today the provider exposes **3 stations and 6 series**. This survey establishes **20,966 series**, and
-says precisely what it does not establish.
+The pre-integration provider exposes **3 stations and 6 series**. The reconciled
+baseline accounts for **33,139 applicable pairs**, all intended to remain selectable:
+**20,966 available and 12,173 unknown**. This is research, not a completed catalogue expansion.
 
-| Product | available | none published | empty in both history windows | never history-checked | check failed |
-| --- | --- | --- | --- | --- | --- |
-| `stage_daily_max` | **5,266** | 1,188 | — | — | — |
-| `discharge_daily_mean` | **4,942** | 1,512 | — | — | — |
-| `discharge_daily_max` | **4,206** | 2,248 | — | — | — |
-| `stage_instantaneous` | **3,221** | — | 202 | 3,021 | 10 |
-| `discharge_instantaneous` | **2,462** | — | 323 | 3,583 | 86 |
-| `water_temperature_reported` | **869** | 0 | — | — | — |
+| Governing basis | Pairs | Availability |
+| --- | ---: | --- |
+| Publisher count positive or exact numerical historical witness | 20,966 | available |
+| Publisher whole-record count zero at acquisition | 4,948 | unknown |
+| Empty in both specified historical windows | 524 | unknown |
+| Historical check failed | 97 | unknown |
+| Recent-empty; history unchecked | 6,604 | unknown |
 
-Per-station detail: [STATION_TABLE.md](STATION_TABLE.md); machine-readable:
-`inventory/station_product_evidence.csv`; generated counts: `inventory/inventory_summary.json`.
+Positive evidence consists of 20,907 publisher-count conclusions and 59 numerical
+historical witnesses. A positive count is not a guarantee of numerical values in every
+row or requested window. Counts of zero do not establish permanent absence.
 
-**The three daily products differ by over a thousand stations each.** A station having stage says
-nothing about it having discharge. No station × product cross-product holds.
+`inventory/governing_evidence.json.xz` carries the governing per-pair acquisitions;
+`inventory/retired_historical_totals.json` records the 59 retired precise old totals.
+The CSV and summary are derived accounting, not substitutes for source responses.
+
+The three daily products have different availability populations. Applicability uses
+the two source populations below, not every station crossed with all six products.
 
 ## 2. Two disjoint populations
 
@@ -50,7 +55,8 @@ hydrometry stations and 869 temperature stations. Temperature stations carry no 
 
 A request settles only when the publisher answered it: HTTP 200/206 with a parseable count, or HTTP
 200 with a parseable series. **A failed attempt never becomes a count, a zero or an empty window**;
-it is recorded as a failure and retried. Every row names the receipts it rests on in `evidence_refs`.
+it remains a failure. No further survey or retries are required for this outcome.
+The governing ledger identifies the actual acquisitions for every pair.
 
 ## 4. Catalogue metadata cannot establish availability
 
@@ -73,63 +79,42 @@ That mapping does **not** mean a station's discharge is its site's discharge. Hy
 (`recordings/doc_hydroportail_station_hydrometrique`; the site calendar page adds that the activation
 table traces which station supplies the site's data.)
 
-The preserved responses show the same thing, same window, same variable
-(`evidence/station_site_comparison.json`):
+The earlier `evidence/station_site_comparison.json` contains derived anecdotes:
+it reports 576-point comparisons for site `25210001`, and 282 station-Q points
+versus an empty site `12320001` over 1–8 June 2026. The observation-bearing
+comparison bodies were not retained in that research package. These precise figures
+are **historical unsupported derived anecdotes**, not full-body-verified governing
+facts. Later witnesses do not recover those old bytes or certify those totals.
 
-| Site | Window | Site series | Its stations |
-| --- | --- | --- | --- |
-| `25210001` | 1–2 Sep 2026 | 576 points | `…01`: 576 points, equal to the site at **1** of 576 instants · `…02`: 576 points, equal at **all 576** |
-| `12320001` | 1–8 Jun 2026 | **no point** | `…01`: **282 points** · `…02`: none |
+The approved decision is settled: a station selection returns **that station's own Q**.
+A complete private response from `/stationhydro/ajax/1232000101/series` verifies the
+selected station code, Q metric, UTC, actual series unit and numerical values for
+**1 June 2026 only**. It supports the route, not a population-wide inference.
+Retain the published station/site mapping; never derive it by truncating identifiers.
+Site access and activation-calendar research are outside this outcome.
 
-So the two entities can disagree in both directions: a station can report while its site is empty, and
-two stations on one site carry different series. **Every `discharge_instantaneous` row in this
-inventory is therefore a station-level finding** (`tested_entity_kind = station`), and none is
-transferred to the site series production requests. What that means for implementation, and the exact
-open question, are in [HANDOFF.md](HANDOFF.md) §3 and [UNRESOLVED.md](UNRESOLVED.md) §3.
+## 6. Historical checks and retired totals
 
-## 6. Instantaneous availability: what is settled, and what is not
+The original bounded historical sample used 1–8 June 2026 and 1–8 June 2023.
+Final governing evidence has 524 two-window empties and 97 failed checks.
+There are 6,604 recent-empty pairs with history unchecked: 1,976 in-service and
+4,628 out-of-service pairs. Being out of service does not establish lack of history.
+These are accounted limitations with unknown availability, not exclusions or a
+request to complete an exhaustive historical survey.
 
-`observations_tr` settles every station with data in its rolling 30 days. For the rest, a bounded
-sample of **682 pairs** (441 Q, 241 H — the same pairs the first survey probed) was re-probed against
-HydroPortail over two windows, 1–8 June 2026 and 1–8 June 2023:
+Fifty-nine unsupported precise old historical totals are retired. Their replacement
+positive witnesses are exact **one-day requests**, not replays of the old eight-day
+windows. Read actual request URLs, dates and bodies in the governing acquisitions;
+old receipt names, `w1`/`w2` filenames and original request URLs are not replacement
+request identities. Do not reproduce old precise totals from derived summaries.
 
-| Outcome | Pairs |
-| --- | --- |
-| available (points in a probed window) | 61 |
-| empty in **both** windows | 525 |
-| check failed (§7) | 96 |
+## 7. Failed checks remain failures
 
-Everything outside that sample is **never history-checked**, and the inventory says so rather than
-calling it absence:
-
-| Never history-checked | Pairs |
-| --- | --- |
-| in-service stations, outside the sample | 1,976 |
-| **out-of-service stations** | **4,628** |
-
-The out-of-service pairs matter and were previously under-described: a station being out of service
-and having no recent reading **does not establish that it lacks historical measurements**. They were
-never checked against history at all.
-
-**What more probing could establish, and what it could not.** Applying the same two windows to the
-6,604 unchecked pairs and retrying the 96 failures is an upper bound of **13,400 requests**. At the
-median spacing actually observed against HydroPortail in this survey (3.52 s between requests,
-measured from the receipts) that is roughly **13.1 hours** of sustained load on a public portal. It
-would move pairs into "available" where those windows happen to contain data, and otherwise produce
-more two-window emptiness. **It would not establish whole-history absence for any station**: two empty
-windows are two empty windows. No whole-record total exists for the instantaneous products, and none
-of this touches the site-series question in §5. See [UNRESOLVED.md](UNRESOLVED.md) §1 — the decision
-is the delivery owner's.
-
-## 7. 96 checks the portal did not answer
-
-Of the 682 sampled pairs, **96 never answered**: 86 `discharge_instantaneous` and 10
-`stage_instantaneous`, with HTTP 500 and HTTP 404. They were retried across three passes on two
-different days (982 HTTP 500 and 120 HTTP 404 attempts in total) and **the same 96 pairs failed every
-time**, with no pair recovering and no previously-answered pair starting to fail.
-
-They are recorded as `history_check_failed`: **no claim about the source**. The reproducibility is a
-fact about those requests, not evidence that the stations lack measurements.
+The 96 retained historical failures are supplemented by `J783301020` instantaneous Q:
+**1–8 June 2026 returned HTTP 500; 1–8 June 2023 was empty**. Its earlier
+two-window-empty classification is superseded. This gives 97 failures, not 97 empty
+series. Do not retry this pair or the unchecked population merely to complete accounting.
+Normal future retrieval can return values, a valid empty result or an explicit source issue.
 
 ## 8. Organisations: names are established, roles are not
 
@@ -160,51 +145,71 @@ shared site's series. **1,088 hydrometry stations have no name**: 1,023 absent f
 blank. Two hypotheses failed — not closure (879 of the 1,023 are in service), not station type (873
 are `STD`). See [UNRESOLVED.md](UNRESOLVED.md) §4 and §5.
 
+
+### Official publication and citation
+
+Official retained legal/about documents identify Service Central Vigicrues (SCV,
+ex-SCHAPI) as HydroPortail editor and manager of PHyC. Content comes from the
+Vigicrues network and external hydrometric producers. Hub'Eau terms name OFB, SCV
+and BRGM as editors. Publication, platform operation, referential production,
+collection and original measurement production are distinct roles.
+
+This establishes traceable official publication, not authorship of every historical
+measurement. The earlier three-station assertion that identity lookups name the
+“producing SIE body” exceeds those fields' evidence and needs correction in production
+provenance. No new original-producer inquiry is required before expansion.
+
+Retain the source's citation words verbatim:
+“L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.”
+The dataset-author citation question remains unresolved; an SCV/Hub'Eau publisher
+label does not settle it. Retain source terms without classifying licences or inferring
+redistribution permission.
+
 ## 9. Routes
 
 [ROUTE_DECISIONS.md](ROUTE_DECISIONS.md) records what each route was measured to do. The correction
 that matters: **the two instantaneous routes tie on freshness in the preserved captures** — both
 HydroPortail and `observations_tr` return `2026-09-08T12:15:00Z` as their latest H instant. An earlier
 version of this survey claimed a five-minute HydroPortail advantage; it was wrong and is withdrawn,
-along with per-route reliability counts no recording supports. What remains evidenced in HydroPortail's
-favour is **historical access**: it served January 2020, where `observations_tr` refuses anything
+along with per-route reliability counts no recording supports. Retain HydroPortail for **historical access**, supported by the governing historical
+witnesses. The old January 2020 example remains receipt-only research history, not a
+newly body-certified numerical total. `observations_tr` rejected the captured request
 beyond 30 days with HTTP 400 `ValidateDateMin`.
 
-## 10. The evidence package, and how to check it
+## 10. Evidence and verification boundary
 
-| Part | Size | What it is |
-| --- | --- | --- |
-| `evidence/hubeau_counts.tar.xz` | 2.59 MB | 33,162 receipts and **all 33,145 answered bodies** for every baseline station × product |
-| `evidence/hydroportail_history.tar.xz` | 131 KB | 2,296 receipts and 2,039 observation-free bodies for the sample |
-| `evidence/station_site_comparison.json` | 2.5 KB | the §5 comparison, derived |
-| `recordings/` | 18.5 MB | 44 recordings; 16.7 MB of it is two complete official Sandre metadata responses |
-| `inventory/station_product_evidence.csv` | 10.1 MB | the 33,139-row inventory |
-| **Folder total** | **33.1 MB** | |
+The retained Hub'Eau bundle contains complete primary count bodies. The historical
+bundle contains retained empty/error bodies. The final controlled private corpus adds
+complete governing positive witness bodies and replacement checks. Each acquisition
+must identify its actual request, retrieval instant, status, byte size and digest;
+compressed bundle identity and response-member identity are distinct.
 
-Each receipt carries the exact request URL, HTTP status, media type, UTC acquisition instant, byte size
-and SHA-256 of the full response. `verify_evidence.py` re-derives every count from the stored body,
-re-classifies every inventory row from the receipts it cites, and checks that each cited request
-addressed that row's own station with that product's own filter.
+- `inventory/governing_evidence.json.xz`: reviewed, rich per-pair acquisition accounting.
+- `inventory/retired_historical_totals.json`: explicit retirement of 59 old totals.
+- `scripts/verify_governing_evidence.py --evidence-root PATH`: explicit private full-body
+  verification against retained inputs, without acquisition.
+- Public offline checks: deterministic ledger/binding checks, **not source certification**.
 
-**Retention limit, and it is a real one.** This project does not commit source observation values.
-Bodies are kept whole only where they carry none — which is every Hub'Eau count response, because each
-is requested with `fields=code_station`. Responses that do carry observations (HydroPortail series with
-points, the sample-row recordings) keep their receipt and derived readings, and their bytes are not
-stored. **That is short of "preserve the actual source responses" and needs the reviewer's explicit
-acceptance** — see [UNRESOLVED.md](UNRESOLVED.md) §6.
+The private root is the controlled `review-evidence/effort-225/fr_hubeau/` corpus.
+It is not available in a fresh clone. Arrange an authorised handoff if absent; do not
+substitute hashes for bodies or rerun the survey. Private evidence stays out of public
+artifacts. This is a publication boundary, not a blanket prohibition on measurement
+values or a legal conclusion about source terms. Existing genuine-recording test
+requirements remain in force. Old receipt-only anecdotes remain uncertified.
 
-## 11. What changed in this revision
+## 11. Earlier research corrections (historical record)
 
-Every item below was a defect in the previous version of this PR.
+The author previously corrected the following defects. Final counts and evidence
+limits in §§1, 6, 7 and 10 supersede that earlier revision.
 
 1. **96 failed checks were recorded as emptiness.** Now failures are a status of their own, retried,
    and never convertible into a zero (§7). The verifier fails if that conversion reappears.
 2. **The second window's outcome was discarded.** Each window is now its own request with its own
    receipt, and a two-window emptiness claim requires both windows answered.
 3. **Station Q results were being read as site availability.** Now separated, with the source's own
-   explanation and a preserved comparison (§5).
-4. **Availability rested on counts with no responses behind them.** Every count now has its response
-   body stored and re-derivable (§10).
+   explanation and a derived historical comparison whose limits are explicit (§5).
+4. **Availability rested on counts with no responses behind them.** Every governing primary count has its response
+   body retained; replacement witnesses have exact private bodies (§10).
 5. **The freshness comparison contradicted the saved responses.** Withdrawn (§9).
 6. **Organisation names were presented as `producer`.** Now the source's field name plus a scope code,
    with the role explicitly unestablished (§8).
@@ -222,22 +227,11 @@ availability. This survey supplies acquisition records against both: the Sandre 
 identity and position, and the whole-record counts settle the four daily and temperature products at
 every station. Converting any of it into catalogue rows is implementation work.
 
-## 13. Checks run
+## 13. Review status and checks
 
-```
-uv run python research/station-coverage/fr_hubeau/scripts/verify_evidence.py
-```
-
-**30/30 pass**, offline. Integrity, reproduction of every reading from stored bodies, independent
-re-classification of all 33,139 rows, failure handling, entity/filter checks, station/site scope,
-organisation scope codes, and a scan proving no observation value is stored anywhere in the folder —
-also run in the suite by `tests/test_fr_hubeau_research_stores_no_observation_values.py`.
-
-These checks were proved to bite: each defect above was deliberately reintroduced into a scratch copy
-and the verifier failed on it, including the original failure-to-emptiness defect, which changes 96
-rows. The clean copy passes.
-
-**Access etiquette:** unauthenticated GET against public routes with a descriptive User-Agent, one
-reused connection. Hub'Eau answered 33,162 requests at about 5 per second without refusal;
-HydroPortail was paced at 3.5 s between requests. Only counts, identities and instants were retained —
-no observation history was accumulated to establish support.
+The original PR reported 30/30 checks from `scripts/verify_evidence.py`. That result
+predates final reconciliation and is not certification of discarded positive bodies.
+Do not adopt its blanket measurement-value scanner as project policy. Use the public
+deterministic checks and explicit private-body verifier described in §10, and report
+which one was run. Nicolas owns review, acceptance and delivery; research publication
+still requires normal review and merge. No production changes are supplied here.

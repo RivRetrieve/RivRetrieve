@@ -1,3 +1,5 @@
+# Historical research utility; not project policy or a certification/publication gate.
+# Full governing evidence is retained privately; do not run stripping on that corpus.
 """Pack working receipts and staged bodies into the committed evidence bundles.
 
     pack : (WorkingReceipts, StagedBodies, PriorBundle?) -> Bundle   (deterministic)

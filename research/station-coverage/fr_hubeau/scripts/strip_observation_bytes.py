@@ -1,3 +1,5 @@
+# Historical research utility; not project policy or a certification/publication gate.
+# Full governing evidence is retained privately; do not run stripping on that corpus.
 """Remove publisher observation values from the committed recordings, keeping receipts and readings.
 
     strip : Recording -> Recording   (idempotent; a recording already stripped is left unchanged)

@@ -12,8 +12,8 @@
     },
     "discharge_instantaneous": {
       "available": 2462,
-      "empty_in_both_history_windows": 323,
-      "history_check_failed": 86,
+      "empty_in_both_history_windows": 322,
+      "history_check_failed": 87,
       "recent_window_empty_history_unchecked": 3583
     },
     "stage_daily_max": {
@@ -37,8 +37,8 @@
       },
       "True": {
         "available": 2462,
-        "empty_in_both_history_windows": 323,
-        "history_check_failed": 86,
+        "empty_in_both_history_windows": 322,
+        "history_check_failed": 87,
         "recent_window_empty_history_unchecked": 1269
       }
     },
@@ -58,11 +58,12 @@
   "remaining_historical_uncertainty": {
     "recent_window_empty_history_unchecked_in_service": 1976,
     "recent_window_empty_history_unchecked_out_of_service": 4628,
-    "history_check_failed": 96,
-    "empty_in_both_history_windows": 525,
-    "two_window_probe_request_upper_bound": 13400,
+    "history_check_failed": 97,
+    "empty_in_both_history_windows": 524,
+    "historical_hypothetical_two_window_request_count": 13402,
+    "survey_scope": "no_further_survey",
     "hydroportail_median_seconds_between_requests": 3.52,
-    "two_window_probe_hours_upper_bound": 13.1
+    "historical_hypothetical_two_window_hours": 13.1
   },
   "hubeau_attempts": 33162,
   "hubeau_attempts_unanswered": 23,

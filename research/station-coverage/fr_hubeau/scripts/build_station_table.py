@@ -13,7 +13,7 @@ import pandas as pd
 
 LABEL = {
     "available": "yes",
-    "empty_no_data_published": "none",
+    "empty_no_data_published": "zero count",
     "empty_in_both_history_windows": "empty ×2",
     "history_check_failed": "check failed",
     "recent_window_empty_history_unchecked": "30d empty",
@@ -64,14 +64,15 @@ def main() -> None:
         "| Value | Meaning |",
         "| --- | --- |",
         "| `yes (n)` | *n* observations reported: whole-record count, 30-day count, or HydroPortail points in a tested window |",
-        "| `none` | whole-record count of zero (daily and temperature products only) |",
+        "| `zero count` | dated whole-record publisher count of zero; availability unknown, not unsupported |",
         "| `empty ×2` | 30-day count of zero and both HydroPortail history windows answered HTTP 200 with no point — emptiness **in those two windows only** |",
         "| `check failed` | 30-day count of zero and at least one history window never answered — **no claim** |",
         "| `30d empty` | 30-day count of zero; **never checked against history** |",
         "| `fail` | the count request was never answered — **no claim** |",
         "",
-        "**`Q inst` is the station's own discharge series.** Production requests the *site* series, which a",
-        "station result does not establish — see `FINDINGS.md` §5. The organisation column carries the Sandre",
+        "**`Q inst` is the station's own discharge series.** Integration must correct the old site route.",
+        "All 33,139 applicable pairs are selectable once their acquisitions are bound; unknown is not excluded.",
+        "The organisation column carries the Sandre",
         "field named in brackets; neither field is established as the producer of the series (`HANDOFF.md` §6).",
         "",
         "| Station | Name | River | Dept | Site | In service | Organisation [field] | "

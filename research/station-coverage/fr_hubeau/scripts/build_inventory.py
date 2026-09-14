@@ -37,10 +37,12 @@ import base64
 import collections
 import csv
 import json
+import lzma
 import pathlib
 import statistics
 import sys
 from datetime import datetime
+from urllib.parse import parse_qsl, urlsplit  # noqa: TID251 -- offline URL parsing only
 
 import pandas as pd
 
@@ -70,6 +72,7 @@ COLUMNS = [
     "station_organisation_name",
     "organisation_scope_note",
     "evidence_refs",
+    "legacy_evidence_refs",
 ]
 LAYERS = (
     # (recording, code field, organisation field, note when named, note when blank)
@@ -294,9 +297,10 @@ def summarise(
             "recent_window_empty_history_unchecked_out_of_service": int((unchecked.en_service == "False").sum()),
             "history_check_failed": failed,
             "empty_in_both_history_windows": int((instant.status == "empty_in_both_history_windows").sum()),
-            "two_window_probe_request_upper_bound": requests_upper,
+            "historical_hypothetical_two_window_request_count": requests_upper,
+            "survey_scope": "no_further_survey",
             "hydroportail_median_seconds_between_requests": round(pacing, 2),
-            "two_window_probe_hours_upper_bound": round(requests_upper * pacing / 3600, 1),
+            "historical_hypothetical_two_window_hours": round(requests_upper * pacing / 3600, 1),
         },
         "hubeau_attempts": len(hubeau),
         "hubeau_attempts_unanswered": sum(not hubeau_settled(r) for r in hubeau),
@@ -309,6 +313,37 @@ def summarise(
     }
 
 
+def apply_governing_evidence(records: list[dict[str, object]], governing: dict) -> list[dict[str, object]]:
+    """Project the reviewed final ledger without recertifying private source bytes."""
+    indexed = {(row["code_station"], row["product_id"]): row for row in governing["pairs"]}
+    keys = {(row["code_station"], row["product_id"]) for row in records}
+    if keys != set(indexed) or len(records) != len(indexed):
+        raise ValueError("governing evidence must match the exact baseline pairs")
+    for row in records:
+        evidence = indexed[(row["code_station"], row["product_id"])]
+        row["legacy_evidence_refs"] = row["evidence_refs"]
+        row["status"] = evidence["status"]
+        row["observations"] = evidence["published_count_or_new_witness_points"]
+        row["evidence_refs"] = " ".join("governing:" + a["reference"] for a in evidence["acquisitions"])
+        row["evidence_basis"] = (
+            evidence["basis"] + "; " + evidence["availability"] + "; dated source outcome, not whole-history absence"
+        )
+        windows = []
+        for acquisition in evidence["acquisitions"]:
+            query = dict(parse_qsl(urlsplit(acquisition["requested_from"][0]).query))
+            if acquisition["role"] == "historical_check":
+                window = query["hydro_series[startAt]"] + ".." + query["hydro_series[endAt]"]
+            else:
+                window = (
+                    "rolling recent window"
+                    if row["product_id"] in INSTANT
+                    else "whole-record query without date filters"
+                )
+            windows.append(window + " acquired " + acquisition["retrieved_at_start"])
+        row["window_tested"] = " | ".join(windows)
+    return records
+
+
 def main() -> None:
     here = pathlib.Path(__file__).resolve().parents[1]
     native = pd.read_parquet(here.parents[2] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
@@ -316,7 +351,10 @@ def main() -> None:
     history = receipts(here / "evidence" / "hydroportail_history.tar.xz")
     with (here / "inventory" / "history_sample.csv").open(newline="", encoding="utf-8") as handle:
         sample = list(csv.DictReader(handle))
-    records = compose(native, hubeau, history, sample, organisations(here / "recordings"))
+    governing = json.loads(lzma.decompress((here / "inventory/governing_evidence.json.xz").read_bytes()))
+    records = apply_governing_evidence(
+        compose(native, hubeau, history, sample, organisations(here / "recordings")), governing
+    )
 
     expected = int((native.source_endpoint == "hydrometrie/referentiel/stations").sum()) * 5 + int(
         (native.source_endpoint == "temperature/station").sum()

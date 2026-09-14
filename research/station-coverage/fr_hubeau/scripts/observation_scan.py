@@ -1,3 +1,5 @@
+# Historical research utility; not project policy or a certification/publication gate.
+# Full governing evidence is retained privately; do not run stripping on that corpus.
 """Find any publisher observation value stored under the fr_hubeau research folder.
 
     find_stored_observations : Folder -> [Violation]   (pure read; empty list = nothing stored)

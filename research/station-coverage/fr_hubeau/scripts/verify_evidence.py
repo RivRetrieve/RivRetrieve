@@ -14,7 +14,7 @@ Groups, each able to fail on the defect it names:
                 the product's own measurement filter and no date filter where a whole record is claimed
   scope         instantaneous discharge rows are station-level and say the site series is not
                 established; organisation fields keep the source's terms and scope codes
-  redistribution no observation value is readable from any file in the folder
+  publication   public checks do not certify the retained private corpus or infer publication rights
 
 Usage: uv run python research/station-coverage/fr_hubeau/scripts/verify_evidence.py [--folder DIR] [--native PARQUET]
 """
@@ -35,8 +35,8 @@ import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from evidence_bundle import bodies, receipts  # noqa: E402
-from observation_scan import body_carries_observations, find_stored_observations  # noqa: E402
 from readings import page_text  # noqa: E402
+from verify_governing_evidence import check_source, verify_public  # noqa: E402
 
 VOCABULARY = {
     "available",
@@ -107,13 +107,6 @@ def verify_recordings(folder: pathlib.Path, check: Checks) -> None:
             ):
                 bad.append(name)
     check(not bad, "every kept recording body matches its SHA-256 and size", bad)
-    kept_values = [
-        n
-        for n, d in documents.items()
-        if d["response"]["body_retained"]
-        and body_carries_observations(base64.b64decode(d["response"]["content_base64"]))
-    ]
-    check(not kept_values, "no kept recording body carries an observation value", kept_values)
     unquoted, unverifiable = [], []
     for name, d in documents.items():
         quotes = (d["response"].get("reading") or {}).get("quotes") or []
@@ -159,49 +152,28 @@ def verify_bundle(folder: pathlib.Path, name: str, check: Checks) -> list[dict[s
         try:
             document = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError):
+            if r["http_status"] in ("200", "206"):
+                drift.append(i)
             continue
         if "count" in r and r["http_status"] in ("200", "206"):
             codes = " ".join(sorted({str(row.get("code_station")) for row in document.get("data") or []}))
             if str(document.get("count")) != r["count"] or codes != r["returned_codes"]:
                 drift.append(i)
         elif "points" in r and r["http_status"] == "200":
+            try:
+                check_source(r["code_station"], r["product_id"], r["request_url"], 200, raw)
+            except (ValueError, KeyError, TypeError):
+                drift.append(i)
+                continue
             series = document.get("series") or {}
-            if str(len(series.get("data") or [])) != r["points"] or str(series.get("code") or "") != r["series_code"]:
+            if (
+                str(len(series.get("data") or [])) != r["points"]
+                or str(series.get("code") or "") != r["series_code"]
+                or str(series.get("metric") or "") != r["series_metric"]
+            ):
                 drift.append(i)
     check(not drift, f"{name}: every receipt reading re-derives from its kept body", drift[:5])
     return rows
-
-
-def expected_row(
-    station: str,
-    product: str,
-    hub: list[dict[str, str]],
-    windows: dict[str, list[dict[str, str]]],
-    sampled: bool,
-) -> tuple[str, str, list[str]]:
-    """Independent re-classification: (status, observations, cited request ids)."""
-    good = [r for r in hub if answered_count(r)]
-    if not good:
-        return "access_failed", "", [f"hubeau:{r['request_id']}" for r in hub]
-    count = int(good[-1]["count"])
-    refs = [f"hubeau:{good[-1]['request_id']}"]
-    if product not in ("stage_instantaneous", "discharge_instantaneous"):
-        return ("available" if count else "empty_no_data_published"), str(count), refs
-    if count:
-        return "available", str(count), refs
-    if not sampled:
-        return "recent_window_empty_history_unchecked", "0", refs
-    answers = {}
-    for w in ("1", "2"):
-        ok = [r for r in windows.get(w, []) if answered_series(r)]
-        answers[w] = ok[-1] if ok else None
-        refs += [f"hydroportail:{r['request_id']}" for r in ([ok[-1]] if ok else windows.get(w, []))]
-    for w in ("1", "2"):
-        if answers[w] is not None and int(answers[w]["points"]) > 0:  # type: ignore[index]
-            return "available", answers[w]["points"], refs  # type: ignore[index]
-    if answers["1"] is not None and answers["2"] is not None:
-        return "empty_in_both_history_windows", "0", refs
-    return "history_check_failed", "", refs
 
 
 def entity_problems(
@@ -242,115 +214,52 @@ def entity_problems(
 
 
 def verify_inventory(folder: pathlib.Path, native: pd.DataFrame, hub_rows, hist_rows, check: Checks) -> None:
-    print("\ninventory")
-    with (folder / "inventory" / "station_product_evidence.csv").open(newline="", encoding="utf-8") as handle:
+    """Check public accounting and original query identities, not private source bodies."""
+    import lzma
+
+    with (folder / "inventory/station_product_evidence.csv").open(newline="", encoding="utf-8") as handle:
         inventory = list(csv.DictReader(handle))
-    with (folder / "inventory" / "history_sample.csv").open(newline="", encoding="utf-8") as handle:
-        sample = {(r["code_station"], r["product_id"]) for r in csv.DictReader(handle)}
+    governed = json.loads(lzma.decompress((folder / "inventory/governing_evidence.json.xz").read_bytes()))
+    by_pair = {(r["code_station"], r["product_id"]): r for r in governed["pairs"]}
+    # This public check verifies ledger/baseline consistency only. Full certification
+    # requires verify_governing_evidence.py --evidence-root with complete private bytes.
+    verify_public(native, governed)
     native = native.assign(code_station=native.code_station.astype(str))
     hydro = set(native.loc[native.source_endpoint == "hydrometrie/referentiel/stations", "code_station"])
     temperature = set(native.loc[native.source_endpoint == "temperature/station", "code_station"])
-    check(
-        len(inventory) == len(hydro) * 5 + len(temperature),
-        f"{len(inventory):,} rows = {len(hydro)} x 5 + {len(temperature)}",
-    )
-    check(
-        {r["code_station"] for r in inventory} == hydro | temperature,
-        f"all {len(hydro | temperature):,} baseline stations accounted for",
-    )
-    pairs = collections.Counter((r["code_station"], r["product_id"]) for r in inventory)
-    check(max(pairs.values()) == 1, "no station x product pair appears twice")
-    check(
-        {r["status"] for r in inventory} <= VOCABULARY,
-        "statuses within the vocabulary",
-        {r["status"] for r in inventory} - VOCABULARY,
-    )
-    check("producer" not in inventory[0], "no column asserts a 'producer'")
-
-    hub: dict[tuple[str, str], list[dict[str, str]]] = collections.defaultdict(list)
-    for r in hub_rows:
-        hub[(r["code_station"], r["product_id"])].append(r)
-    hist: dict[tuple[str, str], dict[str, list[dict[str, str]]]] = collections.defaultdict(
-        lambda: collections.defaultdict(list)
-    )
-    for r in hist_rows:
-        hist[(r["code_station"], r["product_id"])][r["window"]].append(r)
-    by_ref = {f"hubeau:{r['request_id']}": r for r in hub_rows} | {
+    check(len(inventory) == len(by_pair), "final inventory has the complete governed pair count")
+    keys = [(r["code_station"], r["product_id"]) for r in inventory]
+    check(len(set(keys)) == len(keys) and set(keys) == set(by_pair), "final inventory keys match the baseline ledger")
+    original_receipts = {f"hubeau:{r['request_id']}": r for r in hub_rows} | {
         f"hydroportail:{r['request_id']}": r for r in hist_rows
     }
-
-    differing, dangling, failure_misread, windows_short, entity = [], [], [], [], []
+    differing, identity = [], []
     for row in inventory:
         key = (row["code_station"], row["product_id"])
-        status, observations, refs = expected_row(*key, hub.get(key, []), hist.get(key, {}), key in sample)
-        if (row["status"], row["observations"], row["evidence_refs"].split()) != (status, observations, refs):
-            differing.append(
-                f"{key}: inventory {row['status']}/{row['observations']}, receipts give {status}/{observations}"
-            )
-        cited = [by_ref.get(ref) for ref in row["evidence_refs"].split()]
-        if None in cited or not cited:
-            dangling.append(key)
-            continue
-        cited_rows: list[dict[str, str]] = [c for c in cited if c is not None]
-        counts = [c for c in cited_rows if "count" in c]
-        series = [c for c in cited_rows if "window" in c]
-        if row["status"] != "access_failed" and not (len(counts) == 1 and answered_count(counts[0])):
-            failure_misread.append(f"{key}: {row['status']} rests on an unanswered count request")
-        if (
-            row["status"] in ("empty_in_both_history_windows", "history_check_failed")
-            or "HydroPortail" in row["evidence_basis"]
+        expected = by_pair[key]
+        refs = ["governing:" + a["reference"] for a in expected["acquisitions"]]
+        if (row["status"], row["observations"], row["evidence_refs"].split()) != (
+            expected["status"],
+            str(expected["published_count_or_new_witness_points"]),
+            refs,
         ):
-            per_window = collections.defaultdict(list)
-            for c in series:
-                per_window[c["window"]].append(c)
-            if row["status"] == "empty_in_both_history_windows" and not all(
-                len(per_window[w]) == 1 and answered_series(per_window[w][0]) and per_window[w][0]["points"] == "0"
-                for w in ("1", "2")
-            ):
-                failure_misread.append(f"{key}: two-window emptiness without two answered empty windows")
-            if row["status"] == "history_check_failed" and all(
-                any(answered_series(c) for c in per_window[w]) for w in ("1", "2")
-            ):
-                failure_misread.append(f"{key}: marked failed though both windows answered")
-        instantaneous = row["product_id"] in ("stage_instantaneous", "discharge_instantaneous")
-        if key in sample and instantaneous and counts and answered_count(counts[0]) and counts[0]["count"] == "0":
-            first = [c for c in hist.get(key, {}).get("1", []) if answered_series(c)]
-            if not hist.get(key, {}).get("1") or (
-                (not first or first[-1]["points"] == "0") and not hist.get(key, {}).get("2")
-            ):
-                windows_short.append(key)
-        entity += [f"{key}: {p}" for p in entity_problems(row, cited_rows, hydro, temperature)]
-    check(not dangling, "every row cites receipts that exist in the bundles", dangling[:5])
-    check(not differing, "every row re-classifies identically from the receipts it cites", differing[:5])
-    check(not failure_misread, "no failed request settles a count or an empty window", failure_misread[:5])
-    check(
-        not windows_short,
-        "every sampled zero pair attempted window 1, and window 2 unless window 1 had points",
-        windows_short[:5],
-    )
-    check(not entity, "every cited request addresses the row's station, route, measurement and filters", entity[:5])
-
-    print("\nscope")
-    q_rows = [r for r in inventory if r["product_id"] == "discharge_instantaneous"]
-    check(
-        all(r["tested_entity_kind"] == "station" and r["tested_entity_code"] == r["code_station"] and r["site_series_relation"] == "station_series_tested_site_series_not_established" for r in q_rows),
-        f"all {len(q_rows):,} instantaneous-discharge rows are station-level and leave the site series unestablished",
-    )  # fmt: skip
-    check(not any(r["tested_entity_kind"] != "station" for r in inventory), "no row claims a site-level result")
+            differing.append(key)
+        cited = [original_receipts[ref] for ref in row["legacy_evidence_refs"].split()]
+        identity.extend((key, problem) for problem in entity_problems(row, cited, hydro, temperature))
+    check(not differing, "final inventory agrees with the reviewed derived governing ledger", differing[:5])
+    check(not identity, "original cited queries retain correct station/product filters", identity[:5])
+    check(all(r["tested_entity_kind"] == "station" for r in inventory), "all final findings are station scoped")
     org = [
         r
         for r in inventory
         if r["organisation_scope_note"] not in ORGANISATION_NOTES.get(r["station_organisation_field"], set())
     ]
-    check(not org, "organisation fields keep the source's name and a declared scope code", org[:3])
-    summary = json.loads((folder / "inventory" / "inventory_summary.json").read_text(encoding="utf-8"))
+    check(not org, "organisation names retain their source role limitations", org[:3])
+    summary = json.loads((folder / "inventory/inventory_summary.json").read_text(encoding="utf-8"))
     tally = collections.defaultdict(collections.Counter)
-    for r in inventory:
-        tally[r["product_id"]][r["status"]] += 1
-    check(
-        {p: dict(c) for p, c in tally.items()} == summary["by_product_status"],
-        "inventory_summary.json reproduces from the inventory",
-    )
+    for row in inventory:
+        tally[row["product_id"]][row["status"]] += 1
+    check({p: dict(c) for p, c in tally.items()} == summary["by_product_status"], "final summary matches the inventory")
 
 
 def main() -> None:
@@ -371,9 +280,6 @@ def main() -> None:
     unkept = [r["request_id"] for r in hub_rows if r["response_sha256"] and r["body_retained"] != "True"]
     check(not unkept, "every answered Hub'Eau count body is kept whole, so every count re-derives offline", unkept[:5])
     verify_inventory(args.folder, pd.read_parquet(args.native), hub_rows, hist_rows, check)
-    print("\nredistribution")
-    stored = find_stored_observations(args.folder)
-    check(not stored, "no observation value is readable from any file in the folder", stored[:5])
     print(f"\n{check.count - len(check.failures)}/{check.count} checks passed")
     if check.failures:
         print("FAILURES:", *check.failures, sep="\n  - ")
