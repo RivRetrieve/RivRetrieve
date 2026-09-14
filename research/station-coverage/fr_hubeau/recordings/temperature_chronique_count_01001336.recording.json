@@ -1,0 +1,35 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique",
+    "parameters": {
+      "code_station": "01001336",
+      "size": "1",
+      "fields": "code_station"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 206,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-09T08:24:40.681740Z",
+    "response_bytes": 475,
+    "sha256": "40351be7c6a6a9f246d09b75cf0b65b000c21bdcec6f855b5f1dbe771db84283",
+    "body_retained": true,
+    "content_base64": "eyJjb3VudCI6MTAzMDI0LCJmaXJzdCI6Imh0dHBzOi8vaHViZWF1LmVhdWZyYW5jZS5mci9hcGkvdjEvdGVtcGVyYXR1cmUvY2hyb25pcXVlP2NvZGVfc3RhdGlvbj0wMTAwMTMzNiZmaWVsZHM9Y29kZV9zdGF0aW9uJnBhZ2U9MSZzaXplPTEiLCJsYXN0IjoiaHR0cHM6Ly9odWJlYXUuZWF1ZnJhbmNlLmZyL2FwaS92MS90ZW1wZXJhdHVyZS9jaHJvbmlxdWU/Y29kZV9zdGF0aW9uPTAxMDAxMzM2JmZpZWxkcz1jb2RlX3N0YXRpb24mcGFnZT0xMDMwMjQmc2l6ZT0xIiwicHJldiI6bnVsbCwibmV4dCI6Imh0dHBzOi8vaHViZWF1LmVhdWZyYW5jZS5mci9hcGkvdjEvdGVtcGVyYXR1cmUvY2hyb25pcXVlP2NvZGVfc3RhdGlvbj0wMTAwMTMzNiZmaWVsZHM9Y29kZV9zdGF0aW9uJnBhZ2U9MiZzaXplPTEiLCJhcGlfdmVyc2lvbiI6IjEuMC4xIiwiZGF0YSI6W3siZ2VvbWV0cnkiOm51bGwsImNvZGVfc3RhdGlvbiI6IjAxMDAxMzM2In1dfQ==",
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 103024,
+      "rows": 1,
+      "row_fields": [
+        "code_station",
+        "geometry"
+      ],
+      "returned_code_station": [
+        "01001336"
+      ],
+      "returned_code_site": []
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
+    "parameters": {
+      "code_entite": "25210001",
+      "grandeur_hydro": "Q",
+      "size": "20",
+      "fields": "code_site,code_station,date_obs"
+    },
+    "body": null,
+    "sent_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=25210001&grandeur_hydro=Q&size=20&fields=code_site%2Ccode_station%2Cdate_obs"
+  },
+  "response": {
+    "status_code": 206,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-11T13:38:50.276064Z",
+    "response_bytes": 2157,
+    "sha256": "87d20f8538f0800bc9fa0fb4d3a62a40b6ba299371b37f6f42423509a75ec3f9",
+    "body_retained": true,
+    "content_base64": "eyJjb3VudCI6MjM3NTgsImZpcnN0IjoiaHR0cHM6Ly9odWJlYXUuZWF1ZnJhbmNlLmZyL2FwaS92Mi9oeWRyb21ldHJpZS9vYnNlcnZhdGlvbnNfdHI/Y29kZV9lbnRpdGU9MjUyMTAwMDEmZ3JhbmRldXJfaHlkcm89USZmaWVsZHM9Y29kZV9zaXRlLGNvZGVfc3RhdGlvbixkYXRlX29icyZjdXJzb3I9JnNpemU9MjAiLCJwcmV2IjpudWxsLCJuZXh0IjoiaHR0cHM6Ly9odWJlYXUuZWF1ZnJhbmNlLmZyL2FwaS92Mi9oeWRyb21ldHJpZS9vYnNlcnZhdGlvbnNfdHI/Y29kZV9lbnRpdGU9MjUyMTAwMDEmZ3JhbmRldXJfaHlkcm89USZmaWVsZHM9Y29kZV9zaXRlLGNvZGVfc3RhdGlvbixkYXRlX29icyZjdXJzb3I9QW9Kd3JPbU95S0FEUHdveU5USXhNREF3TVY4eU5USXhNREF3TVRBeVgxRmZNakF5Tmkwd09TMHhNVlF4TVRvek1Eb3dNQSUzRCUzRCZzaXplPTIwIiwiYXBpX3ZlcnNpb24iOiIyLjAuMSIsImRhdGEiOlt7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjoiMjUyMTAwMDEwMSIsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMjowMDowMFoifSx7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjoiMjUyMTAwMDEwMiIsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMjowMDowMFoifSx7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjpudWxsLCJkYXRlX29icyI6IjIwMjYtMDktMTFUMTI6MDA6MDBaIn0seyJjb2RlX3NpdGUiOiIyNTIxMDAwMSIsImNvZGVfc3RhdGlvbiI6IjI1MjEwMDAxMDEiLCJkYXRlX29icyI6IjIwMjYtMDktMTFUMTE6NTU6MDBaIn0seyJjb2RlX3NpdGUiOiIyNTIxMDAwMSIsImNvZGVfc3RhdGlvbiI6IjI1MjEwMDAxMDIiLCJkYXRlX29icyI6IjIwMjYtMDktMTFUMTE6NTU6MDBaIn0seyJjb2RlX3NpdGUiOiIyNTIxMDAwMSIsImNvZGVfc3RhdGlvbiI6bnVsbCwiZGF0ZV9vYnMiOiIyMDI2LTA5LTExVDExOjU1OjAwWiJ9LHsiY29kZV9zaXRlIjoiMjUyMTAwMDEiLCJjb2RlX3N0YXRpb24iOiIyNTIxMDAwMTAxIiwiZGF0ZV9vYnMiOiIyMDI2LTA5LTExVDExOjUwOjAwWiJ9LHsiY29kZV9zaXRlIjoiMjUyMTAwMDEiLCJjb2RlX3N0YXRpb24iOiIyNTIxMDAwMTAyIiwiZGF0ZV9vYnMiOiIyMDI2LTA5LTExVDExOjUwOjAwWiJ9LHsiY29kZV9zaXRlIjoiMjUyMTAwMDEiLCJjb2RlX3N0YXRpb24iOm51bGwsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMTo1MDowMFoifSx7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjoiMjUyMTAwMDEwMSIsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMTo0NTowMFoifSx7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjoiMjUyMTAwMDEwMiIsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMTo0NTowMFoifSx7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjpudWxsLCJkYXRlX29icyI6IjIwMjYtMDktMTFUMTE6NDU6MDBaIn0seyJjb2RlX3NpdGUiOiIyNTIxMDAwMSIsImNvZGVfc3RhdGlvbiI6IjI1MjEwMDAxMDEiLCJkYXRlX29icyI6IjIwMjYtMDktMTFUMTE6NDA6MDBaIn0seyJjb2RlX3NpdGUiOiIyNTIxMDAwMSIsImNvZGVfc3RhdGlvbiI6IjI1MjEwMDAxMDIiLCJkYXRlX29icyI6IjIwMjYtMDktMTFUMTE6NDA6MDBaIn0seyJjb2RlX3NpdGUiOiIyNTIxMDAwMSIsImNvZGVfc3RhdGlvbiI6bnVsbCwiZGF0ZV9vYnMiOiIyMDI2LTA5LTExVDExOjQwOjAwWiJ9LHsiY29kZV9zaXRlIjoiMjUyMTAwMDEiLCJjb2RlX3N0YXRpb24iOiIyNTIxMDAwMTAxIiwiZGF0ZV9vYnMiOiIyMDI2LTA5LTExVDExOjM1OjAwWiJ9LHsiY29kZV9zaXRlIjoiMjUyMTAwMDEiLCJjb2RlX3N0YXRpb24iOiIyNTIxMDAwMTAyIiwiZGF0ZV9vYnMiOiIyMDI2LTA5LTExVDExOjM1OjAwWiJ9LHsiY29kZV9zaXRlIjoiMjUyMTAwMDEiLCJjb2RlX3N0YXRpb24iOm51bGwsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMTozNTowMFoifSx7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjoiMjUyMTAwMDEwMSIsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMTozMDowMFoifSx7ImNvZGVfc2l0ZSI6IjI1MjEwMDAxIiwiY29kZV9zdGF0aW9uIjoiMjUyMTAwMDEwMiIsImRhdGVfb2JzIjoiMjAyNi0wOS0xMVQxMTozMDowMFoifV19",
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 23758,
+      "rows": 20,
+      "row_fields": [
+        "code_site",
+        "code_station",
+        "date_obs"
+      ],
+      "returned_code_station": [
+        "2521000101",
+        "2521000102",
+        "<null>"
+      ],
+      "returned_code_site": [
+        "25210001"
+      ],
+      "date_obs_min": "2026-09-11T11:30:00Z",
+      "date_obs_max": "2026-09-11T12:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations",
+    "parameters": {
+      "code_station": "1232000102"
+    },
+    "body": null,
+    "sent_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1232000102"
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-11T13:38:48.251240Z",
+    "response_bytes": 1660,
+    "sha256": "8da81f49c884f49b6a0a239c2a6f5b7040cfcee608b5174a39740352f251b637",
+    "body_retained": true,
+    "content_base64": "eyJjb3VudCI6MSwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL3JlZmVyZW50aWVsL3N0YXRpb25zP2NvZGVfc3RhdGlvbj0xMjMyMDAwMTAyJnBhZ2U9MSZzaXplPTEwMDAiLCJsYXN0IjpudWxsLCJwcmV2IjpudWxsLCJuZXh0IjpudWxsLCJhcGlfdmVyc2lvbiI6IjIuMC4xIiwiZGF0YSI6W3siY29kZV9zaXRlIjoiMTIzMjAwMDEiLCJsaWJlbGxlX3NpdGUiOiJMYSByaXZpw6hyZSBkZSBQZXRpdGUtUGxhaW5lIMOgIFBvaW50ZS1Ob2lyZSIsImNvZGVfc3RhdGlvbiI6IjEyMzIwMDAxMDIiLCJsaWJlbGxlX3N0YXRpb24iOiJMYSByaXZpw6hyZSBkZSBQZXRpdGUtUGxhaW5lIMOgIFBvaW50ZS1Ob2lyZSAtIDIiLCJ0eXBlX3N0YXRpb24iOiJTVEQiLCJjb29yZG9ubmVlX3hfc3RhdGlvbiI6NjMwODE0LjgyLCJjb29yZG9ubmVlX3lfc3RhdGlvbiI6MTc5NDEzOC43MSwiY29kZV9wcm9qZWN0aW9uIjozOSwibG9uZ2l0dWRlX3N0YXRpb24iOi02MS43NzYwMzk0MDksImxhdGl0dWRlX3N0YXRpb24iOjE2LjIyNDMxNjUyOSwiaW5mbHVlbmNlX2xvY2FsZV9zdGF0aW9uIjpudWxsLCJjb21tZW50YWlyZV9zdGF0aW9uIjpudWxsLCJhbHRpdHVkZV9yZWZfYWx0aV9zdGF0aW9uIjpudWxsLCJjb2RlX3N5c3RlbWVfYWx0aV9zaXRlIjpudWxsLCJjb2RlX2NvbW11bmVfc3RhdGlvbiI6Ijk3MTIxIiwibGliZWxsZV9jb21tdW5lIjoiUE9JTlRFLU5PSVJFIiwiY29kZV9kZXBhcnRlbWVudCI6Ijk3MSIsImNvZGVfcmVnaW9uIjoiMDEiLCJsaWJlbGxlX3JlZ2lvbiI6IkdVQURFTE9VUEUiLCJjb2RlX2NvdXJzX2VhdSI6IjEyMzIwMDIwIiwibGliZWxsZV9jb3Vyc19lYXUiOiJSaXZpw6hyZSBkZSBQZXRpdGUtUGxhaW5lIiwidXJpX2NvdXJzX2VhdSI6Imh0dHA6Ly9pZC5lYXVmcmFuY2UuZnIvQ0VBLzEyMzIwMDIwIiwiZGVzY3JpcHRpZl9zdGF0aW9uIjoiMiIsImRhdGVfbWFqX3N0YXRpb24iOiIyMDI2LTA0LTIwVDAwOjAwOjAwWiIsImRhdGVfb3V2ZXJ0dXJlX3N0YXRpb24iOiIyMDI2LTAxLTAxVDAwOjAwOjAwWiIsImRhdGVfZmVybWV0dXJlX3N0YXRpb24iOm51bGwsImNvbW1lbnRhaXJlX2luZmx1ZW5jZV9sb2NhbGVfc3RhdGlvbiI6bnVsbCwiY29kZV9yZWdpbWVfc3RhdGlvbiI6MSwicXVhbGlmaWNhdGlvbl9kb25uZWVzX3N0YXRpb24iOjE2LCJjb2RlX2ZpbmFsaXRlX3N0YXRpb24iOm51bGwsInR5cGVfY29udGV4dGVfbG9pX3N0YXRfc3RhdGlvbiI6bnVsbCwidHlwZV9sb2lfc3RhdGlvbiI6bnVsbCwiY29kZV9zYW5kcmVfcmVzZWF1X3N0YXRpb24iOlsiUE9IMTI5IiwiUE9IMjA4IiwiUE9INTQiXSwiZGF0ZV9kZWJ1dF9yZWZfYWx0aV9zdGF0aW9uIjpudWxsLCJkYXRlX2FjdGl2YXRpb25fcmVmX2FsdGlfc3RhdGlvbiI6bnVsbCwiZGF0ZV9tYWpfcmVmX2FsdGlfc3RhdGlvbiI6bnVsbCwibGliZWxsZV9kZXBhcnRlbWVudCI6IkdVQURFTE9VUEUiLCJlbl9zZXJ2aWNlIjp0cnVlLCJnZW9tZXRyeSI6eyJ0eXBlIjoiUG9pbnQiLCJjcnMiOnsidHlwZSI6Im5hbWUiLCJwcm9wZXJ0aWVzIjp7Im5hbWUiOiJ1cm46b2djOmRlZjpjcnM6T0dDOjEuMzpDUlM4NCJ9fSwiY29vcmRpbmF0ZXMiOlstNjEuNzc2MDM5NDA4NzM5MTQsMTYuMjI0MzE2NTI5MTUwNDRdfX1dfQ==",
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 1,
+      "rows": 1,
+      "row_fields": [
+        "altitude_ref_alti_station",
+        "code_commune_station",
+        "code_cours_eau",
+        "code_departement",
+        "code_finalite_station",
+        "code_projection",
+        "code_regime_station",
+        "code_region",
+        "code_sandre_reseau_station",
+        "code_site",
+        "code_station",
+        "code_systeme_alti_site",
+        "commentaire_influence_locale_station",
+        "commentaire_station",
+        "coordonnee_x_station",
+        "coordonnee_y_station",
+        "date_activation_ref_alti_station",
+        "date_debut_ref_alti_station",
+        "date_fermeture_station",
+        "date_maj_ref_alti_station",
+        "date_maj_station",
+        "date_ouverture_station",
+        "descriptif_station",
+        "en_service",
+        "geometry",
+        "influence_locale_station",
+        "latitude_station",
+        "libelle_commune",
+        "libelle_cours_eau",
+        "libelle_departement",
+        "libelle_region",
+        "libelle_site",
+        "libelle_station",
+        "longitude_station",
+        "qualification_donnees_station",
+        "type_contexte_loi_stat_station",
+        "type_loi_station",
+        "type_station",
+        "uri_cours_eau"
+      ],
+      "returned_code_station": [
+        "1232000102"
+      ],
+      "returned_code_site": [
+        "12320001"
+      ]
+    }
+  }
+}
