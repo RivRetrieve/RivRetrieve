@@ -1,0 +1,87 @@
+{
+  "scope": "Two exact runtime-v2 source interactions for padded public-window/cache tests, plus one unchanged historical-v1 null interaction for beyond-sample unknown selection. Not the complete availability corpus.",
+  "independent_expectation": {
+    "author_role": "Independent source-only agent thai-source-boundary",
+    "source_report": "RUNTIME-V2-REPORT.md reviewed by delivery owner; retained review evidence, not runtime input",
+    "user_start": "2025-09-11",
+    "user_end": "2026-09-10",
+    "reading_count": 52560,
+    "first_wall_clock_time": {
+      "time": "2025-09-11T00:00:00",
+      "time_zone": "unknown"
+    },
+    "last_wall_clock_time": {
+      "time": "2026-09-10T23:50:00",
+      "time_zone": "unknown"
+    },
+    "method": "Complete source-only JSON grid derivation. Timestamped nulls retained. No provider code, parser outputs or implementation diffs available to expectation author."
+  },
+  "captures": [
+    {
+      "name": "normal",
+      "recording": "th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",
+      "recording_sha256": "f42aa902357ad760817903c44a59ac61f9cb5559c13f938b362a9a1af87c76fd",
+      "response_sha256": "aa1738c851b47d382de5adb9557fa8af91317d530f1e2b5bb1cac29c916d401b",
+      "retrieved_at": "2026-09-14T08:14:36.999902Z",
+      "request": {
+        "method": "GET",
+        "url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph",
+        "parameters": {
+          "station_type": "tele_waterlevel",
+          "station_id": "1373273",
+          "start_date": "2025-09-09",
+          "end_date": "2026-09-08"
+        },
+        "body": null,
+        "ordinary_headers": {
+          "User-Agent": "RivRetrieve"
+        },
+        "credential_header_names": []
+      }
+    },
+    {
+      "name": "tail",
+      "recording": "th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json",
+      "recording_sha256": "f6000163a34ada21ba0b176325b48cacf0f459d5bc7fc2132f4f2a39d82380e1",
+      "response_sha256": "2916d249b04202a3c492b129ae3c93c334c3f2f8a51cdc8c730922705cd6d9e5",
+      "retrieved_at": "2026-09-14T07:57:37.664645Z",
+      "request": {
+        "method": "GET",
+        "url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph",
+        "parameters": {
+          "station_type": "tele_waterlevel",
+          "station_id": "1373273",
+          "start_date": "2026-09-09",
+          "end_date": "2026-09-12"
+        },
+        "body": null,
+        "ordinary_headers": {
+          "User-Agent": "RivRetrieve"
+        },
+        "credential_header_names": []
+      }
+    },
+    {
+      "name": "historical_null",
+      "recording": "th_thaiwater_11688546_2026-06-08_2026-09-06.recording.json",
+      "recording_sha256": "4f4b63a1677ddf7b656318d10c782d8c2e7f4f4464282055cf10ae31d24e5643",
+      "response_sha256": "710e5649afedcd48c99e76a44c568f1edd223921c28ed79aa45f03f8075a945f",
+      "retrieved_at": "2026-09-07T15:37:34.187448Z",
+      "request": {
+        "method": "GET",
+        "url": "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph",
+        "parameters": {
+          "station_type": "tele_waterlevel",
+          "station_id": "11688546",
+          "start_date": "2026-06-08",
+          "end_date": "2026-09-06"
+        },
+        "body": null
+      },
+      "original_commit": "e5c89070aca905c08a1bcce03bb4eb5afb4969e2",
+      "original_path": "research/station-coverage/th_thaiwater/recordings/boundary_11688546_empty_90d.recording.json",
+      "original_git_blob": "1749278a441ed4833a6176bbb63fa80d6346c79f",
+      "fidelity": "Exact original v1 file, unchanged; not reconstructed from later derived metadata or converted from v2."
+    }
+  ]
+}

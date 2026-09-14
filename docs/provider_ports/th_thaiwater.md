@@ -37,13 +37,13 @@ the origin-evidence receipt; it documents coordinate semantics and contributes n
 
 | Legacy / source field | Canonical target | Provider metadata | Decision |
 | --- | --- | --- | --- |
-| `station.id` | `provider_id`, `station_id` | Native only | Exact identity copy of the committed String value; `station.tele_station_oldcode` is not identity. |
-| `station.tele_station_name.*` | No canonical column | Native only | Multilingual source values remain readable in `native.parquet`. |
-| `station.tele_station_lat`, `station.tele_station_long` | `latitude`, `longitude` | Native only | Exact decimal values, cast only to canonical schema dtypes. Null values fail the build. |
-| `river_name`, `geocode.*`, `basin.*`, `agency.*` | No canonical columns | Native only | Source vocabulary remains readable in `native.parquet`; RivRetrieve does not adjudicate these labels. |
-| `station.tele_station_oldcode` | No canonical column | Native only | Preserved source station code; never substituted for `station.id`. |
+| `station.id` | `station_id` | Native table | Exact identity copy of the committed String value; `station.tele_station_oldcode` is not identity. `provider_id` is authored by RivRetrieve. |
+| `station.tele_station_name.*` | No canonical column | Native table | Multilingual source values remain readable in `native.parquet`. |
+| `station.tele_station_lat`, `station.tele_station_long` | `latitude`, `longitude` | Native table | Exact decimal values, cast only to canonical schema dtypes. Null values fail the build. |
+| `river_name`, `geocode.*`, `basin.*`, `agency.*` | No canonical columns | Native table | Source vocabulary remains readable in `native.parquet`; RivRetrieve does not adjudicate these labels. |
+| `station.tele_station_oldcode` | No canonical column | Native table | Preserved source station code; never substituted for `station.id`. |
 | CRS | `crs = "unknown"` | Origin evidence | ThaiWater's captured coordinate-standard page specifies ISO 6709 formatting but no datum, CRS, EPSG code, or projection. |
-| `station_type` | Build contract | Native only | Every native row must equal `tele_waterlevel`; any other value fails loudly. |
+| `station_type` | Build contract | Native table | Every native row must equal `tele_waterlevel`; any other value fails loudly. |
 
 ## Product Dictionary
 
@@ -58,36 +58,81 @@ No unit conversion is required.
 
 ## Observation Retrieval
 
-- **Windowing**: the shared engine renders one inclusive date request for the requested source-label window. No publisher cap is claimed.
+- **Windowing**: both products declare engine-owned `capped-span`, DATE rendering, inclusive
+  stop and a conservative size of **365 inclusive source dates**. The engine adds two days
+  to each user endpoint before planning. A 365-date user request can therefore require two
+  source requests per product. Each sub-window has its own bounds; the provider performs
+  no padding, splitting or stop arithmetic. Direct normal and leap-containing captures
+  honour this size; it is not the exact maximum or a universal leap-year rule.
 - **Request**: `station_type=tele_waterlevel`, `station_id`, `start_date`, and `end_date` are sent to
   `waterlevel_graph` through the shared `HttpClient` transport seam.
-- **Coalescing**: one graph response publishes both `value` and `discharge`, so a station-window
-  requested for both products produces one source call and one publisher receipt.
+- **Co-published fields**: one graph response contains both `value` and `discharge`. The provider
+  fetch stage can group both fields if supplied together. The public engine deliberately
+  calls each product separately; each selected product receives its own source calls and receipts.
 - **Parsing**: `value` and `discharge` are projected directly into source-labeled rows without claiming an instant or interval. Nulls
   remain null. `value_out` remains uninterpreted. There is no provider clipping, aggregation, unit
-  conversion, retry loop, or result assembly.
+  conversion, retry loop, or result assembly. A valid source `result: "NO"` with its non-empty
+  message returns an error issue and empty typed rows. Malformed JSON, invalid envelopes or
+  missing required fields in an `OK` graph remain contract errors. No broad exception isolation
+  was added.
 
 ## Station Count
 
 825 stations at catalogue version `2026-08-02`, built offline from committed `native.parquet` plus the five station origins. Every native row is required to have `station_type == "tele_waterlevel"`, non-null latitude and longitude, and a unique String `station.id`; violations fail the build rather than being filtered, dropped, or deduplicated.
 
-The packaged station-product carrier contains exactly the two edges established by the recorded
-station `1373273` response: `stage_reported` and `discharge_reported`. Their published record
-bounds remain null and `last_catalogue_check` is the recording date, `2026-09-02`. The other 1,648
-candidate availability facts remain explicitly withheld and do not become catalogue rows.
+The packaged station-product carrier now contains all **1,650 source-evidenced pairs**
+over the original 825 station IDs. Positive availability is 813 stage and 283 discharge;
+unknown availability is 12 stage and 542 discharge. Unknown pairs remain selectable.
+Every pair has an actual governing graph acquisition; none remains withheld merely
+because the tested response carried no numerical value. Published record bounds remain
+null. Each `last_catalogue_check` is that pair's actual September 11 or September 13
+acquisition date, not the native metadata capture date or a fabricated common instant.
+
+| Coverage | Before | After |
+| --- | ---: | ---: |
+| Selectable baseline stations | 1 | 825 |
+| Selectable station/product pairs | 2 | 1,650 |
+| Positive availability pairs | 2 | 1,096 |
+| Selectable unknown pairs | 0 | 554 |
+
+The 25 original IDs absent from the later 1,405-row snapshot remain. The 605 newly
+observed IDs are not added. The machine-readable source account is
+`research/station-coverage/th_thaiwater/inventory/governing_summary.json`; the exact
+per-pair acquisition/material ledger sits beside it. The capture corpus remains private,
+not an observation archive published with these catalogues. A current caller can ask
+windows beyond the recorded research dates; the source may return measurements,
+timestamped nulls, an empty answer or an explicit issue.
 
 ## Shared Architecture Impact
 
-The public selection path previously drove each selected station-product edge as a separate engine
-request. That prevented a provider from coalescing fields published by one response. The public path
-now groups the selected products for each station before it calls the engine; it does not invent a
-station-product Cartesian product.
+The existing engine remains responsible for padding, sub-window planning, clipping,
+cache reuse/refresh and source-call isolation. This expansion does not change driver
+coalescing or add a provider-specific date planner. Available and unknown relation rows
+are admitted from their own source acquisitions, not an inferred Cartesian product.
+
+Catalogue builds take reviewed ledger bytes as an explicit typed input. Only the build
+entry point opens its `--availability-evidence` path; public discovery/retrieval reads
+packaged catalogues and never opens the repository research tree. Accepted body material
+identities use the existing acquisition provenance contract without fake public recording
+URIs. A separate explicit-root offline verifier must read all private bodies at acceptance
+and final integration; public CI checks metadata/binding consistency only.
+
+Supplying agencies retain their verified native per-station bindings. HII's platform and
+product-semantics publication roles are distinct from unestablished original measurement
+producers or historical sensor operators. Source terms and citation words are not classified.
+
+Recorded tests use an independently authored normal-window boundary expectation over two
+exact runtime-v2 interactions, with original/new retrieval dates kept explicit. A historical
+82-byte database-error response is exercised directly at the real parser boundary; it is
+not presented as a new public HTTP replay with invented execution headers. Existing engine
+WithIssues tests cover issue propagation and cache-write suppression. The leap-containing
+null capture establishes honoured source dates, not historical observations.
 
 ## Pain Points
 
 | Issue | Status | Action |
 | --- | --- | --- |
 | Naive graph timestamps | Source zone is not established. | Preserve wall clock with `time_zone="unknown"`; never infer UTC or Bangkok. |
-| Response publishes two products together | Expressed by one payload with two station-product pairs. | Keep one call and receipt per station-window. |
-| No elevation or drainage area | Null in the canonical station columns. | Do not infer values. |
+| Response publishes two products together | Provider fetch supports a two-product payload; public calls remain product-wise. | Preserve each actual call and receipt. |
+| Elevation and drainage area | Not canonical station columns under the identity/geometry contract. | Preserve source facts in the native table; do not infer values. |
 | Multilingual station names | Preserved in flattened native columns. | Keep source language values unchanged. |

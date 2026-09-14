@@ -88,12 +88,44 @@ def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
             rr.to_utc(result)
 
 
-def test_thaiwater_find_has_only_the_two_recorded_edges() -> None:
-    established = rr.as_frame(rr.find(provider="th_thaiwater", station="1373273"))
-    absent = rr.as_frame(rr.find(provider="th_thaiwater", station="1373272"))
+def test_thaiwater_find_exposes_the_original_baseline_available_and_unknown_pairs() -> None:
+    baseline = rr.as_frame(rr.find(provider="th_thaiwater"))
+    positive_beyond_sample = rr.as_frame(rr.find(provider="th_thaiwater", station="1373272"))
+    unknown_beyond_sample = rr.as_frame(rr.find(provider="th_thaiwater", station="11688546"))
 
-    assert established.select("station_id", "product_id").sort("product_id").rows() == [
-        ("1373273", "discharge_reported"),
-        ("1373273", "stage_reported"),
+    assert baseline.height == 1650
+    assert baseline["station_id"].n_unique() == 825
+    assert positive_beyond_sample.select("station_id", "product_id").sort("product_id").rows() == [
+        ("1373272", "discharge_reported"),
+        ("1373272", "stage_reported"),
     ]
-    assert absent.is_empty()
+    assert unknown_beyond_sample.select("station_id", "product_id").sort("product_id").rows() == [
+        ("11688546", "discharge_reported"),
+        ("11688546", "stage_reported"),
+    ]
+
+
+def test_thaiwater_unknown_pair_beyond_sample_returns_recorded_null_rows_and_can_be_reused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    envelope = read_recording(
+        Path(__file__).parent / "test_data/th_thaiwater_11688546_2026-06-08_2026-09-06.recording.json"
+    )
+    replay = _CountingReplay(envelope)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+    selection = rr.find(provider="th_thaiwater", station="11688546")
+    result = rr.fetch(selection, start="2026-06-10", end="2026-09-04", cache="reuse", receipts=True, on_issue="ignore")
+    assert not result.data.is_empty()
+    assert result.data["value"].is_null().all()
+    assert result.data["time_zone"].unique().to_list() == ["unknown"]
+    assert set(result.data["station_id"]) == {"11688546"}
+    assert len(replay.requests) == 2
+    assert all(entry.content == envelope.content for entry in result.receipts.entries)
+    repeated = rr.fetch(selection, start="2026-06-10", end="2026-09-04", cache="reuse", on_issue="ignore")
+    assert len(replay.requests) == 2
+    from polars.testing import assert_frame_equal
+
+    assert_frame_equal(result.data, repeated.data)
+    assert len(rr.cache_status("th_thaiwater").coverage) == 2

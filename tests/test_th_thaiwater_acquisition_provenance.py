@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -13,8 +16,18 @@ from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_ar
 from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
+from rivretrieve._internal.providers.th_thaiwater.availability_evidence import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.declaration import declaration
 from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisition_provenance
+
+LEDGER_PATH = (
+    Path(__file__).parents[1]
+    / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+)
+
+
+def _evidence() -> GraphAvailabilityEvidence:
+    return GraphAvailabilityEvidence(LEDGER_PATH.read_bytes())
 
 
 def test_thailand_provenance_maps_every_row_to_its_exact_native_agency() -> None:
@@ -74,59 +87,116 @@ def test_thailand_canonical_product_definition_is_rivretrieve_owned() -> None:
     assert set(canonical.facts) == {fact for fact in provenance.fact_universe if fact.startswith("product.")}
 
 
-def test_thailand_withholds_each_station_product_availability_fact() -> None:
-    provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
+def test_every_governing_pair_is_bound_to_its_actual_acquisition_and_agency() -> None:
+    artifact = load_packaged_catalogue_artifact(declaration.catalogue)
+    provenance = artifact.acquisition_provenance
     assert provenance is not None
-    assert len(provenance.withheld_facts) == 1_648
-    assert {item.reason for item in provenance.withheld_facts} == {"no_acquisition_record_established"}
-    assert all(
-        fact.startswith("station_product:") and fact.endswith(":availability")
-        for item in provenance.withheld_facts
-        for fact in item.facts
-    )
-    withheld_edges = {
-        (locator.station_id, locator.product_id)
-        for item in provenance.withheld_facts
-        for locator in item.catalogue_rows
+    assert provenance.withheld_facts == ()
+    ledger = list(csv.DictReader(io.StringIO(LEDGER_PATH.read_text())))
+    bindings = {
+        binding.fact_group: binding
+        for binding in provenance.fact_bindings
+        if binding.fact_group.startswith("station_product:")
     }
-    assert ("1373273", "discharge_reported") not in withheld_edges
-    assert ("1373273", "stage_reported") not in withheld_edges
-    assert ("1373272", "discharge_reported") in withheld_edges
-    assert ("1373272", "stage_reported") in withheld_edges
+    acquisitions = {
+        (source.source_id, acquisition.acquisition_id): acquisition
+        for source in provenance.source_records
+        for acquisition in source.acquisitions
+    }
+    catalogue = {(row["station_id"], row["product_id"]): row for row in artifact.station_products.to_dicts()}
+    assert len(bindings) == len(catalogue) == len(ledger) == 1650
+    for row in ledger:
+        binding = bindings[f"station_product:{row['station_id']}:{row['product_id']}:availability"]
+        assert binding.source_id == row["source_id"]
+        assert binding.acquisition_id == row["request_id"]
+        assert binding.source_id is not None and binding.acquisition_id is not None
+        acquisition = acquisitions[(binding.source_id, binding.acquisition_id)]
+        assert acquisition.requested_from == (row["request_url"],)
+        assert acquisition.retrieved_at_start == datetime.fromisoformat(row["retrieved_at"])
+        assert acquisition.recording_ids == ()  # Private material is not a public RecordingReference.
+        assert acquisition.material is not None
+        assert acquisition.material.filename == Path(row["evidence_body"]).name
+        assert acquisition.material.byte_count == int(row["response_bytes"])
+        assert acquisition.material.sha256 == row["response_sha256"]
+        pair = catalogue[(row["station_id"], row["product_id"])]
+        assert pair["availability"] == row["availability"]
+        assert pair["last_catalogue_check"] == datetime.fromisoformat(row["retrieved_at"]).date()
+        assert row["request_id"] in pair["availability_reason"]
+        assert row["native_field"] in pair["availability_reason"]
+        assert row["window_start"] in pair["availability_reason"]
+        assert row["window_end"] in pair["availability_reason"]
+        if row["availability"] == "unknown":
+            assert "null-only" in pair["availability_reason"]
+        else:
+            assert f"{row['nonnull_observations']} non-null" in pair["availability_reason"]
+    graph_acquisitions: set[tuple[str, str]] = set()
+    for binding in bindings.values():
+        assert binding.source_id is not None and binding.acquisition_id is not None
+        graph_acquisitions.add((binding.source_id, binding.acquisition_id))
+    assert len(graph_acquisitions) == 825
+    assert Counter(source for source, _ in graph_acquisitions) == {
+        "th_agency_8": 73,
+        "th_agency_9": 329,
+        "th_agency_12": 328,
+        "th_agency_91": 95,
+    }
+    acquisition_dates = []
+    for key in graph_acquisitions:
+        retrieved_at = acquisitions[key].retrieved_at_start
+        assert retrieved_at is not None
+        acquisition_dates.append(retrieved_at.date().isoformat())
+    assert Counter(acquisition_dates) == {
+        "2026-09-11": 12,
+        "2026-09-13": 813,
+    }
 
 
-def test_recorded_graph_binds_only_the_two_established_edges_to_existing_issuer() -> None:
-    provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
-    assert provenance is not None
-    bindings = [
-        binding for binding in provenance.fact_bindings if binding.fact_group.startswith("station_product:1373273:")
-    ]
-    assert {(binding.fact_group, binding.source_id, binding.acquisition_id) for binding in bindings} == {
-        (
-            "station_product:1373273:discharge_reported:availability",
-            "th_agency_9",
-            "waterlevel_graph_1373273_2026_08_01_02",
-        ),
-        (
-            "station_product:1373273:stage_reported:availability",
-            "th_agency_9",
-            "waterlevel_graph_1373273_2026_08_01_02",
-        ),
-    }
-    issuer = next(source for source in provenance.source_records if source.source_id == "th_agency_9")
-    acquisition = next(
-        item for item in issuer.acquisitions if item.acquisition_id == "waterlevel_graph_1373273_2026_08_01_02"
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("station_id", "999999999"),
+        ("product_id", "stage_instantaneous"),
+        ("native_field", "waterlevel_msl"),
+        ("source_id", "th_agency_8"),
+        ("response_sha256", "0" * 64),
+        ("response_bytes", "1"),
+        ("retrieved_at", "2026-09-12T18:03:34Z"),
+        ("request_url", "https://example.org/forged"),
+        ("status", "empty_in_tested_window"),
+        ("availability", "unknown"),
+        ("nonnull_observations", "0"),
+    ],
+)
+def test_reviewed_ledger_rejects_identity_hash_date_and_status_tampering(field: str, value: str) -> None:
+    original = LEDGER_PATH.read_bytes()
+    first_row = original.splitlines()[1]
+    fields = original.splitlines()[0].decode().split(",")
+    cells = first_row.decode().split(",")
+    cells[fields.index(field)] = value
+    altered = original.replace(first_row, ",".join(cells).encode(), 1)
+    with pytest.raises(FatalContractError, match="availability evidence digest mismatch"):
+        GraphAvailabilityEvidence(altered)
+
+
+def test_native_agency_disagreement_with_reviewed_acquisition_fails() -> None:
+    native = read_native_table(declaration.catalogue / "native.parquet")
+    from rivretrieve._internal.catalogues.native import NativeTable
+
+    altered = native.data.with_columns(
+        pl.when(pl.col("station.id") == "1").then(8).otherwise(pl.col(column)).alias(column)
+        for column in ("agency.id", "station.agency_id")
     )
-    assert acquisition.recording_ids == ("th_thaiwater_1373273_graph_2026_08_01_02",)
-    assert acquisition.material is not None
-    assert acquisition.material.sha256 == "436593e32ccb99e2edff4ea87681679608f226efada8bc263fd706dfc7c20d01"
+    with pytest.raises(FatalContractError, match="unverified evidence agency mapping"):
+        build_acquisition_provenance(NativeTable(altered), _evidence())
 
 
 def test_thailand_cli_rejects_native_byte_substitution(tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
     native.write_bytes((declaration.catalogue / "native.parquet").read_bytes() + b"changed")
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
-        generate_catalogue.main(["--native", str(native), "--out", str(tmp_path / "out")])
+        generate_catalogue.main(
+            ["--native", str(native), "--availability-evidence", str(LEDGER_PATH), "--out", str(tmp_path / "out")]
+        )
 
 
 def test_thailand_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,11 +205,20 @@ def test_thailand_cli_invokes_recording_verification(tmp_path: Path, monkeypatch
 
     monkeypatch.setattr(generate_catalogue, "verify_provenance_recordings", reject)
     with pytest.raises(FatalContractError, match="recording verification invoked"):
-        generate_catalogue.main(["--native", str(declaration.catalogue / "native.parquet"), "--out", str(tmp_path)])
+        generate_catalogue.main(
+            [
+                "--native",
+                str(declaration.catalogue / "native.parquet"),
+                "--availability-evidence",
+                str(LEDGER_PATH),
+                "--out",
+                str(tmp_path),
+            ]
+        )
 
 
 def test_thailand_station_carrier_has_exact_multi_agency_lineage() -> None:
-    provenance = build_acquisition_provenance(read_native_table(declaration.catalogue / "native.parquet"))
+    provenance = build_acquisition_provenance(read_native_table(declaration.catalogue / "native.parquet"), _evidence())
     station_carrier = next(
         binding for binding in provenance.fact_bindings if binding.fact_group == "canonical_station_carrier"
     )
@@ -169,3 +248,24 @@ def test_committed_thaiwater_official_evidence_matches_capture_manifest() -> Non
     assert "ม.รทก.".encode() in bundle
     assert "ปริมาณน้ำท่า".encode() in bundle
     assert "(ม.3/วิ.)".encode() in bundle
+
+
+def test_platform_identity_does_not_claim_the_agency_supplied_measurements() -> None:
+    provenance = build_acquisition_provenance(read_native_table(declaration.catalogue / "native.parquet"), _evidence())
+    bindings = {binding.fact_group: binding for binding in provenance.fact_bindings}
+    platform = bindings["canonical_platform_carrier"]
+    assert platform.transformation is not None
+    assert all(fact.startswith("provider.") for fact in platform.facts)
+    assert platform.transformation.external_inputs == (
+        ExternalFactReference(source_id="th_agency_9", fact="source.provider.thaiwater_platform_identity"),
+    )
+    relations = bindings["canonical_station_product_carrier"]
+    assert relations.transformation is not None
+    assert all(fact.startswith("station_product.") for fact in relations.facts)
+    expected = {
+        (binding.source_id, binding.facts[0])
+        for binding in provenance.fact_bindings
+        if binding.fact_group.startswith("station_product:")
+    }
+    assert len(expected) == 1650
+    assert {(item.source_id, item.fact) for item in relations.transformation.external_inputs} == expected

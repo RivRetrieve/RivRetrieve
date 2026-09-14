@@ -1,4 +1,4 @@
-"""ThaiWater catalogue maintenance : refresh(ThaiWaterWaterlevelEnvelope, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedThThaiWaterCatalogue."""
+"""ThaiWater catalogue maintenance : refresh(ThaiWaterWaterlevelEnvelope, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations, GraphAvailabilityEvidence) → GeneratedThThaiWaterCatalogue."""
 
 from __future__ import annotations
 
@@ -42,6 +42,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.th_thaiwater.availability_evidence import GraphAvailabilityEvidence
 
 PROVIDER_ID = ProviderId("th_thaiwater")
 PROVIDER_NAME = "ThaiWater public API / Hydro-Informatics Institute (HII)"
@@ -373,12 +374,13 @@ def _flatten_native_row(row: dict[str, object]) -> dict[str, object]:
 def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
+    availability_evidence: GraphAvailabilityEvidence,
 ) -> GeneratedThThaiWaterCatalogue:
     _validate_canonical_native_table(native_table)
     products = build_products()
     stations = build_stations(native_table)
     enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
-    station_products = build_station_products(stations)
+    station_products = build_station_products(stations, availability_evidence)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("ThaiWater native table has no valid retrieved_at values")
@@ -386,7 +388,7 @@ def build_catalogue(
 
     from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisition_provenance
 
-    acquisition_provenance = build_acquisition_provenance(native_table)
+    acquisition_provenance = build_acquisition_provenance(native_table, availability_evidence)
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedThThaiWaterCatalogue(
         provider_info,
@@ -452,25 +454,33 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
     ).sort("station_id")
 
 
-def build_station_products(stations: StationCatalog) -> StationProductCatalog:
-    if stations.filter(pl.col("station_id") == "1373273").height != 1:
-        raise FatalContractError("ThaiWater certified station-product station 1373273 is absent from the native table")
-    recording_date = date(2026, 9, 2)
-    rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "station_id": "1373273",
-            "product_id": definition.product_id,
-            "availability": "available",
-            "availability_reason": "Recorded ThaiWater graph response published a non-null native field",
-            "published_record_start_date": None,
-            "published_record_end_date": None,
-            "last_catalogue_check": recording_date,
-        }
-        for definition in PRODUCT_DEFINITIONS
-    ]
-    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
-        pl.col("availability").cast(AvailabilityDtype)
+def build_station_products(
+    stations: StationCatalog,
+    availability_evidence: GraphAvailabilityEvidence,
+) -> StationProductCatalog:
+    if {pair.station_id for pair in availability_evidence.pairs} != set(stations["station_id"]):
+        raise FatalContractError("ThaiWater availability evidence station population differs from native table")
+    rows = []
+    for pair in availability_evidence.pairs:
+        retrieved_at = pair.acquisition.retrieved_at_start
+        if retrieved_at is None:
+            raise FatalContractError("ThaiWater graph acquisition has no retrieval instant")
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": pair.station_id,
+                "product_id": pair.product_id,
+                "availability": pair.availability,
+                "availability_reason": pair.availability_reason,
+                "published_record_start_date": None,
+                "published_record_end_date": None,
+                "last_catalogue_check": retrieved_at.date(),
+            }
+        )
+    return (
+        pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+        .with_columns(pl.col("availability").cast(AvailabilityDtype))
+        .sort("station_id", "product_id")
     )
 
 
@@ -484,7 +494,9 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: one date-rendered request per station-window; co-published products share one source call"
+            "true: graph responses co-publish stage and discharge fields; "
+            "public retrieval requests each product and source sub-window separately, "
+            "with at most 365 inclusive calendar dates per source request"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
@@ -572,6 +584,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Refresh or build the packaged th_thaiwater catalogue.")
     parser.add_argument("--fixture", type=Path, help="Path to a ThaiWater waterlevel_load JSON fixture.")
     parser.add_argument("--live", action="store_true", help="Fetch the live ThaiWater metadata endpoint.")
+    parser.add_argument(
+        "--availability-evidence", type=Path, help="Required reviewed graph availability ledger for build mode."
+    )
     parser.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
@@ -590,6 +605,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--out requires --native")
         if args.retrieved_at is not None:
             parser.error("--retrieved-at is only valid with refresh mode")
+        if args.availability_evidence is None:
+            parser.error("--out requires --availability-evidence")
         from rivretrieve._internal.providers.th_thaiwater.origins import (
             NATIVE_TABLE_BYTE_SIZE,
             NATIVE_TABLE_SHA256,
@@ -601,11 +618,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_sha256=NATIVE_TABLE_SHA256,
             expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
         )
-        catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
+        availability_evidence = GraphAvailabilityEvidence(args.availability_evidence.read_bytes())
+        catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS, availability_evidence)
         verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
         write_catalogue(catalogue, args.out)
         return 0
 
+    if args.availability_evidence is not None:
+        parser.error("--availability-evidence is only valid with build mode")
     if args.native is not None:
         parser.error("--native cannot be used with --native-out")
     if (args.fixture is None) == (not args.live):

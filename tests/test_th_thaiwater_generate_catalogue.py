@@ -19,11 +19,22 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.engine import UnknownTemporalSupport, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
+from rivretrieve._internal.providers.th_thaiwater.availability_evidence import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.config import config
 from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
 
 FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
+LEDGER_PATH = (
+    Path(__file__).parents[1]
+    / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+)
+
+
+def _availability_evidence() -> GraphAvailabilityEvidence:
+    return GraphAvailabilityEvidence(LEDGER_PATH.read_bytes())
+
+
 NATIVE_PATH = CATALOGUE_PATH / "native.parquet"
 ATTESTED_DATETIME = datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
@@ -204,7 +215,9 @@ def _committed_native_table() -> NativeTable:
 
 
 def _build(table: NativeTable | None = None) -> generate_catalogue.GeneratedThThaiWaterCatalogue:
-    return generate_catalogue.build_catalogue(table or _committed_native_table(), STATION_CATALOGUE_ORIGINS)
+    return generate_catalogue.build_catalogue(
+        table or _committed_native_table(), STATION_CATALOGUE_ORIGINS, _availability_evidence()
+    )
 
 
 def _expected_station_projection(table: NativeTable) -> pl.DataFrame:
@@ -648,21 +661,21 @@ def test_native_build_counts_and_identity_station_fields() -> None:
 
     assert catalogue.stations.height == 825
     assert catalogue.products.height == 2
-    assert catalogue.station_products.height == 2
+    assert catalogue.station_products.height == 1650
     assert set(catalogue.products["product_id"]) == RETAINED_PRODUCT_IDS
     assert set(catalogue.products["frequency"]) == {"unknown"}
     assert set(catalogue.products["statistic"]) == {"unknown"}
     assert set(catalogue.products["period_type"]) == {"unknown"}
     assert set(catalogue.products["period_anchor"]) == {"unknown"}
     assert set(catalogue.station_products["product_id"]) == RETAINED_PRODUCT_IDS
-    assert catalogue.station_products["station_id"].unique().to_list() == ["1373273"]
-    assert catalogue.station_products["availability"].cast(str).unique().to_list() == ["available"]
-    assert catalogue.station_products["published_record_start_date"].null_count() == 2
-    assert catalogue.station_products["published_record_end_date"].null_count() == 2
-    assert catalogue.station_products["last_catalogue_check"].unique().to_list() == [date(2026, 9, 2)]
+    assert set(catalogue.station_products["station_id"]) == set(committed["station.id"])
+    assert set(catalogue.station_products["availability"].cast(str)) == {"available", "unknown"}
+    assert catalogue.station_products["published_record_start_date"].null_count() == 1650
+    assert catalogue.station_products["published_record_end_date"].null_count() == 1650
+    assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 9, 11), date(2026, 9, 13)}
     assert catalogue.station_products.group_by("product_id").len().sort("product_id").to_dicts() == [
-        {"product_id": "discharge_reported", "len": 1},
-        {"product_id": "stage_reported", "len": 1},
+        {"product_id": "discharge_reported", "len": 825},
+        {"product_id": "stage_reported", "len": 825},
     ]
     assert set(catalogue.products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
     assert set(catalogue.station_products["product_id"]).isdisjoint(WITHDRAWN_PRODUCT_IDS)
@@ -754,29 +767,22 @@ def test_origin_enforcement_is_part_of_native_build() -> None:
     del declarations["longitude"]
 
     with pytest.raises(FatalContractError, match="th_thaiwater.longitude: canonical column has no origin declaration"):
-        generate_catalogue.build_catalogue(_committed_native_table(), declarations)
+        generate_catalogue.build_catalogue(_committed_native_table(), declarations, _availability_evidence())
 
 
-def test_station_product_check_uses_recording_date_and_provider_uses_native_date() -> None:
-    data = (
-        _committed_native_table()
-        .data.head(2)
-        .with_columns(
-            pl.Series("station.id", ["1373273", "200"], dtype=pl.String),
-            pl.Series(
-                "retrieved_at",
-                [datetime(2026, 8, 1, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC)],
-                dtype=pl.Datetime("us", "UTC"),
-            ),
-        )
-    )
-    catalogue = _build(NativeTable(data))
-
-    dates = {
-        station_id: values["last_catalogue_check"].unique().to_list()
-        for station_id, values in catalogue.station_products.group_by("station_id")
+def test_station_product_check_uses_own_acquisition_date_and_provider_uses_native_date() -> None:
+    catalogue = _build()
+    expected = {
+        (pair.station_id, pair.product_id): pair.acquisition.retrieved_at_start.date()
+        for pair in _availability_evidence().pairs
+        if pair.acquisition.retrieved_at_start is not None
     }
-    assert dates == {("1373273",): [date(2026, 9, 2)]}
+    assert {
+        (station, product): checked
+        for station, product, checked in catalogue.station_products.select(
+            "station_id", "product_id", "last_catalogue_check"
+        ).iter_rows()
+    } == expected
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
@@ -791,7 +797,12 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
     )
     monkeypatch.setattr(generate_catalogue, "_read_fixture_json", lambda path: pytest.fail(f"fixture read: {path}"))
 
-    assert generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)]) == 0
+    assert (
+        generate_catalogue.main(
+            ["--native", str(NATIVE_PATH), "--availability-evidence", str(LEDGER_PATH), "--out", str(tmp_path)]
+        )
+        == 0
+    )
     assert NATIVE_PATH.read_bytes() == before
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
@@ -821,5 +832,63 @@ def test_committed_catalogue_ids_match_native_ids() -> None:
 def test_fresh_build_matches_all_committed_artefact_bytes(tmp_path: Path) -> None:
     generate_catalogue.write_catalogue(_build(), tmp_path)
 
-    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+    for artifact_name in (
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "provenance.json",
+        "croissant.json",
+    ):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
+
+
+def test_governing_acquisitions_expose_all_baseline_pairs() -> None:
+    catalogue = _build()
+    pairs = catalogue.station_products
+    assert pairs.height == 1650
+    assert Counter(pairs.select("product_id", "availability").iter_rows()) == {
+        ("stage_reported", "available"): 813,
+        ("stage_reported", "unknown"): 12,
+        ("discharge_reported", "available"): 283,
+        ("discharge_reported", "unknown"): 542,
+    }
+    assert set(pairs["station_id"]) == set(_committed_native_table().data["station.id"])
+    assert catalogue.acquisition_provenance.withheld_facts == ()
+
+
+def test_later_snapshot_does_not_replace_baseline_or_remove_absent_stations() -> None:
+    import csv
+
+    snapshot = LEDGER_PATH.parents[1] / "recordings/waterlevel_load_live.stations.csv"
+    with snapshot.open() as stream:
+        later = {row["station_id"] for row in csv.DictReader(stream)}
+    native = set(_committed_native_table().data["station.id"])
+    assert len(native - later) == 25
+    assert len(later - native) == 605
+    exposed = set(_build().station_products["station_id"])
+    assert native - later <= exposed
+    assert exposed.isdisjoint(later - native)
+
+
+def test_build_cli_requires_explicit_reviewed_availability_evidence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+    assert "--out requires --availability-evidence" in capsys.readouterr().err
+
+
+def test_each_governing_product_uses_the_official_graph_field() -> None:
+    catalogue = _build()
+    fields = dict(catalogue.products.select("product_id", "native_id").iter_rows())
+    assert fields == {"stage_reported": "value", "discharge_reported": "discharge"}
+    assert all(fields[pair.product_id] == pair.native_field for pair in _availability_evidence().pairs)
+
+
+def test_provider_request_description_distinguishes_source_fields_from_public_calls() -> None:
+    assert _build().provider_info["bulk_observations"] == (
+        "true: graph responses co-publish stage and discharge fields; "
+        "public retrieval requests each product and source sub-window separately, "
+        "with at most 365 inclusive calendar dates per source request"
+    )

@@ -378,7 +378,7 @@ def test_missing_terms_do_not_block_traced_values_and_do_not_explain_current_ret
     thailand = _document("th_thaiwater")
     assert [statement for source in thailand["source_records"] for statement in source["statements"]] == []
     thailand_withheld = {fact for group in thailand["withheld_facts"] for fact in group["facts"]}
-    assert thailand_withheld
-    assert all(fact.startswith("station_product:") and fact.endswith(":availability") for fact in thailand_withheld)
+    assert thailand_withheld == set()
     bound = {fact for binding in thailand["fact_bindings"] for fact in binding["facts"]}
     assert any(fact.startswith("source.station:") for fact in bound)
+    assert sum(fact.startswith("source.station_product:") and fact.endswith(".availability") for fact in bound) == 1650
