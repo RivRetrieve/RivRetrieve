@@ -1,0 +1,31 @@
+{
+  "provider_id": "fr_hubeau",
+  "baseline_stations": 7323,
+  "applicable_pairs": 33139,
+  "previous_selectable_stations": 3,
+  "previous_selectable_pairs": 6,
+  "selectable_stations": 7323,
+  "selectable_pairs": 33139,
+  "availability": {
+    "available": 20966,
+    "unknown": 12173
+  },
+  "availability_reasons": {
+    "available": 20966,
+    "empty_no_data_published": 4948,
+    "empty_in_both_history_windows": 524,
+    "history_check_failed": 97,
+    "recent_window_empty_history_unchecked": 6604
+  },
+  "population": {
+    "hydrometry_stations": 6454,
+    "hydrometry_products_per_station": 5,
+    "temperature_stations": 869,
+    "temperature_products_per_station": 1
+  },
+  "governing_evidence": "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz",
+  "acquisition_dates": "Mixed; each exact instant and request retained in governing evidence and acquisition provenance. Not a simultaneous snapshot.",
+  "availability_scope": "Evidence at acquisition, not guaranteed continuous or future measurements. Unknown remains selectable.",
+  "instantaneous_discharge_entity": "selected station code, not shared site",
+  "verification_scope": "Public derived ledger consistency and separately required full private source-body verification."
+}

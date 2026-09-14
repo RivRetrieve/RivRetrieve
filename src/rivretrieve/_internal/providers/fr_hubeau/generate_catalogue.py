@@ -1,21 +1,29 @@
-"""refresh : HubeauHydrometryStations × RetrievedAt × HubeauTemperatureStations × RetrievedAt → WithIssues[NativeTable]; build : NativeTable × FranceOriginDeclarations → GeneratedFrHubeauCatalogue (pure)."""
+"""refresh : HubeauHydrometryStations × RetrievedAt × HubeauTemperatureStations × RetrievedAt → WithIssues[NativeTable]; build : NativeTable × FranceOriginDeclarations × FranceAvailability → GeneratedFrHubeauCatalogue (pure)."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import lzma
 import math
 import urllib.request
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from pathlib import Path
-from typing import Never, cast
+from pathlib import Path, PurePosixPath
+from types import MappingProxyType
+from typing import Literal, Never, cast
+from urllib.parse import parse_qsl, urlsplit  # noqa: TID251 -- structural parsing only
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    MaterialIdentity,
+    verify_provenance_recordings,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import (
     PackagedCatalogArtifact,
@@ -34,7 +42,6 @@ from rivretrieve._internal.catalogues.schemas import (
     PROVIDER_INFO_CATALOG_SCHEMA,
     STATION_CATALOG_SCHEMA,
     STATION_PRODUCT_CATALOG_SCHEMA,
-    AvailabilityDtype,
     ProductCatalog,
     StationCatalog,
     StationProductCatalog,
@@ -52,8 +59,405 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     hydrometry_coordinates,
 )
 
+Product = Literal[
+    "discharge_instantaneous",
+    "stage_instantaneous",
+    "discharge_daily_mean",
+    "discharge_daily_max",
+    "stage_daily_max",
+    "water_temperature_reported",
+]
+Status = Literal[
+    "available",
+    "empty_no_data_published",
+    "empty_in_both_history_windows",
+    "history_check_failed",
+    "recent_window_empty_history_unchecked",
+]
+Basis = Literal[
+    "publisher_count",
+    "historical_positive_witness",
+    "two_exact_windows_empty",
+    "preserved_history_failure",
+    "replacement_window_failure_prior_empty_claim_unverified",
+]
+ROUTES = {
+    "discharge_instantaneous": ("observations_tr", "grandeur_hydro", "Q"),
+    "stage_instantaneous": ("observations_tr", "grandeur_hydro", "H"),
+    "discharge_daily_mean": ("obs_elab", "grandeur_hydro_elab", "QmnJ"),
+    "discharge_daily_max": ("obs_elab", "grandeur_hydro_elab", "QIXnJ"),
+    "stage_daily_max": ("obs_elab", "grandeur_hydro_elab", "HIXnJ"),
+    "water_temperature_reported": ("chronique", None, None),
+}
+
+
+@dataclass(frozen=True)
+class AvailabilityAcquisition:
+    http_status: int
+    material: MaterialIdentity
+    media_type: str
+    method: Literal["http_request"]
+    receipt_id: str | None
+    reference: str
+    requested_from: tuple[str]
+    retrieved_at_start: datetime
+    role: Literal["publisher_count", "historical_check"]
+
+    def __post_init__(self) -> None:
+        if self.retrieved_at_start.utcoffset() is None:
+            raise ValueError("availability acquisition requires a zoned retrieval instant")
+        if type(self.material.byte_count) is not int or self.material.byte_count <= 0:
+            raise ValueError("availability material requires a positive byte count")
+        for location in (self.reference, self.material.filename):
+            for part in location.split("!"):
+                path = PurePosixPath(part)
+                if path.is_absolute() or ".." in path.parts or not part:
+                    raise ValueError("availability material reference must be relative")
+        if "!" in self.reference:
+            archive, member = self.reference.split("!", 1)
+            if not archive.endswith(".tar.xz") or member != f"bodies/{self.receipt_id}.body":
+                raise ValueError("availability receipt member mismatch")
+            expected = self.reference
+        else:
+            if not self.reference.endswith(".receipt.json"):
+                raise ValueError("availability sidecar reference required")
+            expected = self.reference.removesuffix(".receipt.json") + ".body"
+        if self.material.filename != expected:
+            raise ValueError("availability material does not match receipt reference")
+        if not self.media_type.strip() or (self.receipt_id is not None and not self.receipt_id.strip()):
+            raise ValueError("availability acquisition identity is blank")
+
+
+@dataclass(frozen=True)
+class StationProductAvailability:
+    acquisitions: tuple[AvailabilityAcquisition, ...]
+    availability: Literal["available", "unknown"]
+    basis: Basis
+    code_station: str
+    product_id: Product
+    published_count_or_new_witness_points: int
+    status: Status
+
+    def __post_init__(self) -> None:
+        if not self.code_station or not self.acquisitions:
+            raise ValueError("availability requires station and acquisitions")
+        count = self.published_count_or_new_witness_points
+        if count < 0 or self.availability != ("available" if self.status == "available" else "unknown"):
+            raise ValueError("availability conclusion mismatch")
+        windows = []
+        for index, acquisition in enumerate(self.acquisitions):
+            expected_role = "publisher_count" if index == 0 else "historical_check"
+            if acquisition.role != expected_role:
+                raise ValueError("availability acquisition order/role mismatch")
+            parsed = urlsplit(acquisition.requested_from[0])
+            entries = parse_qsl(parsed.query, keep_blank_values=True)
+            query = dict(entries)
+            if parsed.scheme != "https" or parsed.fragment or len(entries) != len(query):
+                raise ValueError("invalid availability request URL")
+            route, field, metric = ROUTES[self.product_id]
+            if index == 0:
+                temp = self.product_id == "water_temperature_reported"
+                path = "/api/v1/temperature/chronique" if temp else f"/api/v2/hydrometrie/{route}"
+                expected_query = {
+                    "code_station" if temp else "code_entite": self.code_station,
+                    "size": "1",
+                    "fields": "code_station",
+                }
+                if field is not None and metric is not None:
+                    expected_query[field] = metric
+                if parsed.netloc != "hubeau.eaufrance.fr" or parsed.path != path or query != expected_query:
+                    raise ValueError("publisher count station/product request mismatch")
+                if acquisition.http_status not in (200, 206):
+                    raise ValueError("publisher count acquisition must succeed")
+            else:
+                if not self.product_id.endswith("_instantaneous"):
+                    raise ValueError("historical route requires instantaneous product")
+                if (
+                    parsed.netloc != "hydro.eaufrance.fr"
+                    or parsed.path != f"/stationhydro/ajax/{self.code_station}/series"
+                ):
+                    raise ValueError("historical station route mismatch")
+                if (
+                    query.get("hydro_series[simpleAndInterpolatedAndHourlyVariable]") != metric
+                    or query.get("hydro_series[statusData]") != "raw"
+                    or query.get("hydro_series[variableType]") != "simple_and_interpolated_and_hourly_variable"
+                ):
+                    raise ValueError("historical source product mismatch")
+                expected_keys = {
+                    "hydro_series[startAt]",
+                    "hydro_series[endAt]",
+                    "hydro_series[variableType]",
+                    "hydro_series[simpleAndInterpolatedAndHourlyVariable]",
+                    "hydro_series[statusData]",
+                }
+                if set(query) != expected_keys:
+                    raise ValueError("unexpected historical request parameters")
+                window = (query["hydro_series[startAt]"], query["hydro_series[endAt]"])
+                if datetime.strptime(window[0], "%d/%m/%Y") > datetime.strptime(window[1], "%d/%m/%Y"):
+                    raise ValueError("historical request bounds reversed")
+                windows.append(window)
+                if acquisition.http_status != 200 and not 400 <= acquisition.http_status <= 599:
+                    raise ValueError("historical acquisition status invalid")
+        history = self.acquisitions[1:]
+        if not history:
+            status = (
+                "available"
+                if count
+                else (
+                    "recent_window_empty_history_unchecked"
+                    if self.product_id.endswith("_instantaneous")
+                    else "empty_no_data_published"
+                )
+            )
+            if self.status != status or self.basis != "publisher_count":
+                raise ValueError("publisher count conclusion mismatch")
+        elif self.basis == "historical_positive_witness":
+            if (
+                count <= 0
+                or self.status != "available"
+                or len(history) != 1
+                or history[0].http_status != 200
+                or windows[0][0] != windows[0][1]
+            ):
+                raise ValueError("historical positive witness mismatch")
+        else:
+            if (
+                count != 0
+                or len(history) < 2
+                or set(windows) != {("01/06/2026", "08/06/2026"), ("01/06/2023", "08/06/2023")}
+            ):
+                raise ValueError("historical two-window conclusion mismatch")
+            successes = sum(a.http_status == 200 for a in history)
+            if successes == len(history) and len(history) != 2:
+                raise ValueError("duplicate successful historical windows")
+            status = "empty_in_both_history_windows" if successes == len(history) else "history_check_failed"
+            basis = (
+                "two_exact_windows_empty"
+                if successes == len(history)
+                else (
+                    "preserved_history_failure"
+                    if successes == 0
+                    else "replacement_window_failure_prior_empty_claim_unverified"
+                )
+            )
+            if self.status != status or self.basis != basis:
+                raise ValueError("historical failed/empty distinction mismatch")
+
+    @property
+    def reason(self) -> str:
+        return {
+            "available": (
+                "Publisher observation count is positive for the recorded query; numerical values and continuity are not implied"
+                if self.basis == "publisher_count"
+                else "Numerical historical witness in the exact recorded one-day station query"
+            ),
+            "empty_no_data_published": "Publisher whole-record count was zero at acquisition; future availability remains unknown",
+            "empty_in_both_history_windows": "Both specified historical windows were empty; whole-history availability remains unknown",
+            "history_check_failed": "Historical check failed; historical availability remains unknown",
+            "recent_window_empty_history_unchecked": "Recent publisher count was zero; historical availability was not checked",
+        }[self.status]
+
+
+@dataclass(frozen=True)
+class AvailabilitySummary:
+    available: int
+    by_status: Mapping[Status, int]
+    pairs: int
+    stations: int
+    unknown: int
+
+
+@dataclass(frozen=True)
+class FranceAvailability:
+    native_table: MaterialIdentity
+    pairs: tuple[StationProductAvailability, ...]
+    research_head: str
+    schema_version: Literal[1]
+    scope: str
+    summary: AvailabilitySummary
+
+    def __post_init__(self) -> None:
+        keys = {(r.code_station, r.product_id) for r in self.pairs}
+        statuses = Counter(r.status for r in self.pairs)
+        available = statuses["available"]
+        if len(keys) != len(self.pairs):
+            raise ValueError("duplicate station/product availability")
+        if (
+            self.summary.pairs != len(keys)
+            or self.summary.stations != len({k[0] for k in keys})
+            or self.summary.available != available
+            or self.summary.unknown != len(keys) - available
+            or self.summary.by_status != dict(statuses)
+        ):
+            raise ValueError("availability ledger accounting mismatch")
+        if (
+            not self.scope.strip()
+            or len(self.research_head) != 40
+            or any(c not in "0123456789abcdef" for c in self.research_head)
+        ):
+            raise ValueError("availability ledger scope/revision invalid")
+
+
+def _object(value: object, required: tuple[str, ...], optional: tuple[str, ...] = ()) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError("availability document component must be an object")
+    document = cast(dict[str, object], value)
+    if not set(required) <= set(document) or not set(document) <= set(required) | set(optional):
+        raise ValueError("availability document component has unexpected or absent fields")
+    return document
+
+
+def _string(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("availability field must be a string")
+    return value
+
+
+def _integer(value: object) -> int:
+    if type(value) is not int:
+        raise ValueError("availability field must be a non-boolean integer")
+    return value
+
+
+def _array(value: object) -> list[object]:
+    if not isinstance(value, list):
+        raise ValueError("availability field must be an array")
+    return cast(list[object], value)
+
+
+def _choice[T: str](value: object, choices: tuple[T, ...]) -> T:
+    for choice in choices:
+        if isinstance(value, str) and value == choice:
+            return choice
+    raise ValueError("availability field is outside the declared vocabulary")
+
+
+def _material(value: object) -> MaterialIdentity:
+    raw = _object(value, ("filename", "byte_count", "sha256"))
+    return MaterialIdentity(
+        filename=_string(raw["filename"]), byte_count=_integer(raw["byte_count"]), sha256=_string(raw["sha256"])
+    )
+
+
+def _acquisition(value: object) -> AvailabilityAcquisition:
+    raw = _object(
+        value,
+        (
+            "http_status",
+            "material",
+            "media_type",
+            "method",
+            "reference",
+            "requested_from",
+            "retrieved_at_start",
+            "role",
+        ),
+        ("receipt_id",),
+    )
+    requests = _array(raw["requested_from"])
+    if len(requests) != 1:
+        raise ValueError("availability acquisition must name exactly one request")
+    return AvailabilityAcquisition(
+        http_status=_integer(raw["http_status"]),
+        material=_material(raw["material"]),
+        media_type=_string(raw["media_type"]),
+        method=_choice(raw["method"], ("http_request",)),
+        receipt_id=None if "receipt_id" not in raw or raw["receipt_id"] is None else _string(raw["receipt_id"]),
+        reference=_string(raw["reference"]),
+        requested_from=(_string(requests[0]),),
+        retrieved_at_start=datetime.fromisoformat(_string(raw["retrieved_at_start"])),
+        role=_choice(raw["role"], ("publisher_count", "historical_check")),
+    )
+
+
+def parse_station_product_availability(value: object) -> StationProductAvailability:
+    """Parse one source-identity-bound ledger row without opening a store."""
+    raw = _object(
+        value,
+        (
+            "acquisitions",
+            "availability",
+            "basis",
+            "code_station",
+            "product_id",
+            "published_count_or_new_witness_points",
+            "status",
+        ),
+    )
+    return StationProductAvailability(
+        acquisitions=tuple(_acquisition(item) for item in _array(raw["acquisitions"])),
+        availability=_choice(raw["availability"], ("available", "unknown")),
+        basis=_choice(
+            raw["basis"],
+            (
+                "publisher_count",
+                "historical_positive_witness",
+                "two_exact_windows_empty",
+                "preserved_history_failure",
+                "replacement_window_failure_prior_empty_claim_unverified",
+            ),
+        ),
+        code_station=_string(raw["code_station"]),
+        product_id=_choice(
+            raw["product_id"],
+            (
+                "discharge_instantaneous",
+                "stage_instantaneous",
+                "discharge_daily_mean",
+                "discharge_daily_max",
+                "stage_daily_max",
+                "water_temperature_reported",
+            ),
+        ),
+        published_count_or_new_witness_points=_integer(raw["published_count_or_new_witness_points"]),
+        status=_status(raw["status"]),
+    )
+
+
+def _status(value: object) -> Status:
+    return _choice(
+        value,
+        (
+            "available",
+            "empty_no_data_published",
+            "empty_in_both_history_windows",
+            "history_check_failed",
+            "recent_window_empty_history_unchecked",
+        ),
+    )
+
+
+def decode_availability(document: str | bytes) -> FranceAvailability:
+    """Decode the explicitly supplied public ledger, without reading private source bodies."""
+    raw = _object(
+        json.loads(document), ("native_table", "pairs", "research_head", "schema_version", "scope", "summary")
+    )
+    summary = _object(raw["summary"], ("available", "by_status", "pairs", "stations", "unknown"))
+    by_status = summary["by_status"]
+    if not isinstance(by_status, dict):
+        raise ValueError("availability status accounting must be an object")
+    if _integer(raw["schema_version"]) != 1:
+        raise ValueError("unsupported availability ledger revision")
+    return FranceAvailability(
+        native_table=_material(raw["native_table"]),
+        pairs=tuple(parse_station_product_availability(item) for item in _array(raw["pairs"])),
+        research_head=_string(raw["research_head"]),
+        schema_version=1,
+        scope=_string(raw["scope"]),
+        summary=AvailabilitySummary(
+            available=_integer(summary["available"]),
+            by_status=MappingProxyType(
+                {_status(key): _integer(count) for key, count in cast(dict[str, object], by_status).items()}
+            ),
+            pairs=_integer(summary["pairs"]),
+            stations=_integer(summary["stations"]),
+            unknown=_integer(summary["unknown"]),
+        ),
+    )
+
+
 PROVIDER_ID = ProviderId("fr_hubeau")
-PROVIDER_NAME = "Hubeau / SCHAPI — French national hydrometric network"
+PROVIDER_NAME = "Hub’Eau / HydroPortail — French hydrometry and water temperature"
 
 HYDRO_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations"
 HYDRO_STATIONS_PARAMS = "format=json&size=5000&in_use=true"
@@ -61,8 +465,6 @@ HYDRO_SITES_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/si
 TEMP_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/station"
 TEMP_STATIONS_PARAMS = "size=5000"
 
-AVAILABILITY_REASON = "Hubeau catalogue does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 MIN_LIVE_HYDRO_STATIONS = 500
 MIN_LIVE_TEMP_STATIONS = 50
 
@@ -579,6 +981,7 @@ def _failed_native_refresh(issue: Issue) -> WithIssues[NativeTable]:
 def build_catalogue(
     native_table: NativeTable,
     origins: Mapping[str, OriginDeclarations],
+    availability: FranceAvailability,
 ) -> GeneratedFrHubeauCatalogue:
     endpoints = native_table.data["source_endpoint"].unique().sort().to_list()
     expected = frozenset({"hydrometrie/referentiel/stations", "temperature/station"})
@@ -605,23 +1008,29 @@ def build_catalogue(
     enforce_catalogue_origins(PROVIDER_ID, hydro_origins, hydro, hydro_stations)
     enforce_catalogue_origins(PROVIDER_ID, temperature_origins, temperature, temperature_stations)
     stations: StationCatalog = pl.concat([hydro_stations, temperature_stations]).sort("station_id")
-    hydro_dates = hydro.data.select(
-        pl.col("code_station").cast(pl.String).alias("station_id"),
-        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
-    ).sort("station_id")
-    temperature_dates = temperature.data.select(
-        pl.col("code_station").cast(pl.String).alias("station_id"),
-        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
-    ).sort("station_id")
+    hydro_ids = tuple(hydro.data["code_station"].to_list())
+    temperature_ids = tuple(temperature.data["code_station"].to_list())
+    expected_pairs = {(station, d.product_id) for station in hydro_ids for d in HYDRO_PRODUCT_DEFS}
+    expected_pairs.update((station, d.product_id) for station in temperature_ids for d in TEMP_PRODUCT_DEFS)
+    if {(pair.code_station, pair.product_id) for pair in availability.pairs} != expected_pairs:
+        raise FatalContractError("France availability must match the exact native applicable station/product pairs")
+    identity = availability.native_table
+    if (identity.sha256, identity.byte_count, identity.filename) != (
+        NATIVE_TABLE_SHA256,
+        NATIVE_TABLE_BYTE_SIZE,
+        "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    ):
+        raise FatalContractError("France availability native material identity mismatch")
     products = build_products()
-    station_products = build_station_products(hydro_dates, temperature_dates)
+    station_products = build_station_products(availability)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("fr_hubeau native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
     acquisition_provenance = build_acquisition_provenance(
-        station_ids=tuple(stations.get_column("station_id").cast(pl.String).to_list()),
-        station_product_keys=tuple(station_products.select("station_id", "product_id").iter_rows()),
+        hydrometry_station_ids=hydro_ids,
+        temperature_station_ids=temperature_ids,
+        availability=availability,
     )
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedFrHubeauCatalogue(
@@ -709,118 +1118,21 @@ def build_temp_stations(native_table: NativeTable) -> StationCatalog:
     )
 
 
-def build_station_products(
-    hydro_station_dates: pl.DataFrame,
-    temperature_station_dates: pl.DataFrame,
-) -> StationProductCatalog:
-    rows: list[dict[str, object]] = []
-    for station_id, catalogue_date in hydro_station_dates.iter_rows():
-        if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
-            raise FatalContractError("hydrometry station retrieval date must pair a string identifier with a date")
-        for d in HYDRO_PRODUCT_DEFS:
-            rows.append(
-                {
-                    "provider_id": PROVIDER_ID,
-                    "station_id": station_id,
-                    "product_id": d.product_id,
-                    "availability": (
-                        "available"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else "unknown"
-                    ),
-                    "availability_reason": (
-                        "Non-empty official source recording"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else AVAILABILITY_REASON
-                    ),
-                    "published_record_start_date": None,
-                    "published_record_end_date": None,
-                    "last_catalogue_check": date(2026, 9, 2)
-                    if (station_id, d.product_id)
-                    in {
-                        ("1011000101", "discharge_daily_mean"),
-                        ("1011000101", "discharge_daily_max"),
-                        ("1011000101", "stage_daily_max"),
-                        ("Y251002001", "discharge_instantaneous"),
-                        ("Y251002001", "stage_instantaneous"),
-                        ("01001336", "water_temperature_reported"),
-                    }
-                    else catalogue_date,
-                }
-            )
-
-    for station_id, catalogue_date in temperature_station_dates.iter_rows():
-        if not isinstance(station_id, str) or not isinstance(catalogue_date, date):
-            raise FatalContractError("temperature station retrieval date must pair a string identifier with a date")
-        for d in TEMP_PRODUCT_DEFS:
-            rows.append(
-                {
-                    "provider_id": PROVIDER_ID,
-                    "station_id": station_id,
-                    "product_id": d.product_id,
-                    "availability": (
-                        "available"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else "unknown"
-                    ),
-                    "availability_reason": (
-                        "Non-empty official source recording"
-                        if (station_id, d.product_id)
-                        in {
-                            ("1011000101", "discharge_daily_mean"),
-                            ("1011000101", "discharge_daily_max"),
-                            ("1011000101", "stage_daily_max"),
-                            ("Y251002001", "discharge_instantaneous"),
-                            ("Y251002001", "stage_instantaneous"),
-                            ("01001336", "water_temperature_reported"),
-                        }
-                        else AVAILABILITY_REASON
-                    ),
-                    "published_record_start_date": None,
-                    "published_record_end_date": None,
-                    "last_catalogue_check": date(2026, 9, 2)
-                    if (station_id, d.product_id)
-                    in {
-                        ("1011000101", "discharge_daily_mean"),
-                        ("1011000101", "discharge_daily_max"),
-                        ("1011000101", "stage_daily_max"),
-                        ("Y251002001", "discharge_instantaneous"),
-                        ("Y251002001", "stage_instantaneous"),
-                        ("01001336", "water_temperature_reported"),
-                    }
-                    else catalogue_date,
-                }
-            )
-
-    return (
-        pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
-        .with_columns(pl.col("availability").cast(AvailabilityDtype))
-        .sort("station_id", "product_id")
-    )
+def build_station_products(availability: FranceAvailability) -> StationProductCatalog:
+    rows = [
+        {
+            "provider_id": PROVIDER_ID,
+            "station_id": pair.code_station,
+            "product_id": pair.product_id,
+            "availability": pair.availability,
+            "availability_reason": pair.reason,
+            "published_record_start_date": None,
+            "published_record_end_date": None,
+            "last_catalogue_check": max(a.retrieved_at_start for a in pair.acquisitions).date(),
+        }
+        for pair in availability.pairs
+    ]
+    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).sort("station_id", "product_id")
 
 
 def build_provider_info(
@@ -949,6 +1261,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to a Hubeau temperature/station JSON fixture (used with --hydro-fixture).",
     )
     parser.add_argument("--native", type=Path, help="Committed native Parquet input for canonical build.")
+    parser.add_argument(
+        "--availability-ledger", type=Path, help="Reviewed compressed France station-product availability ledger."
+    )
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--hydro-retrieved-at", type=_parse_retrieved_at)
@@ -970,6 +1285,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--native build mode cannot be combined with refresh sources or retrieval instants")
         if args.out is None:
             parser.error("--out is required for canonical build")
+        if args.availability_ledger is None:
+            parser.error("--availability-ledger is required for canonical build")
+        availability = decode_availability(lzma.decompress(args.availability_ledger.read_bytes()))
         from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
         catalogue = build_catalogue(
@@ -979,6 +1297,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
             ),
             FRANCE_ORIGIN_DECLARATIONS,
+            availability,
         )
         verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
         write_catalogue(catalogue, args.out)

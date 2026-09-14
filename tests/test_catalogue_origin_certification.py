@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import lzma
 import re
 import socket
 import urllib.request
@@ -45,6 +46,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, read_native_tab
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
@@ -98,6 +100,10 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     assert module_path is not None
     native_path = Path(module_path).parent / "catalogue/native.parquet"
     build = generator.build_catalogue
+    if provider == "fr_hubeau":
+        ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+        availability = decode_availability(lzma.decompress(ledger.read_bytes()))
+        build = partial(build, availability=availability)
     if provider == "th_thaiwater":
         build = partial(
             build, availability_evidence=GraphAvailabilityEvidence(THAI_AVAILABILITY_EVIDENCE_PATH.read_bytes())
@@ -683,6 +689,13 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
                 "--citation-recording",
                 "tests/test_data/jp_mlit_terms_citation.pdf",
+            )
+        )
+    elif adapter.provider_id == "fr_hubeau":
+        arguments.extend(
+            (
+                "--availability-ledger",
+                str(ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"),
             )
         )
     elif adapter.provider_id == "th_thaiwater":

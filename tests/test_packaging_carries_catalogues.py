@@ -96,19 +96,9 @@ for provider_id in provider_ids:
     assert rivretrieve.describe(provider_id) == json.loads(catalogue.joinpath("croissant.json").read_text())
     assert not any(name.endswith((".eml", ".xlsx")) for name in packaged_names)
 
-for provider_id, station_id, count in (
-    ("fr_hubeau", "01010000", 47_773),
-):
-    try:
-        rivretrieve.find(provider=provider_id, station=station_id)
-    except Exception as exc:
-        assert type(exc).__name__ == "UnknownStationError"
-    else:
-        raise AssertionError((provider_id, station_id))
-    provider_selection = rivretrieve.find(provider=provider_id)
-    groups = provider_selection.acquisition_provenance[0].withheld_facts
-    assert len(groups) == count
-    assert {{group.reason for group in groups}} == {{"no_acquisition_record_established"}}
+france = rivretrieve.find(provider="fr_hubeau")
+assert len(france.series) == 33_139
+assert not france.acquisition_provenance[0].withheld_facts
 bosnia = rivretrieve.find(provider="ba_fhmzbih")
 assert len(bosnia.series) == 180
 assert len({{series.station_id for series in bosnia.series}}) == 60

@@ -53,5 +53,9 @@ def test_france_catalogue_capture_names_all_exact_recorded_requests() -> None:
         for fact in item["facts"]
         if item.get("acquisition_id")
     }
-    assert bindings["source.product.hydrometry_api_semantics"] == hydrometry["acquisition_id"]
+    hydrometry_semantics = _acquisition("fr_hubeau", "fr_hubeau_hydrometrie")
+    assert hydrometry_semantics["requested_from"] == ["https://hubeau.eaufrance.fr/page/api-hydrometrie"]
+    assert hydrometry_semantics["retrieved_at_start"] == "2026-09-13T17:56:22.140907Z"
+    assert hydrometry_semantics["recording_ids"] == ["fr_hubeau_hydrometrie"]
+    assert bindings["source.product.hydrometry_api_semantics"] == hydrometry_semantics["acquisition_id"]
     assert bindings["source.product.temperature_api_semantics"] == temperature_semantics["acquisition_id"]

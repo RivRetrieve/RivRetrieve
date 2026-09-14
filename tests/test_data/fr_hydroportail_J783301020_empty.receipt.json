@@ -1,0 +1,53 @@
+{
+  "job": {
+    "purpose": "two_window_negative",
+    "code_station": "J783301020",
+    "product_id": "discharge_instantaneous",
+    "old_receipt": "J783301020_Q_w2_a1",
+    "original_request_url": "https://hydro.eaufrance.fr/stationhydro/ajax/J783301020/series?hydro_series%5BstartAt%5D=01%2F06%2F2023&hydro_series%5BendAt%5D=08%2F06%2F2023&hydro_series%5BvariableType%5D=simple_and_interpolated_and_hourly_variable&hydro_series%5BsimpleAndInterpolatedAndHourlyVariable%5D=Q&hydro_series%5BstatusData%5D=raw",
+    "proposed_request_url": "https://hydro.eaufrance.fr/stationhydro/ajax/J783301020/series?hydro_series%5BstartAt%5D=01%2F06%2F2023&hydro_series%5BendAt%5D=08%2F06%2F2023&hydro_series%5BvariableType%5D=simple_and_interpolated_and_hourly_variable&hydro_series%5BsimpleAndInterpolatedAndHourlyVariable%5D=Q&hydro_series%5BstatusData%5D=raw",
+    "required_result": "HTTP200; returned station and metric match; zero points; both original windows need full bodies for pair-level two-window emptiness. Positive reclassifies available; failure does not establish absence.",
+    "window": "2"
+  },
+  "request": {
+    "method": "GET",
+    "url": "https://hydro.eaufrance.fr/stationhydro/ajax/J783301020/series?hydro_series%5BstartAt%5D=01%2F06%2F2023&hydro_series%5BendAt%5D=08%2F06%2F2023&hydro_series%5BvariableType%5D=simple_and_interpolated_and_hourly_variable&hydro_series%5BsimpleAndInterpolatedAndHourlyVariable%5D=Q&hydro_series%5BstatusData%5D=raw",
+    "redirects_allowed": false
+  },
+  "response": {
+    "status": 200,
+    "media_type": "application/json",
+    "retrieved_at": "2026-09-13T18:15:05.864424+00:00",
+    "completed_at": "2026-09-13T18:15:12.243753+00:00",
+    "duration_seconds": 6.379279667045921,
+    "retry_after": null,
+    "content_encoding": "gzip",
+    "byte_carrier": "HTTP entity body after content-encoding decoding, as parsed",
+    "body_complete": true,
+    "byte_size": 833,
+    "sha256": "28f1e90b2e9ca2c622447039beaddbf9a0e28585aedaddce5e9856e6537e2f0c",
+    "body_file": "222_J783301020_Q_w2_a1.body"
+  },
+  "error": null,
+  "outcome": "empty",
+  "reason": "valid station series.data empty; statistics retained separately",
+  "reading": {
+    "code": "J783301020",
+    "metric": "Q",
+    "unit": "l",
+    "timezone": "UTC",
+    "points": 0,
+    "numeric_points": 0,
+    "first_t": null,
+    "last_t": null,
+    "statistics_present": true,
+    "statistics": {
+      "q25": 167,
+      "median": 620,
+      "q75": 2160,
+      "minimum": 0,
+      "maximum": 88500,
+      "mean": 2360
+    }
+  }
+}

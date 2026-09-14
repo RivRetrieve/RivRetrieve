@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import lzma
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +26,7 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     NATIVE_SOURCE_COLUMNS,
     TEMP_PRODUCT_DEFS,
     build_catalogue,
+    decode_availability,
     native_table_content_digest,
     refresh_native_table,
     refresh_native_table_from_fixtures,
@@ -50,6 +52,11 @@ _HYDRO_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 32, 58, tzinfo=UTC))
 _TEMP_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 33, 34, tzinfo=UTC))
 _PINNED_NATIVE_DIGEST = "f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322"
 NATIVE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+
+
+def _availability():
+    path = Path(__file__).parents[1] / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+    return decode_availability(lzma.decompress(path.read_bytes()))
 
 
 def _full_payload(path: Path) -> dict[str, object]:
@@ -88,7 +95,7 @@ def _assert_issue(result: object, message: str) -> None:
 
 
 def _catalogue():
-    return build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS)
+    return build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS, _availability())
 
 
 @pytest.mark.parametrize(
@@ -115,7 +122,7 @@ def test_native_build_enforces_each_endpoint_origin_declaration(
         FatalContractError,
         match=r"^fr_hubeau\.longitude: canonical column has no origin declaration$",
     ):
-        build_catalogue(read_native_table(NATIVE_PATH), origins)
+        build_catalogue(read_native_table(NATIVE_PATH), origins, _availability())
 
 
 @pytest.mark.parametrize(
@@ -141,7 +148,7 @@ def test_native_build_enforces_each_partition_census(
     )
 
     with pytest.raises(FatalContractError) as raised:
-        build_catalogue(shortened, FRANCE_ORIGIN_DECLARATIONS)
+        build_catalogue(shortened, FRANCE_ORIGIN_DECLARATIONS, _availability())
     assert str(raised.value) == (f"fr_hubeau native {partition} partition has {remaining} rows; expected {expected}")
 
 
@@ -198,7 +205,7 @@ def test_generate_catalogue_temp_station_products() -> None:
 
 def _assert_fatal_issue(table: NativeTable, code: str, message: str) -> None:
     with pytest.raises(FatalContractError) as raised:
-        build_catalogue(table, FRANCE_ORIGIN_DECLARATIONS)
+        build_catalogue(table, FRANCE_ORIGIN_DECLARATIONS, _availability())
     assert [(issue.provider_id, issue.code, issue.message) for issue in raised.value.issues] == [
         (ProviderId("fr_hubeau"), code, message)
     ]
@@ -844,23 +851,83 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
         (["--out", "out"], "--native is required for canonical build"),
         (["--native", str(NATIVE_PATH)], "--out is required for canonical build"),
         (
-            ["--native", str(NATIVE_PATH), "--out", "out", "--hydro-fixture", str(_HYDRO_FIXTURE)],
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--availability-ledger",
+                str(
+                    Path(__file__).parents[1]
+                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                ),
+                "--out",
+                "out",
+                "--hydro-fixture",
+                str(_HYDRO_FIXTURE),
+            ],
             "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            ["--native", str(NATIVE_PATH), "--out", "out", "--temp-fixture", str(_TEMP_FIXTURE)],
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--availability-ledger",
+                str(
+                    Path(__file__).parents[1]
+                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                ),
+                "--out",
+                "out",
+                "--temp-fixture",
+                str(_TEMP_FIXTURE),
+            ],
             "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            ["--native", str(NATIVE_PATH), "--out", "out", "--native-out", "native.parquet"],
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--availability-ledger",
+                str(
+                    Path(__file__).parents[1]
+                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                ),
+                "--out",
+                "out",
+                "--native-out",
+                "native.parquet",
+            ],
             "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            ["--native", str(NATIVE_PATH), "--out", "out", "--hydro-retrieved-at", "2026-08-02T17:32:58+00:00"],
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--availability-ledger",
+                str(
+                    Path(__file__).parents[1]
+                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                ),
+                "--out",
+                "out",
+                "--hydro-retrieved-at",
+                "2026-08-02T17:32:58+00:00",
+            ],
             "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
         (
-            ["--native", str(NATIVE_PATH), "--out", "out", "--temperature-retrieved-at", "2026-08-02T17:33:34+00:00"],
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--availability-ledger",
+                str(
+                    Path(__file__).parents[1]
+                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                ),
+                "--out",
+                "out",
+                "--temperature-retrieved-at",
+                "2026-08-02T17:33:34+00:00",
+            ],
             "--native build mode cannot be combined with refresh sources or retrieval instants",
         ),
     ],
@@ -1060,7 +1127,8 @@ def test_native_dates_flow_to_station_rows_and_provider_maximum() -> None:
             .alias("retrieved_at")
         )
     )
-    catalogue = build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS)
+    availability = _availability()
+    catalogue = build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS, availability)
     hydro_dates = catalogue.station_products.filter(pl.col("station_id") == hydro_first)[
         "last_catalogue_check"
     ].unique()
@@ -1068,8 +1136,16 @@ def test_native_dates_flow_to_station_rows_and_provider_maximum() -> None:
     temperature_dates = catalogue.station_products.filter(pl.col("station_id") == temperature_id)[
         "last_catalogue_check"
     ].unique()
-    assert set(hydro_dates.to_list()) == {datetime(2026, 8, 1).date(), datetime(2026, 9, 2).date()}
-    assert set(temperature_dates.to_list()) == {datetime(2026, 9, 2).date()}
+    assert set(hydro_dates.to_list()) == {
+        max(a.retrieved_at_start for a in pair.acquisitions).date()
+        for pair in availability.pairs
+        if pair.code_station == hydro_first
+    }
+    assert set(temperature_dates.to_list()) == {
+        max(a.retrieved_at_start for a in pair.acquisitions).date()
+        for pair in availability.pairs
+        if pair.code_station == temperature_id
+    }
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
@@ -1094,10 +1170,10 @@ def _frame_digest(frame: pl.DataFrame) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-_PINNED_PROVIDER_JSON_SHA256 = "f9c38afc3e79476b329a9ebcb0df90f9fce0d7917e7fc193068672c60d62f634"
+_PINNED_PROVIDER_JSON_SHA256 = "e1ac897ad79a84a0685574325903bc2676e23a6cee70701adfbbd1108e135cf8"
 _PINNED_PRODUCTS_FRAME_SHA256 = "1800401b4987adbb771dcd39dd9b303ec6e30e29c7ffec41ccb4dbc53e2bdbd5"
-_PINNED_STATIONS_FRAME_SHA256 = "c3d5b0f2e6b5bd39135a3bb1314fcdebf537f4c4b1d9b9f0fa823045c423acc2"
-_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "ef2af963f04438238fd05b7d38e2d6c900ae64d72b1a66ce1f949c09343c4806"
+_PINNED_STATIONS_FRAME_SHA256 = "0958c6dfe6fa44d0a66e105c51b7d3ae3ac675337fe0fa07f98e02017726c1c1"
+_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "3126fc84b22ba46a6b52a450e18d6014c56c5987340d1bca45ab983331e10bcd"
 
 
 def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
@@ -1136,7 +1212,7 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
     ).sort("station_id")
     pl_testing.assert_frame_equal(
         committed_stations,
-        expected_stations.filter(pl.col("station_id").is_in(["01001336", "1011000101", "Y251002001"])),
+        expected_stations,
         check_exact=True,
     )
 
@@ -1160,21 +1236,23 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
     ).sort("product_id")
     pl_testing.assert_frame_equal(committed_products, expected_products, check_exact=True)
 
-    assert set(committed_station_products.select("station_id", "product_id").iter_rows()) == {
-        ("01001336", "water_temperature_reported"),
-        ("1011000101", "discharge_daily_mean"),
-        ("1011000101", "discharge_daily_max"),
-        ("1011000101", "stage_daily_max"),
-        ("Y251002001", "discharge_instantaneous"),
-        ("Y251002001", "stage_instantaneous"),
+    expected_pairs = {
+        (row[0], d.product_id) for row in hydro.select("code_station").iter_rows() for d in HYDRO_PRODUCT_DEFS
     }
-    assert set(committed_station_products["availability"].cast(str)) == {"available"}
-    assert committed_station_products["published_record_start_date"].null_count() == 6
-    assert committed_station_products["published_record_end_date"].null_count() == 6
+    expected_pairs.update(
+        (row[0], d.product_id) for row in temperature.select("code_station").iter_rows() for d in TEMP_PRODUCT_DEFS
+    )
+    assert set(committed_station_products.select("station_id", "product_id").iter_rows()) == expected_pairs
+    assert dict(committed_station_products.group_by("availability").len().iter_rows()) == {
+        "available": 20966,
+        "unknown": 12173,
+    }
+    assert committed_station_products["published_record_start_date"].null_count() == 33139
+    assert committed_station_products["published_record_end_date"].null_count() == 33139
 
     expected_provider = {
         "provider_id": "fr_hubeau",
-        "name": "Hubeau / SCHAPI — French national hydrometric network",
+        "name": "Hub’Eau / HydroPortail — French hydrometry and water temperature",
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
@@ -1207,7 +1285,22 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
     monkeypatch.setattr(generator, "refresh_native_table", forbidden)
     monkeypatch.setattr(generator, "refresh_native_table_from_fixtures", forbidden)
     native_before = NATIVE_PATH.read_bytes()
-    assert generator.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)]) == 0
+    assert (
+        generator.main(
+            [
+                "--native",
+                str(NATIVE_PATH),
+                "--availability-ledger",
+                str(
+                    Path(__file__).parents[1]
+                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                ),
+                "--out",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
     assert calls == []
     assert NATIVE_PATH.read_bytes() == native_before
     assert {path.name for path in tmp_path.iterdir()} == {
@@ -1224,5 +1317,6 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "stations.parquet",
         "station_products.parquet",
         "provenance.json",
+        "croissant.json",
     ):
         assert (tmp_path / artifact).read_bytes() == (NATIVE_PATH.parent / artifact).read_bytes()

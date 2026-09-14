@@ -123,12 +123,14 @@ def test_find_includes_unknown_edges_for_czech_and_excludes_unavailable_usgs_row
 
 def test_find_scopes_duplicate_bare_station_ids_by_provider() -> None:
     assert _keys(rr.find(station="01010000")) == (
+        ("fr_hubeau", "01010000", "water_temperature_reported"),
         ("usgs_nwis", "01010000", "discharge_daily_mean"),
         ("usgs_nwis", "01010000", "discharge_instantaneous"),
         ("usgs_nwis", "01010000", "stage_instantaneous"),
     )
-    with pytest.raises(UnknownStationError, match="Station is not registered"):
-        rr.find(provider="fr_hubeau", station="01010000")
+    assert _keys(rr.find(provider="fr_hubeau", station="01010000")) == (
+        ("fr_hubeau", "01010000", "water_temperature_reported"),
+    )
     assert _keys(rr.find(provider="usgs_nwis", station="01010000")) == (
         ("usgs_nwis", "01010000", "discharge_daily_mean"),
         ("usgs_nwis", "01010000", "discharge_instantaneous"),

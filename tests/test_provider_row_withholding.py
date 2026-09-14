@@ -43,12 +43,12 @@ def test_bosnia_loader_admits_acquired_baseline_without_withholding() -> None:
     assert artifact.acquisition_provenance.withheld_facts == ()
 
 
-def test_france_loader_executes_all_unmapped_sie_withholding() -> None:
+def test_france_loader_admits_all_evidenced_baseline_pairs() -> None:
     artifact = load_packaged_catalogue_artifact(france.catalogue)
-    assert artifact.stations.height == 3
-    assert artifact.station_products.height == 6
+    assert artifact.stations.height == 7_323
+    assert artifact.station_products.height == 33_139
     assert artifact.acquisition_provenance is not None
-    assert len(artifact.acquisition_provenance.withheld_facts) == 47_773
+    assert not artifact.acquisition_provenance.withheld_facts
 
 
 def test_thailand_loader_retains_every_acquired_pair() -> None:
@@ -60,14 +60,11 @@ def test_thailand_loader_retains_every_acquired_pair() -> None:
     assert artifact.acquisition_provenance.withheld_facts == ()
 
 
-def test_public_find_excludes_withheld_rows_and_keeps_reasons() -> None:
-    for provider_id, station_id, count in (("fr_hubeau", "01010000", 47_773),):
-        with pytest.raises(Exception, match="Station is not registered") as raised:
-            rr.find(provider=provider_id, station=station_id)
-        assert raised.type.__name__ == "UnknownStationError"
-        provenance = rr.find(provider=provider_id).acquisition_provenance[0]
-        assert len(provenance.withheld_facts) == count
-        assert {group.reason for group in provenance.withheld_facts} == {"no_acquisition_record_established"}
+def test_public_find_admits_previously_withheld_baseline_stations() -> None:
+    for provider_id, station_id in (("ba_fhmzbih", "1010"), ("fr_hubeau", "01010000")):
+        selection = rr.find(provider=provider_id, station=station_id)
+        assert selection.series
+        assert not selection.acquisition_provenance[0].withheld_facts
 
     selection = rr.find(provider="th_thaiwater", station="1", product="stage_reported")
     assert rr.as_frame(selection).height == 1

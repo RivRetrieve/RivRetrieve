@@ -1,0 +1,155 @@
+"""Station HydroPortail contracts : recorded source interactions → station-own rows or explicit defects."""
+
+import json
+from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+import rivretrieve as rr
+import rivretrieve._internal.discovery as discovery
+from rivretrieve._internal.boundary_probes import BoundaryProbe, WallClockExpectation
+from rivretrieve._internal.engine import (
+    Payload,
+    RenderedWindow,
+    SourceCallOrigin,
+    UnknownOriginFact,
+    WindowEndpoint,
+    _make_fetch_window,
+)
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.fr_hubeau.config import config
+from rivretrieve._internal.providers.fr_hubeau.fetch import fetch
+from rivretrieve._internal.providers.fr_hubeau.parse import parse
+from rivretrieve._internal.recordings import ReplayTransport, read_recording
+
+DATA = Path(__file__).parent / "test_data"
+PRODUCT = ProductId("discharge_instantaneous")
+
+
+def _window(start, stop):
+    return _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime.fromisoformat(start)),
+        WindowEndpoint.from_datetime(datetime.fromisoformat(stop)),
+    )
+
+
+def _empty_payload():
+    # Genuine empty source body and original receipt, not an authored capture.
+    receipt = json.loads((DATA / "fr_hydroportail_J783301020_empty.receipt.json").read_text())
+    return Payload(
+        config().products[PRODUCT].coordinates,
+        (("J783301020", PRODUCT),),
+        _window("2023-06-01", "2023-06-08T23:59:59"),
+        (DATA / "fr_hydroportail_J783301020_empty.body").read_bytes(),
+        SourceCallOrigin(
+            receipt["request"]["url"],
+            {},
+            receipt["response"]["status"],
+            datetime.fromisoformat(receipt["response"]["retrieved_at"]),
+            receipt["response"]["media_type"],
+            UnknownOriginFact(),
+            UnknownOriginFact(),
+        ),
+        (),
+    )
+
+
+def test_station_own_discharge_fetch_replays_exact_non_sample_station():
+    recording = read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json")
+    fetched = fetch(
+        ("1232000101",),
+        (PRODUCT,),
+        {PRODUCT: (RenderedWindow("30/05/2026", "04/06/2026"),)},
+        _window("2026-05-30", "2026-06-04T23:59:59"),
+        config(),
+        ReplayTransport((recording,)),
+    )
+    (payload,) = fetched.value
+    assert payload.content == recording.content
+    frame = parse(payload, config()).value
+    assert not frame.is_empty()
+    assert frame["station_id"].unique().to_list() == ["1232000101"]
+
+
+def test_station_own_discharge_parser_does_not_require_the_old_sample_site():
+    recording = read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json")
+    assert recording.content_type is not None
+    payload = Payload(
+        config().products[PRODUCT].coordinates,
+        (("1232000101", PRODUCT),),
+        _window("2026-05-30", "2026-06-04T23:59:59"),
+        recording.content,
+        SourceCallOrigin(
+            recording.request.url,
+            dict(recording.request.parameters or {}),
+            recording.status_code,
+            recording.retrieved_at,
+            recording.content_type,
+            UnknownOriginFact(),
+            UnknownOriginFact(),
+        ),
+        recording.prerequisite_calls,
+    )
+    assert not parse(payload, config()).value.is_empty()
+
+
+def test_valid_empty_envelope_is_not_a_source_identity_failure():
+    assert parse(_empty_payload(), config()).value.is_empty()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("code", "Y2510020"),
+        ("metric", "H"),
+        ("unit", "m3"),
+        ("statuses", "validated"),
+    ],
+)
+def test_empty_envelope_checks_series_contract_before_iteration(field, value):
+    payload = _empty_payload()
+    document = json.loads(payload.content)
+    document["series"][field] = value
+    with pytest.raises(FatalContractError):
+        parse(replace(payload, content=json.dumps(document).encode()), config())
+
+
+def test_empty_envelope_requires_source_utc_before_iteration():
+    payload = _empty_payload()
+    document = json.loads(payload.content)
+    document["timezone"] = "Europe/Paris"
+    with pytest.raises(FatalContractError):
+        parse(replace(payload, content=json.dumps(document).encode()), config())
+
+
+def test_empty_envelope_requires_identity_metadata_before_iteration():
+    payload = _empty_payload()
+    document = json.loads(payload.content)
+    del document["series"]["code"]
+    with pytest.raises(FatalContractError):
+        parse(replace(payload, content=json.dumps(document).encode()), config())
+
+
+def _run_station_discharge_boundary(replay):
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(discovery, "HttpClient", lambda: replay)
+        selection = rr.find(provider="fr_hubeau", station="1232000101", product=PRODUCT)
+        return rr.fetch(selection, start="2026-06-01", end="2026-06-02", on_issue="raise").data
+
+
+# Three literals supplied by the independent source-only author, not this parser.
+# Exact source material and authorship are recorded in the adjacent provenance document.
+STATION_DISCHARGE_PROBE = BoundaryProbe(
+    ProviderId("fr_hubeau"),
+    PRODUCT,
+    (read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json"),),
+    {
+        "reading_count": 282,
+        "first_wall_clock_time": WallClockExpectation("2026-06-01T00:00:00", "+00:00"),
+        "last_wall_clock_time": WallClockExpectation("2026-06-02T18:00:00", "+00:00"),
+    },
+    _run_station_discharge_boundary,
+)

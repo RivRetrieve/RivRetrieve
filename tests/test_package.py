@@ -136,7 +136,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (738, 0, 0),
         "cz_chmi": (4_155, 0, 0),
-        "fr_hubeau": (6, 0, 0),
+        "fr_hubeau": (33_139, 0, 0),
         "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
         "no_nve": (44_118, 0, 0),

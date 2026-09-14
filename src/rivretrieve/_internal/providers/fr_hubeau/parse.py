@@ -29,9 +29,23 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     if not isinstance(document, dict):
         raise FatalContractError("fr_hubeau payload must be a JSON object")
     root = cast("dict[str, object]", document)
-    series_value = root.get("series")
-    if coordinates.family == "hydroportail" and isinstance(series_value, dict):
-        raw_rows = cast("dict[str, object]", series_value).get("data")
+    if coordinates.family == "hydroportail":
+        series_value = root.get("series")
+        if not isinstance(series_value, dict):
+            raise FatalContractError("fr_hubeau HydroPortail payload has no series object")
+        series = cast("dict[str, object]", series_value)
+        if series.get("code") != station:
+            raise FatalContractError("fr_hubeau HydroPortail response contains an unexpected station identity")
+        if series.get("metric") != coordinates.field:
+            raise FatalContractError("fr_hubeau HydroPortail response contains an unexpected metric")
+        expected_unit = "mm" if coordinates.field == "H" else "l"
+        if series.get("unit") != expected_unit or root.get("timezone") != "UTC":
+            raise FatalContractError(
+                "fr_hubeau HydroPortail unit or timezone differs from the evidenced source contract"
+            )
+        if series.get("statuses") != "raw":
+            raise FatalContractError("fr_hubeau HydroPortail response does not contain the requested raw series")
+        raw_rows = series.get("data")
     else:
         raw_rows = root.get("data")
     if not isinstance(raw_rows, list):
@@ -60,17 +74,6 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
             value = _value(row.get("resultat"))
             zone = "unknown"
         else:
-            series = cast("dict[str, object]", root["series"])
-            expected_code = "Y2510020" if coordinates.field == "Q" else station
-            if series.get("code") != expected_code:
-                raise FatalContractError("fr_hubeau HydroPortail response contains an unexpected entity identity")
-            if series.get("metric") != coordinates.field:
-                raise FatalContractError("fr_hubeau HydroPortail response contains an unexpected metric")
-            expected_unit = "mm" if coordinates.field == "H" else "l"
-            if series.get("unit") != expected_unit or root.get("timezone") != "UTC":
-                raise FatalContractError(
-                    "fr_hubeau HydroPortail unit or timezone differs from the evidenced source contract"
-                )
             raw_time = row.get("t")
             if not isinstance(raw_time, str) or not raw_time.endswith("Z"):
                 raise FatalContractError("fr_hubeau HydroPortail timestamp must end in Z")
