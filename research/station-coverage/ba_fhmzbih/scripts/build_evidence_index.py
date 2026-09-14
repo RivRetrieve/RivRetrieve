@@ -4,8 +4,10 @@ Two kinds of evidence, kept separate on purpose:
 
   * Response-shape examples (recordings/) illustrate a route or a response shape. An example
     cannot substantiate a different station's result and is never cited as one.
-  * Per-pair evidence (evidence/) supports one station and one product. Each inventory row
-    links to its own file.
+  * Per-pair survey accounting (evidence/) links one historical station/product row.
+    Positive summaries without bodies do not certify numerical classifications.
+  * Governing baseline accounting identifies complete privately retained source responses;
+    public accounting is not raw-body proof.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ EVIDENCE = HERE / "evidence"
 ESTABLISHES = {
     "layers_manifest": "The publisher's own list of ten layers; the authoritative product-to-layer mapping.",
     "layer_10": "Vodostaj (H) layer membership - 99 hydrological stations.",
-    "layer_20": "Proticaj (Q) layer membership - 60 stations; identical to the committed baseline.",
+    "layer_20": "Proticaj (Q) layer membership - same 60 station IDs as the committed baseline, not byte equality.",
     "layer_30": "Temperatura vode (WT) layer membership - 13 stations.",
     "layer_40": "GroundWaterLevel layer; object type 'Stanica podzemnih voda' - a different object type.",
     "layer_50": "GroundWaterTemp layer; object type 'Stanica podzemnih voda' - a different object type.",
@@ -38,15 +40,15 @@ ESTABLISHES = {
         "EPPFlow layer - 40 stations of object type 'General;Hidrološka stanica', the same type as "
         "the surveyed population. Excluded by layer alias, not by object type: see UNRESOLVED.md §7."
     ),
-    "portal_root": "Portal identity: page title names Agencija za vodno području rijeke Save.",
+    "portal_root": "Portal identity: page title names Agencija za vodno područje rijeke Save.",
     "boundary_4060_WT_headeronly": "Response shape: no data rows, parameter and unit still declared.",
-    "boundary_1020_WT_populated": "Response shape: a fully populated workbook, every data row carrying a value.",
-    "boundary_4110_Q_smallest": "Response shape: populated Q workbook; unit m³/s.",
-    "boundary_4110_H_smallest": "Response shape: populated H workbook; unit cm.",
+    "boundary_1020_WT_populated": "Historical summary: populated workbook; full positive body absent from this public file.",
+    "boundary_4110_Q_smallest": "Historical summary: populated Q workbook, unit m³/s; full body absent from this public file.",
+    "boundary_4110_H_smallest": "Historical summary: populated H workbook, unit cm; full body absent from this public file.",
     "absent_4228_H_404": "Response shape: station declared in the H layer, workbook route returns 404.",
     "absent_9025_H_404": "Response shape: station declared in the H layer, workbook route returns 404.",
     "absent_4109_WT_404": "Response shape: WT workbook route returns 404.",
-    "horizon_4024_Q_1M_exists": "Response shape: a one-month workbook period exists.",
+    "horizon_4024_Q_1M_exists": "Historical monthly-example accounting; full positive body absent from this public file.",
     "horizon_4024_Q_5Y_absent": "Response shape: a _5Y filename returns 404 for this station and product.",
     "horizon_directory_listing_403": "Directory listing refused with 403; recorded, not bypassed.",
 }
@@ -66,17 +68,27 @@ def main() -> None:
     lines = [
         "# ba_fhmzbih — evidence index",
         "",
-        "Every preserved response, with its integrity fields and what it establishes.",
+        "Historical survey response accounting, with integrity fields and limits.",
         "",
-        "Two kinds, deliberately separate:",
+        "Public survey records are separate from the governing private baseline corpus:",
         "",
         "- **Response-shape examples** (`recordings/`) illustrate a route or a response shape. An",
         "  example cannot substantiate a different station's result, and none is cited as one.",
-        "- **Per-station-per-product evidence** (`evidence/`) supports exactly one inventory row.",
+        "- **Per-pair survey accounting** (`evidence/`) links one historical inventory row; positive summaries lack bodies.",
         "",
-        "## Response-shape examples",
+        "The governing 180-pair account is [inventory/baseline_workbook_access.json](inventory/baseline_workbook_access.json).",
+        "All 180 governing bodies are retained privately: 132 numerical-positive and 48 empty WT.",
+        "Dates: 3 pairs September 2, 3 September 7, 48 September 9, 126 September 13, 2026.",
+        "All 60 baseline stations / 180 applicable pairs remain selectable after integration;",
+        "48 empty WT pairs have unknown availability, not unsupported products.",
+        "The public ledger is derived accounting, not raw-body proof. Keep the whole controlled",
+        "corpus private and out of distributed artifacts; arrange an authorised handoff if needed.",
+        "The historical 99-station / 297-pair survey does not expand the baseline or certify its",
+        "41 nonbaseline positive summaries. The records below retain their original dates.",
         "",
-        "| Recording | Status | Retrieved (UTC) | Bytes | SHA-256 | Establishes |",
+        "## Response-shape examples and historical summaries",
+        "",
+        "| Recording/account | Status | Retrieved (UTC) | Bytes | SHA-256 | Evidence scope |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
     for path in sorted(RECORDINGS.glob("*.recording.json")):
@@ -113,30 +125,45 @@ def main() -> None:
         "byte size and the SHA-256 **of the full publisher response**.",
         "",
         f"**{retained}** of them retain the complete response bytes — every response that carries no",
-        "observation values does, which covers all four non-measurement categories:",
+        "observation values does: three nonpositive pair categories plus 56 retained horizon refusals.",
         "",
-        "| Status | Rows | Bytes retained |",
+        "| Historical survey status | Pairs | Bytes retained |",
         "| --- | --- | --- |",
         f"| `timestamped_without_measurements` | {counts.get('timestamped_without_measurements', 0)} | full |",
         f"| `no_data_rows` | {counts.get('no_data_rows', 0)} | full |",
         f"| `access_failed` | {counts.get('access_failed', 0)} | full |",
         f"| `measurements_present` | {counts.get('measurements_present', 0)} | header, window and excerpt; see below |",
         "",
-        "For workbooks that do carry observations, the complete bytes are a year of the agency's",
-        "measurements. Issue #223 directs that whole observation histories are not to be downloaded",
-        "merely to prove access, and the source records no redistribution grant, so those files keep the",
-        "full-response digest plus a bounded excerpt: opening rows, and witness rows carrying real",
-        "values. One populated cell establishes the classification, which is what the excerpt preserves.",
-        "The excerpt carries its own separate digest and is never presented as the response digest.",
+        "Historical positive workbooks retain a full-response digest and derived header/window",
+        "summaries. Bounded excerpts hold opening rows and witness rows with `has_value` booleans,",
+        "not actual measurement values. A populated-cell flag does not prove a finite numerical",
+        "value. An excerpt digest authenticates the excerpt only, not the absent source body.",
         "",
-        "**Limitation, stated plainly:** a digest over bytes that are not retained cannot be recomputed",
-        "later. The source serves a rolling window, so a re-fetch returns different bytes. The digest",
-        "fixes what was received at the recorded instant; it is not a re-verification route.",
+        "The original positive bodies were discarded. A later rolling download cannot recover",
+        "them. Governing baseline replacements retain their own actual acquisition dates.",
+        "There is no approved blanket measurement-value ban. Layer JSON contains `L1_ts_value`",
+        "snapshots. No legal classification or redistribution permission is inferred here;",
+        "any needed representative recording publication follows normal review.",
+        "",
+        "## Verification limits",
+        "",
+        "The old 25/25 result accepted a false positive summary despite unchanged blank bytes.",
+        "It is retired as acceptance evidence. Default no-root mode verifies retained public",
+        "survey bytes and correspondence, but cannot prove positives whose bodies are absent.",
+        "Protected source certification requires all 180 governing bodies and explicit paths:",
+        "",
+        "```sh",
+        "uv run python research/station-coverage/ba_fhmzbih/scripts/verify_evidence.py --evidence-root <controlled-ba-directory> --baseline-native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+        "```",
+        "",
+        "Missing required bodies must fail. Public derived accounting alone is not certification.",
+        "See FINDINGS.md §13 for the verification and independent-expectation boundaries.",
         "",
         "## Historical-access attempts",
         "",
         "`evidence/horizon/` holds every attempted period suffix and format variant, with its own",
-        "response preserved and its station and product named. See `inventory/horizon_probe.csv`.",
+        "request/response accounting and its station and product named. Of 64 attempts, 56 refusals retain bodies;",
+        "8 positive attempts retain summaries without bodies. See `inventory/horizon_probe.csv`.",
     ]
 
     (HERE / "EVIDENCE_INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

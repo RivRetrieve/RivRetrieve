@@ -1,4 +1,4 @@
-"""Generate STATION_TABLE.md: one row per station in the published list, with per-product status.
+"""Generate STATION_TABLE.md: historical surveyed station list with reported product status.
 
 This is the readable companion to inventory/station_product_evidence.csv. Every station in the
 surveyed population appears exactly once; no row is omitted or summarised away.
@@ -42,20 +42,29 @@ def main() -> None:
         return label
 
     lines = [
-        "# ba_fhmzbih — station list with established coverage",
+        "# ba_fhmzbih — historical survey station list",
         "",
         "One row per station in the surveyed population. Generated from",
         "`inventory/station_product_evidence.csv` by `scripts/build_station_table.py`; every station",
         "appears, none is omitted.",
         "",
-        "`yes (n)` = the download carried *n* populated measurement cells.",
+        "This is the historical September 9 survey, not the governing baseline acquisition account.",
+        "Positive bodies were discarded; their exact populated-cell totals remain unverified",
+        "summaries. They are not newly certified by the later baseline captures. Nonempty text",
+        "also is not finite-numerical evidence. No expansion to the additional 39 is in scope.",
+        "See [inventory/baseline_workbook_access.json](inventory/baseline_workbook_access.json)",
+        "for the governing 180-pair derived account: 132 numerical-positive and 48 empty WT,",
+        "all selectable after integration. All governing bodies are retained privately.",
+        "Public accounting is not raw-body proof; see FINDINGS.md §13 for source verification.",
+        "",
+        "`yes (n)` = the historical summary reports *n* populated measurement cells.",
         "`blank (n rows, 0 values)` = the download carried *n* timestamped rows with every measurement",
         "cell published empty, **while still declaring the parameter and its unit**. That establishes what",
         "this download contained; it is *not* a statement that the station cannot measure the parameter.",
         "`empty` = no data rows at all, parameter and unit still declared.",
         "`404` = the route serves no workbook; an access failure, never evidence of absence.",
         "",
-        "Counts are populated measurement cells, not the publisher's `#Rows` header. The header counts",
+        "Counts are historical populated-cell summaries, not the publisher's `#Rows` header. The header counts",
         "timestamped rows, including rows whose measurement cell is empty, so it overstates availability.",
         "",
         "**Baseline** marks the 60 stations in the committed `native.parquet` (the publisher's layer-20",
@@ -79,9 +88,9 @@ def main() -> None:
     lines += [
         "",
         f"**{frame.station_no.nunique()} stations · {len(frame)} station × product pairs · "
-        f"{established} series carrying measurements.**",
+        f"{established} historical positive summaries (not source-certified here).**",
         "",
-        "| Product | measurements | timestamped, no values | no data rows | access failed |",
+        "| Product | positive summaries | timestamped, no values | no data rows | access failed |",
         "| --- | --- | --- | --- | --- |",
     ]
     for product in PRODUCTS:
@@ -93,7 +102,9 @@ def main() -> None:
         )
 
     (HERE / "STATION_TABLE.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"wrote STATION_TABLE.md — {frame.station_no.nunique()} stations, {established} series with measurements")
+    print(
+        f"wrote STATION_TABLE.md — {frame.station_no.nunique()} stations, {established} historical positive summaries"
+    )
 
 
 if __name__ == "__main__":

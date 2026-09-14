@@ -14,45 +14,44 @@ modified by this PR.
 | This survey captured | `2026-09-09` |
 | Evidence | 28 response-shape examples + 361 per-pair and per-attempt files |
 | Inventory | 297 rows = 99 stations × 3 products, none omitted |
-| Verification | `scripts/verify_evidence.py` — 25/25 checks pass |
+| Verification | Protected baseline source check; public survey checks have narrower scope (see §13) |
 
 ## 1. Headline
 
-Today the provider exposes **2 stations and 3 series**. This survey establishes **173 series
-carrying measurements across 99 stations**, of which **132 across the committed 60-station
-baseline**.
+At discovery close the provider exposes **2 stations and 3 series**. The approved
+integration destination is **60 baseline stations / 180 selectable series**.
 
-| Population | Q | H | WT | series |
-| --- | --- | --- | --- | --- |
-| Committed baseline (60 stations) | 60 | 60 | 12 | **132** |
-| Additional published stations (39) | 2 | 36 | 3 | **41** |
-| **Total (99 stations)** | **62** | **96** | **15** | **173** |
-| *Currently public* | *1* | *1* | *1* | *3* |
+The governing baseline account is [inventory/baseline_workbook_access.json](inventory/baseline_workbook_access.json).
+All 180 baseline pairs have complete responses retained in the controlled private corpus:
+60 Q and 60 H positive, 12 WT positive, and 48 valid WT workbooks with zero data rows.
+All 60 stations and 180 applicable pairs remain selectable after integration, including
+48 unknown-availability pairs. Positive-only selection is not the approved contract.
+Acquisition dates are mixed: 3 pairs on September 2, 3 on September 7, 48 on September 9,
+and 126 on September 13, 2026. These are not a simultaneous snapshot.
 
-The station-by-station breakdown is in [STATION_TABLE.md](STATION_TABLE.md); the machine-readable
-form is `inventory/station_product_evidence.csv`.
+The public account is derived accounting, not raw-body proof. Source certification must
+read the exact retained bodies. Keep the whole controlled corpus private and out of
+wheels and other distributed artifacts. A different review environment needs an
+authorised controlled handoff, not an automatic new survey.
 
-### Correction to an earlier revision of this survey
+The September 9 survey remains historical context: 99 stations / 297 pairs, with
+173 positive summaries (132 baseline and 41 outside it), 35 blank-only, 82 empty,
+and 7 access failures. Its positive workbook bodies were discarded, so its precise
+positive totals are not source-certified by the public summaries. The later governing
+baseline captures supersede those summaries for baseline delivery, not for the extra 39.
+[STATION_TABLE.md](STATION_TABLE.md) and `inventory/station_product_evidence.csv`
+retain that historical survey, not a new scope or the final acquisition dates.
 
-An earlier revision reported **208** series. It classified a station × product as available
-whenever the workbook header declared `#Rows > 0`. That header counts *timestamped rows*, and 35
-of those pairs are rows whose measurement cell is published empty — timestamps with no values.
-Reading the measurement cells rather than the header removes them.
-
-Two consequences matter more than the headline number:
-
-- **The committed baseline is unaffected.** All 132 baseline series carry real measurements. Every
-  one of the 35 blank-only pairs lies outside the baseline.
-- **The case for extending the population collapses.** The earlier revision argued for adding the
-  39 extra stations because 36 of them had "populated discharge workbooks". In fact **34 of those
-  36 carry no discharge values at all** — only `1030` (HS Orašje) and `4230` (HS Obre) do. See
-  [UNRESOLVED.md](UNRESOLVED.md) §3.
+The earlier 208-positive claim incorrectly used `#Rows`. Thirty-five surveyed pairs
+had timestamped rows but blank measurement cells. The retained blank responses support
+that correction. All 35 are outside the baseline. This does not justify excluding
+unknown availability or expanding the approved population.
 
 ## 2. Why the baseline is 60, and what that omitted
 
-`native.parquet` is byte-for-byte the membership of **layer 20**, the publisher's *Proticaj*
-(discharge) display layer. The port notes confirm the mechanism: "Each request fetches
-`layers/20/index.json` once."
+`native.parquet` has the same station-ID membership as recorded **layer 20**, the publisher's *Proticaj*
+(discharge) display layer. The baseline capture selected that layer. Membership equality does not mean byte equality
+between a Parquet table and a JSON response, or that runtime routing caused the population limit.
 
 The publisher's layer manifest (`layers/index.json`) declares ten layers. RivRetrieve's three
 products correspond to three of them:
@@ -64,14 +63,14 @@ products correspond to three of them:
 | `water_temperature_reported` | 30 | Temperatura vode | 13 |
 
 The union is **99 stations**. Layer 20 is not "the stations that have discharge": 39 stations
-outside it are declared in the stage layer, and two of them do serve discharge measurements.
+outside it are declared in the stage layer, and two have positive discharge summaries in the historical survey.
 
 This survey does not merge those 39 into the baseline. Every inventory row carries `in_baseline`.
-The scope decision belongs to the delivery owner — see [UNRESOLVED.md](UNRESOLVED.md) §3.
+The agreed scope remains the original 60 — see [UNRESOLVED.md](UNRESOLVED.md) §3.
 
 **Object type does not separate this population from the rest of the portal.** Layers 80 and 90
 (`EPPVodostaj`, `EPPProticaj`) carry 81 further stations of the identical object type
-`General;Hidrološka stanica`, 40 of them publishing Q. The criterion that actually selects the 99
+`General;Hidrološka stanica`, 40 of them declared in the Q layer. The criterion that actually selects the 99
 is the publisher's layer alias, not the object type. Recorded in
 [UNRESOLVED.md](UNRESOLVED.md) §7 as an explained exclusion, not a proposal to enable them.
 
@@ -92,7 +91,7 @@ No document object is treated as a missing station without evidence that it is o
 
 ## 4. Population reconciliation against the baseline
 
-All 60 baseline stations were present in the live layer-20 document on 2026-09-09. **Zero
+All 60 baseline stations were present in the retained layer-20 response acquired on 2026-09-07. **Zero
 additions, zero removals** since the 2026-08-02 capture. Station ids are unique with no nulls; one
 is non-numeric (`2101-B`) and must stay a string.
 
@@ -106,8 +105,11 @@ Availability is read from the **measurement cells** of each workbook, taken from
 <c r="B5196" s="5" t="n"><v>1.331</v></c>  a measurement
 ```
 
-A dataframe loader renders both as `NaN`, so it cannot tell a published blank from a decode
-failure. Reading the cell elements keeps that distinction.
+Read cell type and finite numerical content as well as timestamped blanks. A nonempty
+text cell is not numerical evidence. The protected baseline check compared independent
+worksheet XML counts with the pinned production parser; both agree on 1,201,474 numerical
+cells and 1,270 timestamped blanks in 16 positive workbooks. The historical survey reader
+counted populated cells, which alone is not a finite-numeric check.
 
 Four things had to be ruled out, each of which produces a wrong answer:
 
@@ -118,8 +120,9 @@ revision; it was the basis of the earlier 208 figure.
 **HTTP status is not availability.** 290 of 297 pairs returned 200. Populated, blank-only and
 empty workbooks are indistinguishable by status code.
 
-**Layer membership is not availability.** Station `4110` is absent from layer 30, yet its WT
-workbook carried 1,827 populated values in the 2026-09-09 capture. Classifying by layer would have
+**Layer membership is not availability.** Station `4110` is absent from layer 30, yet its governing WT workbook contains
+numerical measurements. The September 9 survey separately reports 1,827 populated cells;
+that older exact total is not certified from its discarded body. Classifying by layer would have
 excluded it.
 
 **Content-Length is not availability.** File size does not separate blank from populated: the
@@ -127,7 +130,7 @@ blank-only `4023` and `4911` workbooks sit at roughly 12 bytes per row, inside t
 populated workbooks. Only 7 pairs carrying measurements are under 10 KB. `Content-Length` is
 retained in the inventory as a recorded observation and is not used to classify.
 
-## 6. The distinction this survey holds
+## 6. Historical survey classifications (not governing baseline totals)
 
 | Status | Rows | Meaning |
 | --- | --- | --- |
@@ -144,16 +147,19 @@ claim about any station; `verify_evidence.py` asserts none is ever claimed.
 
 ## 7. Temporal horizon — what was established, and what was not
 
-**Established.** Two workbook periods serve measurements: `_1M` and `_1Y`. The `_1Y` workbooks
-carry a recent rolling window; across the measurement-carrying downloads captured on 2026-09-09
-the observed span runs **2025-09-10 → 2026-09-09**. Each capture's own observed window is recorded
-per pair in the inventory (`observed_window_start`, `observed_window_end`), tied to that capture's
-acquisition instant.
+**Established.** The configured `_1Y` route serves rolling workbooks. A recorded
+`4024/Q` `_1M` example also exists. This does not establish exactly two possible periods
+or rule out other date parameters. The historical September 9 positive summaries report
+a combined span **2025-09-10 → 2026-09-09**; their discarded bodies do not certify it. The historical inventory reports per-pair
+`observed_window_start` and `observed_window_end`. Use the governing baseline account
+for the actual spans and acquisition instants of the complete private replacements.
 
-**Attempted and refused.** 64 attempts across 4 stations and 3 products
-(`inventory/horizon_probe.csv`, each with its own preserved response in `evidence/horizon/`):
-`_1D`, `_1W`, `_3M`, `_6M`, `_2Y`, `_5Y`, `_10Y`, `_ALL`, `_COMPLETE`, `_HIST` and the `.csv`,
-`.json`, `.zip` variants each returned 404 on every target tried. Directory listing returned 403;
+**Historical attempts.** There were 64 attempts across 4 stations and 3 products:
+56 refusals retain complete response bodies, and 8 positive attempts retain summaries
+without bodies. Each has request/response accounting in `evidence/horizon/` and a row
+in `inventory/horizon_probe.csv`. Among the refused attempts, `_1D`, `_1W`, `_3M`,
+`_6M`, `_2Y`, `_5Y`, `_10Y`, `_ALL`, `_COMPLETE`, `_HIST` and the `.csv`, `.json`
+and `.zip` variants returned 404 on the targets tried. Directory listing returned 403;
 recorded, not bypassed.
 
 **Not established.** That no longer-history access method exists. These attempts establish only
@@ -167,62 +173,61 @@ historical measurements.
 
 ## 8. Units and time semantics
 
-The publisher states units in every workbook header, and they match the committed `config.py`
-exactly: `m³/s` (Q, 97 workbooks), `cm` (H, 97), `°C` (WT, 96).
+The governing baseline workbook headers match station, parameter and configured units:
+`m³/s` (60 Q workbooks), `cm` (60 H), `°C` (60 WT, including the 48 empty workbooks).
 
 `#Timeseries Name` is `81 Web Kontinuirani` at every station and product. It names a timeseries
 without stating statistic, frequency, period type or period anchor — these stay `unknown`.
 Workbook timestamps are naive with no zone marker, so `zone` stays `unknown`. Nothing here is
 inferred; see [UNRESOLVED.md](UNRESOLVED.md) §5.
 
-## 9. Producer
+## 9. Publication and upstream responsibility
 
-The portal is operated by **Agencija za vodno području rijeke Save** — the portal root's title is
-that name, and the host is a subdomain of the agency's own `voda.ba`. The committed `origins.py`
-issuer is therefore correct, and the provider id `ba_fhmzbih` (Federalni hidrometeorološki zavod
-BiH) does not match any publisher evidence found.
+**Agencija za vodno područje rijeke Save (AVP Sava)** is the evidenced issuer of
+the directly acquired station/workbook material. The portal title names that agency.
+Keep the stable public key `ba_fhmzbih`; correct institutional display descriptions and
+provenance, not the provider ID.
 
-Whether that agency *produces* the observations or republishes them is **not established**. The
-`BODY_RESPONSIBLE` field is empty for 59 of the 60 baseline stations, and only 8 stations carry a
-jurisdiction statement (`JP Spreča d.d. Tuzla`). See [UNRESOLVED.md](UNRESOLVED.md) §1 and §2.
+Original measurement production and further upstream responsibility are not established.
+A station-reference responsibility field is not authorship of every observation. No
+new original-producer enquiry is a prerequisite under the approved official-publication
+scope. This issuer evidence does not settle an unestablished dataset-author citation.
+Preserve source terms and citation words verbatim; infer no legal classification or
+redistribution permission.
 
 ## 10. Relation to the withheld facts
 
 The packaged `catalogue/provenance.json` carries **293 withheld fact groups**, every one with reason
 `no_acquisition_record_established`: 58 withheld station identities, 58 withheld observation facts
 and 177 withheld candidate availability facts. Its single source record names issuer *Agencija za
-vodno području rijeke Save* with operator *vodostaji.voda.ba*, which this survey's portal evidence
+vodno područje rijeke Save* with operator *vodostaji.voda.ba*, which this survey's portal evidence
 corroborates.
 
 Those facts were withheld for want of an acquisition record, not because the source denies them.
-This survey supplies recorded acquisitions covering station identity, the retrieval route and
-per-station-per-product availability across the whole published population. Converting them into
-catalogue rows is implementation work and belongs to the delivery owner.
+The complete controlled governing acquisitions now account for all 180 baseline pairs and
+their exact routes. Integration must bind those acquisitions and the official station identity
+evidence through the existing catalogue authority and provenance checks. The historical
+297-pair survey does not certify acquisitions across the whole published population; its
+41 nonbaseline positive summaries remain outside this delivery scope.
 
 ## 11. What evidence is preserved
 
-Every one of the 297 pairs has its own evidence file recording the exact request URL, HTTP status,
-media type, UTC acquisition instant, byte size and the SHA-256 **of the full publisher response**.
-`verify_evidence.py` checks that each file's station, product, URL, instant and digest match the
-inventory row citing it — correspondence, not merely that a cited file exists.
+The historical 297-pair survey has per-pair request, status, media type, acquisition instant,
+body size and digest accounting. Of its 361 evidence files, 180 retain full bodies:
+35 blank-only pairs, 82 empty pairs, 7 access failures and 56 horizon refusals. The
+64 horizon attempts include 8 positive summaries without bodies. These counts are separate
+from the **180 governing baseline responses**, all retained privately.
 
-**No observation values are committed anywhere in this survey.** Workbooks that carry
-measurements keep their request, HTTP status, media type, acquisition instant and full-response
-digest, plus a derived reading (row counts, unit, parameter, observed window) and an excerpt that
-records, per row, only *whether* the publisher's cell carried a value — never the value.
-`verify_evidence.py` fails if any measurement value appears.
+Historical positive excerpts carry `has_value` booleans, not measurement values.
+Neither those booleans nor a digest without the original body can prove a numerical
+classification. A later rolling download does not recover discarded September 9 bytes.
 
-**180 of the 361 evidence files retain the complete response bytes.** That is every response
-carrying no observation values: all 35 blank-only pairs, all 82 empty pairs, all 7 access
-failures, and every historical-access attempt. Establishing that a file is blank requires every
-cell, and there is no observation value in these files to withhold. These are exactly the
-classifications the review disputed, and they are fully checkable offline.
-
-**Limitation, stated plainly.** A digest over bytes that are not retained cannot be recomputed
-later: the source serves a rolling window, so a re-fetch returns different bytes. The digest fixes
-what was received at the recorded instant; it is not a re-verification route. Whether the full
-bytes should be committed is a redistribution decision for the delivery owner —
-[UNRESOLVED.md](UNRESOLVED.md) §8.
+There is no approved project-wide ban on measurement values in research or recordings.
+Layer JSON includes `L1_ts_value` snapshots, so a blanket “no values anywhere” assertion
+was false. Do not extend a research scanner into repository policy or infer a legal
+verdict from absent terms. Genuine recorded-source testing remains required. Publishing
+any needed representative recordings requires normal review; do not automatically
+upload the private corpus or selected files from it.
 
 ## 12. Contents
 
@@ -231,30 +236,44 @@ bytes should be committed is a redistribution decision for the delivery owner �
 | [`FINDINGS.md`](FINDINGS.md) | This document |
 | [`STATION_TABLE.md`](STATION_TABLE.md) | The station list: one row per station with per-product status |
 | [`HANDOFF.md`](HANDOFF.md) | Implementation handoff: routes, fields, units, availability basis, limits |
-| [`UNRESOLVED.md`](UNRESOLVED.md) | Unresolved cases and the decisions required from the delivery owner |
-| [`EVIDENCE_INDEX.md`](EVIDENCE_INDEX.md) | Every preserved response and what it establishes |
-| `inventory/station_product_evidence.csv` | The 297-row inventory |
+| [`UNRESOLVED.md`](UNRESOLVED.md) | Remaining limits and settled decisions |
+| [`EVIDENCE_INDEX.md`](EVIDENCE_INDEX.md) | Retained responses, historical summaries and their limits |
+| `inventory/station_product_evidence.csv` | Historical 297-row survey inventory |
+| `inventory/baseline_workbook_access.json` | Governing 180-pair derived baseline account |
 | `inventory/population_sweep.csv` | Raw sweep output, one row per pair |
 | `inventory/horizon_probe.csv` | Every historical-access attempt |
 | `evidence/` | Per-station-per-product evidence, and the horizon attempts |
 | `recordings/` | 28 response-shape examples, in the repository's existing convention |
 | `scripts/` | Acquisition, composition and verification scripts |
 
-## 13. Checks run
+## 13. Verification boundaries
 
-```
+The old “25/25 checks pass” result was a false assurance: a deliberately false positive
+summary passed despite unchanged blank source bytes. Comparing derived assertions did
+not verify classification. That result is retired, not acceptance evidence.
+
+Public survey check (offline, no controlled root):
+
+```sh
 uv run python research/station-coverage/ba_fhmzbih/scripts/verify_evidence.py
 ```
 
-**25/25 checks pass**, offline. They include the check that would have caught the defect corrected
-in this revision: no pair with timestamped rows and zero populated measurement cells may be
-classified as carrying measurements. Also verified: per-row evidence correspondence (station,
-product, URL, instant, digest); that no evidence file is reused across rows as a stand-in; that
-full bytes are retained for every response carrying no observations; that excerpt digests are never
-presented as response digests; that every measurements-present row preserves a witness value; and
-that every historical-access attempt cites its own response and names its station and product.
+This mode verifies retained public survey bytes and correspondence. It cannot prove
+positive classifications whose private source bodies are absent. It must not report
+baseline source certification from the public ledger alone.
 
-Access etiquette: all requests were unauthenticated GET against public routes at ~4 requests per
-second with a descriptive User-Agent. Observation bytes were read, classified and discarded rather
-than retained. The one refused route (403 directory listing) was recorded and not circumvented. No
-credentials, cookies or tokens were sent or stored.
+Protected baseline source certification (offline):
+
+```sh
+uv run python research/station-coverage/ba_fhmzbih/scripts/verify_evidence.py --evidence-root <controlled-ba-directory> --baseline-native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet
+```
+
+This check requires all 180 governing bodies and checks digest/size, exact pair membership,
+station/parameter/unit identity, metadata routes, worksheet cells and governing accounting.
+A missing required body is a failure. The completed independent audit also checked the
+pinned production parser. Those parser observations are not independently authored new
+boundary expectations. Review verifier execution and accepted research before claiming
+delivery; this documentation does not itself merge research or expand production.
+
+The historical survey used unauthenticated GETs and recorded, rather than bypassed, a
+403 directory refusal. Do not rerun acquisition scripts to repair evidence gaps.

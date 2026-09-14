@@ -1,17 +1,26 @@
-# ba_fhmzbih — station list with established coverage
+# ba_fhmzbih — historical survey station list
 
 One row per station in the surveyed population. Generated from
 `inventory/station_product_evidence.csv` by `scripts/build_station_table.py`; every station
 appears, none is omitted.
 
-`yes (n)` = the download carried *n* populated measurement cells.
+This is the historical September 9 survey, not the governing baseline acquisition account.
+Positive bodies were discarded; their exact populated-cell totals remain unverified
+summaries. They are not newly certified by the later baseline captures. Nonempty text
+also is not finite-numerical evidence. No expansion to the additional 39 is in scope.
+See [inventory/baseline_workbook_access.json](inventory/baseline_workbook_access.json)
+for the governing 180-pair derived account: 132 numerical-positive and 48 empty WT,
+all selectable after integration. All governing bodies are retained privately.
+Public accounting is not raw-body proof; see FINDINGS.md §13 for source verification.
+
+`yes (n)` = the historical summary reports *n* populated measurement cells.
 `blank (n rows, 0 values)` = the download carried *n* timestamped rows with every measurement
 cell published empty, **while still declaring the parameter and its unit**. That establishes what
 this download contained; it is *not* a statement that the station cannot measure the parameter.
 `empty` = no data rows at all, parameter and unit still declared.
 `404` = the route serves no workbook; an access failure, never evidence of absence.
 
-Counts are populated measurement cells, not the publisher's `#Rows` header. The header counts
+Counts are historical populated-cell summaries, not the publisher's `#Rows` header. The header counts
 timestamped rows, including rows whose measurement cell is empty, so it overstates availability.
 
 **Baseline** marks the 60 stations in the committed `native.parquet` (the publisher's layer-20
@@ -120,9 +129,9 @@ membership). The other 39 are published hydrological stations that the layer-20 
 | `9102` | HS Osjek | Bosna | 4 | — | empty | empty | empty |
 | `9130` | HS Tešanjka | Usora | 4 | — | blank (1 rows, 0 values) | **yes** (8,691) | empty |
 
-**99 stations · 297 station × product pairs · 173 series carrying measurements.**
+**99 stations · 297 station × product pairs · 173 historical positive summaries (not source-certified here).**
 
-| Product | measurements | timestamped, no values | no data rows | access failed |
+| Product | positive summaries | timestamped, no values | no data rows | access failed |
 | --- | --- | --- | --- | --- |
 | `discharge_reported` | 62 | 34 | 1 | 2 |
 | `stage_reported` | 96 | 0 | 1 | 2 |

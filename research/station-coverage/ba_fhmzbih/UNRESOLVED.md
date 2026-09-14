@@ -1,14 +1,14 @@
-# ba_fhmzbih — unresolved cases and decisions required
+# ba_fhmzbih — remaining limits and settled decisions
 
-Separated deliberately from the established findings. Each entry states what was attempted, the
-exact remaining question, and whether it needs a scope decision from the delivery owner
-(@CooperBigFoot) or further research.
+The agreed implementation vision settles baseline scope, publication responsibility and
+retention. Nicolas (@CooperBigFoot) owns remaining verification, acceptance and delivery.
+These limits do not reopen a correction-request cycle with Thiago or require new acquisition.
 
 ---
 
-## 1. Producer versus distributor — RESEARCH INCOMPLETE
+## 1. Publication responsibility — SCOPE SETTLED
 
-**Established.** The portal is operated by Agencija za vodno području rijeke Save (AVP Sava): the
+**Established.** The portal is operated by Agencija za vodno područje rijeke Save (AVP Sava): the
 portal root's title is that name, and `vodostaji.voda.ba` is a subdomain of the agency's `voda.ba`.
 
 **Attempted.** The exact-host impressum (`tests/test_data/ba_fhmzbih_terms_absence.html`) names no
@@ -19,27 +19,24 @@ across the full 230 objects it names cantonal ministries (54 Srednjebosanski, 16
 jurisdiction statements: of 96 non-empty descriptions among our hydrological stations, only **8**
 name a responsible body, all `JP Spreča d.d. Tuzla`. The remainder record founding/renovation years.
 
-**Exact remaining question.** For the ~88 hydrological stations with no `BODY_RESPONSIBLE` value and
-no jurisdiction statement, which organisation produces the observations? AVP Sava is established as
-*publisher*; it is not established as *producer*, and this survey does not assert it.
-
-**Needed.** Further research, most likely a direct enquiry to the agency. A reviewer with knowledge
-of the BiH institutional landscape may resolve it faster than further web survey.
-
----
-
-## 2. Provider identifier appears to name the wrong institution — DECISION REQUIRED
-
-The provider id is `ba_fhmzbih`, i.e. Federalni hidrometeorološki zavod BiH. No evidence found in
-this survey ties the data at `vodostaji.voda.ba` to that institute; all publisher evidence points to
-AVP Sava. The committed `origins.py` already records the issuer as AVP Sava, so the identifier and
-the provenance disagree.
-
-**Needed.** A decision from the delivery owner. This survey changes no production identifier.
+**Remaining limit.** Original measurement production and additional upstream responsibility
+are not established. The approved requirement is traceable official publication: AVP Sava
+is the issuer of the directly acquired station/workbook material. No new producer enquiry
+is a prerequisite for baseline expansion. This does not resolve a dataset-author citation
+or authorise inventing an original measurer.
 
 ---
 
-## 3. Population scope: 60 committed versus 99 published — DECISION REQUIRED
+## 2. Provider identity — SETTLED
+
+Keep the stable public key `ba_fhmzbih`. Institutional display descriptions and provenance
+must identify the evidenced AVP Sava issuer. A public provider key is an authored identity,
+not evidence that its historical abbreviation names the publisher. No provider-ID migration
+is in scope.
+
+---
+
+## 3. Population scope: original 60 only — SETTLED
 
 The committed baseline is exactly the layer-20 (discharge) membership. The union of the three
 surface-water layers is 99 stations.
@@ -47,15 +44,15 @@ surface-water layers is 99 stations.
 **An earlier revision of this survey overstated the case for extending.** It reported that 36 of
 the 39 additional stations had populated discharge workbooks. Reading the measurement cells rather
 than the `#Rows` header shows **34 of those 36 carry no discharge values at all** — timestamped
-rows with every measurement cell published empty. Only two additional stations serve discharge
-measurements:
+rows with every measurement cell published empty. Only two additional stations have positive discharge summaries
+in the historical survey (their positive bodies were discarded):
 
 | Station | Name | Populated Q values |
 | --- | --- | --- |
 | `1030` | HS Orašje | 2,161 |
 | `4230` | HS Obre | 8,484 |
 
-What the 39 additional stations actually offer, on the 2026-09-09 capture: **2** discharge series,
+What the historical 2026-09-09 summaries report for the 39 additional stations: **2** discharge series,
 **36** stage series, **3** water-temperature series — 41 series in total, not 76.
 
 Of the 34 blank-only discharge workbooks, 29 belong to stations named `HS …` (hidrološka stanica)
@@ -66,11 +63,10 @@ for these stations and returns timestamps without values on it. Recorded as obse
 This survey **does not** merge them into the baseline. Every inventory row carries `in_baseline`
 so the committed population stays distinguishable.
 
-**Needed.** A decision whether coverage extends to the published hydrological population or stays
-at the captured layer-20 baseline. Issue #223 says not to assume every published object should be
-enabled, and limits coverage to "this existing provider and its captured inventory"; it also says
-the difference must be explained rather than left silent. This entry is that explanation. The
-36 stage series are the substantive gain; the discharge argument is now down to two stations.
+**Settled.** Integration remains the original 60-station baseline and all 180 applicable
+pairs, including 48 selectable unknown WT pairs. The additional 39 stations / 117 pairs
+are historical survey context only. Their 41 positive summaries are not certified by the
+new baseline captures. No population expansion decision is pending for this delivery.
 
 ---
 
@@ -82,45 +78,51 @@ the difference must be explained rather than left silent. This entry is that exp
 - return HTTP 404 for every workbook, including the `H` workbook their layer membership implies.
 
 Recorded as `access_failed` in the inventory, never as "no data". Both are outside the committed
-baseline, so they block nothing. If the scope decision in §3 extends coverage to the published
-population, these two must be excluded with this evidence rather than silently dropped.
+baseline, so they block nothing. They remain dated source access outcomes, not permanent absence or an automatic
+exclusion policy for any future scope.
 
 ---
 
-## 5. Facts the source does not publish — CLOSED AS UNKNOWN
+## 5. Unestablished source semantics — RETAIN UNKNOWN
 
 Reported so they are not mistaken for gaps in the research:
 
 - **Timezone of workbook timestamps.** Cells are naive; no zone statement was found. Stays `unknown`.
 - **Statistic, frequency, period type, period anchor.** `#Timeseries Name` is `81 Web Kontinuirani`
   at every station and product, which names a timeseries without stating any of these.
-- **Published record bounds.** Not published. Station founding years exist in descriptions but are
+- **Published record bounds.** Not established in the reviewed material. Station founding years exist in descriptions but are
   not record bounds and were not used as such.
 - **Horizontal CRS.** Unchanged from the committed position: the station document publishes no
   horizontal-CRS token.
 
 ---
 
-## 6. Longer history: is any other access method available? — RESEARCH INCOMPLETE
+## 6. Longer-history method — UNESTABLISHED, NOT A DELIVERY BLOCKER
 
 **Reopened.** An earlier revision closed this as "CLOSED WITH EVIDENCE", stating that data older
 than one year is not retrievable through this route at all. The preserved evidence does not carry
 that conclusion.
 
-**What is established.** `_1M` and `_1Y` workbooks serve measurements. Across 64 attempts on 4
-stations and 3 products, the period suffixes `_1D`, `_1W`, `_3M`, `_6M`, `_2Y`, `_5Y`, `_10Y`,
-`_ALL`, `_COMPLETE`, `_HIST` and the `.csv`, `.json` and `.zip` variants each returned 404, and
-directory listing returned 403. Every attempt has its own preserved response in `evidence/horizon/`
-and names the station, product and request it concerns (`inventory/horizon_probe.csv`).
+**What is established.** The configured `_1Y` rolling route and a recorded `4024/Q`
+`_1M` example serve measurements. This is not an exhaustive list of periods or parameters.
+
+**Historical attempts.** There were 64 attempts across 4 stations and 3 products:
+56 refusals retain complete response bodies, and 8 positive attempts retain summaries
+without bodies. Each has request/response accounting in `evidence/horizon/` and a row
+in `inventory/horizon_probe.csv`. Among the refused attempts, `_1D`, `_1W`, `_3M`,
+`_6M`, `_2Y`, `_5Y`, `_10Y`, `_ALL`, `_COMPLETE`, `_HIST` and the `.csv`, `.json`
+and `.zip` variants returned 404 on the targets tried. Directory listing returned 403;
+recorded, not bypassed.
 
 **What is not established.** That no longer-history access method exists. A 404 for a guessed
 filename establishes that this filename is not served at this route — not that the publisher
 offers no archive by any other means. No archive discovery was attempted, and issue #223 does not
 ask for one.
 
-**Needed.** Either acceptance that the adapter's configured route is limited to a recent rolling
-window, with longer history left as an open question, or a decision to research publisher archive
-access directly (likely an enquiry to the agency, as in §1).
+**Settled.** Keep configured rolling-year access and the monthly example distinct from
+an archive. Longer-history methods remain unestablished, and no further archive survey
+is required for this outcome. Ordinary future requested windows are not restricted to
+the research windows.
 
 **Must not be inferred.** An older requested window returning no measurements through this rolling
 download is a limit of this route. It is never evidence that a station lacks historical
@@ -132,8 +134,8 @@ measurements.
 
 The publisher's layers 80 (`EPPVodostaj`) and 90 (`EPPProticaj`) carry 81 stations in the `7xxx`
 range, all under site `7000`, all of object type `General;Hidrološka stanica` — the same object
-type as the 99 surveyed — with the same `81 Web Kontinuirani` timeseries name. 40 of them publish
-Q and 81 publish H.
+type as the 99 surveyed — with the same `81 Web Kontinuirani` timeseries name. 40 appear in the Q layer and 81 in the H layer; layer membership is not workbook
+availability evidence.
 
 They are excluded from the surveyed population, and the honest statement of why is that they sit
 outside the three layers RivRetrieve's products map to. **Object type does not separate them**, so
@@ -151,33 +153,38 @@ explained rather than assumed to be missing stations. This entry is that explana
 
 ---
 
-## 8. Retention of workbook bytes — YOUR ACCEPTANCE REQUIRED
+## 8. Governing body retention — COMPLETE PRIVATELY; PUBLICATION REVIEW REMAINS
 
-Every response carrying **no** observation values is committed in full: all 35 blank-only pairs,
-all 82 empty pairs, all 7 access failures, all 64 historical-access attempts (180 files). Those
-are the disputed classifications, and establishing that a file is blank requires every cell.
+The governing baseline account is [inventory/baseline_workbook_access.json](inventory/baseline_workbook_access.json).
+All 180 baseline pairs have complete responses retained in the controlled private corpus:
+60 Q and 60 H positive, 12 WT positive, and 48 valid WT workbooks with zero data rows.
+All 60 stations and 180 applicable pairs remain selectable after integration, including
+48 unknown-availability pairs. Positive-only selection is not the approved contract.
+Acquisition dates are mixed: 3 pairs on September 2, 3 on September 7, 48 on September 9,
+and 126 on September 13, 2026. These are not a simultaneous snapshot.
 
-Workbooks that carry measurements are **not** committed. They keep the exact request, HTTP status,
-media type, acquisition instant, byte size and full-response SHA-256, plus a derived reading and a
-per-row record of whether each cell carried a value. No measurement value is stored anywhere;
-`verify_evidence.py` fails if one appears.
+The public account is derived accounting, not raw-body proof. Source certification must
+read the exact retained bodies. Keep the whole controlled corpus private and out of
+wheels and other distributed artifacts. A different review environment needs an
+authorised controlled handoff, not an automatic new survey.
 
-**This does not meet your bullet literally.** You asked to "retain the exact non-secret request,
-response bytes, HTTP status, media type, actual acquisition time and digest". Everything in that
-list is retained except **response bytes, for the 173 workbooks that carry measurements**.
+The historical survey discarded positive workbook bodies, and `has_value` excerpts are
+only derived assertions. Acceptance of those excerpts as a substitute is not pending:
+complete governing baseline responses now replace that insufficient basis, with their
+actual mixed dates. They do not recover discarded September 9 bytes or certify the
+nonbaseline positive summaries.
 
-Your own next sentence — that the correction "does not require downloading complete histories" —
-suggests this is what you meant, and #223 says the same ("do not download whole observation
-histories merely to prove access"). The source also records `"license": None`
-(`generate_catalogue.py:403`) and no redistribution grant. But none of that is you saying the gap
-is closed, so it stays open here.
+Public accounting can identify acquisitions by route, date, digest, size and derived
+counts without publishing the bodies. It does not itself recalculate numerical cells.
+Use the protected verifier command in [FINDINGS.md](FINDINGS.md) §13. Fail when a
+required governing body is unavailable; arrange an authorised controlled handoff.
 
-**Needed.** Your explicit acceptance that request + HTTP status + media type + acquisition instant
-+ full-response digest + a per-row populated/empty record is sufficient evidence for a workbook
-that carries measurements. If it is not sufficient, say what would be — noting that committing the
-observations themselves is not available to us: this project does not redistribute source data.
+Keep the whole verification corpus private. Publishing accepted derived accounting,
+source documentation and any required genuine representative test recordings follows
+normal review. There is no blanket no-values policy, legal classification or inferred
+redistribution permission. Layer recordings contain measurement snapshots. Preserve
+source terms and citation words verbatim and leave unestablished citation fields absent.
 
-**Consequence, stated plainly.** A digest over bytes that are not retained cannot be recomputed
-later: the source serves a rolling window, so a re-fetch returns different bytes. The digest fixes
-what was received at the recorded instant. Re-running `sweep_population.py` reproduces the
-classification, not the original bytes.
+Remaining gates are reviewed publication, controlled portability where needed, authorised
+recorded-test inputs, independent source-derived boundary expectations, and accepted/merged
+research and implementation. Public-only checks or an open PR do not complete delivery.

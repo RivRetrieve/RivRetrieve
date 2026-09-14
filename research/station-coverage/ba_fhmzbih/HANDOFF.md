@@ -1,8 +1,22 @@
 # ba_fhmzbih implementation handoff
 
-For the implementing agent. Everything below is established by a recording in `recordings/`
-unless it appears under "Not established". Nothing here is inferred from how identifiers look.
-Per-station-per-product results are evidenced in `evidence/`, one file per pair.
+For the implementing agent. Use complete governing baseline source responses, not
+historical survey summaries, to certify workbook access. Response-shape examples in
+`recordings/` cannot prove another station’s result. Nothing is inferred from identifiers.
+
+The governing baseline account is [inventory/baseline_workbook_access.json](inventory/baseline_workbook_access.json).
+All 180 baseline pairs have complete responses retained in the controlled private corpus:
+60 Q and 60 H positive, 12 WT positive, and 48 valid WT workbooks with zero data rows.
+All 60 stations and 180 applicable pairs remain selectable after integration, including
+48 unknown-availability pairs. Positive-only selection is not the approved contract.
+Acquisition dates are mixed: 3 pairs on September 2, 3 on September 7, 48 on September 9,
+and 126 on September 13, 2026. These are not a simultaneous snapshot.
+
+The public account is derived accounting, not raw-body proof. Source certification must
+read the exact retained bodies. Keep the whole controlled corpus private and out of
+wheels and other distributed artifacts. A different review environment needs an
+authorised controlled handoff, not an automatic new survey.
+
 
 Baseline commit: `67796ab8d793867aaaaf9c6fb55bec208adaeab8` · native table captured `2026-08-02T12:42:03Z`
 · this survey captured `2026-09-09`.
@@ -32,7 +46,7 @@ documents. One station id is non-numeric (`2101-B`), so station ids must stay st
 
 **Population.** The committed baseline of 60 is exactly the layer-20 membership. The union of
 layers 10/20/30 is **99** hydrological stations. See `FINDINGS.md` §2 for the reconciliation and
-the scope decision this raises.
+the settled original-60 scope. No expansion to the other 39 or EPP objects is included.
 
 ## 2. Retrieval route
 
@@ -47,23 +61,27 @@ https://vodostaji.voda.ba/data/internet/stations/{site_no}/{station_no}/{code}/{
 | `water_temperature_reported` | `WT` | `Tvode_1Y.xlsx` |
 
 `site_no` must be resolved from a layer document, never derived from the station id. The current
-adapter resolves it from `layers/20/index.json` only; that is the mechanism that clipped the
-catalogue to 60 stations (see `FINDINGS.md` §2).
+adapter resolves it from `layers/20/index.json`. The historical baseline capture selected
+that layer; runtime routing did not cause the population limit. All baseline route groups
+were checked against the retained September 7 layer-20 response. `2101-B` routes to site
+`3`; preserve its string identity. Do not rewrite the existing exact-route fetch logic
+to solve the catalogue’s sample-only acquisition bindings.
 
 ## 2a. Request shape, pagination and access requirements
 
-**Access requirements: none.** Every route surveyed is public and unauthenticated. No API key,
-token, cookie or session is involved, and none was sent. There is nothing to preflight.
+**Observed access.** The surveyed requests succeeded without authentication where the
+route was served. No API key, token, cookie or session was sent. Do not interpret that
+access observation as a legal permission or a guarantee about future source behaviour.
 
-**Pagination: none.** Layer documents are unpaginated JSON arrays returned whole (layer 10 is the
+**Observed pagination: none.** Layer documents are unpaginated JSON arrays returned whole (layer 10 is the
 largest at 99 objects / 106 KB). The layer manifest is a single object. Workbooks are single-sheet
 XLSX files returned whole. No `Link` header, cursor, offset or page parameter appears on any route.
 
-**Request windows: none.** The workbook route accepts no date parameters of any kind — the period is
-fixed in the filename (`_1M` / `_1Y`). This is why the provider declares source-fixed windows and
-why the engine renders no window for these calls. The tested windows are therefore exactly the two
-the publisher offers; there is no window to vary. Clipping to the user's requested range happens
-after parsing, as it does today.
+**Configured request windows.** The adapter uses source-fixed rolling-year workbook
+filenames and the engine renders no date arguments for these calls. A recorded `4024/Q`
+monthly example also exists. This does not establish that the publisher accepts no other
+date parameters or offers exactly two possible periods. Clipping to the user’s requested
+window happens after parsing. Preserve ordinary requested-window behaviour.
 
 **Distinct response shapes recorded:** unpaginated JSON array (layer documents), JSON object (layer
 manifest), XLSX with a populated body, XLSX with a header block and zero data rows, HTTP 404 for an
@@ -97,12 +115,16 @@ value child:
 <c r="B5196" s="5" t="n"><v>1.331</v></c>  a measurement
 ```
 
-A dataframe loader renders both as `NaN`, so it cannot distinguish a published blank from a decode
-failure. `scripts/workbook_evidence.py:read_workbook` is the reference implementation.
+Check finite numerical content and cell type, not merely nonempty text. The historical
+survey reader counted populated cells; that alone cannot certify numerical availability.
+The protected baseline verification compares source XML and governing counts. Independent
+XML and the pinned production parser agreed on 1,201,474 numerical cells and 1,270
+timestamped blanks in 16 positive workbooks. Do not promote these observed parser outputs
+into independently authored new boundary expectations.
 
 | Status | Meaning |
 | --- | --- |
-| `measurements_present` | at least one populated measurement cell in the download |
+| `measurements_present` | governing baseline: at least one finite numerical measurement |
 | `timestamped_without_measurements` | timestamped rows, every measurement cell published empty |
 | `no_data_rows` | no data rows at all; parameter and unit still declared |
 | `access_failed` | the route served no workbook (HTTP 404) |
@@ -112,25 +134,26 @@ what this download contained. It is **not** a statement that the station cannot 
 parameter, and must not be recorded as one.
 
 HTTP status carries no availability signal: populated, blank-only and empty workbooks all return
-200. Only genuinely absent routes return 404.
+200. A recorded 404 is a dated access failure, not proof of permanent absence.
 
 ## 5. Temporal horizon
 
-**Established.** Two workbook periods serve measurements:
+**Established.** Keep configured `Q_1Y.xlsx`, `H_1Y.xlsx` and `Tvode_1Y.xlsx`
+rolling-year access. `horizon_4024_Q_1M_exists.recording.json` identifies a known monthly
+example, not a historical archive or an exhaustive list of periods.
 
-- `*_1M.xlsx` — a recent one-month window
-- `*_1Y.xlsx` — a recent one-year window; across the 2026-09-09 capture the observed span runs
-  2025-09-10 → 2026-09-09
+Each governing capture’s actual observed span and acquisition instant are recorded in
+[inventory/baseline_workbook_access.json](inventory/baseline_workbook_access.json).
+Do not substitute the September 9 survey’s older reported span for these mixed-date
+captures. Rolling windows can change on later requests.
 
-Each pair's own observed window is recorded in the inventory as `observed_window_start` /
-`observed_window_end`, tied to that capture's acquisition instant. Treat these as *recent rolling
-windows*: the span moves with the capture date, and a later fetch returns a later window.
-
-**Attempted and refused.** 64 attempts across 4 stations and 3 products, each with its own
-preserved response under `evidence/horizon/` and recorded in `inventory/horizon_probe.csv`:
-`_1D`, `_1W`, `_3M`, `_6M`, `_2Y`, `_5Y`, `_10Y`, `_ALL`, `_COMPLETE`, `_HIST` and the `.csv`,
-`.json` and `.zip` variants each returned 404 on every target tried. Directory listing returned
-403; recorded, not bypassed.
+**Historical attempts.** There were 64 attempts across 4 stations and 3 products:
+56 refusals retain complete response bodies, and 8 positive attempts retain summaries
+without bodies. Each has request/response accounting in `evidence/horizon/` and a row
+in `inventory/horizon_probe.csv`. Among the refused attempts, `_1D`, `_1W`, `_3M`,
+`_6M`, `_2Y`, `_5Y`, `_10Y`, `_ALL`, `_COMPLETE`, `_HIST` and the `.csv`, `.json`
+and `.zip` variants returned 404 on the targets tried. Directory listing returned 403;
+recorded, not bypassed.
 
 **Not established.** That no longer-history access method exists. The attempts above establish only
 that these filename variants are not served at this route on the stations tried. Whether the
@@ -155,23 +178,30 @@ statistic, frequency, period type or period anchor. Those remain `unknown`.
 Station descriptions in the station document give founding and renovation years (e.g. "Stanica
 osnovana 1963. godine"). These are **not** published record bounds and must not be used as such.
 
-## 7. Producer
+## 7. Publication responsibility
 
-Established: the portal is operated by **Agencija za vodno područje rijeke Save**
-(`recordings/portal_root.recording.json` — the page title; the host is a subdomain of the agency's
-own `voda.ba`). The committed `origins.py` issuer is therefore correct.
+**Agencija za vodno područje rijeke Save (AVP Sava)** is the evidenced issuer of the
+directly acquired station/workbook material (`recordings/portal_root.recording.json`
+identifies the portal). Keep the public key `ba_fhmzbih`; correct institutional display
+and provenance descriptions without a provider-ID migration.
 
-Not established: whether that agency *produces* the observations or republishes them. See
-`UNRESOLVED.md` §1 — this is a question for the delivery owner, not something to infer.
+Original measurers and further upstream responsibility remain unestablished, not a new
+producer-enquiry prerequisite. Issuer evidence does not settle an absent dataset-author
+citation. Preserve source terms and citation words verbatim; infer no legal verdict.
+
+Keep responsibilities in the existing provider catalogue authority/generation and
+fetch/parse boundaries. Source-workbook evidence reading and station-product acquisition
+accounting are stable domain responsibilities, not ticket-named product architecture.
 
 ## 8. Things that must not be done
 
 - **Do not treat the `#Rows` header as a measurement count.** It counts timestamped rows. 35 of the
   297 surveyed pairs declare rows > 0 with every measurement cell published empty. Read the cells.
-- **Do not read measurement cells through a dataframe loader alone.** A published blank and a decode
-  failure both surface as `NaN`; only the cell element distinguishes them.
+- **Do not classify from nonempty text or a derived `has_value` flag.** Check actual
+  numerical cells and preserve timestamped blanks as a distinct source fact.
 - Do not treat layer membership as availability. Station `4110` is absent from layer 30 yet its WT
-  workbook carried 1,827 populated values on the 2026-09-09 capture.
+  governing workbook has numerical measurements; the older September 9 exact summary
+  is not source-certified from its discarded body.
 - Do not treat HTTP 200 as availability. 290 of 297 pairs returned 200, across three different
   classifications.
 - Do not treat file size as availability. Blank-only and populated workbooks overlap in bytes per row.
@@ -182,3 +212,18 @@ Not established: whether that agency *produces* the observations or republishes 
   lacks historical data.** It is a limit of this rolling route.
 - Do not state that longer history cannot be retrieved by any means. That was not established.
 - Do not infer a timezone, statistic, frequency, or record bound from anything in this survey.
+
+## 9. Offline verification and publication boundary
+
+The old 25/25 verifier result accepted a false positive summary over unchanged blank
+bytes and is retired as acceptance evidence. Public no-root mode checks retained survey
+bytes but cannot prove private positives. Use this explicit protected source check:
+
+```sh
+uv run python research/station-coverage/ba_fhmzbih/scripts/verify_evidence.py --evidence-root <controlled-ba-directory> --baseline-native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet
+```
+
+Missing required source bodies must fail. The whole corpus stays private. Public derived
+accounting is not raw-body proof. Review any required genuine representative recording
+publication separately; retain existing source-recording and independent-expectation
+requirements. No blanket measurement-value ban is approved. Do not reacquire the survey.

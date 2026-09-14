@@ -10,11 +10,12 @@ A dataframe loader renders both as NaN, so it cannot distinguish a published bla
 decode failure. Reading the cell elements keeps that distinction, which is the whole point of
 the classification below.
 
-No observation values are committed anywhere in this survey. Responses that carry measurements
-keep their request, status, media type, acquisition instant and full-response digest, plus a
-derived reading; their bytes are not retained. Responses that carry no measurements - blank-only
-workbooks, empty workbooks and failed requests - are retained whole, because establishing that a
-file is blank requires every cell and no observation value exists in them to redistribute.
+Historical survey helper, not the governing source verifier. It discarded populated workbook
+bodies and retained only derived occupancy summaries. That incomplete retention is recorded
+here as past behaviour, not an approved measurement-value ban or legal conclusion. The layer
+recordings also contain measurement snapshots. Governing baseline bodies are now complete in
+the controlled private corpus and verify_evidence.py checks them with an explicit evidence root.
+Do not rerun the historical survey to reproduce discarded rolling responses.
 """
 
 from __future__ import annotations
@@ -248,12 +249,11 @@ def write_evidence(
     else:
         document["evidence_kind"] = "response_digest"
         document["retention"] = (
-            "full response bytes not retained: this workbook holds a year of the publisher's "
-            "observations. Issue #223 forbids downloading whole observation histories to prove "
-            "access, and the source records no redistribution grant. The digest above is over "
-            "the exact response; the excerpt below is derived and carries its own separate "
-            "digest. The source is a rolling window, so the response digest will not reproduce "
-            "on a later fetch."
+            "historical incomplete retention: populated workbook bytes were discarded. "
+            "The digest identifies the exact response but cannot certify its content without "
+            "those bytes. The occupancy excerpt is derived, not source-body proof. This is "
+            "not a project-wide retention policy or a legal conclusion. A later rolling "
+            "response cannot recover the discarded bytes."
         )
     if reading is not None:
         excerpt = {
