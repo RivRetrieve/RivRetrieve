@@ -1,0 +1,28 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
+    "parameters": {
+      "code_entite": "Y251002001",
+      "grandeur_hydro": "H",
+      "date_debut_obs": "2026-08-08T00:00:00Z",
+      "size": "1"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 400,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-08T11:50:49.252431Z",
+    "response_bytes": 173,
+    "sha256": "be2c2f997e3ef0788eff4cf6dbf2e0071a786447169356a6f25b14efeb369083",
+    "body_retained": true,
+    "content_base64": "eyJjb2RlIjoiSW52YWxpZFJlcXVlc3QiLCJtZXNzYWdlIjoiSW52YWxpZCBzaXRlcyByZXF1ZXN0IiwiZmllbGRfZXJyb3JzIjpbeyJjb2RlIjoiVmFsaWRhdGVEYXRlTWluIiwibWVzc2FnZSI6ImRhdGUgY2FuJ3QgYmUgPCAxIG1vbnRoIGZyb20gbm93IiwiZmllbGQiOiJkYXRlX2RlYnV0X29icyJ9XX0=",
+    "reading": {
+      "parse": "hubeau_error",
+      "code": "InvalidRequest",
+      "message": "Invalid sites request"
+    }
+  }
+}

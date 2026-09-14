@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr",
+    "parameters": {
+      "code_entite": "Y251002001",
+      "grandeur_hydro": "Q",
+      "size": "2"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 206,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-08T08:50:20.517619Z",
+    "response_bytes": 1396,
+    "sha256": "2d9f0d6421cbda091896a77bd4924b803162c3a4712256a696242602fde1e100",
+    "body_retained": false,
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 5174,
+      "rows": 2,
+      "row_fields": [
+        "code_continuite",
+        "code_methode_obs",
+        "code_qualification_obs",
+        "code_site",
+        "code_station",
+        "code_statut",
+        "code_systeme_alti_serie",
+        "date_debut_serie",
+        "date_fin_serie",
+        "date_obs",
+        "grandeur_hydro",
+        "latitude",
+        "libelle_continuite",
+        "libelle_methode_obs",
+        "libelle_qualification_obs",
+        "libelle_statut",
+        "longitude",
+        "resultat_obs"
+      ],
+      "returned_code_station": [
+        "Y251002001"
+      ],
+      "returned_code_site": [
+        "Y2510020"
+      ],
+      "date_obs_min": "2026-09-08T08:35:00Z",
+      "date_obs_max": "2026-09-08T08:40:00Z"
+    }
+  }
+}

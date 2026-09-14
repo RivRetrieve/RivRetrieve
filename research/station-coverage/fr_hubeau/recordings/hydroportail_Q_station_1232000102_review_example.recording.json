@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hydro.eaufrance.fr/stationhydro/ajax/1232000102/series",
+    "parameters": {
+      "hydro_series[startAt]": "01/06/2026",
+      "hydro_series[endAt]": "08/06/2026",
+      "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
+      "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "Q",
+      "hydro_series[statusData]": "raw"
+    },
+    "body": null,
+    "sent_url": "https://hydro.eaufrance.fr/stationhydro/ajax/1232000102/series?hydro_series%5BstartAt%5D=01%2F06%2F2026&hydro_series%5BendAt%5D=08%2F06%2F2026&hydro_series%5BvariableType%5D=simple_and_interpolated_and_hourly_variable&hydro_series%5BsimpleAndInterpolatedAndHourlyVariable%5D=Q&hydro_series%5BstatusData%5D=raw"
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-11T13:38:52.698286Z",
+    "response_bytes": 775,
+    "sha256": "56acc9b8e49ea2fd81cea1983c6f7ef59b3cc4eb79d762aab6d7b22c114155ab",
+    "body_retained": true,
+    "content_base64": "ewogICAgICAgICJyYW5nZSI6IFsiMjAyNlx1MDAyRDA2XHUwMDJEMDFUMDBcdTAwM0EwMFx1MDAzQTAwWiIsICIyMDI2XHUwMDJEMDZcdTAwMkQwOFQyM1x1MDAzQTU5XHUwMDNBNTlaIl0sCiAgICAidGltZXpvbmUiOiAiVVRDIiwKICAgICJ1bml0SCI6ICJtIiwKICAgICJ1bml0USI6ICJtMyIsCiAgICAidW5pdFJSIjogIm1tIiwKICAgICAgICAic2VyaWVzIjp7CiAgICAgICAgImNvZGUiOiIxMjMyMDAwMTAyIiwKICAgICAgICAibWV0cmljIjoiUSIsCiAgICAgICAgInRpbWVTdGVwIjpudWxsLAogICAgICAgICJzdGF0dXNlcyI6InJhdyIsCiAgICAgICAgInJvbGxpbmciOmZhbHNlLAogICAgICAgICJ1bml0IjogImwiLAogICAgICAgICJ0aXRsZSI6IkRcdTAwZTliaXQgaW5zdGFudGFuXHUwMGU5IC0gRG9ublx1MDBlOWVzIGJydXRlcyBkZSBsJ2VudGl0XHUwMGU5IC0gMTIzMiAwMDAxIDAyIC0gTGEgcml2aVx1MDBlOHJlIGRlIFBldGl0ZS1QbGFpbmUgXHUwMGUwIFBvaW50ZS1Ob2lyZSAtIDIgLSBkdSAwMVwvMDZcLzIwMjYgMDA6MDAgYXUgMDhcLzA2XC8yMDI2IDIzOjU5IChUVSkiLAogICAgICAgICJiYXNlRmlsZW5hbWUiOiAiMTIzMjAwMDEwMl9RIiwKICAgICAgICAiZGF0YSI6IFsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBdCiAgICB9LAogICAgImV2ZW50cyI6IFtdLAogICAgInRvbm5hZ2VzIjogW10sCiAgICAiY29ycmVjdGlvbkN1cnZlcyI6IFtdLAogICAgInRocmVzaG9sZHMiOiBbXSwKICAgICJzdGF0aXN0aWNzIjoge319Cg==",
+    "reading": {
+      "parse": "hydroportail_series",
+      "series_code": "1232000102",
+      "series_metric": "Q",
+      "series_title": "Débit instantané - Données brutes de l'entité - 1232 0001 02 - La rivière de Petite-Plaine à Pointe-Noire - 2 - du 01/06/2026 00:00 au 08/06/2026 23:59 (TU)",
+      "range": [
+        "2026-06-01T00:00:00Z",
+        "2026-06-08T23:59:59Z"
+      ],
+      "timezone": "UTC",
+      "points": 0,
+      "point_fields": [],
+      "first_t": null,
+      "last_t": null,
+      "statistics_state": "empty"
+    }
+  }
+}

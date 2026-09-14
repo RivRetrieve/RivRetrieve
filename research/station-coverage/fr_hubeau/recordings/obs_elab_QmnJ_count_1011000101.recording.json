@@ -1,0 +1,35 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+    "parameters": {
+      "code_entite": "1011000101",
+      "grandeur_hydro_elab": "QmnJ",
+      "size": "1",
+      "fields": "code_station"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 206,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-09T08:24:38.764990Z",
+    "response_bytes": 482,
+    "sha256": "866cf58c834f8ce6d54c48956d86c6cbfa72b41002abe4999db1502074897cb5",
+    "body_retained": true,
+    "content_base64": "eyJjb3VudCI6NDA3OSwiZmlyc3QiOiJodHRwczovL2h1YmVhdS5lYXVmcmFuY2UuZnIvYXBpL3YyL2h5ZHJvbWV0cmllL29ic19lbGFiP2NvZGVfZW50aXRlPTEwMTEwMDAxMDEmZ3JhbmRldXJfaHlkcm9fZWxhYj1RbW5KJmZpZWxkcz1jb2RlX3N0YXRpb24mY3Vyc29yPSZzaXplPTEiLCJwcmV2IjpudWxsLCJuZXh0IjoiaHR0cHM6Ly9odWJlYXUuZWF1ZnJhbmNlLmZyL2FwaS92Mi9oeWRyb21ldHJpZS9vYnNfZWxhYj9jb2RlX2VudGl0ZT0xMDExMDAwMTAxJmdyYW5kZXVyX2h5ZHJvX2VsYWI9UW1uSiZmaWVsZHM9Y29kZV9zdGF0aW9uJmN1cnNvcj1Bb1FrVVcxdVNpb3hNREV4TURBd01UQXhjSUNMMnZtN0FqOE5VVzF1U2kweE1ERXhNREF3TVMweE1ERXhNREF3TVRBeExUSXdNVE10TURFdE1ERlVNREE2TURBNk1EQSUzRCZzaXplPTEiLCJhcGlfdmVyc2lvbiI6IjIuMC4xIiwiZGF0YSI6W3siY29kZV9zdGF0aW9uIjoiMTAxMTAwMDEwMSJ9XX0=",
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 4079,
+      "rows": 1,
+      "row_fields": [
+        "code_station"
+      ],
+      "returned_code_station": [
+        "1011000101"
+      ],
+      "returned_code_site": []
+    }
+  }
+}

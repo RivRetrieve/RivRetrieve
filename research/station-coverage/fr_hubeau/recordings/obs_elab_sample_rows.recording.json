@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+    "parameters": {
+      "code_entite": "1011000101",
+      "grandeur_hydro_elab": "QmnJ",
+      "date_debut_obs_elab": "2026-08-01",
+      "date_fin_obs_elab": "2026-08-05",
+      "size": "20"
+    },
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-09T08:24:40.105184Z",
+    "response_bytes": 2177,
+    "sha256": "7651b43384b6fc1b4c95f8188b0f09f098c86b58f5fb2f86c3bab07d5f296f43",
+    "body_retained": false,
+    "reading": {
+      "parse": "hubeau_page",
+      "count": 5,
+      "rows": 5,
+      "row_fields": [
+        "code_methode",
+        "code_qualification",
+        "code_site",
+        "code_station",
+        "code_statut",
+        "date_obs_elab",
+        "date_prod",
+        "grandeur_hydro_elab",
+        "latitude",
+        "libelle_methode",
+        "libelle_qualification",
+        "libelle_statut",
+        "longitude",
+        "resultat_obs_elab"
+      ],
+      "returned_code_station": [
+        "1011000101"
+      ],
+      "returned_code_site": [
+        "10110001"
+      ],
+      "date_obs_elab_min": "2026-08-01",
+      "date_obs_elab_max": "2026-08-05"
+    }
+  }
+}
