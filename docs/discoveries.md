@@ -225,3 +225,102 @@ Closeout status for prior notes:
 - D5 remains a post-V1 public-surface hygiene candidate. `test_deferred_public_names_remain_absent_after_provider_handle_promotion` and `test_provider_handle_protocol_declares_exactly_seven_public_methods` still guard accidental public expansion.
 - D6 remains resolved by keeping provider implementation packages under `rivretrieve._internal.providers`.
 - D7 and D9 did not fire during M4/M5 map work. Keep them as provider-code review probes when future provider parsing or Pydantic extras work actually triggers them, not as permanent architecture lenses.
+
+## D11 — A source may cap a requested window silently; the provider must declare it, not absorb it
+
+**Found during:** `th_thaiwater` station-coverage research (issue #224).
+
+**The fact:** ThaiWater's `waterlevel_graph` route silently shortens long requests. Day counts here
+are **inclusive calendar dates** (both endpoints counted; elapsed days = dates − 1). For station
+`1373273` with `end_date=2026-09-06` (recorded 2026-09-07,
+`research/station-coverage/th_thaiwater/inventory/window_limit_readings.csv`):
+
+| Requested | Dates | Returned | Dates |
+| --- | --- | --- | --- |
+| 2026-08-31 .. 2026-09-06 | 7 | as requested | 7 |
+| 2026-06-08 .. 2026-09-06 | 91 | as requested | 91 |
+| 2025-09-08 .. 2026-09-06 | 364 | as requested | 364 |
+| 2025-09-07 .. 2026-09-06 | 365 | as requested | 365 |
+| 2025-09-06 .. 2026-09-06 | 366 | as requested | 366 |
+| 2025-06-06 .. 2026-09-06 | 458 | 2025-09-06 .. 2026-09-06 | 366 |
+| 2023-09-06 .. 2026-09-06 | 1,097 | 2025-09-06 .. 2026-09-06 | 366 |
+
+The shortening is **silent**: HTTP 200 and `result: "OK"` do not identify the shortfall.
+The historical comparison demonstrates that 366 inclusive dates ending 2026-09-06
+were honoured. This is not a measured general maximum. Its endpoints cannot
+distinguish subtraction of 365 elapsed days from subtraction of one calendar year.
+
+### Public bounds are not source bounds
+
+The earlier public request `rr.fetch(..., start="2023-01-01", end="2026-09-06")`
+contains 1,345 inclusive user dates. The engine adds two days at each end **before**
+planning source requests, then clips returned rows to the user's requested window.
+For the unsplit declaration used by that capture:
+
+- User request: `2023-01-01 .. 2026-09-06`.
+- Source request: `2022-12-30 .. 2026-09-08` (1,349 inclusive dates).
+- Preserved source response: `2025-09-08 .. 2026-09-08` (366 dates,
+  52,704 ten-minute grid entries).
+- Final clip: `2025-09-08 .. 2026-09-06` (364 dates,
+  52,416 ten-minute grid entries per product, including nulls).
+
+The earlier direct probes ended at source date **2026-09-06**, not **2026-09-08**.
+They therefore did not send the same end date as the public path. The retained
+September 13 capture of the effective public source request explains the two-day
+shift through padding and final clipping. The earlier public summary did not retain
+its outgoing request; this later capture is not a recovery of those earlier bytes.
+The prior inference of an unstable source floor is withdrawn. No general anchor rule
+or exact maximum follows from these examples.
+
+### Conservative source-request size
+
+Retained bounded captures for station `1373273` directly honour both of these
+**365-inclusive-source-date** requests:
+
+| Requested | Dates | Returned | Dates |
+| --- | --- | --- | --- |
+| 2025-09-09 .. 2026-09-08 | 365 | as requested | 365 |
+| 2023-03-03 .. 2024-03-01 | 365 | as requested | 365 |
+
+Each response contains 52,560 ten-minute grid entries. The second contains 29 February
+and is a complete null grid for both products. It proves the span was honoured, not
+that historical measurements exist. These captures support a conservative working
+size of 365 inclusive source dates, not an exact maximum or a universal leap-year rule.
+
+The controlled review evidence is retained privately under
+`th_thaiwater/bounded-window-captures/` in the Effort #225 evidence corpus.
+Each named capture has `.receipt.json`, `.reading.json` and `.body` companions:
+
+| Capture | Acquired (UTC, 2026-09-13) | Body bytes | Body SHA-256 |
+| --- | --- | --- | --- |
+| `normal365` | 17:57:07.244961 | 4,336,225 | `aa1738c851b47d382de5adb9557fa8af91317d530f1e2b5bb1cac29c916d401b` |
+| `leap365` | 17:57:09.771255 | 4,152,372 | `538b2afa9cc22e0f67190985efbf4589461c24632f637f07e16d57039843b0e7` |
+| `effective_public_long` | 17:57:12.554373 | 4,347,594 | `f06aa9b49f393610d3aea847e694ef2a28436165f370210bc400f8b6761dc936` |
+
+These identifiers locate review inputs, not public downloads. Bodies remain private;
+arithmetic tests do not replace verification of the retained source responses.
+See [Effort #225](https://github.com/RivRetrieve/RivRetrieve/issues/225#issuecomment-5655285384)
+for the completed verification account.
+
+### Application
+
+[ADR 0017](adr/0017-the-engine-owns-every-window-arithmetic.md) assigns all padding
+and splitting to the engine. Its existing `capped-span` planner accepts a `size` in
+inclusive source dates. Thailand's unsplit `WindowGranularity("date")` declaration
+at research time was a declaration gap, not a missing planner.
+
+1. Declare `WindowGranularity("capped-span")`, DATE rendering, inclusive stop and
+   `size=365` for both ThaiWater products. This documents the required correction;
+   this research change does not implement the production declaration.
+2. Pad the user interval first, then plan each source sub-window with its own start
+   and end. The provider consumes those bounds unchanged. Backwards traversal is
+   not required. A 365-date user request spans 369 source dates after padding and
+   can require multiple requests. Do not introduce a public 361-date restriction.
+3. Keep the tested working size distinct from the source's unknown exact maximum.
+   The retained normal and leap-containing captures already support this choice;
+   a repeated floor survey is not a prerequisite. For other sources, record exact
+   tested source bounds and limitations rather than assuming unlimited access.
+4. Verify the actual public fetch and cache reuse/refresh paths, not only planner
+   arithmetic. Silent shortening can otherwise cause accumulated-cache coverage
+   to claim a requested interval whose earlier source dates were discarded.
+   A successful null grid is source records, not proof of unsupported products.
