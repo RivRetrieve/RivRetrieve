@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/1/1020/WT/Tvode_1Y.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrieved_at": "2026-09-07T08:46:43.731904Z",
+    "byte_size": 95020,
+    "response_sha256": "b39b0b0981851ea6ca4d06444222c1ef3a56e4370fff3fc364dee535e586a57e"
+  },
+  "evidence_kind": "response_digest",
+  "retention": "full response bytes NOT retained: this workbook carries the publisher's observations (7251 measurement values). No observation values are committed. The digest is over the exact response.",
+  "reading": {
+    "declared_rows": 7251,
+    "data_rows": 7251,
+    "populated_measurements": 7251,
+    "declared_unit": "°C",
+    "observed_window_start": "2025-09-07 00:00:00",
+    "observed_window_end": "2026-09-06 12:00:00"
+  }
+}

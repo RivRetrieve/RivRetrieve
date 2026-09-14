@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "evidence_kind": "response_recording",
+  "station_no": "1020",
+  "product_code": "WT",
+  "attempted_variant": "directory_listing",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/1/1020/WT/",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 403,
+    "content_type": "text/html; charset=iso-8859-1",
+    "retrieved_at": "2026-09-09T15:51:15.314510Z",
+    "byte_size": 235,
+    "response_sha256": "d30cbbe76441dd2ace499ed0036201af2be9aa5562ca3b6346ed178d29100541",
+    "content_base64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT40MDMgRm9yYmlkZGVuPC90aXRsZT4KPC9oZWFkPjxib2R5Pgo8aDE+Rm9yYmlkZGVuPC9oMT4KPHA+WW91IGRvbid0IGhhdmUgcGVybWlzc2lvbiB0byBhY2Nlc3MgL2RhdGEvaW50ZXJuZXQvc3RhdGlvbnMvMS8xMDIwL1dULwpvbiB0aGlzIHNlcnZlci48L3A+CjwvYm9keT48L2h0bWw+Cg=="
+  },
+  "retention": "full response bytes retained; this response carries no observation values"
+}

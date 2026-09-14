@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/4024/Q/Q_1M.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "retrieved_at": "2026-09-07T09:06:43.931116Z",
+    "byte_size": 13307,
+    "response_sha256": "aaa542c9f38e8ddfd2fd1f16ab74b0ee0733cbb48dea19f4b3b1c7d50ad1cf86"
+  },
+  "evidence_kind": "response_digest",
+  "retention": "full response bytes NOT retained: this workbook carries the publisher's observations (657 measurement values). No observation values are committed. The digest is over the exact response.",
+  "reading": {
+    "declared_rows": 657,
+    "data_rows": 657,
+    "populated_measurements": 657,
+    "declared_unit": "m³/s",
+    "observed_window_start": "2026-08-08 00:00:00",
+    "observed_window_end": "2026-09-07 00:00:00"
+  }
+}

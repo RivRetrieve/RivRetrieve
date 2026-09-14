@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "evidence_kind": "response_recording",
+  "station_no": "4110",
+  "product_code": "H",
+  "attempted_variant": "H_ALL.xlsx",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/4/4110/H/H_ALL.xlsx",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 404,
+    "content_type": "text/html; charset=iso-8859-1",
+    "retrieved_at": "2026-09-09T15:51:06.935815Z",
+    "byte_size": 240,
+    "response_sha256": "34a51cf2cff37a07fbec5d5b5a222f5c5a0be53d732d3881fa4967065382b1bb",
+    "content_base64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT40MDQgTm90IEZvdW5kPC90aXRsZT4KPC9oZWFkPjxib2R5Pgo8aDE+Tm90IEZvdW5kPC9oMT4KPHA+VGhlIHJlcXVlc3RlZCBVUkwgL2RhdGEvaW50ZXJuZXQvc3RhdGlvbnMvNC80MTEwL0gvSF9BTEwueGxzeCB3YXMgbm90IGZvdW5kIG9uIHRoaXMgc2VydmVyLjwvcD4KPC9ib2R5PjwvaHRtbD4K"
+  },
+  "retention": "full response bytes retained; this response carries no observation values"
+}

@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "evidence_kind": "response_recording",
+  "station_no": "1020",
+  "product_code": "WT",
+  "attempted_variant": "Tvode_1Y.json",
+  "request": {
+    "method": "GET",
+    "url": "https://vodostaji.voda.ba/data/internet/stations/1/1020/WT/Tvode_1Y.json",
+    "parameters": null,
+    "body": null
+  },
+  "response": {
+    "status_code": 404,
+    "content_type": "text/html; charset=iso-8859-1",
+    "retrieved_at": "2026-09-09T15:51:14.553329Z",
+    "byte_size": 244,
+    "response_sha256": "99f76b0f0e7d59840f2ee8a7688dd07c6c666e6badd10b154bf0435378213070",
+    "content_base64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT40MDQgTm90IEZvdW5kPC90aXRsZT4KPC9oZWFkPjxib2R5Pgo8aDE+Tm90IEZvdW5kPC9oMT4KPHA+VGhlIHJlcXVlc3RlZCBVUkwgL2RhdGEvaW50ZXJuZXQvc3RhdGlvbnMvMS8xMDIwL1dUL1R2b2RlXzFZLmpzb24gd2FzIG5vdCBmb3VuZCBvbiB0aGlzIHNlcnZlci48L3A+CjwvYm9keT48L2h0bWw+Cg=="
+  },
+  "retention": "full response bytes retained; this response carries no observation values"
+}
