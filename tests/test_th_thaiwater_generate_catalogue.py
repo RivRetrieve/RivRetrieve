@@ -19,8 +19,8 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.engine import UnknownTemporalSupport, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
-from rivretrieve._internal.providers.th_thaiwater.availability_evidence import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.config import config
+from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
 
 FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"

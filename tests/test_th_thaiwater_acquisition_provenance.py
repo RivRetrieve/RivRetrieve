@@ -16,8 +16,8 @@ from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_ar
 from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
-from rivretrieve._internal.providers.th_thaiwater.availability_evidence import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.declaration import declaration
+from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisition_provenance
 
 LEDGER_PATH = (

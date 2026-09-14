@@ -1,6 +1,9 @@
 """ThaiWater provenance : NativeTable × GraphAvailabilityEvidence → AcquisitionProvenance (pure)."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from rivretrieve._internal import catalogue_origins
 from rivretrieve._internal.acquisition_provenance import (
@@ -19,7 +22,9 @@ from rivretrieve._internal.acquisition_provenance import (
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.th_thaiwater.availability_evidence import GraphAvailabilityEvidence
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 
 CRS_EVIDENCE_URL = "https://standard.thaiwater.net/docs/การจัดทำมาตรฐานน้ำ-ระยะ/ข้อมูลอ้างอิง-ข้อมูลอ้า/การระบุพิกัดตำแหน่ง/"
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
