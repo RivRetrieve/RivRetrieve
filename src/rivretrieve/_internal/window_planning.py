@@ -169,6 +169,35 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
     return tuple(windows)
 
 
+def _plan_fixed_backward_span(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
+    """Cover fetch dates by disjoint, fixed-size inclusive spans ending at the final fetch date.
+
+    Each rendered span contains exactly ``size`` whole calendar days. Only the earliest
+    span may extend outward, by fewer than ``size`` days before the fetch start date.
+    Stops are ``size`` days apart; chronological output never overlaps. The provider
+    can use each stop as a backward-range anchor without computing or clipping dates.
+    """
+    _require(
+        declaration,
+        declaration.size is not None
+        and declaration.rendering is WindowRenderingVocabulary.DATE
+        and declaration.stop_convention is StopConvention.INCLUSIVE,
+        "a positive size, date rendering and an inclusive stop",
+    )
+    size = declaration.size
+    assert size is not None
+    first = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
+    stop = _datetime_from_endpoint(fetch_window, "end").replace(hour=0, minute=0, second=0, microsecond=0)
+    windows = []
+    while stop >= first:
+        start = stop - timedelta(days=size - 1)
+        windows.append(RenderedWindow(start.date().isoformat(), stop.date().isoformat()))
+        if start <= first:
+            break
+        stop = start - timedelta(days=1)
+    return tuple(reversed(windows))
+
+
 def _plan_none(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
     _require(
         declaration,
@@ -185,6 +214,7 @@ _GRANULARITY_PLANNERS: dict[str, _Planner] = {
     "year-month": _plan_year_month,
     "n-year-chunk": _plan_n_year_chunk,
     "capped-span": _plan_capped_span,
+    "fixed-backward-span": _plan_fixed_backward_span,
     "none": _plan_none,
 }
 

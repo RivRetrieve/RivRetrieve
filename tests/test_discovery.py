@@ -42,7 +42,7 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_reported",
         "water_temperature_reported",
     ],
-    "br_ana": [],
+    "br_ana": ["discharge_instantaneous", "stage_instantaneous"],
     "ca_eccc": [
         "discharge_daily_mean",
         "stage_daily_mean",

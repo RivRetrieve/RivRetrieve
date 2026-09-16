@@ -43,8 +43,34 @@ CONTRIBUTORS = {
 }
 
 
+MAINTAINER_ROLES = {"generate_catalogue.py", "capture.py", "inventory.py"}
+
+
 def _runtime_provider_files() -> list[Path]:
-    return sorted(path for path in PROVIDERS_ROOT.glob("*/*.py") if path.name != "generate_catalogue.py")
+    return sorted(path for path in PROVIDERS_ROOT.glob("*/*.py") if path.name not in MAINTAINER_ROLES)
+
+
+def test_runtime_declarations_transitively_do_not_import_maintainer_roles() -> None:
+    for provider in BUILTIN_PROVIDER_IDS:
+        prefix = f"rivretrieve._internal.providers.{provider}."
+        pending = ["declaration"]
+        seen: set[str] = set()
+        while pending:
+            module = pending.pop()
+            if module in seen:
+                continue
+            seen.add(module)
+            assert f"{module}.py" not in MAINTAINER_ROLES
+            path = PROVIDERS_ROOT / provider / f"{module}.py"
+            if not path.is_file():
+                continue
+            for node in ast.walk(_tree(path)):
+                names = []
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    names.append(node.module)
+                elif isinstance(node, ast.Import):
+                    names.extend(alias.name for alias in node.names)
+                pending.extend(name.removeprefix(prefix) for name in names if name.startswith(prefix))
 
 
 def _tree(path: Path) -> ast.Module:
@@ -306,7 +332,7 @@ def test_observation_adapter_module_docstrings_preserve_contributor_attribution(
 def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
     model_names = {
         node.name
-        for path in PROVIDERS_ROOT.glob("*/*.py")
+        for path in _runtime_provider_files()
         for node in _tree(path).body
         if isinstance(node, ast.ClassDef)
         and any(isinstance(base, ast.Name) and base.id == "BaseModel" for base in node.bases)

@@ -95,12 +95,13 @@ def test_undeclared_fact_is_not_guessed():
         resolve_evidence(evidence, FactSelection(names=("station.latitude-guess",)))
 
 
-def test_brazil_withheld_product_fact_resolves_without_invented_acquisition():
+def test_brazil_adopted_product_fact_resolves_to_documented_source_material():
     evidence, _, _ = _inputs("br_ana")
     resolved = resolve_evidence(evidence, FactSelection(names=("product.product_id",)))
     nodes = _nodes(resolved["@graph"])
-    assert nodes[0]["rr:absence"] == {"kind": "withheld", "reason": "no_acquisition_record_established"}
-    assert not any(node["@id"].startswith("acquisition/") for node in nodes)
+    assert not any("rr:absence" in node for node in nodes)
+    assert any(node["@id"].startswith("acquisition/") for node in nodes)
+    assert "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3" in str(nodes)
 
 
 def test_source_terms_are_once_and_explicitly_linked_from_every_selected_acquisition():

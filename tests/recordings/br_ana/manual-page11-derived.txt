@@ -1,0 +1,42 @@
+9 
+ 
+ANEXO I - Exemplo de Consultas Manuais em Alguns dos 
+Métodos Disponíveis no Serviço. 
+Consultando a rota HidroinfoanaSerieTelemetricaAdotada 
+A seguir é apresentado um exemplo de realização de uma consulta as séries de 
+dados das estações telemétricas, que transmitem em tempo quase-real. 
+Selecionar /EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1 
+e clicar no botão “Try it out”. 
+ 
+ 
+Segue o resultado da consulta. Em amarelo é mostrado o significado dos campos. 
+{ 
+  "status": "OK", 
+  "code": 200, 
+  "message": "Sucesso", 
+  "items": [ 
+    { 
+      "Chuva_Adotada": "0.00",  [Precipitação (mm)] 
+      "Chuva_Adotada_Status": "0", [Precipitação QC (0 = ok, 1 = suspeito, 2 = ruim)] 
+      "Cota_Adotada": "781.00", [Cota (cm)] 
+      "Cota_Adotada_Status": "0", [Cota QC (0 = ok, 1 = suspeito, 2 = ruim)] 
+      "Data_Atualizacao": "2024-01-02 00:28:03.307",    [DataHora da atualização do dado na base] 
+      "Data_Hora_Medicao": "2024-01-01 23:00:00.0",   [DataHora da medição/coleta do dado] 
+      "Vazao_Adotada": "13225.42", [Vazão (m3/s)] 
+      "Vazao_Adotada_Status": "0", [Vazão QC (0 = ok, 1 = suspeito, 2 = ruim] 
+      "codigoestacao": "15400000" [Código da Estação] 
+    }, 
+    { 
+      "Chuva_Adotada": "0.00", 
+      "Chuva_Adotada_Status": "0", 
+      "Cota_Adotada": "781.00", 
+      "Cota_Adotada_Status": "0", 
+      "Data_Atualizacao": "2024-01-02 00:28:03.317", 
+      "Data_Hora_Medicao": "2024-01-01 23:15:00.0", 
+      "Vazao_Adotada": "13225.42", 
+      "Vazao_Adotada_Status": "0", 
+      "codigoestacao": "15400000" 
+    }, 
+ 
+  ] 
+} 

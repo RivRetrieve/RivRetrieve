@@ -30,6 +30,8 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.br_ana.capture import AdoptedTelemetryEvidence
+from rivretrieve._internal.providers.br_ana.config import BrAnaSourceCoordinates, config
 
 PROVIDER_ID = ProviderId("br_ana")
 PROVIDER_NAME = "ANA Hidroweb — Brazilian National Water and Sanitation Agency"
@@ -74,10 +76,65 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
         raise FatalContractError("br_ana native station identity or coordinates are invalid") from exc
 
 
+def build_products() -> ProductCatalog:
+    """Documented adopted source fields → canonical instantaneous products."""
+    rows = []
+    for product, definition in config().products.items():
+        coordinates = definition.coordinates.value
+        assert isinstance(coordinates, BrAnaSourceCoordinates)
+        stage = coordinates.field == "Cota_Adotada"
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "product_id": product,
+                "observed_property": "stage" if stage else "discharge",
+                "frequency": "irregular",
+                "statistic": "instantaneous",
+                "period_type": "instant",
+                "period_anchor": "instant",
+                "unit": "m" if stage else "m3/s",
+                "native_id": f"HidroinfoanaSerieTelemetricaAdotada/v1:{coordinates.field}",
+            }
+        )
+    return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
+
+
+def build_station_products(native: NativeTable, telemetry: AdoptedTelemetryEvidence) -> StationProductCatalog:
+    """Fluviometric inventory candidates × observed evidence → truthful availability rows."""
+    rows = []
+    for station, retrieved_at in native.data.select("codigoestacao", "retrieved_at").iter_rows():
+        if not isinstance(station, str) or not isinstance(retrieved_at, datetime):
+            raise FatalContractError("ANA station-product candidate identity or acquisition time is invalid")
+        for product in config().products:
+            observed = (station, product) in telemetry.available_pairs
+            rows.append(
+                {
+                    "provider_id": PROVIDER_ID,
+                    "station_id": station,
+                    "product_id": product,
+                    "availability": "available" if observed else "unknown",
+                    "availability_reason": (
+                        "Non-null adopted measurements present in the retained source request; this establishes neither continuous nor complete record"
+                        if observed
+                        else "Fluviometrica inventory candidate; inventory membership does not establish adopted-endpoint product availability; per-station endpoint evidence is not acquired"
+                    ),
+                    "published_record_start_date": None,
+                    "published_record_end_date": None,
+                    "last_catalogue_check": max(retrieved_at, telemetry.observations.retrieved_at).date()
+                    if observed
+                    else retrieved_at.date(),
+                }
+            )
+    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).sort("station_id", "product_id")
+
+
 def build_catalogue(
-    native_table: NativeTable, origins: OriginDeclarations, provenance: AcquisitionProvenance
+    native_table: NativeTable,
+    origins: OriginDeclarations,
+    provenance: AcquisitionProvenance,
+    telemetry: AdoptedTelemetryEvidence | None = None,
 ) -> GeneratedBrAnaCatalogue:
-    """Build only evidenced station identity and geometry; product semantics remain withheld."""
+    """Build attested identity and geometry, plus adopted products where their evidence is supplied."""
     projected = project_stations(native_table)
     stations = build_stations(native_table)
     enforce_catalogue_origins(PROVIDER_ID, origins, projected, stations)
@@ -91,13 +148,20 @@ def build_catalogue(
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": "false: catalogue-only; observation product semantics remain withheld",
+        "bulk_observations": (
+            "false: authenticated adopted telemetry; conventional daily and temperature unsupported pending source semantics"
+            if telemetry is not None
+            else "false: catalogue-only; observation product semantics remain withheld"
+        ),
         "catalogue_version": maximum.date().isoformat(),
         "license": terms.get("license"),
         "citation": terms.get("citation"),
     }
     products = pl.DataFrame(schema=PRODUCT_CATALOG_SCHEMA.polars_schema)
     station_products = pl.DataFrame(schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+    if telemetry is not None:
+        products = build_products()
+        station_products = build_station_products(projected, telemetry)
     for frame, schema in (
         (
             pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
@@ -208,7 +272,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_byte_size=capture.native_table.byte_size,
     )
     verify_native_identity(capture, args.native.read_bytes(), native)
-    catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, build_acquisition_provenance(capture))
+    from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence
+    from rivretrieve._internal.providers.br_ana.origins import with_adopted_telemetry
+    from rivretrieve._internal.recordings import read_recording
+
+    evidence_root = args.repository_root / "tests/recordings/br_ana"
+    recording_path = evidence_root / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
+    telemetry = parse_adopted_telemetry_evidence(
+        (evidence_root / "manual-page11-acquisition.json").read_bytes(),
+        (evidence_root / "manual-page11-derived.txt").read_bytes(),
+        read_recording(recording_path),
+        str(recording_path.relative_to(args.repository_root)),
+    )
+    provenance = with_adopted_telemetry(
+        build_acquisition_provenance(capture), capture, project_stations(native).data, telemetry
+    )
+    catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry)
     write_catalogue(catalogue, args.out)
     return 0
 

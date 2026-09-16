@@ -1,11 +1,13 @@
-"""ANA inventory attestation : InventoryCapture × RecordedInteractions → NativeTable (offline)."""
+"""ANA capture authority : InventoryCapture × RecordedInteractions → NativeTable; DocumentaryMaterial × RecordingEnvelope → AdoptedTelemetryEvidence (offline)."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import lzma
+import math
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -13,10 +15,17 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from rivretrieve._internal.acquisition_provenance import NativeTableIdentity
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionRecord,
+    MaterialIdentity,
+    NativeTableIdentity,
+    RecordingReference,
+)
 from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.recordings import RecordingEnvelope, read_recording
+from rivretrieve._internal.transport import HttpMethod
 
 
 class CapturedInventoryResponse(BaseModel):
@@ -219,3 +228,106 @@ def materialize_captured_native_table(capture: InventoryCapture, repository_root
             target.write_bytes(lzma.decompress(encoded))
             recordings.append(read_recording(target))
     return verify_materialization(capture, tuple(recordings))
+
+
+@dataclass(frozen=True, slots=True)
+class AdoptedTelemetryEvidence:
+    """Verified documentation material and nonnull per-product source observations."""
+
+    documentation: AcquisitionRecord
+    observations: RecordingReference
+    available_pairs: frozenset[tuple[str, ProductId]]
+
+
+def parse_adopted_telemetry_evidence(
+    documentation_metadata: bytes,
+    derived_excerpt: bytes,
+    recording: RecordingEnvelope,
+    recording_repository_path: str,
+) -> AdoptedTelemetryEvidence:
+    """Source materials → documented adopted units and bounded observed availability (pure)."""
+    from rivretrieve._internal.providers.br_ana.config import BrAnaSourceCoordinates, config
+
+    metadata = json.loads(documentation_metadata)
+    material = metadata["publisher_material"]
+    excerpt = metadata["derived_excerpt"]
+    url = material["requested_url"]
+    if (
+        material["method"] != "GET"
+        or material["status_code"] != 200
+        or material["content_type"] != "application/pdf"
+        or material["credential_header_names"] != []
+        or material["transport_response_url"] != url
+        or not url.startswith("https://www.gov.br/ana/")
+        or hashlib.sha256(derived_excerpt).hexdigest() != excerpt["sha256"]
+        or len(derived_excerpt) != excerpt["bytes"]
+    ):
+        raise FatalContractError("ANA manual material or derived excerpt identity is invalid")
+    text = derived_excerpt.decode("utf-8")
+    if not all(
+        term in text
+        for term in ("Cota_Adotada", "Cota (cm)", "Vazao_Adotada", "Vazão (m3/s)", "DataHora da medição/coleta do dado")
+    ):
+        raise FatalContractError("ANA manual excerpt lacks adopted units or measurement-time documentation")
+    documentation = AcquisitionRecord(
+        acquisition_id="adopted_telemetry_manual",
+        method="http_request",
+        instant_type="retrieval",
+        description=(
+            "Official ANA manual PDF acquired without credentials, original bytes not retained. "
+            f"Safe derived page11 text SHA256 {excerpt['sha256']}, {excerpt['bytes']} bytes. "
+            f"Transformation {excerpt['transformation']!r}. Derived text is not original response bytes. "
+            "PDF page11 documents Cota_Adotada cm, Vazao_Adotada m3/s and measurement/collection timestamp."
+        ),
+        requested_from=(url,),
+        retrieved_at_start=datetime.fromisoformat(material["retrieved_at"]),
+        material=MaterialIdentity(
+            filename=url.rsplit("/", 1)[-1], byte_count=material["bytes"], sha256=material["sha256"]
+        ),
+    )
+    request = recording.request
+    parameters = request.parameters
+    if (
+        request.url
+        != "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
+        or recording.content_type is None
+        or request.method != HttpMethod.GET
+        or request.body is not None
+        or recording.status_code != 200
+        or parameters is None
+        or parameters.get("Tipo Filtro Data") != "DATA_LEITURA"
+        or set(parameters)
+        != {"Código da Estação", "Tipo Filtro Data", "Data de Busca (yyyy-MM-dd)", "Range Intervalo de busca"}
+        or parameters["Range Intervalo de busca"] != "DIAS_30"
+    ):
+        raise FatalContractError("ANA adopted availability requires an exact successful measurement-time recording")
+    station = str(parameters["Código da Estação"])
+    document = json.loads(recording.content)
+    if (
+        document["status"] != "OK"
+        or type(document["code"]) is not int
+        or document["code"] != 200
+        or not isinstance(document["items"], list)
+    ):
+        raise FatalContractError("ANA adopted availability recording has an invalid source envelope")
+    pairs = set()
+    for row in document["items"]:
+        if row["codigoestacao"] != station:
+            raise FatalContractError("ANA adopted availability recording contains another station")
+        for product, definition in config().products.items():
+            coordinates = definition.coordinates.value
+            assert isinstance(coordinates, BrAnaSourceCoordinates)
+            value = row[coordinates.field]
+            if value is not None:
+                if not isinstance(value, str) or not math.isfinite(float(value)):
+                    raise FatalContractError("ANA adopted availability value must be a finite numeric string or null")
+                pairs.add((station, product))
+    reference = RecordingReference(
+        recording_id="ana_adopted_telemetry_measurements",
+        repository_path=recording_repository_path,
+        source_url=request.url,
+        retrieved_at=recording.retrieved_at,
+        media_type=recording.content_type,
+        sha256=recording.sha256,
+    )
+    return AdoptedTelemetryEvidence(documentation, reference, frozenset(pairs))

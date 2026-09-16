@@ -25,6 +25,7 @@ from rivretrieve._internal.acquisition_provenance import (
     SourceStatement,
     WithheldFact,
     _validate_requested_location,
+    absence_marker_accepts_fact,
 )
 
 EVIDENCE_FILENAMES = {
@@ -553,20 +554,17 @@ _AUTHORED = {
         "native_id",
     )
 }
-_MARKERS = {
-    AbsenceMarkerValue.NULL: {"provider.license", "provider.citation"},
-    AbsenceMarkerValue.UNKNOWN: {"station.crs"},
-}
 
 
 def _validate_transformation(t: TransformationDeclaration, facts: list[str], withheld: bool) -> None:
     if t.kind == "authored_constant" and not set(facts) <= _AUTHORED:
         raise ValueError("authored-constant transformations may produce only explicit canonical code-defined outputs")
     if withheld and (
-        t.kind != "absence_marker" or not set(facts) <= {"provider.license", "provider.citation", "station.crs"}
+        t.kind != "absence_marker"
+        or not all(any(absence_marker_accepts_fact(marker, fact) for marker in AbsenceMarkerValue) for fact in facts)
     ):
         raise ValueError("withheld external inputs may only produce absence markers")
-    if t.kind == "absence_marker" and (t.marker_value is None or not set(facts) <= _MARKERS[t.marker_value]):
+    if t.kind == "absence_marker" and not all(absence_marker_accepts_fact(t.marker_value, fact) for fact in facts):
         raise ValueError("absence-marker value is incompatible with its output facts")
 
 

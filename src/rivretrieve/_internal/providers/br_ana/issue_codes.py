@@ -5,6 +5,7 @@ from enum import StrEnum
 
 class BrAnaObservationIssueCodes(StrEnum):
     MISSING_DATA = "missing_data"
+    SOURCE_STATUS = "source_status"
     PARTIAL_RESPONSE = "partial_response"
     SOURCE_REQUEST_FAILED = "source_request_failed"
     DATE_ONLY_TIMESTAMP = "date_only_timestamp"

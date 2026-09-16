@@ -4,11 +4,44 @@ Related issue: [#213](https://github.com/RivRetrieve/RivRetrieve/issues/213).
 
 ## Delivered boundary
 
-This is inventory certification, not Brazil end-to-end observation delivery. The declaration
-remains `CatalogueOnly`. Products and station-product relationships are withheld pending
-source semantics and observation-stage certification. Inventory presence, type flags,
-operating dates, and one empty observation response do not establish availability.
-The former five candidate products are not published by this build.
+The certified inventory now supports authenticated adopted telemetry through the normal
+public API: `discharge_instantaneous` and `stage_instantaneous`. The declaration is
+`LiveStages`, using the shared ANA credential exchange. Conventional daily products and
+water temperature remain unsupported pending source metadata and consistency-level
+semantics. The full Brazil vision is not complete. Legacy reference code remains retained.
+
+Every certified Fluviometrica station is a candidate for both supported products. Its
+availability is `unknown` unless nonnull adopted measurements were actually recorded for
+that station/product. Station `15400000` has this bounded observed evidence. Unknown
+candidates remain selectable, not silently excluded by telemetry flags or empty periods.
+Inventory membership does not establish adopted-endpoint product availability. No probed
+window or operating period becomes a published record bound. Source flags remain native
+and uninterpreted; there are no inferred `unavailable` relationships.
+
+Request access from `telemetria@ana.gov.br`. ANA's identifier is not the account email.
+Copy `.env.example` to your own working-directory `.env` and fill `ANA_IDENTIFICADOR`
+and `ANA_SENHA`, or set process variables (which take precedence). Credentials stay at the
+public composition root and never enter recordings, receipts or provenance. Documentation:
+https://www.ana.gov.br/hidrowebservice/swagger-ui.html#/ . Password reset:
+https://www.snirh.gov.br/hidrotelemetria/Login2.aspx .
+
+```python
+import rivretrieve as rr
+selection = rr.find(provider="br_ana", station="15400000", product="discharge_instantaneous")
+result = rr.fetch(selection, start="2024-01-01 23:30", end="2024-01-02 00:30", receipts=True)
+```
+
+Times are native naive measurement timestamps with `time_zone="unknown"`. No geographic
+offset is inferred. Adopted source statuses are informational source words, never canonical
+quality classes. Null adopted values stay null; undocumented numeric sentinel meanings are
+not invented. Shared conversion handles stage cm to m and discharge m3/s unchanged.
+
+The endpoint's fixed backward DIAS_30 source ranges are declared to the shared engine.
+The engine covers padded dates with disjoint30-day spans anchored at the final fetch date,
+expands the earliest source span by less than30 days when needed, and clips once to the
+closed requested wall-clock window. Provider code does no date arithmetic or deduplication.
+See `tests/recordings/br_ana/` for exact observation recordings, independently authored
+midnight expectations, the actual overlapping-tail regression, and safe derived manual evidence.
 
 ## Acquired population and native fidelity
 
@@ -81,8 +114,8 @@ attested native build. The legacy observation subtree stays intact pending verif
 
 Official telemetry documentation establishes `Cota_Adotada` in cm and `Vazao_Adotada` in m3/s.
 Conventional daily `Mediadiaria`, source units and simultaneous consistency-level selection
-remain unresolved. This slice publishes neither telemetry nor conventional products and does
-not turn station operating periods into observation availability or period of record.
+remain unresolved. Only the two adopted telemetry products are supported; no daily means,
+water temperature, inferred station support or published record bounds are synthesized.
 
 ## Historical notes
 

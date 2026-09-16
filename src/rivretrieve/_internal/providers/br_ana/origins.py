@@ -1,6 +1,8 @@
-"""ANA catalogue authority : InventoryCapture → OriginDeclarations × AcquisitionProvenance (pure)."""
+"""ANA catalogue authority : InventoryCapture × OptionalAdoptedTelemetryEvidence → OriginDeclarations × AcquisitionProvenance (pure)."""
 
 from datetime import datetime
+
+import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import (
     AbsenceMarkerValue,
@@ -25,7 +27,9 @@ from rivretrieve._internal.catalogue_origins import (
     Withheld,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
-from rivretrieve._internal.providers.br_ana.capture import InventoryCapture
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.br_ana.capture import AdoptedTelemetryEvidence, InventoryCapture
+from rivretrieve._internal.providers.br_ana.config import config
 
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("br_ana")),
@@ -262,6 +266,179 @@ def build_acquisition_provenance(capture: InventoryCapture) -> AcquisitionProven
         native_table=capture.native_table,
         fact_universe=(*CATALOGUE_FACT_UNIVERSE, *source_facts, "source.ana.horizontal_crs"),
         source_records=(terms, inventory),
+        fact_bindings=tuple(bindings),
+        withheld_facts=withheld,
+    )
+
+
+def with_adopted_telemetry(
+    inventory: AcquisitionProvenance,
+    capture: InventoryCapture,
+    candidates: pl.DataFrame,
+    telemetry: AdoptedTelemetryEvidence,
+) -> AcquisitionProvenance:
+    """Inventory authority × candidate source keys × telemetry evidence → complete product/relationship authority."""
+    source_id = "br_ana.adopted_telemetry"
+    documentation_fact = "source.ana.adopted_field_units_measurement_time"
+    unknown_fact = "source.ana.adopted_endpoint_availability_unacquired"
+    record_fact = "source.ana.adopted_published_record_unacquired"
+    reference = telemetry.observations
+    source = SourceRecord(
+        source_id=source_id,
+        issuer="Agência Nacional de Águas e Saneamento Básico (ANA)",
+        operator="www.ana.gov.br",
+        acquisitions=(
+            telemetry.documentation,
+            AcquisitionRecord(
+                acquisition_id=reference.recording_id,
+                method="http_request",
+                instant_type="retrieval",
+                description=(
+                    "Exact adopted telemetry measurement-time request in retained RecordingEnvelope. "
+                    "Only nonnull recorded adopted fields establish bounded per-product availability; "
+                    "no continuity, current availability or published record bounds are inferred."
+                ),
+                requested_from=(reference.source_url,),
+                retrieved_at_start=reference.retrieved_at,
+                recording_ids=(reference.recording_id,),
+            ),
+        ),
+        evidence=(
+            EvidenceReference(
+                evidence_id=reference.recording_id,
+                description="Exact credential-free adopted telemetry observation RecordingEnvelope",
+                recording=reference,
+            ),
+        ),
+    )
+    facts = [*inventory.fact_universe, documentation_fact, unknown_fact, record_fact]
+    bindings = list(inventory.fact_bindings)
+    bindings.append(
+        FactBinding(
+            fact_group="adopted_telemetry_documented_fields",
+            facts=(documentation_fact,),
+            source_id=source_id,
+            acquisition_id=telemetry.documentation.acquisition_id,
+        )
+    )
+    doc_ref = ExternalFactReference(source_id=source_id, fact=documentation_fact)
+    observed_facts = {}
+    for station, product in sorted(telemetry.available_pairs):
+        fact = f"source.adopted_observations.{station}.{product}.nonnull"
+        observed_facts[station, product] = fact
+        facts.append(fact)
+        bindings.append(
+            FactBinding(
+                fact_group=f"observed_adopted_{station}_{product}",
+                facts=(fact,),
+                source_id=source_id,
+                acquisition_id=reference.recording_id,
+            )
+        )
+    candidate_ids = set(candidates["codigoestacao"].to_list())
+    if any(station not in candidate_ids for station, _ in telemetry.available_pairs):
+        raise FatalContractError("ANA adopted observation evidence names a station outside the certified catalogue")
+    for station, uf, basin in candidates.select("codigoestacao", "UF_Estacao", "codigobacia").iter_rows():
+        source_inputs = tuple(
+            ExternalFactReference(source_id="br_ana.hidro_inventory", fact=f"source.inventory.{response.recording_id}")
+            for response in capture.responses
+            if response.parameters == {"Unidade Federativa": uf}
+            or response.parameters == {"Código da Bacia": int(basin)}
+        )
+        if not source_inputs:
+            raise FatalContractError("ANA candidate lacks a containing inventory acquisition")
+        for product in config().products:
+            fact = f"station_product:{station}:{product}.availability"
+            facts.append(fact)
+            observed_fact = observed_facts.get((station, product))
+            inputs = (
+                *source_inputs,
+                doc_ref,
+                ExternalFactReference(source_id=source_id, fact=observed_fact or unknown_fact),
+            )
+            transform = Transformation(
+                name=(
+                    "Nonnull adopted field in exact observed request establishes available, not continuous/complete record"
+                    if observed_fact
+                    else "Certified Fluviometrica candidate with no established per-station adopted endpoint evidence; not source silence"
+                ),
+                external_inputs=inputs,
+                kind="derived_value" if observed_fact else "absence_marker",
+                marker_value=None if observed_fact else AbsenceMarkerValue.UNKNOWN,
+            )
+            bindings.append(
+                FactBinding(
+                    fact_group=f"adopted_candidate_{station}_{product}",
+                    facts=(fact,),
+                    source_id=None,
+                    acquisition_id=None,
+                    transformation=transform,
+                )
+            )
+    for group, output, inputs, transform_name in (
+        (
+            "documented_adopted_products",
+            tuple(f for f in CATALOGUE_FACT_UNIVERSE if f.startswith("product.")),
+            (doc_ref,),
+            "Documented adopted stage/discharge fields, units and measurement timestamps to instantaneous canonical products",
+        ),
+        (
+            "adopted_candidate_relations",
+            tuple(
+                f for f in CATALOGUE_FACT_UNIVERSE if f.startswith("station_product.") and "published_record" not in f
+            ),
+            (doc_ref, ExternalFactReference(source_id=None, fact="station.station_id")),
+            "Certified Fluviometrica candidates crossed with documented products; exact availability authority is in each row-scoped fact; native flags and operating periods are not interpreted",
+        ),
+    ):
+        bindings.append(
+            FactBinding(
+                fact_group=group,
+                facts=output,
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(name=transform_name, external_inputs=inputs),
+            )
+        )
+    bindings.append(
+        FactBinding(
+            fact_group="adopted_record_bounds_unestablished",
+            facts=tuple(
+                f for f in CATALOGUE_FACT_UNIVERSE if f.startswith("station_product.") and "published_record" in f
+            ),
+            source_id=None,
+            acquisition_id=None,
+            transformation=Transformation(
+                name="No published adopted product record acquired; operating periods and probed windows are not published product records",
+                kind="absence_marker",
+                marker_value=AbsenceMarkerValue.NULL,
+                external_inputs=(ExternalFactReference(source_id=source_id, fact=record_fact),),
+            ),
+        )
+    )
+    withheld = tuple(
+        w for w in inventory.withheld_facts if not any(f.startswith(("product.", "station_product.")) for f in w.facts)
+    )
+    withheld += (
+        WithheldFact(
+            fact_group="adopted_endpoint_availability_not_acquired",
+            facts=(unknown_fact,),
+            reason="no_acquisition_record_established",
+            source_id=source_id,
+        ),
+        WithheldFact(
+            fact_group="adopted_published_record_not_acquired",
+            facts=(record_fact,),
+            reason="no_acquisition_record_established",
+            source_id=source_id,
+        ),
+    )
+    return AcquisitionProvenance(
+        schema_version=2,
+        provider_id=inventory.provider_id,
+        native_table=inventory.native_table,
+        fact_universe=tuple(facts),
+        source_records=(*inventory.source_records, source),
         fact_bindings=tuple(bindings),
         withheld_facts=withheld,
     )

@@ -358,6 +358,26 @@ class AbsenceMarkerValue(StrEnum):
     UNKNOWN = "unknown"
 
 
+def station_product_availability_key(fact: str) -> tuple[str, str] | None:
+    """Exact row-scoped canonical availability name → station/product key, or no key."""
+    match = re.fullmatch(r"station_product:([^:\s]+):([^:\s]+)\.availability", fact)
+    return (match.group(1), match.group(2)) if match is not None else None
+
+
+def absence_marker_accepts_fact(marker: AbsenceMarkerValue | None, fact: str) -> bool:
+    """Typed canonical absence carriers only; row existence is checked against emitted tables."""
+    if marker is AbsenceMarkerValue.NULL:
+        return fact in {
+            "provider.license",
+            "provider.citation",
+            "station_product.published_record_start_date",
+            "station_product.published_record_end_date",
+        }
+    if marker is AbsenceMarkerValue.UNKNOWN:
+        return fact == "station.crs" or station_product_availability_key(fact) is not None
+    return False
+
+
 class Transformation(_ProvenanceModel):
     """Name a RivRetrieve-authored output and its external lineage."""
 
@@ -723,17 +743,17 @@ class AcquisitionProvenance(_ProvenanceModel):
                 for reference in binding.transformation.external_inputs
                 if (reference.fact, reference.source_id) in withheld_fact_keys
             }
-            if withheld_inputs:
-                absence_marker_facts = {"provider.license", "provider.citation", "station.crs"}
-                if binding.transformation.kind != "absence_marker" or not set(binding.facts) <= absence_marker_facts:
-                    raise ValueError("withheld external inputs may only produce absence markers")
+            if withheld_inputs and (
+                binding.transformation.kind != "absence_marker"
+                or not all(
+                    any(absence_marker_accepts_fact(marker, fact) for marker in AbsenceMarkerValue)
+                    for fact in binding.facts
+                )
+            ):
+                raise ValueError("withheld external inputs may only produce absence markers")
             if binding.transformation.kind == "absence_marker":
-                allowed_marker_facts = {
-                    AbsenceMarkerValue.NULL: {"provider.license", "provider.citation"},
-                    AbsenceMarkerValue.UNKNOWN: {"station.crs"},
-                }
                 marker_value = binding.transformation.marker_value
-                if marker_value is None or not set(binding.facts) <= allowed_marker_facts[marker_value]:
+                if not all(absence_marker_accepts_fact(marker_value, fact) for fact in binding.facts):
                     raise ValueError("absence-marker value is incompatible with its output facts")
             for reference in binding.transformation.external_inputs:
                 reference_key = (reference.fact, reference.source_id)

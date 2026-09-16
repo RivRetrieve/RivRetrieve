@@ -190,6 +190,13 @@ def test_native_value_mutation_is_rejected() -> None:
         generate_catalogue.build_catalogue(mutated, STATION_CATALOGUE_ORIGINS)
 
 
-def test_brazil_remains_empty_and_unselectable() -> None:
-    assert rr.find(provider="br_ana").series == ()
-    assert rr.products(provider="br_ana") == []
+def test_brazil_certified_candidates_are_selectable_without_inferred_availability() -> None:
+    selection = rr.find(provider="br_ana")
+    assert len(selection.series) == 35_828
+    assert rr.products(provider="br_ana") == ["discharge_instantaneous", "stage_instantaneous"]
+    assert {series.availability for series in selection.series} == {"available", "unknown"}
+    observed = tuple(series for series in selection.series if series.availability == "available")
+    assert {(series.station_id, series.product_id) for series in observed} == {
+        ("15400000", "discharge_instantaneous"),
+        ("15400000", "stage_instantaneous"),
+    }

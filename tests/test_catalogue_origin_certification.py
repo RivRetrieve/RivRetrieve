@@ -101,11 +101,26 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     native_path = Path(module_path).parent / "catalogue/native.parquet"
     build = generator.build_catalogue
     if provider == "br_ana":
-        from rivretrieve._internal.providers.br_ana.capture import read_capture_record
-        from rivretrieve._internal.providers.br_ana.origins import build_acquisition_provenance
+        from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
+        from rivretrieve._internal.providers.br_ana.origins import build_acquisition_provenance, with_adopted_telemetry
+        from rivretrieve._internal.recordings import read_recording
 
         capture = read_capture_record(ROOT / "tests/test_data/br_ana_inventory/capture.json")
-        build = partial(build, provenance=build_acquisition_provenance(capture))
+        data = ROOT / "tests/recordings/br_ana"
+        recorded_path = data / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
+        telemetry = parse_adopted_telemetry_evidence(
+            (data / "manual-page11-acquisition.json").read_bytes(),
+            (data / "manual-page11-derived.txt").read_bytes(),
+            read_recording(recorded_path),
+            str(recorded_path.relative_to(ROOT)),
+        )
+        provenance = with_adopted_telemetry(
+            build_acquisition_provenance(capture),
+            capture,
+            generator.project_stations(read_native_table(native_path)).data,
+            telemetry,
+        )
+        build = partial(build, provenance=provenance, telemetry=telemetry)
     if provider == "fr_hubeau":
         ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
