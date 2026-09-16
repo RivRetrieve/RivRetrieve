@@ -65,3 +65,25 @@ public declaration remains catalogue-only. This is not the complete Brazil outco
 Conventional daily semantics and water temperature remain unresolved; legacy reference
 code is deliberately retained. These recordings prove one station's measurements,
 not national station-product availability or a published period of record.
+
+## Safe manual acquisition identity
+
+`manual-page11-acquisition.json` records the actual unauthenticated shared-transport
+retrieval instant, source URL, content type and digest/size of the publisher PDF.
+The original PDF existed only in memory and was discarded to exclude its
+illustrative authentication tutorial. `manual-page11-derived.txt` is explicitly
+**derived**, not a RecordingEnvelope or original HTTP response. Its independent
+SHA-256 and size are recorded beside the deterministic extraction rule:
+`pypdf==6.13.1`, `PdfReader(BytesIO(content)).pages[10].extract_text(extraction_mode="plain").encode("utf-8")`.
+
+The source investigator's capture script is retained with output directory made
+an explicit command-line argument. It never reads credentials or persists the full
+PDF. An authorized maintainer can reacquire into a separate directory using:
+
+```sh
+uv run python tests/recordings/br_ana/capture_manual_page11.py .worktrees/ana-manual-refresh
+```
+
+This command makes a live unauthenticated request; ordinary tests do not run it.
+A fresh response may differ. Original source identity and derived identity must
+not be conflated or overwritten without evidence review.

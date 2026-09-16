@@ -1,0 +1,33 @@
+{
+  "publisher_material": {
+    "method": "GET",
+    "requested_url": "https://www.gov.br/ana/pt-br/assuntos/monitoramento-e-eventos-criticos/monitoramento-hidrologico/orientacoes-manuais/manuais/manual-hidrowebservice_publica.pdf",
+    "transport_response_url": "https://www.gov.br/ana/pt-br/assuntos/monitoramento-e-eventos-criticos/monitoramento-hidrologico/orientacoes-manuais/manuais/manual-hidrowebservice_publica.pdf",
+    "redirect_policy": "refuse",
+    "status_code": 200,
+    "retrieved_at": "2026-09-16T11:50:12.173541+00:00",
+    "content_type": "application/pdf",
+    "sha256": "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3",
+    "bytes": 1322670,
+    "retention": "Full publisher PDF not retained: authentication tutorial deliberately excluded; original bytes existed only in process memory.",
+    "ordinary_request_headers": {
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": []
+  },
+  "derived_excerpt": {
+    "path": "manual-page11-derived.txt",
+    "authorship": "derived text extraction, NOT original publisher response bytes",
+    "sha256": "8dd99201d9b3ac27df8be40ef0f56cbbb818a259989977b5061b495733bd3f45",
+    "bytes": 1621,
+    "transformation": {
+      "implementation": "pypdf.PdfReader(io.BytesIO(response.content)).pages[10].extract_text(extraction_mode=plain).encode(utf-8)",
+      "pypdf_version": "6.13.1",
+      "pdf_page_1_based": 11,
+      "printed_page_label": "9",
+      "text_encoding": "UTF-8",
+      "post_extraction_modifications": "none"
+    }
+  },
+  "qualification": "retrieved_at is HttpClient transport acquisition time for the original PDF, not extraction time; excerpt hash identifies derived bytes separately. Full PDF not retained, so the excerpt is not a replayable recording of the original HTTP response."
+}
