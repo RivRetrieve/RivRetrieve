@@ -64,7 +64,8 @@ The certified national catalogue exposes both as explicit candidates for every
 Fluviometrica station, with unknown support except where exact per-product
 observations establish bounded availability. Conventional daily evidence now adds
 four separate Bruto/Consistido mean products, documented below. Water temperature
-remains unsupported. Legacy removal is gated on root-owned public live verification.
+remains unsupported. The legacy subtree was removed after root-owned public live verification
+of the adopted telemetry and four daily products.
 These recordings prove one station's measurements, not national station-product
 availability or a published period of record.
 
@@ -150,3 +151,30 @@ that view, not authority to exclude Bruto.
 All evidence in this directory is excluded from wheel and sdist payloads. The
 packaged normalized provenance carries original material identities, exact
 recording references, derived-artifact digests, and per-variant row predicates.
+
+## Root-owned daily public verification and legacy retirement
+
+The root agent verified committed `c149e2d0a9d478e9ad90a574e940e458f7e57972`
+through actual `find`, `pick`, and `fetch` with its intentionally provisioned credentials.
+`daily-public-live-verification.json` is the unchanged sanitized summary, not an independent
+expectation or recording. All four independent January probes passed: eight total rows,
+exact modern values subject only to normal floating-point conversion, native unknown zone,
+safe receipt hashes and no error issues. Together with the retained adopted telemetry
+public verification, this authorized removal of `reference/legacy_observations/br_ana/`.
+Useful source leads, documentary identities and the unsupported temperature decision remain
+retained. Historical legacy source is recoverable at main commit `33e063a`.
+
+`verify_daily_public.py` retains the root-authored verification logic. Maintenance changes
+are limited to formatter/import ordering, explicit expectation/output CLI paths, output
+parent creation, and explicit strict zip after the existing equal-length guard. It reads credentials only from the caller's own environment/current-directory
+`.env` via the established resolver, and makes live calls. Ordinary tests never execute it.
+An authorized maintainer can run from their credential-provisioned working directory:
+
+```text
+uv run python tests/recordings/br_ana/verify_daily_public.py tests/recordings/br_ana/daily-independent-expectations.json .worktrees/ana-daily-verification/result.json
+```
+
+This is representative access evidence, not a promise of continuity, source quality,
+national availability or final vision acceptance. Water-temperature field existence in a
+bounded detailed response is established, but every water-temperature value/status was null.
+`Temperatura_Interna` has both strings and nulls and is never substituted for water temperature.

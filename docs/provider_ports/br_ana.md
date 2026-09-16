@@ -9,8 +9,10 @@ public API: `discharge_instantaneous` and `stage_instantaneous`. The declaration
 `LiveStages`, using the shared ANA credential exchange. Four conventional daily-mean source variants are also supported:
 `discharge_daily_mean_bruto`, `discharge_daily_mean_consistido`,
 `stage_daily_mean_bruto`, and `stage_daily_mean_consistido`.
-Water temperature remains unsupported. Final vision completion and legacy retirement
-require the root-owned verification record; implementation alone is not that claim.
+Water temperature remains unsupported. Root-owned public live verification passed for all
+four daily variants at commit `c149e2d`, after the prior verified telemetry replacement.
+The retired Brazil legacy subtree has been removed. Final vision acceptance remains a
+separate root audit; these representative calls do not prove national data availability.
 
 Every certified Fluviometrica station is a candidate for all six supported products. Its
 availability is `unknown` unless nonnull measurements of the exact source variant were recorded for
@@ -110,7 +112,8 @@ Source-row occurrences bind every repeated station to all its acquired files and
 
 The old `--fixture`, `--live`, `--withhold-uncertified` and direct payload build paths now fail
 with an explicit migration message. They cannot publish invented fixtures or bypass the
-attested native build. The legacy observation subtree stays intact pending verified replacement.
+attested native build. The legacy observation subtree was removed after verified replacement; its historical
+source and useful retained leads are listed below.
 
 ## Conventional daily source contract
 
@@ -180,7 +183,7 @@ The exact recording and derived field census are retained under `tests/recording
 
 The archived implementation and invented payloads remain recoverable at main commit
 `33e063a`, under `reference/legacy_observations/br_ana/`; their original-path inventory
-is that subtree's README. Removing the subtree is gated on verified daily and telemetry
-replacement, including root-owned live public calls. Retained source evidence lives in
+is that subtree's README. The subtree was removed only after verified daily and telemetry replacement,
+including root-owned live public calls for all six products. Retained source evidence lives in
 `tests/recordings/br_ana/` and the unchanged inventory capture inputs. These paths are
 excluded from both distributions; only generated public catalogue evidence is packaged.

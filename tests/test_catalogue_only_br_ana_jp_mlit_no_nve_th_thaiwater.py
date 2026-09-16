@@ -188,50 +188,14 @@ def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
         assert row.select("latitude", "longitude").row(0) == coordinates
 
 
-def test_reference_tree_preserves_complete_porting_evidence() -> None:
-    expected_fixtures = {
-        "br_ana": {
-            "br_ana_12345000_telemetrica_adotada.json",
-            "br_ana_12345000_telemetrica_detalhada.json",
-            "br_ana_12345000_vazao_2020.json",
-            "br_ana_60435000_cotas_2020.json",
-            "br_ana_metadata.json",
-        },
-    }
-    endpoints = {
-        "br_ana": (
-            "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
-        ),
-    }
-    assert not (REFERENCE_ROOT / "jp_mlit").exists()
-    assert not (REFERENCE_ROOT / "no_nve").exists()
-    source_names = {
-        "issue_codes.py",
-        "module.py",
-        "observation_client.py",
-        "parser.py",
-        "retrieval.py",
-        "transform.py",
-    }
-    for provider_id, fixture_names in expected_fixtures.items():
-        provider_root = REFERENCE_ROOT / provider_id
-        assert {path.name for path in (provider_root / "source").iterdir()} == source_names
-        assert {path.name for path in (provider_root / "tests").glob("test_*.py")} == {
-            f"test_{provider_id}_module.py",
-            f"test_{provider_id}_observations.py",
-        }
-        assert {path.name for path in (provider_root / "tests" / "test_data").iterdir()} == fixture_names
-        client_text = (provider_root / "source" / "observation_client.py").read_text()
-        assert endpoints[provider_id] in client_text
-        readme = (provider_root / "README.md").read_text()
-        assert "51ce7d87da140568ee4145cd41fef0ac9f39fc45" in readme
-        for source_name in source_names:
-            original = f"src/rivretrieve/_internal/providers/{provider_id}/{source_name}"
-            assert f"- `{original}` -> `source/{source_name}`" in readme
-        for test_name in (f"test_{provider_id}_module.py", f"test_{provider_id}_observations.py"):
-            assert f"- `tests/{test_name}` -> `tests/{test_name}`" in readme
-        for fixture_name in fixture_names:
-            assert f"- `tests/test_data/{fixture_name}` -> `tests/test_data/{fixture_name}`" in readme
+def test_verified_provider_replacements_retire_their_legacy_subtrees() -> None:
+    for provider in ("br_ana", "jp_mlit", "no_nve"):
+        assert not (REFERENCE_ROOT / provider).exists()
+    evidence = Path(__file__).parent / "recordings" / "br_ana"
+    assert (evidence / "daily-public-live-verification.json").is_file()
+    assert (evidence / "public-live-verification.json").is_file()
+    assert (evidence / "daily-independent-expectations.json").is_file()
+    assert (evidence / "detailed-candidate-field-summary.json").is_file()
 
 
 def test_active_catalogue_fixtures_remain_available() -> None:
