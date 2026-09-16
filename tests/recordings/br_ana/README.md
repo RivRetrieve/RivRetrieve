@@ -58,10 +58,11 @@ planner tests cover short tails, multiples, leap days and year changes.
 
 ## Scope
 
-These are two internal stage products: `discharge_instantaneous` and
+These are two public stage products: `discharge_instantaneous` and
 `stage_instantaneous`, using the adopted endpoint rather than a new quality axis.
-Until the certified catalogue and evidenced station-product relations are integrated,
-public declaration remains catalogue-only. This is not the complete Brazil outcome.
+The certified national catalogue exposes both as explicit candidates for every
+Fluviometrica station, with unknown support except where exact per-product
+observations establish bounded availability. This is not the complete Brazil outcome.
 Conventional daily semantics and water temperature remain unresolved; legacy reference
 code is deliberately retained. These recordings prove one station's measurements,
 not national station-product availability or a published period of record.

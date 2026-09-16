@@ -274,7 +274,10 @@ def test_v3_parse_never_constructs_old_national_models(monkeypatch):
     plt.assert_frame_equal(parsed.facts, evidence.facts)
 
 
-@pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
+# Brazil has new adopted-product acquisitions after this migration oracle.
+# Its current evidence still passes the all-provider lossless roundtrip above;
+# source-material and per-pair assertions live in test_br_ana_catalogue_telemetry.
+@pytest.mark.parametrize("provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider != "br_ana"))
 def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
     assert oracle["revision"] == "6f0edf6a455735cb1f8c858a1a9f35d4245cf209"

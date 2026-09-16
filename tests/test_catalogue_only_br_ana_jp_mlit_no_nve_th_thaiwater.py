@@ -14,16 +14,6 @@ from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 CATALOGUE_ONLY_PROVIDERS = (
     (
-        "br_ana",
-        17_914,
-        0,
-        0,
-        set(),
-        "ANA Hidroweb — Brazilian National Water and Sanitation Agency",
-        "2026-09-16",
-        set(),
-    ),
-    (
         "za_dws",
         2905,
         3,
@@ -37,7 +27,6 @@ CATALOGUE_ONLY_PROVIDERS = (
 DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py"}
 DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
-    "br_ana": DEFERRED_CATALOGUE_MODULE_FILES | {"capture.py", "inventory.py", "origins.py"},
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
 REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"

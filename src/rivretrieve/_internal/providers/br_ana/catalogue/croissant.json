@@ -45,16 +45,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "08d530cb808cd187bacb2b5a36f6ba15388567eb9fe9ae331d5bd2685e18be6d",
-      "contentSize": "508 B"
+      "sha256": "662c88d5f5bd61f78afc6f281d06cdac9e689e45f73a9d525a61c710fdcf1e38",
+      "contentSize": "551 B"
     },
     {
       "@id": "products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "6f283dc8f096b69959b08673af4d052cf32d31aaf942a4e568176955296e673a",
-      "contentSize": "985 B"
+      "sha256": "0bb5a9e1edde38f2228e0f66d42d6c8900c59c43c8504c002b48b33713e4b13d",
+      "contentSize": "3969 B"
     },
     {
       "@id": "stations.parquet",
@@ -69,56 +69,56 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "b9e28ecae1f3fc330e259eb11145c1afd30fe2bd75bd07404e700bb8d6a9d3c4",
-      "contentSize": "1218 B"
+      "sha256": "a4b378327c190ab8057aed6a63a29f94db9ef9940b8fc6544fd576ce7fbc2cd6",
+      "contentSize": "115537 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "8eb784e454c06558302edc619f71e0ccf6ab90c2cbd0819ec6be4d6b6efde0fe",
-      "contentSize": "39849 B"
+      "sha256": "2e7723c5d09f3779c89422bb2b2e5030ad08b8518eea51bacaee4519613196d5",
+      "contentSize": "42364 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "93a9d872a9cb7f673e39dd17db9237b0ebc7eb3998c43cac9967a92d31f74601",
-      "contentSize": "2781 B"
+      "sha256": "62c90cdf194c3254bda86c0a5ae5bbe7024edc5efe1ade1d9ac1d4a10429fa60",
+      "contentSize": "305880 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "955df810d073c3fcbaef89aaf564a6c9a38d9c81a6ef823c126616b720cc875f",
-      "contentSize": "9973 B"
+      "sha256": "06b80f90d4fa068cee5f6abc43c68af1bb0249805e548066be8889c8820f95e9",
+      "contentSize": "10359 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "da1d6b73df46006a42ad592ea03db07de8d0ceaa610a854b336618d8953694dd",
-      "contentSize": "2592 B"
+      "sha256": "4ecd9ce3101d28d76992ad4bcf6f7bb3c4c047d504238726b0ddd7a5aab15e15",
+      "contentSize": "193619 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "9304c0d2ff34815886d97348e530e4f33b9e3525487393556f6aeaff0c4e4376",
-      "contentSize": "1405 B"
+      "sha256": "e5f7ab557aa56df6a9660e70d5e6147a4c47f52beb5e247e613f63abd3c3e937",
+      "contentSize": "176153 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "691ac456c391b28b0109500850729b07656629478352bfd4a6455bf3c20bfb83",
-      "contentSize": "1783 B"
+      "sha256": "829b90840d750f1d48a2e7e74d2e7742be652e50ddac9941a338af898d0d9ccb",
+      "contentSize": "252871 B"
     }
   ],
   "recordSet": [
@@ -348,10 +348,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -372,10 +368,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -396,10 +388,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -420,10 +408,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -444,10 +428,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -468,10 +448,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -492,10 +468,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -516,10 +488,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -540,10 +508,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         }
       ],
@@ -553,21 +517,6 @@
         "name": "Exact catalogue fact locator relation",
         "url": "provenance_facts.parquet",
         "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
-      },
-      "rr:absence": {
-        "kind": "withheld",
-        "reason": "no_acquisition_record_established",
-        "fields": [
-          "provider_id",
-          "product_id",
-          "observed_property",
-          "frequency",
-          "statistic",
-          "period_type",
-          "period_anchor",
-          "unit",
-          "native_id"
-        ]
       }
     },
     {
@@ -714,10 +663,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -738,10 +683,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -762,10 +703,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -786,10 +723,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -810,10 +743,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -834,10 +763,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -858,10 +783,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -882,10 +803,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         }
       ],
@@ -895,20 +812,6 @@
         "name": "Exact catalogue fact locator relation",
         "url": "provenance_facts.parquet",
         "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
-      },
-      "rr:absence": {
-        "kind": "withheld",
-        "reason": "no_acquisition_record_established",
-        "fields": [
-          "provider_id",
-          "station_id",
-          "product_id",
-          "availability",
-          "availability_reason",
-          "published_record_start_date",
-          "published_record_end_date",
-          "last_catalogue_check"
-        ]
       }
     },
     {

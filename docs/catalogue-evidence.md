@@ -168,3 +168,22 @@ Discovery, fetch and describe do not call full serialization or expand this grap
 Strict v2 files remain a read/build transition input. They normalize once to the
 same v3 Python carrier. New builds publish v3. No runtime v2 projection, new public
 retrieval API, provider role or network resolver is introduced.
+
+
+### Unacquired station-product facts
+
+An explicitly unknown candidate availability is not a claim of source silence.
+A row-scoped `station_product:<station_id>:<product_id>.availability` fact can be
+an `absence_marker` with `marker_value=unknown` and a withheld external input whose
+reason is `no_acquisition_record_established`. The exact station/product must exist
+in the emitted catalogue and its availability must be `unknown`. Row-locator
+completeness still covers every candidate. Nonexistent pairs, misspelled roles,
+other row-scoped fields and mismatched marker values are rejected.
+
+The two nullable `station_product.published_record_start_date` and
+`station_product.published_record_end_date` column facts also admit an explicit
+`null` absence marker when their acquisition is unestablished. Probed windows and
+station operating periods do not become published product record bounds.
+Nested input validation, normalized evidence validation and final carrier-value
+validation enforce the same narrow vocabulary. This extends supported absence
+carriers without weakening source attribution or treating an unknown as unavailable.

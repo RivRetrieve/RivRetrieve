@@ -249,13 +249,16 @@ _CLOSURE_ORACLES = {
     },
     "br_ana": {
         "original_sha256": "aefb34d6582bc53b6463f3cec882b6395ee96aa99fcf118f41f862f9af07173e",
-        "cases": [
+        # Retain the historical oracle verbatim; it does not describe the newly
+        # acquired adopted products. Current material assertions are separate below.
+        "historical_cases": [
             {
                 "names": ["product.product_id"],
                 "pair": None,
                 "sha256": "2fb41fd37c8c1e2223d1f95831974e36ec1215bd1f6a94e4aec02c37ae7d2216",
             }
         ],
+        "cases": [],
         "terms": {
             "license": "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle."
         },
@@ -370,13 +373,15 @@ for provider, oracle in closure_oracles.items():
                     issuers = {str(name) for node in ancestors for creator in graph.objects(node, SC.creator)
                                for name in graph.objects(creator, SC.name)}
                     assert {"Global Runoff Data Centre", "Institute of Meteorology and Water Management – National Research Institute"} <= issuers
-        if provider == "br_ana":
-            assert header.native_table is not None
-            assert resolved["@graph"][0]["rr:absence"] == {"kind": "withheld", "reason": "no_acquisition_record_established"}
-            assert not any(node["@id"].startswith("acquisition/") for node in resolved["@graph"])
-            assert "isBasedOn" in descriptor and descriptor["datePublished"] == "2026-09-16"
-            assert all("rr:absence" in records[name] for name in ("products", "station_products"))
     assert verified_catalogue_terms(evidence) == oracle["terms"]
     assert {kind: descriptor[kind] for kind in ("license", "citation") if kind in descriptor} == oracle["descriptor_terms"]
-print("Installed socket-denied evidence proof: all five relations x five providers; eight complete closures; keys/FKs/header; Poland roles/corroboration; Brazil withholding; exact terms")
+print("Installed socket-denied evidence proof: all five relations x five providers; historical closures and adopted products; keys/FKs/header; Poland roles/corroboration; Brazil manual material; exact terms")
+
+brazil_catalogue = provider_root.joinpath("br_ana", "catalogue")
+brazil = parse_catalogue_evidence(EvidenceHeader.model_validate_json(brazil_catalogue.joinpath("provenance.json").read_bytes()),
+    {filename: brazil_catalogue.joinpath(filename).read_bytes() for filename in EVIDENCE_FILENAMES.values()})
+products = resolve_evidence(brazil, FactSelection(names=("product.product_id",)))
+assert "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3" in json.dumps(products)
+assert "withheld" not in json.dumps(products)
+assert set(rivretrieve.products(provider="br_ana")) == {"discharge_instantaneous", "stage_instantaneous"}
 """

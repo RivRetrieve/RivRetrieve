@@ -154,15 +154,15 @@ The output directories are disposable and are not the private evidence corpus.
 uv run python -m rivretrieve._internal.providers.fr_hubeau.generate_catalogue \
   --native src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet \
   --availability-ledger research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz \
-  --out planning/coverage-build/fr_hubeau
+  --out .worktrees/coverage-build/fr_hubeau
 uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
   --native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet \
   --workbook-access-ledger research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json \
-  --out planning/coverage-build/ba_fhmzbih
+  --out .worktrees/coverage-build/ba_fhmzbih
 uv run python -m rivretrieve._internal.providers.th_thaiwater.generate_catalogue \
   --native src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet \
   --availability-evidence research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv \
-  --out planning/coverage-build/th_thaiwater
+  --out .worktrees/coverage-build/th_thaiwater
 ```
 
 Use [profile 3's offline joins and selected-closure recipe](../catalogue-evidence.md#offline-python-and-polars-inspection)

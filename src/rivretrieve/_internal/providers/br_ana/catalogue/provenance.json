@@ -479,6 +479,26 @@
         }
       ],
       "statements": []
+    },
+    {
+      "source_id": "br_ana.adopted_telemetry",
+      "issuer": "Agência Nacional de Águas e Saneamento Básico (ANA)",
+      "operator": "www.ana.gov.br",
+      "evidence": [
+        {
+          "evidence_id": "ana_adopted_telemetry_measurements",
+          "description": "Exact credential-free adopted telemetry observation RecordingEnvelope",
+          "recording": {
+            "recording_id": "ana_adopted_telemetry_measurements",
+            "repository_path": "tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1",
+            "retrieved_at": "2026-09-16T11:35:34.908979Z",
+            "media_type": "application/json",
+            "sha256": "7cd09799a09f22f8d18cb5f34e6b08a1d74066a70ef9a16fc4bb1bcb27cdc691"
+          }
+        }
+      ],
+      "statements": []
     }
   ],
   "descriptions": [
@@ -518,7 +538,9 @@
     "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 6}; 10929 accepted source rows and 10929 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
     "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 7}; 1894 accepted source rows and 1894 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
     "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 8}; 3937 accepted source rows and 3937 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
-    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 9}; 1104 accepted source rows and 1104 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes."
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 9}; 1104 accepted source rows and 1104 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Official ANA manual PDF acquired without credentials, original bytes not retained. Safe derived page11 text SHA256 8dd99201d9b3ac27df8be40ef0f56cbbb818a259989977b5061b495733bd3f45, 1621 bytes. Transformation {'implementation': 'pypdf.PdfReader(io.BytesIO(response.content)).pages[10].extract_text(extraction_mode=plain).encode(utf-8)', 'pypdf_version': '6.13.1', 'pdf_page_1_based': 11, 'printed_page_label': '9', 'text_encoding': 'UTF-8', 'post_extraction_modifications': 'none'}. Derived text is not original response bytes. PDF page11 documents Cota_Adotada cm, Vazao_Adotada m3/s and measurement/collection timestamp.",
+    "Exact adopted telemetry measurement-time request in retained RecordingEnvelope. Only nonnull recorded adopted fields establish bounded per-product availability; no continuity, current availability or published record bounds are inferred."
   ],
   "transformations": [
     {
@@ -545,6 +567,31 @@
       "name": "CRS acquisition not established; unknown carrier, not source silence",
       "kind": "absence_marker",
       "marker_value": "unknown"
+    },
+    {
+      "name": "Certified Fluviometrica candidate with no established per-station adopted endpoint evidence; not source silence",
+      "kind": "absence_marker",
+      "marker_value": "unknown"
+    },
+    {
+      "name": "Nonnull adopted field in exact observed request establishes available, not continuous/complete record",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Documented adopted stage/discharge fields, units and measurement timestamps to instantaneous canonical products",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Certified Fluviometrica candidates crossed with documented products; exact availability authority is in each row-scoped fact; native flags and operating periods are not interpreted",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "No published adopted product record acquired; operating periods and probed windows are not published product records",
+      "kind": "absence_marker",
+      "marker_value": "null"
     }
   ],
   "withheld_facts": [
@@ -564,70 +611,62 @@
       "reason": "no_acquisition_record_established"
     },
     {
-      "fact_group": "products_pending_source_semantics_and_observation_stage_certification",
+      "fact_group": "adopted_endpoint_availability_not_acquired",
       "facts": [
-        "product.provider_id",
-        "product.product_id",
-        "product.observed_property",
-        "product.frequency",
-        "product.statistic",
-        "product.period_type",
-        "product.period_anchor",
-        "product.unit",
-        "product.native_id"
+        "source.ana.adopted_endpoint_availability_unacquired"
       ],
-      "reason": "no_acquisition_record_established"
+      "reason": "no_acquisition_record_established",
+      "source_id": "br_ana.adopted_telemetry"
     },
     {
-      "fact_group": "station_product_relationships_not_established_by_inventory_presence",
+      "fact_group": "adopted_published_record_not_acquired",
       "facts": [
-        "station_product.provider_id",
-        "station_product.station_id",
-        "station_product.product_id",
-        "station_product.availability",
-        "station_product.availability_reason",
-        "station_product.published_record_start_date",
-        "station_product.published_record_end_date",
-        "station_product.last_catalogue_check"
+        "source.ana.adopted_published_record_unacquired"
       ],
-      "reason": "no_acquisition_record_established"
+      "reason": "no_acquisition_record_established",
+      "source_id": "br_ana.adopted_telemetry"
     }
   ],
-  "row_locator_requirements": [],
+  "row_locator_requirements": [
+    {
+      "carrier": "station_product",
+      "role": "availability"
+    }
+  ],
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "93a9d872a9cb7f673e39dd17db9237b0ebc7eb3998c43cac9967a92d31f74601",
-      "byte_count": 2781,
-      "row_count": 69,
+      "sha256": "62c90cdf194c3254bda86c0a5ae5bbe7024edc5efe1ade1d9ac1d4a10429fa60",
+      "byte_count": 305880,
+      "row_count": 35902,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
       "path": "provenance_acquisitions.parquet",
-      "sha256": "955df810d073c3fcbaef89aaf564a6c9a38d9c81a6ef823c126616b720cc875f",
-      "byte_count": 9973,
-      "row_count": 37,
+      "sha256": "06b80f90d4fa068cee5f6abc43c68af1bb0249805e548066be8889c8820f95e9",
+      "byte_count": 10359,
+      "row_count": 39,
       "schema_version": 3
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "da1d6b73df46006a42ad592ea03db07de8d0ceaa610a854b336618d8953694dd",
-      "byte_count": 2592,
-      "row_count": 42,
+      "sha256": "4ecd9ce3101d28d76992ad4bcf6f7bb3c4c047d504238726b0ddd7a5aab15e15",
+      "byte_count": 193619,
+      "row_count": 35876,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "9304c0d2ff34815886d97348e530e4f33b9e3525487393556f6aeaff0c4e4376",
-      "byte_count": 1405,
-      "row_count": 50,
+      "sha256": "e5f7ab557aa56df6a9660e70d5e6147a4c47f52beb5e247e613f63abd3c3e937",
+      "byte_count": 176153,
+      "row_count": 35898,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "691ac456c391b28b0109500850729b07656629478352bfd4a6455bf3c20bfb83",
-      "byte_count": 1783,
-      "row_count": 74,
+      "sha256": "829b90840d750f1d48a2e7e74d2e7742be652e50ddac9941a338af898d0d9ccb",
+      "byte_count": 252871,
+      "row_count": 142230,
       "schema_version": 3
     }
   }

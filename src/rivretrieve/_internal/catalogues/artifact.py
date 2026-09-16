@@ -9,7 +9,11 @@ from pathlib import Path
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import AbsenceMarkerValue, AcquisitionProvenance
+from rivretrieve._internal.acquisition_provenance import (
+    AbsenceMarkerValue,
+    AcquisitionProvenance,
+    station_product_availability_key,
+)
 from rivretrieve._internal.catalogues.evidence import (
     CatalogueEvidence,
     EvidenceHeader,
@@ -203,62 +207,57 @@ def _validate_absence_marker_values(
     station_products: pl.DataFrame,
     provenance: AcquisitionProvenance | CatalogueEvidence,
 ) -> None:
-    """Require declared absence markers to equal their canonical carrier values."""
-    tables = {
-        "provider": provider_info,
-        "product": products,
-        "station": stations,
-        "station_product": station_products,
-    }
+    """Require declared absence markers to equal their exact canonical carriers.
+
+    Row-scoped availability uses one key index, not a full catalogue scan per pair.
+    Foreign row identities fail instead of vacuously matching an empty selection.
+    """
+    tables = {"provider": provider_info, "product": products, "station": stations, "station_product": station_products}
+    outputs: list[tuple[AbsenceMarkerValue | None, str]] = []
     if isinstance(provenance, CatalogueEvidence):
         for transformation_id, transformation in enumerate(provenance.header.transformations):
-            if transformation.kind != "absence_marker":
-                continue
-            marker = transformation.marker_value
-            if marker is None:
-                raise FatalContractError("absence-marker transformation has no marker value")
-            outputs = (
-                provenance.bindings.filter(pl.col("transformation_id") == transformation_id)
-                .select("binding_id")
-                .join(provenance.binding_facts, on="binding_id")
-                .join(provenance.facts.select("fact_id", "name"), on="fact_id")
-            )
-            for fact in outputs["name"]:
-                carrier, separator, column = fact.partition(".")
-                if not separator or carrier not in tables or column not in tables[carrier].columns:
-                    raise FatalContractError(f"absence marker output {fact!r} does not resolve to a catalogue carrier")
-                mismatch = (
-                    pl.col(column).is_not_null()
-                    if marker == AbsenceMarkerValue.NULL
-                    else pl.col(column) != marker.value
+            if transformation.kind == "absence_marker":
+                names = (
+                    provenance.bindings.filter(pl.col("transformation_id") == transformation_id)
+                    .select("binding_id")
+                    .join(provenance.binding_facts, on="binding_id")
+                    .join(provenance.facts.select("fact_id", "name"), on="fact_id")["name"]
                 )
-                mismatches = tables[carrier].filter(mismatch).height
-                if mismatches:
-                    raise FatalContractError(
-                        f"absence marker output {fact} must be exactly {marker.value}; found {mismatches} mismatching rows"
-                    )
-        return
-    for binding in provenance.fact_bindings:
-        transformation = binding.transformation
-        if transformation is None or transformation.kind != "absence_marker":
+                outputs.extend((transformation.marker_value, name) for name in names)
+    else:
+        for binding in provenance.fact_bindings:
+            transformation = binding.transformation
+            if transformation is not None and transformation.kind == "absence_marker":
+                outputs.extend((transformation.marker_value, fact) for fact in binding.facts)
+    availability = (
+        {
+            (station, product): value
+            for station, product, value in station_products.select(
+                "station_id", "product_id", "availability"
+            ).iter_rows()
+        }
+        if any(station_product_availability_key(fact) is not None for _, fact in outputs)
+        else {}
+    )
+    for marker, fact in outputs:
+        if marker is None:
+            raise FatalContractError("absence-marker transformation has no marker value")
+        key = station_product_availability_key(fact)
+        if key is not None:
+            if key not in availability:
+                raise FatalContractError(f"absence marker output {fact!r} names an absent station-product row")
+            if marker is not AbsenceMarkerValue.UNKNOWN or availability[key] != "unknown":
+                raise FatalContractError(f"absence marker output {fact} must be exactly unknown")
             continue
-        marker_value = transformation.marker_value
-        if marker_value is None:  # pragma: no cover - rejected by the provenance model
-            raise AssertionError("absence-marker transformation has no marker value")
-        expected: object = None if marker_value == AbsenceMarkerValue.NULL else marker_value.value
-        for fact in binding.facts:
-            carrier, separator, column = fact.partition(".")
-            if not separator or carrier not in tables or column not in tables[carrier].columns:
-                raise FatalContractError(f"absence marker output {fact!r} does not resolve to a catalogue carrier")
-            mismatch_expression = (
-                pl.col(column).is_not_null() if marker_value == AbsenceMarkerValue.NULL else pl.col(column) != expected
+        carrier, separator, column = fact.partition(".")
+        if not separator or carrier not in tables or column not in tables[carrier].columns:
+            raise FatalContractError(f"absence marker output {fact!r} does not resolve to a catalogue carrier")
+        mismatch = pl.col(column).is_not_null() if marker == AbsenceMarkerValue.NULL else pl.col(column) != marker.value
+        mismatches = tables[carrier].filter(mismatch).height
+        if mismatches:
+            raise FatalContractError(
+                f"absence marker output {fact} must be exactly {marker.value}; found {mismatches} mismatching rows"
             )
-            mismatches = tables[carrier].filter(mismatch_expression).height
-            if mismatches:
-                raise FatalContractError(
-                    f"absence marker output {fact} must be exactly {marker_value.value}; "
-                    f"found {mismatches} mismatching rows"
-                )
 
 
 def _apply_withheld_facts(
