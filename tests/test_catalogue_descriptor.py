@@ -186,9 +186,24 @@ def test_evidenced_baseline_record_sets_do_not_report_withheld_rows(provider: st
     assert "rr:absence" not in record
 
 
-def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch):
+def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch, tmp_path):
+    # Inventory-only projection remains a valid empty-table fixture, even though
+    # the shipped Brazil catalogue now includes evidenced adopted telemetry.
+    from rivretrieve._internal.catalogues.native import read_native_table
+    from rivretrieve._internal.providers.br_ana.capture import read_capture_record
+    from rivretrieve._internal.providers.br_ana.generate_catalogue import build_catalogue, write_catalogue
+    from rivretrieve._internal.providers.br_ana.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
+
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
-    brazil = mlc.Dataset(_path("br_ana") / "croissant.json")
+    repository = Path(__file__).parents[1]
+    capture = read_capture_record(repository / "tests/test_data/br_ana_inventory/capture.json")
+    inventory = build_catalogue(
+        read_native_table(repository / capture.native_table.repository_path),
+        STATION_CATALOGUE_ORIGINS,
+        build_acquisition_provenance(capture),
+    )
+    write_catalogue(inventory, tmp_path)
+    brazil = mlc.Dataset(tmp_path / "croissant.json")
     for record in ("products", "station_products"):
         assert list(brazil.records(record)) == []
     provider = list(brazil.records("provider"))
@@ -214,7 +229,7 @@ def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch):
     pl_testing.assert_frame_equal(extracted, expected)
 
 
-def test_brazil_preserves_attested_identity_and_withholds_only_unevidenced_products():
+def test_brazil_preserves_attested_identity_and_exposes_documented_adopted_products():
     descriptor = _descriptor("br_ana")
     provenance, _, _ = _inputs("br_ana")
     assert descriptor["license"] == provenance.header.source_records[0].statements[0].exact_text
@@ -223,7 +238,11 @@ def test_brazil_preserves_attested_identity_and_withholds_only_unevidenced_produ
     records = {record["@id"]: record for record in descriptor["recordSet"]}
     assert "rr:absence" not in records["stations"]
     for name in ("products", "station_products"):
-        assert "rr:absence" in records[name]
+        assert "rr:absence" not in records[name]
+    documentation = provenance.acquisitions.filter(pl.col("acquisition_id") == "adopted_telemetry_manual")
+    assert documentation["material_sha256"].to_list() == [
+        "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3"
+    ]
 
 
 def test_generator_rejects_missing_origins_and_unattributed_canonical_column():
