@@ -1,0 +1,12 @@
+[
+  {
+    "name": "population_bacias",
+    "endpoint": "HidroBacia",
+    "parameters": {}
+  },
+  {
+    "name": "population_ufs",
+    "endpoint": "HidroUF",
+    "parameters": {}
+  }
+]

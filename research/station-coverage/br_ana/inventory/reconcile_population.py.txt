@@ -1,0 +1,18 @@
+"""UF sweep × targeted basin inventory → bounded population reconciliation."""
+import collections
+import hashlib
+import json
+from pathlib import Path
+from rivretrieve._internal.recordings import read_recording
+out=Path.cwd()/".worktrees/brazil-live-evidence"
+def rows(name):return json.loads(read_recording(out/(name+".recording.json")).content)["items"]
+def digest(row):return hashlib.sha256(json.dumps(row,sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
+ufs="AC AL AM AP BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO".split()
+known={}
+for uf in ufs:
+    known.update({r["codigoestacao"]:digest(r) for r in rows("inventory_UF_"+uf)})
+foreign_refs=[r for r in rows("population_ufs") if r["Estado_Sigla"] not in ufs]
+basin=rows("population_inventory_basin9")
+result={"reference_foreign_units":foreign_refs,"basin9_rows":len(basin),"basin9_uf_counts":dict(collections.Counter(r["UF_Estacao"] for r in basin)),"basin9_station_types":dict(collections.Counter(r["Tipo_Estacao"] for r in basin)),"basin9_overlap_ids":[r["codigoestacao"] for r in basin if r["codigoestacao"] in known],"basin9_overlap_conflicts":[r["codigoestacao"] for r in basin if r["codigoestacao"] in known and digest(r)!=known[r["codigoestacao"]]],"basin9_outside_sweep":[{"station_id":r["codigoestacao"],"uf":r["UF_Estacao"],"type":r["Tipo_Estacao"]} for r in basin if r["codigoestacao"] not in known],"basin9_domestic_outside_sweep":[r["codigoestacao"] for r in basin if r["UF_Estacao"] in ufs and r["codigoestacao"] not in known],"basin9_null_uf_ids":[r["codigoestacao"] for r in basin if r["UF_Estacao"] is None]}
+(out/"population-reconciliation.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
+print(json.dumps({k:len(v) if isinstance(v,list) else v for k,v in result.items()},ensure_ascii=False))

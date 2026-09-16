@@ -1,0 +1,10 @@
+[
+  {
+    "name": "population_inventory_basin9",
+    "http_status": 200,
+    "sha256": "eef625668bd8fcc2beaf0aac6a263b8bdec50c6d3050b1f40b6af4f3b069909d",
+    "bytes": 2431358,
+    "items_kind": "list",
+    "items_count": 1104
+  }
+]

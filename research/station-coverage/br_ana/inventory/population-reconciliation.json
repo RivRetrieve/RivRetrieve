@@ -1,0 +1,5630 @@
+{
+  "reference_foreign_units": [
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "URUGUAI",
+      "Estado_Sigla": "UR",
+      "codigouf": "61"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "ARGENTINA",
+      "Estado_Sigla": "AR",
+      "codigouf": "62"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "PARAGUAI",
+      "Estado_Sigla": "PG",
+      "codigouf": "63"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "CHILE",
+      "Estado_Sigla": "CH",
+      "codigouf": "64"
+    },
+    {
+      "Data_Ultima_Alteracao": "2013-07-03 00:00:00.0",
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "BOLÍVIA",
+      "Estado_Sigla": "BO",
+      "codigouf": "65"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "PERU",
+      "Estado_Sigla": "PU",
+      "codigouf": "66"
+    },
+    {
+      "Data_Ultima_Alteracao": "2013-05-27 00:00:00.0",
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "COLÔMBIA",
+      "Estado_Sigla": "CO",
+      "codigouf": "67"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "EQUADOR",
+      "Estado_Sigla": "EQ",
+      "codigouf": "68"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "VENEZUELA",
+      "Estado_Sigla": "VE",
+      "codigouf": "69"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "GUIANA",
+      "Estado_Sigla": "GU",
+      "codigouf": "70"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "SURINAME",
+      "Estado_Sigla": "SU",
+      "codigouf": "71"
+    },
+    {
+      "Data_Ultima_Alteracao": null,
+      "Estado_Codigo_IBGE": null,
+      "Estado_Nome": "GUIANA FRANCESA",
+      "Estado_Sigla": "GF",
+      "codigouf": "72"
+    }
+  ],
+  "basin9_rows": 1104,
+  "basin9_uf_counts": {
+    "PU": 516,
+    "PE": 1,
+    "EQ": 72,
+    "CH": 26,
+    "PG": 7,
+    "AR": 61,
+    "UR": 2,
+    "CO": 102,
+    "VE": 63,
+    "SU": 214,
+    "GU": 39,
+    "GF": 1
+  },
+  "basin9_station_types": {
+    "Pluviometrica": 1088,
+    "Fluviometrica": 16
+  },
+  "basin9_overlap_ids": [
+    "332000"
+  ],
+  "basin9_overlap_conflicts": [],
+  "basin9_outside_sweep": [
+    {
+      "station_id": "75001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "75005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "173000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "175000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "270000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "271000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "272000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "273000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "274001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "274002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "275000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "276000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "374000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "377000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "377002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "380001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "380002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "380003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "469006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "470007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "479000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "481001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "481002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "577000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "577001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "578024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "479005",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "479004",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "479003",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "479002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "479001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "478004",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "478003",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "478002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "379002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "379001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "378012",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "378004",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "378003",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "378002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "378001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "280002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "280001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "279002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "279001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278016",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278015",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278014",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278013",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278012",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278011",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278010",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278009",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278008",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278007",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278006",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278005",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278004",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278003",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "278000",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "180001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "179002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "179001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178012",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178011",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178009",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178008",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178007",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178006",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178005",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178004",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178003",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "178000",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "89001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "80002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "80001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "79003",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "79002",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "78007",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "78006",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "78005",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "78003",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "78001",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "75004",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579026",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579027",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579028",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579029",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579030",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579031",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579032",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579033",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579034",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579035",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "579036",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "580001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "677000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "677002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "677003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "678022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "679013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "778025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "874001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "874002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "874003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "874010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "874011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "874012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "875000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "879001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "974000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "974001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "975007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "975009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "976015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "976016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "976017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "977004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1074000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1074003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075026",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075027",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075028",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075029",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075030",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075031",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075032",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075033",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1075034",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076026",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076027",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076028",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076029",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076030",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1076035",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1174009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175027",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175028",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175029",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175030",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175031",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175032",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175033",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1175034",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176026",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176027",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176028",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176029",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1176030",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1272009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1273000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1273001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1273002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1273003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1273004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1273005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1273006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274026",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274027",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274028",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274029",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1274030",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275023",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275026",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275027",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275028",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1275029",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1277001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1277002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1277003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1370001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1370002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1370005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371019",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371020",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371021",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371022",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371024",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371025",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1371026",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1372018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1373018",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374013",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374014",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374015",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374016",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1374017",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1375000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1375001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1375002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1375003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1375004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1376001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1469001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1469002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1469003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1469004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1470000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1470003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1471011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1472000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1472001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1472002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1472003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473006",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473007",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473008",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473009",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473010",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473011",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1473012",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1474000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1474001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1474002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1474003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1474004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1570001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1570002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1571000",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1571001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1571002",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1571003",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1571004",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1571005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1575001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1671001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1769001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1870001",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1870002",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "1959000",
+      "uf": "PG",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2058002",
+      "uf": "PG",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2061000",
+      "uf": "PG",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2070000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2257002",
+      "uf": "PG",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2260002",
+      "uf": "PG",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2261000",
+      "uf": "PG",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2265001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2370001",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2462000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2465002",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2562000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2657000",
+      "uf": "PG",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2660000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2665000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2680000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2764001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2770000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2865000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2867000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2870000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2961001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2966000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "2971001",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3055012",
+      "uf": "UR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3068000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3160001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3164000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3166000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3168000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3268001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3270000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3271000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3364000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3365000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3366000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3370000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3371001",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3378000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3454002",
+      "uf": "UR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3458002",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3460001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3468000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3471000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3557000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3560001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3561001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3569000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3572000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3657001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3659001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3659002",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3661001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3664001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3666001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3673001",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3757001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3759000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3761001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3762001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3860000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3862000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3862001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3862002",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3868000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3872000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3873000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3964000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "3973000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4063000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4064001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4168000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4171000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4173001",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4271001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4365000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4368000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4374000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4567001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4571000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4572000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4671000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4675000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4765001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4870000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "4967001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5068000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5072000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5169000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5275000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5367000",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5370001",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5467000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5468001",
+      "uf": "AR",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "5668000",
+      "uf": "CH",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8074002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8077001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8078000",
+      "uf": "EQ",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8166005",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8177013",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8177014",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8178001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8178002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8256000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8256001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8256002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8256003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8256004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8257000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8259001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8264000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8264001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8265000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8265001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8265002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8266000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8267000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8267001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8272001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8272002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8273001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275003",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275004",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275005",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275006",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275007",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275008",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275009",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8275010",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276003",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276004",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276005",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276006",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276007",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276008",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8276009",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8277002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8354000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8354002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8354003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8354004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8355000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8355001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8355002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8355003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8355004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8355005",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8356000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8356001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8356002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357000",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357005",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8357008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8359001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8359003",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8359004",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8365000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8365001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8365002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8365003",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8365004",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8366000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8367000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8367001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8367002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8373000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8373001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8373004",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8374001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8375000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8375004",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8375005",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8375006",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8375008",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376003",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376004",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376005",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376006",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376007",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376008",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376010",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376012",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376013",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376016",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376017",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376018",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376019",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8376020",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8377000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8377002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8377003",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8452000",
+      "uf": "GF",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454005",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454009",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454011",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454012",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454013",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8454016",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455005",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455009",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455010",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455011",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455012",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455013",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455014",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455016",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8455019",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456005",
+      "uf": "PU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8456008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8457000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8457001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8457002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8457003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8457004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8457005",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8457006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8461001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8465000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8466000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8466001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8467000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8467001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8470001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8473001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8474001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8474002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8474003",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8474004",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8474005",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475003",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475004",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475005",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475006",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475007",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475008",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8475010",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8476000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554009",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554010",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554011",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554012",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554013",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554014",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554015",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554016",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554017",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554018",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554019",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554020",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554021",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554022",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554023",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554024",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554029",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554031",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554036",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554037",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554038",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554041",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8554042",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555009",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555010",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555011",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555012",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555013",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555014",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555015",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555016",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555017",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555018",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555019",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555020",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555021",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555022",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555023",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555024",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555026",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555027",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555028",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555029",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555030",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555031",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555032",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555033",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555034",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555035",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555036",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555037",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555038",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555039",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555040",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555041",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555042",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555043",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555044",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555045",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555046",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555047",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555048",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555049",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555050",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555051",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555052",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555053",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555054",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555055",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555056",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555057",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555058",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555059",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555060",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555061",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555062",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555063",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555064",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555065",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555067",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555068",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555073",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555077",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555080",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555084",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555091",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555096",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555098",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555101",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555104",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8555105",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556001",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556005",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556009",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556010",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556011",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556012",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556013",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556014",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556015",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556016",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556017",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556018",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556019",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556020",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556021",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556022",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556023",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556024",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556025",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8556033",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557002",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557003",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557004",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557005",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557006",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557007",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557008",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557009",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557010",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557011",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557012",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8557013",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8559000",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8559001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8559002",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8560001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8560002",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8560003",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8565000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8565001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8565002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8566000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8566001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567003",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567004",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567005",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567006",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8567007",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8572001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8575001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8576001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8655000",
+      "uf": "SU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8657000",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8657001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8657002",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8657003",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8657004",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658000",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658002",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658003",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658004",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658005",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658006",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658007",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658008",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8658009",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8660000",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8662000",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8667000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8667001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8675001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8675002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8758000",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8758001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8761001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8767001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8770000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8770001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8770002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8772001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8772002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8772003",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8772004",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8772005",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8773001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8773002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8774001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8776001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8859000",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8859001",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8859002",
+      "uf": "GU",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8863001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8871001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8875001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8876001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8962001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8963001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8969001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8969002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8970001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8970002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8974000",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "8975001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9062001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9063001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9064001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9064002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9066001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9066002",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9066003",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9067001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9068001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9069001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9071001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9074001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9075001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9075002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9166001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9169001",
+      "uf": "VE",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9174001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9281001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9281002",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "9381001",
+      "uf": "CO",
+      "type": "Pluviometrica"
+    },
+    {
+      "station_id": "90070001",
+      "uf": "GU",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90070002",
+      "uf": "GU",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90070003",
+      "uf": "GU",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90070004",
+      "uf": "GU",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90100001",
+      "uf": "SU",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90200000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90210000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90220000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90230000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90240000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90250000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90260000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90270000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90280000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90290000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    },
+    {
+      "station_id": "90300000",
+      "uf": "EQ",
+      "type": "Fluviometrica"
+    }
+  ],
+  "basin9_domestic_outside_sweep": [],
+  "basin9_null_uf_ids": []
+}

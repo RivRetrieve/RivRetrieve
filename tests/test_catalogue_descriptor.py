@@ -61,15 +61,12 @@ def _inputs(provider: str):
             EvidenceHeader.model_validate_json(payload),
             {name: evidence_files[name] for name in EVIDENCE_FILENAMES.values()},
         )
-    if provider == "br_ana":
-        origins = ()
-    else:
-        module = importlib.import_module(f"rivretrieve._internal.providers.{provider}.origins")
-        origins = (
-            (module.HYDROMETRY_STATION_CATALOGUE_ORIGINS, module.TEMPERATURE_STATION_CATALOGUE_ORIGINS)
-            if provider == "fr_hubeau"
-            else (module.STATION_CATALOGUE_ORIGINS,)
-        )
+    module = importlib.import_module(f"rivretrieve._internal.providers.{provider}.origins")
+    origins = (
+        (module.HYDROMETRY_STATION_CATALOGUE_ORIGINS, module.TEMPERATURE_STATION_CATALOGUE_ORIGINS)
+        if provider == "fr_hubeau"
+        else (module.STATION_CATALOGUE_ORIGINS,)
+    )
     files = {**canonical, **evidence_files}
     return provenance, origins, files
 
@@ -192,10 +189,11 @@ def test_evidenced_baseline_record_sets_do_not_report_withheld_rows(provider: st
 def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
     brazil = mlc.Dataset(_path("br_ana") / "croissant.json")
-    for record in ("products", "stations", "station_products"):
+    for record in ("products", "station_products"):
         assert list(brazil.records(record)) == []
     provider = list(brazil.records("provider"))
-    assert provider[0]["provider/catalogue_version"] is None
+    assert provider[0]["provider/catalogue_version"] is not None
+    assert len(list(islice(brazil.records("stations"), 1))) == 1
     poland = mlc.Dataset(_path("pl_imgw") / "croissant.json")
     rows = list(islice(poland.records("station_products"), 3))
     extracted = pl.DataFrame(
@@ -216,15 +214,16 @@ def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch):
     pl_testing.assert_frame_equal(extracted, expected)
 
 
-def test_brazil_preserves_terms_without_inventing_date_or_native_identity():
+def test_brazil_preserves_attested_identity_and_withholds_only_unevidenced_products():
     descriptor = _descriptor("br_ana")
     provenance, _, _ = _inputs("br_ana")
     assert descriptor["license"] == provenance.header.source_records[0].statements[0].exact_text
-    assert not {"version", "datePublished", "isBasedOn"}.intersection(descriptor)
-    assert all(
-        "rr:absence" in record for record in descriptor["recordSet"] if not record["@id"].startswith("provenance_")
-    )
-    assert all("rowCount" not in record["rr:absence"] for record in descriptor["recordSet"] if "rr:absence" in record)
+    assert {"version", "datePublished", "isBasedOn"} <= set(descriptor)
+    assert provenance.header.native_table is not None
+    records = {record["@id"]: record for record in descriptor["recordSet"]}
+    assert "rr:absence" not in records["stations"]
+    for name in ("products", "station_products"):
+        assert "rr:absence" in records[name]
 
 
 def test_generator_rejects_missing_origins_and_unattributed_canonical_column():

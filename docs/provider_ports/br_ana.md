@@ -1,3 +1,93 @@
+# Brazil ANA inventory certification
+
+Related issue: [#213](https://github.com/RivRetrieve/RivRetrieve/issues/213).
+
+## Delivered boundary
+
+This is inventory certification, not Brazil end-to-end observation delivery. The declaration
+remains `CatalogueOnly`. Products and station-product relationships are withheld pending
+source semantics and observation-stage certification. Inventory presence, type flags,
+operating dates, and one empty observation response do not establish availability.
+The former five candidate products are not published by this build.
+
+## Acquired population and native fidelity
+
+The 2026-09-16 acquisition covers all 27 documented UF filters and all nine documented basin
+filters of `HidroInventarioEstacoes/v1`. The 36 successful recordings contain 78,836 row
+occurrences and 40,747 distinct station identities. All overlapping source rows are identical.
+Every supporting recording and row occurrence is retained. Conflicting overlaps fail rather
+than selecting a preferred source row. Native `retrieved_at` is the earliest containing
+acquisition instant; it is not an observation date or a source update timestamp.
+
+The native table preserves all 69 source columns, exact strings, nulls, casing and native
+terms, including 2,658 foreign station identities absent from the domestic UF sweep.
+Source columns and station identities are sorted lexically for deterministic materialization.
+The canonical projection is exactly `Tipo_Estacao == "Fluviometrica"`: 17,914 river gauges.
+The remaining 22,833 `Pluviometrica` records remain native and explicitly accounted, not
+acquisition-withheld. Unknown or missing source station types fail. No acquired source row
+is dropped for coordinates, geography, operating status or inferred product support.
+The origin gate compares the explicit river-gauge native projection one-to-one with the
+canonical table; its global no-row-loss invariant is unchanged.
+
+This is the population returned by the documented enumerated filters, not a claim that
+undocumented records with both null UF and null basin cannot exist. All UF identities also
+occur in the basin sweep. The basin9 cross-check first exposed foreign records; the final
+nine-basin sweep retains them instead of imposing an arbitrary geographic exclusion.
+Original seven HTTP503 UF attempts and successful retries remain separate acquisition
+outcomes. A failed attempt is never an empty successful response.
+
+Latitude and longitude are strict numeric conversions of source strings. Their CRS is
+withheld because acquisition evidence does not establish it. No CRS, coordinate-derived
+timezone, area unit or availability is inferred. ANA's independently retained institutional
+open-data statement is surfaced verbatim. No citation request was established.
+
+## Offline reproduction and maintenance
+
+Native input, compressed recordings and private acquisition reports are repository build
+inputs, excluded from both distributions. The capture attestation identifies exact requests,
+retrieval instants, recording and payload digests, counts and the revision-pinned native file.
+The public provenance and Croissant descriptor are generated from exact emitted bytes.
+
+```bash
+uv run python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
+  --materialize-record tests/test_data/br_ana_inventory/capture.json \
+  --repository-root . --native-out /tmp/ana-native.parquet
+uv run python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
+  --native /tmp/ana-native.parquet \
+  --capture-record tests/test_data/br_ana_inventory/capture.json \
+  --out /tmp/ana-catalogue
+```
+
+Maintainer refresh uses the shared secure credential exchange. Run from the working directory
+where the owner intentionally provisioned credentials; no secret file is copied into a worktree.
+Process environment takes precedence over the explicit env file. The output directory must
+not already exist, so a new acquisition never overwrites historical attempts.
+
+```bash
+uv run python scripts/acquire_ana_inventory.py --out <new-acquisition-directory> --env-file <owner-supplied-env-file>
+```
+
+A new capture requires reconciliation, fresh native materialization, a pinned input commit and
+reviewed attestation before publishing. Do not point an old attestation at a new response.
+The original acquisition scripts and outcome reports are retained under
+`research/station-coverage/br_ana/inventory/` as historical evidence, not alternate generators.
+Source-row occurrences bind every repeated station to all its acquired files and row indices.
+
+The old `--fixture`, `--live`, `--withhold-uncertified` and direct payload build paths now fail
+with an explicit migration message. They cannot publish invented fixtures or bypass the
+attested native build. The legacy observation subtree stays intact pending verified replacement.
+
+## Observation evidence limitations
+
+Official telemetry documentation establishes `Cota_Adotada` in cm and `Vazao_Adotada` in m3/s.
+Conventional daily `Mediadiaria`, source units and simultaneous consistency-level selection
+remain unresolved. This slice publishes neither telemetry nor conventional products and does
+not turn station operating periods into observation availability or period of record.
+
+## Historical notes
+
+The following notes describe prior investigation and remain historical, not current certification.
+
 # br_ana Provider Port Notes
 
 These notes capture endpoint facts, catalogue mapping decisions, and pain points from porting Brazil's ANA Hidroweb provider. Pain that is `br_ana`-specific stays here; shared harness gaps would be promoted to [ADRs](../adr/).

@@ -1,7 +1,16 @@
 {
   "schema_version": 3,
   "provider_id": "br_ana",
-  "native_table": null,
+  "native_table": {
+    "repository_path": "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "revision": "ff432f57733585ee055ab4dbc72d69c548841382",
+    "sha256": "3538893b182ded3693bdb1ce5312c814371a1854bc3d63a6c3e09ea1d8d56581",
+    "byte_size": 1757184,
+    "semantic_digest": {
+      "name": "br_ana.native_semantic_frame_sha256",
+      "sha256": "c4a1c055070a4867b0329cd23dbe7c3819aa76cf9b66b661e1e1f01f59d073af"
+    }
+  },
   "source_records": [
     {
       "source_id": "br_ana.terms",
@@ -30,30 +39,532 @@
           "verification_status": "verified_public_recording"
         }
       ]
+    },
+    {
+      "source_id": "br_ana.hidro_inventory",
+      "issuer": "Agência Nacional de Águas e Saneamento Básico (ANA)",
+      "operator": "www.ana.gov.br",
+      "evidence": [
+        {
+          "evidence_id": "inventory_UF_AC",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_AC",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=AC",
+            "retrieved_at": "2026-09-16T11:26:38.200714Z",
+            "media_type": "application/json",
+            "sha256": "0f69fe786751e42a0a0f87cb5f8d3448ca8d18235c291de983701afd67a103ae"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_AL",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_AL",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_AL.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=AL",
+            "retrieved_at": "2026-09-16T11:26:45.045585Z",
+            "media_type": "application/json",
+            "sha256": "bfd05492b868623b24844a8de51f13dfe0f2df00bbfdc2bc6681c8a1e22ad4d5"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_AM",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_AM",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_AM.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=AM",
+            "retrieved_at": "2026-09-16T11:26:55.834509Z",
+            "media_type": "application/json",
+            "sha256": "f3394106f81de926eb56b4d4cde6ef76465835f3e7867571670b82a018e4abd3"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_AP",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_AP",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_AP.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=AP",
+            "retrieved_at": "2026-09-16T11:27:08.260705Z",
+            "media_type": "application/json",
+            "sha256": "5bd2c357353cb892f4ccf58ec435ce5c9a99be2bafc6bad70c2b033d0f91e70a"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_BA",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_BA",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_BA.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=BA",
+            "retrieved_at": "2026-09-16T11:27:25.205219Z",
+            "media_type": "application/json",
+            "sha256": "f25bc2042545debe315aafa39d27d3702ca7b92705e1ad402307e033bef1c8ec"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_CE",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_CE",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_CE.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=CE",
+            "retrieved_at": "2026-09-16T11:27:36.852251Z",
+            "media_type": "application/json",
+            "sha256": "25a07a81dc6cd134950610ce5d000453ff82623963cdcdbfca0fb72a2e436149"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_DF",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_DF",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_DF.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=DF",
+            "retrieved_at": "2026-09-16T11:27:48.284553Z",
+            "media_type": "application/json",
+            "sha256": "87a20b89badf4ecc54e969f95dec0b52fcba0e92a8f3e910d0c5d7e5c5f46169"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_ES",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_ES",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_ES.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=ES",
+            "retrieved_at": "2026-09-16T11:28:01.453116Z",
+            "media_type": "application/json",
+            "sha256": "ef87ffffd0e25bb597733caf0234fa3977f04afdc53eb42f0d68899ae11087f5"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_GO",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_GO",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_GO.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=GO",
+            "retrieved_at": "2026-09-16T11:28:14.110447Z",
+            "media_type": "application/json",
+            "sha256": "dfa3633856802e20a22005dbf9325dd41c0bd06896f398ed37bbe66a1212147e"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_MA",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_MA",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_MA.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=MA",
+            "retrieved_at": "2026-09-16T11:28:26.687531Z",
+            "media_type": "application/json",
+            "sha256": "687cd794dd9a9ff30a7edc01f4abfa7908d600a8c952acba26f39191395c10c3"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_MG",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_MG",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_MG.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=MG",
+            "retrieved_at": "2026-09-16T11:29:08.112647Z",
+            "media_type": "application/json",
+            "sha256": "43b174b45ef15ade138584073df95d6a7b674347cfdde99c79d4535570f3baba"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_MS",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_MS",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_MS.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=MS",
+            "retrieved_at": "2026-09-16T11:28:49.466957Z",
+            "media_type": "application/json",
+            "sha256": "563f34b56724f715bb334a8150cc1ea017248e361a3cc641fe242dcfa97a7ded"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_MT",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_MT",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_MT.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=MT",
+            "retrieved_at": "2026-09-16T11:28:39.034914Z",
+            "media_type": "application/json",
+            "sha256": "945b890cb36bd1b2e2dce648d970862cc95e3cf1924c12e0153f73535f1d6a52"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_PA",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_PA",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_PA.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=PA",
+            "retrieved_at": "2026-09-16T11:29:23.869378Z",
+            "media_type": "application/json",
+            "sha256": "52a98ad2ebe07fbea937c2730b2d47fd3ab179707d1a2b14ea01556a4d1cd530"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_PB",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_PB",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_PB.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=PB",
+            "retrieved_at": "2026-09-16T11:32:31.109646Z",
+            "media_type": "application/json",
+            "sha256": "7c88353d1f1386b4ca54eb2b1264d34a822abb255e74fc5a6a5a5eae5bc2ab54"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_PE",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_PE",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_PE.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=PE",
+            "retrieved_at": "2026-09-16T11:32:41.958057Z",
+            "media_type": "application/json",
+            "sha256": "e5054452b682fe3f27dff33ed302e5ab57f6629d2d2338e7fe71c9c29d564b4e"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_PI",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_PI",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_PI.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=PI",
+            "retrieved_at": "2026-09-16T11:32:46.129617Z",
+            "media_type": "application/json",
+            "sha256": "e1293ccde854ed0a6f1fc66bf5728eb0eac703034c1a1b9f4365297e2c96c222"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_PR",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_PR",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_PR.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=PR",
+            "retrieved_at": "2026-09-16T11:32:36.258134Z",
+            "media_type": "application/json",
+            "sha256": "4741f090a1f0bd3e0d8e4360086ca7112902626a77c57288bb450be3719a6952"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_RJ",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_RJ",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_RJ.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=RJ",
+            "retrieved_at": "2026-09-16T11:32:50.883256Z",
+            "media_type": "application/json",
+            "sha256": "fa29288f48aa2363d19e5c3b3e5fd01d717b9dd1e4e290b90d0a2bb0ee5b8b14"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_RN",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_RN",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_RN.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=RN",
+            "retrieved_at": "2026-09-16T11:32:55.334389Z",
+            "media_type": "application/json",
+            "sha256": "4b394f07bf593fd183dde0e083e9d412da9008faa5fa869f3e87b2159a630881"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_RO",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_RO",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_RO.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=RO",
+            "retrieved_at": "2026-09-16T11:30:13.324146Z",
+            "media_type": "application/json",
+            "sha256": "b0b14a752d3f2f56e694bdea4a35b8aea434cf9d5a930417128fbba5d9dba6c8"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_RR",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_RR",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_RR.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=RR",
+            "retrieved_at": "2026-09-16T11:30:16.656851Z",
+            "media_type": "application/json",
+            "sha256": "360bf1906020aed97584f5f85c0ac8086a3ee58214c861b34932e13c724ab4cc"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_RS",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_RS",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_RS.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=RS",
+            "retrieved_at": "2026-09-16T11:33:00.797198Z",
+            "media_type": "application/json",
+            "sha256": "31c0923b5139b191595143d9ef7362f7161457a1ac15e88b801688b8cb2d3edb"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_SC",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_SC",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_SC.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=SC",
+            "retrieved_at": "2026-09-16T11:30:22.011439Z",
+            "media_type": "application/json",
+            "sha256": "19aec642932bbf87c4aa690a52a714f6d380421b80522787f2cdf704c17d6f9a"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_SE",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_SE",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_SE.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=SE",
+            "retrieved_at": "2026-09-16T11:30:36.955515Z",
+            "media_type": "application/json",
+            "sha256": "34416cd232a66148fec6eac597e702d1c67cdfac88400c5417e7335843f903e6"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_SP",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_SP",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_SP.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=SP",
+            "retrieved_at": "2026-09-16T11:30:31.042379Z",
+            "media_type": "application/json",
+            "sha256": "d0faca4b0a16a9fcfef59515265c5c493ff438b4452e1c8d5b89a574c2e0f8df"
+          }
+        },
+        {
+          "evidence_id": "inventory_UF_TO",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "inventory_UF_TO",
+            "repository_path": "tests/test_data/br_ana_inventory/inventory_UF_TO.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?Unidade%20Federativa=TO",
+            "retrieved_at": "2026-09-16T11:30:44.488412Z",
+            "media_type": "application/json",
+            "sha256": "964f5d3bdfcaeee7aed48fb15ba129240b5bb9c28437042f8a6f4a80224a59ae"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin1",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin1",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin1.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=1",
+            "retrieved_at": "2026-09-16T11:37:14.536855Z",
+            "media_type": "application/json",
+            "sha256": "884205c6b9694e810db13855e520844724a5875ddf4d7b3c139e3cba6d585e9d"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin2",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin2",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin2.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=2",
+            "retrieved_at": "2026-09-16T11:37:20.490632Z",
+            "media_type": "application/json",
+            "sha256": "b9cf1dd0070812b3a11163b0135581b99735ff5783338b54683f62646ea009fa"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin3",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin3",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin3.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=3",
+            "retrieved_at": "2026-09-16T11:37:26.911791Z",
+            "media_type": "application/json",
+            "sha256": "7a3ddcfd4d3ff3c9a8b7a7f08c364d730ebba24fee0fa3035e532c135b1727fa"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin4",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin4",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin4.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=4",
+            "retrieved_at": "2026-09-16T11:37:32.348754Z",
+            "media_type": "application/json",
+            "sha256": "ee7e776f103d65e1d5a42c6f3c3281c38b4d9b59443900ac244569d99917f92f"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin5",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin5",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin5.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=5",
+            "retrieved_at": "2026-09-16T11:37:39.470353Z",
+            "media_type": "application/json",
+            "sha256": "c05ef29530036751b84e92db31058e5ca944c6a7ac9734fb255960d6e15a8014"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin6",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin6",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin6.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=6",
+            "retrieved_at": "2026-09-16T11:37:49.731691Z",
+            "media_type": "application/json",
+            "sha256": "56c62240df8f3ca6253e8f44c36f78797cb7ea84c0a77d98441a0826d82b3be7"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin7",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin7",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin7.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=7",
+            "retrieved_at": "2026-09-16T11:37:54.979864Z",
+            "media_type": "application/json",
+            "sha256": "9cd628f16abd1785c14f5addf6a4002361829cabb15cc52f5c0c47247631ad07"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin8",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin8",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin8.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=8",
+            "retrieved_at": "2026-09-16T11:38:00.986472Z",
+            "media_type": "application/json",
+            "sha256": "28d630f557f1dc4394f817eebe2556d1b3fc834a9bec23721d57abcbf8499a45"
+          }
+        },
+        {
+          "evidence_id": "population_inventory_basin9",
+          "description": "Exact credential-free inventory recording; excluded from distributions",
+          "recording": {
+            "recording_id": "population_inventory_basin9",
+            "repository_path": "tests/test_data/br_ana_inventory/population_inventory_basin9.recording.json.xz",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1?C%C3%B3digo%20da%20Bacia=9",
+            "retrieved_at": "2026-09-16T11:33:41.130809Z",
+            "media_type": "application/json",
+            "sha256": "eef625668bd8fcc2beaf0aac6a263b8bdec50c6d3050b1f40b6af4f3b069909d"
+          }
+        }
+      ],
+      "statements": []
     }
   ],
   "descriptions": [
-    "ANA institutional open-data terms HTML response"
+    "ANA institutional open-data terms HTML response",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'AC'}; 152 accepted source rows and 152 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes. Original failed attempts and successful retries are retained separately, not interpreted as empty inventories. research/station-coverage/br_ana/inventory/inventory-ufs-retry.json.results.json: SHA256 046a4d2b5cac0bdc9841057a4a7fb8f7068726a04617a182bbc16b1aaf7cfb57, 1526 bytes; research/station-coverage/br_ana/inventory/inventory-ufs.json.results.json: SHA256 d57d86de36c143dbd84a85f4cd7acec2f60c431386f7bde16a2b1854ff6482dc, 5032 bytes; research/station-coverage/br_ana/inventory/population-basin9.json.results.json: SHA256 07928d0b963cb85c9c39f9e7604338d5d5ce3adac5c1b8fc8042b12f9de156a9, 233 bytes; research/station-coverage/br_ana/inventory/population-basins1-8.json.results.json: SHA256 62912bfcdf8efc561a877e47b3db24c1a9c6fc30fa8cd110a8e8954c471d1b49, 1847 bytes",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'AL'}; 439 accepted source rows and 439 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'AM'}; 648 accepted source rows and 648 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'AP'}; 176 accepted source rows and 176 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'BA'}; 3220 accepted source rows and 3220 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'CE'}; 1768 accepted source rows and 1768 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'DF'}; 468 accepted source rows and 468 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'ES'}; 795 accepted source rows and 795 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'GO'}; 1261 accepted source rows and 1261 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'MA'}; 602 accepted source rows and 602 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'MG'}; 5322 accepted source rows and 5322 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'MS'}; 778 accepted source rows and 778 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'MT'}; 1390 accepted source rows and 1390 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'PA'}; 929 accepted source rows and 929 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'PB'}; 794 accepted source rows and 794 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'PE'}; 1393 accepted source rows and 1393 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'PI'}; 629 accepted source rows and 629 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'PR'}; 2768 accepted source rows and 2768 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'RJ'}; 1967 accepted source rows and 1967 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'RN'}; 852 accepted source rows and 852 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'RO'}; 430 accepted source rows and 430 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'RR'}; 139 accepted source rows and 139 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'RS'}; 3031 accepted source rows and 3031 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'SC'}; 1810 accepted source rows and 1810 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'SE'}; 297 accepted source rows and 297 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'SP'}; 5349 accepted source rows and 5349 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Unidade Federativa': 'TO'}; 682 accepted source rows and 682 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 1}; 3520 accepted source rows and 3520 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 2}; 1570 accepted source rows and 1570 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 3}; 6144 accepted source rows and 6144 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 4}; 4131 accepted source rows and 4131 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 5}; 7518 accepted source rows and 7518 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 6}; 10929 accepted source rows and 10929 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 7}; 1894 accepted source rows and 1894 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 8}; 3937 accepted source rows and 3937 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
+    "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 9}; 1104 accepted source rows and 1104 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes."
   ],
   "transformations": [
     {
-      "name": "RivRetrieve code-defined provider registration and capabilities",
+      "name": "RivRetrieve provider identity, capabilities and attested catalogue date",
       "kind": "authored_constant",
       "marker_value": null
+    },
+    {
+      "name": "ANA issuing agency identity",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "ANA institutional open-data terms verbatim",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Exact native union (40747 distinct stations); select Tipo_Estacao == Fluviometrica (17914); retain Pluviometrica (22833) in native input, not acquisition-withheld. Equal overlapping source rows retain all containing acquisition references; conflicts fail. Acquired all 27 documented UF filters and all 9 basin filters, including source-published foreign stations. This does not prove that undocumented records with both null UF and null basin cannot exist.",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "CRS acquisition not established; unknown carrier, not source silence",
+      "kind": "absence_marker",
+      "marker_value": "unknown"
     }
   ],
   "withheld_facts": [
     {
-      "fact_group": "provider_external_catalogue_facts_without_acquisition",
+      "fact_group": "horizontal_crs_not_established",
       "facts": [
-        "provider.catalogue_version",
-        "provider.license",
+        "source.ana.horizontal_crs"
+      ],
+      "reason": "no_acquisition_record_established",
+      "source_id": "br_ana.hidro_inventory"
+    },
+    {
+      "fact_group": "citation_request_not_established",
+      "facts": [
         "provider.citation"
       ],
       "reason": "no_acquisition_record_established"
     },
     {
-      "fact_group": "product_definitions_without_acquisition",
+      "fact_group": "products_pending_source_semantics_and_observation_stage_certification",
       "facts": [
         "product.provider_id",
         "product.product_id",
@@ -68,18 +579,7 @@
       "reason": "no_acquisition_record_established"
     },
     {
-      "fact_group": "station_identity_and_location_without_acquisition",
-      "facts": [
-        "station.provider_id",
-        "station.station_id",
-        "station.latitude",
-        "station.longitude",
-        "station.crs"
-      ],
-      "reason": "no_acquisition_record_established"
-    },
-    {
-      "fact_group": "station_product_relationships_without_acquisition",
+      "fact_group": "station_product_relationships_not_established_by_inventory_presence",
       "facts": [
         "station_product.provider_id",
         "station_product.station_id",
@@ -97,37 +597,37 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "c14bc4a0c65fdf7581c28f824fec04ea6608c7635ced54871ef36651261afd4b",
-      "byte_count": 2430,
-      "row_count": 32,
+      "sha256": "93a9d872a9cb7f673e39dd17db9237b0ebc7eb3998c43cac9967a92d31f74601",
+      "byte_count": 2781,
+      "row_count": 69,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
       "path": "provenance_acquisitions.parquet",
-      "sha256": "40176b515362ebdfa3904e66ad10bd33b6c6d3b4eff3c0c36b8a7288a7c8085f",
-      "byte_count": 6213,
-      "row_count": 1,
+      "sha256": "955df810d073c3fcbaef89aaf564a6c9a38d9c81a6ef823c126616b720cc875f",
+      "byte_count": 9973,
+      "row_count": 37,
       "schema_version": 3
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "502a007ee39dc2e4a4cf47ce5f2a4d5ea589a038a320d7d07df2943ad8b4e202",
-      "byte_count": 2188,
-      "row_count": 2,
+      "sha256": "da1d6b73df46006a42ad592ea03db07de8d0ceaa610a854b336618d8953694dd",
+      "byte_count": 2592,
+      "row_count": 42,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "5095987683f5ed352ae5beb97dba07ddf63181d198e1fbe15542f075fcbfc981",
-      "byte_count": 1196,
-      "row_count": 7,
+      "sha256": "9304c0d2ff34815886d97348e530e4f33b9e3525487393556f6aeaff0c4e4376",
+      "byte_count": 1405,
+      "row_count": 50,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "13e38eb8f0617806e5a30e33d64a8e2db8a69d068ea715d152755da20bdc93b8",
-      "byte_count": 559,
-      "row_count": 0,
+      "sha256": "691ac456c391b28b0109500850729b07656629478352bfd4a6455bf3c20bfb83",
+      "byte_count": 1783,
+      "row_count": 74,
       "schema_version": 3
     }
   }

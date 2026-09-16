@@ -176,6 +176,10 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
         "When using data from this service, if possible, please refer to this service as origin of data.",
     )
+    expected_provider_terms["br_ana"] = (
+        "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle.",
+        None,
+    )
     for provider_id in provider_ids:
         catalogue_path = providers_root / provider_id / "catalogue"
         raw_provider_info = json.loads((catalogue_path / "provider.json").read_text())
