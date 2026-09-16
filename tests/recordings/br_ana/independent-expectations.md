@@ -31,7 +31,7 @@ These are literals established by enumerating the actual five source rows, not b
 
 ## Evidence identity and integrity
 
-Input: `.worktrees/brazil-live-evidence/telemetry_15400000_2024-01-04_DIAS_30.recording.json`.
+Input at authorship: `.worktrees/brazil-live-evidence/telemetry_15400000_2024-01-04_DIAS_30.recording.json`. The unchanged recording is now retained beside this report.
 
 - Computed recording-envelope file SHA256: `8a5ef970522616dc49b6b1817fa009f124edcd641d056de8a2e1ade61fdac604`.
 - Strict Base64 decoding of `response.content_base64` succeeded.
@@ -70,7 +70,15 @@ Official `.worktrees/brazil-source-evidence/api-docs.json`, path `/EstacoesTelem
 From repository root:
 
 ```sh
-uv run python .worktrees/brazil-independent-expectations/read_telemetry_source.py
+uv run python tests/recordings/br_ana/read_telemetry_source.py
 ```
 
 The small independent standard-library script directly decodes source bytes, verifies the body digest against the envelope and supplied digest, enumerates rows in the closed native-time window, and reports source properties. It imports no project code. Saved execution output: `telemetry-source-audit.txt` in this directory. This report supplies source-grounded expectations, not a claim that a provider has passed them.
+
+### Repository retention note
+
+The implementation owner retained the independent author's script and original output
+alongside this report. Only the script's input path was relocated to its sibling recording;
+formatting/import order were normalized without changing audit logic or literals.
+The retained script has no provider imports. Its output is checked against the original
+`telemetry-source-audit.txt`. The original independence statement remains unchanged.
