@@ -1,4 +1,4 @@
-"""record_observations : ProviderId × stations × products × RequestedWindow × CredentialHeader* × HttpClient → RecordingEnvelope files   (composition root).
+"""record_observations : ProviderDeclaration × stations × products × RequestedWindow × CredentialSources × HttpClient → RecordingEnvelope files   (composition root).
 
 Maintainer entry point that drives one live provider exactly as a public fetch would, with the
 engine's own padding, window planning and stop convention, and writes every source exchange the
@@ -11,9 +11,9 @@ Usage::
         --product discharge_instantaneous --product stage_instantaneous \\
         --start 2020-01-05 --end 2020-01-06 --out-dir tests/test_data --name za_dws_X3H001_Point_2020-01-03_2020-01-09
 
-A credentialed source names the header, the environment variable holding its value and the exact
-origin the credential is scoped to; the value is read here, applied by ``AuthenticatedTransport``
-below the recorded request, and never written::
+Declared direct and exchanged credentials are resolved here from the environment or the explicit
+``--env-file``. Credential exchange runs below the recorder, so token responses are never recorded.
+The existing explicit direct-header options remain supported for maintainer use::
 
     uv run python -m rivretrieve._internal.record_observations --provider no_nve --station 1.200.0 \\
         --product stage_daily_mean --start 2025-07-10T00:00:00 --end 2025-07-12T00:00:00 \\
@@ -21,6 +21,9 @@ below the recorded request, and never written::
         --env-file .env --out-dir tests/test_data --name no_nve_1.200.0_1000_1440_2025-07-08_2025-07-14
 
 ``--env-file`` is consulted only when the environment does not already carry the variable.
+
+Error issues produce a nonzero CLI exit after any safe partial recordings are written.
+Warning issues do not prevent recording source responses such as HTTP 404.
 
 One captured exchange is written as ``<name>.recording.json``; several are written as
 ``<name>_p1.recording.json``, ``<name>_p2.recording.json`` and so on, in send order.
@@ -30,21 +33,29 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from dotenv import dotenv_values
 
+from rivretrieve._internal.authentication import CredentialExchangeTransport
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.engine import RequestedWindow
-from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.issues import FatalContractError, IssuePolicyError, apply_on_issue
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.observations import ObservationRequest as PublicObservationRequest
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.recordings import RecordingEnvelope, RecordingTransport, write_recording
-from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient, Transport
+from rivretrieve._internal.transport import (
+    AuthenticatedTransport,
+    CredentialHeader,
+    HttpClient,
+    Transport,
+    _SystemClock,
+)
 
 
 def record_observations(
@@ -82,12 +93,14 @@ def record_observations(
     client = HttpClient() if transport is None else transport
     recording_transport = RecordingTransport(AuthenticatedTransport(client, credentials) if credentials else client)
     try:
-        drive(
+        result = drive(
             request,
             observations.stages,
             provenance=ObservationProvenance(source="live", provider_id=public_request.provider_id),
             transport=recording_transport,
+            credential_names=declared.declaration.required_credentials,
         )
+        apply_on_issue(tuple(issue for issue in result.issues if issue.severity == "error"), "raise")
     finally:
         written = _write(recording_transport.recordings, out_dir, name)
     return written
@@ -106,7 +119,7 @@ def _write(recordings: tuple[RecordingEnvelope, ...], out_dir: Path, name: str) 
             f"for {recording.request.describe()}"
         )
     if not recordings:
-        print("no source exchange was issued; nothing written")
+        print("no observation recording was captured; nothing written")
     return tuple(paths)
 
 
@@ -145,20 +158,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     credential_options = (arguments.credential_header, arguments.credential_env, arguments.credential_origin)
     if any(option is not None for option in credential_options) and not all(credential_options):
         parser.error("--credential-header, --credential-env and --credential-origin must be given together")
+    (declared,) = load_manifest((arguments.provider,))
+    declaration = declared.declaration
+    if not isinstance(declaration.observations, LiveStages):
+        raise FatalContractError(f"Provider {arguments.provider} is not a LiveStages provider; nothing to record")
+    exchange = declaration.credential_exchange
+    if exchange is not None and any(credential_options):
+        parser.error("declared credential exchange cannot be overridden by direct credential options")
     credentials: tuple[CredentialHeader, ...] = ()
+    transport: Transport | None = None
     if all(credential_options):
         value = credential_value(arguments.credential_env, os.environ, arguments.env_file)
         credentials = (CredentialHeader(arguments.credential_header, value, (arguments.credential_origin,)),)
-    record_observations(
-        arguments.provider,
-        arguments.station,
-        arguments.product,
-        arguments.start,
-        arguments.end,
-        arguments.out_dir,
-        arguments.name,
-        credentials,
-    )
+    else:
+        bindings = declaration.credential_headers if exchange is None else exchange.credential_headers
+        credentials = tuple(
+            CredentialHeader(
+                binding.header, credential_value(binding.variable, os.environ, arguments.env_file), binding.origins
+            )
+            for binding in bindings
+        )
+        if exchange is not None:
+            transport = CredentialExchangeTransport(HttpClient(), credentials, exchange.spec, _SystemClock())
+            credentials = ()
+    try:
+        record_observations(
+            arguments.provider,
+            arguments.station,
+            arguments.product,
+            arguments.start,
+            arguments.end,
+            arguments.out_dir,
+            arguments.name,
+            credentials,
+            transport=transport,
+        )
+    except IssuePolicyError as error:
+        for issue in error.issues:
+            print(f"recording failed: {issue.message}", file=sys.stderr)
+        return 1
     return 0
 
 

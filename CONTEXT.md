@@ -185,7 +185,9 @@ The single statement, living in a [[provider]]'s own directory, of everything th
 [[engine]] needs to make that source usable: where its packaged catalogue sits, which
 [[provider-kind]] it is, and the names of any credential variables observation access
 requires. A header-authenticated provider also declares the header name and exact source
-origin without carrying a credential value. It is the only file a new source must write
+origin without carrying a credential value. A credential-exchange provider instead
+declares the exchange specification and its input header bindings; public retrieval
+and maintainer recording compose the shared exchange transport from those facts. It is the only file a new source must write
 beyond its stage code, and it is read once, at registration. Everything else a provider used to state
 about itself — the catalogue-reading functions each of the thirteen copied verbatim — was
 never called, because the engine reads the catalogue from the artifact directly.
