@@ -56,16 +56,18 @@ and January4, with no duplicate requested rows. Existing granularities are uncha
 The test also replays adjacent January1/January31 requests, and property-style
 planner tests cover short tails, multiples, leap days and year changes.
 
-## Scope
+## Telemetry recording scope
 
-These are two public stage products: `discharge_instantaneous` and
+The telemetry recordings establish `discharge_instantaneous` and
 `stage_instantaneous`, using the adopted endpoint rather than a new quality axis.
 The certified national catalogue exposes both as explicit candidates for every
 Fluviometrica station, with unknown support except where exact per-product
-observations establish bounded availability. This is not the complete Brazil outcome.
-Conventional daily semantics and water temperature remain unresolved; legacy reference
-code is deliberately retained. These recordings prove one station's measurements,
-not national station-product availability or a published period of record.
+observations establish bounded availability. Conventional daily evidence now adds
+four separate Bruto/Consistido mean products, documented below. Water temperature
+remains unsupported. The legacy subtree was removed after root-owned public live verification
+of the adopted telemetry and four daily products.
+These recordings prove one station's measurements, not national station-product
+availability or a published period of record.
 
 ## Safe manual acquisition identity
 
@@ -106,3 +108,73 @@ An authorized maintainer can run `uv run python tests/recordings/br_ana/verify_p
 from the working directory containing their own credentials. It makes live requests;
 ordinary tests never run it. This proves representative telemetry access, not daily
 support, universal station availability or completion of the full Brazil vision.
+
+
+## Conventional daily source evidence
+
+`HidroSerie{Cotas,Vazao}_15400000_2020-01-01_2020-01-31`,
+`..._2024-01-01_2024-01-31`, and `..._2024-02-01_2024-02-29`
+are the six original successful full-month recording envelopes used for catalogue
+availability. Other monthly recordings test additional calendar boundaries but do
+not extend this acquisition scope. They retain exact requests, original response
+bytes, UTC retrieval instants, and payload hashes. Credentials are not retained.
+
+The `hidro-1.4-conventional-dictionary-derived.json` and
+`hidro-sqlserver-selected-views-derived.json` files are derived text, **not**
+original publisher response bytes. The former retains the original ZIP identity;
+`hidro-extraction-manifest.json` identifies the statically extracted PDF and SQL
+members and the installer. The installer was not executed. No ZIP, installer,
+MDB or full PDF is committed. The capture gate pins the reviewed derived bytes,
+not a caller-supplied self-attestation. Source definitions and their limits are
+reviewed in `daily-definitions-report.md`.
+
+The four `paired-*-comparison.json` files are derived field comparisons.
+Their original modern and SOAP responses are retained under `correspondence/`,
+with exact identities in `daily-correspondence-identities.json`. Some modern
+requests returned byte-identical responses to distinct bounds; both exact request
+identities remain visible. These recordings corroborate field correspondence;
+they are not substituted for modern values or used to infer catalogue availability.
+The original research reports retain their acquisition-time paths and chronology;
+local retained paths are listed by the identity file. Modern precision/update
+versions differ from SOAP. See `daily-source-comparison-report.md`.
+
+Hidro1.4 explicitly defines MediaDiaria 0=Não (instantaneous), 1=Sim (daily mean)
+and consistency 1=Bruto, 2=Consistido. These are separate source variants, not
+quality ranks. API stage uses `nivelconsistencia`; discharge uses
+`Nivel_Consistencia`. Each daily product requires `Mediadiaria=1` and its exact
+consistency code. Numbered slots name ordinal days in the header month. The
+midnight label establishes neither a timezone nor a midnight-to-midnight day.
+No averaging, ranking, fallback, source-status filtering, or record-bound inference
+is performed. The source's SQL analysis-view filter for Consistido is local to
+that view, not authority to exclude Bruto.
+
+All evidence in this directory is excluded from wheel and sdist payloads. The
+packaged normalized provenance carries original material identities, exact
+recording references, derived-artifact digests, and per-variant row predicates.
+
+## Root-owned daily public verification and legacy retirement
+
+The root agent verified committed `c149e2d0a9d478e9ad90a574e940e458f7e57972`
+through actual `find`, `pick`, and `fetch` with its intentionally provisioned credentials.
+`daily-public-live-verification.json` is the unchanged sanitized summary, not an independent
+expectation or recording. All four independent January probes passed: eight total rows,
+exact modern values subject only to normal floating-point conversion, native unknown zone,
+safe receipt hashes and no error issues. Together with the retained adopted telemetry
+public verification, this authorized removal of `reference/legacy_observations/br_ana/`.
+Useful source leads, documentary identities and the unsupported temperature decision remain
+retained. Historical legacy source is recoverable at main commit `33e063a`.
+
+`verify_daily_public.py` retains the root-authored verification logic. Maintenance changes
+are limited to formatter/import ordering, explicit expectation/output CLI paths, output
+parent creation, and explicit strict zip after the existing equal-length guard. It reads credentials only from the caller's own environment/current-directory
+`.env` via the established resolver, and makes live calls. Ordinary tests never execute it.
+An authorized maintainer can run from their credential-provisioned working directory:
+
+```text
+uv run python tests/recordings/br_ana/verify_daily_public.py tests/recordings/br_ana/daily-independent-expectations.json .worktrees/ana-daily-verification/result.json
+```
+
+This is representative access evidence, not a promise of continuity, source quality,
+national availability or final vision acceptance. Water-temperature field existence in a
+bounded detailed response is established, but every water-temperature value/status was null.
+`Temperatura_Interna` has both strings and nulls and is never substituted for water temperature.

@@ -77,8 +77,8 @@ def _authenticated_replay(monkeypatch: pytest.MonkeyPatch) -> _AuthenticatedRepl
 
 def test_public_catalogue_exposes_national_candidates_without_claiming_availability() -> None:
     selection = rr.find(provider="br_ana")
-    frame = rr.as_frame(selection)
-    assert rr.products("br_ana") == list(_PRODUCTS)
+    frame = rr.as_frame(selection).filter(pl.col("product_id").is_in(_PRODUCTS))
+    assert set(_PRODUCTS) <= set(rr.products("br_ana"))
     assert frame["station_id"].n_unique() == 17914
     assert frame.height == 17914 * 2
     assert set(frame["product_id"]) == set(_PRODUCTS)

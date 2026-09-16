@@ -1,4 +1,4 @@
-"""ANA catalogue authority : InventoryCapture × OptionalAdoptedTelemetryEvidence → OriginDeclarations × AcquisitionProvenance (pure)."""
+"""ANA catalogue authority : InventoryCapture × OptionalObservationEvidence → OriginDeclarations × AcquisitionProvenance (pure)."""
 
 from datetime import datetime
 
@@ -28,8 +28,12 @@ from rivretrieve._internal.catalogue_origins import (
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.br_ana.capture import AdoptedTelemetryEvidence, InventoryCapture
-from rivretrieve._internal.providers.br_ana.config import config
+from rivretrieve._internal.providers.br_ana.capture import (
+    AdoptedTelemetryEvidence,
+    ConventionalDailyEvidence,
+    InventoryCapture,
+)
+from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates, config
 
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("br_ana")),
@@ -271,13 +275,14 @@ def build_acquisition_provenance(capture: InventoryCapture) -> AcquisitionProven
     )
 
 
-def with_adopted_telemetry(
+def with_observation_products(
     inventory: AcquisitionProvenance,
     capture: InventoryCapture,
     candidates: pl.DataFrame,
     telemetry: AdoptedTelemetryEvidence,
+    daily: ConventionalDailyEvidence | None = None,
 ) -> AcquisitionProvenance:
-    """Inventory authority × candidate source keys × telemetry evidence → complete product/relationship authority."""
+    """Inventory authority × candidate source keys × source observations → product/relationship authority."""
     source_id = "br_ana.adopted_telemetry"
     documentation_fact = "source.ana.adopted_field_units_measurement_time"
     unknown_fact = "source.ana.adopted_endpoint_availability_unacquired"
@@ -335,7 +340,100 @@ def with_adopted_telemetry(
                 acquisition_id=reference.recording_id,
             )
         )
+    sources = [*inventory.source_records, source]
+    daily_source_id = "br_ana.conventional_daily"
+    daily_doc_fact = "source.ana.conventional_daily_definitions"
+    daily_unknown = "source.ana.daily_variant_availability_unacquired"
+    daily_record = "source.ana.daily_published_record_unacquired"
+    daily_refs = {}
+    correspondence_inputs = []
+    if daily is not None:
+        facts.extend((daily_doc_fact, daily_unknown, daily_record))
+        bindings.append(
+            FactBinding(
+                fact_group="conventional_daily_definitions",
+                facts=(daily_doc_fact,),
+                source_id=daily_source_id,
+                acquisition_id=daily.documentation.acquisition_id,
+            )
+        )
+        daily_acquisitions = [daily.documentation]
+        daily_evidence = []
+        for ref in daily.correspondence:
+            comparison_fact = f"source.ana.daily_correspondence.{ref.recording_id}"
+            facts.append(comparison_fact)
+            correspondence_inputs.append(ExternalFactReference(source_id=daily_source_id, fact=comparison_fact))
+            bindings.append(
+                FactBinding(
+                    fact_group=ref.recording_id,
+                    facts=(comparison_fact,),
+                    source_id=daily_source_id,
+                    acquisition_id=ref.recording_id,
+                )
+            )
+            daily_acquisitions.append(
+                AcquisitionRecord(
+                    acquisition_id=ref.recording_id,
+                    method="http_request",
+                    instant_type="retrieval",
+                    description="Supporting original modern/SOAP response for reviewed field correspondence; not authority to substitute SOAP values or infer availability of another variant.",
+                    requested_from=(ref.source_url,),
+                    retrieved_at_start=ref.retrieved_at,
+                    recording_ids=(ref.recording_id,),
+                )
+            )
+            daily_evidence.append(
+                EvidenceReference(
+                    evidence_id=ref.recording_id,
+                    description="Original response behind retained derived field comparison",
+                    recording=ref,
+                )
+            )
+        for ref, pairs in daily.observations:
+            daily_acquisitions.append(
+                AcquisitionRecord(
+                    acquisition_id=ref.recording_id,
+                    method="http_request",
+                    instant_type="retrieval",
+                    description="Exact modern month request retained in RecordingEnvelope; Mediadiaria=1 and endpoint-specific consistency (stage nivelconsistencia, discharge Nivel_Consistencia) identify separate Bruto=1 and Consistido=2 variants. Nonnull numbered slots establish only this exact variant, not other variants or period bounds.",
+                    requested_from=(ref.source_url,),
+                    retrieved_at_start=ref.retrieved_at,
+                    recording_ids=(ref.recording_id,),
+                )
+            )
+            daily_evidence.append(
+                EvidenceReference(
+                    evidence_id=ref.recording_id,
+                    description="Credential-free original modern monthly response, not SOAP substituted values",
+                    recording=ref,
+                )
+            )
+            for station, product in sorted(pairs):
+                fact = f"source.daily_observations.{ref.recording_id}.{station}.{product}.nonnull"
+                facts.append(fact)
+                bindings.append(
+                    FactBinding(
+                        fact_group=f"daily_{ref.recording_id}_{product}",
+                        facts=(fact,),
+                        source_id=daily_source_id,
+                        acquisition_id=ref.recording_id,
+                    )
+                )
+                daily_refs.setdefault((station, product), []).append(
+                    ExternalFactReference(source_id=daily_source_id, fact=fact)
+                )
+        sources.append(
+            SourceRecord(
+                source_id=daily_source_id,
+                issuer=source.issuer,
+                operator="www.ana.gov.br",
+                acquisitions=tuple(daily_acquisitions),
+                evidence=tuple(daily_evidence),
+            )
+        )
     candidate_ids = set(candidates["codigoestacao"].to_list())
+    if daily is not None and any(station not in candidate_ids for station, _ in daily.available_pairs):
+        raise FatalContractError("ANA daily evidence names a station outside the certified catalogue")
     if any(station not in candidate_ids for station, _ in telemetry.available_pairs):
         raise FatalContractError("ANA adopted observation evidence names a station outside the certified catalogue")
     for station, uf, basin in candidates.select("codigoestacao", "UF_Estacao", "codigobacia").iter_rows():
@@ -347,7 +445,10 @@ def with_adopted_telemetry(
         )
         if not source_inputs:
             raise FatalContractError("ANA candidate lacks a containing inventory acquisition")
-        for product in config().products:
+        for product, definition in config().products.items():
+            is_telemetry = isinstance(definition.coordinates.value, BrAnaSourceCoordinates)
+            if not is_telemetry and daily is None:
+                continue
             fact = f"station_product:{station}:{product}.availability"
             facts.append(fact)
             observed_fact = observed_facts.get((station, product))
@@ -356,11 +457,33 @@ def with_adopted_telemetry(
                 doc_ref,
                 ExternalFactReference(source_id=source_id, fact=observed_fact or unknown_fact),
             )
+            coordinates = definition.coordinates.value
+            predicate = ""
+            if not is_telemetry:
+                assert isinstance(coordinates, BrAnaDailySourceCoordinates)
+                consistency_field = (
+                    "nivelconsistencia" if coordinates.endpoint == "HidroSerieCotas" else "Nivel_Consistencia"
+                )
+                predicate = f"{coordinates.endpoint}/v1: Mediadiaria=1 AND {consistency_field}={coordinates.consistency}; {coordinates.field_prefix}_01..31"
+                observed_fact = daily_refs.get((station, product))
+                inputs = (
+                    *source_inputs,
+                    ExternalFactReference(source_id=daily_source_id, fact=daily_doc_fact),
+                    *(observed_fact or (ExternalFactReference(source_id=daily_source_id, fact=daily_unknown),)),
+                )
             transform = Transformation(
                 name=(
-                    "Nonnull adopted field in exact observed request establishes available, not continuous/complete record"
-                    if observed_fact
-                    else "Certified Fluviometrica candidate with no established per-station adopted endpoint evidence; not source silence"
+                    (
+                        f"{predicate}: nonnull numbered day slot; no ranking, averaging or fallback"
+                        if not is_telemetry and observed_fact
+                        else f"Certified Fluviometrica candidate; {predicate}: availability unacquired, not source silence"
+                    )
+                    if not is_telemetry
+                    else (
+                        "Nonnull adopted field in exact observed request establishes available, not continuous/complete record"
+                        if observed_fact
+                        else "Certified Fluviometrica candidate with no established per-station adopted endpoint evidence; not source silence"
+                    )
                 ),
                 external_inputs=inputs,
                 kind="derived_value" if observed_fact else "absence_marker",
@@ -368,7 +491,7 @@ def with_adopted_telemetry(
             )
             bindings.append(
                 FactBinding(
-                    fact_group=f"adopted_candidate_{station}_{product}",
+                    fact_group=f"observation_candidate_{station}_{product}",
                     facts=(fact,),
                     source_id=None,
                     acquisition_id=None,
@@ -377,17 +500,24 @@ def with_adopted_telemetry(
             )
     for group, output, inputs, transform_name in (
         (
-            "documented_adopted_products",
+            "documented_observation_products",
             tuple(f for f in CATALOGUE_FACT_UNIVERSE if f.startswith("product.")),
-            (doc_ref,),
-            "Documented adopted stage/discharge fields, units and measurement timestamps to instantaneous canonical products",
+            (doc_ref,)
+            if daily is None
+            else (
+                doc_ref,
+                ExternalFactReference(source_id=daily_source_id, fact=daily_doc_fact),
+                *correspondence_inputs,
+            ),
+            "Documented adopted instantaneous fields; when supplied, Hidro daily means Mediadiaria=1 with Bruto=1 and Consistido=2 as separate products, ordinal daily labels, unknown day definition and zone",
         ),
         (
-            "adopted_candidate_relations",
+            "observation_candidate_relations",
             tuple(
                 f for f in CATALOGUE_FACT_UNIVERSE if f.startswith("station_product.") and "published_record" not in f
             ),
-            (doc_ref, ExternalFactReference(source_id=None, fact="station.station_id")),
+            (doc_ref, ExternalFactReference(source_id=None, fact="station.station_id"))
+            + (() if daily is None else (ExternalFactReference(source_id=daily_source_id, fact=daily_doc_fact),)),
             "Certified Fluviometrica candidates crossed with documented products; exact availability authority is in each row-scoped fact; native flags and operating periods are not interpreted",
         ),
     ):
@@ -402,17 +532,18 @@ def with_adopted_telemetry(
         )
     bindings.append(
         FactBinding(
-            fact_group="adopted_record_bounds_unestablished",
+            fact_group="observation_record_bounds_unestablished",
             facts=tuple(
                 f for f in CATALOGUE_FACT_UNIVERSE if f.startswith("station_product.") and "published_record" in f
             ),
             source_id=None,
             acquisition_id=None,
             transformation=Transformation(
-                name="No published adopted product record acquired; operating periods and probed windows are not published product records",
+                name="No published product record acquired; operating periods and probed windows are not published product records",
                 kind="absence_marker",
                 marker_value=AbsenceMarkerValue.NULL,
-                external_inputs=(ExternalFactReference(source_id=source_id, fact=record_fact),),
+                external_inputs=(ExternalFactReference(source_id=source_id, fact=record_fact),)
+                + (() if daily is None else (ExternalFactReference(source_id=daily_source_id, fact=daily_record),)),
             ),
         )
     )
@@ -433,12 +564,32 @@ def with_adopted_telemetry(
             source_id=source_id,
         ),
     )
+    if daily is not None:
+        withheld += tuple(
+            WithheldFact(
+                fact_group=name, facts=(fact,), reason="no_acquisition_record_established", source_id=daily_source_id
+            )
+            for name, fact in (
+                ("daily_variant_availability_not_acquired", daily_unknown),
+                ("daily_published_record_not_acquired", daily_record),
+            )
+        )
     return AcquisitionProvenance(
         schema_version=2,
         provider_id=inventory.provider_id,
         native_table=inventory.native_table,
         fact_universe=tuple(facts),
-        source_records=(*inventory.source_records, source),
+        source_records=tuple(sources),
         fact_bindings=tuple(bindings),
         withheld_facts=withheld,
     )
+
+
+def with_adopted_telemetry(
+    inventory: AcquisitionProvenance,
+    capture: InventoryCapture,
+    candidates: pl.DataFrame,
+    telemetry: AdoptedTelemetryEvidence,
+) -> AcquisitionProvenance:
+    """Compatibility entry point for the telemetry-only catalogue builder."""
+    return with_observation_products(inventory, capture, candidates, telemetry)

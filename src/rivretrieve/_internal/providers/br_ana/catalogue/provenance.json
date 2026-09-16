@@ -499,6 +499,206 @@
         }
       ],
       "statements": []
+    },
+    {
+      "source_id": "br_ana.conventional_daily",
+      "issuer": "Agência Nacional de Águas e Saneamento Básico (ANA)",
+      "operator": "www.ana.gov.br",
+      "evidence": [
+        {
+          "evidence_id": "ana_daily_correspondence_0",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_0",
+            "repository_path": "tests/recordings/br_ana/correspondence/HidroSerieCotas_15400000_2020-01-01_2020-01-03.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1",
+            "retrieved_at": "2026-09-16T11:28:30.626788Z",
+            "media_type": "application/json",
+            "sha256": "cc33bfc96aeebd9fcdb88fc3262d7fa91ec88b3c8154495cc4739dd59979f552"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_1",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_1",
+            "repository_path": "tests/recordings/br_ana/correspondence/HidroSerieCotas_15400000_20240101_20240103.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1",
+            "retrieved_at": "2026-09-16T11:26:25.658776Z",
+            "media_type": "application/json",
+            "sha256": "19b9ce9014bc0f03f4d3f0a11d725e147adbced9a6e99b6413d0e8547a57fd52"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_2",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_2",
+            "repository_path": "tests/recordings/br_ana/correspondence/HidroSerieVazao_15400000_2020-01-01_2020-01-03.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1",
+            "retrieved_at": "2026-09-16T11:27:45.582190Z",
+            "media_type": "application/json",
+            "sha256": "e681d5067c0672f793c736f6c31aeb0bd07f872a37a749a65d438a67a55f99fe"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_3",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_3",
+            "repository_path": "tests/recordings/br_ana/correspondence/HidroSerieVazao_15400000_2023-12-31_2024-01-01.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1",
+            "retrieved_at": "2026-09-16T11:27:35.244410Z",
+            "media_type": "application/json",
+            "sha256": "ec4528bc3024514cde576a5ce69fc2aa0f29ebf72b81ee05fc1c8df9780bcb2c"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_4",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_4",
+            "repository_path": "tests/recordings/br_ana/correspondence/HidroSerieVazao_15400000_20240101_20240103.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1",
+            "retrieved_at": "2026-09-16T11:26:23.735344Z",
+            "media_type": "application/json",
+            "sha256": "ec4528bc3024514cde576a5ce69fc2aa0f29ebf72b81ee05fc1c8df9780bcb2c"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_5",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_5",
+            "repository_path": "tests/recordings/br_ana/correspondence/soap_discharge_15400000_202001_level2.recording.json",
+            "source_url": "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/HidroSerieHistorica",
+            "retrieved_at": "2026-09-16T13:02:53.447584Z",
+            "media_type": "text/xml; charset=utf-8",
+            "sha256": "62e774572f980241e4c50689600e32bef3b1a9c5e90c366ed469b872c144b2ed"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_6",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_6",
+            "repository_path": "tests/recordings/br_ana/correspondence/soap_discharge_15400000_202401_level1.recording.json",
+            "source_url": "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/HidroSerieHistorica",
+            "retrieved_at": "2026-09-16T13:02:54.454881Z",
+            "media_type": "text/xml; charset=utf-8",
+            "sha256": "4c9dfa84e2df08848f8eb675196b604add966bd3d6f3f22c2016dfb05a236669"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_7",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_7",
+            "repository_path": "tests/recordings/br_ana/correspondence/soap_stage_15400000_202001_level1.recording.json",
+            "source_url": "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/HidroSerieHistorica",
+            "retrieved_at": "2026-09-16T13:01:30.939001Z",
+            "media_type": "text/xml; charset=utf-8",
+            "sha256": "3d695dff5f4ba3c506c6998596f0afb7375da66fb144d994d6698b263ea07d93"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_8",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_8",
+            "repository_path": "tests/recordings/br_ana/correspondence/soap_stage_15400000_202001_level2.recording.json",
+            "source_url": "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/HidroSerieHistorica",
+            "retrieved_at": "2026-09-16T13:01:31.904745Z",
+            "media_type": "text/xml; charset=utf-8",
+            "sha256": "f421dd8f38dd4855b72759a0467b216d893ad4e210aed0e8d51419958bc73f5f"
+          }
+        },
+        {
+          "evidence_id": "ana_daily_correspondence_9",
+          "description": "Original response behind retained derived field comparison",
+          "recording": {
+            "recording_id": "ana_daily_correspondence_9",
+            "repository_path": "tests/recordings/br_ana/correspondence/soap_stage_15400000_202401_level1.recording.json",
+            "source_url": "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/HidroSerieHistorica",
+            "retrieved_at": "2026-09-16T13:02:55.758421Z",
+            "media_type": "text/xml; charset=utf-8",
+            "sha256": "388f8503a7eee3472a2bbf7f317662f623842186b64d8417636d5f73145509bb"
+          }
+        },
+        {
+          "evidence_id": "ana_HidroSerieCotas_15400000_2020-01-01",
+          "description": "Credential-free original modern monthly response, not SOAP substituted values",
+          "recording": {
+            "recording_id": "ana_HidroSerieCotas_15400000_2020-01-01",
+            "repository_path": "tests/recordings/br_ana/HidroSerieCotas_15400000_2020-01-01_2020-01-31.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1",
+            "retrieved_at": "2026-09-16T13:06:14.122416Z",
+            "media_type": "application/json",
+            "sha256": "cc33bfc96aeebd9fcdb88fc3262d7fa91ec88b3c8154495cc4739dd59979f552"
+          }
+        },
+        {
+          "evidence_id": "ana_HidroSerieCotas_15400000_2024-01-01",
+          "description": "Credential-free original modern monthly response, not SOAP substituted values",
+          "recording": {
+            "recording_id": "ana_HidroSerieCotas_15400000_2024-01-01",
+            "repository_path": "tests/recordings/br_ana/HidroSerieCotas_15400000_2024-01-01_2024-01-31.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1",
+            "retrieved_at": "2026-09-16T13:06:16.319327Z",
+            "media_type": "application/json",
+            "sha256": "4a663fe96402026175c08fec6a8bba14767f693e254f78f7ade3a725f79487a3"
+          }
+        },
+        {
+          "evidence_id": "ana_HidroSerieCotas_15400000_2024-02-01",
+          "description": "Credential-free original modern monthly response, not SOAP substituted values",
+          "recording": {
+            "recording_id": "ana_HidroSerieCotas_15400000_2024-02-01",
+            "repository_path": "tests/recordings/br_ana/HidroSerieCotas_15400000_2024-02-01_2024-02-29.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieCotas/v1",
+            "retrieved_at": "2026-09-16T13:06:18.477913Z",
+            "media_type": "application/json",
+            "sha256": "852c468844854122e8ccb29ff3be495e93cfaf27f42bd02c0c7d6a894c0a0eec"
+          }
+        },
+        {
+          "evidence_id": "ana_HidroSerieVazao_15400000_2020-01-01",
+          "description": "Credential-free original modern monthly response, not SOAP substituted values",
+          "recording": {
+            "recording_id": "ana_HidroSerieVazao_15400000_2020-01-01",
+            "repository_path": "tests/recordings/br_ana/HidroSerieVazao_15400000_2020-01-01_2020-01-31.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1",
+            "retrieved_at": "2026-09-16T13:06:12.898706Z",
+            "media_type": "application/json",
+            "sha256": "e681d5067c0672f793c736f6c31aeb0bd07f872a37a749a65d438a67a55f99fe"
+          }
+        },
+        {
+          "evidence_id": "ana_HidroSerieVazao_15400000_2024-01-01",
+          "description": "Credential-free original modern monthly response, not SOAP substituted values",
+          "recording": {
+            "recording_id": "ana_HidroSerieVazao_15400000_2024-01-01",
+            "repository_path": "tests/recordings/br_ana/HidroSerieVazao_15400000_2024-01-01_2024-01-31.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1",
+            "retrieved_at": "2026-09-16T13:06:15.120739Z",
+            "media_type": "application/json",
+            "sha256": "ec4528bc3024514cde576a5ce69fc2aa0f29ebf72b81ee05fc1c8df9780bcb2c"
+          }
+        },
+        {
+          "evidence_id": "ana_HidroSerieVazao_15400000_2024-02-01",
+          "description": "Credential-free original modern monthly response, not SOAP substituted values",
+          "recording": {
+            "recording_id": "ana_HidroSerieVazao_15400000_2024-02-01",
+            "repository_path": "tests/recordings/br_ana/HidroSerieVazao_15400000_2024-02-01_2024-02-29.recording.json",
+            "source_url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1",
+            "retrieved_at": "2026-09-16T13:06:17.330254Z",
+            "media_type": "application/json",
+            "sha256": "dd5d8878a92abf2045381d36b3362fa7e7ac978ac1545c56c9c11655d0edc6f9"
+          }
+        }
+      ],
+      "statements": []
     }
   ],
   "descriptions": [
@@ -540,7 +740,10 @@
     "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 8}; 3937 accepted source rows and 3937 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
     "Exact HidroInventarioEstacoes request parameters {'Código da Bacia': 9}; 1104 accepted source rows and 1104 distinct IDs. The retained compressed RecordingEnvelope carries exact request parameters and response bytes.",
     "Official ANA manual PDF acquired without credentials, original bytes not retained. Safe derived page11 text SHA256 8dd99201d9b3ac27df8be40ef0f56cbbb818a259989977b5061b495733bd3f45, 1621 bytes. Transformation {'implementation': 'pypdf.PdfReader(io.BytesIO(response.content)).pages[10].extract_text(extraction_mode=plain).encode(utf-8)', 'pypdf_version': '6.13.1', 'pdf_page_1_based': 11, 'printed_page_label': '9', 'text_encoding': 'UTF-8', 'post_extraction_modifications': 'none'}. Derived text is not original response bytes. PDF page11 documents Cota_Adotada cm, Vazao_Adotada m3/s and measurement/collection timestamp.",
-    "Exact adopted telemetry measurement-time request in retained RecordingEnvelope. Only nonnull recorded adopted fields establish bounded per-product availability; no continuity, current availability or published record bounds are inferred."
+    "Exact adopted telemetry measurement-time request in retained RecordingEnvelope. Only nonnull recorded adopted fields establish bounded per-product availability; no continuity, current availability or published record bounds are inferred.",
+    "Official Hidro Build1.4.0.81 distribution; ZIP and installer are not retained publicly. Static extraction with binary-refinery==0.11.2; installer SHA256 0a004473f7ae4e98f0e968ec747146f0064bd0f9b564cde74e4b1c468c0812ac. Dictionary member 'Hidro 1.4 - Novidades do Sistema.pdf', SHA256 d098fe733740299c25ef3fc33ac7e96d6b21ff01925150d6b1d74791914e24f8; derived transformation PyMuPDF get_text per original PDF page; selected pages20-24. SQL member 'Hidro SQLSERVER 2008.sql', SHA256 6136dd163ba52d5863ffd6b70c9f3aace5d5551abdd1599c5f2972f0a4f9fb98; UTF-16 decoding, exact selected CREATE VIEW blocks ending before GO. Dictionary pages21-24: MediaDiaria 0=Não (instantaneous), 1=Sim (daily mean); NivelConsistencia 1=Bruto, 2=Consistido; Data MM/AAAA; Cota01..31 cm, Vazao01..31 m3/s. SQL ordinal-day expansion corroborates calendar labels, not daily support or zone. Paired modern/SOAP field research corroborates renamed fields, not interchangeable values; modern values remain authoritative. Derived excerpts are not original response bytes. tests/recordings/br_ana/hidro-1.4-conventional-dictionary-derived.json: SHA256 984304fa3a47824362008f6ec2479a78ca16a2301381dec41fe6bae1f441d732, 12630 bytes; tests/recordings/br_ana/hidro-sqlserver-selected-views-derived.json: SHA256 ca8d60f3780e669303bc9b3369658ab8c646efeb850a1515e81729e7b2b1ac7b, 32685 bytes; tests/recordings/br_ana/hidro-extraction-manifest.json: SHA256 14edd76db0cb0277e8b1d896552b46eee4c2d03bfb47a449db7e74ea326092f6, 2698 bytes; tests/recordings/br_ana/daily-source-comparison-report.md: SHA256 66a8a9b8e1ad18ce634491f9afd45f4813f855441f12602217af5d13f9403f5d, 8490 bytes; tests/recordings/br_ana/paired-discharge-2024-comparison.json: SHA256 7edef07cd01b85d9a47442200ec8f2dc315667da19b53401c9143c802217f9f1, 21341 bytes; tests/recordings/br_ana/paired-stage-2020-comparison.json: SHA256 1f8d95b6ae700b7c133e9cd873a7c78e678bb00b0f742f17f26bbc64a703f70a, 74122 bytes; tests/recordings/br_ana/paired-discharge-2020-comparison.json: SHA256 a42f4ec3408690af0faf7155e03d0a538fc6392fc824dd5544bb77e50b4fe077, 21338 bytes; tests/recordings/br_ana/paired-stage-2024-comparison.json: SHA256 cced4ceaaa5724e29cb0ebdb3428c688f444d2a83ac056b2a656cc4941fc428e, 56164 bytes; tests/recordings/br_ana/daily-correspondence-identities.json: SHA256 b0de850c7658e9232b2afaa50c9d468e9f64dc5f4f85015e5e645fef2d97f823, 8526 bytes",
+    "Supporting original modern/SOAP response for reviewed field correspondence; not authority to substitute SOAP values or infer availability of another variant.",
+    "Exact modern month request retained in RecordingEnvelope; Mediadiaria=1 and endpoint-specific consistency (stage nivelconsistencia, discharge Nivel_Consistencia) identify separate Bruto=1 and Consistido=2 variants. Nonnull numbered slots establish only this exact variant, not other variants or period bounds."
   ],
   "transformations": [
     {
@@ -574,12 +777,52 @@
       "marker_value": "unknown"
     },
     {
+      "name": "Certified Fluviometrica candidate; HidroSerieVazao/v1: Mediadiaria=1 AND Nivel_Consistencia=1; Vazao_01..31: availability unacquired, not source silence",
+      "kind": "absence_marker",
+      "marker_value": "unknown"
+    },
+    {
+      "name": "Certified Fluviometrica candidate; HidroSerieVazao/v1: Mediadiaria=1 AND Nivel_Consistencia=2; Vazao_01..31: availability unacquired, not source silence",
+      "kind": "absence_marker",
+      "marker_value": "unknown"
+    },
+    {
+      "name": "Certified Fluviometrica candidate; HidroSerieCotas/v1: Mediadiaria=1 AND nivelconsistencia=1; Cota_01..31: availability unacquired, not source silence",
+      "kind": "absence_marker",
+      "marker_value": "unknown"
+    },
+    {
+      "name": "Certified Fluviometrica candidate; HidroSerieCotas/v1: Mediadiaria=1 AND nivelconsistencia=2; Cota_01..31: availability unacquired, not source silence",
+      "kind": "absence_marker",
+      "marker_value": "unknown"
+    },
+    {
       "name": "Nonnull adopted field in exact observed request establishes available, not continuous/complete record",
       "kind": "derived_value",
       "marker_value": null
     },
     {
-      "name": "Documented adopted stage/discharge fields, units and measurement timestamps to instantaneous canonical products",
+      "name": "HidroSerieVazao/v1: Mediadiaria=1 AND Nivel_Consistencia=1; Vazao_01..31: nonnull numbered day slot; no ranking, averaging or fallback",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "HidroSerieVazao/v1: Mediadiaria=1 AND Nivel_Consistencia=2; Vazao_01..31: nonnull numbered day slot; no ranking, averaging or fallback",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "HidroSerieCotas/v1: Mediadiaria=1 AND nivelconsistencia=1; Cota_01..31: nonnull numbered day slot; no ranking, averaging or fallback",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "HidroSerieCotas/v1: Mediadiaria=1 AND nivelconsistencia=2; Cota_01..31: nonnull numbered day slot; no ranking, averaging or fallback",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Documented adopted instantaneous fields; when supplied, Hidro daily means Mediadiaria=1 with Bruto=1 and Consistido=2 as separate products, ordinal daily labels, unknown day definition and zone",
       "kind": "derived_value",
       "marker_value": null
     },
@@ -589,7 +832,7 @@
       "marker_value": null
     },
     {
-      "name": "No published adopted product record acquired; operating periods and probed windows are not published product records",
+      "name": "No published product record acquired; operating periods and probed windows are not published product records",
       "kind": "absence_marker",
       "marker_value": "null"
     }
@@ -625,6 +868,22 @@
       ],
       "reason": "no_acquisition_record_established",
       "source_id": "br_ana.adopted_telemetry"
+    },
+    {
+      "fact_group": "daily_variant_availability_not_acquired",
+      "facts": [
+        "source.ana.daily_variant_availability_unacquired"
+      ],
+      "reason": "no_acquisition_record_established",
+      "source_id": "br_ana.conventional_daily"
+    },
+    {
+      "fact_group": "daily_published_record_not_acquired",
+      "facts": [
+        "source.ana.daily_published_record_unacquired"
+      ],
+      "reason": "no_acquisition_record_established",
+      "source_id": "br_ana.conventional_daily"
     }
   ],
   "row_locator_requirements": [
@@ -636,37 +895,37 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "62c90cdf194c3254bda86c0a5ae5bbe7024edc5efe1ade1d9ac1d4a10429fa60",
-      "byte_count": 305880,
-      "row_count": 35902,
+      "sha256": "0c07a2c5e8265ba8f871b72adb9e858c5232ab97539f46a221d7efdb8c8e3ae9",
+      "byte_count": 712072,
+      "row_count": 107578,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
       "path": "provenance_acquisitions.parquet",
-      "sha256": "06b80f90d4fa068cee5f6abc43c68af1bb0249805e548066be8889c8820f95e9",
-      "byte_count": 10359,
-      "row_count": 39,
+      "sha256": "f8cdf00bef3a1ce95b6a84f1cc9dc5b0d11ae0a3d70105243c75065c72caac8c",
+      "byte_count": 11027,
+      "row_count": 56,
       "schema_version": 3
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "4ecd9ce3101d28d76992ad4bcf6f7bb3c4c047d504238726b0ddd7a5aab15e15",
-      "byte_count": 193619,
-      "row_count": 35876,
+      "sha256": "5067c520e46adc224635f49697875bc993541642a007ec0acd241a52d1d3240c",
+      "byte_count": 580592,
+      "row_count": 107550,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "e5f7ab557aa56df6a9660e70d5e6147a4c47f52beb5e247e613f63abd3c3e937",
-      "byte_count": 176153,
-      "row_count": 35898,
+      "sha256": "82ec84a2c2637272642af2f91fabee56b2e9f135bec8959e2827fedff1720f6f",
+      "byte_count": 548459,
+      "row_count": 107572,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "829b90840d750f1d48a2e7e74d2e7742be652e50ddac9941a338af898d0d9ccb",
-      "byte_count": 252871,
-      "row_count": 142230,
+      "sha256": "a4d3b70481b945a4ac04c9633be91f12e5a2a5bf24747ca076c901643ada3484",
+      "byte_count": 763082,
+      "row_count": 426550,
       "schema_version": 3
     }
   }

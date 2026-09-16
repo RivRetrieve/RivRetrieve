@@ -42,7 +42,11 @@ from rivretrieve._internal.recordings import ReplayTransport, UnmatchedRequestEr
 from rivretrieve._internal.store import StoreRoot
 
 _DATA = Path(__file__).parent / "recordings" / "br_ana"
-_PRODUCTS = tuple(config().products)
+_PRODUCTS = tuple(
+    product
+    for product, definition in config().products.items()
+    if isinstance(definition.coordinates.value, BrAnaSourceCoordinates)
+)
 _PROVIDER = ProviderId("br_ana")
 
 

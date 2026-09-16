@@ -1,4 +1,4 @@
-"""ANA capture authority : InventoryCapture × RecordedInteractions → NativeTable; DocumentaryMaterial × RecordingEnvelope → AdoptedTelemetryEvidence (offline)."""
+"""ANA capture authority : InventoryCapture × RecordedInteractions → NativeTable; DocumentaryMaterial × RecordingEnvelope → ObservationEvidence (offline)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import hashlib
 import json
 import lzma
 import math
+import re
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
@@ -316,7 +317,8 @@ def parse_adopted_telemetry_evidence(
             raise FatalContractError("ANA adopted availability recording contains another station")
         for product, definition in config().products.items():
             coordinates = definition.coordinates.value
-            assert isinstance(coordinates, BrAnaSourceCoordinates)
+            if not isinstance(coordinates, BrAnaSourceCoordinates):
+                continue
             value = row[coordinates.field]
             if value is not None:
                 if not isinstance(value, str) or not math.isfinite(float(value)):
@@ -331,3 +333,202 @@ def parse_adopted_telemetry_evidence(
         sha256=recording.sha256,
     )
     return AdoptedTelemetryEvidence(documentation, reference, frozenset(pairs))
+
+
+@dataclass(frozen=True, slots=True)
+class ConventionalDailyEvidence:
+    """Reviewed source definitions and exact nonnull daily variant observations."""
+
+    documentation: AcquisitionRecord
+    observations: tuple[tuple[RecordingReference, frozenset[tuple[str, ProductId]]], ...]
+    correspondence: tuple[RecordingReference, ...]
+
+    @property
+    def available_pairs(self) -> frozenset[tuple[str, ProductId]]:
+        return frozenset(pair for _, pairs in self.observations for pair in pairs)
+
+
+# Reviewed derived documents are pinned, not accepted merely because a caller
+# supplies a self-consistent digest. Renewing these identities requires source review.
+_DAILY_DEFINITION_DIGESTS = {
+    "hidro-1.4-conventional-dictionary-derived.json": "984304fa3a47824362008f6ec2479a78ca16a2301381dec41fe6bae1f441d732",
+    "hidro-sqlserver-selected-views-derived.json": "ca8d60f3780e669303bc9b3369658ab8c646efeb850a1515e81729e7b2b1ac7b",
+    "hidro-extraction-manifest.json": "14edd76db0cb0277e8b1d896552b46eee4c2d03bfb47a449db7e74ea326092f6",
+    "daily-source-comparison-report.md": "66a8a9b8e1ad18ce634491f9afd45f4813f855441f12602217af5d13f9403f5d",
+    "paired-discharge-2024-comparison.json": "7edef07cd01b85d9a47442200ec8f2dc315667da19b53401c9143c802217f9f1",
+    "paired-stage-2020-comparison.json": "1f8d95b6ae700b7c133e9cd873a7c78e678bb00b0f742f17f26bbc64a703f70a",
+    "paired-discharge-2020-comparison.json": "a42f4ec3408690af0faf7155e03d0a538fc6392fc824dd5544bb77e50b4fe077",
+    "paired-stage-2024-comparison.json": "cced4ceaaa5724e29cb0ebdb3428c688f444d2a83ac056b2a656cc4941fc428e",
+    "daily-correspondence-identities.json": "b0de850c7658e9232b2afaa50c9d468e9f64dc5f4f85015e5e645fef2d97f823",
+}
+
+
+def parse_conventional_daily_evidence(
+    documents: dict[str, bytes],
+    recordings: tuple[tuple[str, RecordingEnvelope], ...],
+    correspondence: tuple[tuple[str, RecordingEnvelope], ...],
+) -> ConventionalDailyEvidence:
+    """Reviewed DocumentaryMaterial × RecordingEnvelope → ConventionalDailyEvidence (pure)."""
+    from calendar import monthrange
+
+    from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, config
+
+    if set(documents) != set(_DAILY_DEFINITION_DIGESTS) or any(
+        hashlib.sha256(documents[name]).hexdigest() != digest for name, digest in _DAILY_DEFINITION_DIGESTS.items()
+    ):
+        raise FatalContractError("ANA conventional source-definition identity is not reviewed")
+    dictionary = json.loads(documents["hidro-1.4-conventional-dictionary-derived.json"])
+    sql = json.loads(documents["hidro-sqlserver-selected-views-derived.json"])
+    extraction = json.loads(documents["hidro-extraction-manifest.json"])
+    distribution = dictionary["publisher_distribution"]
+    documentation = AcquisitionRecord(
+        acquisition_id="conventional_hidro_definitions",
+        method="http_request",
+        instant_type="retrieval",
+        requested_from=(distribution["url"],),
+        retrieved_at_start=datetime.fromisoformat(distribution["retrieved_at"]),
+        material=MaterialIdentity(
+            filename=distribution["url"].rsplit("/", 1)[-1],
+            byte_count=distribution["bytes"],
+            sha256=distribution["sha256"],
+        ),
+        description=(
+            "Official Hidro Build1.4.0.81 distribution; ZIP and installer are not retained publicly. "
+            f"Static extraction with {extraction['extractor']}; installer SHA256 {extraction['installer_sha256']}. "
+            f"Dictionary member {dictionary['source_member']!r}, SHA256 {dictionary['source_sha256']}; "
+            f"derived transformation {dictionary['transformation']}. "
+            f"SQL member {sql['source_member']!r}, SHA256 {sql['source_sha256']}; {sql['transformation']}. "
+            "Dictionary pages21-24: MediaDiaria 0=Não (instantaneous), 1=Sim (daily mean); "
+            "NivelConsistencia 1=Bruto, 2=Consistido; Data MM/AAAA; Cota01..31 cm, Vazao01..31 m3/s. "
+            "SQL ordinal-day expansion corroborates calendar labels, not daily support or zone. "
+            "Paired modern/SOAP field research corroborates renamed fields, not interchangeable values; "
+            "modern values remain authoritative. Derived excerpts are not original response bytes. "
+            + "; ".join(
+                f"tests/recordings/br_ana/{name}: SHA256 {digest}, {len(documents[name])} bytes"
+                for name, digest in _DAILY_DEFINITION_DIGESTS.items()
+            )
+        ),
+    )
+    correspondence_identities = json.loads(documents["daily-correspondence-identities.json"])["recordings"]
+    retained = dict(correspondence)
+    if set(retained) != {item["repository_path"] for item in correspondence_identities}:
+        raise FatalContractError("ANA source correspondence recordings are incomplete")
+    correspondence_refs = []
+    for index, item in enumerate(correspondence_identities):
+        recording = retained[item["repository_path"]]
+        request = recording.request
+        expected_request = item["request"]
+        if recording.sha256 != item["response_sha256"] or (
+            request.method.value,
+            request.url,
+            dict(request.parameters or {}),
+            request.body,
+            dict(request.ordinary_headers),
+            list(request.credential_header_names),
+        ) != (
+            expected_request["method"],
+            expected_request["url"],
+            expected_request["parameters"],
+            expected_request["body"],
+            expected_request["ordinary_headers"],
+            expected_request["credential_header_names"],
+        ):
+            raise FatalContractError("ANA source correspondence identity differs from reviewed comparison")
+        if recording.content_type is None or recording.status_code != 200:
+            raise FatalContractError("ANA source correspondence recording is unsuccessful")
+        correspondence_refs.append(
+            RecordingReference(
+                recording_id=f"ana_daily_correspondence_{index}",
+                repository_path=item["repository_path"],
+                source_url=recording.request.url,
+                retrieved_at=recording.retrieved_at,
+                media_type=recording.content_type,
+                sha256=recording.sha256,
+            )
+        )
+    observations = []
+    identities = set()
+    for path, recording in recordings:
+        request = recording.request
+        parameters = request.parameters
+        endpoint = request.url.rsplit("/", 2)[-2]
+        if (
+            endpoint not in {"HidroSerieCotas", "HidroSerieVazao"}
+            or request.url != f"https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/{endpoint}/v1"
+            or request.method != HttpMethod.GET
+            or request.body is not None
+            or recording.status_code != 200
+            or recording.content_type is None
+            or parameters is None
+            or set(parameters)
+            != {"Código da Estação", "Tipo Filtro Data", "Data Inicial (yyyy-MM-dd)", "Data Final (yyyy-MM-dd)"}
+            or parameters["Tipo Filtro Data"] != "DATA_LEITURA"
+        ):
+            raise FatalContractError("ANA daily availability requires exact successful measurement-month requests")
+        station = str(parameters["Código da Estação"])
+        start = datetime.strptime(str(parameters["Data Inicial (yyyy-MM-dd)"]), "%Y-%m-%d")
+        stop = datetime.strptime(str(parameters["Data Final (yyyy-MM-dd)"]), "%Y-%m-%d")
+        if start.day != 1 or (stop.year, stop.month, stop.day) != (
+            start.year,
+            start.month,
+            monthrange(start.year, start.month)[1],
+        ):
+            raise FatalContractError("ANA daily availability recording must request an exact whole month")
+        identity = (endpoint, station, start)
+        if identity in identities:
+            raise FatalContractError("ANA daily availability recording request is duplicated")
+        identities.add(identity)
+        document = json.loads(recording.content)
+        if (
+            document["status"] != "OK"
+            or type(document["code"]) is not int
+            or document["code"] != 200
+            or not isinstance(document["items"], list)
+        ):
+            raise FatalContractError("ANA daily availability source envelope is invalid")
+        pairs = set()
+        consistency_field = "nivelconsistencia" if endpoint == "HidroSerieCotas" else "Nivel_Consistencia"
+        for row in document["items"]:
+            if (
+                row["codigoestacao"] != station
+                or row["Mediadiaria"] not in {"0", "1"}
+                or row[consistency_field] not in {"1", "2"}
+            ):
+                raise FatalContractError("ANA daily availability row identity is invalid")
+            if row["Mediadiaria"] != "1":
+                continue
+            header = datetime.fromisoformat(row["Data_Hora_Dado"])
+            if header != start:
+                raise FatalContractError("ANA daily availability month label is not the requested midnight header")
+            for product, definition in config().products.items():
+                coordinates = definition.coordinates.value
+                if (
+                    not isinstance(coordinates, BrAnaDailySourceCoordinates)
+                    or coordinates.endpoint != endpoint
+                    or coordinates.consistency != row[consistency_field]
+                ):
+                    continue
+                for day in range(1, 32):
+                    value = row[f"{coordinates.field_prefix}_{day:02}"]
+                    if value is None or value == "":
+                        continue
+                    if (
+                        not isinstance(value, str)
+                        or re.fullmatch(r"[+-]?[0-9]+(?:\.[0-9]+)?", value) is None
+                        or not math.isfinite(float(value))
+                        or day > stop.day
+                    ):
+                        raise FatalContractError("ANA daily availability requires finite values on valid calendar days")
+                    pairs.add((station, product))
+        reference = RecordingReference(
+            recording_id=f"ana_{endpoint}_{station}_{start.date().isoformat()}",
+            repository_path=path,
+            source_url=request.url,
+            retrieved_at=recording.retrieved_at,
+            media_type=recording.content_type,
+            sha256=recording.sha256,
+        )
+        observations.append((reference, frozenset(pairs)))
+    if not observations:
+        raise FatalContractError("ANA daily availability requires observation evidence")
+    return ConventionalDailyEvidence(documentation, tuple(observations), tuple(correspondence_refs))

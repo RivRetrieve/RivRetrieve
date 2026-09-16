@@ -1,10 +1,11 @@
-"""ANA parse : Payload × ProviderConfig → WithIssues[Rows] (native adopted telemetry, no quality policy).
+"""ANA parse : Payload × ProviderConfig → WithIssues[Rows] (native source variants, no quality policy).
 
 Contributed by: Thiago von Däniken
 """
 
 import json
 import re
+from calendar import monthrange
 from collections import Counter
 from datetime import datetime
 from math import isfinite
@@ -14,8 +15,8 @@ import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.br_ana.config import BrAnaSourceCoordinates
+from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates
 from rivretrieve._internal.providers.br_ana.issue_codes import BrAnaObservationIssueCodes
 
 _PROVIDER = ProviderId("br_ana")
@@ -28,9 +29,14 @@ def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
         raise FatalContractError("ANA payload requires exactly one station-product pair")
     station, product = payload.station_products[0]
     coordinates = config.products[product].coordinates.value
-    if not isinstance(coordinates, BrAnaSourceCoordinates) or payload.source_coordinates.value != coordinates:
-        raise FatalContractError("ANA payload coordinates differ from the requested adopted product")
+    if (
+        not isinstance(coordinates, (BrAnaSourceCoordinates, BrAnaDailySourceCoordinates))
+        or payload.source_coordinates.value != coordinates
+    ):
+        raise FatalContractError("ANA payload coordinates differ from the requested source product")
     observations = _observations(payload.content)
+    if isinstance(coordinates, BrAnaDailySourceCoordinates):
+        return _daily_rows(observations, station, product, coordinates)
     rows: list[dict[str, object]] = []
     statuses: Counter[str | None] = Counter()
     for index, observation in enumerate(observations):
@@ -84,6 +90,89 @@ def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
     return WithIssues(frame, issues)
 
 
+def _daily_rows(
+    observations: list[dict[str, object]],
+    station: str,
+    product: ProductId,
+    coordinates: BrAnaDailySourceCoordinates,
+) -> WithIssues[Rows]:
+    """Decode monthly source day slots for one exact mean/consistency variant."""
+    rows: list[dict[str, object]] = []
+    statuses: Counter[tuple[str, str | None]] = Counter()
+    consistency_field = "nivelconsistencia" if coordinates.field_prefix == "Cota" else "Nivel_Consistencia"
+    for index, observation in enumerate(observations):
+        if observation.get("codigoestacao") != station:
+            raise FatalContractError(f"ANA observation {index} station differs from the requested station")
+        mean = observation.get("Mediadiaria")
+        consistency = observation.get(consistency_field)
+        if mean not in ("0", "1") or consistency not in ("1", "2"):
+            raise FatalContractError(f"ANA observation {index} has an invalid mean or consistency code")
+        # Flag0 headers legitimately carry07:00/17:00. They are outside this
+        # mean product, not malformed daily means and never averaging inputs.
+        if mean != "1" or consistency != coordinates.consistency:
+            continue
+        header = _time(observation.get("Data_Hora_Dado"), index)
+        if header.day != 1 or header != datetime(header.year, header.month, 1):
+            raise FatalContractError(f"ANA observation {index} daily mean requires a midnight first-of-month header")
+        last_day = monthrange(header.year, header.month)[1]
+        for day in range(1, 32):
+            field = f"{coordinates.field_prefix}_{day:02d}"
+            status_field = f"{field}_Status"
+            if field not in observation or status_field not in observation:
+                raise FatalContractError(f"ANA observation {index} is missing a daily value or status field")
+            raw = observation[field]
+            status = observation[status_field]
+            if status is not None and not isinstance(status, str):
+                raise FatalContractError(f"ANA observation {index} daily status must be a source string or null")
+            if day > last_day:
+                # Hidro1.4 explicitly names status0 BRANCO. It is not a
+                # numeric-value sentinel: a finite value outside the month fails.
+                if raw not in (None, "") or status not in (None, "", "0"):
+                    raise FatalContractError(f"ANA observation {index} has a nonempty invalid calendar slot {field}")
+                continue
+            statuses[(status_field, status)] += 1
+            rows.append(
+                {
+                    "station_id": station,
+                    "product_id": product,
+                    "time": datetime(header.year, header.month, day),
+                    "value": None if raw == "" else _value(raw, index),
+                    "time_zone": "unknown",
+                }
+            )
+    # Source duplicates are observations, not authorization to choose a winner.
+    frame = pl.DataFrame(rows, schema=RowsSchema.polars_schema).sort("time", maintain_order=True)
+    issues = tuple(
+        Issue(
+            severity="info",
+            code=BrAnaObservationIssueCodes.SOURCE_STATUS,
+            message="ANA published daily status without RivRetrieve interpretation",
+            details={
+                "station_id": station,
+                "product_id": product,
+                "source_field": field,
+                "source_status": status,
+                "count": count,
+            },
+            provider_id=_PROVIDER,
+        )
+        for (field, status), count in sorted(
+            statuses.items(), key=lambda item: (item[0][0], item[0][1] is not None, item[0][1] or "")
+        )
+    )
+    if not rows:
+        issues += (
+            Issue(
+                severity="warning",
+                code=BrAnaObservationIssueCodes.MISSING_DATA,
+                message="ANA response contains no daily observations for the requested source variant",
+                details={"station_id": station, "product_id": product},
+                provider_id=_PROVIDER,
+            ),
+        )
+    return WithIssues(frame, issues)
+
+
 def _observations(content: bytes) -> list[dict[str, object]]:
     try:
         document = json.loads(content)
@@ -115,9 +204,9 @@ def _value(value: object, index: int) -> float | None:
     if value is None:
         return None
     if not isinstance(value, str) or _NUMBER.fullmatch(value) is None:
-        raise FatalContractError(f"ANA observation {index} adopted value must be a decimal string or null")
+        raise FatalContractError(f"ANA observation {index} value must be a decimal string or null")
     result = float(value)
     if not isfinite(result):
-        raise FatalContractError(f"ANA observation {index} adopted value must be finite")
+        raise FatalContractError(f"ANA observation {index} value must be finite")
     # No documented sentinel rule: finite source numbers remain numbers, including negative values.
     return result

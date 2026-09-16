@@ -1,0 +1,2640 @@
+{
+  "authorship": "derived comparison, not a source recording",
+  "transformations": [
+    "XML absent optional elements represented as null for comparison; original XML retained",
+    "Decimal parses numeric text only for numeric comparison; exact source strings retained below",
+    "datetime.fromisoformat compares source wall-clock date strings; no timezone applied",
+    "Join on station, consistency, DataHora and MediaDiaria; retain every row and level"
+  ],
+  "modern_sha256": "cc33bfc96aeebd9fcdb88fc3262d7fa91ec88b3c8154495cc4739dd59979f552",
+  "field_map": {
+    "EstacaoCodigo": "codigoestacao",
+    "NivelConsistencia": "nivelconsistencia",
+    "DataHora": "Data_Hora_Dado",
+    "MediaDiaria": "Mediadiaria",
+    "TipoMedicaoCotas": "Tipo_Medicao_Cotas",
+    "Maxima": "Maxima",
+    "Minima": "Minima",
+    "Media": "Media",
+    "DiaMaxima": "Dia_Maxima",
+    "DiaMinima": "Dia_Minima",
+    "MaximaStatus": "Maxima_Status",
+    "MinimaStatus": "Minima_Status",
+    "MediaStatus": "Media_Status",
+    "MediaAnual": "Media_Anual",
+    "MediaAnualStatus": "Media_Anual_Status",
+    "DataIns": "Data_Ultima_Alteracao",
+    "Cota01": "Cota_01",
+    "Cota02": "Cota_02",
+    "Cota03": "Cota_03",
+    "Cota04": "Cota_04",
+    "Cota05": "Cota_05",
+    "Cota06": "Cota_06",
+    "Cota07": "Cota_07",
+    "Cota08": "Cota_08",
+    "Cota09": "Cota_09",
+    "Cota10": "Cota_10",
+    "Cota11": "Cota_11",
+    "Cota12": "Cota_12",
+    "Cota13": "Cota_13",
+    "Cota14": "Cota_14",
+    "Cota15": "Cota_15",
+    "Cota16": "Cota_16",
+    "Cota17": "Cota_17",
+    "Cota18": "Cota_18",
+    "Cota19": "Cota_19",
+    "Cota20": "Cota_20",
+    "Cota21": "Cota_21",
+    "Cota22": "Cota_22",
+    "Cota23": "Cota_23",
+    "Cota24": "Cota_24",
+    "Cota25": "Cota_25",
+    "Cota26": "Cota_26",
+    "Cota27": "Cota_27",
+    "Cota28": "Cota_28",
+    "Cota29": "Cota_29",
+    "Cota30": "Cota_30",
+    "Cota31": "Cota_31",
+    "Cota01Status": "Cota_01_Status",
+    "Cota02Status": "Cota_02_Status",
+    "Cota03Status": "Cota_03_Status",
+    "Cota04Status": "Cota_04_Status",
+    "Cota05Status": "Cota_05_Status",
+    "Cota06Status": "Cota_06_Status",
+    "Cota07Status": "Cota_07_Status",
+    "Cota08Status": "Cota_08_Status",
+    "Cota09Status": "Cota_09_Status",
+    "Cota10Status": "Cota_10_Status",
+    "Cota11Status": "Cota_11_Status",
+    "Cota12Status": "Cota_12_Status",
+    "Cota13Status": "Cota_13_Status",
+    "Cota14Status": "Cota_14_Status",
+    "Cota15Status": "Cota_15_Status",
+    "Cota16Status": "Cota_16_Status",
+    "Cota17Status": "Cota_17_Status",
+    "Cota18Status": "Cota_18_Status",
+    "Cota19Status": "Cota_19_Status",
+    "Cota20Status": "Cota_20_Status",
+    "Cota21Status": "Cota_21_Status",
+    "Cota22Status": "Cota_22_Status",
+    "Cota23Status": "Cota_23_Status",
+    "Cota24Status": "Cota_24_Status",
+    "Cota25Status": "Cota_25_Status",
+    "Cota26Status": "Cota_26_Status",
+    "Cota27Status": "Cota_27_Status",
+    "Cota28Status": "Cota_28_Status",
+    "Cota29Status": "Cota_29_Status",
+    "Cota30Status": "Cota_30_Status",
+    "Cota31Status": "Cota_31_Status"
+  },
+  "rows": [
+    {
+      "soap_sha256": "3d695dff5f4ba3c506c6998596f0afb7375da66fb144d994d6698b263ea07d93",
+      "identity": {
+        "EstacaoCodigo": "15400000",
+        "NivelConsistencia": "1",
+        "DataHora": "2020-01-01 00:00:00",
+        "MediaDiaria": "1"
+      },
+      "unmapped_soap": [],
+      "unmapped_modern": [],
+      "fields": [
+        {
+          "soap_field": "EstacaoCodigo",
+          "modern_field": "codigoestacao",
+          "soap_value": "15400000",
+          "soap_presence": "text",
+          "modern_value": "15400000",
+          "equal": true
+        },
+        {
+          "soap_field": "NivelConsistencia",
+          "modern_field": "nivelconsistencia",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "DataHora",
+          "modern_field": "Data_Hora_Dado",
+          "soap_value": "2020-01-01 00:00:00",
+          "soap_presence": "text",
+          "modern_value": "2020-01-01 00:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaDiaria",
+          "modern_field": "Mediadiaria",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "TipoMedicaoCotas",
+          "modern_field": "Tipo_Medicao_Cotas",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Maxima",
+          "modern_field": "Maxima",
+          "soap_value": "1437",
+          "soap_presence": "text",
+          "modern_value": "1437.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Minima",
+          "modern_field": "Minima",
+          "soap_value": "1278.5",
+          "soap_presence": "text",
+          "modern_value": "1278.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Media",
+          "modern_field": "Media",
+          "soap_value": "1355.5",
+          "soap_presence": "text",
+          "modern_value": "1355.5",
+          "equal": true
+        },
+        {
+          "soap_field": "DiaMaxima",
+          "modern_field": "Dia_Maxima",
+          "soap_value": "13",
+          "soap_presence": "text",
+          "modern_value": "13",
+          "equal": true
+        },
+        {
+          "soap_field": "DiaMinima",
+          "modern_field": "Dia_Minima",
+          "soap_value": "31",
+          "soap_presence": "text",
+          "modern_value": "31",
+          "equal": true
+        },
+        {
+          "soap_field": "MaximaStatus",
+          "modern_field": "Maxima_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "MinimaStatus",
+          "modern_field": "Minima_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaStatus",
+          "modern_field": "Media_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnual",
+          "modern_field": "Media_Anual",
+          "soap_value": null,
+          "soap_presence": "absent",
+          "modern_value": null,
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnualStatus",
+          "modern_field": "Media_Anual_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "DataIns",
+          "modern_field": "Data_Ultima_Alteracao",
+          "soap_value": "2020-05-12 00:00:00",
+          "soap_presence": "text",
+          "modern_value": "2020-05-12 00:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01",
+          "modern_field": "Cota_01",
+          "soap_value": "1284",
+          "soap_presence": "text",
+          "modern_value": "1284.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02",
+          "modern_field": "Cota_02",
+          "soap_value": "1292",
+          "soap_presence": "text",
+          "modern_value": "1292.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03",
+          "modern_field": "Cota_03",
+          "soap_value": "1315",
+          "soap_presence": "text",
+          "modern_value": "1315.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04",
+          "modern_field": "Cota_04",
+          "soap_value": "1338",
+          "soap_presence": "text",
+          "modern_value": "1338.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05",
+          "modern_field": "Cota_05",
+          "soap_value": "1383",
+          "soap_presence": "text",
+          "modern_value": "1383.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06",
+          "modern_field": "Cota_06",
+          "soap_value": "1377.5",
+          "soap_presence": "text",
+          "modern_value": "1377.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07",
+          "modern_field": "Cota_07",
+          "soap_value": "1393",
+          "soap_presence": "text",
+          "modern_value": "1393.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08",
+          "modern_field": "Cota_08",
+          "soap_value": "1406.5",
+          "soap_presence": "text",
+          "modern_value": "1406.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09",
+          "modern_field": "Cota_09",
+          "soap_value": "1413",
+          "soap_presence": "text",
+          "modern_value": "1413.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10",
+          "modern_field": "Cota_10",
+          "soap_value": "1426.5",
+          "soap_presence": "text",
+          "modern_value": "1426.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11",
+          "modern_field": "Cota_11",
+          "soap_value": "1429.5",
+          "soap_presence": "text",
+          "modern_value": "1429.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12",
+          "modern_field": "Cota_12",
+          "soap_value": "1423",
+          "soap_presence": "text",
+          "modern_value": "1423.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13",
+          "modern_field": "Cota_13",
+          "soap_value": "1437",
+          "soap_presence": "text",
+          "modern_value": "1437.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14",
+          "modern_field": "Cota_14",
+          "soap_value": "1431.5",
+          "soap_presence": "text",
+          "modern_value": "1431.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15",
+          "modern_field": "Cota_15",
+          "soap_value": "1413",
+          "soap_presence": "text",
+          "modern_value": "1413.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16",
+          "modern_field": "Cota_16",
+          "soap_value": "1393.5",
+          "soap_presence": "text",
+          "modern_value": "1393.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17",
+          "modern_field": "Cota_17",
+          "soap_value": "1374.5",
+          "soap_presence": "text",
+          "modern_value": "1374.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18",
+          "modern_field": "Cota_18",
+          "soap_value": "1363.5",
+          "soap_presence": "text",
+          "modern_value": "1363.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19",
+          "modern_field": "Cota_19",
+          "soap_value": "1366",
+          "soap_presence": "text",
+          "modern_value": "1366.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20",
+          "modern_field": "Cota_20",
+          "soap_value": "1349.5",
+          "soap_presence": "text",
+          "modern_value": "1349.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21",
+          "modern_field": "Cota_21",
+          "soap_value": "1337.5",
+          "soap_presence": "text",
+          "modern_value": "1337.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22",
+          "modern_field": "Cota_22",
+          "soap_value": "1326.5",
+          "soap_presence": "text",
+          "modern_value": "1326.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23",
+          "modern_field": "Cota_23",
+          "soap_value": "1348.5",
+          "soap_presence": "text",
+          "modern_value": "1348.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24",
+          "modern_field": "Cota_24",
+          "soap_value": "1329.5",
+          "soap_presence": "text",
+          "modern_value": "1329.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25",
+          "modern_field": "Cota_25",
+          "soap_value": "1312",
+          "soap_presence": "text",
+          "modern_value": "1312.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26",
+          "modern_field": "Cota_26",
+          "soap_value": "1300",
+          "soap_presence": "text",
+          "modern_value": "1300.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27",
+          "modern_field": "Cota_27",
+          "soap_value": "1290",
+          "soap_presence": "text",
+          "modern_value": "1290.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28",
+          "modern_field": "Cota_28",
+          "soap_value": "1285.5",
+          "soap_presence": "text",
+          "modern_value": "1285.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29",
+          "modern_field": "Cota_29",
+          "soap_value": "1307.5",
+          "soap_presence": "text",
+          "modern_value": "1307.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30",
+          "modern_field": "Cota_30",
+          "soap_value": "1295.5",
+          "soap_presence": "text",
+          "modern_value": "1295.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31",
+          "modern_field": "Cota_31",
+          "soap_value": "1278.5",
+          "soap_presence": "text",
+          "modern_value": "1278.5",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01Status",
+          "modern_field": "Cota_01_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02Status",
+          "modern_field": "Cota_02_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03Status",
+          "modern_field": "Cota_03_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04Status",
+          "modern_field": "Cota_04_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05Status",
+          "modern_field": "Cota_05_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06Status",
+          "modern_field": "Cota_06_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07Status",
+          "modern_field": "Cota_07_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08Status",
+          "modern_field": "Cota_08_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09Status",
+          "modern_field": "Cota_09_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10Status",
+          "modern_field": "Cota_10_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11Status",
+          "modern_field": "Cota_11_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12Status",
+          "modern_field": "Cota_12_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13Status",
+          "modern_field": "Cota_13_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14Status",
+          "modern_field": "Cota_14_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15Status",
+          "modern_field": "Cota_15_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16Status",
+          "modern_field": "Cota_16_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17Status",
+          "modern_field": "Cota_17_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18Status",
+          "modern_field": "Cota_18_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19Status",
+          "modern_field": "Cota_19_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20Status",
+          "modern_field": "Cota_20_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21Status",
+          "modern_field": "Cota_21_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22Status",
+          "modern_field": "Cota_22_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23Status",
+          "modern_field": "Cota_23_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24Status",
+          "modern_field": "Cota_24_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25Status",
+          "modern_field": "Cota_25_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26Status",
+          "modern_field": "Cota_26_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27Status",
+          "modern_field": "Cota_27_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28Status",
+          "modern_field": "Cota_28_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29Status",
+          "modern_field": "Cota_29_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30Status",
+          "modern_field": "Cota_30_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31Status",
+          "modern_field": "Cota_31_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        }
+      ]
+    },
+    {
+      "soap_sha256": "3d695dff5f4ba3c506c6998596f0afb7375da66fb144d994d6698b263ea07d93",
+      "identity": {
+        "EstacaoCodigo": "15400000",
+        "NivelConsistencia": "1",
+        "DataHora": "2020-01-01 07:00:00",
+        "MediaDiaria": "0"
+      },
+      "unmapped_soap": [],
+      "unmapped_modern": [],
+      "fields": [
+        {
+          "soap_field": "EstacaoCodigo",
+          "modern_field": "codigoestacao",
+          "soap_value": "15400000",
+          "soap_presence": "text",
+          "modern_value": "15400000",
+          "equal": true
+        },
+        {
+          "soap_field": "NivelConsistencia",
+          "modern_field": "nivelconsistencia",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "DataHora",
+          "modern_field": "Data_Hora_Dado",
+          "soap_value": "2020-01-01 07:00:00",
+          "soap_presence": "text",
+          "modern_value": "2020-01-01 07:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaDiaria",
+          "modern_field": "Mediadiaria",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "TipoMedicaoCotas",
+          "modern_field": "Tipo_Medicao_Cotas",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Maxima",
+          "modern_field": "Maxima",
+          "soap_value": "1440",
+          "soap_presence": "text",
+          "modern_value": "1440.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Minima",
+          "modern_field": "Minima",
+          "soap_value": "1270",
+          "soap_presence": "text",
+          "modern_value": "1270.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Media",
+          "modern_field": "Media",
+          "soap_value": "1356",
+          "soap_presence": "text",
+          "modern_value": "1356.0",
+          "equal": true
+        },
+        {
+          "soap_field": "DiaMaxima",
+          "modern_field": "Dia_Maxima",
+          "soap_value": "13",
+          "soap_presence": "text",
+          "modern_value": "13",
+          "equal": true
+        },
+        {
+          "soap_field": "DiaMinima",
+          "modern_field": "Dia_Minima",
+          "soap_value": "31",
+          "soap_presence": "text",
+          "modern_value": "31",
+          "equal": true
+        },
+        {
+          "soap_field": "MaximaStatus",
+          "modern_field": "Maxima_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "MinimaStatus",
+          "modern_field": "Minima_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaStatus",
+          "modern_field": "Media_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnual",
+          "modern_field": "Media_Anual",
+          "soap_value": null,
+          "soap_presence": "absent",
+          "modern_value": null,
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnualStatus",
+          "modern_field": "Media_Anual_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "DataIns",
+          "modern_field": "Data_Ultima_Alteracao",
+          "soap_value": "2020-05-12 00:00:00",
+          "soap_presence": "text",
+          "modern_value": "2020-05-12 00:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01",
+          "modern_field": "Cota_01",
+          "soap_value": "1291",
+          "soap_presence": "text",
+          "modern_value": "1291.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02",
+          "modern_field": "Cota_02",
+          "soap_value": "1283",
+          "soap_presence": "text",
+          "modern_value": "1283.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03",
+          "modern_field": "Cota_03",
+          "soap_value": "1310",
+          "soap_presence": "text",
+          "modern_value": "1310.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04",
+          "modern_field": "Cota_04",
+          "soap_value": "1338",
+          "soap_presence": "text",
+          "modern_value": "1338.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05",
+          "modern_field": "Cota_05",
+          "soap_value": "1392",
+          "soap_presence": "text",
+          "modern_value": "1392.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06",
+          "modern_field": "Cota_06",
+          "soap_value": "1374",
+          "soap_presence": "text",
+          "modern_value": "1374.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07",
+          "modern_field": "Cota_07",
+          "soap_value": "1386",
+          "soap_presence": "text",
+          "modern_value": "1386.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08",
+          "modern_field": "Cota_08",
+          "soap_value": "1403",
+          "soap_presence": "text",
+          "modern_value": "1403.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09",
+          "modern_field": "Cota_09",
+          "soap_value": "1412",
+          "soap_presence": "text",
+          "modern_value": "1412.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10",
+          "modern_field": "Cota_10",
+          "soap_value": "1423",
+          "soap_presence": "text",
+          "modern_value": "1423.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11",
+          "modern_field": "Cota_11",
+          "soap_value": "1432",
+          "soap_presence": "text",
+          "modern_value": "1432.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12",
+          "modern_field": "Cota_12",
+          "soap_value": "1424",
+          "soap_presence": "text",
+          "modern_value": "1424.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13",
+          "modern_field": "Cota_13",
+          "soap_value": "1434",
+          "soap_presence": "text",
+          "modern_value": "1434.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14",
+          "modern_field": "Cota_14",
+          "soap_value": "1431",
+          "soap_presence": "text",
+          "modern_value": "1431.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15",
+          "modern_field": "Cota_15",
+          "soap_value": "1419",
+          "soap_presence": "text",
+          "modern_value": "1419.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16",
+          "modern_field": "Cota_16",
+          "soap_value": "1404",
+          "soap_presence": "text",
+          "modern_value": "1404.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17",
+          "modern_field": "Cota_17",
+          "soap_value": "1381",
+          "soap_presence": "text",
+          "modern_value": "1381.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18",
+          "modern_field": "Cota_18",
+          "soap_value": "1364",
+          "soap_presence": "text",
+          "modern_value": "1364.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19",
+          "modern_field": "Cota_19",
+          "soap_value": "1368",
+          "soap_presence": "text",
+          "modern_value": "1368.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20",
+          "modern_field": "Cota_20",
+          "soap_value": "1351",
+          "soap_presence": "text",
+          "modern_value": "1351.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21",
+          "modern_field": "Cota_21",
+          "soap_value": "1342",
+          "soap_presence": "text",
+          "modern_value": "1342.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22",
+          "modern_field": "Cota_22",
+          "soap_value": "1325",
+          "soap_presence": "text",
+          "modern_value": "1325.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23",
+          "modern_field": "Cota_23",
+          "soap_value": "1354",
+          "soap_presence": "text",
+          "modern_value": "1354.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24",
+          "modern_field": "Cota_24",
+          "soap_value": "1328",
+          "soap_presence": "text",
+          "modern_value": "1328.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25",
+          "modern_field": "Cota_25",
+          "soap_value": "1322",
+          "soap_presence": "text",
+          "modern_value": "1322.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26",
+          "modern_field": "Cota_26",
+          "soap_value": "1314",
+          "soap_presence": "text",
+          "modern_value": "1314.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27",
+          "modern_field": "Cota_27",
+          "soap_value": "1295",
+          "soap_presence": "text",
+          "modern_value": "1295.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28",
+          "modern_field": "Cota_28",
+          "soap_value": "1278",
+          "soap_presence": "text",
+          "modern_value": "1278.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29",
+          "modern_field": "Cota_29",
+          "soap_value": "1309",
+          "soap_presence": "text",
+          "modern_value": "1309.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30",
+          "modern_field": "Cota_30",
+          "soap_value": "1299",
+          "soap_presence": "text",
+          "modern_value": "1299.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31",
+          "modern_field": "Cota_31",
+          "soap_value": "1287",
+          "soap_presence": "text",
+          "modern_value": "1287.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01Status",
+          "modern_field": "Cota_01_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02Status",
+          "modern_field": "Cota_02_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03Status",
+          "modern_field": "Cota_03_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04Status",
+          "modern_field": "Cota_04_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05Status",
+          "modern_field": "Cota_05_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06Status",
+          "modern_field": "Cota_06_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07Status",
+          "modern_field": "Cota_07_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08Status",
+          "modern_field": "Cota_08_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09Status",
+          "modern_field": "Cota_09_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10Status",
+          "modern_field": "Cota_10_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11Status",
+          "modern_field": "Cota_11_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12Status",
+          "modern_field": "Cota_12_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13Status",
+          "modern_field": "Cota_13_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14Status",
+          "modern_field": "Cota_14_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15Status",
+          "modern_field": "Cota_15_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16Status",
+          "modern_field": "Cota_16_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17Status",
+          "modern_field": "Cota_17_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18Status",
+          "modern_field": "Cota_18_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19Status",
+          "modern_field": "Cota_19_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20Status",
+          "modern_field": "Cota_20_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21Status",
+          "modern_field": "Cota_21_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22Status",
+          "modern_field": "Cota_22_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23Status",
+          "modern_field": "Cota_23_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24Status",
+          "modern_field": "Cota_24_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25Status",
+          "modern_field": "Cota_25_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26Status",
+          "modern_field": "Cota_26_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27Status",
+          "modern_field": "Cota_27_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28Status",
+          "modern_field": "Cota_28_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29Status",
+          "modern_field": "Cota_29_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30Status",
+          "modern_field": "Cota_30_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31Status",
+          "modern_field": "Cota_31_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        }
+      ]
+    },
+    {
+      "soap_sha256": "3d695dff5f4ba3c506c6998596f0afb7375da66fb144d994d6698b263ea07d93",
+      "identity": {
+        "EstacaoCodigo": "15400000",
+        "NivelConsistencia": "1",
+        "DataHora": "2020-01-01 17:00:00",
+        "MediaDiaria": "0"
+      },
+      "unmapped_soap": [],
+      "unmapped_modern": [],
+      "fields": [
+        {
+          "soap_field": "EstacaoCodigo",
+          "modern_field": "codigoestacao",
+          "soap_value": "15400000",
+          "soap_presence": "text",
+          "modern_value": "15400000",
+          "equal": true
+        },
+        {
+          "soap_field": "NivelConsistencia",
+          "modern_field": "nivelconsistencia",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "DataHora",
+          "modern_field": "Data_Hora_Dado",
+          "soap_value": "2020-01-01 17:00:00",
+          "soap_presence": "text",
+          "modern_value": "2020-01-01 17:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaDiaria",
+          "modern_field": "Mediadiaria",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "TipoMedicaoCotas",
+          "modern_field": "Tipo_Medicao_Cotas",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Maxima",
+          "modern_field": "Maxima",
+          "soap_value": "1440",
+          "soap_presence": "text",
+          "modern_value": "1440.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Minima",
+          "modern_field": "Minima",
+          "soap_value": "1270",
+          "soap_presence": "text",
+          "modern_value": "1270.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Media",
+          "modern_field": "Media",
+          "soap_value": "1356",
+          "soap_presence": "text",
+          "modern_value": "1356.0",
+          "equal": true
+        },
+        {
+          "soap_field": "DiaMaxima",
+          "modern_field": "Dia_Maxima",
+          "soap_value": "13",
+          "soap_presence": "text",
+          "modern_value": "13",
+          "equal": true
+        },
+        {
+          "soap_field": "DiaMinima",
+          "modern_field": "Dia_Minima",
+          "soap_value": "31",
+          "soap_presence": "text",
+          "modern_value": "31",
+          "equal": true
+        },
+        {
+          "soap_field": "MaximaStatus",
+          "modern_field": "Maxima_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "MinimaStatus",
+          "modern_field": "Minima_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaStatus",
+          "modern_field": "Media_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnual",
+          "modern_field": "Media_Anual",
+          "soap_value": null,
+          "soap_presence": "absent",
+          "modern_value": null,
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnualStatus",
+          "modern_field": "Media_Anual_Status",
+          "soap_value": "0",
+          "soap_presence": "text",
+          "modern_value": "0",
+          "equal": true
+        },
+        {
+          "soap_field": "DataIns",
+          "modern_field": "Data_Ultima_Alteracao",
+          "soap_value": "2020-05-12 00:00:00",
+          "soap_presence": "text",
+          "modern_value": "2020-05-12 00:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01",
+          "modern_field": "Cota_01",
+          "soap_value": "1277",
+          "soap_presence": "text",
+          "modern_value": "1277.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02",
+          "modern_field": "Cota_02",
+          "soap_value": "1301",
+          "soap_presence": "text",
+          "modern_value": "1301.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03",
+          "modern_field": "Cota_03",
+          "soap_value": "1320",
+          "soap_presence": "text",
+          "modern_value": "1320.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04",
+          "modern_field": "Cota_04",
+          "soap_value": "1338",
+          "soap_presence": "text",
+          "modern_value": "1338.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05",
+          "modern_field": "Cota_05",
+          "soap_value": "1374",
+          "soap_presence": "text",
+          "modern_value": "1374.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06",
+          "modern_field": "Cota_06",
+          "soap_value": "1381",
+          "soap_presence": "text",
+          "modern_value": "1381.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07",
+          "modern_field": "Cota_07",
+          "soap_value": "1400",
+          "soap_presence": "text",
+          "modern_value": "1400.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08",
+          "modern_field": "Cota_08",
+          "soap_value": "1410",
+          "soap_presence": "text",
+          "modern_value": "1410.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09",
+          "modern_field": "Cota_09",
+          "soap_value": "1414",
+          "soap_presence": "text",
+          "modern_value": "1414.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10",
+          "modern_field": "Cota_10",
+          "soap_value": "1430",
+          "soap_presence": "text",
+          "modern_value": "1430.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11",
+          "modern_field": "Cota_11",
+          "soap_value": "1427",
+          "soap_presence": "text",
+          "modern_value": "1427.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12",
+          "modern_field": "Cota_12",
+          "soap_value": "1422",
+          "soap_presence": "text",
+          "modern_value": "1422.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13",
+          "modern_field": "Cota_13",
+          "soap_value": "1440",
+          "soap_presence": "text",
+          "modern_value": "1440.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14",
+          "modern_field": "Cota_14",
+          "soap_value": "1432",
+          "soap_presence": "text",
+          "modern_value": "1432.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15",
+          "modern_field": "Cota_15",
+          "soap_value": "1407",
+          "soap_presence": "text",
+          "modern_value": "1407.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16",
+          "modern_field": "Cota_16",
+          "soap_value": "1383",
+          "soap_presence": "text",
+          "modern_value": "1383.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17",
+          "modern_field": "Cota_17",
+          "soap_value": "1368",
+          "soap_presence": "text",
+          "modern_value": "1368.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18",
+          "modern_field": "Cota_18",
+          "soap_value": "1363",
+          "soap_presence": "text",
+          "modern_value": "1363.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19",
+          "modern_field": "Cota_19",
+          "soap_value": "1364",
+          "soap_presence": "text",
+          "modern_value": "1364.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20",
+          "modern_field": "Cota_20",
+          "soap_value": "1348",
+          "soap_presence": "text",
+          "modern_value": "1348.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21",
+          "modern_field": "Cota_21",
+          "soap_value": "1333",
+          "soap_presence": "text",
+          "modern_value": "1333.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22",
+          "modern_field": "Cota_22",
+          "soap_value": "1328",
+          "soap_presence": "text",
+          "modern_value": "1328.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23",
+          "modern_field": "Cota_23",
+          "soap_value": "1343",
+          "soap_presence": "text",
+          "modern_value": "1343.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24",
+          "modern_field": "Cota_24",
+          "soap_value": "1331",
+          "soap_presence": "text",
+          "modern_value": "1331.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25",
+          "modern_field": "Cota_25",
+          "soap_value": "1302",
+          "soap_presence": "text",
+          "modern_value": "1302.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26",
+          "modern_field": "Cota_26",
+          "soap_value": "1286",
+          "soap_presence": "text",
+          "modern_value": "1286.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27",
+          "modern_field": "Cota_27",
+          "soap_value": "1285",
+          "soap_presence": "text",
+          "modern_value": "1285.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28",
+          "modern_field": "Cota_28",
+          "soap_value": "1293",
+          "soap_presence": "text",
+          "modern_value": "1293.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29",
+          "modern_field": "Cota_29",
+          "soap_value": "1306",
+          "soap_presence": "text",
+          "modern_value": "1306.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30",
+          "modern_field": "Cota_30",
+          "soap_value": "1292",
+          "soap_presence": "text",
+          "modern_value": "1292.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31",
+          "modern_field": "Cota_31",
+          "soap_value": "1270",
+          "soap_presence": "text",
+          "modern_value": "1270.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01Status",
+          "modern_field": "Cota_01_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02Status",
+          "modern_field": "Cota_02_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03Status",
+          "modern_field": "Cota_03_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04Status",
+          "modern_field": "Cota_04_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05Status",
+          "modern_field": "Cota_05_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06Status",
+          "modern_field": "Cota_06_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07Status",
+          "modern_field": "Cota_07_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08Status",
+          "modern_field": "Cota_08_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09Status",
+          "modern_field": "Cota_09_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10Status",
+          "modern_field": "Cota_10_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11Status",
+          "modern_field": "Cota_11_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12Status",
+          "modern_field": "Cota_12_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13Status",
+          "modern_field": "Cota_13_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14Status",
+          "modern_field": "Cota_14_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15Status",
+          "modern_field": "Cota_15_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16Status",
+          "modern_field": "Cota_16_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17Status",
+          "modern_field": "Cota_17_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18Status",
+          "modern_field": "Cota_18_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19Status",
+          "modern_field": "Cota_19_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20Status",
+          "modern_field": "Cota_20_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21Status",
+          "modern_field": "Cota_21_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22Status",
+          "modern_field": "Cota_22_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23Status",
+          "modern_field": "Cota_23_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24Status",
+          "modern_field": "Cota_24_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25Status",
+          "modern_field": "Cota_25_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26Status",
+          "modern_field": "Cota_26_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27Status",
+          "modern_field": "Cota_27_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28Status",
+          "modern_field": "Cota_28_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29Status",
+          "modern_field": "Cota_29_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30Status",
+          "modern_field": "Cota_30_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31Status",
+          "modern_field": "Cota_31_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        }
+      ]
+    },
+    {
+      "soap_sha256": "f421dd8f38dd4855b72759a0467b216d893ad4e210aed0e8d51419958bc73f5f",
+      "identity": {
+        "EstacaoCodigo": "15400000",
+        "NivelConsistencia": "2",
+        "DataHora": "2020-01-01 00:00:00",
+        "MediaDiaria": "1"
+      },
+      "unmapped_soap": [],
+      "unmapped_modern": [],
+      "fields": [
+        {
+          "soap_field": "EstacaoCodigo",
+          "modern_field": "codigoestacao",
+          "soap_value": "15400000",
+          "soap_presence": "text",
+          "modern_value": "15400000",
+          "equal": true
+        },
+        {
+          "soap_field": "NivelConsistencia",
+          "modern_field": "nivelconsistencia",
+          "soap_value": "2",
+          "soap_presence": "text",
+          "modern_value": "2",
+          "equal": true
+        },
+        {
+          "soap_field": "DataHora",
+          "modern_field": "Data_Hora_Dado",
+          "soap_value": "2020-01-01 00:00:00",
+          "soap_presence": "text",
+          "modern_value": "2020-01-01 00:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaDiaria",
+          "modern_field": "Mediadiaria",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "TipoMedicaoCotas",
+          "modern_field": "Tipo_Medicao_Cotas",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Maxima",
+          "modern_field": "Maxima",
+          "soap_value": "1437",
+          "soap_presence": "text",
+          "modern_value": "1437.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Minima",
+          "modern_field": "Minima",
+          "soap_value": "1279",
+          "soap_presence": "text",
+          "modern_value": "1279.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Media",
+          "modern_field": "Media",
+          "soap_value": "1355.77417",
+          "soap_presence": "text",
+          "modern_value": "1355.7742",
+          "equal": false
+        },
+        {
+          "soap_field": "DiaMaxima",
+          "modern_field": "Dia_Maxima",
+          "soap_value": "13",
+          "soap_presence": "text",
+          "modern_value": "13",
+          "equal": true
+        },
+        {
+          "soap_field": "DiaMinima",
+          "modern_field": "Dia_Minima",
+          "soap_value": "31",
+          "soap_presence": "text",
+          "modern_value": "31",
+          "equal": true
+        },
+        {
+          "soap_field": "MaximaStatus",
+          "modern_field": "Maxima_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "MinimaStatus",
+          "modern_field": "Minima_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaStatus",
+          "modern_field": "Media_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnual",
+          "modern_field": "Media_Anual",
+          "soap_value": null,
+          "soap_presence": "absent",
+          "modern_value": null,
+          "equal": true
+        },
+        {
+          "soap_field": "MediaAnualStatus",
+          "modern_field": "Media_Anual_Status",
+          "soap_value": null,
+          "soap_presence": "absent",
+          "modern_value": null,
+          "equal": true
+        },
+        {
+          "soap_field": "DataIns",
+          "modern_field": "Data_Ultima_Alteracao",
+          "soap_value": "2023-04-20 00:00:00",
+          "soap_presence": "text",
+          "modern_value": "2023-04-20 00:00:00.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01",
+          "modern_field": "Cota_01",
+          "soap_value": "1284",
+          "soap_presence": "text",
+          "modern_value": "1284.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02",
+          "modern_field": "Cota_02",
+          "soap_value": "1292",
+          "soap_presence": "text",
+          "modern_value": "1292.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03",
+          "modern_field": "Cota_03",
+          "soap_value": "1315",
+          "soap_presence": "text",
+          "modern_value": "1315.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04",
+          "modern_field": "Cota_04",
+          "soap_value": "1338",
+          "soap_presence": "text",
+          "modern_value": "1338.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05",
+          "modern_field": "Cota_05",
+          "soap_value": "1383",
+          "soap_presence": "text",
+          "modern_value": "1383.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06",
+          "modern_field": "Cota_06",
+          "soap_value": "1378",
+          "soap_presence": "text",
+          "modern_value": "1378.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07",
+          "modern_field": "Cota_07",
+          "soap_value": "1393",
+          "soap_presence": "text",
+          "modern_value": "1393.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08",
+          "modern_field": "Cota_08",
+          "soap_value": "1407",
+          "soap_presence": "text",
+          "modern_value": "1407.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09",
+          "modern_field": "Cota_09",
+          "soap_value": "1413",
+          "soap_presence": "text",
+          "modern_value": "1413.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10",
+          "modern_field": "Cota_10",
+          "soap_value": "1427",
+          "soap_presence": "text",
+          "modern_value": "1427.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11",
+          "modern_field": "Cota_11",
+          "soap_value": "1430",
+          "soap_presence": "text",
+          "modern_value": "1430.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12",
+          "modern_field": "Cota_12",
+          "soap_value": "1423",
+          "soap_presence": "text",
+          "modern_value": "1423.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13",
+          "modern_field": "Cota_13",
+          "soap_value": "1437",
+          "soap_presence": "text",
+          "modern_value": "1437.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14",
+          "modern_field": "Cota_14",
+          "soap_value": "1432",
+          "soap_presence": "text",
+          "modern_value": "1432.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15",
+          "modern_field": "Cota_15",
+          "soap_value": "1413",
+          "soap_presence": "text",
+          "modern_value": "1413.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16",
+          "modern_field": "Cota_16",
+          "soap_value": "1394",
+          "soap_presence": "text",
+          "modern_value": "1394.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17",
+          "modern_field": "Cota_17",
+          "soap_value": "1375",
+          "soap_presence": "text",
+          "modern_value": "1375.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18",
+          "modern_field": "Cota_18",
+          "soap_value": "1364",
+          "soap_presence": "text",
+          "modern_value": "1364.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19",
+          "modern_field": "Cota_19",
+          "soap_value": "1366",
+          "soap_presence": "text",
+          "modern_value": "1366.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20",
+          "modern_field": "Cota_20",
+          "soap_value": "1350",
+          "soap_presence": "text",
+          "modern_value": "1350.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21",
+          "modern_field": "Cota_21",
+          "soap_value": "1338",
+          "soap_presence": "text",
+          "modern_value": "1338.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22",
+          "modern_field": "Cota_22",
+          "soap_value": "1327",
+          "soap_presence": "text",
+          "modern_value": "1327.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23",
+          "modern_field": "Cota_23",
+          "soap_value": "1349",
+          "soap_presence": "text",
+          "modern_value": "1349.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24",
+          "modern_field": "Cota_24",
+          "soap_value": "1330",
+          "soap_presence": "text",
+          "modern_value": "1330.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25",
+          "modern_field": "Cota_25",
+          "soap_value": "1312",
+          "soap_presence": "text",
+          "modern_value": "1312.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26",
+          "modern_field": "Cota_26",
+          "soap_value": "1300",
+          "soap_presence": "text",
+          "modern_value": "1300.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27",
+          "modern_field": "Cota_27",
+          "soap_value": "1290",
+          "soap_presence": "text",
+          "modern_value": "1290.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28",
+          "modern_field": "Cota_28",
+          "soap_value": "1286",
+          "soap_presence": "text",
+          "modern_value": "1286.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29",
+          "modern_field": "Cota_29",
+          "soap_value": "1308",
+          "soap_presence": "text",
+          "modern_value": "1308.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30",
+          "modern_field": "Cota_30",
+          "soap_value": "1296",
+          "soap_presence": "text",
+          "modern_value": "1296.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31",
+          "modern_field": "Cota_31",
+          "soap_value": "1279",
+          "soap_presence": "text",
+          "modern_value": "1279.0",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota01Status",
+          "modern_field": "Cota_01_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota02Status",
+          "modern_field": "Cota_02_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota03Status",
+          "modern_field": "Cota_03_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota04Status",
+          "modern_field": "Cota_04_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota05Status",
+          "modern_field": "Cota_05_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota06Status",
+          "modern_field": "Cota_06_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota07Status",
+          "modern_field": "Cota_07_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota08Status",
+          "modern_field": "Cota_08_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota09Status",
+          "modern_field": "Cota_09_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota10Status",
+          "modern_field": "Cota_10_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota11Status",
+          "modern_field": "Cota_11_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota12Status",
+          "modern_field": "Cota_12_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota13Status",
+          "modern_field": "Cota_13_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota14Status",
+          "modern_field": "Cota_14_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota15Status",
+          "modern_field": "Cota_15_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota16Status",
+          "modern_field": "Cota_16_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota17Status",
+          "modern_field": "Cota_17_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota18Status",
+          "modern_field": "Cota_18_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota19Status",
+          "modern_field": "Cota_19_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota20Status",
+          "modern_field": "Cota_20_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota21Status",
+          "modern_field": "Cota_21_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota22Status",
+          "modern_field": "Cota_22_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota23Status",
+          "modern_field": "Cota_23_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota24Status",
+          "modern_field": "Cota_24_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota25Status",
+          "modern_field": "Cota_25_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota26Status",
+          "modern_field": "Cota_26_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota27Status",
+          "modern_field": "Cota_27_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota28Status",
+          "modern_field": "Cota_28_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota29Status",
+          "modern_field": "Cota_29_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota30Status",
+          "modern_field": "Cota_30_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        },
+        {
+          "soap_field": "Cota31Status",
+          "modern_field": "Cota_31_Status",
+          "soap_value": "1",
+          "soap_presence": "text",
+          "modern_value": "1",
+          "equal": true
+        }
+      ]
+    }
+  ]
+}

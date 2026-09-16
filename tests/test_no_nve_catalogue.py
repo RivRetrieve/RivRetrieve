@@ -192,11 +192,22 @@ def test_native_value_mutation_is_rejected() -> None:
 
 def test_brazil_certified_candidates_are_selectable_without_inferred_availability() -> None:
     selection = rr.find(provider="br_ana")
-    assert len(selection.series) == 35_828
-    assert rr.products(provider="br_ana") == ["discharge_instantaneous", "stage_instantaneous"]
+    assert len(selection.series) == 6 * 17_914
+    assert rr.products(provider="br_ana") == [
+        "discharge_daily_mean_bruto",
+        "discharge_daily_mean_consistido",
+        "discharge_instantaneous",
+        "stage_daily_mean_bruto",
+        "stage_daily_mean_consistido",
+        "stage_instantaneous",
+    ]
     assert {series.availability for series in selection.series} == {"available", "unknown"}
     observed = tuple(series for series in selection.series if series.availability == "available")
     assert {(series.station_id, series.product_id) for series in observed} == {
         ("15400000", "discharge_instantaneous"),
         ("15400000", "stage_instantaneous"),
+        ("15400000", "discharge_daily_mean_bruto"),
+        ("15400000", "discharge_daily_mean_consistido"),
+        ("15400000", "stage_daily_mean_bruto"),
+        ("15400000", "stage_daily_mean_consistido"),
     }

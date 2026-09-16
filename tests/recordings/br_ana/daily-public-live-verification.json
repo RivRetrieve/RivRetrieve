@@ -1,0 +1,833 @@
+{
+  "passed": true,
+  "audits": [
+    {
+      "window": [
+        "2020-01-15T00:00:00",
+        "2020-01-16T00:00:00"
+      ],
+      "products": [
+        "stage_daily_mean_bruto",
+        "stage_daily_mean_consistido",
+        "discharge_daily_mean_consistido"
+      ],
+      "checks": {
+        "stage_daily_mean_bruto": true,
+        "stage_daily_mean_consistido": true,
+        "discharge_daily_mean_consistido": true
+      },
+      "selection": [
+        {
+          "provider_id": "br_ana",
+          "station_id": "15400000",
+          "product_id": "discharge_daily_mean_consistido",
+          "latitude": -8.7483,
+          "longitude": -63.9169,
+          "crs": "unknown",
+          "observed_property": "discharge",
+          "frequency": "daily",
+          "statistic": "mean",
+          "period_type": "daily",
+          "period_anchor": "unknown",
+          "unit": "m3/s",
+          "native_id": "HidroSerieVazao/v1:Vazao_01..31;Mediadiaria=1;Nivel_Consistencia=2",
+          "availability": "available",
+          "availability_reason": "Non-null numbered day slot with Mediadiaria=1 and exact source consistency variant; no other variant, continuity or complete record implied",
+          "published_record_start_date": null,
+          "published_record_end_date": null,
+          "last_catalogue_check": "2026-09-16"
+        },
+        {
+          "provider_id": "br_ana",
+          "station_id": "15400000",
+          "product_id": "stage_daily_mean_bruto",
+          "latitude": -8.7483,
+          "longitude": -63.9169,
+          "crs": "unknown",
+          "observed_property": "stage",
+          "frequency": "daily",
+          "statistic": "mean",
+          "period_type": "daily",
+          "period_anchor": "unknown",
+          "unit": "m",
+          "native_id": "HidroSerieCotas/v1:Cota_01..31;Mediadiaria=1;nivelconsistencia=1",
+          "availability": "available",
+          "availability_reason": "Non-null numbered day slot with Mediadiaria=1 and exact source consistency variant; no other variant, continuity or complete record implied",
+          "published_record_start_date": null,
+          "published_record_end_date": null,
+          "last_catalogue_check": "2026-09-16"
+        },
+        {
+          "provider_id": "br_ana",
+          "station_id": "15400000",
+          "product_id": "stage_daily_mean_consistido",
+          "latitude": -8.7483,
+          "longitude": -63.9169,
+          "crs": "unknown",
+          "observed_property": "stage",
+          "frequency": "daily",
+          "statistic": "mean",
+          "period_type": "daily",
+          "period_anchor": "unknown",
+          "unit": "m",
+          "native_id": "HidroSerieCotas/v1:Cota_01..31;Mediadiaria=1;nivelconsistencia=2",
+          "availability": "available",
+          "availability_reason": "Non-null numbered day slot with Mediadiaria=1 and exact source consistency variant; no other variant, continuity or complete record implied",
+          "published_record_start_date": null,
+          "published_record_end_date": null,
+          "last_catalogue_check": "2026-09-16"
+        }
+      ],
+      "rows": [
+        {
+          "time": "2020-01-15 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "discharge_daily_mean_consistido",
+          "value": 31218.674
+        },
+        {
+          "time": "2020-01-16 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "discharge_daily_mean_consistido",
+          "value": 30587.594
+        },
+        {
+          "time": "2020-01-15 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "stage_daily_mean_bruto",
+          "value": 14.13
+        },
+        {
+          "time": "2020-01-16 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "stage_daily_mean_bruto",
+          "value": 13.935
+        },
+        {
+          "time": "2020-01-15 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "stage_daily_mean_consistido",
+          "value": 14.13
+        },
+        {
+          "time": "2020-01-16 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "stage_daily_mean_consistido",
+          "value": 13.94
+        }
+      ],
+      "issues": [
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "provenance.citation_not_established",
+          "message": "RivRetrieve has not yet established the citation for provider br_ana."
+        }
+      ],
+      "source_call_count": 4,
+      "receipts": [
+        {
+          "byte_count": 1837,
+          "sha256": "e681d5067c0672f793c736f6c31aeb0bd07f872a37a749a65d438a67a55f99fe"
+        },
+        {
+          "byte_count": 6528,
+          "sha256": "cc33bfc96aeebd9fcdb88fc3262d7fa91ec88b3c8154495cc4739dd59979f552"
+        },
+        {
+          "byte_count": 6528,
+          "sha256": "cc33bfc96aeebd9fcdb88fc3262d7fa91ec88b3c8154495cc4739dd59979f552"
+        }
+      ]
+    },
+    {
+      "window": [
+        "2024-01-15T00:00:00",
+        "2024-01-16T00:00:00"
+      ],
+      "products": [
+        "discharge_daily_mean_bruto"
+      ],
+      "checks": {
+        "discharge_daily_mean_bruto": true
+      },
+      "selection": [
+        {
+          "provider_id": "br_ana",
+          "station_id": "15400000",
+          "product_id": "discharge_daily_mean_bruto",
+          "latitude": -8.7483,
+          "longitude": -63.9169,
+          "crs": "unknown",
+          "observed_property": "discharge",
+          "frequency": "daily",
+          "statistic": "mean",
+          "period_type": "daily",
+          "period_anchor": "unknown",
+          "unit": "m3/s",
+          "native_id": "HidroSerieVazao/v1:Vazao_01..31;Mediadiaria=1;Nivel_Consistencia=1",
+          "availability": "available",
+          "availability_reason": "Non-null numbered day slot with Mediadiaria=1 and exact source consistency variant; no other variant, continuity or complete record implied",
+          "published_record_start_date": null,
+          "published_record_end_date": null,
+          "last_catalogue_check": "2026-09-16"
+        }
+      ],
+      "rows": [
+        {
+          "time": "2024-01-15 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "discharge_daily_mean_bruto",
+          "value": 13202.701
+        },
+        {
+          "time": "2024-01-16 00:00:00",
+          "time_zone": "unknown",
+          "station_id": "15400000",
+          "product_id": "discharge_daily_mean_bruto",
+          "value": 13652.53
+        }
+      ],
+      "issues": [
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "source_status",
+          "message": "ANA published daily status without RivRetrieve interpretation"
+        },
+        {
+          "severity": "info",
+          "code": "provenance.citation_not_established",
+          "message": "RivRetrieve has not yet established the citation for provider br_ana."
+        }
+      ],
+      "source_call_count": 2,
+      "receipts": [
+        {
+          "byte_count": 1839,
+          "sha256": "ec4528bc3024514cde576a5ce69fc2aa0f29ebf72b81ee05fc1c8df9780bcb2c"
+        }
+      ]
+    }
+  ]
+}

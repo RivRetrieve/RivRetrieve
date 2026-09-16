@@ -1,0 +1,72 @@
+{
+  "extractor": "binary-refinery==0.11.2",
+  "installer_sha256": "0a004473f7ae4e98f0e968ec747146f0064bd0f9b564cde74e4b1c468c0812ac",
+  "files": [
+    {
+      "archive_path": "{app}/Hidro.mdb",
+      "filename": "Hidro.mdb",
+      "byte_count": 140369920,
+      "sha256": "27e78b52d6d6b7f9791cbf9b522eb6c5c542613759a8c9098ffa5eada1042311"
+    },
+    {
+      "archive_path": "{app}/Hidro 1.0 - Manual do Usu\u00e1rio.pdf",
+      "filename": "Hidro 1.0 - Manual do Usu\u00e1rio.pdf",
+      "byte_count": 853919,
+      "sha256": "45c4bac86bc584a9f4926acf18b878cfec3b48bdcdc7594cb194fdfc94e16c37"
+    },
+    {
+      "archive_path": "{app}/Hidro 1.3 - Novidades do Sistema.pdf",
+      "filename": "Hidro 1.3 - Novidades do Sistema.pdf",
+      "byte_count": 1675678,
+      "sha256": "e81c3a8731af6b38ad6c15bed2420f4bc868d36f9def121adbe36b619101ce34"
+    },
+    {
+      "archive_path": "{app}/Hidro 1.4 - Novidades do Sistema.pdf",
+      "filename": "Hidro 1.4 - Novidades do Sistema.pdf",
+      "byte_count": 1422292,
+      "sha256": "d098fe733740299c25ef3fc33ac7e96d6b21ff01925150d6b1d74791914e24f8"
+    },
+    {
+      "archive_path": "{app}/Hidro SQLSERVER 2008.sql",
+      "filename": "Hidro SQLSERVER 2008.sql",
+      "byte_count": 1089656,
+      "sha256": "6136dd163ba52d5863ffd6b70c9f3aace5d5551abdd1599c5f2972f0a4f9fb98"
+    },
+    {
+      "archive_path": "{app}/Hidro Oracle 10G.sql",
+      "filename": "Hidro Oracle 10G.sql",
+      "byte_count": 20437,
+      "sha256": "9dba0bf43ed700b73edd6be0a8bfd8509f3e48844bd710152b6edd307a2a31aa"
+    },
+    {
+      "archive_path": "{app}/Hidro CREATE_TABLES_FICHA_DESCRITIVA.sql",
+      "filename": "Hidro CREATE_TABLES_FICHA_DESCRITIVA.sql",
+      "byte_count": 13520,
+      "sha256": "ba6222d31d20864feddee4b48ef850fb3262639ac9700497eeac1fe821dd2844"
+    },
+    {
+      "archive_path": "{app}/Hidro CREATE_VIEWS_FICHA_DESCRITIVA.sql",
+      "filename": "Hidro CREATE_VIEWS_FICHA_DESCRITIVA.sql",
+      "byte_count": 6914,
+      "sha256": "0c36f620a8116a0c001c1399579a693d91cec951b020dcbaf0954f213183a5ad"
+    },
+    {
+      "archive_path": "{app}/Hidro INSERTS_FICHA_DESCRITIVA.sql",
+      "filename": "Hidro INSERTS_FICHA_DESCRITIVA.sql",
+      "byte_count": 32187,
+      "sha256": "03292ac85318ce8eb389c2c72cd13e700c3773201784c5b2337583aad6d96992"
+    },
+    {
+      "archive_path": "{app}/Hidro.cnt",
+      "filename": "Hidro.cnt",
+      "byte_count": 2078,
+      "sha256": "6ae24b58d24273205edd667a96331e54803474fd42c3047fcc0a5abc9fcfe11f"
+    },
+    {
+      "archive_path": "{app}/Hidro.hlp",
+      "filename": "Hidro.hlp",
+      "byte_count": 4699018,
+      "sha256": "7604198da91248faccda82dd4515f939124a2411a728b14b704b35983d69da3c"
+    }
+  ]
+}
