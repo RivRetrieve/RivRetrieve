@@ -311,10 +311,14 @@ _Avoid_: chunk, window split, decomposition (which names the act, not the piece)
 **Window granularity**:
 The declaration keyed by provider-product that tells the [[engine]] whether a
 [[fetch-window]] is unsplit as an ISO instant or date pair, split by year, split by
-year-month, split into N-year chunks, split into capped inclusive-date spans, or has no
+year-month, split into N-year chunks, split into capped inclusive-date spans, split into fixed backward
+inclusive-date spans, or has no
 requested-window parameters. Drive selects one declaration for each requested `ProductId`
 before planning the authoritative fetch window. It names source request boundaries;
-post-hoc result filtering is not a granularity.
+post-hoc result filtering is not a granularity. Fixed backward spans each contain exactly
+the declared number of whole dates, are disjoint and end at the final fetch date.
+Only the earliest span may extend before the fetch start date, by fewer than that
+number of days; convert still clips to the requested window.
 
 **Stop convention**:
 Whether a rendered source-request stop includes its displayed boundary or excludes it.

@@ -367,6 +367,7 @@ def test_granularity_registry_and_decomposition_arithmetic_have_one_home() -> No
         "year-month",
         "n-year-chunk",
         "capped-span",
+        "fixed-backward-span",
         "none",
     }
     assert all(locations == [planner_path] for locations in handler_locations.values())
@@ -448,3 +449,37 @@ def test_window_planning_carrier_type_diagnostics_are_exact() -> None:
         with pytest.raises(TypeError) as exc:
             factory()  # type: ignore[operator]
         assert str(exc.value) == message
+
+
+@pytest.mark.parametrize("days", [1, 2, 29, 30, 31, 59, 60, 61, 365, 366])
+@pytest.mark.parametrize("end", [datetime(2024, 1, 4, 12, 30), datetime(2024, 3, 1), datetime(2025, 1, 1)])
+@pytest.mark.parametrize("size", [1, 7, 30])
+def test_fixed_backward_spans_cover_whole_fetch_dates_without_overlap(days: int, end: datetime, size: int) -> None:
+    from datetime import timedelta
+
+    start = end - timedelta(days=days - 1)
+    windows = window_planning.plan_windows(
+        _fetch(start, end),
+        _declaration("fixed-backward-span", engine.WindowRenderingVocabulary.DATE, size=size),
+    )
+    bounds = [(datetime.fromisoformat(w.start), datetime.fromisoformat(w.stop)) for w in windows if w.stop]
+    assert len(bounds) == (days + size - 1) // size
+    assert bounds[-1][1].date() == end.date()
+    assert 0 <= (start.date() - bounds[0][0].date()).days < size
+    for left, right in bounds:
+        assert (right - left).days == size - 1
+    for previous, current in zip(bounds, bounds[1:], strict=False):
+        assert current[0] - previous[1] == timedelta(days=1)
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        _declaration("fixed-backward-span", engine.WindowRenderingVocabulary.DATE),
+        _declaration("fixed-backward-span", engine.WindowRenderingVocabulary.ISO_INSTANT, size=30),
+        _declaration("fixed-backward-span", engine.WindowRenderingVocabulary.DATE, engine.StopConvention.EXCLUSIVE, 30),
+    ],
+)
+def test_fixed_backward_span_refuses_unsupported_declarations(declaration: engine.WindowDeclaration) -> None:
+    with pytest.raises(ValueError, match="requires"):
+        window_planning.plan_windows(_fetch(datetime(2024, 1, 1), datetime(2024, 1, 2)), declaration)
