@@ -53,7 +53,7 @@ def test_mismatched_identity_names_directory_and_catalogue(
 
 
 def test_malformed_kind_names_provider_and_unrecognised_value(tmp_path: Path) -> None:
-    declaration = ProviderDeclaration(tmp_path / "catalogue", "live")  # type: ignore[arg-type]
+    declaration = ProviderDeclaration(tmp_path / "catalogue", "live")  # ty: ignore[invalid-argument-type]
 
     with pytest.raises(FatalContractError, match="Provider xx_test.*unrecognised observation kind.*live"):
         load_manifest(("xx_test",), declaration_loader=lambda _provider_id: declaration)
@@ -63,7 +63,7 @@ def test_live_stages_without_stage_contract_refuses_before_catalogue_loading(
     stub_packaged_catalogue_artifact,
     tmp_path: Path,
 ) -> None:
-    declaration = ProviderDeclaration(tmp_path / "catalogue", LiveStages(stages=object()))  # type: ignore[arg-type]
+    declaration = ProviderDeclaration(tmp_path / "catalogue", LiveStages(stages=object()))  # ty: ignore[invalid-argument-type]
     registry = ProviderRegistry()
     catalogue_loads: list[Path] = []
 
@@ -89,10 +89,10 @@ def test_bulk_store_requires_callable_operations_before_catalogue_loading(
         "download": lambda request: request,
         "compile": lambda request: request,
     }
-    operations[operation] = None  # type: ignore[assignment]
+    operations[operation] = None  # ty: ignore[invalid-assignment]
     declaration = ProviderDeclaration(
         tmp_path / "catalogue",
-        BulkStore(config=bulk_config, **operations),  # type: ignore[arg-type]
+        BulkStore(config=bulk_config, **operations),
     )
     registry = ProviderRegistry()
     catalogue_loads: list[Path] = []
@@ -219,3 +219,89 @@ def test_credential_header_binding_rejects_undeclared_variable(tmp_path: Path) -
 
     with pytest.raises(FatalContractError, match="references undeclared variable 'TOKEN'"):
         load_manifest(("xx_test",), declaration_loader=lambda _provider_id: declaration)
+
+
+def _exchange_declaration(tmp_path: Path) -> ProviderDeclaration:
+    from rivretrieve._internal.authentication import ExchangeSpec
+
+    return ProviderDeclaration(
+        tmp_path / "catalogue",
+        no_nve_declaration.declaration.observations,
+        required_credentials=("IDENTIFIER", "PASSWORD"),
+        credential_exchange=registration.CredentialExchangeBinding(
+            ExchangeSpec.ana(),
+            (
+                CredentialHeaderBinding("IDENTIFIER", "identificador", ("https://www.ana.gov.br",)),
+                CredentialHeaderBinding("PASSWORD", "senha", ("https://www.ana.gov.br",)),
+            ),
+        ),
+    )
+
+
+def test_exchange_declaration_propagates_to_registry(tmp_path, stub_packaged_catalogue_artifact):
+    declaration = _exchange_declaration(tmp_path)
+    registry = ProviderRegistry()
+    register_manifest(
+        registry,
+        ("xx_test",),
+        declaration_loader=lambda _: declaration,
+        artifact_loader=lambda _: stub_packaged_catalogue_artifact("xx_test"),
+    )
+    assert registry.get("xx_test").credential_exchange == declaration.credential_exchange
+    assert registry.get("xx_test").credential_headers == ()
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "mixed",
+        "catalogue",
+        "spec",
+        "missing",
+        "extra",
+        "duplicate_variable",
+        "duplicate_header",
+        "origin",
+        "extra_origin",
+        "bindings",
+        "binding",
+    ],
+)
+def test_exchange_declaration_refuses_invalid_contract(tmp_path, defect):
+    declaration = _exchange_declaration(tmp_path)
+    exchange = declaration.credential_exchange
+    assert exchange is not None
+    bindings = exchange.credential_headers
+    if defect == "mixed":
+        declaration = replace(declaration, credential_headers=bindings)
+    elif defect == "catalogue":
+        declaration = replace(declaration, observations=CatalogueOnly())
+    elif defect == "spec":
+        exchange = replace(exchange, spec="ana")
+    elif defect == "missing":
+        exchange = replace(exchange, credential_headers=bindings[:1])
+    elif defect == "extra":
+        exchange = replace(exchange, credential_headers=(*bindings, replace(bindings[0], variable="OTHER")))
+    elif defect == "duplicate_variable":
+        exchange = replace(exchange, credential_headers=(bindings[0], bindings[0]))
+    elif defect == "duplicate_header":
+        exchange = replace(exchange, credential_headers=(bindings[0], replace(bindings[1], header="IDENTIFICADOR")))
+    elif defect == "origin":
+        exchange = replace(
+            exchange, credential_headers=(replace(bindings[0], origins=("https://other.test",)), bindings[1])
+        )
+    elif defect == "extra_origin":
+        exchange = replace(
+            exchange,
+            credential_headers=(
+                replace(bindings[0], origins=("https://www.ana.gov.br", "https://other.test")),
+                bindings[1],
+            ),
+        )
+    elif defect == "bindings":
+        exchange = replace(exchange, credential_headers=list(bindings))
+    elif defect == "binding":
+        exchange = replace(exchange, credential_headers=("bad",))
+    declaration = replace(declaration, credential_exchange=exchange)
+    with pytest.raises(FatalContractError):
+        load_manifest(("xx_test",), declaration_loader=lambda _: declaration)

@@ -1,4 +1,4 @@
-"""record_observations : ProviderId × stations × products × RequestedWindow × CredentialHeader* × HttpClient → RecordingEnvelope files   (composition root).
+"""record_observations : ProviderDeclaration × stations × products × RequestedWindow × CredentialSources × HttpClient → RecordingEnvelope files   (composition root).
 
 Maintainer entry point that drives one live provider exactly as a public fetch would, with the
 engine's own padding, window planning and stop convention, and writes every source exchange the
@@ -11,9 +11,9 @@ Usage::
         --product discharge_instantaneous --product stage_instantaneous \\
         --start 2020-01-05 --end 2020-01-06 --out-dir tests/test_data --name za_dws_X3H001_Point_2020-01-03_2020-01-09
 
-A credentialed source names the header, the environment variable holding its value and the exact
-origin the credential is scoped to; the value is read here, applied by ``AuthenticatedTransport``
-below the recorded request, and never written::
+Declared direct and exchanged credentials are resolved here from the environment or the explicit
+``--env-file``. Credential exchange runs below the recorder, so token responses are never recorded.
+The existing explicit direct-header options remain supported for maintainer use::
 
     uv run python -m rivretrieve._internal.record_observations --provider no_nve --station 1.200.0 \\
         --product stage_daily_mean --start 2025-07-10T00:00:00 --end 2025-07-12T00:00:00 \\
@@ -35,6 +35,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from rivretrieve._internal.authentication import CredentialExchangeTransport
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.engine import RequestedWindow
@@ -44,7 +45,13 @@ from rivretrieve._internal.observations import ObservationRequest as PublicObser
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.recordings import RecordingEnvelope, RecordingTransport, write_recording
-from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient, Transport
+from rivretrieve._internal.transport import (
+    AuthenticatedTransport,
+    CredentialHeader,
+    HttpClient,
+    Transport,
+    _SystemClock,
+)
 
 
 def record_observations(
@@ -145,10 +152,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     credential_options = (arguments.credential_header, arguments.credential_env, arguments.credential_origin)
     if any(option is not None for option in credential_options) and not all(credential_options):
         parser.error("--credential-header, --credential-env and --credential-origin must be given together")
+    (declared,) = load_manifest((arguments.provider,))
+    declaration = declared.declaration
+    if not isinstance(declaration.observations, LiveStages):
+        raise FatalContractError(f"Provider {arguments.provider} is not a LiveStages provider; nothing to record")
+    exchange = declaration.credential_exchange
+    if exchange is not None and any(credential_options):
+        parser.error("declared credential exchange cannot be overridden by direct credential options")
     credentials: tuple[CredentialHeader, ...] = ()
+    transport: Transport | None = None
     if all(credential_options):
         value = credential_value(arguments.credential_env, os.environ, arguments.env_file)
         credentials = (CredentialHeader(arguments.credential_header, value, (arguments.credential_origin,)),)
+    else:
+        bindings = declaration.credential_headers if exchange is None else exchange.credential_headers
+        credentials = tuple(
+            CredentialHeader(
+                binding.header, credential_value(binding.variable, os.environ, arguments.env_file), binding.origins
+            )
+            for binding in bindings
+        )
+        if exchange is not None:
+            transport = CredentialExchangeTransport(HttpClient(), credentials, exchange.spec, _SystemClock())
+            credentials = ()
     record_observations(
         arguments.provider,
         arguments.station,
@@ -158,6 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments.out_dir,
         arguments.name,
         credentials,
+        transport=transport,
     )
     return 0
 

@@ -447,10 +447,14 @@ def test_source_failure_isolation_exists_once_in_the_engine() -> None:
     for path in PROVIDERS_ROOT.glob("*/fetch.py"):
         tree = _tree(path)
         for node in ast.walk(tree):
-            if isinstance(node, ast.ExceptHandler) and (
-                isinstance(node.type, ast.Name) and node.type.id == "TransportFailure"
-            ):
-                provider_violations.append(f"{path.parent.name}:{node.lineno}:TransportFailure")
+            if isinstance(node, ast.ExceptHandler) and node.type is not None:
+                caught_failures = {
+                    child.id
+                    for child in ast.walk(node.type)
+                    if isinstance(child, ast.Name) and child.id in {"TransportFailure", "CredentialExchangeError"}
+                }
+                if caught_failures:
+                    provider_violations.append(f"{path.parent.name}:{node.lineno}:{sorted(caught_failures)}")
             if isinstance(node, ast.Compare) and any(
                 isinstance(child, ast.Attribute) and child.attr == "status_code" for child in ast.walk(node)
             ):
@@ -462,7 +466,16 @@ def test_source_failure_isolation_exists_once_in_the_engine() -> None:
         node
         for node in ast.walk(driver)
         if isinstance(node, ast.ExceptHandler)
-        and isinstance(node.type, ast.Name)
-        and node.type.id == "TransportFailure"
+        and node.type is not None
+        and any(
+            isinstance(child, ast.Name) and child.id in {"TransportFailure", "CredentialExchangeError"}
+            for child in ast.walk(node.type)
+        )
     ]
     assert len(isolation_points) == 1
+    caught = isolation_points[0].type
+    assert isinstance(caught, ast.Tuple)
+    assert tuple(child.id for child in caught.elts if isinstance(child, ast.Name)) == (
+        "TransportFailure",
+        "CredentialExchangeError",
+    )

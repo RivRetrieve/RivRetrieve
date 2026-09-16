@@ -11,6 +11,7 @@ from typing import Protocol, assert_never, runtime_checkable
 import polars as pl
 
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
+from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.conversion import convert, validate_native_rows
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval, remainder, served_coverage
@@ -267,18 +268,18 @@ def _source_failure_issue(
     provider_id: ProviderId,
     station_id: str,
     product_id: ProductId,
-    failure: TransportFailure,
+    failure: TransportFailure | CredentialExchangeError,
     credential_names: tuple[str, ...],
 ) -> Issue:
-    """source failure classification : Series × TransportFailure × CredentialNames → Issue."""
+    """source failure classification : Series × (TransportFailure | CredentialExchangeError) × CredentialNames → Issue."""
     details: dict[str, object] = {
         "station_id": station_id,
         "product_id": str(product_id),
         "failure_reason": failure.reason.value,
-        "attempts": failure.attempts,
+        "attempts": None if isinstance(failure, CredentialExchangeError) else failure.attempts,
         "status_code": failure.status_code,
     }
-    if failure.status_code == 404:
+    if failure.status_code == 404 and not isinstance(failure, CredentialExchangeError):
         return Issue(
             severity="warning",
             code="source.http_not_found",
@@ -294,6 +295,11 @@ def _source_failure_issue(
         message = (
             f"Provider {provider_id} rejected the credential for station {station_id}, product {product_id}: "
             f"HTTP {failure.status_code}; check {names}."
+        )
+    elif isinstance(failure, CredentialExchangeError):
+        message = (
+            f"Provider {provider_id} authentication failed for station {station_id}, product {product_id}: "
+            f"{failure.reason.value}."
         )
     elif failure.reason is TransportFailureReason.HTTP_STATUS:
         message = (
@@ -491,7 +497,7 @@ def drive(
                         config,
                         _SourceResponseTransport(resolved_transport),
                     )
-                except TransportFailure as failure:
+                except (TransportFailure, CredentialExchangeError) as failure:
                     failed_series.add((station_id, product_id))
                     all_issues.append(
                         _source_failure_issue(

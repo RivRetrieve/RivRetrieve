@@ -346,3 +346,458 @@ def test_fetch_by_provider_preflights_every_selected_provider_before_any_request
         "first_provider": ("FIRST_TOKEN",),
         "second_provider": ("SECOND_USER", "SECOND_PASSWORD"),
     }
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 302])
+def test_rejected_exchange_is_isolated_by_public_fetch(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    status,
+):
+    from rivretrieve._internal.transport import HttpClient
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EXCHANGE_ID", _SECRET)
+    monkeypatch.setenv("EXCHANGE_PASSWORD", "password-sentinel")
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request.url)
+        return b"rejected", status, "text/plain"
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender))
+    result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", receipts=True, on_issue="ignore")
+    assert calls == ["https://hydapi.nve.no/token"]
+    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.is_empty()
+    assert result.receipts.entries == ()
+    issues = [issue for issue in result.issues if issue.code == "source.request_failed"]
+    assert len(issues) == 1
+    assert issues[0].severity == "error"
+    if status in (401, 403):
+        assert "EXCHANGE_ID" in issues[0].message
+    assert _SECRET not in repr(result)
+
+
+def _register_exchange(monkeypatch, artifact_factory, series=None, origin="https://hydapi.nve.no"):
+    """Protocol-only exchange over admitted NVE bytes, not a claim about NVE authentication."""
+    from rivretrieve._internal.authentication import ExchangeSpec
+    from rivretrieve._internal.providers.registration import CredentialExchangeBinding, CredentialHeaderBinding
+
+    _register_no_nve(monkeypatch, artifact_factory)
+    record = _registry.get("no_nve")
+    artifact = record._artifact
+    _registry.clear()
+    if series is not None:
+        artifact = replace(
+            artifact,
+            stations=pl.concat(
+                [
+                    artifact.stations.with_columns(pl.lit(station).alias("station_id"))
+                    for station in dict.fromkeys(station for station, product in series)
+                ]
+            ),
+            products=pl.concat(
+                [
+                    artifact.products.with_columns(pl.lit(product).alias("product_id"))
+                    for product in dict.fromkeys(product for station, product in series)
+                ]
+            ),
+            station_products=pl.concat(
+                [
+                    artifact.station_products.with_columns(
+                        pl.lit(station).alias("station_id"), pl.lit(product).alias("product_id")
+                    )
+                    for station, product in series
+                ]
+            ),
+        )
+    assert isinstance(no_nve_declaration.observations, LiveStages)
+    spec = ExchangeSpec(f"{origin}/token", ("token",), "Bearer", 3600, 3300, origin)
+    _registry.register(
+        "no_nve",
+        artifact,
+        engine_provider_module=no_nve_declaration.observations.stages,
+        required_credentials=("EXCHANGE_ID", "EXCHANGE_PASSWORD"),
+        credential_exchange=CredentialExchangeBinding(
+            spec,
+            (
+                CredentialHeaderBinding("EXCHANGE_ID", "Identifier", (origin,)),
+                CredentialHeaderBinding("EXCHANGE_PASSWORD", "Password", (origin,)),
+            ),
+        ),
+    )
+    return rr.find(provider="no_nve")
+
+
+def test_public_declared_exchange_composes_and_sanitizes(monkeypatch, tmp_path, stub_packaged_catalogue_artifact):
+    from rivretrieve._internal.transport import HttpClient
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EXCHANGE_ID", "protocol-identifier-sentinel")
+    monkeypatch.setenv("EXCHANGE_PASSWORD", "protocol-password-sentinel")
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append((request.url, dict(request.headers)))
+        if request.url.endswith("/token"):
+            return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
+        return _recording().content, 200, "application/json"
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda seconds: None))
+    result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", receipts=True, on_issue="ignore")
+    assert len(calls) == 2
+    assert calls[0][1]["Identifier"] == "protocol-identifier-sentinel"
+    assert calls[0][1]["Password"] == "protocol-password-sentinel"
+    assert calls[1][1]["Authorization"] == "Bearer protocol-bearer-sentinel"
+    assert result.data.height == 3
+    for secret in ("protocol-identifier-sentinel", "protocol-password-sentinel", "protocol-bearer-sentinel"):
+        assert secret not in repr(result)
+        assert secret.encode() not in b"".join(entry.content for entry in result.receipts.entries)
+
+
+class _ExchangeClock:
+    value = 100.0
+
+    def monotonic(self):
+        return self.value
+
+    def utcnow(self):
+        return datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _exchange_environment(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EXCHANGE_ID", "protocol-identifier-sentinel")
+    monkeypatch.setenv("EXCHANGE_PASSWORD", "protocol-password-sentinel")
+
+
+@pytest.mark.parametrize("elapsed, exchanges", [(3299, 1), (3300, 2), (3601, 2)])
+def test_public_exchange_reuses_and_refreshes_across_stations(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    elapsed,
+    exchanges,
+):
+    from rivretrieve._internal.authentication import CredentialExchangeTransport
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    selection = _register_exchange(
+        monkeypatch,
+        stub_packaged_catalogue_artifact,
+        (("1.200.0", "water_temperature_daily_mean"), ("12.210.0", "water_temperature_daily_mean")),
+    )
+    clock = _ExchangeClock()
+    calls = []
+    captures = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request)
+        if request.url.endswith("/token"):
+            return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
+        station = request.params["StationId"]
+        recording = read_recording(_DATA / f"no_nve_{station}_1003_1440_2025-07-08_2025-07-14.recording.json")
+        clock.value = 100.0 + elapsed
+        return recording.content, recording.status_code, recording.content_type
+
+    def recorded_exchange(*args):
+        capture = RecordingTransport(CredentialExchangeTransport(*args))
+        captures.append(capture)
+        return capture
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, clock=clock, sleeper=lambda _: None))
+    monkeypatch.setattr(discovery, "_SystemClock", lambda: clock)
+    monkeypatch.setattr(discovery, "CredentialExchangeTransport", recorded_exchange)
+    result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", receipts=True, on_issue="ignore")
+    assert sum(request.url.endswith("/token") for request in calls) == exchanges
+    assert len(calls) == 2 + exchanges
+    assert result.data["station_id"].unique().to_list() == ["1.200.0"]
+    assert any(issue.code == "source.http_not_found" for issue in result.issues)
+    assert len(captures) == 1
+    recordings = captures[0].recordings
+    assert len(recordings) == 2
+    assert sum(len(recording.prerequisite_calls) for recording in recordings) == exchanges
+    assert all(recording.request.credential_header_names == ("Authorization",) for recording in recordings)
+    for secret in ("protocol-identifier-sentinel", "protocol-password-sentinel", "protocol-bearer-sentinel"):
+        assert secret not in repr((result, recordings, captures))
+
+
+def test_public_exchange_failure_does_not_cancel_independent_station(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+):
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    selection = _register_exchange(
+        monkeypatch,
+        stub_packaged_catalogue_artifact,
+        (("0.protocol", "water_temperature_daily_mean"), ("1.200.0", "water_temperature_daily_mean")),
+    )
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request.url)
+        if len(calls) == 1:
+            return b"denied", 401, "text/plain"
+        if request.url.endswith("/token"):
+            return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
+        return (
+            read_recording(_DATA / "no_nve_1.200.0_1003_1440_2025-07-08_2025-07-14.recording.json").content,
+            200,
+            "application/json",
+        )
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda _: None))
+    result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", on_issue="ignore")
+    assert len(calls) == 3
+    assert result.data["station_id"].unique().to_list() == ["1.200.0"]
+    assert len([issue for issue in result.issues if issue.code == "source.request_failed"]) == 1
+
+
+@pytest.mark.parametrize("identifier", [None, "", "environment-identifier"])
+def test_public_exchange_environment_precedence_and_preflight(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    identifier,
+):
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    (tmp_path / ".env").write_text("EXCHANGE_ID=file-identifier\nEXCHANGE_PASSWORD=file-password\n")
+    if identifier is None:
+        monkeypatch.delenv("EXCHANGE_ID")
+    else:
+        monkeypatch.setenv("EXCHANGE_ID", identifier)
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request)
+        return b"denied", 401, "text/plain"
+
+    def client():
+        assert identifier != "", "missing credential must precede construction"
+        return HttpClient(sender=sender)
+
+    monkeypatch.setattr(discovery, "HttpClient", client)
+    if identifier == "":
+        with pytest.raises(MissingCredentialError) as raised:
+            rr.fetch(selection, start="2025-07-10", end="2025-07-12")
+        assert raised.value.missing_by_provider == {"no_nve": ("EXCHANGE_ID",)}
+        assert not calls
+    else:
+        rr.fetch(selection, start="2025-07-10", end="2025-07-12", on_issue="ignore")
+        assert calls[0].headers["Identifier"] == (identifier or "file-identifier")
+        assert calls[0].headers["Password"] == "protocol-password-sentinel"
+
+
+@pytest.mark.parametrize("unsafe_call", ["exchange", "data"])
+def test_public_exchange_secret_echo_is_not_retained(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    unsafe_call,
+    caplog,
+):
+    from rivretrieve._internal.authentication import CredentialExchangeTransport
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+    captures = []
+
+    def sender(request, timeout_seconds):
+        if request.url.endswith("/token"):
+            if unsafe_call == "exchange":
+                raise RuntimeError("protocol-identifier-sentinel protocol-password-sentinel")
+            return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
+        return b"protocol-bearer-sentinel protocol-password-sentinel", 200, "text/plain"
+
+    def recorded_exchange(*args):
+        capture = RecordingTransport(CredentialExchangeTransport(*args))
+        captures.append(capture)
+        return capture
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda _: None))
+    monkeypatch.setattr(discovery, "CredentialExchangeTransport", recorded_exchange)
+    result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", receipts=True, on_issue="ignore")
+    assert result.data.is_empty()
+    assert result.receipts.entries == ()
+    assert captures[0].recordings == ()
+    for secret in ("protocol-identifier-sentinel", "protocol-password-sentinel", "protocol-bearer-sentinel"):
+        assert secret not in repr((result, captures)) + caplog.text
+
+
+@pytest.mark.parametrize("origin", ["http://hydapi.nve.no", "https://hydapi.nve.no:444", "https://sub.hydapi.nve.no"])
+def test_public_exchange_exact_origin_never_forwards_credentials(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    origin,
+):
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact, origin=origin)
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request)
+        return _recording().content, 200, "application/json"
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender))
+    result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", on_issue="ignore")
+    assert result.data.height == 3
+    assert len(calls) == 1
+    assert set(calls[0].headers) == {"Accept", "User-Agent"}
+
+
+@pytest.mark.parametrize("redirected_call", ["exchange", "data"])
+def test_public_exchange_real_redirect_refusal(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    redirected_call,
+):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from importlib import import_module
+    from threading import Thread
+
+    _exchange_environment(monkeypatch, tmp_path)
+    targets = []
+
+    class Target(BaseHTTPRequestHandler):
+        def do_GET(self):
+            targets.append(dict(self.headers))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, format, *args):
+            pass
+
+    target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
+    target_thread = Thread(target=target.serve_forever, daemon=True)
+    target_thread.start()
+
+    class Source(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if (redirected_call == "exchange" and self.path == "/token") or (
+                redirected_call == "data" and self.path.startswith("/data")
+            ):
+                self.send_response(302)
+                self.send_header("Location", f"http://127.0.0.1:{target.server_port}/target")
+                self.end_headers()
+            else:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"token":"protocol-bearer-sentinel"}')
+
+        def log_message(self, format, *args):
+            pass
+
+    source = ThreadingHTTPServer(("127.0.0.1", 0), Source)
+    source_thread = Thread(target=source.serve_forever, daemon=True)
+    source_thread.start()
+    origin = f"http://127.0.0.1:{source.server_port}"
+    try:
+        selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact, origin=origin)
+        fetch_module = import_module("rivretrieve._internal.providers.no_nve.fetch")
+        monkeypatch.setattr(fetch_module, "_URL", f"{origin}/data")
+        result = rr.fetch(selection, start="2025-07-10", end="2025-07-12", receipts=True, on_issue="ignore")
+        assert result.data.is_empty()
+        assert result.receipts.entries == ()
+        assert targets == []
+        assert any(
+            issue.details is not None and issue.details["failure_reason"] == f"{redirected_call}_redirect_refused"
+            for issue in result.issues
+            if issue.code == "source.request_failed"
+        )
+    finally:
+        source.shutdown()
+        target.shutdown()
+        source.server_close()
+        target.server_close()
+        source_thread.join()
+        target_thread.join()
+
+
+def test_public_exchange_issue_exception_is_sanitized(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    caplog,
+):
+    import traceback
+
+    from rivretrieve._internal.issues import IssuePolicyError
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+
+    def sender(request, timeout_seconds):
+        raise RuntimeError("protocol-password-sentinel")
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender))
+    with pytest.raises(IssuePolicyError) as raised:
+        rr.fetch(selection, start="2025-07-10", end="2025-07-12", on_issue="raise")
+    rendered = "".join(traceback.format_exception(raised.value))
+    assert "protocol-password-sentinel" not in rendered + repr(raised.value) + caplog.text
+    assert raised.value.__cause__ is None
+    assert raised.value.__context__ is None
+
+
+def test_public_exchange_cache_contains_only_observations(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+):
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    monkeypatch.setattr(discovery, "user_cache_dir", lambda _: str(tmp_path / "cache"))
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request.url)
+        if request.url.endswith("/token"):
+            return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
+        return _recording().content, 200, "application/json"
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda _: None))
+    refreshed = rr.fetch(selection, start="2025-07-10", end="2025-07-12", cache="refresh", on_issue="ignore")
+    reused = rr.fetch(selection, start="2025-07-10", end="2025-07-12", cache="reuse", receipts=True, on_issue="ignore")
+    from polars.testing import assert_frame_equal
+
+    assert_frame_equal(refreshed.data, reused.data)
+    assert len(calls) == 2
+    cache_files = tuple(path for path in (tmp_path / "cache").rglob("*") if path.is_file())
+    assert cache_files
+    retained = b"".join(path.read_bytes() for path in cache_files) + repr((refreshed, reused)).encode()
+    for secret in (b"protocol-identifier-sentinel", b"protocol-password-sentinel", b"protocol-bearer-sentinel"):
+        assert secret not in retained
+
+
+def test_public_exchange_missing_both_credentials_prevents_network(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+):
+    monkeypatch.chdir(tmp_path)
+    for name in ("EXCHANGE_ID", "EXCHANGE_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: pytest.fail("transport constructed before preflight"))
+    with pytest.raises(MissingCredentialError) as raised:
+        rr.fetch(selection, start="2025-07-10", end="2025-07-12")
+    assert raised.value.missing_by_provider == {"no_nve": ("EXCHANGE_ID", "EXCHANGE_PASSWORD")}

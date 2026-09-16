@@ -37,7 +37,11 @@ from rivretrieve._internal.results import CatalogResult
 from rivretrieve._internal.store import StoreRoot
 
 if TYPE_CHECKING:
-    from rivretrieve._internal.providers.registration import BulkStore, CredentialHeaderBinding
+    from rivretrieve._internal.providers.registration import (
+        BulkStore,
+        CredentialExchangeBinding,
+        CredentialHeaderBinding,
+    )
     from rivretrieve._internal.transport import Transport
 
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -83,6 +87,7 @@ class _ProviderHandle:
     _bulk_operations: BulkStore | None = None
     required_credentials: tuple[str, ...] = ()
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
+    credential_exchange: CredentialExchangeBinding | None = None
 
     def info(self) -> ProviderInfo:
         provenance = self._artifact.acquisition_provenance
@@ -364,6 +369,7 @@ class ProviderRegistry:
         bulk_operations: BulkStore | None = None,
         required_credentials: tuple[str, ...] = (),
         credential_headers: tuple[CredentialHeaderBinding, ...] = (),
+        credential_exchange: CredentialExchangeBinding | None = None,
     ) -> _ProviderHandle:
         if not _PROVIDER_ID_PATTERN.fullmatch(provider_id):
             raise FatalContractError(f"Provider ID has invalid format: {provider_id}")
@@ -411,6 +417,7 @@ class ProviderRegistry:
             _bulk_operations=bulk_operations,
             required_credentials=required_credentials,
             credential_headers=credential_headers,
+            credential_exchange=credential_exchange,
         )
         self._providers[provider_id] = _ProviderRecord(
             provider_id=typed_provider_id,

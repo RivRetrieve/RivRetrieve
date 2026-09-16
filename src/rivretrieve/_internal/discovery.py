@@ -13,6 +13,7 @@ import polars as pl
 from dotenv import dotenv_values
 from platformdirs import user_cache_dir
 
+from rivretrieve._internal.authentication import CredentialExchangeTransport
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.issues import FatalContractError, Issue, MissingCredentialError, apply_on_issue
 from rivretrieve._internal.observations import ObservationRequest, ObservationResult, ReceiptMode, Receipts
@@ -26,7 +27,13 @@ from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
-from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient, Transport
+from rivretrieve._internal.transport import (
+    AuthenticatedTransport,
+    CredentialHeader,
+    HttpClient,
+    Transport,
+    _SystemClock,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -306,9 +313,21 @@ def _resolve_credentials(
 
 
 def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transport:
-    """credential transport : ProviderCredentialValues × HeaderBindings → Transport."""
+    """credential transport : ProviderCredentialValues × (HeaderBindings | CredentialExchangeBinding) → Transport."""
     base = HttpClient()
-    bindings = _registry.get(provider_id).credential_headers
+    handle = _registry.get(provider_id)
+    exchange = handle.credential_exchange
+    if exchange is not None:
+        return CredentialExchangeTransport(
+            base,
+            tuple(
+                CredentialHeader(binding.header, values[binding.variable], binding.origins)
+                for binding in exchange.credential_headers
+            ),
+            exchange.spec,
+            _SystemClock(),
+        )
+    bindings = handle.credential_headers
     if not bindings:
         return base
     return AuthenticatedTransport(
