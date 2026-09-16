@@ -1,0 +1,28 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroSerieVazao/v1",
+    "parameters": {
+      "Código da Estação": 15400000,
+      "Tipo Filtro Data": "DATA_LEITURA",
+      "Data Inicial (yyyy-MM-dd)": "2023-02-01",
+      "Data Final (yyyy-MM-dd)": "2023-02-28"
+    },
+    "body": null,
+    "ordinary_headers": {
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "Authorization"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-16T13:23:22.562922Z",
+    "content_base64": "eyJzdGF0dXMiOiJPSyIsImNvZGUiOjIwMCwibWVzc2FnZSI6IlN1Y2Vzc28iLCJpdGVtcyI6W3siRGF0YV9Ib3JhX0RhZG8iOiIyMDIzLTAyLTAxIDAwOjAwOjAwLjAiLCJEYXRhX1VsdGltYV9BbHRlcmFjYW8iOiIyMDI1LTA2LTMwIDAwOjAwOjAwLjAiLCJEaWFfTWF4aW1hIjoiMjUiLCJEaWFfTWluaW1hIjoiMyIsIk1heGltYSI6IjMxMjg1LjQ5MiIsIk1heGltYV9TdGF0dXMiOiIxIiwiTWVkaWEiOiIyNTYwOS4wOTYiLCJNZWRpYV9BbnVhbCI6bnVsbCwiTWVkaWFfQW51YWxfU3RhdHVzIjpudWxsLCJNZWRpYV9TdGF0dXMiOiIxIiwiTWVkaWFkaWFyaWEiOiIxIiwiTWV0b2RvX09idGVuY2FvX1Zhem9lcyI6IjEiLCJNaW5pbWEiOiIxNzE3Mi43NCIsIk1pbmltYV9TdGF0dXMiOiIxIiwiTml2ZWxfQ29uc2lzdGVuY2lhIjoiMiIsIlZhemFvXzAxIjoiMTc1NjYuMjQ4IiwiVmF6YW9fMDFfU3RhdHVzIjoiMSIsIlZhemFvXzAyIjoiMTc0MTguMTM3IiwiVmF6YW9fMDJfU3RhdHVzIjoiMSIsIlZhemFvXzAzIjoiMTcxNzIuNzQiLCJWYXphb18wM19TdGF0dXMiOiIxIiwiVmF6YW9fMDQiOiIxNzM5My41MTQiLCJWYXphb18wNF9TdGF0dXMiOiIxIiwiVmF6YW9fMDUiOiIxODI0MC44NCIsIlZhemFvXzA1X1N0YXR1cyI6IjEiLCJWYXphb18wNiI6IjE5NTI1LjE0IiwiVmF6YW9fMDZfU3RhdHVzIjoiMSIsIlZhemFvXzA3IjoiMjA2MzkuMjE1IiwiVmF6YW9fMDdfU3RhdHVzIjoiMSIsIlZhemFvXzA4IjoiMjIyMzAuNzc3IiwiVmF6YW9fMDhfU3RhdHVzIjoiMSIsIlZhemFvXzA5IjoiMjM3NjguMDgyIiwiVmF6YW9fMDlfU3RhdHVzIjoiMSIsIlZhemFvXzEwIjoiMjU1OTkuMzQ0IiwiVmF6YW9fMTBfU3RhdHVzIjoiMSIsIlZhemFvXzExIjoiMjYwNTMuMDQ5IiwiVmF6YW9fMTFfU3RhdHVzIjoiMSIsIlZhemFvXzEyIjoiMjY1NDEuNTg0IiwiVmF6YW9fMTJfU3RhdHVzIjoiMSIsIlZhemFvXzEzIjoiMjY5NDIuMDA2IiwiVmF6YW9fMTNfU3RhdHVzIjoiMSIsIlZhemFvXzE0IjoiMjc0MzkuMTI1IiwiVmF6YW9fMTRfU3RhdHVzIjoiMSIsIlZhemFvXzE1IjoiMjc1NjQuMTQ2IiwiVmF6YW9fMTVfU3RhdHVzIjoiMSIsIlZhemFvXzE2IjoiMjc1MDEuNTk4IiwiVmF6YW9fMTZfU3RhdHVzIjoiMSIsIlZhemFvXzE3IjoiMjc3NTIuMjM0IiwiVmF6YW9fMTdfU3RhdHVzIjoiMSIsIlZhemFvXzE4IjoiMjc4NzcuOTk2IiwiVmF6YW9fMThfU3RhdHVzIjoiMSIsIlZhemFvXzE5IjoiMjg2MDYuODgzIiwiVmF6YW9fMTlfU3RhdHVzIjoiMSIsIlZhemFvXzIwIjoiMjkxMTkuNzI3IiwiVmF6YW9fMjBfU3RhdHVzIjoiMSIsIlZhemFvXzIxIjoiMjk1MzkuOTEiLCJWYXphb18yMV9TdGF0dXMiOiIxIiwiVmF6YW9fMjIiOiIyOTg2NS4yNjgiLCJWYXphb18yMl9TdGF0dXMiOiIxIiwiVmF6YW9fMjMiOiIzMDYyMC42NDMiLCJWYXphb18yM19TdGF0dXMiOiIxIiwiVmF6YW9fMjQiOiIzMTE4NS4yOTEiLCJWYXphb18yNF9TdGF0dXMiOiIxIiwiVmF6YW9fMjUiOiIzMTI4NS40OTIiLCJWYXphb18yNV9TdGF0dXMiOiIxIiwiVmF6YW9fMjYiOiIzMDY1My43MDkiLCJWYXphb18yNl9TdGF0dXMiOiIxIiwiVmF6YW9fMjciOiIyOTgwMC4wNDciLCJWYXphb18yN19TdGF0dXMiOiIxIiwiVmF6YW9fMjgiOiIyOTE1MS45MzgiLCJWYXphb18yOF9TdGF0dXMiOiIxIiwiVmF6YW9fMjkiOm51bGwsIlZhemFvXzI5X1N0YXR1cyI6bnVsbCwiVmF6YW9fMzAiOm51bGwsIlZhemFvXzMwX1N0YXR1cyI6bnVsbCwiVmF6YW9fMzEiOm51bGwsIlZhemFvXzMxX1N0YXR1cyI6bnVsbCwiY29kaWdvZXN0YWNhbyI6IjE1NDAwMDAwIn1dfQ==",
+    "sha256": "f77f751e1bff6d1e6bc9fa32b098a9923eb790fb9d4ca75aed5d15260b6d7894",
+    "prerequisite_calls": []
+  }
+}

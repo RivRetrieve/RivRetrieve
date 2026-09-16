@@ -58,9 +58,10 @@ pinned by `tests/test_provider_row_withholding.py`.
 [ADR 0012](adr/0012-a-catalogue-column-declares-its-origin.md) records the original deferral boundary.
 `no_nve` is enrolled after gaining a committed attested native table and complete origin declarations.
 `br_ana` is enrolled after an attested inventory union and explicit Fluviometrica projection.
-All acquired source rows remain in its native table. Its products and station-product facts
-remain withheld pending source semantics and observation-stage certification. This intermediate
-catalogue certification is not end-to-end Brazil observation delivery.
+All acquired source rows remain in its native table. It publishes two adopted telemetry products
+and four explicitly selected Bruto/Consistido daily-mean products. Each certified river gauge
+is a candidate; availability remains unknown unless exact source-variant observations establish
+bounded positive evidence. Request windows never become published record bounds.
 
 Brazil's former `--fixture`, `--live`, and `--withhold-uncertified` catalogue routes refuse
 with a migration message. Materialize retained credential-free recordings first, then build
@@ -89,7 +90,7 @@ the runtime does not select an unrelated contributor's words to fill a scalar. F
 per-source statements remain available in acquisition provenance and in the descriptor.
 
 Run the reference `mlcroissant` validator through the test suite for all thirteen outputs,
-including Brazil's inventory-only descriptor. The validator is a development
+including Brazil's inventory and source-variant product descriptor. The validator is a development
 dependency; reading a descriptor from an installed wheel must not import it. Catalogue
 version and publication date come from the recorded catalogue date, and acquisition dates
 remain source facts. No build clock enters the descriptor.

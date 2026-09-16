@@ -28,11 +28,18 @@ def test_brazil_inventory_and_adopted_candidates_are_certified() -> None:
     capture = read_capture_record(Path(__file__).parent / "test_data/br_ana_inventory/capture.json")
     artifact = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise")
     assert artifact.stations.height == capture.fluviometric_station_count
-    assert set(artifact.products["product_id"]) == {"discharge_instantaneous", "stage_instantaneous"}
-    assert artifact.station_products.height == 2 * capture.fluviometric_station_count
+    assert set(artifact.products["product_id"]) == {
+        "discharge_daily_mean_bruto",
+        "discharge_daily_mean_consistido",
+        "discharge_instantaneous",
+        "stage_daily_mean_bruto",
+        "stage_daily_mean_consistido",
+        "stage_instantaneous",
+    }
+    assert artifact.station_products.height == 6 * capture.fluviometric_station_count
     assert set(artifact.station_products["station_id"]) == set(artifact.stations["station_id"])
     available = artifact.station_products.filter(pl.col("availability") == "available")
-    assert set(available["station_id"]) == {"15400000"} and available.height == 2
+    assert set(available["station_id"]) == {"15400000"} and available.height == 6
     assert set(artifact.station_products["availability"].cast(pl.String)) == {"available", "unknown"}
     evidence = artifact.acquisition_provenance
     assert evidence is not None
@@ -49,11 +56,18 @@ def test_brazil_inventory_and_adopted_candidates_are_certified() -> None:
 
 def test_brazil_discovery_exposes_only_documented_adopted_products() -> None:
     assert "br_ana" in rr.providers().get_column("provider_id").to_list()
-    assert rr.products(provider="br_ana") == ["discharge_instantaneous", "stage_instantaneous"]
+    assert rr.products(provider="br_ana") == [
+        "discharge_daily_mean_bruto",
+        "discharge_daily_mean_consistido",
+        "discharge_instantaneous",
+        "stage_daily_mean_bruto",
+        "stage_daily_mean_consistido",
+        "stage_instantaneous",
+    ]
     reader = catalogue_reader("br_ana")
     assert not reader.read_stations().data.is_empty()
-    assert reader.read_products().data.height == 2
-    assert reader.read_station_products().data.height == 2 * reader.read_stations().data.height
+    assert reader.read_products().data.height == 6
+    assert reader.read_station_products().data.height == 6 * reader.read_stations().data.height
 
 
 def test_brazil_unacquired_station_support_is_not_source_silence() -> None:
@@ -80,7 +94,11 @@ def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence()
     assert selection.empty_reason is None
     assert len(selection.acquisition_provenance) == 1
     assert selection.acquisition_provenance[0].header.withheld_facts
-    unknown = next(series for series in selection.series if series.availability == "unknown")
+    unknown = next(
+        series
+        for series in selection.series
+        if series.availability == "unknown" and series.product_id == "stage_instantaneous"
+    )
     selected = rr.pick(selection, station=unknown.station_id, product=unknown.product_id)
     assert selected.series == (unknown,)
     assert unknown.availability_reason is not None
@@ -145,7 +163,14 @@ def test_deferred_public_terms_are_traced_without_republishing_catalogue_values(
             and not artifact.station_products.is_empty()
         )
         if provider_id == "br_ana":
-            assert set(artifact.products["product_id"]) == {"discharge_instantaneous", "stage_instantaneous"}
+            assert set(artifact.products["product_id"]) == {
+                "discharge_daily_mean_bruto",
+                "discharge_daily_mean_consistido",
+                "discharge_instantaneous",
+                "stage_daily_mean_bruto",
+                "stage_daily_mean_consistido",
+                "stage_instantaneous",
+            }
         statements = [statement for source in provenance.header.source_records for statement in source.statements]
         assert {statement.kind for statement in statements} == kinds
         assert all(statement.verification_status == "verified_public_recording" for statement in statements)

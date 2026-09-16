@@ -30,8 +30,8 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.br_ana.capture import AdoptedTelemetryEvidence
-from rivretrieve._internal.providers.br_ana.config import BrAnaSourceCoordinates, config
+from rivretrieve._internal.providers.br_ana.capture import AdoptedTelemetryEvidence, ConventionalDailyEvidence
+from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates, config
 
 PROVIDER_ID = ProviderId("br_ana")
 PROVIDER_NAME = "ANA Hidroweb — Brazilian National Water and Sanitation Agency"
@@ -76,37 +76,61 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
         raise FatalContractError("br_ana native station identity or coordinates are invalid") from exc
 
 
-def build_products() -> ProductCatalog:
-    """Documented adopted source fields → canonical instantaneous products."""
+def build_products(daily: ConventionalDailyEvidence | None = None) -> ProductCatalog:
+    """Documented source variants → canonical instantaneous and daily mean products."""
     rows = []
     for product, definition in config().products.items():
         coordinates = definition.coordinates.value
-        assert isinstance(coordinates, BrAnaSourceCoordinates)
-        stage = coordinates.field == "Cota_Adotada"
+        if isinstance(coordinates, BrAnaDailySourceCoordinates):
+            if daily is None:
+                continue
+            stage = coordinates.field_prefix == "Cota"
+            native_id = (
+                f"{coordinates.endpoint}/v1:{coordinates.field_prefix}_01..31;Mediadiaria=1;"
+                f"{'nivelconsistencia' if stage else 'Nivel_Consistencia'}={coordinates.consistency}"
+            )
+        elif isinstance(coordinates, BrAnaSourceCoordinates):
+            stage = coordinates.field == "Cota_Adotada"
+            native_id = f"HidroinfoanaSerieTelemetricaAdotada/v1:{coordinates.field}"
+        else:
+            raise FatalContractError("ANA catalogue source coordinates are unsupported")
+        daily_product = isinstance(coordinates, BrAnaDailySourceCoordinates)
         rows.append(
             {
                 "provider_id": PROVIDER_ID,
                 "product_id": product,
                 "observed_property": "stage" if stage else "discharge",
-                "frequency": "irregular",
-                "statistic": "instantaneous",
-                "period_type": "instant",
-                "period_anchor": "instant",
+                "frequency": "daily" if daily_product else "irregular",
+                "statistic": "mean" if daily_product else "instantaneous",
+                "period_type": "daily" if daily_product else "instant",
+                "period_anchor": "unknown" if daily_product else "instant",
                 "unit": "m" if stage else "m3/s",
-                "native_id": f"HidroinfoanaSerieTelemetricaAdotada/v1:{coordinates.field}",
+                "native_id": native_id,
             }
         )
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
-def build_station_products(native: NativeTable, telemetry: AdoptedTelemetryEvidence) -> StationProductCatalog:
+def build_station_products(
+    native: NativeTable, telemetry: AdoptedTelemetryEvidence, daily: ConventionalDailyEvidence | None = None
+) -> StationProductCatalog:
     """Fluviometric inventory candidates × observed evidence → truthful availability rows."""
     rows = []
     for station, retrieved_at in native.data.select("codigoestacao", "retrieved_at").iter_rows():
         if not isinstance(station, str) or not isinstance(retrieved_at, datetime):
             raise FatalContractError("ANA station-product candidate identity or acquisition time is invalid")
-        for product in config().products:
-            observed = (station, product) in telemetry.available_pairs
+        for product, definition in config().products.items():
+            is_telemetry = isinstance(definition.coordinates.value, BrAnaSourceCoordinates)
+            if not is_telemetry and daily is None:
+                continue
+            observed = (
+                (station, product) in telemetry.available_pairs
+                if is_telemetry
+                else daily is not None and (station, product) in daily.available_pairs
+            )
+            checked_at = telemetry.observations.retrieved_at
+            if not is_telemetry and daily is not None and observed:
+                checked_at = max(ref.retrieved_at for ref, pairs in daily.observations if (station, product) in pairs)
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
@@ -114,15 +138,21 @@ def build_station_products(native: NativeTable, telemetry: AdoptedTelemetryEvide
                     "product_id": product,
                     "availability": "available" if observed else "unknown",
                     "availability_reason": (
-                        "Non-null adopted measurements present in the retained source request; this establishes neither continuous nor complete record"
-                        if observed
-                        else "Fluviometrica inventory candidate; inventory membership does not establish adopted-endpoint product availability; per-station endpoint evidence is not acquired"
+                        (
+                            "Non-null numbered day slot with Mediadiaria=1 and exact source consistency variant; no other variant, continuity or complete record implied"
+                            if observed
+                            else "Fluviometrica inventory candidate; exact daily source variant availability is unacquired, not source silence"
+                        )
+                        if not is_telemetry
+                        else (
+                            "Non-null adopted measurements present in the retained source request; this establishes neither continuous nor complete record"
+                            if observed
+                            else "Fluviometrica inventory candidate; inventory membership does not establish adopted-endpoint product availability; per-station endpoint evidence is not acquired"
+                        )
                     ),
                     "published_record_start_date": None,
                     "published_record_end_date": None,
-                    "last_catalogue_check": max(retrieved_at, telemetry.observations.retrieved_at).date()
-                    if observed
-                    else retrieved_at.date(),
+                    "last_catalogue_check": max(retrieved_at, checked_at).date() if observed else retrieved_at.date(),
                 }
             )
     return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).sort("station_id", "product_id")
@@ -133,8 +163,11 @@ def build_catalogue(
     origins: OriginDeclarations,
     provenance: AcquisitionProvenance,
     telemetry: AdoptedTelemetryEvidence | None = None,
+    daily: ConventionalDailyEvidence | None = None,
 ) -> GeneratedBrAnaCatalogue:
-    """Build attested identity and geometry, plus adopted products where their evidence is supplied."""
+    """Build attested identity and geometry, plus products with supplied reviewed source evidence."""
+    if daily is not None and telemetry is None:
+        raise FatalContractError("ANA daily catalogue extension requires the certified telemetry evidence")
     projected = project_stations(native_table)
     stations = build_stations(native_table)
     enforce_catalogue_origins(PROVIDER_ID, origins, projected, stations)
@@ -149,7 +182,9 @@ def build_catalogue(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "false: authenticated adopted telemetry; conventional daily and temperature unsupported pending source semantics"
+            "false: authenticated adopted telemetry and conventional daily Bruto/Consistido means; temperature unsupported"
+            if daily is not None
+            else "false: authenticated adopted telemetry; conventional daily and temperature unsupported pending source semantics"
             if telemetry is not None
             else "false: catalogue-only; observation product semantics remain withheld"
         ),
@@ -160,8 +195,8 @@ def build_catalogue(
     products = pl.DataFrame(schema=PRODUCT_CATALOG_SCHEMA.polars_schema)
     station_products = pl.DataFrame(schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
     if telemetry is not None:
-        products = build_products()
-        station_products = build_station_products(projected, telemetry)
+        products = build_products(daily)
+        station_products = build_station_products(projected, telemetry, daily)
     for frame, schema in (
         (
             pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
@@ -273,7 +308,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     verify_native_identity(capture, args.native.read_bytes(), native)
     from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence
-    from rivretrieve._internal.providers.br_ana.origins import with_adopted_telemetry
+    from rivretrieve._internal.providers.br_ana.origins import with_observation_products
     from rivretrieve._internal.recordings import read_recording
 
     evidence_root = args.repository_root / "tests/recordings/br_ana"
@@ -284,10 +319,44 @@ def main(argv: Sequence[str] | None = None) -> int:
         read_recording(recording_path),
         str(recording_path.relative_to(args.repository_root)),
     )
-    provenance = with_adopted_telemetry(
-        build_acquisition_provenance(capture), capture, project_stations(native).data, telemetry
+    from rivretrieve._internal.providers.br_ana.capture import parse_conventional_daily_evidence
+
+    daily = parse_conventional_daily_evidence(
+        {
+            name: (evidence_root / name).read_bytes()
+            for name in (
+                "hidro-1.4-conventional-dictionary-derived.json",
+                "hidro-sqlserver-selected-views-derived.json",
+                "hidro-extraction-manifest.json",
+                "daily-source-comparison-report.md",
+                "daily-correspondence-identities.json",
+                "paired-stage-2020-comparison.json",
+                "paired-stage-2024-comparison.json",
+                "paired-discharge-2020-comparison.json",
+                "paired-discharge-2024-comparison.json",
+            )
+        },
+        tuple(
+            (str(path.relative_to(args.repository_root)), read_recording(path))
+            for path in (
+                evidence_root / f"{endpoint}_15400000_{start}_{stop}.recording.json"
+                for endpoint in ("HidroSerieCotas", "HidroSerieVazao")
+                for start, stop in (
+                    ("2020-01-01", "2020-01-31"),
+                    ("2024-01-01", "2024-01-31"),
+                    ("2024-02-01", "2024-02-29"),
+                )
+            )
+        ),
+        tuple(
+            (str(path.relative_to(args.repository_root)), read_recording(path))
+            for path in sorted((evidence_root / "correspondence").glob("*.recording.json"))
+        ),
     )
-    catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry)
+    provenance = with_observation_products(
+        build_acquisition_provenance(capture), capture, project_stations(native).data, telemetry, daily
+    )
+    catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry, daily)
     write_catalogue(catalogue, args.out)
     return 0
 

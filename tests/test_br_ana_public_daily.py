@@ -1,0 +1,152 @@
+"""public ANA retrieval : PackagedCatalogue × Credentials × Recording → ObservationResult.
+
+Observation bytes come from retained exact modern monthly recordings. The token response below is protocol-only test input.
+"""
+
+import json
+from datetime import datetime
+from pathlib import Path
+
+import polars as pl
+import polars.testing as pl_testing
+import pytest
+
+import rivretrieve as rr
+import rivretrieve._internal.discovery as discovery
+from rivretrieve._internal.authentication import ExchangeSpec
+from rivretrieve._internal.issues import MissingCredentialError
+from rivretrieve._internal.observations import ReceiptAuthorship
+from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.transport import HttpClient, TransportRequest, TransportResponse
+
+_DATA = Path(__file__).parent / "recordings" / "br_ana"
+_PRODUCTS = (
+    "discharge_daily_mean_bruto",
+    "discharge_daily_mean_consistido",
+    "stage_daily_mean_bruto",
+    "stage_daily_mean_consistido",
+)
+_START = "2020-01-10"
+_END = "2020-01-20"
+_IDENTIFIER = "protocol-identifier-sentinel"
+_PASSWORD = "protocol-password-sentinel"
+_TOKEN = "protocol-bearer-sentinel"
+
+
+@pytest.fixture(autouse=True)
+def isolated_public_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Never inspect the owner's working-directory .env or local observation cache.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    for name in ("ANA_IDENTIFICADOR", "ANA_SENHA", "NVE_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    def forbidden_client():
+        raise AssertionError("offline public tests must inject their transport")
+
+    monkeypatch.setattr(discovery, "HttpClient", forbidden_client)
+
+
+class _AuthenticatedReplay:
+    def __init__(self, product: str) -> None:
+        endpoint = "HidroSerieCotas" if product.startswith("stage") else "HidroSerieVazao"
+        month = "2024-01" if product == "discharge_daily_mean_bruto" else "2020-01"
+        self.recording = read_recording(_DATA / f"{endpoint}_15400000_{month}-01_{month}-31.recording.json")
+        self.replay = ReplayTransport((self.recording,))
+        self.exchange_calls = 0
+        self.observation_calls = 0
+
+    def send(self, request: TransportRequest) -> TransportResponse:
+        if request.url == ExchangeSpec.ana().exchange_url:
+            self.exchange_calls += 1
+
+            # Protocol-only credential exchange, never an observation recording.
+            def token_sender(request, timeout_seconds):
+                assert request.headers["Identificador"] == _IDENTIFIER
+                assert request.headers["Senha"] == _PASSWORD
+                return b'{"items":{"tokenautenticacao":"protocol-bearer-sentinel"}}', 200, "application/json"
+
+            return HttpClient(sender=token_sender).send(request)
+        self.observation_calls += 1
+        assert request.headers["Authorization"] == f"Bearer {_TOKEN}"
+        assert "Identificador" not in request.headers
+        assert "Senha" not in request.headers
+        return self.replay.send(request)
+
+
+def _authenticated_replay(monkeypatch: pytest.MonkeyPatch, product: str) -> _AuthenticatedReplay:
+    monkeypatch.setenv("ANA_IDENTIFICADOR", _IDENTIFIER)
+    monkeypatch.setenv("ANA_SENHA", _PASSWORD)
+    transport = _AuthenticatedReplay(product)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    return transport
+
+
+@pytest.mark.parametrize("product", _PRODUCTS)
+def test_public_daily_requires_credentials_before_transport(product: str) -> None:
+    selection = rr.find(provider="br_ana", station="15400000", product=product)
+    with pytest.raises(MissingCredentialError) as raised:
+        rr.fetch(selection, start=_START, end=_END)
+    assert raised.value.missing_by_provider == {"br_ana": ("ANA_IDENTIFICADOR", "ANA_SENHA")}
+
+
+@pytest.mark.parametrize("product", _PRODUCTS)
+def test_public_daily_authenticated_receipt_and_cache_roundtrip(monkeypatch: pytest.MonkeyPatch, product: str) -> None:
+    transport = _authenticated_replay(monkeypatch, product)
+    year = 2024 if product == "discharge_daily_mean_bruto" else 2020
+    start, end = f"{year}-01-10", f"{year}-01-20"
+    selection = rr.find(provider="br_ana", station="15400000", product=product)
+    assert len(selection.series) == 1
+    live = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="ignore")
+    assert transport.exchange_calls == transport.observation_calls == 1
+    # Interior cell fidelity uses modern source bytes, never SOAP precision or port output.
+    prefix = "Cota" if product.startswith("stage") else "Vazao"
+    level_field = "nivelconsistencia" if prefix == "Cota" else "Nivel_Consistencia"
+    level = "1" if product.endswith("bruto") else "2"
+    expected_rows = []
+    for row in json.loads(transport.recording.content)["items"]:
+        if row["Mediadiaria"] == "1" and row[level_field] == level:
+            raw = row[f"{prefix}_15"]
+            value = None if raw is None or not raw.strip() else float(raw)
+            if value is not None and prefix == "Cota":
+                value /= 100
+            expected_rows.append((datetime(year, 1, 15), "unknown", "15400000", product, value))
+    expected = pl.DataFrame(expected_rows, schema=live.data.schema, orient="row")
+    pl_testing.assert_frame_equal(live.data.filter(pl.col("time") == datetime(year, 1, 15)), expected)
+    receipt = live.receipts.entries[0]
+    assert receipt.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
+    assert receipt.content == transport.recording.content
+    assert receipt.origin.url == transport.recording.request.url
+    assert live.provenance.acquisition_provenance is not None
+    assert any(
+        call.get("request_parameters") == dict(transport.recording.request.parameters or {})
+        for call in live.provenance.calls_made
+    )
+    assert not any(issue.severity == "error" for issue in live.issues)
+    for secret in (_IDENTIFIER, _PASSWORD, _TOKEN):
+        assert secret not in repr(live)
+        assert secret.encode() not in receipt.content
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
+    cached = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="ignore")
+    pl_testing.assert_frame_equal(live.data, cached.data)
+    assert cached.provenance.served_intervals
+    assert all(entry.authorship is ReceiptAuthorship.STORE_EXCERPT for entry in cached.receipts.entries)
+    unasked = rr.fetch(selection, start=start, end=end, cache="reuse", on_issue="ignore")
+    assert unasked.receipts.entries == ()
+
+
+def test_public_daily_credential_rejection_is_safe(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    monkeypatch.setenv("ANA_IDENTIFICADOR", _IDENTIFIER)
+    monkeypatch.setenv("ANA_SENHA", _PASSWORD)
+
+    def rejected_sender(request, timeout_seconds):
+        return b"Unauthorized", 401, "text/plain"
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=rejected_sender))
+    selection = rr.find(provider="br_ana", station="15400000", product="stage_daily_mean_bruto")
+    result = rr.fetch(selection, start=_START, end=_END, receipts=True, on_issue="ignore")
+    assert result.data.is_empty()
+    assert any(issue.severity == "error" for issue in result.issues)
+    assert result.receipts.entries == ()
+    for secret in (_IDENTIFIER, _PASSWORD, _TOKEN):
+        assert secret not in repr(result) + caplog.text

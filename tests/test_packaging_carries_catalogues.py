@@ -383,5 +383,5 @@ brazil = parse_catalogue_evidence(EvidenceHeader.model_validate_json(brazil_cata
 products = resolve_evidence(brazil, FactSelection(names=("product.product_id",)))
 assert "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3" in json.dumps(products)
 assert "withheld" not in json.dumps(products)
-assert set(rivretrieve.products(provider="br_ana")) == {"discharge_instantaneous", "stage_instantaneous"}
+assert set(rivretrieve.products(provider="br_ana")) == {"discharge_daily_mean_bruto", "discharge_daily_mean_consistido", "discharge_instantaneous", "stage_daily_mean_bruto", "stage_daily_mean_consistido", "stage_instantaneous"}
 """

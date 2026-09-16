@@ -20,7 +20,7 @@ Domain terms remain in [`../CONTEXT.md`](../CONTEXT.md).
 | Provider | Port notes | Structured provenance | Origin declarations |
 |---|---|---|---|
 | `ba_fhmzbih` | [notes](provider_ports/ba_fhmzbih.md) | [record](../src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/provenance.json) | [origins](../src/rivretrieve/_internal/providers/ba_fhmzbih/origins.py) |
-| `br_ana` | [notes](provider_ports/br_ana.md) | [withholding record](../src/rivretrieve/_internal/providers/br_ana/catalogue/provenance.json) | Not yet declared |
+| `br_ana` | [notes](provider_ports/br_ana.md) | [record](../src/rivretrieve/_internal/providers/br_ana/catalogue/provenance.json) | [origins](../src/rivretrieve/_internal/providers/br_ana/origins.py) |
 | `ca_eccc` | [notes](provider_ports/ca_eccc.md) | [record](../src/rivretrieve/_internal/providers/ca_eccc/catalogue/provenance.json) | [origins](../src/rivretrieve/_internal/providers/ca_eccc/origins.py) |
 | `ch_foen` | [notes](provider_ports/ch_foen.md) | [record](../src/rivretrieve/_internal/providers/ch_foen/catalogue/provenance.json) | [origins](../src/rivretrieve/_internal/providers/ch_foen/origins.py) |
 | `cz_chmi` | [notes](provider_ports/cz_chmi.md) | [record](../src/rivretrieve/_internal/providers/cz_chmi/catalogue/provenance.json) | [origins](../src/rivretrieve/_internal/providers/cz_chmi/origins.py) |

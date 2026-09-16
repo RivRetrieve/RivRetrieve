@@ -36,6 +36,7 @@ build-backend = "uv_build"
 source-exclude = [
     "/src/rivretrieve/_internal/providers/*/catalogue/native.parquet",
     "/tests/test_data/**",
+    "/tests/recordings/**",
     "/research/**",
     "/reference/legacy_observations/**",
     "/.env",

@@ -27,6 +27,7 @@ def test_wheel_excludes_catalogue_build_inputs(tmp_path: Path) -> None:
             name
             for name in names
             if "br_ana_inventory" in name
+            or "/recordings/" in name
             or "station-coverage/br_ana" in name
             or "no_nve_stations_active_" in name
             or "no_nve_station_catalogue_capture" in name
@@ -58,6 +59,7 @@ def test_sdist_excludes_catalogue_build_inputs_and_keeps_runtime_catalogues(tmp_
         for name in names
         if name.endswith("/catalogue/native.parquet")
         or "/tests/test_data/" in name
+        or "/tests/recordings/" in name
         or "/research/" in name
         or "/reference/legacy_observations/" in name
         or name.endswith("/.env")
