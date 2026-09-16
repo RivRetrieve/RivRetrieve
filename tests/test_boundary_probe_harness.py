@@ -219,6 +219,8 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
         (ProviderId("ba_fhmzbih"), ProductId("discharge_reported")),
         (ProviderId("ba_fhmzbih"), ProductId("stage_reported")),
         (ProviderId("ba_fhmzbih"), ProductId("water_temperature_reported")),
+        (ProviderId("br_ana"), ProductId("discharge_instantaneous")),
+        (ProviderId("br_ana"), ProductId("stage_instantaneous")),
         (ProviderId("ca_eccc"), ProductId("discharge_daily_mean")),
         (ProviderId("ca_eccc"), ProductId("stage_daily_mean")),
         (ProviderId("ch_foen"), ProductId("discharge_reported")),

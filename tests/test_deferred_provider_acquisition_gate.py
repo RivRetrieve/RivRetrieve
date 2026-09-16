@@ -7,6 +7,7 @@ import json
 import shutil
 from pathlib import Path
 
+import polars as pl
 import polars.testing as pl_testing
 import pytest
 from pydantic import ValidationError
@@ -14,43 +15,48 @@ from pydantic import ValidationError
 import rivretrieve as rr
 from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
 from rivretrieve._internal.catalogues.artifact import (
-    CATALOGUE_FACT_UNIVERSE,
     CorruptCatalogArtifactError,
     load_packaged_catalogue_artifact,
 )
-from rivretrieve._internal.discovery import EmptySelectionError
 from tests._catalogue import catalogue_path, catalogue_reader
 from tests._provenance import legacy_provenance
 
 
-def test_brazil_inventory_is_certified_without_product_claims() -> None:
+def test_brazil_inventory_and_adopted_candidates_are_certified() -> None:
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record
 
     capture = read_capture_record(Path(__file__).parent / "test_data/br_ana_inventory/capture.json")
     artifact = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise")
     assert artifact.stations.height == capture.fluviometric_station_count
-    assert artifact.products.is_empty()
-    assert artifact.station_products.is_empty()
+    assert set(artifact.products["product_id"]) == {"discharge_instantaneous", "stage_instantaneous"}
+    assert artifact.station_products.height == 2 * capture.fluviometric_station_count
+    assert set(artifact.station_products["station_id"]) == set(artifact.stations["station_id"])
+    available = artifact.station_products.filter(pl.col("availability") == "available")
+    assert set(available["station_id"]) == {"15400000"} and available.height == 2
+    assert set(artifact.station_products["availability"].cast(pl.String)) == {"available", "unknown"}
     evidence = artifact.acquisition_provenance
     assert evidence is not None
     assert evidence.header.native_table == capture.native_table
     withheld = {fact for group in evidence.header.withheld_facts for fact in group.facts}
     assert not any(fact.startswith("station.") for fact in withheld)
-    assert {fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith(("product.", "station_product."))} <= withheld
+    assert not any(fact.startswith(("product.", "station_product.")) for fact in withheld)
+    assert "source.ana.adopted_endpoint_availability_unacquired" in withheld
+    assert "source.ana.adopted_published_record_unacquired" in withheld
+    assert evidence.facts.filter(pl.col("locator_role") == "availability").height == artifact.station_products.height
     assert artifact.provider_info["license"] is not None
     assert artifact.provider_info["citation"] is None
 
 
-def test_brazil_discovery_exposes_stations_but_no_unevidenced_products() -> None:
+def test_brazil_discovery_exposes_only_documented_adopted_products() -> None:
     assert "br_ana" in rr.providers().get_column("provider_id").to_list()
-    assert rr.products(provider="br_ana") == []
+    assert rr.products(provider="br_ana") == ["discharge_instantaneous", "stage_instantaneous"]
     reader = catalogue_reader("br_ana")
     assert not reader.read_stations().data.is_empty()
-    assert reader.read_products().data.is_empty()
-    assert reader.read_station_products().data.is_empty()
+    assert reader.read_products().data.height == 2
+    assert reader.read_station_products().data.height == 2 * reader.read_stations().data.height
 
 
-def test_brazil_product_withholding_is_not_source_silence() -> None:
+def test_brazil_unacquired_station_support_is_not_source_silence() -> None:
     brazil = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise")
     evidence = brazil.acquisition_provenance
     assert evidence is not None
@@ -69,15 +75,19 @@ def test_brazil_requires_provenance_at_the_packaged_boundary(tmp_path: Path) -> 
         load_packaged_catalogue_artifact(copied, on_issue="raise")
 
 
-def test_brazil_selection_retains_product_withholding_reason() -> None:
+def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence() -> None:
     selection = rr.find(provider="br_ana")
-    assert selection.series == ()
+    assert selection.empty_reason is None
     assert len(selection.acquisition_provenance) == 1
     assert selection.acquisition_provenance[0].header.withheld_facts
-    assert selection.empty_reason is not None
-    assert selection.empty_reason.code == "no_catalogue_edge"
-    with pytest.raises(EmptySelectionError, match=r"fetch\(\) cannot retrieve an empty selection"):
-        rr.fetch(selection, start="2024-01-01", end="2024-01-02")
+    unknown = next(series for series in selection.series if series.availability == "unknown")
+    selected = rr.pick(selection, station=unknown.station_id, product=unknown.product_id)
+    assert selected.series == (unknown,)
+    assert unknown.availability_reason is not None
+    assert (
+        "inventory membership does not establish adopted-endpoint product availability" in unknown.availability_reason
+    )
+    assert unknown.published_record_start_date is unknown.published_record_end_date is None
 
 
 def test_packaged_evidence_rejects_retired_schema(tmp_path: Path) -> None:
@@ -129,18 +139,13 @@ def test_deferred_public_terms_are_traced_without_republishing_catalogue_values(
         artifact = load_packaged_catalogue_artifact(catalogue_path(provider_id), on_issue="raise")
         provenance = artifact.acquisition_provenance
         assert provenance is not None
+        assert (
+            not artifact.products.is_empty()
+            and not artifact.stations.is_empty()
+            and not artifact.station_products.is_empty()
+        )
         if provider_id == "br_ana":
-            assert (
-                artifact.products.is_empty()
-                and not artifact.stations.is_empty()
-                and artifact.station_products.is_empty()
-            )
-        else:
-            assert (
-                not artifact.products.is_empty()
-                and not artifact.stations.is_empty()
-                and not artifact.station_products.is_empty()
-            )
+            assert set(artifact.products["product_id"]) == {"discharge_instantaneous", "stage_instantaneous"}
         statements = [statement for source in provenance.header.source_records for statement in source.statements]
         assert {statement.kind for statement in statements} == kinds
         assert all(statement.verification_status == "verified_public_recording" for statement in statements)

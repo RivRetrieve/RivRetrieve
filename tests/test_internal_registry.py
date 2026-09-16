@@ -1060,7 +1060,7 @@ def test_registry_terms_come_from_verified_acquisition_statements(
     expected = {
         statement.kind: statement.exact_text
         for source in provenance.header.source_records
-        if source.source_id != "ch_existenz" and provider_id not in ("pl_imgw", "br_ana")
+        if source.source_id != "ch_existenz" and provider_id != "pl_imgw"
         for statement in source.statements
         if statement.kind in ("license", "citation")
     }
@@ -1068,6 +1068,8 @@ def test_registry_terms_come_from_verified_acquisition_statements(
     assert result.provenance.citation == expected.get("citation")
     assert {issue.code for issue in result.issues} == (
         {"provenance.license_not_established", "provenance.citation_not_established"}
-        if provider_id in ("za_dws", "pl_imgw", "br_ana")
+        if provider_id in ("za_dws", "pl_imgw")
+        else {"provenance.citation_not_established"}
+        if provider_id == "br_ana"
         else set()
     )
