@@ -32,6 +32,14 @@ requires = ["uv_build>=0.11.16,<0.12"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
+# Source exclusions also apply when building wheels from the sdist.
+source-exclude = [
+    "/src/rivretrieve/_internal/providers/*/catalogue/native.parquet",
+    "/tests/test_data/**",
+    "/research/**",
+    "/reference/legacy_observations/**",
+    "/.env",
+]
 wheel-exclude = ["/src/rivretrieve/_internal/providers/*/catalogue/native.parquet"]
 
 [dependency-groups]
