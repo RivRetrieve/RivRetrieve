@@ -78,7 +78,9 @@ def test_provider_terms_do_not_promote_an_explicit_absence_or_unbound_statement(
     assert verified_provider_terms((imgw,), (), ()) == {}
     brazil = AcquisitionProvenance.model_validate(legacy_document(_PROVIDERS / "br_ana/catalogue/provenance.json"))
     assert "license" in verified_source_terms(brazil.source_records)
-    assert verified_provider_terms(brazil.source_records, brazil.fact_bindings, brazil.withheld_facts) == {}
+    assert verified_provider_terms(brazil.source_records, brazil.fact_bindings, brazil.withheld_facts) == {
+        "license": verified_source_terms(brazil.source_records)["license"]
+    }
 
 
 def test_south_africa_remains_catalogue_only() -> None:

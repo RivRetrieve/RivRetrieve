@@ -1,0 +1,191 @@
+[
+  {
+    "name": "inventory_UF_AC",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "AC"
+    }
+  },
+  {
+    "name": "inventory_UF_AL",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "AL"
+    }
+  },
+  {
+    "name": "inventory_UF_AM",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "AM"
+    }
+  },
+  {
+    "name": "inventory_UF_AP",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "AP"
+    }
+  },
+  {
+    "name": "inventory_UF_BA",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "BA"
+    }
+  },
+  {
+    "name": "inventory_UF_CE",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "CE"
+    }
+  },
+  {
+    "name": "inventory_UF_DF",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "DF"
+    }
+  },
+  {
+    "name": "inventory_UF_ES",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "ES"
+    }
+  },
+  {
+    "name": "inventory_UF_GO",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "GO"
+    }
+  },
+  {
+    "name": "inventory_UF_MA",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "MA"
+    }
+  },
+  {
+    "name": "inventory_UF_MT",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "MT"
+    }
+  },
+  {
+    "name": "inventory_UF_MS",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "MS"
+    }
+  },
+  {
+    "name": "inventory_UF_MG",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "MG"
+    }
+  },
+  {
+    "name": "inventory_UF_PA",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PA"
+    }
+  },
+  {
+    "name": "inventory_UF_PB",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PB"
+    }
+  },
+  {
+    "name": "inventory_UF_PR",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PR"
+    }
+  },
+  {
+    "name": "inventory_UF_PE",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PE"
+    }
+  },
+  {
+    "name": "inventory_UF_PI",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PI"
+    }
+  },
+  {
+    "name": "inventory_UF_RJ",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RJ"
+    }
+  },
+  {
+    "name": "inventory_UF_RN",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RN"
+    }
+  },
+  {
+    "name": "inventory_UF_RS",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RS"
+    }
+  },
+  {
+    "name": "inventory_UF_RO",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RO"
+    }
+  },
+  {
+    "name": "inventory_UF_RR",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RR"
+    }
+  },
+  {
+    "name": "inventory_UF_SC",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "SC"
+    }
+  },
+  {
+    "name": "inventory_UF_SP",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "SP"
+    }
+  },
+  {
+    "name": "inventory_UF_SE",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "SE"
+    }
+  },
+  {
+    "name": "inventory_UF_TO",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "TO"
+    }
+  }
+]

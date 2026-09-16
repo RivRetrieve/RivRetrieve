@@ -1,89 +1,144 @@
-"""Catalogue-generation tests retained after archiving BR ANA observations."""
+"""ANA canonical scope and retired catalogue entry-point contracts."""
 
-from __future__ import annotations
-
-import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
+from polars.testing import assert_frame_equal
 
-from rivretrieve._internal.catalogues.schemas import (
-    PRODUCT_CATALOG_SCHEMA,
-    PROVIDER_INFO_CATALOG_SCHEMA,
-    STATION_PRODUCT_CATALOG_SCHEMA,
+from rivretrieve._internal.catalogues.native import NativeTable
+from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.br_ana.generate_catalogue import (
+    build_stations,
+    generate_catalogue,
+    generate_catalogue_from_fixture,
+    generate_catalogue_from_live,
+    main,
+    project_stations,
 )
-from rivretrieve._internal.providers.br_ana.generate_catalogue import generate_catalogue_from_fixture
-from tests._provenance import legacy_document
 
 _METADATA_FIXTURE = Path(__file__).parent / "test_data" / "br_ana_metadata.json"
 
 
-def test_generate_catalogue_station_count() -> None:
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    assert cat.stations.height == 2
+def inventory() -> NativeTable:
+    """Authored station carriers test projection, not source observation semantics."""
+    return NativeTable(
+        pl.DataFrame(
+            {
+                "codigoestacao": ["002", "001", "003"],
+                "Tipo_Estacao": ["Fluviometrica", "Pluviometrica", "Fluviometrica"],
+                "Latitude": ["-10.50", "-11", None],
+                "Longitude": ["-60.25", "-61", None],
+                "Tipo_Estacao_Desc_Liquida": ["Nao", "Sim", "Nao"],
+                "retrieved_at": [datetime(2026, 9, 16, tzinfo=UTC)] * 3,
+            }
+        )
+    )
 
 
-def test_generate_catalogue_product_count() -> None:
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    # discharge_daily_mean, stage_daily_mean, discharge_instantaneous,
-    # stage_instantaneous, water_temperature_instantaneous
-    assert cat.products.height == 5
+def test_legacy_fixture_cannot_certify_catalogue() -> None:
+    with pytest.raises(FatalContractError, match="retired"):
+        generate_catalogue_from_fixture(_METADATA_FIXTURE)
 
 
-def test_generate_catalogue_station_products_count() -> None:
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    # 2 stations × 5 products = 10
-    assert cat.station_products.height == 10
+def test_legacy_live_does_not_acquire_or_echo_credentials() -> None:
+    with pytest.raises(FatalContractError, match="retired") as caught:
+        generate_catalogue_from_live(username="private-identifier", password="private-password")
+    assert "private-" not in str(caught.value)
 
 
-def test_generate_catalogue_station_fields() -> None:
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    row = cat.stations.filter(pl.col("station_id") == "12345000")
-    assert row.height == 1
-    assert row["crs"][0] == "unknown"
+def test_unattested_payload_cannot_build_catalogue() -> None:
+    with pytest.raises(FatalContractError, match="retired"):
+        generate_catalogue([])
 
 
-def test_generate_catalogue_filters_no_coord_station() -> None:
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    ids = set(cat.stations["station_id"].to_list())
-    assert "99999999" not in ids
+@pytest.mark.parametrize("mode", [["--fixture", "absent.json"], ["--live"], ["--withhold-uncertified"]])
+def test_retired_cli_fails_before_io(mode: list[str], tmp_path: Path) -> None:
+    output = tmp_path / "not-created"
+    with pytest.raises(FatalContractError, match="retired"):
+        main([*mode, "--out", str(output)])
+    assert not output.exists()
 
 
-def test_generate_catalogue_filters_pure_pluviometric_station() -> None:
-    """Stations with no discharge/level/water-quality flag set are out of scope."""
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    ids = set(cat.stations["station_id"].to_list())
-    assert "77777000" not in ids
+def test_projection_is_exact_partition_and_preserves_native_strings() -> None:
+    native = inventory()
+    before = native.data.clone()
+    selected = project_stations(native)
+    expected = native.data.filter(pl.col("codigoestacao").is_in(["002", "003"]))
+    assert_frame_equal(selected.data, expected)
+    assert_frame_equal(native.data, before)
+    assert (
+        selected.data.height + native.data.filter(pl.col("Tipo_Estacao") == "Pluviometrica").height
+        == native.data.height
+    )
 
 
-def test_generate_catalogue_keeps_stations_with_any_relevant_type_flag() -> None:
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    ids = set(cat.stations["station_id"].to_list())
-    # 12345000: discharge + level; 60435000: level only — both relevant to our products.
-    assert {"12345000", "60435000"} <= ids
+def test_stations_use_type_not_flags_and_keep_unknown_coordinates() -> None:
+    expected = pl.DataFrame(
+        [
+            {"provider_id": "br_ana", "station_id": "002", "latitude": -10.5, "longitude": -60.25, "crs": "unknown"},
+            {"provider_id": "br_ana", "station_id": "003", "latitude": None, "longitude": None, "crs": "unknown"},
+        ],
+        schema=STATION_CATALOG_SCHEMA.polars_schema,
+    )
+    assert_frame_equal(build_stations(inventory()), expected)
 
 
-def test_fixture_build_uses_exact_reduced_carriers() -> None:
-    cat = generate_catalogue_from_fixture(_METADATA_FIXTURE)
-    assert cat.products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
-    assert cat.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
-    assert tuple(cat.provider_info) == tuple(PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
+@pytest.mark.parametrize("kind", [None, "fluviometrica", "", "Other"])
+def test_unexpected_station_type_fails_loudly(kind: str | None) -> None:
+    native = NativeTable(inventory().data.with_columns(pl.lit(kind, dtype=pl.String).alias("Tipo_Estacao")))
+    with pytest.raises(FatalContractError, match="Tipo_Estacao"):
+        build_stations(native)
 
 
-def test_projected_national_artifacts_have_pinned_complete_content() -> None:
-    catalogue = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/br_ana/catalogue"
-    provider_info = json.loads((catalogue / "provider.json").read_text(encoding="utf-8"))
-    assert provider_info["catalogue_version"] is None
-    assert pl.read_parquet(catalogue / "products.parquet").is_empty()
-    assert pl.read_parquet(catalogue / "stations.parquet").is_empty()
-    assert pl.read_parquet(catalogue / "station_products.parquet").is_empty()
-    provenance = legacy_document(catalogue / "provenance.json")
-    assert provenance["native_table"] is None
-    assert {statement["kind"] for source in provenance["source_records"] for statement in source["statements"]} == {
-        "license"
-    }
-    assert len(provenance["fact_bindings"]) == 2
-    authored = provenance["fact_bindings"][0]
-    assert authored["fact_group"] == "rivretrieve_authored_provider_registration"
-    assert authored["transformation"]["kind"] == "authored_constant"
-    assert {item["reason"] for item in provenance["withheld_facts"]} == {"no_acquisition_record_established"}
+def test_missing_station_type_fails_loudly() -> None:
+    native = NativeTable(inventory().data.drop("Tipo_Estacao"))
+    with pytest.raises(FatalContractError, match="Tipo_Estacao"):
+        build_stations(native)
+
+
+def test_bad_coordinate_is_not_silently_discarded() -> None:
+    native = NativeTable(inventory().data.with_columns(pl.lit("not-a-number").alias("Latitude")))
+    with pytest.raises(FatalContractError, match="coordinates"):
+        build_stations(native)
+
+
+def test_attested_inventory_build_has_only_evidenced_station_facts(tmp_path: Path) -> None:
+    from rivretrieve._internal.catalogues.native import read_native_table
+    from rivretrieve._internal.providers.br_ana.capture import read_capture_record, verify_native_identity
+    from rivretrieve._internal.providers.br_ana.generate_catalogue import build_catalogue, write_catalogue
+    from rivretrieve._internal.providers.br_ana.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
+
+    repository = Path(__file__).parents[1]
+    capture = read_capture_record(repository / "tests/test_data/br_ana_inventory/capture.json")
+    native_path = repository / capture.native_table.repository_path
+    native = read_native_table(native_path)
+    verify_native_identity(capture, native_path.read_bytes(), native)
+    provenance = build_acquisition_provenance(capture)
+    catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance)
+    expected_ids = (
+        native.data.filter(pl.col("Tipo_Estacao") == "Fluviometrica")
+        .select(pl.col("codigoestacao").alias("station_id"))
+        .sort("station_id")
+    )
+    assert_frame_equal(catalogue.stations.select("station_id"), expected_ids)
+    assert_frame_equal(catalogue.public_artifact.stations, catalogue.stations)
+    assert catalogue.acquired_station_count == capture.distinct_station_count
+    assert catalogue.pluviometric_station_count == capture.pluviometric_station_count
+    assert catalogue.stations.height == capture.fluviometric_station_count
+    assert catalogue.products.is_empty()
+    assert catalogue.station_products.is_empty()
+    assert catalogue.provider_info["citation"] is None
+    latest = native.data["retrieved_at"].max()
+    assert isinstance(latest, datetime)
+    assert catalogue.provider_info["catalogue_version"] == latest.date().isoformat()
+    assert str(catalogue.provider_info["bulk_observations"]).startswith("false:")
+    terms = next(record for record in provenance.source_records if record.source_id == "br_ana.terms")
+    assert catalogue.provider_info["license"] == terms.statements[0].exact_text
+    write_catalogue(catalogue, tmp_path)
+    assert_frame_equal(pl.read_parquet(tmp_path / "stations.parquet"), catalogue.stations)
+    assert pl.read_parquet(tmp_path / "products.parquet").is_empty()
+    assert pl.read_parquet(tmp_path / "station_products.parquet").is_empty()
+    assert (tmp_path / "croissant.json").is_file()

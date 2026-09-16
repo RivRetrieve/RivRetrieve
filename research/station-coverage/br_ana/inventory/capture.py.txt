@@ -1,0 +1,45 @@
+"""ANA research capture : official data requests → credential-free exact recordings."""
+import json
+import os
+import sys
+from pathlib import Path
+from rivretrieve._internal.authentication import CredentialExchangeError, CredentialExchangeTransport, ExchangeSpec
+from rivretrieve._internal.record_observations import credential_value
+from rivretrieve._internal.recordings import RecordingTransport, write_recording
+from rivretrieve._internal.transport import CredentialHeader, HttpClient, HttpMethod, TransportRequest, _SystemClock
+
+BASE = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/"
+
+def main():
+    out = Path.cwd() / ".worktrees/brazil-live-evidence"
+    spec = ExchangeSpec.ana()
+    headers = tuple(CredentialHeader(header, credential_value(variable, os.environ, Path.cwd()/".env"), (spec.allowed_data_origin,)) for header, variable in (("Identificador", "ANA_IDENTIFICADOR"), ("Senha", "ANA_SENHA")))
+    exchange = CredentialExchangeTransport(HttpClient(), headers, spec, _SystemClock())
+    recorder = RecordingTransport(exchange)
+    jobs = json.loads((out / sys.argv[1]).read_text())
+    summaries = []
+    # Sole item-isolation point. Never serialize or print exception strings or response bodies.
+    for job in jobs:
+        try:
+            response = recorder.send(TransportRequest(HttpMethod.GET, BASE+job["endpoint"]+"/v1", params=job["parameters"]))
+            recording = recorder.recordings[-1]
+            # Shared exchange checks decoded response and metadata against input credentials and acquired token before recorder sees it.
+            # RecordingEnvelope additionally rejects secret-bearing fields. No exchange body enters this writer.
+            write_recording(recording, out/(job["name"]+".recording.json"))
+            data = json.loads(response.content)
+            items = data.get("items") if isinstance(data, dict) else None
+            summary = {"name":job["name"], "http_status":response.status_code,"sha256":recording.sha256,"bytes":len(response.content),"items_kind":type(items).__name__,"items_count":len(items) if isinstance(items,(list,dict)) else None}
+        except CredentialExchangeError as error:
+            summary = {"name":job["name"], "failure":error.reason.value,"http_status":error.status_code}
+        except Exception:
+            summary = {"name":job["name"], "failure":"capture_failed_no_exception_retained"}
+        summaries.append(summary)
+        print(json.dumps(summary), flush=True)
+        (out/(sys.argv[1]+".results.json")).write_text(json.dumps(summaries, indent=2)+"\n")
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        print("research startup failed; exception suppressed", flush=True)
+        sys.exit(1)

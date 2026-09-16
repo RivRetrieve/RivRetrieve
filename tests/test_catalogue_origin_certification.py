@@ -60,7 +60,7 @@ THAI_AVAILABILITY_EVIDENCE_PATH = (
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-DEFERRED_PROVIDERS = frozenset({ProviderId("br_ana")})
+DEFERRED_PROVIDERS: frozenset[ProviderId] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +100,12 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     assert module_path is not None
     native_path = Path(module_path).parent / "catalogue/native.parquet"
     build = generator.build_catalogue
+    if provider == "br_ana":
+        from rivretrieve._internal.providers.br_ana.capture import read_capture_record
+        from rivretrieve._internal.providers.br_ana.origins import build_acquisition_provenance
+
+        capture = read_capture_record(ROOT / "tests/test_data/br_ana_inventory/capture.json")
+        build = partial(build, provenance=build_acquisition_provenance(capture))
     if provider == "fr_hubeau":
         ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
@@ -133,6 +139,7 @@ ADAPTERS = {
     ProviderId(provider): _adapter(provider, _stations_case(provider))
     for provider in (
         "ba_fhmzbih",
+        "br_ana",
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
@@ -178,6 +185,8 @@ def _case_frames(
     adapter: ProviderAdapter, case: DeclarationCase, native: NativeTable, stations: StationCatalog
 ) -> tuple[NativeTable, StationCatalog]:
     case_native = native
+    if adapter.provider_id == ProviderId("br_ana"):
+        case_native = adapter.generator.project_stations(native)
     if case.native_partition is not None:
         case_native = NativeTable(native.data.filter(pl.col("source_endpoint") == case.native_partition))
     station_origin = case.declarations["station_id"]
@@ -203,6 +212,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         return Withheld()
 
     return {
+        (ProviderId("br_ana"), "stations"): {
+            "provider_id": authored("br_ana"),
+            "station_id": field("codigoestacao"),
+            "latitude": field("Latitude", FloatConversion()),
+            "longitude": field("Longitude", FloatConversion()),
+            "crs": withheld(),
+        },
         (ProviderId("ba_fhmzbih"), "stations"): {
             "provider_id": authored("ba_fhmzbih"),
             "station_id": field("metadata_station_no"),
@@ -309,7 +325,7 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
 
     assert frozenset(ADAPTERS) == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered - frozenset(ADAPTERS) == DEFERRED_PROVIDERS, (
-        "br_ana must remain registered and BUILDING until it has a committed full native input"
+        "Every registered provider must declare its certification status explicitly"
     )
     assert not (DEFERRED_PROVIDERS & ORIGIN_GATE_ENROLLED_PROVIDERS)
     assert all(adapter.native_path.is_file() for adapter in ADAPTERS.values())
@@ -317,7 +333,7 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
     assert {
         (adapter.provider_id, case.identity): case.declarations for adapter, case in CASES
     } == _expected_declarations()
-    assert len(CASES) == 13
+    assert len(CASES) == 14
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
 
@@ -553,7 +569,7 @@ def test_real_build_crs_semantics_are_complete_and_reviewed(adapter: ProviderAda
         assert stations["crs"].unique().to_list() == [origin.value]
         assert "unknown" not in stations["crs"].unique().to_list()
     elif isinstance(origin, Withheld):
-        assert adapter.provider_id == ProviderId("pl_imgw")
+        assert adapter.provider_id in {ProviderId("pl_imgw"), ProviderId("br_ana")}
         assert origin.reason == "acquisition_not_established"
         assert stations["crs"].unique().to_list() == ["unknown"]
     else:
@@ -743,23 +759,3 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
             assert _normalized_built_at(rebuilt) == _normalized_built_at(committed)
         else:
             assert rebuilt == committed
-
-
-def test_withheld_catalogue_descriptor_rebuilds_without_network(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    generator = _module("br_ana", "generate_catalogue")
-
-    def denied(*args: object, **kwargs: object) -> None:
-        raise AssertionError("Withheld catalogue build attempted network access")
-
-    monkeypatch.setattr(socket.socket, "connect", denied)
-    monkeypatch.setattr(transport.HttpClient, "send", denied)
-    monkeypatch.setattr(generator, "generate_catalogue_from_live", denied)
-    output = tmp_path / "br_ana"
-    assert generator.main(["--withhold-uncertified", "--catalogue-date", "2000-01-01", "--out", str(output)]) == 0
-    committed = ROOT / "src/rivretrieve/_internal/providers/br_ana/catalogue/croissant.json"
-    assert (output / "croissant.json").read_bytes() == committed.read_bytes()
-    document = json.loads(committed.read_bytes())
-    assert "datePublished" not in document
-    assert "version" not in document

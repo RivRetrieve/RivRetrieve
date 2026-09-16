@@ -57,15 +57,14 @@ pinned by `tests/test_provider_row_withholding.py`.
 `ORIGIN_GATE_ENROLLED_PROVIDERS` in `catalogue_origins.py` is the executable certification boundary.
 [ADR 0012](adr/0012-a-catalogue-column-declares-its-origin.md) records the original deferral boundary.
 `no_nve` is enrolled after gaining a committed attested native table and complete origin declarations.
-`br_ana` remains outside it pending a credentialed native acquisition. Until Brazil gains a committed
-attested native table and origin declarations, generate its deterministic empty catalogue with:
+`br_ana` is enrolled after an attested inventory union and explicit Fluviometrica projection.
+All acquired source rows remain in its native table. Its products and station-product facts
+remain withheld pending source semantics and observation-stage certification. This intermediate
+catalogue certification is not end-to-end Brazil observation delivery.
 
-```bash
-uv run python src/rivretrieve/_internal/providers/<provider>/generate_catalogue.py \
-  --withhold-uncertified \
-  --catalogue-date <existing-version> \
-  --out src/rivretrieve/_internal/providers/<provider>/catalogue/
-```
+Brazil's former `--fixture`, `--live`, and `--withhold-uncertified` catalogue routes refuse
+with a migration message. Materialize retained credential-free recordings first, then build
+from the attested native table. See [Brazil maintenance](provider_ports/br_ana.md).
 
 Commit `provider.json`, `products.parquet`, `stations.parquet`, `station_products.parquet`,
 `provenance.json`, all five `provenance_*.parquet` relations, and the generated Croissant descriptor. Test fixtures must not republish
@@ -90,7 +89,7 @@ the runtime does not select an unrelated contributor's words to fill a scalar. F
 per-source statements remain available in acquisition provenance and in the descriptor.
 
 Run the reference `mlcroissant` validator through the test suite for all thirteen outputs,
-including the descriptor of Brazil's withheld catalogue. The validator is a development
+including Brazil's inventory-only descriptor. The validator is a development
 dependency; reading a descriptor from an installed wheel must not import it. Catalogue
 version and publication date come from the recorded catalogue date, and acquisition dates
 remain source facts. No build clock enters the descriptor.

@@ -1,0 +1,51 @@
+[
+  {
+    "name": "inventory_UF_PB",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PB"
+    }
+  },
+  {
+    "name": "inventory_UF_PR",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PR"
+    }
+  },
+  {
+    "name": "inventory_UF_PE",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PE"
+    }
+  },
+  {
+    "name": "inventory_UF_PI",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "PI"
+    }
+  },
+  {
+    "name": "inventory_UF_RJ",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RJ"
+    }
+  },
+  {
+    "name": "inventory_UF_RN",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RN"
+    }
+  },
+  {
+    "name": "inventory_UF_RS",
+    "endpoint": "HidroInventarioEstacoes",
+    "parameters": {
+      "Unidade Federativa": "RS"
+    }
+  }
+]
