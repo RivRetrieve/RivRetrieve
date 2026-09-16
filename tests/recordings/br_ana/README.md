@@ -82,7 +82,7 @@ an explicit command-line argument. It never reads credentials or persists the fu
 PDF. An authorized maintainer can reacquire into a separate directory using:
 
 ```sh
-uv run python tests/recordings/br_ana/capture_manual_page11.py .worktrees/ana-manual-refresh
+uv run --with pypdf==6.13.1 python tests/recordings/br_ana/capture_manual_page11.py .worktrees/ana-manual-refresh
 ```
 
 This command makes a live unauthenticated request; ordinary tests do not run it.
