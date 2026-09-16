@@ -88,3 +88,21 @@ uv run python tests/recordings/br_ana/capture_manual_page11.py .worktrees/ana-ma
 This command makes a live unauthenticated request; ordinary tests do not run it.
 A fresh response may differ. Original source identity and derived identity must
 not be conflated or overwritten without evidence review.
+
+## Root-owned public live verification
+
+The root implementing agent ran the normal public API with its intentionally
+provisioned working-directory credentials against implementation commit
+`c3ec5f34972ce8076daeac4a19037c6299867f39` on 2026-09-16. No credential file was copied.
+`public-live-verification.json` is the unchanged sanitized summary, not a source
+recording or independent expectation. Both products returned five native rows across
+midnight, unknown zone, two exact-body receipts matching the Jan4 recording SHA,
+and three source calls (one shared exchange and two observation requests). Only
+informational source-status and unestablished-citation issues occurred.
+
+The root-authored script is retained as `verify_public_ana.py`; formatting and
+creation of its output directory were added, without changing its public calls.
+An authorized maintainer can run `uv run python tests/recordings/br_ana/verify_public_ana.py`
+from the working directory containing their own credentials. It makes live requests;
+ordinary tests never run it. This proves representative telemetry access, not daily
+support, universal station availability or completion of the full Brazil vision.
