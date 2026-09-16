@@ -1,0 +1,34 @@
+"""ANA UF and basin captures → union identity accounting with every native-row occurrence retained."""
+import collections
+import hashlib
+import json
+from pathlib import Path
+from rivretrieve._internal.recordings import read_recording
+out=Path.cwd()/".worktrees/brazil-live-evidence"
+occurrences=collections.defaultdict(list)
+canonical_rows={}
+acquisitions=[]
+missing=[]
+for path in sorted([*out.glob("inventory_UF_*.recording.json"), *out.glob("population_inventory_basin*.recording.json")]):
+    rec=read_recording(path)
+    envelope=json.loads(rec.content)
+    rows=envelope["items"]
+    acquisitions.append({"file":path.name,"http_status":rec.status_code,"source_code":envelope["code"],"rows":len(rows),"payload_sha256":rec.sha256,"retrieved_at":rec.retrieved_at.isoformat()})
+    for index,row in enumerate(rows):
+        station=row["codigoestacao"]
+        row_digest=hashlib.sha256(json.dumps(row,sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
+        ref={"file":path.name,"row_index":index,"native_row_sha256":row_digest}
+        if station is None or station=="":missing.append(ref); continue
+        occurrences[station].append(ref)
+        canonical_rows[(station,row_digest)]=row
+conflicts={station:refs for station,refs in occurrences.items() if len({r["native_row_sha256"] for r in refs})>1}
+# Only equal-content identities may contribute a unique native-row statistic.
+unique_rows=[canonical_rows[(station,refs[0]["native_row_sha256"])] for station,refs in occurrences.items() if station not in conflicts]
+ufs=set("AC AL AM AP BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO".split())
+basin_only=[station for station,refs in occurrences.items() if not any(ref["file"].startswith("inventory_UF_") for ref in refs)]
+uf_only=[station for station,refs in occurrences.items() if not any(ref["file"].startswith("population_inventory_basin") for ref in refs)]
+summary={"acquisitions":acquisitions,"acquired_rows_with_repeat_occurrences":sum(a["rows"] for a in acquisitions),"distinct_station_ids":len(occurrences),"unique_equal_content_ids":len(unique_rows),"conflicting_station_ids":sorted(conflicts),"missing_station_ids":missing,"basin_only_ids":basin_only,"uf_only_ids":uf_only,"unique_equal_content_station_types":dict(collections.Counter(row["Tipo_Estacao"] for row in unique_rows)),"unique_equal_content_uf_counts":dict(collections.Counter(row["UF_Estacao"] for row in unique_rows)),"unique_equal_content_basin_counts":dict(collections.Counter(row["codigobacia"] for row in unique_rows)),"unique_equal_content_domestic_count":sum(row["UF_Estacao"] in ufs for row in unique_rows),"unique_equal_content_null_uf_count":sum(row["UF_Estacao"] is None for row in unique_rows),"schema_variants":dict(collections.Counter("|".join(sorted(row)) for row in unique_rows))}
+(out/"source-population-union.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
+(out/"source-row-occurrences.json").write_text(json.dumps(dict(occurrences),ensure_ascii=False,indent=2)+"\n")
+(out/"source-row-conflicts.json").write_text(json.dumps(conflicts,ensure_ascii=False,indent=2)+"\n")
+print(json.dumps({k:(len(v) if isinstance(v,list) else v) for k,v in summary.items() if k not in {"acquisitions","schema_variants"}},ensure_ascii=False))

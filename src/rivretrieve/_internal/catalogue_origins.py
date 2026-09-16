@@ -225,6 +225,7 @@ type OriginDeclarations = Mapping[str, object]
 ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
     {
         ProviderId("ba_fhmzbih"),
+        ProviderId("br_ana"),
         ProviderId("ca_eccc"),
         ProviderId("ch_foen"),
         ProviderId("cz_chmi"),
@@ -238,7 +239,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("za_dws"),
     }
 )
-"""The twelve providers with complete audited catalogue origin declarations. br_ana remains explicitly deferred."""
+"""The thirteen providers with complete audited catalogue origin declarations."""
 
 
 def validate_catalogue_origins(

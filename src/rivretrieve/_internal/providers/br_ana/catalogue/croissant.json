@@ -45,8 +45,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "24d035cb53cd08a77b9686631cdc2ec7743ad4a2d545cf0f5b9a092899676470",
-      "contentSize": "374 B"
+      "sha256": "08d530cb808cd187bacb2b5a36f6ba15388567eb9fe9ae331d5bd2685e18be6d",
+      "contentSize": "508 B"
     },
     {
       "@id": "products.parquet",
@@ -61,8 +61,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "9c71c8aaf3fca5c0ec36e23bd2c1daf13ad1a3a0f4bfe7db4f9d0eab08d4e2fe",
-      "contentSize": "597 B"
+      "sha256": "3c31f757b3a9f24af6c51d2faad9f5b6caa4a4d31d3a8de1a6fd8e5b8f2dc369",
+      "contentSize": "178284 B"
     },
     {
       "@id": "station_products.parquet",
@@ -77,48 +77,48 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "7980010b572856b3a2cde7e5adb4cf81d2c9e63f33628e564545f8445697c099",
-      "contentSize": "4435 B"
+      "sha256": "8eb784e454c06558302edc619f71e0ccf6ab90c2cbd0819ec6be4d6b6efde0fe",
+      "contentSize": "39849 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "c14bc4a0c65fdf7581c28f824fec04ea6608c7635ced54871ef36651261afd4b",
-      "contentSize": "2430 B"
+      "sha256": "93a9d872a9cb7f673e39dd17db9237b0ebc7eb3998c43cac9967a92d31f74601",
+      "contentSize": "2781 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "40176b515362ebdfa3904e66ad10bd33b6c6d3b4eff3c0c36b8a7288a7c8085f",
-      "contentSize": "6213 B"
+      "sha256": "955df810d073c3fcbaef89aaf564a6c9a38d9c81a6ef823c126616b720cc875f",
+      "contentSize": "9973 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "502a007ee39dc2e4a4cf47ce5f2a4d5ea589a038a320d7d07df2943ad8b4e202",
-      "contentSize": "2188 B"
+      "sha256": "da1d6b73df46006a42ad592ea03db07de8d0ceaa610a854b336618d8953694dd",
+      "contentSize": "2592 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "5095987683f5ed352ae5beb97dba07ddf63181d198e1fbe15542f075fcbfc981",
-      "contentSize": "1196 B"
+      "sha256": "9304c0d2ff34815886d97348e530e4f33b9e3525487393556f6aeaff0c4e4376",
+      "contentSize": "1405 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "13e38eb8f0617806e5a30e33d64a8e2db8a69d068ea715d152755da20bdc93b8",
-      "contentSize": "559 B"
+      "sha256": "691ac456c391b28b0109500850729b07656629478352bfd4a6455bf3c20bfb83",
+      "contentSize": "1783 B"
     }
   ],
   "recordSet": [
@@ -264,10 +264,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -288,10 +284,6 @@
             "url": "provenance_facts.parquet",
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
-          },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
           }
         },
         {
@@ -330,8 +322,6 @@
         "kind": "withheld",
         "reason": "no_acquisition_record_established",
         "fields": [
-          "catalogue_version",
-          "license",
           "citation"
         ]
       }
@@ -603,10 +593,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
-          }
+          "description": "RivRetrieve-authored provider identity br_ana."
         },
         {
           "@id": "stations/station_id",
@@ -627,10 +614,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
-          }
+          "description": "Native column codigoestacao; conversion identity."
         },
         {
           "@id": "stations/latitude",
@@ -651,10 +635,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
-          }
+          "description": "Native column Latitude; conversion float."
         },
         {
           "@id": "stations/longitude",
@@ -675,10 +656,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "rr:absence": {
-            "kind": "withheld",
-            "reason": "no_acquisition_record_established"
-          }
+          "description": "Native column Longitude; conversion float."
         },
         {
           "@id": "stations/crs",
@@ -699,6 +677,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
+          "description": "Source fact withheld because acquisition is not established.",
           "rr:absence": {
             "kind": "withheld",
             "reason": "no_acquisition_record_established"
@@ -711,17 +690,6 @@
         "name": "Exact catalogue fact locator relation",
         "url": "provenance_facts.parquet",
         "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
-      },
-      "rr:absence": {
-        "kind": "withheld",
-        "reason": "no_acquisition_record_established",
-        "fields": [
-          "provider_id",
-          "station_id",
-          "latitude",
-          "longitude",
-          "crs"
-        ]
       }
     },
     {
@@ -1470,5 +1438,20 @@
     "url": "provenance.json",
     "name": "Issuing sources, exact statements and evidence declarations",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
+  },
+  "version": "2026-09-16",
+  "datePublished": "2026-09-16",
+  "isBasedOn": {
+    "@id": "native-table",
+    "@type": "sc:MediaObject",
+    "name": "Committed native catalogue build input",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/ff432f57733585ee055ab4dbc72d69c548841382/src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "sha256": "3538893b182ded3693bdb1ce5312c814371a1854bc3d63a6c3e09ea1d8d56581",
+    "contentSize": "1757184 B",
+    "creator": {
+      "@type": "sc:Organization",
+      "name": "RivRetrieve"
+    },
+    "description": "RivRetrieve materialization of the separately attributed source inputs."
   }
 }

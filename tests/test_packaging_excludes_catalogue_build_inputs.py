@@ -25,7 +25,9 @@ def test_wheel_excludes_catalogue_build_inputs(tmp_path: Path) -> None:
         forbidden = [
             name
             for name in names
-            if "no_nve_stations_active_" in name
+            if "br_ana_inventory" in name
+            or "station-coverage/br_ana" in name
+            or "no_nve_stations_active_" in name
             or "no_nve_station_catalogue_capture" in name
             or "no_nve_swagger" in name
             or name.endswith("/.env")

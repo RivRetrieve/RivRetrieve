@@ -312,10 +312,11 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_the_twelve_in_scope_providers() -> None:
+def test_origin_gate_enrols_exactly_the_thirteen_in_scope_providers() -> None:
     expected = frozenset(
         {
             ProviderId("ba_fhmzbih"),
+            ProviderId("br_ana"),
             ProviderId("ca_eccc"),
             ProviderId("ch_foen"),
             ProviderId("cz_chmi"),
@@ -333,7 +334,7 @@ def test_origin_gate_enrols_exactly_the_twelve_in_scope_providers() -> None:
 
     assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered >= ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered - ORIGIN_GATE_ENROLLED_PROVIDERS == frozenset({ProviderId("br_ana")})
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS
 
 
 def _collapse_whitespace(value: str) -> str:
@@ -361,7 +362,7 @@ def test_origin_scope_documentation_contract_pins_the_constant_docstring() -> No
         "origin gate scope docstring is not immediately after the assignment"
     )
     assert docstring_statement.value.value == (
-        "The twelve providers with complete audited catalogue origin declarations. br_ana remains explicitly deferred."
+        "The thirteen providers with complete audited catalogue origin declarations."
     ), "origin gate scope docstring has drifted"
 
 
@@ -369,7 +370,7 @@ def test_origin_scope_documentation_contract_pins_adr_ruling() -> None:
     adr = _collapse_whitespace(CATALOGUE_ORIGINS_ADR_PATH.read_text())
     scoped_state = _collapse_whitespace(
         "There is no half-landed state within `ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled "
-        "set is completely declared, while the explicitly deferred `br_ana` remains outside that set."
+        "set is completely declared."
     )
 
     assert "## Consequence: the build stays red until every enrolled provider is declared" in adr, (
@@ -391,7 +392,7 @@ def test_origin_scope_documentation_contract_pins_adr_ruling() -> None:
     maintenance = _collapse_whitespace(CATALOGUE_PROVENANCE_PATH.read_text())
     assert "`ORIGIN_GATE_ENROLLED_PROVIDERS`" in maintenance
     assert "ADR 0012" in maintenance
-    assert "`br_ana` remains outside it" in maintenance
+    assert "`br_ana` is enrolled" in maintenance
     assert "`no_nve` is enrolled" in maintenance
 
 
@@ -555,7 +556,7 @@ def test_committed_bosnia_origins_pass_validation_and_enforcement() -> None:
     enforce_catalogue_origins(ProviderId("ba_fhmzbih"), STATION_CATALOGUE_ORIGINS, native_table, stations)
 
 
-@pytest.mark.parametrize("provider_id", [ProviderId("br_ana"), ProviderId("other_provider")])
+@pytest.mark.parametrize("provider_id", [ProviderId("other_provider")])
 def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation(provider_id: ProviderId) -> None:
     with pytest.raises(FatalContractError) as exc_info:
         enforce_catalogue_origins(provider_id, {}, None, None)  # ty: ignore[invalid-argument-type]
