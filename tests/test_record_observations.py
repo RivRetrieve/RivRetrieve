@@ -201,3 +201,116 @@ def test_recording_main_preflights_declared_credentials(tmp_path, monkeypatch, m
             ]
         )
     assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("stations", [("1.200.0",), ("0.protocol", "1.200.0")])
+def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_recordings(
+    tmp_path,
+    monkeypatch,
+    capsys,
+    stations,
+):
+    from dataclasses import replace
+
+    from rivretrieve._internal import record_observations as recorder
+    from rivretrieve._internal.authentication import ExchangeSpec
+    from rivretrieve._internal.providers.no_nve.declaration import declaration
+    from rivretrieve._internal.providers.registration import (
+        CredentialExchangeBinding,
+        CredentialHeaderBinding,
+        DeclaredProvider,
+    )
+
+    spec = ExchangeSpec(f"{_ORIGIN}/token", ("token",), "Bearer", 3600, 3300, _ORIGIN)
+    declared = replace(
+        declaration,
+        required_credentials=("TEST_PASSWORD",),
+        credential_headers=(),
+        credential_exchange=CredentialExchangeBinding(
+            spec, (CredentialHeaderBinding("TEST_PASSWORD", "Password", (_ORIGIN,)),)
+        ),
+    )
+    monkeypatch.setattr(recorder, "load_manifest", lambda _: (DeclaredProvider("no_nve", declared),))
+    monkeypatch.setenv("TEST_PASSWORD", "REJECTED-PASSWORD-SENTINEL")
+    calls = []
+    payload = read_recording(
+        Path(__file__).parent / "test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json"
+    ).content
+
+    def sender(request, timeout_seconds):
+        calls.append(request.url)
+        if len(calls) == 1:
+            return b"REJECTED-PASSWORD-SENTINEL", 401, "text/plain"
+        if request.url == spec.exchange_url:
+            return b'{"token":"ACQUIRED-TOKEN-SENTINEL"}', 200, "application/json"
+        return payload, 200, "application/json"
+
+    monkeypatch.setattr(recorder, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda _: None))
+    args = [
+        "--provider",
+        "no_nve",
+        "--product",
+        "stage_daily_mean",
+        "--start",
+        "1900-01-03",
+        "--end",
+        "1900-01-05",
+        "--out-dir",
+        str(tmp_path),
+        "--name",
+        "rejection",
+    ]
+    for station in stations:
+        args.extend(("--station", station))
+    assert recorder.main(args) == 1
+    captured = capsys.readouterr()
+    assert "TEST_PASSWORD" in captured.err
+    assert "HTTP 401" in captured.err
+    assert "recording failed" in captured.err
+    recordings = tuple(tmp_path.glob("*.recording.json"))
+    assert len(recordings) == len(stations) - 1
+    assert len(calls) == (1 if len(stations) == 1 else 3)
+    retained = captured.out + captured.err + "".join(path.read_text() for path in recordings)
+    for secret in ("REJECTED-PASSWORD-SENTINEL", "ACQUIRED-TOKEN-SENTINEL"):
+        assert secret not in retained
+    assert "no source exchange was issued" not in captured.out
+
+
+def test_recording_main_retains_not_found_response_without_error_exit(tmp_path, monkeypatch):
+    from rivretrieve._internal import record_observations as recorder
+
+    monkeypatch.setenv("NVE_API_KEY", _SECRET)
+    recording = read_recording(
+        Path(__file__).parent / "test_data/no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json"
+    )
+
+    def sender(request, timeout_seconds):
+        return recording.content, recording.status_code, recording.content_type
+
+    monkeypatch.setattr(recorder, "HttpClient", lambda: HttpClient(sender=sender))
+    assert (
+        recorder.main(
+            [
+                "--provider",
+                "no_nve",
+                "--station",
+                "12.210.0",
+                "--product",
+                "water_temperature_daily_mean",
+                "--start",
+                "2025-07-10",
+                "--end",
+                "2025-07-12",
+                "--out-dir",
+                str(tmp_path),
+                "--name",
+                "not_found",
+            ]
+        )
+        == 0
+    )
+    (written,) = tuple(tmp_path.glob("*.recording.json"))
+    retained = read_recording(written)
+    assert retained.status_code == 404
+    assert retained.content == recording.content
+    assert _SECRET not in written.read_text()

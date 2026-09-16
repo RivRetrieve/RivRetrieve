@@ -22,6 +22,9 @@ The existing explicit direct-header options remain supported for maintainer use:
 
 ``--env-file`` is consulted only when the environment does not already carry the variable.
 
+Error issues produce a nonzero CLI exit after any safe partial recordings are written.
+Warning issues do not prevent recording source responses such as HTTP 404.
+
 One captured exchange is written as ``<name>.recording.json``; several are written as
 ``<name>_p1.recording.json``, ``<name>_p2.recording.json`` and so on, in send order.
 """
@@ -30,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -39,7 +43,7 @@ from rivretrieve._internal.authentication import CredentialExchangeTransport
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.engine import RequestedWindow
-from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.issues import FatalContractError, IssuePolicyError, apply_on_issue
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.observations import ObservationRequest as PublicObservationRequest
 from rivretrieve._internal.primitives import ProductId
@@ -89,12 +93,14 @@ def record_observations(
     client = HttpClient() if transport is None else transport
     recording_transport = RecordingTransport(AuthenticatedTransport(client, credentials) if credentials else client)
     try:
-        drive(
+        result = drive(
             request,
             observations.stages,
             provenance=ObservationProvenance(source="live", provider_id=public_request.provider_id),
             transport=recording_transport,
+            credential_names=declared.declaration.required_credentials,
         )
+        apply_on_issue(tuple(issue for issue in result.issues if issue.severity == "error"), "raise")
     finally:
         written = _write(recording_transport.recordings, out_dir, name)
     return written
@@ -113,7 +119,7 @@ def _write(recordings: tuple[RecordingEnvelope, ...], out_dir: Path, name: str) 
             f"for {recording.request.describe()}"
         )
     if not recordings:
-        print("no source exchange was issued; nothing written")
+        print("no observation recording was captured; nothing written")
     return tuple(paths)
 
 
@@ -175,17 +181,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         if exchange is not None:
             transport = CredentialExchangeTransport(HttpClient(), credentials, exchange.spec, _SystemClock())
             credentials = ()
-    record_observations(
-        arguments.provider,
-        arguments.station,
-        arguments.product,
-        arguments.start,
-        arguments.end,
-        arguments.out_dir,
-        arguments.name,
-        credentials,
-        transport=transport,
-    )
+    try:
+        record_observations(
+            arguments.provider,
+            arguments.station,
+            arguments.product,
+            arguments.start,
+            arguments.end,
+            arguments.out_dir,
+            arguments.name,
+            credentials,
+            transport=transport,
+        )
+    except IssuePolicyError as error:
+        for issue in error.issues:
+            print(f"recording failed: {issue.message}", file=sys.stderr)
+        return 1
     return 0
 
 
