@@ -119,3 +119,18 @@ def test_documentation_local_links_and_python_syntax():
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
     assert (ROOT / "docs/reference.md").read_text() == namespace["render_reference"]()
+
+
+def test_architecture_test_links_are_explicit_verification_references():
+    text = (ROOT / "docs/architecture.md").read_text()
+    heading = "### Verification tests"
+    verification_start = text.find(heading)
+    test_links = [
+        match for match in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text) if match.group(2).startswith("../tests/")
+    ]
+    assert test_links
+    for match in test_links:
+        label, destination = match.groups()
+        assert "test" in label.lower(), (label, destination)
+    assert verification_start >= 0
+    assert all(match.start() > verification_start for match in test_links)
