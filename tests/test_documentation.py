@@ -3,7 +3,11 @@
 import ast
 import re
 import runpy
+from datetime import datetime
 from pathlib import Path
+
+import polars as pl
+from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 
@@ -43,10 +47,17 @@ def test_readme_example_replays_publisher_recording(monkeypatch, capsys):
     for block in python_blocks(ROOT / "README.md"):
         exec(compile(block, "README.md", "exec"), scope)
     result = scope["result"]
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
-    assert result.data["station_id"].to_list() == ["07374000"]
     # The publisher recording has 373000 ft3/s on 2023-01-01.
-    assert result.data["value"].to_list() == [373000.0 * 0.028316846592]
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2023, 1, 1)],
+            "time_zone": ["unknown"],
+            "station_id": ["07374000"],
+            "product_id": ["discharge_daily_mean"],
+            "value": [373000.0 * 0.028316846592],
+        }
+    )
+    assert_frame_equal(result.data, expected)
     assert result.receipts.entries[0].content == recording.content
 
 
@@ -67,7 +78,14 @@ def test_camels_example_selects_documented_gauges_without_network(monkeypatch, c
     )
     scope = {}
     exec(compile(ast.Module(body=tree.body[:fetch_index], type_ignores=[]), "camels-us.md", "exec"), scope)
-    assert rr.as_frame(scope["selection"])["station_id"].to_list() == ["01013500", "01022500", "01030500"]
+    expected = pl.DataFrame(
+        {
+            "provider_id": ["usgs_nwis"] * 3,
+            "station_id": ["01013500", "01022500", "01030500"],
+            "product_id": ["discharge_daily_mean"] * 3,
+        }
+    )
+    assert_frame_equal(rr.as_frame(scope["selection"]).select(expected.columns), expected)
 
 
 PAGES = [

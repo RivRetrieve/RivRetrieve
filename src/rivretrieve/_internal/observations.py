@@ -96,7 +96,7 @@ class ObservationProvenance(BaseModel):
         Additional window metadata. The current engine leaves this tuple empty.
     decomposition : tuple[str, ...]
         Additional decomposition metadata. The current engine leaves this tuple
-        empty. Unit conversion is reported through informational result issues.
+        empty. Unit conversion currently emits no informational result issue.
     endpoints : tuple[str, ...]
         Distinct source URLs used by retained call metadata.
     query : dict[str, object] or None
