@@ -37,6 +37,22 @@ superseded. Use them as history rather than as current usage instructions.
 The inventory account's recorded limitations remain applicable. It does not establish
 countrywide inventory completeness or continuous observation history.
 
+Existing provider port evidence notes:
+
+- [ba_fhmzbih](provider_ports/ba_fhmzbih.md)
+- [br_ana](provider_ports/br_ana.md)
+- [ca_eccc](provider_ports/ca_eccc.md)
+- [ch_foen](provider_ports/ch_foen.md)
+- [cz_chmi](provider_ports/cz_chmi.md)
+- [fr_hubeau](provider_ports/fr_hubeau.md)
+- [jp_mlit](provider_ports/jp_mlit.md)
+- [lt_lhmt](provider_ports/lt_lhmt.md)
+- [no_nve](provider_ports/no_nve.md)
+- [pl_imgw](provider_ports/pl_imgw.md)
+- [th_thaiwater](provider_ports/th_thaiwater.md)
+- [usgs_nwis](provider_ports/usgs_nwis.md)
+- [za_dws](provider_ports/za_dws.md)
+
 ## Local documentation checks
 
 Markdown reads directly on GitHub. No site build, credentials or bulk download is needed.
