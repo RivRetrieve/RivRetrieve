@@ -69,7 +69,7 @@ Not touched:
 - any file under `src/`;
 - any file under `tests/`;
 - any file under `reference/legacy_observations/`;
-- `CONTEXT.md`, any ADR, packaging metadata, or lockfiles;
+- `CONTEXT.md`, packaging metadata, or lockfiles;
 - engine endpoint or window types;
 - normalization, padding, decomposition, clipping, invariants, provider ports, or provider declarations;
 - any implementation or test belonging to later milestones;

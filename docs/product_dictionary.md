@@ -1,6 +1,6 @@
 # RivRetrieve Product Dictionary
 
-This file is the authoritative dictionary of canonical RivRetrieve product IDs. [ADR 0010](adr/0010-a-declaration-is-keyed-by-product.md) defines how provider declarations are keyed to products.
+This file is the authoritative dictionary of canonical RivRetrieve product IDs. [Product declarations](architecture.md#responsibilities) bind source coordinates, native units and time semantics to each product.
 
 Product IDs are stable user-facing labels. They are not parseable mini-grammars. Code must rely on the structured fields in each entry.
 

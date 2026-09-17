@@ -1,6 +1,6 @@
 # th_thaiwater Provider Port Notes
 
-These notes capture evidence and handoff context from the `th_thaiwater` provider port. They are not user documentation and not an architecture contract; promote shared harness commitments to [ADRs](../adr/) only with concrete evidence.
+These notes capture evidence and handoff context from the `th_thaiwater` provider port. They are not user documentation and not an architecture contract. See [Architecture](../architecture.md) for shared harness contracts.
 
 ## Source Endpoints
 

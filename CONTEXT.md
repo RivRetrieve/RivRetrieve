@@ -286,7 +286,7 @@ placed against a [[station-timezone]], and five of the thirteen sources publish 
 capability would evaporate by country. This is what makes clipping possible for a station
 whose zone is [[unknown]]: wall clock compares to wall clock without needing a zone on
 either side. A caller wanting an absolute interval converts the returned [[native-time]]
-afterwards, as ADR 0006 intends.
+afterwards.
 _Avoid_: date range, time range, requested period, UTC window
 
 **Fetch window**:

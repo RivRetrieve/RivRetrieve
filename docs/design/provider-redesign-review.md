@@ -24,9 +24,7 @@ can we remove without breaking it.
 updated to record what the team settled in review, and what deliberately remains
 open. Where the meeting moved a position, the reasoning that produced the move is
 kept here rather than deleted, because the reasoning is the part that is expensive
-to reconstruct. Decisions that are hard to reverse also exist as short standalone
-records in `docs/adr/`, and the vocabulary this document uses is defined in
-`CONTEXT.md`.
+to reconstruct. The vocabulary this document uses is defined in `CONTEXT.md`.
 
 This is a companion to `provider-redesign.md`. That document proposed the shape
 of the package. This one revisits it with thirteen providers in hand.
@@ -113,8 +111,7 @@ the datum a stage measurement is counted from.
 
 So the boundary has a second clause: **we harmonise what is objective and that we
 can establish. Where we cannot establish it, we say so rather than assume it.**
-That principle is recorded as `docs/adr/0005-unknown-is-first-class.md`, and it is
-what resolved the time, day-definition and datum arguments, all three of which had
+That principle resolved the time, day-definition and datum arguments, all three of which had
 looked like separate disputes.
 
 **Note on v2.** Whether a future version should offer a harmonised quality flag
@@ -347,8 +344,7 @@ Two alternatives were rejected alongside it. A class per provider subclassing a
 base, which was the original RivRetrieve design: an object earns its keep only
 when it holds state that is expensive to compute and reused across tasks, and
 fetching gauge A produces nothing costly that fetching gauge B then needs. And
-pure configuration with no code at all, for the reason in 3.4. Recorded as
-`docs/adr/0003-three-provider-files.md`.
+pure configuration with no code at all, for the reason in 3.4.
 
 ## 4. What we should remove
 
@@ -440,8 +436,7 @@ The original proposal guaranteed UTC output; the team rejected that.**
 **Decision. We return native time, and offer UTC as best-effort.** Timestamps come
 back as the provider published them, carrying whatever zone information we can
 establish. Conversion to UTC is offered where the source zone is documented and
-withheld where it is not. Recorded as
-`docs/adr/0001-native-time-by-default.md`.
+withheld where it is not.
 
 *What the original proposal said, and why it fell.* The first draft argued UTC-in
 and UTC-out was the only globally well-defined choice, since "provider-local" is
@@ -621,8 +616,7 @@ agency, so any status we record is our reading rather than the source's statemen
 More lasting: a licence we classify once is a licence we must keep re-reading,
 because when a source revises its terms our stale interpretation is still sitting
 in the catalogue with our name on it. Publishing only what the source published
-carries no such standing obligation. Recorded as
-`docs/adr/0004-never-interpret-licenses.md`.
+carries no such standing obligation.
 
 The accepted cost is that a user cannot filter providers by redistribution status.
 They follow the link and read the terms, which is the correct place for that
@@ -782,8 +776,7 @@ standardised format is what we are proceeding with, on the read-path argument
 above rather than on storage efficiency.
 
 **Generalised after the meeting.** The decision is not really about bulk providers,
-it is about anything we store on disk, so it is recorded at that level:
-`docs/adr/0002-one-local-storage-layout.md`. The trigger was a second idea raised
+it is about anything we store on disk. The trigger was a second idea raised
 in the meeting, in 7.4.
 
 ### 7.4 A user-built archive (raised in the meeting, deferred)
@@ -809,8 +802,8 @@ separate; only the format underneath is shared.
 **Deferred out of v0.1.0.** The archive is a second product surface with its own
 lifecycle, failure modes, and questions about what the user owns. Shipping the
 redesigned engine across thirteen providers is the whole of the work before the
-release. Deferring costs little precisely because ADR 0002 already fixes the
-layout it would build on.
+release. Deferring costs little precisely because the shared storage decision in
+7.3 already fixes the layout it would build on.
 
 ## 8. The public API surface
 
@@ -1034,22 +1027,21 @@ about the thirteen sources that nobody in the room could supply from memory.
    objective *and that we can establish*.
 2. **Time output (5.2).** Reversed from the original proposal. Native time is
    returned; UTC is offered where the source zone is documented. `time_zone="local"`
-   is dropped. `docs/adr/0001`.
+   is dropped.
 3. **Day definition (5.2).** Declared per provider-product, never assumed to be
    midnight. NRFA's 09:00 day is the case that broke the original rule.
 4. **Provider layout (3.5).** Three files, `fetch.py`, `parse.py`, `config.py`, with
-   a `Contributed by:` docstring field for attribution. `docs/adr/0003`.
+   a `Contributed by:` docstring field for attribution.
 5. **Local storage (7.3, 7.4).** One layout for anything stored on disk, queried by
-   one engine. `docs/adr/0002`.
+   one engine.
 6. **Licence (6.3).** Link and the source's own wording. We never classify.
-   `docs/adr/0004`.
 7. **Dates we were not given (6.2).** Null. Never computed.
 8. **Licence and citation placement (6.3).** Provider level, and stamped into
    `provenance` on every result.
 9. **API keys (Section 9).** `.env`, with per-provider tutorials on obtaining a
    token, and no code that obtains one.
 10. **Unknown is first-class (2.1).** The principle underneath 2, 3 and the datum
-    question. `docs/adr/0005`.
+    question.
 
 ### Open, and blocked on the same missing evidence
 
@@ -1065,7 +1057,7 @@ publish. They share one survey.
   gauge's datum can be revised, which would make it a per-station, time-varying
   property rather than a per-provider constant.
 
-ADR 0005 is what stops these blocking the design: because unknown is representable
+The unknown-is-first-class principle stops these blocking the design: because unknown is representable
 everywhere, the survey changes what gets *populated*, not what gets *built*. The
 work can start before the answers exist.
 

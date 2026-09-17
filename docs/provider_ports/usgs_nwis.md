@@ -1,6 +1,6 @@
 # usgs_nwis Provider Port Notes
 
-These notes capture evidence and decisions from porting the USGS National Water Information System (NWIS) USA provider. See [ADRs](../adr/) for shared harness contracts. Provider-specific pain stays here; only shared architecture decisions should be promoted to an ADR.
+These notes capture evidence and decisions from porting the USGS National Water Information System (NWIS) USA provider. See [Architecture](../architecture.md) for shared harness contracts. Provider-specific porting details stay here.
 
 ## Source Endpoints
 
@@ -70,7 +70,7 @@ Conversion approach:
 
 Series annotation `resolved_timezone` is always `"UTC"`. Series annotation `timezone_source` is `"provider_timestamp_offset"` because the conversion does not require inference — the offset is explicit in the response.
 
-**Divergence from legacy behavior:** The legacy `USAFetcher._parse_data()` did `pd.to_datetime(df.index.dt.date)`, which stripped timezone and time-of-day entirely and produced a timezone-naive date index at midnight. The new implementation preserves the full UTC timestamp, so a DV observation for `2023-01-01` at a CST station becomes `2023-01-01T06:00:00Z`, not `2023-01-01T00:00:00Z`. This is the ported behavior; shared time and zone representation is owned by [ADR 0006](../adr/0006-time-and-zone-are-two-columns.md) and [ADR 0007](../adr/0007-zone-values-are-iana-offset-or-unknown.md).
+**Divergence from legacy behavior:** The legacy `USAFetcher._parse_data()` did `pd.to_datetime(df.index.dt.date)`, which stripped timezone and time-of-day entirely and produced a timezone-naive date index at midnight. The new implementation preserves the full UTC timestamp, so a DV observation for `2023-01-01` at a CST station becomes `2023-01-01T06:00:00Z`, not `2023-01-01T00:00:00Z`. This is the ported behavior; current shared time and zone representation is described in [Architecture](../architecture.md#contracts-between-stages).
 
 ## Observation Retrieval
 

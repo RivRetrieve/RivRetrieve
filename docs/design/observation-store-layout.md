@@ -115,9 +115,8 @@ Certification performs a second bounded decode of the unchanged publisher artifa
 
 Values are stored in source units. Timestamps are stored as source wall-clock values,
 without converting them to UTC or attaching an inferred zone. Unit conversion occurs
-only on read through the existing convert stage under ADR 0002. Exact clipping to the
-requested closed wall-clock window also occurs only on read through that convert stage
-under ADR 0017. A storage scan MAY use a conservative time predicate to reduce I/O, but
+only on read through the existing convert stage. Exact clipping to the
+requested closed wall-clock window also occurs only on read through that convert stage. A storage scan MAY use a conservative time predicate to reduce I/O, but
 it MUST return a superset sufficient for convert to remain the authority for clipping.
 
 Standardising the container does not author new measurements, interpret quality codes,
@@ -164,8 +163,8 @@ disposition records MUST be unique where this document requires uniqueness.
 The artifact checksum makes provenance identifiable: it proves which downloaded bytes
 were compiled. It does not make provenance reproducible, retain the artifact, prove the
 publisher will continue serving it, or allow reconstruction from the checksum. The
-artifact and intermediates are deleted only after certified compilation succeeds under
-ADR 0021; only URL, publisher-dated vintage, checksum, and schema fingerprint survive in
+artifact and intermediates are deleted only after certified compilation succeeds;
+only URL, publisher-dated vintage, checksum, and schema fingerprint survive in
 the manifest.
 
 ## Compatibility and refusal
@@ -187,7 +186,7 @@ to the Parquet dataset scan rather than eagerly loading all partitions. Hive dir
 filters eliminate unrelated products and years before file reads. The one-file partition
 and `station_id` ordering permit Parquet row-group statistics to eliminate unrelated
 station ranges; writers SHOULD emit row groups with `station_id` statistics. Time
-pushdown may reduce the conservative candidate set, but the ADR 0017 convert stage owns
+pushdown may reduce the conservative candidate set, but the convert stage owns
 exact requested-window clipping. Predicate pushdown changes I/O, never semantics.
 
 ## Analysis against source shapes

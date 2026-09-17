@@ -1,6 +1,6 @@
 # lt_lhmt Provider Port Notes
 
-These notes capture evidence and decisions from porting the Lithuanian Hydrometeorological Service (Meteo.lt) provider. They are not user documentation. Provider-specific pain stays here; shared architecture changes require a concrete ADR.
+These notes capture evidence and decisions from porting the Lithuanian Hydrometeorological Service (Meteo.lt) provider. They are not user documentation. Provider-specific porting details stay here. See [Architecture](../architecture.md) for shared contracts.
 
 ## Source Endpoints
 

@@ -1,6 +1,6 @@
 # cz_chmi Provider Port Notes
 
-These notes capture evidence and hand-off context from the `cz_chmi` Czech CHMI provider port. Promote only shared harness commitments to [ADRs](../adr/).
+These notes capture evidence and hand-off context from the `cz_chmi` Czech CHMI provider port. See [Architecture](../architecture.md) for shared harness contracts.
 
 ## Source Endpoints
 

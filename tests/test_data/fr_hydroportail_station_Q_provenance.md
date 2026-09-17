@@ -71,4 +71,4 @@ change or harness normalization was introduced.
 The separately accepted source-zone attestation has SHA256
 `20934e09c72d2f43a0ea02786acb6f219774608a0d7d1822c1a0bfb7a3c01024`.
 Its local handoff file is not a required runtime or fresh-clone reference. The source
-facts and explicit ADR rationale are preserved here with the exact source body above.
+facts and design rationale are preserved here with the exact source body above.

@@ -304,8 +304,8 @@ for the completed verification account.
 
 ### Application
 
-[ADR 0017](adr/0017-the-engine-owns-every-window-arithmetic.md) assigns all padding
-and splitting to the engine. Its existing `capped-span` planner accepts a `size` in
+The [window planner](../src/rivretrieve/_internal/window_planning.py) owns padding
+and splitting in the engine. Its existing `capped-span` planner accepts a `size` in
 inclusive source dates. Thailand's unsplit `WindowGranularity("date")` declaration
 at research time was a declaration gap, not a missing planner.
 

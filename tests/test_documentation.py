@@ -134,3 +134,9 @@ def test_architecture_test_links_are_explicit_verification_references():
         assert "test" in label.lower(), (label, destination)
     assert verification_start >= 0
     assert all(match.start() > verification_start for match in test_links)
+
+
+def test_documentation_has_no_adr_directory_or_references():
+    assert not (ROOT / "docs/adr").exists()
+    for path in (ROOT / "docs").rglob("*.md"):
+        assert not re.search(r"\bADRs?\b|(?<![A-Za-z])adr/", path.read_text(), re.IGNORECASE), path

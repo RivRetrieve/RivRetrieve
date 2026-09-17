@@ -1,8 +1,8 @@
 # no_nve Provider Port Notes
 
 These notes capture evidence and context from the `no_nve` port of the NVE HydAPI provider onto the
-shared observation engine. They are not user documentation and not a new architecture contract;
-promote only shared harness commitments to [ADRs](../adr/).
+shared observation engine. They are not user documentation and not a new architecture contract.
+See [Architecture](../architecture.md) for shared harness contracts.
 
 ## Source
 

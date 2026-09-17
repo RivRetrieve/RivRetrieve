@@ -77,7 +77,6 @@ JAPAN_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue/
 THAI_COORDINATE_EVIDENCE_PATH = Path("tests/test_data/th_thaiwater_coordinate_standard.html")
 REPOSITORY_ROOT = Path(__file__).parents[1]
 CATALOGUE_ORIGINS_MODULE_PATH = REPOSITORY_ROOT / "src/rivretrieve/_internal/catalogue_origins.py"
-CATALOGUE_ORIGINS_ADR_PATH = REPOSITORY_ROOT / "docs/adr/0012-a-catalogue-column-declares-its-origin.md"
 CATALOGUE_PROVENANCE_PATH = REPOSITORY_ROOT / "docs/catalogue-provenance.md"
 CONTEXT_PATH = REPOSITORY_ROOT / "CONTEXT.md"
 
@@ -366,32 +365,13 @@ def test_origin_scope_documentation_contract_pins_the_constant_docstring() -> No
     ), "origin gate scope docstring has drifted"
 
 
-def test_origin_scope_documentation_contract_pins_adr_ruling() -> None:
-    adr = _collapse_whitespace(CATALOGUE_ORIGINS_ADR_PATH.read_text())
-    scoped_state = _collapse_whitespace(
-        "There is no half-landed state within `ORIGIN_GATE_ENROLLED_PROVIDERS`: every provider in the enrolled "
-        "set is completely declared."
-    )
-
-    assert "## Consequence: the build stays red until every enrolled provider is declared" in adr, (
-        "ADR consequence heading does not scope the build-red rule to enrolled providers"
-    )
-    assert "2026-08-03" in adr, "ADR is missing the dated human scope ruling"
-    assert "`br_ana`" in adr, "ADR is missing the deferred br_ana provider id"
-    assert "`no_nve`" in adr, "ADR is missing the historical no_nve provider id"
-    assert "deferred `br_ana` and `no_nve` to separate work" in adr, (
-        "ADR does not preserve the historical deferral boundary"
-    )
-    assert "`no_nve` subsequently gained" in adr, "ADR does not record Norway's later enrolment"
-    assert scoped_state in adr, "ADR is missing the exact scoped half-landed-state contract"
-    assert "ORIGIN_GATE_ENROLLED_PROVIDERS" in adr, "ADR is missing the explicit enrolment boundary name"
-    assert "26,231" in adr, "ADR lost the USGS defect-history station count"
-    assert "52,145" in adr, "ADR lost the Brazil defect-history row count"
-    assert "4,889" in adr, "ADR lost the Norway defect-history station count"
-
+def test_origin_scope_documentation_contract_pins_maintenance_boundary() -> None:
     maintenance = _collapse_whitespace(CATALOGUE_PROVENANCE_PATH.read_text())
     assert "`ORIGIN_GATE_ENROLLED_PROVIDERS`" in maintenance
-    assert "ADR 0012" in maintenance
+    assert (
+        "Every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS` has complete audited catalogue origin declarations."
+        in maintenance
+    )
     assert "`br_ana` is enrolled" in maintenance
     assert "`no_nve` is enrolled" in maintenance
 
