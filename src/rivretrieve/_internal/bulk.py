@@ -50,6 +50,22 @@ class InsufficientDiskSpaceError(FatalContractError):
 
 @dataclass(frozen=True, slots=True)
 class CacheClearResult:
+    """The paths and bytes removed by explicit cache deletion.
+
+    Attributes
+    ----------
+    provider_id : ProviderId
+        Provider whose cache was cleared.
+    path : pathlib.Path
+        Resolved observation-store path.
+    existed : bool
+        True if any recognized store or recovery path existed.
+    bytes_freed : int
+        Sum of removed file and symlink sizes, in bytes.
+    removed_paths : tuple[pathlib.Path, ...]
+        Store and recognized recovery inputs removed by the call.
+    """
+
     provider_id: ProviderId
     path: Path
     existed: bool

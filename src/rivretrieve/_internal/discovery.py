@@ -44,9 +44,30 @@ _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 
 
 def describe(provider: str) -> dict[str, object]:
-    """Return a provider's packaged Croissant JSON-LD descriptor without network access.
+    """Read one provider's packaged Croissant JSON-LD descriptor offline.
 
-    describe : ProviderId × PackagedCatalogueDescriptor → JSONLDMapping.
+    Parameters
+    ----------
+    provider : str
+        Built-in provider identifier.
+
+    Returns
+    -------
+    dict[str, object]
+        Parsed descriptor with catalogue file identities, extraction rules,
+        evidence relations and recorded absences. This is not an observation
+        descriptor or a live inventory.
+
+    Raises
+    ------
+    UnknownProviderError
+        If provider is not in the built-in manifest.
+    FatalContractError
+        If the JSON document is not an object.
+    OSError
+        If the packaged descriptor cannot be read.
+    json.JSONDecodeError
+        If its JSON is malformed.
     """
     from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 
@@ -60,7 +81,27 @@ def describe(provider: str) -> dict[str, object]:
 
 
 def providers() -> pl.DataFrame:
-    """providers : BuiltInProviderDeclarations × CredentialSources → ProviderAccessFrame."""
+    """List registered providers and local credential readiness.
+
+    Returns
+    -------
+    polars.DataFrame
+        Columns are provider_id (String), credentials (List(String)) and access
+        (String). Rows are sorted by provider_id. Access is "open", "ready",
+        or "missing <variable names>". It does not test source access.
+
+    Raises
+    ------
+    FatalContractError
+        If a shipped declaration or catalogue cannot be loaded.
+
+    Notes
+    -----
+    Reads credential names from declarations and values from the process
+    environment or the working directory .env file. A present environment
+    variable takes precedence, including a blank value. Values are not returned.
+    No source request is made.
+    """
     _ensure_default_providers_registered()
     resolved = _resolve_credentials(_registry.list_provider_ids(), require_all=False)
     rows = []
@@ -82,6 +123,37 @@ def find(
     station: str | None = None,
     product: str | None = None,
 ) -> _Selection:
+    """Select station-product series from packaged catalogues.
+
+    Parameters
+    ----------
+    provider : str or None, default None
+        Exact provider identifier. None includes every provider.
+    station : str or None, default None
+        Exact station identifier, including leading zeros. With provider=None,
+        the same identifier can select stations from several providers.
+    product : str or None, default None
+        Exact canonical product identifier. None includes every product.
+
+    Returns
+    -------
+    _Selection
+        Immutable, sorted, unique (provider_id, station_id, product_id) series
+        with catalogue metadata and acquisition evidence. Available and unknown
+        availability remain selectable. Unavailable pairs are excluded. A valid
+        query without a selectable pair returns an empty selection with a reason.
+
+    Raises
+    ------
+    UnknownProviderError
+        If provider is not registered.
+    UnknownStationError
+        If station is absent from the requested provider scope.
+    UnknownProductError
+        If product is absent from the global vocabulary.
+    FatalContractError
+        If shipped catalogue contracts fail.
+    """
     _ensure_default_providers_registered()
     return _selection_find(_registry.iter_records(), provider=provider, station=station, product=product)
 
@@ -93,20 +165,118 @@ def pick(
     station: str | Sequence[str] | None = None,
     product: str | Sequence[str] | None = None,
 ) -> _Selection:
+    """Narrow an existing selection without changing it.
+
+    Parameters
+    ----------
+    selection : _Selection
+        Selection returned by find, pick or from_frame.
+    provider : str, sequence of str or None, default None
+        Provider identifiers to retain. None or an empty sequence adds no filter.
+    station : str, sequence of str or None, default None
+        Station identifiers to retain. Provider scopes vocabulary validation.
+        None or an empty sequence adds no filter.
+    product : str, sequence of str or None, default None
+        Product identifiers to retain. None or an empty sequence adds no filter.
+
+    Returns
+    -------
+    _Selection
+        Intersection of the selection with the requested identifiers. A new
+        empty answer carries not_in_selection. An already empty selection
+        keeps its original reason.
+
+    Raises
+    ------
+    TypeError
+        If selection is not a RivRetrieve selection.
+    UnknownProviderError, UnknownStationError, UnknownProductError
+        If an identifier is outside catalogue vocabulary, even when the input
+        selection is empty.
+    FatalContractError
+        If shipped catalogue contracts fail.
+    """
     _ensure_default_providers_registered()
     return _selection_pick(_registry.iter_records(), selection, provider=provider, station=station, product=product)
 
 
 def as_frame(selection: _Selection) -> pl.DataFrame:
+    """Copy a selection into a Polars frame for inspection or filtering.
+
+    Parameters
+    ----------
+    selection : _Selection
+        Selection returned by find, pick or from_frame.
+
+    Returns
+    -------
+    polars.DataFrame
+        One row per series in SELECTION_FRAME_SCHEMA order. Identity, geometry,
+        product semantics, canonical unit, native product identifier, availability,
+        published record dates and catalogue check date travel together. Empty
+        selections retain the schema. Acquisition evidence and the empty reason
+        stay on selection rather than becoming frame columns.
+
+    Raises
+    ------
+    TypeError
+        If selection is not a RivRetrieve selection.
+    """
     return _selection_as_frame(selection)
 
 
 def from_frame(frame: pl.DataFrame) -> _Selection:
+    """Rebuild a selection from frame identities and packaged catalogue facts.
+
+    Parameters
+    ----------
+    frame : polars.DataFrame
+        Contains provider_id, station_id and product_id String columns in that
+        relative order. Identities must be non-null and unique. Other columns
+        are ignored, including caller-edited catalogue metadata.
+
+    Returns
+    -------
+    _Selection
+        Sorted series with current packaged metadata and acquisition evidence.
+        An empty identity frame produces the empty_frame reason.
+
+    Raises
+    ------
+    TypeError
+        If frame is not a Polars DataFrame.
+    UnknownProviderError, UnknownStationError, UnknownProductError
+        If an identity is outside catalogue vocabulary.
+    FatalContractError
+        If columns, dtypes, nulls or duplicates violate the identity contract,
+        or a triple has no selectable catalogue pair.
+    """
     _ensure_default_providers_registered()
     return _selection_from_frame(_registry.iter_records(), frame)
 
 
 def map(selection: _Selection) -> object:
+    """Render selected stations without narrowing the selection.
+
+    Parameters
+    ----------
+    selection : _Selection
+        Selection whose stations will be shown once each.
+
+    Returns
+    -------
+    folium.Map
+        Station markers with identity, coordinates and CRS in their popups.
+        Unknown CRS markers are orange and drawn as if EPSG:4326. Established
+        CRS markers are blue. The rendering does not rewrite catalogue facts.
+
+    Raises
+    ------
+    TypeError
+        If selection is not a RivRetrieve selection.
+    MissingOptionalDependencyError
+        If folium is not installed. Install the rivretrieve[map] extra.
+    """
     return StationMap(_selection_station_frame(selection)).render()
 
 
@@ -142,12 +312,73 @@ def fetch(
     cache: CacheMode = "bypass",
     on_issue: OnIssue = "warn",
 ) -> ObservationResult:
-    """Retrieve selected series, optionally reusing or refreshing locally held values.
+    """Retrieve selected observations from one provider.
 
-    ``bypass`` (default) leaves a live provider's cache untouched. ``reuse`` serves
-    covered intervals and fetches the remainder; ``refresh`` replaces the requested
-    interval with the source's current answer. Bulk providers always read their
-    compiled store and require ``download()`` to replace it.
+    Parameters
+    ----------
+    selection : _Selection
+        Series to retrieve. fetch requires a nonempty selection from one provider.
+    start : str or datetime, default None
+        Required naive wall-clock endpoint in each source calendar. ISO date
+        strings begin at midnight. None and datetime.date objects are refused.
+    end : str, datetime or None, default None
+        Inclusive naive wall-clock endpoint. A bare ISO date includes that whole
+        date. None uses the caller machine's local date through its last instant.
+        A future end stays unchanged and adds one informational issue per provider.
+    receipts : bool, default False
+        Retain publisher payloads and store excerpts when True. Otherwise the
+        returned receipts.entries tuple is empty.
+    cache : {"bypass", "reuse", "refresh"}, default "bypass"
+        For live providers, bypass leaves the cache untouched, reuse serves held
+        coverage and fetches the remainder, and refresh replaces the requested
+        interval after successful retrieval. Bulk providers always read their
+        compiled store. They accept bypass and reuse, but refuse refresh.
+    on_issue : {"warn", "raise", "ignore"}, default "warn"
+        Handling for warning and error issues. Warn emits RuntimeWarning and
+        returns results. Raise raises IssuePolicyError. Ignore suppresses
+        notifications, not retained issues. Info does not activate this policy.
+
+    Returns
+    -------
+    ObservationResult
+        Five-column observation frame with native wall-clock time, per-row zone,
+        station_id, product_id and canonical value. Provenance, issues and optional
+        receipts accompany it. Source failures can yield partial or empty data
+        with issues. Successful retrieval does not establish continuous coverage.
+
+    Raises
+    ------
+    EmptySelectionError
+        If the selection is empty. The exception carries its reason.
+    MultiProviderSelectionError
+        If the selection contains more than one provider.
+    TypeError
+        If selection is not a RivRetrieve selection.
+    ValueError
+        If cache is not one of the supported modes.
+    InvalidObservationRequestError
+        If start is omitted, an endpoint is invalid or zone-aware, or start > end.
+    MissingCredentialError
+        If a selected provider lacks required credentials before source access.
+    ObservationsUnavailableError
+        If a provider has no observation stages.
+    ObservationStoreRefusedError
+        If an existing store cannot be validated.
+    IssuePolicyError
+        If on_issue="raise" and results carry warning or error issues.
+    FatalContractError
+        If a stage contract fails or refresh is requested for a bulk provider.
+        These errors are independent of on_issue.
+
+    Notes
+    -----
+    Daily products clip on native calendar dates. Other products clip on their
+    wall-clock labels. The engine pads source requests by two days at each end
+    and clips returned rows to the requested window. Unit conversion does not
+    compute a new hydrological product. Supplied credentials come from the
+    process environment or working directory .env file, not function arguments.
+    A missing compiled store returns an empty frame with bulk.store_missing,
+    a warning issue. No implicit download starts.
     """
     cache = _parse_cache_mode(cache)
     _require_selection(selection)
@@ -190,7 +421,66 @@ def fetch_by_provider(
     cache: CacheMode = "bypass",
     on_issue: OnIssue = "warn",
 ) -> dict[str, ObservationResult]:
-    """Retrieve each provider's selected series with the same cache mode as ``fetch``."""
+    """Retrieve a selection as separate results keyed by provider.
+
+    Parameters
+    ----------
+    selection : _Selection
+        Series to retrieve from zero or more providers.
+    start : str or datetime, default None
+        Required naive wall-clock endpoint in each source calendar. ISO date
+        strings begin at midnight. None and datetime.date objects are refused.
+    end : str, datetime or None, default None
+        Inclusive naive wall-clock endpoint. A bare ISO date includes that whole
+        date. None uses the caller machine's local date through its last instant.
+        A future end stays unchanged and adds one informational issue per provider.
+    receipts : bool, default False
+        Retain publisher payloads and store excerpts when True. Otherwise the
+        returned receipts.entries tuple is empty.
+    cache : {"bypass", "reuse", "refresh"}, default "bypass"
+        For live providers, bypass leaves the cache untouched, reuse serves held
+        coverage and fetches the remainder, and refresh replaces the requested
+        interval after successful retrieval. Bulk providers always read their
+        compiled store. They accept bypass and reuse, but refuse refresh.
+    on_issue : {"warn", "raise", "ignore"}, default "warn"
+        Handling for warning and error issues. Warn emits RuntimeWarning and
+        returns results. Raise raises IssuePolicyError. Ignore suppresses
+        notifications, not retained issues. Info does not activate this policy.
+
+    Returns
+    -------
+    dict[str, ObservationResult]
+        One result per selected provider, in provider-id order. An empty
+        selection returns {} without validating its window or credentials.
+        Each result uses the same schema and semantics as fetch.
+
+    Raises
+    ------
+    TypeError
+        If selection is not a RivRetrieve selection.
+    ValueError
+        If cache is not one of the supported modes.
+    InvalidObservationRequestError
+        If start is omitted, an endpoint is invalid or zone-aware, or start > end.
+    MissingCredentialError
+        If a selected provider lacks required credentials before source access.
+    ObservationsUnavailableError
+        If a provider has no observation stages.
+    ObservationStoreRefusedError
+        If an existing store cannot be validated.
+    IssuePolicyError
+        If on_issue="raise" and results carry warning or error issues.
+    FatalContractError
+        If a stage contract fails or refresh is requested for a bulk provider.
+        These errors are independent of on_issue.
+
+    Notes
+    -----
+    Credentials are checked for all selected providers before retrieval.
+    The issue policy runs after all provider results have been assembled.
+    A fatal contract error still aborts the call. This function does not
+    merge provider frames, whose station identifiers need not be globally unique.
+    """
     cache = _parse_cache_mode(cache)
     _require_selection(selection)
     partitions = _partition_by_provider(selection.series)
@@ -468,7 +758,26 @@ def _merge_provider_issues(results: tuple[ObservationResult, ...]) -> tuple[Issu
 
 
 def products(provider: str | None = None) -> list[str]:
-    """products : PackagedProductCatalogues × (ProviderId ∪ {None}) → list[ProductId]."""
+    """List canonical product identifiers from packaged catalogues.
+
+    Parameters
+    ----------
+    provider : str or None, default None
+        Registered provider identifier. None includes every provider.
+
+    Returns
+    -------
+    list[str]
+        Sorted, unique product identifiers. These are catalogue vocabulary,
+        not a guarantee that every station offers each product.
+
+    Raises
+    ------
+    UnknownProviderError
+        If provider is not registered.
+    FatalContractError
+        If a shipped declaration or catalogue is invalid.
+    """
     _ensure_default_providers_registered()
     provider_ids = _registry.list_provider_ids()
     if provider is not None and provider not in provider_ids:
@@ -507,25 +816,118 @@ def _ensure_default_providers_registered() -> None:
 
 
 def download(provider: str):
-    """Download and compile observations for one bulk provider by explicit consent."""
+    """Explicitly download and compile one bulk provider into the local cache.
+
+    Parameters
+    ----------
+    provider : str
+        Registered bulk provider identifier. Calling this function is consent
+        to transfer the publisher artifacts and compile them locally.
+
+    Returns
+    -------
+    ValidatedStore
+        Validated compiled store with its root, manifest and partition paths.
+        Successful certification replaces the previous store and deletes the
+        downloaded publisher artifacts. Their identities remain in the manifest.
+
+    Raises
+    ------
+    TypeError
+        If provider is not a nonempty string.
+    UnknownProviderError
+        If provider is not registered.
+    BulkOperationsUnavailableError
+        If provider is not a bulk provider.
+    InsufficientDiskSpaceError
+        If free space is below the declared requirement before any transfer.
+    FatalContractError
+        If a source response or store validation violates a contract.
+    StoreCertificationError
+        If compilation certification fails before publication.
+    StorePostCommitCleanupError
+        If publication succeeded but cleanup left residue. The new store remains
+        authoritative and the exception names the residue.
+    OSError
+        If local file operations fail.
+
+    Notes
+    -----
+    This call can transfer a national dataset. It is not needed for live
+    providers. Before publication, a failed compilation preserves the previous
+    store and publisher inputs. Use clear_cache explicitly for recovery.
+    Transport failures can also propagate rather than becoming result issues.
+    """
     from rivretrieve._internal.bulk import download as bulk_download
 
     return bulk_download(provider)
 
 
 def cache_status(provider: str):
-    """Return the local store status, size, and coverage for one provider."""
+    """Inspect one provider's local observation store without source access.
+
+    Parameters
+    ----------
+    provider : str
+        Registered provider identifier, for a live or bulk store.
+
+    Returns
+    -------
+    StoreStatus
+        Resolved path, presence, validated manifest and bytes on disk. Properties
+        expose format version, partition row counts, bulk source identity and
+        accumulated coverage where applicable. An absent store has no manifest,
+        zero bytes and empty coverage. Coverage is retrieval history, not continuity.
+
+    Raises
+    ------
+    TypeError
+        If provider is not a nonempty string.
+    UnknownProviderError
+        If provider is not registered.
+    ObservationStoreRefusedError
+        If an existing store is invalid or interrupted publication needs recovery.
+    OSError
+        If local file operations fail.
+    """
     from rivretrieve._internal.bulk import cache_status as bulk_cache_status
 
     return bulk_cache_status(provider)
 
 
 def clear_cache(provider: str):
-    """Delete a provider's compiled observation store or accumulated live store and recovery inputs.
+    """Delete one provider's compiled observation store or accumulated live store.
 
-    This explicit destructive action removes preserved pending publisher downloads and
-    accumulated-write staging/backup directories, allowing a retry after interrupted
-    retrieval or failed compilation.
+    Parameters
+    ----------
+    provider : str
+        Registered provider identifier. This call is explicit destructive consent.
+
+    Returns
+    -------
+    CacheClearResult
+        Provider identifier, store path, whether anything existed, total bytes
+        removed and every removed path. Includes recognized pending publisher
+        downloads and accumulated-write staging or backup directories.
+
+    Raises
+    ------
+    TypeError
+        If provider is not a nonempty string.
+    UnknownProviderError
+        If provider is not registered.
+    BulkArtifactCleanupRefusedError
+        If the pending-download namespace is symlinked or contains an unsafe entry.
+    OSError
+        If deletion fails. This operation is not transactional.
+
+    Notes
+    -----
+    This destructive action also removes preserved pending publisher downloads
+    and accumulated-write staging or backup directories, allowing a retry after
+    interrupted retrieval or failed compilation. It does not download replacement
+    data. It removes symlinks themselves rather than following them.
+    Unrelated sibling paths are not removed.
     """
     from rivretrieve._internal.bulk import clear_cache as bulk_clear_cache
 

@@ -74,6 +74,47 @@ class ObservationRequest:
 
 
 class ObservationProvenance(BaseModel):
+    """Source and request facts that accompany observations.
+
+    Attributes
+    ----------
+    source : str
+        Observation source identifier, including "local" for compiled stores.
+    provider_id : ProviderId
+        Provider identity for every row in the observation frame.
+    rivretrieve_version, catalogue_version : str or None
+        Software and packaged catalogue versions when recorded.
+    license, citation : str or None
+        Established source terms and credit. None means not established here.
+    requested_at, retrieved_at : datetime or None
+        UTC request instant and latest known source retrieval instant.
+    request : dict[str, object] or None
+        Selected series and resolved start and end wall-clock endpoints.
+    calls_made : tuple[dict[str, object], ...]
+        Ordered source-call origins and sanitized prerequisite exchange events.
+    time_windows : tuple[dict[str, object], ...]
+        Additional window metadata. The current engine leaves this tuple empty.
+    decomposition : tuple[str, ...]
+        Additional decomposition metadata. The current engine leaves this tuple
+        empty. Unit conversion currently emits no informational result issue.
+    endpoints : tuple[str, ...]
+        Distinct source URLs used by retained call metadata.
+    query : dict[str, object] or None
+        Executed local-query description when applicable.
+    response_version, metadata : str or None
+        Optional source response version and metadata text.
+    served_intervals : tuple[CoverageInterval, ...]
+        Held intervals served from an accumulated store, with retrieval instants.
+    source_vintage : datetime.date or None
+        Source-stated bulk release date, not a freshness verdict.
+    publisher_artifact_checksum : str or None
+        Checksum of the first publisher artifact for compiled-store provenance.
+    publisher_artifact_checksums, publisher_artifact_urls : tuple[str, ...]
+        Ordered identities of all compiled publisher artifacts.
+    acquisition_provenance : CatalogueEvidence or None
+        Normalized evidence for the packaged catalogue, not observation quality.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     source: str
@@ -112,6 +153,19 @@ class ReceiptAuthorship(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ReceiptEntry:
+    """Retained bytes with an origin and explicit authorship.
+
+    Attributes
+    ----------
+    content : bytes
+        Exact provider parse input, or a store excerpt for StoreExcerptReceipt.
+    origin : SourceCallOrigin
+        Source-call facts with explicit unknown states and no request headers.
+    authorship : ReceiptAuthorship
+        publisher_payload identifies source-authored bytes. store_excerpt
+        identifies rows encoded by RivRetrieve, not a publisher response.
+    """
+
     content: bytes
     origin: SourceCallOrigin
     authorship: ReceiptAuthorship
@@ -127,7 +181,21 @@ class ReceiptEntry:
 
 @dataclass(frozen=True, slots=True)
 class StoreExcerptReceipt(ReceiptEntry):
-    """A faithful Parquet re-encoding of rows returned by a store query."""
+    """A Parquet re-encoding of the exact rows returned by a store query.
+
+    Attributes
+    ----------
+    content, origin, authorship
+        ReceiptEntry fields. Authorship is always store_excerpt.
+    store_path : StoreRoot
+        Local store queried.
+    executed_query : ExecutedStoreQuery
+        Product, year, station and closed wall-clock predicates used by the scan.
+    format_version : int
+        Store layout revision, 2 for compiled or 4 for accumulated stores.
+    source_vintage : datetime.date or None
+        Bulk release date. None for an accumulated store.
+    """
 
     store_path: StoreRoot
     executed_query: ExecutedStoreQuery
@@ -150,6 +218,16 @@ class StoreExcerptReceipt(ReceiptEntry):
 
 @dataclass(frozen=True, slots=True)
 class Receipts:
+    """Optional byte receipts for one provider.
+
+    Attributes
+    ----------
+    provider_id : ProviderId
+        Provider identity shared by the entries.
+    entries : tuple[ReceiptEntry, ...]
+        Retained entries. Empty by default and when retrieval omits receipts.
+    """
+
     provider_id: ProviderId
     entries: tuple[ReceiptEntry, ...] = ()
 
@@ -159,6 +237,24 @@ class Receipts:
 
 
 class ObservationResult(BaseModel):
+    """Observations and their traceability for one provider.
+
+    Attributes
+    ----------
+    data : polars.DataFrame
+        Columns in order: time (naive Datetime), time_zone (String), station_id
+        (String), product_id (String), value (nullable Float64). Time is the source
+        wall-clock label paired with its published zone or "unknown". Values use
+        canonical units: discharge in m3/s, stage in m and temperature in degC.
+        A null value differs from an absent row. Provider identity is in provenance.
+    provenance : ObservationProvenance
+        Request, source and catalogue evidence.
+    issues : tuple[Issue, ...]
+        Retained findings, including source failures and request information.
+    receipts : Receipts
+        Optional parse inputs and store excerpts, empty unless requested.
+    """
+
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     data: pl.DataFrame
@@ -175,9 +271,31 @@ class ObservationResult(BaseModel):
         return values
 
     def to_polars(self) -> pl.DataFrame:
+        """Return the result's observation frame without copying.
+
+        Returns
+        -------
+        polars.DataFrame
+            The same frame as data, with time, time_zone, station_id, product_id
+            and value. Provenance, issues and receipts stay on the result.
+        """
         return self.data
 
     def to_pandas(self) -> Any:
+        """Convert the observation frame to a pandas DataFrame.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The five observation columns. Conversion follows Polars to_pandas
+            defaults, including pandas representation of nulls. Provenance, issues
+            and receipts stay on the result.
+
+        Raises
+        ------
+        ImportError
+            If a dependency required by Polars to_pandas is unavailable.
+        """
         return self.data.to_pandas()
 
 

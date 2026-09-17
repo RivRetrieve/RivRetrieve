@@ -246,6 +246,27 @@ class SourceQuery:
 
 @dataclass(frozen=True, slots=True)
 class SourceCallOrigin:
+    """Source-call facts carried with retained receipt bytes.
+
+    Attributes
+    ----------
+    url : str or UnknownOriginFact
+        Source URL when applicable.
+    request_parameters : Mapping[str, SourceCallParameter] or UnknownOriginFact
+        Source query parameters. Request headers are never stored here.
+    status_code : int or UnknownOriginFact
+        Source response status when applicable.
+    retrieved_at : datetime or UnknownOriginFact
+        UTC source retrieval instant when established.
+    content_type : str or UnknownOriginFact
+        Published content type when established.
+    source_path : str or UnknownOriginFact
+        Local input path when applicable.
+    query : SourceQuery or UnknownOriginFact
+        Executed local statement and parameters when applicable. UnknownOriginFact
+        carries a reason rather than filling an inapplicable fact by assumption.
+    """
+
     url: str | UnknownOriginFact
     request_parameters: Mapping[str, SourceCallParameter] | UnknownOriginFact
     status_code: int | UnknownOriginFact

@@ -171,7 +171,25 @@ class EvidenceHeader(_EvidenceModel):
 
 
 class CatalogueEvidence(_EvidenceModel):
-    """Validated normalized evidence; JSON uses one array per physical column."""
+    """Validated catalogue evidence in normalized Polars relations.
+
+    Attributes
+    ----------
+    header : EvidenceHeader
+        Versioned source declarations, exact terms, acquisition descriptions,
+        transformations, withheld facts and identities of the five relations.
+    facts : polars.DataFrame
+        Fact identities and station/product locators.
+    acquisitions : polars.DataFrame
+        Source-local acquisition identities, methods, times and recordings.
+    bindings : polars.DataFrame
+        Links between output groups, sources, acquisitions and transformations.
+    binding_facts : polars.DataFrame
+        Ordered fact membership for each binding.
+    external_inputs : polars.DataFrame
+        Exact ordered input facts for transformations. JSON serialization uses
+        one array per physical column and is explicit, not part of discovery.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
     header: EvidenceHeader

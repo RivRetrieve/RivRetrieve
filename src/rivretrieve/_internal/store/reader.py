@@ -115,6 +115,32 @@ class StorePresence(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class StoreStatus:
+    """Validated local-store presence and size without source access.
+
+    Attributes
+    ----------
+    store : StoreRoot
+        Resolved local store path, also exposed as root.
+    provider_id : ProviderId
+        Provider whose store was inspected.
+    presence : StorePresence
+        absent or present. The exists property reports the same distinction.
+    manifest : StoreManifest, AccumulatedStoreManifest or None
+        Validated manifest when present.
+    bytes_on_disk : int
+        Total regular-file bytes under the store, zero when absent.
+    coverage : tuple[CoverageInterval, ...]
+        Property exposing accumulated-store retrieval history, otherwise empty.
+    partition_row_counts : Mapping[PartitionIdentifier, int]
+        Property exposing physical row counts, empty when absent.
+    format_version, compiler_version, built_at, source_vintage
+        Properties exposing applicable manifest fields, otherwise None.
+    publisher_artifact_url, publisher_artifact_checksum, source_schema_fingerprint
+        Compiled-store identity properties, otherwise None.
+    publisher_artifact_urls, publisher_artifact_checksums : tuple
+        Ordered identities for all compiled artifacts, otherwise empty.
+    """
+
     store: StoreRoot
     provider_id: ProviderId
     presence: StorePresence

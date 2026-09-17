@@ -62,6 +62,32 @@ class PublisherArtifact:
 
 @dataclass(frozen=True, slots=True)
 class StoreManifest:
+    """Manifest of a compiled bulk store.
+
+    Attributes
+    ----------
+    format_version : int
+        Compiled layout revision, 2.
+    provider_id : ProviderId
+        Provider whose native observations are stored.
+    compiler_version : str
+        Software version used to compile the store.
+    built_at : datetime
+        UTC build instant.
+    source_vintage : datetime.date
+        Source-stated release date.
+    publisher_artifact : PublisherArtifact
+        First publisher artifact identity, retained for single-artifact access.
+    publisher_artifacts : tuple[PublisherArtifact, ...]
+        Ordered artifact URLs and SHA-256 checksums. These identify deleted inputs.
+    source_schema : SourceSchema
+        Native column names, types and schema fingerprint.
+    source_column_dispositions : tuple[SourceColumnDisposition, ...]
+        Retained, reconstructible or deliberately discarded fields and rationale.
+    partition_row_counts : Mapping[PartitionIdentifier, int]
+        Exact physical row counts keyed by product/year.
+    """
+
     format_version: Literal[2]
     provider_id: ProviderId
     compiler_version: str
@@ -79,6 +105,22 @@ class StoreManifest:
 
 @dataclass(frozen=True, slots=True)
 class AccumulatedStoreManifest:
+    """Manifest of accumulated live parse output.
+
+    Attributes
+    ----------
+    format_version : int
+        Accumulated layout revision, 4.
+    provider_id : ProviderId
+        Provider whose native observations are stored.
+    built_at : datetime
+        UTC store write instant.
+    coverage : tuple[CoverageInterval, ...]
+        Successfully retrieved series intervals and source retrieval instants.
+    partition_row_counts : Mapping[PartitionIdentifier, int]
+        Exact physical row counts keyed by product/year.
+    """
+
     format_version: Literal[4]
     provider_id: ProviderId
     built_at: datetime
@@ -91,6 +133,18 @@ class AccumulatedStoreManifest:
 
 @dataclass(frozen=True, slots=True)
 class ValidatedStore:
+    """A store whose manifest and physical partitions passed validation.
+
+    Attributes
+    ----------
+    root : StoreRoot
+        Resolved local store path.
+    manifest : StoreManifest or AccumulatedStoreManifest
+        Validated manifest. download returns a compiled StoreManifest.
+    partition_files : Mapping[PartitionIdentifier, pathlib.Path]
+        Read-only product/year partition paths.
+    """
+
     root: StoreRoot
     manifest: StoreManifest | AccumulatedStoreManifest
     partition_files: Mapping[PartitionIdentifier, Path]

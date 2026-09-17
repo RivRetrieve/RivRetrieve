@@ -1,49 +1,50 @@
 # RivRetrieve
 
-A Python package for downloading global river gauge data.
+RivRetrieve retrieves river-gauge observations through a shared Python API.
+It harmonises identifiers, units and returned columns. It leaves source quality
+judgements and study suitability to the reader.
 
-## Installation
+## Install
+
+Requires Python 3.13 or later. In your Python project:
 
 ```bash
-pip install rivretrieve
-pip install "rivretrieve[map]"  # optional station-map backend
+uv add rivretrieve
 ```
 
-## Usage
+For optional station maps, use `uv add "rivretrieve[map]"`.
+
+## First retrieval
+
+This example requests one day of USGS daily mean discharge. It requires network access,
+not credentials. Discovery reads the packaged catalogue.
 
 ```python
 import rivretrieve as rr
 
-rr.providers()
-rr.stations()
-rr.products()
+selection = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+selection = rr.pick(selection, station="07374000")
+print(rr.as_frame(selection))
 
-provider = rr.provider("ch_foen")
-provider.stations()
-provider.products()
-provider.station_products()
-
-station_map = rr.map_stations(providers="ch_foen")
+result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True)
+print(result.data)
+print(result.issues)
+print(result.provenance)
 ```
 
-`ch_foen` currently provides catalogue data only. Observation retrieval is unavailable until its
-provider pipeline is ported to the engine stage contracts.
+The result contains a Polars frame with `time`, `time_zone`, `station_id`, `product_id`
+and `value`. Discharge values use m³/s. Read timestamps together with their zone column.
+Inspect issues even when retrieval returns rows. A successful call does not establish
+continuous records or scientific comparability.
 
 ## Documentation
 
-Developer documentation is indexed in [`docs/README.md`](docs/README.md).
+Start with the [documentation index](docs/README.md).
 
-## Development
+- [Usage](docs/usage.md): selections, results, windows, issues, credentials, cache and receipts.
+- [Recent streamflow for CAMELS-US gauges](docs/examples/camels-us.md).
+- [Public API and software reference](docs/reference.md).
+- [Architecture](docs/architecture.md): responsibilities, a traced request and contracts.
 
-```bash
-uv run pytest                  # run tests
-uv run ruff check --fix        # lint
-uv run ruff format             # format
-```
-
-## Adding Dependencies
-
-```bash
-uv add <package>               # runtime dependency
-uv add --group dev <package>   # dev dependency
-```
+Potential-provider suggestions can include source links and relevant access information
+in a [GitHub issue](https://github.com/RivRetrieve/RivRetrieve/issues).
