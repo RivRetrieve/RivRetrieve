@@ -75,8 +75,10 @@ The following trace describes that recording, not a new live check or a guarante
 4. **Fetch source bytes.** The USGS declaration selects the `dv` endpoint, parameter `00060`, and statistic `00003`.
    Fetch sends `sites=07374000`, `startDT=2022-12-30`, and `endDT=2023-01-03`, with `format=json`.
    The recording matches that complete request at `https://waterservices.usgs.gov/nwis/dv/`.
-5. **Parse native rows.** Parse checks the returned station, parameter, statistic, and unit against the declared product.
-   The payload publishes five daily values in `ft3/s`, with naive midnight labels.
+5. **Parse native rows.** Parse uses the payload's tagged station-product pair and configured product semantics.
+   It reads numeric values, the no-data marker and timestamps, then attaches the tagged identifiers.
+   It does not validate the returned station, parameter, statistic or unit metadata.
+   The recording publishes five daily values in `ft3/s`, with naive midnight labels.
    Parse retains those labels and sets `time_zone` to `unknown` rather than deriving a zone from station metadata.
 6. **Convert and clip.** The shared convert stage multiplies discharge by `0.028316846592` to return m³/s.
    It clips daily products by their calendar dates and removes the four extra days.

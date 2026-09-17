@@ -570,17 +570,18 @@ Convert observation labels to UTC using each row's published zone.
 
 - **ObservationResult**
   New result with naive UTC time values and time_zone="+00:00" on every row.
-  Data keeps its five columns and timestamp precision. Provenance, issues
-  and receipts are unchanged. The input is not modified.
+  Data keeps its five columns and timestamp dtype. Conversion uses Python
+  datetime values with microsecond precision, so submicrosecond precision
+  is not preserved. Provenance, issues and receipts are unchanged.
+  The input is not modified.
 
 #### Raises
 
 - **FatalContractError**
   If any row has time_zone="unknown". The error gives the provider and count.
 - **ValueError**
-  If a zone value violates the zone vocabulary.
-- **zoneinfo.ZoneInfoNotFoundError**
-  If an IANA zone cannot be resolved by the local timezone database.
+  If a zone value violates the zone vocabulary or an IANA zone cannot
+  be resolved by the local timezone database.
 
 #### Notes
 
