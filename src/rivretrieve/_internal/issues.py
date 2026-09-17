@@ -7,6 +7,22 @@ from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProviderId
 
 
 class Issue(BaseModel):
+    """A retained finding distinct from a fatal contract exception.
+
+    Attributes
+    ----------
+    severity : {"info", "warning", "error"}
+        Finding severity. Only warning and error activate the caller issue policy.
+    code : str
+        Machine-readable classification.
+    message : str
+        Human-readable finding.
+    details : dict[str, object] or None
+        Structured context, such as station, product and source failure reason.
+    provider_id : ProviderId or None
+        Provider responsible for the affected series when known.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     severity: IssueSeverity

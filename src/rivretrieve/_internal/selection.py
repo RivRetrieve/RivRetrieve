@@ -77,6 +77,34 @@ class _EmptyReason:
 
 @dataclass(frozen=True, slots=True)
 class _Series:
+    """One selectable station-product pair and its packaged catalogue facts.
+
+    Attributes
+    ----------
+    provider_id, station_id, product_id : str
+        Exact series identity. Station identifiers are provider-scoped strings.
+    latitude, longitude : float
+        Station coordinates interpreted with crs.
+    crs : str
+        Published EPSG reference identifier or "unknown".
+    observed_property, frequency, statistic : str
+        Canonical product quantity, sampling frequency and published statistic.
+    period_type, period_anchor : str
+        Published temporal support and label anchor, including explicit unknowns.
+    unit : str
+        Canonical output unit, not necessarily the source's original unit.
+    native_id : str or None
+        Source product identifier when established.
+    availability : {"available", "unknown"}
+        Packaged pair availability. Neither value promises present-day retrieval.
+    availability_reason : str or None
+        Recorded explanation for unknown availability.
+    published_record_start_date, published_record_end_date : datetime.date or None
+        Source-stated record bounds. They do not establish continuity or limit fetch.
+    last_catalogue_check : datetime.date
+        Recorded catalogue check date, not a live status.
+    """
+
     provider_id: str
     station_id: str
     product_id: str
@@ -99,6 +127,21 @@ class _Series:
 
 @dataclass(frozen=True, slots=True)
 class _Selection:
+    """An immutable selection of packaged station-product series.
+
+    Attributes
+    ----------
+    series : tuple[_Series, ...]
+        Sorted, unique series keys with catalogue facts. Use as_frame to inspect.
+    empty_reason : _EmptyReason or None
+        Present exactly when series is empty. Its code is no_catalogue_edge,
+        not_in_selection or empty_frame, with requested identities and any
+        published_products retained for explanation.
+    acquisition_provenance : tuple[CatalogueEvidence, ...]
+        Provider-scoped normalized catalogue evidence. It does not certify
+        continuous observation history.
+    """
+
     series: tuple[_Series, ...]
     empty_reason: _EmptyReason | None = None
     acquisition_provenance: tuple[CatalogueEvidence, ...] = ()

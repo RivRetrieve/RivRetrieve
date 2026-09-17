@@ -12,7 +12,14 @@ _PRECISION = timedelta(microseconds=1)
 
 @dataclass(frozen=True, slots=True)
 class RequestedInterval:
-    """A closed native wall-clock interval at the store's microsecond precision."""
+    """A closed native wall-clock interval at microsecond precision.
+
+    Attributes
+    ----------
+    start, end : datetime
+        Naive endpoints, including both boundaries. Start must not exceed end.
+        These are source calendar labels rather than absolute UTC instants.
+    """
 
     start: datetime
     end: datetime
@@ -26,6 +33,21 @@ class RequestedInterval:
 
 @dataclass(frozen=True, slots=True)
 class CoverageInterval:
+    """A successfully retrieved interval, including a successful empty answer.
+
+    Attributes
+    ----------
+    station_id : str
+        Source station identifier.
+    product_id : ProductId
+        Canonical product identifier.
+    interval : RequestedInterval
+        Closed naive native wall-clock interval with start and end datetimes.
+    retrieved_at : datetime
+        UTC instant when the source was queried successfully. This is not a
+        continuity or freshness claim.
+    """
+
     station_id: str
     product_id: ProductId
     interval: RequestedInterval

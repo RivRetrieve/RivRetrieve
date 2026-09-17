@@ -11,6 +11,36 @@ from rivretrieve._internal.observations import ObservationResult
 
 
 def to_utc(result: ObservationResult) -> ObservationResult:
+    """Convert observation labels to UTC using each row's published zone.
+
+    Parameters
+    ----------
+    result : ObservationResult
+        Result whose time_zone values are established IANA identifiers or
+        fixed offsets. Unknown zones are refused before converting any row.
+
+    Returns
+    -------
+    ObservationResult
+        New result with naive UTC time values and time_zone="+00:00" on every row.
+        Data keeps its five columns and timestamp precision. Provenance, issues
+        and receipts are unchanged. The input is not modified.
+
+    Raises
+    ------
+    FatalContractError
+        If any row has time_zone="unknown". The error gives the provider and count.
+    ValueError
+        If a zone value violates the zone vocabulary.
+    zoneinfo.ZoneInfoNotFoundError
+        If an IANA zone cannot be resolved by the local timezone database.
+
+    Notes
+    -----
+    No station catalogue or coordinate lookup is used. IANA conversions use
+    Python timezone rules and the default fold for ambiguous labels. This does
+    not establish a daily product's day definition or make series comparable.
+    """
     unknown_count = result.data["time_zone"].eq("unknown").sum()
     if unknown_count:
         raise FatalContractError(
