@@ -39,20 +39,5 @@ create it. Returned discharge uses m³/s. The timestamps retain source calendar 
 paired with source-established zones or `unknown`. An unknown zone does not justify
 assuming UTC. See [request windows](../usage.md#request-windows-and-utc).
 
-Inspect issues, null values and dates before joining observations to a study.
-An absent observation does not identify its cause. A source failure does not establish
-an empty hydrological record. Row counts alone do not certify completeness or quality.
-This example does not recover CAMELS quality flags, infill records, extend forcing,
-convert discharge to basin-depth units, or produce a CAMELS-compatible export.
-
-## Validation
-
-A live public-API check on 2026-09-17 requested these three gauges for all of 2025.
-It returned 1,095 rows, with 365 per gauge, `time_zone="unknown"` and no issues.
-That observation describes that call, not future availability or scientific quality.
-No retrieved dataset is distributed with these pages.
-
-The repeatable documentation test checks these gauge selections offline. A separate
-historical replay executes the [README retrieval](../../README.md#first-retrieval) for
-station `07374000` on 2023-01-01 using committed USGS response bytes. That station is
-not asserted to be a CAMELS member. The replay does not establish 2025 availability.
+Inspect dates, null values and issues before combining the observations with existing
+CAMELS records. Check whether each gauge returned the period your study needs.

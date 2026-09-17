@@ -64,5 +64,6 @@ uv run pytest -q tests/test_documentation.py
 ```
 
 The tests replay committed source bytes through the public API. They do not test current
-service availability. The [example](examples/camels-us.md#validation) records the separate
-live check. Hosting is deferred and is not delivered by these pages.
+service availability. Validation evidence is recorded in the
+[documentation PR](https://github.com/RivRetrieve/RivRetrieve/pull/246).
+Hosting is deferred and is not delivered by these pages.
