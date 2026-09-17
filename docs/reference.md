@@ -697,7 +697,7 @@ Observations and their traceability for one provider.
 - **provenance : ObservationProvenance**
   Request, source and catalogue evidence.
 - **issues : tuple[Issue, ...]**
-  Retained findings, including source failures and informational conversions.
+  Retained findings, including source failures and request information.
 - **receipts : Receipts**
   Optional parse inputs and store excerpts, empty unless requested.
 
