@@ -2,15 +2,12 @@
 
 [Documentation index](../README.md) · [Usage](../usage.md)
 
-A study extending CAMELS-US may need more recent streamflow observations.
-RivRetrieve can request USGS daily mean discharge for selected gauges. The returned data
-are a starting point for that work, not an extended CAMELS dataset.
+This example retrieves 2025 daily streamflow for three CAMELS-US gauges. Researchers
+can use it as a starting point for extending the dataset beyond 2010.
 
-Newman et al. (2015), [section 2.2](https://doi.org/10.5194/hess-19-209-2015), describes
-671 basins and daily USGS streamflow for 1980–2010. Some records were shorter.
-That study period is not a claim about the endpoint of later CAMELS-US releases.
-The official [CAMELS record](https://doi.org/10.5065/D6MW2F4D) links to the
-[gauge-name file](https://zenodo.org/records/15529996/files/camels_name.txt) used here.
+The gauge names come from the [CAMELS gauge list](https://zenodo.org/records/15529996/files/camels_name.txt)
+in the [official CAMELS record](https://doi.org/10.5065/D6MW2F4D).
+See [Newman et al. (2015)](https://doi.org/10.5194/hess-19-209-2015) for the study.
 
 | Station ID | Name in CAMELS |
 |---|---|
