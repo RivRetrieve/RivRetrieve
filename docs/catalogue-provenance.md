@@ -55,7 +55,7 @@ pinned by `tests/test_provider_row_withholding.py`.
 ## Current certification boundary
 
 `ORIGIN_GATE_ENROLLED_PROVIDERS` in `catalogue_origins.py` is the executable certification boundary.
-[ADR 0012](adr/0012-a-catalogue-column-declares-its-origin.md) records the original deferral boundary.
+Every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS` has complete audited catalogue origin declarations.
 `no_nve` is enrolled after gaining a committed attested native table and complete origin declarations.
 `br_ana` is enrolled after an attested inventory union and explicit Fluviometrica projection.
 All acquired source rows remain in its native table. It publishes two adopted telemetry products
@@ -97,14 +97,13 @@ remain source facts. No build clock enters the descriptor.
 
 ## Observation evidence
 
-Observation fixtures follow [ADR 0024](adr/0024-an-observation-fixture-is-a-recording.md). That ADR,
-not this catalogue procedure, owns exact request replay and the rule against treating constructed
-payloads or retired implementations as source evidence.
+Observation fixtures record real source interactions. The [recording implementation](../src/rivretrieve/_internal/recordings.py)
+replays exact requests. Constructed payloads and retired implementations do not establish
+source evidence. See [verification](architecture.md#evidence-and-verification) for the testing contracts.
 
 ## Public metadata migration: schema version 3
 
-[ADR 0028](adr/0028-catalogue-evidence-is-normalized-once.md) and the
-[versioned evidence profile](catalogue-evidence.md#profile-3) document the explicit
+The [versioned evidence profile](catalogue-evidence.md#profile-3) documents the explicit
 metadata migration. The descriptor is now bounded: it describes exact relational
 files rather than repeating the national acquisition graph as JSON-LD nodes.
 Resolving an individual fact or pair is an explicit offline relation traversal.

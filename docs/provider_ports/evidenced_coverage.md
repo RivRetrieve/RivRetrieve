@@ -108,8 +108,7 @@ This is an explicit metadata migration, not RDF-isomorphic compression. `find` a
 `fetch` signatures and observation tables are unchanged. Nested acquisition metadata
 now uses `CatalogueEvidence.header` and five Polars relations, without old nested
 aliases. `describe` returns the bounded profile-3 JSON-LD. Strict v2 file/build inputs
-normalize to the new carrier. See [profile 3](../catalogue-evidence.md) and
-[ADR 0028](../adr/0028-catalogue-evidence-is-normalized-once.md).
+normalize to the new carrier. See [profile 3](../catalogue-evidence.md).
 
 The intermediate eager-loader measurements were 989,364,224 bytes peak RSS for a
 three-pair USGS selection and 1,357,758,464 bytes for France selection/description on

@@ -2,7 +2,7 @@
 
 The three literals of every probe below were authored from the committed recordings and
 the NVE HydAPI documentation by an author with no access to the port's code or output,
-as ADR 0024 requires. They are pasted verbatim.
+as the source-recording contract requires. They are pasted verbatim.
 """
 
 from datetime import datetime

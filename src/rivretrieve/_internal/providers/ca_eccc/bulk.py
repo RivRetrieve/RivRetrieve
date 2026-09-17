@@ -172,7 +172,7 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
 
     Success atomically replaces the previous store and deletes the SQLite artifact.
     Pre-commit failures restore both. A typed post-commit cleanup failure keeps the
-    validated new store authoritative and reports residue, as required by ADR 0021.
+    validated new store authoritative and reports residue.
     """
     artifact = Path(request.publisher_artifact)
     schema = _declared_schema()

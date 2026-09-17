@@ -27,7 +27,6 @@ The pages above describe current software. Earlier design documents preserve the
 at their recorded revision. Their API names, provider counts and execution details can be
 superseded. Use them as history rather than as current usage instructions.
 
-- [Accepted architecture decisions](adr/).
 - [Domain vocabulary](../CONTEXT.md). Historical operational counts are not a capability census.
 - [Catalogue provenance](catalogue-provenance.md).
 - [Provider port evidence](provider_ports/) and [evidenced inventory account](provider_ports/evidenced_coverage.md).

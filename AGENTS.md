@@ -4,7 +4,7 @@ A rule appears in this file only if (a) it encodes a project choice that cannot 
 
 ## 0. Project Overview
 
-RivRetrieve provides faithful, traceable access to river-gauge data from national hydrology agencies through one consistent shape. It harmonises objective identity and physics while leaving source judgement uninterpreted. Domain terms are defined in [`CONTEXT.md`](CONTEXT.md), and architectural decisions are recorded in [`docs/adr/`](docs/adr/).
+RivRetrieve provides faithful, traceable access to river-gauge data from national hydrology agencies through one consistent shape. It harmonises objective identity and physics while leaving source judgement uninterpreted. Domain terms are defined in [`CONTEXT.md`](CONTEXT.md), and the architecture is described in [`docs/architecture.md`](docs/architecture.md).
 
 ## 1. Python Environment
 
