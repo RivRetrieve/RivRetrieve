@@ -896,7 +896,7 @@ def cache_status(provider: str):
 
 
 def clear_cache(provider: str):
-    """Delete one provider's observation store and recognized recovery inputs.
+    """Delete one provider's compiled observation store or accumulated live store.
 
     Parameters
     ----------
@@ -923,8 +923,11 @@ def clear_cache(provider: str):
 
     Notes
     -----
-    Does not download replacement data. Removes symlinks themselves rather
-    than following them. Unrelated sibling paths are not removed.
+    This destructive action also removes preserved pending publisher downloads
+    and accumulated-write staging or backup directories, allowing a retry after
+    interrupted retrieval or failed compilation. It does not download replacement
+    data. It removes symlinks themselves rather than following them.
+    Unrelated sibling paths are not removed.
     """
     from rivretrieve._internal.bulk import clear_cache as bulk_clear_cache
 
