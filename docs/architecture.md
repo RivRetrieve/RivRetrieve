@@ -44,7 +44,8 @@ Providers consume those renderings without shifting their bounds.
 
 ## A recorded USGS request
 
-The existing [publisher-receipt test](../tests/test_receipts_publisher_payload.py) traces this public request:
+The [retrieval entry point](../src/rivretrieve/_internal/discovery.py) sends this request
+through the [shared driver](../src/rivretrieve/_internal/driver.py):
 
 ```python
 import rivretrieve as rr
@@ -62,9 +63,8 @@ result = rr.fetch(
 )
 ```
 
-Running these calls normally contacts USGS.
-The test substitutes a request-matching replay transport and uses a committed real-source recording.
-The following trace describes that recording, not a new live check or a guarantee about today's response.
+Running these calls contacts USGS. The trace below follows the saved source response
+for this request.
 
 1. **Select a catalogue series.** `find` checks the provider, station, and product against the packaged catalogue.
    The station identifier remains a string, including its leading zero.
@@ -188,14 +188,17 @@ Replay refuses a request that has no matching recording, so changed request boun
 Boundary probes assert source-checkable counts and first and last native labels.
 These checks establish behavior against recorded interactions, not current service availability.
 
-The implementation has separate tests for complementary contracts:
+### Verification tests
 
-- [Engine contracts](../tests/test_internal_engine_contracts.py) check typed windows, payloads, and row shapes.
-- [Window planning](../tests/test_internal_window_planning.py) checks shared splitting and rendering.
-- [Source-failure isolation](../tests/test_source_failure_isolation.py) checks partial results and retained diagnostics.
-- [Live cache](../tests/test_live_cache.py) checks reuse, refresh, coverage, and receipts.
-- [Store conformance](../tests/test_observation_store_conformance.py) checks native storage and shared reads.
-- [Catalogue evidence](../tests/test_catalogue_evidence.py) checks the normalized evidence contract.
+These links open tests rather than implementation modules:
+
+- [Publisher-receipt tests](../tests/test_receipts_publisher_payload.py) replay the USGS request traced above.
+- [Engine-contract tests](../tests/test_internal_engine_contracts.py) check typed windows, payloads, and row shapes.
+- [Window-planning tests](../tests/test_internal_window_planning.py) check shared splitting and rendering.
+- [Source-failure tests](../tests/test_source_failure_isolation.py) check partial results and retained diagnostics.
+- [Live-cache tests](../tests/test_live_cache.py) check reuse, refresh, coverage, and receipts.
+- [Store-conformance tests](../tests/test_observation_store_conformance.py) check native storage and shared reads.
+- [Catalogue-evidence tests](../tests/test_catalogue_evidence.py) check the normalized evidence contract.
 
 ## Decision record
 
