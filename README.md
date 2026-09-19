@@ -1,50 +1,141 @@
 # RivRetrieve
 
-RivRetrieve retrieves river-gauge observations through a shared Python API.
-It harmonises identifiers, units and returned columns. It leaves source quality
-judgements and study suitability to the reader.
+Find and download river data from national agencies around the world, through one consistent
+Python interface.
+
+## River data and where to find them
+
+RivRetrieve connects you to river data from over 67,000 gauging stations across 12 national agencies,
+through one Python interface. The map below shows where those providers are, with darker shading
+indicating more gauges.
+
+![Countries with supported providers, shaded by gauge count on a logarithmic scale; counts are listed in the provider table below.](docs/assets/coverage-map.png)
+
+*Boundaries: [Natural Earth](https://www.naturalearthdata.com/). Their depiction implies no position on territorial status.*
+
+RivRetrieve focuses on time series of streamflow (discharge), stage and water temperature.
+It harmonises identifiers, units and returned columns, and records the source of retrieved observations.
+It leaves source quality judgements and study suitability to the reader. Think of RivRetrieve as
+a bridge between the original provider and the user.
+
+Some providers require credentials. See the [usage guide](docs/usage.md#supplied-credentials)
+for how to supply them.
+
+<details>
+<summary>All 12 providers</summary>
+
+| Country | Agency | Provider | Stations | Access |
+|---|---|---|---:|---|
+| Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | open |
+| Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | credentials |
+| Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | open |
+| Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | open |
+| France | Hub'Eau / HydroPortail | `fr_hubeau` | 7,323 | open |
+| Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | open |
+| Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | open |
+| Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | API key |
+| Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | open |
+| Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 246 | open |
+| Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | open |
+| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | open |
+
+</details>
+
+South Africa's Department of Water and Sanitation (`za_dws`) is in the catalogue with 2,905
+stations, but its observations cannot be retrieved yet.
+
+Our hope is that this map keeps filling up. Know a data source we're missing? Let us know:
+potential-provider suggestions can include source links and relevant access information
+in a [GitHub issue](https://github.com/RivRetrieve/RivRetrieve/issues).
 
 ## Install
 
-Requires Python 3.13 or later. In your Python project:
+Requires Python 3.13 or later. We recommend [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv add rivretrieve
 ```
 
-For optional station maps, use `uv add "rivretrieve[map]"`.
+It also installs with pip: `pip install rivretrieve`.
 
-## First retrieval
+For optional station maps, install the `map` extra: `uv add "rivretrieve[map]"`.
 
-This example requests one day of USGS daily mean discharge. It requires network access,
-not credentials. Discovery reads the packaged catalogue.
+## Quick start
 
 ```python
 import rivretrieve as rr
 
-selection = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
-selection = rr.pick(selection, station="07374000")
-print(rr.as_frame(selection))
+# Find a gauge and choose daily mean streamflow.
+gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+gauge = rr.pick(gauges, station="07374000")
 
-result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True)
+# Download observations for January 2023.
+result = rr.fetch(gauge, start="2023-01-01", end="2023-01-31")
+
 print(result.data)
 print(result.issues)
-print(result.provenance)
 ```
 
-The result contains a Polars frame with `time`, `time_zone`, `station_id`, `product_id`
-and `value`. Discharge values use m³/s. Read timestamps together with their zone column.
-Inspect issues even when retrieval returns rows. A successful call does not establish
-continuous records or scientific comparability.
+Find, select, retrieve. The same Python interface works across providers, returning consistent columns
+and units. This example downloads daily mean streamflow from a USGS gauge without credentials.
+
+`result.data` is a Polars frame with `time`, `time_zone`, `station_id`, `product_id` and `value`.
+Discharge values use m³/s. Read timestamps together with their zone column. Inspect `result.issues`
+even when rows come back. A successful call does not establish continuous records or scientific
+comparability. Downloading observations requires internet access.
+
+Next: the [usage guide](docs/usage.md) covers selections, time windows, issues, credentials and
+caching, and the [CAMELS-US example](docs/examples/camels-us.md) retrieves streamflow for several
+gauges at once.
+
+## What RivRetrieve does and does not do
+
+- **No quality control or gap filling.** RivRetrieve does not assess scientific quality.
+  It converts units and formats, and reports retrieval and parsing issues.
+- **No aggregation.** RivRetrieve does not aggregate data (e.g., from hourly to daily). Data are
+  returned at the time step the provider publishes: daily data are available only where the
+  provider already publishes daily values.
+- **No hosting.** RivRetrieve does not host the data. Downloads come from the providers' own
+  services.
+- **Fresh downloads depend on the providers.** Service outages or changes can prevent new
+  downloads. Previously cached observations can remain available.
 
 ## Documentation
 
 Start with the [documentation index](docs/README.md).
 
 - [Usage](docs/usage.md): selections, results, windows, issues, credentials, cache and receipts.
-- [Recent streamflow for CAMELS-US gauges](docs/examples/camels-us.md).
+- [Example: Recent streamflow for CAMELS-US gauges](docs/examples/camels-us.md).
 - [Public API and software reference](docs/reference.md).
 - [Architecture](docs/architecture.md): responsibilities, a traced request and contracts.
 
-Potential-provider suggestions can include source links and relevant access information
-in a [GitHub issue](https://github.com/RivRetrieve/RivRetrieve/issues).
+## Data rights
+
+All data rights remain with the original providers. Credit the providers of data you use and
+follow their attribution and citation requirements. Users are responsible for reviewing and
+following each provider's terms, which can be found on their respective homepages. The MIT licence
+in the LICENSE file applies only to the code of this package, not to any data downloaded through
+it.
+
+## Background
+
+RivRetrieve is under active development. Breaking changes should be expected between release
+versions. See the [issues](https://github.com/RivRetrieve/RivRetrieve/issues) for what is being
+worked on.
+
+The package began as a Python translation of
+[RivRetrieve for R](https://github.com/Ryan-Riggs/RivRetrieve) by Ryan Riggs, made by @kratzert with
+the Gemini CLI and a few manual fixes for API changes. It has grown into a collaborative effort
+since, with @simonmoulds, @thiagovmdon and @CooperBigFoot.
+
+Questions, bug reports and collaboration are welcome through the
+[issues](https://github.com/RivRetrieve/RivRetrieve/issues).
+
+## Acknowledgements
+
+Importantly, this project would not exist without the open APIs of so many data providers. We thank
+them for their data and for supporting the philosophy of open data.
+
+We also thank Henning Plessow at the Global Runoff Data Centre (GRDC) for the exchange around
+[hydrodownloadR](https://github.com/bafg-bund/hydrodownloadR), which pursues the same goal as
+RivRetrieve, but in R.
