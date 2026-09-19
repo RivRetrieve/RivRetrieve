@@ -14,9 +14,12 @@ comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
 
 ## Providers
 
-RivRetrieve currently reads from 13 national agencies. The [README](../README.md#current-coverage) lists them
-with their station counts. The data belong to those agencies, and each one describes its own network
-best, so these pages cover what you need in order to use a provider through RivRetrieve.
+RivRetrieve currently reads from 12 national agencies. The [README](../README.md#current-coverage)
+lists them with their station counts.
+
+The data belong to those agencies, and they document their own networks far better than we could.
+These pages therefore cover only what you need in order to work with a provider through
+RivRetrieve, and link to the agency for everything else.
 
 Whatever the provider, RivRetrieve gives you the same things:
 
@@ -46,7 +49,6 @@ The pages above describe the software as it is today. The records below preserve
 the time they were written: their API names, provider counts and execution details may since have
 been superseded. Read them as history rather than as instructions.
 
-- [Domain vocabulary](../CONTEXT.md).
 - [Catalogue provenance](catalogue-provenance.md).
 - [Evidenced inventory account](provider_ports/evidenced_coverage.md). Its recorded limitations
   still apply: it does not establish countrywide inventory completeness or continuous observation
