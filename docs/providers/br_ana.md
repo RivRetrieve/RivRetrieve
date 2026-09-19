@@ -29,8 +29,18 @@ programming interface, HidroWebService. RivRetrieve reads that interface.
 
 ## Credentials
 
-Brazil is one of two providers that require credentials. ANA grants them on request, and issues an
-*Identificador* and a *Senha* that are yours personally:
+Brazil is one of two providers that require credentials, and ANA issues them on request.
+
+Its [Solicite Acesso API](https://www.snirh.gov.br/hidroweb/acesso-api) page asks you to email
+**telemetria@ana.gov.br** with the subject *"Solicitação de acesso à API"*, a few lines explaining
+why you need access, and three details for the registration:
+
+- the name of the user or institution;
+- a CPF or CNPJ (if you are Brazilian), which becomes your username;
+- an email address, to which the password is sent.
+
+ANA reviews the request and may come back for more information. What you receive is an
+*Identificador* and a *Senha*, which RivRetrieve reads from the environment:
 
 ```bash
 export ANA_IDENTIFICADOR="your-identifier"
@@ -38,8 +48,7 @@ export ANA_SENHA="your-password"
 ```
 
 `rr.providers()` shows `ready` once both are set, and `missing ANA_IDENTIFICADOR, ANA_SENHA`
-before that. Catalogue browsing works without them; only retrieval needs them. See
-[.env.example](../../.env.example) for where to request access.
+before that. Catalogue browsing works without them; only retrieval needs them.
 
 ## Raw and reviewed: bruto and consistido
 
@@ -106,6 +115,7 @@ committed or published, whatever the terms say about the data themselves.
 | [ANA — Dados abertos](https://www.gov.br/ana/pt-br/acesso-a-informacao/dados-abertos) | 2026-09-19 |
 | [HidroWebService](https://www.ana.gov.br/hidrowebservice/swagger-ui/index.html) | 2026-09-19 |
 | [Hidroweb portal](https://www.snirh.gov.br/hidroweb/) | 2026-09-19 |
+| [Hidroweb — Solicite Acesso API](https://www.snirh.gov.br/hidroweb/acesso-api) | 2026-09-19 |
 
 Station counts come from the packaged catalogue. The consistency levels and field definitions
 follow ANA's Hidro 1.4 data dictionary, as recorded when the provider was built.
