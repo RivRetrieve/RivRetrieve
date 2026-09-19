@@ -98,7 +98,7 @@ field, `area`, alongside gauge identity, river, elevation, and coordinates. This
 repository record establishes eligibility, but not a unit.
 
 Field eligibility is recorded in `AREA_FIELDS` in the builder. Existing evidence
-includes the [Czech drainage-area entry](milestone-tracker.md), the
+includes the [Czech drainage-area entry](https://github.com/RivRetrieve/RivRetrieve/blob/05b5cf7f16863a254d86073b9a2066b93456f923/docs/milestone-tracker.md), the
 [recorded Polish catalogue description](https://github.com/RivRetrieve/RivRetrieve/blob/9b89e3e55154371be8afa293dbd7716948d1431e/docs/milestone-tracker.md),
 the retained [French station schema](../tests/test_data/fr_hubeau_temperature_openapi.json),
 and the [Norwegian schema](../tests/test_data/no_nve_swagger.json).

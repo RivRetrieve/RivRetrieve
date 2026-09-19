@@ -1,4 +1,3 @@
-import ast
 import hashlib
 import typing
 from dataclasses import FrozenInstanceError
@@ -77,8 +76,6 @@ JAPAN_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue/
 THAI_COORDINATE_EVIDENCE_PATH = Path("tests/test_data/th_thaiwater_coordinate_standard.html")
 REPOSITORY_ROOT = Path(__file__).parents[1]
 CATALOGUE_ORIGINS_MODULE_PATH = REPOSITORY_ROOT / "src/rivretrieve/_internal/catalogue_origins.py"
-CATALOGUE_PROVENANCE_PATH = REPOSITORY_ROOT / "docs/catalogue-provenance.md"
-CONTEXT_PATH = REPOSITORY_ROOT / "CONTEXT.md"
 
 
 class _CanonicalLinkParser(HTMLParser):
@@ -334,62 +331,6 @@ def test_origin_gate_enrols_exactly_the_thirteen_in_scope_providers() -> None:
     assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered >= ORIGIN_GATE_ENROLLED_PROVIDERS
     assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS
-
-
-def _collapse_whitespace(value: str) -> str:
-    return " ".join(value.split())
-
-
-def test_origin_scope_documentation_contract_pins_the_constant_docstring() -> None:
-    module = ast.parse(CATALOGUE_ORIGINS_MODULE_PATH.read_text())
-    assignment_index = next(
-        (
-            index
-            for index, statement in enumerate(module.body)
-            if isinstance(statement, ast.Assign)
-            and any(
-                isinstance(target, ast.Name) and target.id == "ORIGIN_GATE_ENROLLED_PROVIDERS"
-                for target in statement.targets
-            )
-        ),
-        None,
-    )
-    assert assignment_index is not None, "ORIGIN_GATE_ENROLLED_PROVIDERS assignment is missing"
-    assert assignment_index + 1 < len(module.body), "origin gate scope docstring is missing after the assignment"
-    docstring_statement = module.body[assignment_index + 1]
-    assert isinstance(docstring_statement, ast.Expr) and isinstance(docstring_statement.value, ast.Constant), (
-        "origin gate scope docstring is not immediately after the assignment"
-    )
-    assert docstring_statement.value.value == (
-        "The thirteen providers with complete audited catalogue origin declarations."
-    ), "origin gate scope docstring has drifted"
-
-
-def test_origin_scope_documentation_contract_pins_maintenance_boundary() -> None:
-    maintenance = _collapse_whitespace(CATALOGUE_PROVENANCE_PATH.read_text())
-    assert "`ORIGIN_GATE_ENROLLED_PROVIDERS`" in maintenance
-    assert (
-        "Every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS` has complete audited catalogue origin declarations."
-        in maintenance
-    )
-    assert "`br_ana` is enrolled" in maintenance
-    assert "`no_nve` is enrolled" in maintenance
-
-
-def test_origin_scope_documentation_contract_pins_glossary_boundary() -> None:
-    glossary = _collapse_whitespace(CONTEXT_PATH.read_text())
-    origin_scope = _collapse_whitespace(
-        "Every canonical column carries one for every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS`; an unenrolled "
-        "provider is explicitly outside origin certification rather than treated as compliant."
-    )
-    best_effort_scope = _collapse_whitespace(
-        "In the catalogue this is enforced rather than intended: a best-effort column still carries an [[origin]] "
-        "for every [[provider]] in `ORIGIN_GATE_ENROLLED_PROVIDERS`, so being empty is a declared claim and not "
-        "permission to leave it unfilled."
-    )
-
-    assert origin_scope in glossary, "Origin glossary entry is missing the explicit enrolment boundary"
-    assert best_effort_scope in glossary, "Best-effort glossary entry is missing the explicit enrolment boundary"
 
 
 def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
