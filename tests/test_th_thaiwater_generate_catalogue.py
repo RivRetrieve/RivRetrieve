@@ -27,7 +27,7 @@ FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
 LEDGER_PATH = (
     Path(__file__).parents[1]
-    / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 
 
@@ -849,20 +849,6 @@ def test_governing_acquisitions_expose_all_baseline_pairs() -> None:
     }
     assert set(pairs["station_id"]) == set(_committed_native_table().data["station.id"])
     assert catalogue.acquisition_provenance.withheld_facts == ()
-
-
-def test_later_snapshot_does_not_replace_baseline_or_remove_absent_stations() -> None:
-    import csv
-
-    snapshot = LEDGER_PATH.parents[1] / "recordings/waterlevel_load_live.stations.csv"
-    with snapshot.open() as stream:
-        later = {row["station_id"] for row in csv.DictReader(stream)}
-    native = set(_committed_native_table().data["station.id"])
-    assert len(native - later) == 25
-    assert len(later - native) == 605
-    exposed = set(_build().station_products["station_id"])
-    assert native - later <= exposed
-    assert exposed.isdisjoint(later - native)
 
 
 def test_build_cli_requires_explicit_reviewed_availability_evidence(

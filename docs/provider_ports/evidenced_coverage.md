@@ -152,15 +152,15 @@ The output directories are disposable and are not the private evidence corpus.
 ```sh
 uv run python -m rivretrieve._internal.providers.fr_hubeau.generate_catalogue \
   --native src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet \
-  --availability-ledger research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz \
+  --availability-ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz \
   --out .worktrees/coverage-build/fr_hubeau
 uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
   --native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet \
-  --workbook-access-ledger research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json \
+  --workbook-access-ledger maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json \
   --out .worktrees/coverage-build/ba_fhmzbih
 uv run python -m rivretrieve._internal.providers.th_thaiwater.generate_catalogue \
   --native src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet \
-  --availability-evidence research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv \
+  --availability-evidence maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv \
   --out .worktrees/coverage-build/th_thaiwater
 ```
 
@@ -171,10 +171,10 @@ certification or claim that missing bytes can be verified from hashes. The accep
 research records independent controlled-body verification separately. Its corpus
 requires an authorised handoff and must not trigger automatic reacquisition.
 
-See the exact verifier interfaces and limits in the research handoffs:
-[France](../../research/station-coverage/fr_hubeau/HANDOFF.md),
-[Bosnia](../../research/station-coverage/ba_fhmzbih/HANDOFF.md), and
-[Thailand](../../research/station-coverage/th_thaiwater/HANDOFF.md).
+See the retained verifier interfaces and source-body requirements:
+[France](../../maintenance/catalogue/fr_hubeau/README.md),
+[Bosnia](../../maintenance/catalogue/ba_fhmzbih/README.md), and
+[Thailand](../../maintenance/catalogue/th_thaiwater/README.md).
 The [Bosnia source expectation note](../../tests/test_data/ba_fhmzbih_public_source_expectations.md)
 documents the repeated unknown-zone timestamps and narrow mixed-blank probe.
 

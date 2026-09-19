@@ -87,7 +87,7 @@
         }
       },
       "ledger": {
-        "path": "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz",
+        "path": "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
         "sha256": "e92b8d0d491c588e558dd1def64d612dcd6f2f95e2729b0715e2a97937ff8843",
         "byte_count": 2174108,
         "row_container": "pairs",
@@ -931,7 +931,7 @@
         }
       },
       "ledger": {
-        "path": "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json",
+        "path": "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json",
         "sha256": "c6662d1117e789e5c7303f310c9b5e33a71b42909aa00800e9773c7c205ac6e9",
         "byte_count": 196253,
         "row_container": "pairs",
@@ -1554,7 +1554,7 @@
         }
       },
       "ledger": {
-        "path": "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv",
+        "path": "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv",
         "sha256": "f96e89c7fa62380ff24bc32bceda8a1075e804b29d004f0c33c6f8d013c23fed",
         "byte_count": 944955,
         "row_container": "CSV records",

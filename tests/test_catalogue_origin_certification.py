@@ -55,7 +55,7 @@ from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
 THAI_AVAILABILITY_EVIDENCE_PATH = (
-    ROOT / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    ROOT / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
@@ -122,7 +122,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         )
         build = partial(build, provenance=provenance, telemetry=telemetry)
     if provider == "fr_hubeau":
-        ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+        ledger = ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
         build = partial(build, availability=availability)
     if provider == "th_thaiwater":
@@ -131,7 +131,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         )
     if provider == "ba_fhmzbih":
         workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
-            (ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
+            (ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
         )
         build = partial(build, workbook_access=workbook_access)
     return ProviderAdapter(
@@ -697,7 +697,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         arguments.extend(
             (
                 "--workbook-access-ledger",
-                str(ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json"),
+                str(ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"),
             )
         )
     elif adapter.provider_id == "jp_mlit":
@@ -713,7 +713,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         arguments.extend(
             (
                 "--availability-ledger",
-                str(ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"),
+                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
             )
         )
     elif adapter.provider_id == "th_thaiwater":

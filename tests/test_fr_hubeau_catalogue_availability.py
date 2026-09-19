@@ -11,7 +11,7 @@ from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECL
 def test_catalogue_admits_full_evidenced_native_inventory() -> None:
     native_path = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
     native = read_native_table(native_path)
-    ledger_path = Path(__file__).parents[1] / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+    ledger_path = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
     availability = decode_availability(lzma.decompress(ledger_path.read_bytes()))
     catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability)
     artifact = catalogue.public_artifact

@@ -27,7 +27,7 @@ from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLed
 _TEST_DATA_DIR = Path(__file__).parent / "test_data"
 _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
 _NATIVE_TABLE = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
-_LEDGER = Path(__file__).parents[1] / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json"
+_LEDGER = Path(__file__).parents[1] / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
 _CATALOGUE_DIR = _NATIVE_TABLE.parent
 _CRS_EVIDENCE = _TEST_DATA_DIR / "ba_fhmzbih_crs_evidence_stations.json"
 _RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC))
