@@ -5,32 +5,21 @@ Python interface.
 
 ## River data and where to find them
 
-From floods to droughts: understanding and modelling rivers is a central environmental concern.
-For that, we need data. Preferably open data. Many countries measure their rivers at thousands of
-stations but compiling that information is often hard. Different data portals, different languages,
-different formats. All of that adds up quickly for anyone interested in the data.
+RivRetrieve connects you to river data from over 67,000 gauging stations across 12 national agencies,
+through one Python interface. The map below shows where those providers are, with darker shading
+indicating more gauges.
 
-> The data exist, but accessing them is challenging.
+![Countries with supported providers, shaded by gauge count on a logarithmic scale; counts are listed in the provider table below.](docs/assets/coverage-map.png)
 
-RivRetrieve focuses on time series of streamflow (discharge), stage and water temperature (other
-variables may come into play later, so stay tuned). It harmonises identifiers, units and returned
-columns, and records where every value came from. It leaves source quality judgements and study
-suitability to the reader. Think of RivRetrieve as a bridge between the original provider and the
-user.
+*Boundaries: [Natural Earth](https://www.naturalearthdata.com/). Their depiction implies no position on territorial status.*
 
-<!-- TODO: badges (PyPI version, supported Python, licence, DOI) once the package is released. -->
+RivRetrieve focuses on time series of streamflow (discharge), stage and water temperature.
+It harmonises identifiers, units and returned columns, and records the source of retrieved observations.
+It leaves source quality judgements and study suitability to the reader. Think of RivRetrieve as
+a bridge between the original provider and the user.
 
-## Current coverage
-
-RivRetrieve currently gives access to 67,000+ stations from 12 national agencies in
-12 countries across the Americas, Asia and Europe.
-
-![Map of RivRetrieve station locations](docs/assets/coverage-map.png)
-
-*Station locations in the packaged catalogue.*
-
-Most providers are open. Norway and Brazil ask for credentials, which you request from the agency
-yourself. See the [usage guide](docs/usage.md#supplied-credentials) for how to supply them.
+Some providers require credentials. See the [usage guide](docs/usage.md#supplied-credentials)
+for how to supply them.
 
 <details>
 <summary>All 12 providers</summary>
@@ -73,42 +62,27 @@ For optional station maps, install the `map` extra: `uv add "rivretrieve[map]"`.
 
 ## Quick start
 
-List the available providers:
-
 ```python
 import rivretrieve as rr
 
-rr.providers()
-```
+# Find a gauge and choose daily mean streamflow.
+gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+gauge = rr.pick(gauges, station="07374000")
 
-The table names each agency and says whether it needs credentials.
+# Download observations for January 2023.
+result = rr.fetch(gauge, start="2023-01-01", end="2023-01-31")
 
-See which variables and time steps one provider offers:
-
-```python
-rr.products("usgs_nwis")
-```
-
-List the stations that offer one of them:
-
-```python
-selection = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
-rr.as_frame(selection)
-```
-
-Everything so far reads a catalogue that ships with the package, so it works offline. Downloading
-observations is the step that needs internet:
-
-```python
-selection = rr.pick(selection, station="07374000")
-result = rr.fetch(selection, start="2023-01-01", end="2023-01-31")
 print(result.data)
+print(result.issues)
 ```
 
-The result is a Polars frame with `time`, `time_zone`, `station_id`, `product_id` and `value`.
-Discharge values use m³/s. Read timestamps together with their zone column. Also look at
-`result.issues`, even when rows come back. A successful call does not establish continuous records
-or scientific comparability.
+Find, select, retrieve. The same Python interface works across providers, returning consistent columns
+and units. This example downloads daily mean streamflow from a USGS gauge without credentials.
+
+`result.data` is a Polars frame with `time`, `time_zone`, `station_id`, `product_id` and `value`.
+Discharge values use m³/s. Read timestamps together with their zone column. Inspect `result.issues`
+even when rows come back. A successful call does not establish continuous records or scientific
+comparability. Downloading observations requires internet access.
 
 Next: the [usage guide](docs/usage.md) covers selections, time windows, issues, credentials and
 caching, and the [CAMELS-US example](docs/examples/camels-us.md) retrieves streamflow for several
@@ -116,15 +90,15 @@ gauges at once.
 
 ## What RivRetrieve does and does not do
 
-- **No quality control or gap filling.** The values are the original ones, as published by the
-  providers, with only units and format converted to a common standard.
+- **No quality control or gap filling.** RivRetrieve does not assess scientific quality.
+  It converts units and formats, and reports retrieval and parsing issues.
 - **No aggregation.** RivRetrieve does not aggregate data (e.g., from hourly to daily). Data are
   returned at the time step the provider publishes: daily data are available only where the
   provider already publishes daily values.
 - **No hosting.** RivRetrieve does not host the data. Downloads come from the providers' own
   services.
-- **Availability depends on the providers.** If a provider's service is down, changes or stops,
-  the data are unavailable through RivRetrieve as well.
+- **Fresh downloads depend on the providers.** Service outages or changes can prevent new
+  downloads. Previously cached observations can remain available.
 
 ## Documentation
 
@@ -135,15 +109,10 @@ Start with the [documentation index](docs/README.md).
 - [Public API and software reference](docs/reference.md).
 - [Architecture](docs/architecture.md): responsibilities, a traced request and contracts.
 
-## How to cite
-
-If you use RivRetrieve in your work, please cite the package. If you use data retrieved through it,
-you must also cite the providers of that data: each one states its own terms and the citation it
-asks for.
-
 ## Data rights
 
-All data rights remain with the original providers. Users are responsible for reviewing and
+All data rights remain with the original providers. Credit the providers of data you use and
+follow their attribution and citation requirements. Users are responsible for reviewing and
 following each provider's terms, which can be found on their respective homepages. The MIT licence
 in the LICENSE file applies only to the code of this package, not to any data downloaded through
 it.

@@ -1,107 +1,124 @@
-"""coverage_map : PackagedCatalogue × WorldPolygons → PNG   (documentation figure)
+"""coverage_map : CatalogueStationIdentities × Admin0Boundaries → CountShadedPNG.
 
-Draws every retrievable catalogue station on a borderless world land mass and prints per-continent
-station counts underneath. Catalogue-only providers are excluded.
-
-Run from the repository root (geopandas and matplotlib are not project dependencies):
+Reproduce from the checkout catalogue and Natural Earth 1:50m Admin 0 Countries:
 
     uv run --with geopandas --with matplotlib python docs/scripts/coverage_map.py \
-        --world /path/to/world.shp --out docs/assets/coverage-map.png
+        --out docs/assets/coverage-map.png
 
-The figure reflects the catalogue of the checkout it runs in; generate it from main, not from a feature
-branch with an older catalogue.
-
-Station coordinates are plotted as longitude/latitude degrees. Several providers declare their
-coordinate reference system as unknown; at world scale the figure does not depend on the datum.
+The default boundary URL is public. For offline regeneration, pass --world with a
+saved copy of that ZIP. Match ADM0_A3, not sovereign ownership of dependencies.
+Counts are unique provider/station identities for observation-capable providers;
+they do not assert continuous observations or complete national network coverage.
+No station coordinates or station CRS assumptions enter this figure.
 """
+
+from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-import geopandas as gpd
-import matplotlib.pyplot as plt
 import polars as pl
 
 import rivretrieve as rr
+from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+from rivretrieve._internal.providers.registration import CatalogueOnly, load_manifest
 
-# Providers whose stations are listed but whose observations cannot be retrieved yet.
-CATALOGUE_ONLY = {"za_dws"}
-
-# Provider → continent, following the README coverage table.
-PROVIDER_CONTINENT = {
-    "ba_fhmzbih": "Europe",
-    "br_ana": "Americas",
-    "ca_eccc": "Americas",
-    "ch_foen": "Europe",
-    "cz_chmi": "Europe",
-    "fr_hubeau": "Europe",
-    "jp_mlit": "Asia",
-    "lt_lhmt": "Europe",
-    "no_nve": "Europe",
-    "pl_imgw": "Europe",
-    "th_thaiwater": "Asia",
-    "usgs_nwis": "Americas",
-    "za_dws": "Africa",
+BOUNDARIES = "https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_countries.zip"
+PROVIDER_COUNTRY = {
+    "ba_fhmzbih": "BIH",
+    "br_ana": "BRA",
+    "ca_eccc": "CAN",
+    "ch_foen": "CHE",
+    "cz_chmi": "CZE",
+    "fr_hubeau": "FRA",
+    "jp_mlit": "JPN",
+    "lt_lhmt": "LTU",
+    "no_nve": "NOR",
+    "pl_imgw": "POL",
+    "th_thaiwater": "THA",
+    "usgs_nwis": "USA",
 }
-
 ROBINSON = "ESRI:54030"
 BACKGROUND = "#FBFCFD"
-LAND = "#E4E8ED"
-STATION = "#0E7C86"
-TEXT = "#23404A"
-MUTED = "#6B7F88"
+LAND = "#E3E8EC"
 
 
-def station_points(stations: pl.DataFrame) -> gpd.GeoDataFrame:
-    return gpd.GeoDataFrame(
-        geometry=gpd.points_from_xy(stations["longitude"].to_list(), stations["latitude"].to_list()),
-        crs="EPSG:4326",
-    ).to_crs(ROBINSON)
+def country_counts(stations: pl.DataFrame) -> dict[str, int]:
+    """Count distinct provider/station identities, combining providers per country."""
+    counts: dict[str, int] = {}
+    for provider, count in (
+        stations.select("provider_id", "station_id").unique().group_by("provider_id").len().iter_rows()
+    ):
+        country = PROVIDER_COUNTRY[provider]
+        counts[country] = counts.get(country, 0) + count
+    if not counts:
+        raise ValueError("Coverage requires at least one observation-capable station")
+    return counts
 
 
-def continent_counts(stations: pl.DataFrame) -> dict[str, int]:
-    continents = pl.DataFrame({"provider_id": list(PROVIDER_CONTINENT), "continent": list(PROVIDER_CONTINENT.values())})
-    counts = stations.join(continents, on="provider_id").group_by("continent").len()
-    return dict(zip(counts["continent"], counts["len"], strict=True))
+def draw(world, stations: pl.DataFrame, out: Path) -> None:
+    """Render country counts without using station geometry."""
+    import matplotlib.pyplot as plt
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import LogNorm
 
-
-def draw(world: gpd.GeoDataFrame, stations: pl.DataFrame, out: Path) -> None:
-    land = gpd.GeoSeries([world[world.geometry.bounds["maxy"] > -60].union_all()], crs=world.crs).to_crs(ROBINSON)
-
-    fig, ax = plt.subplots(figsize=(14, 7.6), facecolor=BACKGROUND)
+    counts = country_counts(stations)
+    missing = counts.keys() - set(world["ADM0_A3"])
+    if missing:
+        raise ValueError(f"Boundary source lacks ADM0_A3 countries: {sorted(missing)}")
+    land = world.loc[world["ADM0_A3"] != "ATA"].copy()
+    land["gauges"] = land["ADM0_A3"].map(counts)
+    land = land.to_crs(ROBINSON)
+    lower, upper = min(50, min(counts.values())), max(30000, max(counts.values()))
+    norm = LogNorm(vmin=lower, vmax=upper)
+    fig, ax = plt.subplots(figsize=(14, 7), facecolor=BACKGROUND)
     ax.set_facecolor(BACKGROUND)
     land.plot(ax=ax, color=LAND, linewidth=0)
-    station_points(stations).plot(ax=ax, color=STATION, markersize=0.8, alpha=0.6, linewidth=0, rasterized=True)
+    land.loc[land["gauges"].notna()].plot(
+        ax=ax,
+        column="gauges",
+        cmap="GnBu",
+        norm=norm,
+        edgecolor=BACKGROUND,
+        linewidth=0.25,
+    )
     ax.set_axis_off()
     ax.margins(0.01)
-
-    counts = continent_counts(stations)
-    n_providers = stations["provider_id"].n_unique()
-    fig.text(
-        0.02,
-        0.12,
-        f"{stations.height:,} stations from {n_providers} national agencies",
-        color=TEXT,
-        fontsize=15,
-        fontweight="bold",
-    )
-    for i, continent in enumerate(c for c in ("Americas", "Europe", "Africa", "Asia") if counts.get(c)):
-        x = 0.02 + i * 0.13
-        fig.text(x, 0.065, f"{counts.get(continent, 0):,}", color=STATION, fontsize=14, fontweight="bold")
-        fig.text(x, 0.04, continent, color=MUTED, fontsize=10)
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0.14)
-    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0.12)
+    legend = fig.add_axes((0.32, 0.065, 0.36, 0.018))
+    ticks = sorted({lower, 100, 500, 1000, 5000, upper})
+    bar = fig.colorbar(ScalarMappable(norm=norm, cmap="GnBu"), cax=legend, orientation="horizontal", ticks=ticks)
+    bar.ax.set_xticklabels([f"{tick:,}" for tick in ticks])
+    bar.ax.minorticks_off()
+    bar.ax.tick_params(labelsize=8, length=2)
+    bar.set_label("Gauging stations · logarithmic scale", fontsize=9)
+    bar.outline.set_visible(False)
     fig.savefig(out, dpi=200, facecolor=BACKGROUND)
+    plt.close(fig)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--world", type=Path, required=True, help="world land or country polygons")
+    import geopandas as gpd
+
+    parser = argparse.ArgumentParser(description="Draw country coverage by unique gauging station count")
+    parser.add_argument("--world", default=BOUNDARIES, help="Natural Earth Admin 0 Countries ZIP or shapefile")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-
-    frame = rr.as_frame(rr.find()).filter(~pl.col("provider_id").is_in(CATALOGUE_ONLY))
-    stations = frame.select("provider_id", "station_id", "latitude", "longitude").unique(["provider_id", "station_id"])
+    supported = [
+        item.provider_id
+        for item in load_manifest(BUILTIN_PROVIDER_IDS)
+        if not isinstance(item.declaration.observations, CatalogueOnly)
+    ]
+    stations = (
+        rr.as_frame(rr.find())
+        .filter(pl.col("provider_id").is_in(supported))
+        .select("provider_id", "station_id")
+        .unique()
+    )
+    counts = country_counts(stations)
+    print(stations.group_by("provider_id").len().sort("provider_id"))
+    print(f"{sum(counts.values()):,} unique stations; {len(supported)} providers; {len(counts)} countries")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     draw(gpd.read_file(args.world), stations, args.out)
 
 
