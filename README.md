@@ -15,14 +15,15 @@ different formats. All of that adds up quickly for anyone interested in the data
 RivRetrieve focuses on time series of streamflow (discharge), stage and water temperature (other
 variables may come into play later, so stay tuned). It harmonises identifiers, units and returned
 columns, and records where every value came from. It leaves source quality judgements and study
-suitability to the reader. Think of RivRetrieve as a bridge between the original provider and the user.
+suitability to the reader. Think of RivRetrieve as a bridge between the original provider and the
+user.
 
 <!-- TODO: badges (PyPI version, supported Python, licence, DOI) once the package is released. -->
 
 ## Current coverage
 
-RivRetrieve currently gives access to 70,000+ stations from 13 national agencies in
-13 countries across Africa, the Americas, Asia and Europe.
+RivRetrieve currently gives access to 67,000+ stations from 12 national agencies in
+12 countries across the Americas, Asia and Europe.
 
 ![Map of RivRetrieve station locations](docs/assets/coverage-map.png)
 
@@ -32,7 +33,7 @@ Most providers are open. Norway and Brazil ask for credentials, which you reques
 yourself. See the [usage guide](docs/usage.md#supplied-credentials) for how to supply them.
 
 <details>
-<summary>All 13 providers</summary>
+<summary>All 12 providers</summary>
 
 | Country | Agency | Provider | Stations | Access |
 |---|---|---|---:|---|
@@ -45,12 +46,14 @@ yourself. See the [usage guide](docs/usage.md#supplied-credentials) for how to s
 | Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | open |
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | API key |
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | open |
-| South Africa | Department of Water and Sanitation (DWS) | `za_dws` | 2,905 | open |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 246 | open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | open |
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | open |
 
 </details>
+
+South Africa's Department of Water and Sanitation (`za_dws`) is in the catalogue with 2,905
+stations, but its observations cannot be retrieved yet.
 
 Our hope is that this map keeps filling up. Know a data source we're missing? Let us know:
 potential-provider suggestions can include source links and relevant access information
@@ -58,62 +61,57 @@ in a [GitHub issue](https://github.com/RivRetrieve/RivRetrieve/issues).
 
 ## Install
 
-Requires Python 3.13 or later.
-
-```bash
-pip install rivretrieve
-```
-
-In a project managed with [uv](https://docs.astral.sh/uv/):
+Requires Python 3.13 or later. We recommend [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv add rivretrieve
 ```
 
-For optional station maps, install the `map` extra: `pip install "rivretrieve[map]"` or
-`uv add "rivretrieve[map]"`.
+It also installs with pip: `pip install rivretrieve`.
 
-## First retrieval
+For optional station maps, install the `map` extra: `uv add "rivretrieve[map]"`.
 
-This example requests one day of daily mean discharge from a USGS gauge. Searching the stations
-works offline, only the download needs internet. No credentials are needed here.
+## Quick start
+
+List the available providers:
 
 ```python
 import rivretrieve as rr
 
-selection = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
-selection = rr.pick(selection, station="07374000")
+rr.providers()
+```
 
-result = rr.fetch(selection, start="2023-01-01", end="2023-01-01")
+The table names each agency and says whether it needs credentials.
+
+See which variables and time steps one provider offers:
+
+```python
+rr.products("usgs_nwis")
+```
+
+List the stations that offer one of them:
+
+```python
+selection = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+rr.as_frame(selection)
+```
+
+Everything so far reads a catalogue that ships with the package, so it works offline. Downloading
+observations is the step that needs internet:
+
+```python
+selection = rr.pick(selection, station="07374000")
+result = rr.fetch(selection, start="2023-01-01", end="2023-01-31")
 print(result.data)
 ```
 
-The result contains a Polars frame with `time`, `time_zone`, `station_id`, `product_id`
-and `value`. Discharge values use m³/s. Read timestamps together with their zone column.
-Also look at `result.issues`, even when rows come back. A successful call does not establish
-continuous records or scientific comparability.
+The result is a Polars frame with `time`, `time_zone`, `station_id`, `product_id` and `value`.
+Discharge values use m³/s. Read timestamps together with their zone column. Also look at
+`result.issues`, even when rows come back. A successful call does not establish continuous records
+or scientific comparability.
 
-Do you prefer to work with pandas? No problem:
-
-```python
-result.data.to_pandas()
-```
-
-## What is available
-
-To see which agencies and variables you can ask for:
-
-```python
-rr.providers()            # the agencies, and whether they need credentials
-rr.products("usgs_nwis")  # the variables and time steps one agency offers
-rr.describe("usgs_nwis")  # what the packaged catalogue records about it
-```
-
-`rr.find` then narrows by provider, product and station, and `rr.as_frame(selection)` shows the
-series you selected before you download anything.
-
-Next: the [usage guide](docs/usage.md) covers time windows, issues, credentials, caching and
-receipts, and the [CAMELS-US example](docs/examples/camels-us.md) retrieves streamflow for several
+Next: the [usage guide](docs/usage.md) covers selections, time windows, issues, credentials and
+caching, and the [CAMELS-US example](docs/examples/camels-us.md) retrieves streamflow for several
 gauges at once.
 
 ## What RivRetrieve does and does not do
@@ -143,8 +141,6 @@ If you use RivRetrieve in your work, please cite the package. If you use data re
 you must also cite the providers of that data: each one states its own terms and the citation it
 asks for.
 
-<!-- TODO: package citation (authors, year, title, version, DOI) once releases are archived. -->
-
 ## Data rights
 
 All data rights remain with the original providers. Users are responsible for reviewing and
@@ -152,15 +148,16 @@ following each provider's terms, which can be found on their respective homepage
 in the LICENSE file applies only to the code of this package, not to any data downloaded through
 it.
 
-## Status and background
+## Background
 
-RivRetrieve is under heavy development. The version number is still 0.x, so the interface can
-change between releases. See the [issues](https://github.com/RivRetrieve/RivRetrieve/issues) for
-what is being worked on.
+RivRetrieve is under active development. Breaking changes should be expected between release
+versions. See the [issues](https://github.com/RivRetrieve/RivRetrieve/issues) for what is being
+worked on.
 
-The package began as a Python translation of the RivRetrieve R package, made by @kratzert with the
-Gemini CLI and a few manual fixes for API changes. It has grown into a collaborative effort since,
-with @simonmoulds, @thiagovmdon and @CooperBigFoot.
+The package began as a Python translation of
+[RivRetrieve for R](https://github.com/Ryan-Riggs/RivRetrieve) by Ryan Riggs, made by @kratzert with
+the Gemini CLI and a few manual fixes for API changes. It has grown into a collaborative effort
+since, with @simonmoulds, @thiagovmdon and @CooperBigFoot.
 
 Questions, bug reports and collaboration are welcome through the
 [issues](https://github.com/RivRetrieve/RivRetrieve/issues).
@@ -169,3 +166,7 @@ Questions, bug reports and collaboration are welcome through the
 
 Importantly, this project would not exist without the open APIs of so many data providers. We thank
 them for their data and for supporting the philosophy of open data.
+
+We also thank Henning Plessow at the Global Runoff Data Centre (GRDC) for the exchange around
+[hydrodownloadR](https://github.com/bafg-bund/hydrodownloadR), which pursues the same goal as
+RivRetrieve, but in R.

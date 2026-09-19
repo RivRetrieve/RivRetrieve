@@ -1,7 +1,7 @@
 """coverage_map : PackagedCatalogue × WorldPolygons → PNG   (documentation figure)
 
-Draws every catalogue station on a borderless world land mass and prints per-continent station counts
-underneath.
+Draws every retrievable catalogue station on a borderless world land mass and prints per-continent
+station counts underneath. Catalogue-only providers are excluded.
 
 Run from the repository root (geopandas and matplotlib are not project dependencies):
 
@@ -24,7 +24,10 @@ import polars as pl
 
 import rivretrieve as rr
 
-# Provider → continent, following docs/overview.md.
+# Providers whose stations are listed but whose observations cannot be retrieved yet.
+CATALOGUE_ONLY = {"za_dws"}
+
+# Provider → continent, following the README coverage table.
 PROVIDER_CONTINENT = {
     "ba_fhmzbih": "Europe",
     "br_ana": "Americas",
@@ -82,7 +85,7 @@ def draw(world: gpd.GeoDataFrame, stations: pl.DataFrame, out: Path) -> None:
         fontsize=15,
         fontweight="bold",
     )
-    for i, continent in enumerate(["Americas", "Europe", "Africa", "Asia"]):
+    for i, continent in enumerate(c for c in ("Americas", "Europe", "Africa", "Asia") if counts.get(c)):
         x = 0.02 + i * 0.13
         fig.text(x, 0.065, f"{counts.get(continent, 0):,}", color=STATION, fontsize=14, fontweight="bold")
         fig.text(x, 0.04, continent, color=MUTED, fontsize=10)
@@ -97,7 +100,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
-    frame = rr.as_frame(rr.find())
+    frame = rr.as_frame(rr.find()).filter(~pl.col("provider_id").is_in(CATALOGUE_ONLY))
     stations = frame.select("provider_id", "station_id", "latitude", "longitude").unique(["provider_id", "station_id"])
     draw(gpd.read_file(args.world), stations, args.out)
 
