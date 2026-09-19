@@ -10,6 +10,7 @@ comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
 - [Usage](usage.md): finding stations, selecting series, retrieving them, time windows, issues,
   credentials, cache and receipts.
 - [CAMELS-US example](examples/camels-us.md): how to extend the original CAMELS time series to recent daily streamflow for three gauges.
+- [Drainage-area metadata](drainage-areas.md): offline access to source area fields for selected gauges.
 - [API reference](reference.md): the public functions, their arguments and the columns they return.
 
 ## Providers
@@ -55,7 +56,7 @@ been superseded. Read them as history rather than as instructions.
   history.
 - [Provider port notes](provider_ports/): what was established about each source when it was
   added.
-- [Design analyses](design/) and [delivery records](milestones/).
+- [Observation store layout](design/observation-store-layout.md): the normative store specification.
 - [Development conventions](development-conventions.md).
 
 <details>

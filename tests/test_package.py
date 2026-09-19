@@ -31,6 +31,7 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
         "clear_cache",
         "describe",
         "download",
+        "drainage_areas",
         "fetch",
         "fetch_by_provider",
         "find",

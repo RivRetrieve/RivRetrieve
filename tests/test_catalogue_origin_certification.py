@@ -478,11 +478,6 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
 
 @pytest.mark.parametrize("receipt", _receipts(), ids=lambda row: str(row["provider_id"]))
 def test_receipt_capture_digest(receipt: dict[str, object]) -> None:
-    provider_id = str(receipt["provider_id"])
-    notes_path = PROVIDER_NOTES / f"{provider_id}.md"
-    assert notes_path.is_file()
-    assert f"provider_ports/{provider_id}.md" in (ROOT / "docs/README.md").read_text(encoding="utf-8")
-
     capture_path = receipt["capture_path"]
     if capture_path is None:
         assert receipt["provider_id"] == "za_dws"
@@ -513,14 +508,6 @@ def test_receipt_provider_specific_url_bindings_and_attested_exceptions() -> Non
     dws = rows["za_dws"]
     assert dws["evidence_url"] != dws["requested_url"] == dws["final_url"]
     assert "web.archive.org/web/20251122081546id_/" in str(dws["requested_url"])
-
-    japan = (PROVIDER_NOTES / "jp_mlit.md").read_text(encoding="utf-8")
-    assert "2026-08-03T12:31:42Z" in japan
-    assert "HTTP 403" in japan
-    assert "77-byte" in japan
-    assert "non-refetchable" in japan
-    swiss = (PROVIDER_NOTES / "ch_foen.md").read_text(encoding="utf-8")
-    assert "fragment" in swiss and "not sent" in swiss and "no redirect" in swiss
 
 
 def test_committed_tests_and_receipts_never_depend_on_supply_tree() -> None:

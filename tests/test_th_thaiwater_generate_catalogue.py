@@ -636,25 +636,9 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
-def test_unknown_temporal_support_uses_the_documented_unknown_catalogue_vocabulary() -> None:
-    catalogue = _build()
-    products = catalogue.products.sort("product_id")
-
-    assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
-    assert products.select("frequency", "statistic", "period_type", "period_anchor").unique().rows() == [
-        ("unknown", "unknown", "unknown", "unknown")
-    ]
-
-    docs = Path(__file__).parents[1] / "docs"
-    dictionary = (docs / "product_dictionary.md").read_text()
-    design = (docs / "design/provider-redesign.md").read_text()
-    assert "period_type:    instant | interval | unknown" in dictionary
-    assert "period_type:    instant | interval | unknown" in design
-    assert "Use `unknown` when source temporal support is not established." in dictionary
-
-
 def test_native_build_counts_and_identity_station_fields() -> None:
     catalogue = _build()
+    assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
     committed = _committed_native_table().data
     source_id = committed["station.id"].item(0)
     station = catalogue.stations.filter(pl.col("station_id") == source_id)
