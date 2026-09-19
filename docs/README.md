@@ -14,8 +14,8 @@ comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
 
 ## Providers
 
-RivRetrieve currently reads from 12 national agencies. The [README](../README.md#current-coverage)
-lists them with their station counts.
+RivRetrieve supports observation retrieval from 12 national agencies. The
+[README](../README.md#river-data-and-where-to-find-them) lists them with their station counts.
 
 The data belong to those agencies, and they document their own networks far better than we could.
 These pages therefore cover only what you need in order to work with a provider through
@@ -23,10 +23,10 @@ RivRetrieve, and link to the agency for everything else.
 
 Whatever the provider, RivRetrieve gives you the same things:
 
-- **Stations**: an identifier, a position, and the products the station offers.
+- **Stations**: an identifier, a position where recorded, and the station’s catalogued products.
 - **Products**: a variable (discharge, stage or water temperature), a statistic (mean, maximum,
-  minimum or an instantaneous reading) and a time step (daily, hourly, irregular, or unknown where
-  the agency does not state one).
+  minimum or an instantaneous reading) and a time step (daily, hourly or irregular). Statistics
+  and time steps remain `unknown` where they are not established.
 - **Units**: discharge in m³/s, stage in m, and water temperature in °C.
 - **Times**: as the agency publishes them, each with its time zone, which is `unknown` when the
   agency does not state one.
