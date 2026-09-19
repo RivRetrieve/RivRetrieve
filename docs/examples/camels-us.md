@@ -2,9 +2,8 @@
 
 [Documentation index](../README.md) · [Usage](../usage.md)
 
-The CAMELS-US dataset ends in 2014, so studies that use it often need the years since. This example
-retrieves 2025 daily streamflow for three CAMELS gauges, as a starting point for extending the
-series yourself.
+This example retrieves 2025 daily streamflow for three CAMELS-US gauges. Researchers
+can use it as a starting point for extending the dataset beyond 2010.
 
 The gauge names come from the [CAMELS gauge list](https://zenodo.org/records/15529996/files/camels_name.txt)
 in the [official CAMELS record](https://doi.org/10.5065/D6MW2F4D).
@@ -18,9 +17,8 @@ See [Newman et al. (2015)](https://doi.org/10.5194/hess-19-209-2015) for the stu
 
 ## Request 2025 daily discharge
 
-You get one row per gauge and day of 2025, with discharge in m³/s. Keep identifiers as strings.
-This example requires network access but no credentials. It reads catalogue facts first, then
-requests the inclusive 2025 calendar window.
+Keep identifiers as strings. This example requires network access but no credentials.
+It reads catalogue facts first, then requests the inclusive 2025 calendar window.
 
 ```python
 import rivretrieve as rr
@@ -36,9 +34,10 @@ print(result.issues)
 print(result.provenance)
 ```
 
-USGS publishes this daily product; RivRetrieve does not aggregate sub-daily values to create it.
-The timestamps retain source calendar dates, paired with source-established zones or `unknown`, and
-an unknown zone does not justify assuming UTC. See [time windows](../usage.md#time-windows).
+USGS publishes this daily product. RivRetrieve does not aggregate sub-daily values to
+create it. Returned discharge uses m³/s. The timestamps retain source calendar dates,
+paired with source-established zones or `unknown`. An unknown zone does not justify
+assuming UTC. See [request windows](../usage.md#request-windows-and-utc).
 
-Before combining these observations with existing CAMELS records, check the dates, null values and
-issues, and whether each gauge returned the period your study needs.
+Inspect dates, null values and issues before combining the observations with existing
+CAMELS records. Check whether each gauge returned the period your study needs.
