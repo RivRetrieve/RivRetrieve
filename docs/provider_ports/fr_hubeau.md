@@ -99,14 +99,18 @@ remain historical evidence; they are not substituted into station-own tests.
 
 ## Catalogue load cost
 
-The complete per-pair acquisition account is large: the generated Croissant descriptor
-is 102,402,010 bytes and provenance is 55,085,081 bytes. No legitimate acquisition
-binding is omitted to reduce these sizes. The compressed wheel measured 9,468,867 bytes.
+France's catalogue evidence uses a compact Croissant descriptor, a provenance
+header and five typed Parquet evidence relations. The packaged `croissant.json`
+is 42,905 bytes; `provenance.json` is 9,824 bytes for the header alone, not the
+complete provenance footprint. See [Catalogue evidence](../catalogue-evidence.md)
+for the representation and relation schemas.
 
-The existing eager catalogue loader can load France provenance even for a different
-provider selection. An independent fresh-process probe selecting three USGS pairs
-reported peak RSS 989,364,224 bytes on macOS and about 2.33 seconds. A separate France
-selection followed by `describe` reported peak RSS 1,357,758,464 bytes. These are local
-measurements, not performance guarantees. The cost is therefore not limited to France
-users. This is an explicit release-verification risk for #9; no shared resolver or
-serialization redesign is included in this provider change.
+Provider registration still loads and validates every catalogue in the complete
+manifest before registering providers. France catalogue validation therefore also
+applies when selecting another provider. Smaller metadata files do not establish
+current runtime or memory costs.
+
+The [historical coverage account](evidenced_coverage.md#representation-migration-and-material-footprint)
+records the superseded expanded representation and its measurements. Its migration
+probes are also historical, environment-specific observations, not current
+benchmarks or performance guarantees.
