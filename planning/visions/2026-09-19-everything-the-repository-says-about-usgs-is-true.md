@@ -26,21 +26,30 @@ Rouge). Re-verify anything you rely on; source responses can change.
 | Daily values, `/nwis/dv/` | `2023-01-01T00:00:00.000` | none |
 | Instantaneous values, `/nwis/iv/` | `2023-01-01T00:00:00.000-06:00` | an offset on every value |
 
-- USGS documents this: "All time values RETURNED from the service are UTC with the exception of
-  daily data, which returns time values in local dates"
-  ([read_waterdata_daily](https://water.code-pages.usgs.gov/dataRetrieval/reference/read_waterdata_daily.html)).
-  See also the [daily values](https://waterservices.usgs.gov/docs/dv-service/daily-values-service-details/)
+- For the `/nwis/dv/` and `/nwis/iv/` endpoints RivRetrieve calls, the recorded bytes are the
+  evidence. Their documentation is the
+  [daily values](https://waterservices.usgs.gov/docs/dv-service/daily-values-service-details/)
   and [instantaneous values](https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/)
   service details.
+- USGS's documentation of its *newer* API (`api.waterdata.usgs.gov`, which RivRetrieve does not
+  call) says: "All time values RETURNED from the service are UTC with the exception of daily data,
+  which returns time values in local dates"
+  ([read_waterdata_daily](https://water.code-pages.usgs.gov/dataRetrieval/reference/read_waterdata_daily.html)).
+  Use it only to support "daily values are local dates". Its first half is not true of `/nwis/iv/`,
+  which returns local offsets, so do not copy the sentence into the port note as a description of
+  the endpoints in use.
 - On the daylight-saving day 2023-03-12 the instantaneous service returns 92 readings for
   discharge (`00060`). They run `…01:30-06:00`, `01:45-06:00`, then `03:00-05:00`, `03:15-05:00`:
-  the offset flips and the 02:00 hour is absent. Values are about 809,000–811,000 ft³/s with
+  the offset flips and the 02:00 hour is absent (8 readings at `-06:00`, 84 at `-05:00`). Values
+  are about 809,000–811,000 ft³/s near the flip and 809,000–829,000 over the day, all with
   qualifier `A`.
 - The daily payload still carries `sourceInfo.timeZoneInfo` (`CST`, `-06:00`, uses DST). That
   describes the station. It is not a zone on the daily values.
-- `https://waterservices.usgs.gov/nwis/iv/` now answers `301` to
-  `https://nwis.waterservices.usgs.gov/nwis/iv/`. The `/nwis/dv/` endpoint answered `200`
-  directly. Retrieval works because the transport follows redirects.
+- `https://waterservices.usgs.gov/nwis/iv/` answers `301` to
+  `https://nwis.waterservices.usgs.gov/nwis/iv/`. This is not new: instantaneous recordings from
+  2026-08-19 and 2026-09-02 already carry the `nwis.` host in the payload's `queryURL`. The
+  `/nwis/dv/` endpoint answered `200` directly. Retrieval works because the transport follows
+  redirects.
 
 ## What the code already does, and must keep doing
 
@@ -56,6 +65,11 @@ sends and `unknown` when there is none. That is the software's design: `AGENTS.m
 preserve source facts and unknowns and not to infer time zones, and `docs/README.md` promises
 times "as the agency publishes them, each with its time zone, which is `unknown` when the agency
 does not state one".
+
+`_parse_timestamp` checks for an offset first, so it would keep an offset on a daily timestamp if
+USGS ever sent one. Once the invented file is gone nothing exercises that branch. Leave the branch
+as it is and do not add a test for it: a test would have to present a daily payload USGS does not
+produce.
 
 For the same reason, which zone defines a USGS daily value's midnight-to-midnight window is
 **not an open question for this project** and gets no follow-up issue. USGS does not state it, so
@@ -100,8 +114,9 @@ than leaving a description of code that no longer exists.
 
 It presents itself as a USGS daily response but is not a capture: every daily timestamp carries
 `-06:00`, its query asks for 1–31 January but it holds 10 values, and it contains the note
-`[mode=USGS_WaterML2; requested:2026-01-01]`. Its discharge values do match real ones
-(373000 ft³/s on 1–3 January 2023), so it is probably a real response that was edited. It was
+`[mode=USGS_WaterML2; requested:2026-01-01]`. Its discharge values for 1–5 January 2023 match
+what USGS returns today (373000 ×3, 377000, 382000 ft³/s) and those for 6–10 January do not, so it
+is probably a real response that was edited. It was
 added with the original port (`b744717`) and is the likely origin of the false doc claim.
 
 It is used by:
@@ -110,11 +125,23 @@ It is used by:
   and `test_parse_fixture_preserves_wall_clock_offset_and_ignores_cst_trap` assert `-06:00` on its
   rows, and `test_parse_requires_exactly_one_station_product_pair` uses its bytes. Note these tests
   parse the daily file under *instantaneous* semantics via `_provider_config()`.
-- `tests/test_usgs_nwis_fetch.py:49` and `tests/test_transport_seam.py:32`, as generic USGS bytes.
+- `tests/test_usgs_nwis_parse.py` — `test_parse_fixture_does_not_invent_a_qualifier_carrier` also
+  reads it, and first asserts the file contains qualifiers `A`, `P` and `e`. Real data for that
+  window carries only `A` and `e` today, so that precondition cannot be kept as written; derive
+  it from whatever the real recording holds.
+- `tests/test_usgs_nwis_fetch.py:49` defines `FIXTURE_PATH` and never uses it. Delete the dead
+  constant.
+- `tests/test_transport_seam.py:32,80` wraps the file in a `RecordingEnvelope` as the response to a
+  daily-values request for 2022-12-30 to 2023-01-03 and replays it through the real stages as
+  `discharge_daily_mean`. That presents an offset-bearing daily payload as a USGS recording. A real
+  recording of that exact request already exists:
+  `tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json`. Use
+  it, and re-derive the test's expectations from its bytes.
 
 Remove tests whose only content is validating the invented shape. Where a test protects a real
 behaviour (wall-clock preserved, published offset kept verbatim, `CST`/`CDT` abbreviations never
-used as the zone, payload identity, exactly one station-product pair), re-ground it on a real
+used as the zone, payload identity, exactly one station-product pair, no qualifier column in the
+parsed rows), re-ground it on a real
 recording: offsets on the real instantaneous recording, naive labels on the real daily recording.
 
 ### `tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12-dst.json` — delete and replace
@@ -152,7 +179,10 @@ assume.
 The existing `*.recording.json` files under `tests/test_data/` are real captures and are the model
 for new ones: `…dv_00060_00003_2023-01-01_2023-01-03.recording.json` (daily, naive labels) and
 `…iv_00060_2023-01-01.recording.json` (instantaneous, offsets, captured 2026-09-19). Recording and
-replay live in `src/rivretrieve/_internal/recordings.py`. A new recording must be the exact request
+replay live in `src/rivretrieve/_internal/recordings.py` (see `RecordingTransport`,
+`write_recording` and its `main()`). Follow the newest envelope shape, as in
+`…iv_00060_2023-01-01.recording.json`, which carries `ordinary_headers`,
+`credential_header_names` and `prerequisite_calls`; older recordings lack them. A new recording must be the exact request
 and the exact response bytes; do not trim, edit or hand-assemble one. USGS needs no credentials and
 was reachable from the maintainer's network on 2026-09-19.
 
