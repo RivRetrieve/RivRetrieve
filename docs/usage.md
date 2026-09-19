@@ -7,12 +7,13 @@ observations, then inspect the data and issues. This page follows that order, th
 credentials, caching, provenance and maps.
 
 Run the Python examples in page order in one session. They build on earlier variables.
-The retrieval examples use the same USGS gauge and one-day window as the README. Discovery
-outputs use the installed catalogue. Observation outputs were checked live on 2026-09-19;
-source responses can change. Synthetic and fixture-only outputs are labelled separately.
+The first retrieval uses the same USGS gauge and one-day window as the README. Later examples
+add a second provider and convert established time zones to UTC.
 
 ## Find stations
 
+A **provider** supplies observations, such as the US Geological Survey (`usgs_nwis`).
+A **station** is a monitoring site, such as USGS gauge `07374000`.
 A **product** names a variable, a statistic and a time step. `discharge_daily_mean` is
 source-published daily mean discharge; `stage_instantaneous` is a stage reading at a given
 moment. Supported variables are discharge, stage and water temperature.
@@ -28,8 +29,10 @@ import rivretrieve as rr
 print(rr.products("usgs_nwis"))
 # Output:
 # ['discharge_daily_mean', 'discharge_instantaneous', 'stage_daily_max', 'stage_daily_mean', 'stage_daily_min', 'stage_instantaneous']
+
 daily_gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
 chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
+
 print(rr.as_frame(chosen_gauges).select("provider_id", "station_id", "product_id").rows())
 # Output:
 # [('usgs_nwis', '07374000', 'discharge_daily_mean')]
@@ -48,7 +51,9 @@ series. The example prints only the three identity columns as a list of rows.
 `native_id` is the agency's own product code. For USGS, `00060:00003` combines discharge
 (`00060`) and daily mean (`00003`).
 
-`find` accepts one identifier per filter. `pick` keeps matching entries from its input.
+`find` accepts one provider, station or product per filter. For example,
+`provider="usgs_nwis"` selects USGS and `product="discharge_daily_mean"` selects daily mean discharge.
+`pick` keeps matching entries from its input.
 The square brackets in `station=["07374000"]` make a Python list; add more station strings
 to select several at once. `pick` cannot introduce a station or product absent from its input.
 Unknown identifiers raise errors. When recognised identifiers have no matching selectable
@@ -74,6 +79,7 @@ regional_gauges = rr.pick(daily_gauges, station=["01013500", "01022500", "073740
 frame = rr.as_frame(regional_gauges)
 northern_frame = frame.filter(pl.col("latitude") > 45)
 northern_gauges = rr.from_frame(northern_frame)
+
 print(rr.as_frame(northern_gauges).select("station_id", "latitude").rows())
 # Output:
 # [('01013500', 47.2375)]
@@ -89,18 +95,19 @@ See the [reference](reference.md) for the full selection interface.
 
 `describe(provider)` returns an offline, machine-readable catalogue description in
 [Croissant](https://github.com/mlcommons/croissant) format. It identifies files and the evidence
-for catalogue facts. A `withheld` fact means RivRetrieve lacks an established acquisition record;
-it does not mean the source publishes nothing. See [catalogue evidence](catalogue-evidence.md).
+for catalogue facts. A `withheld` fact means RivRetrieve lacks an established acquisition record. See [catalogue evidence](catalogue-evidence.md).
 
 ## Retrieve and inspect results
 
-Retrieve observations for the one gauge in `chosen_gauges`, not the regional filtering example:
+Retrieve observations for the gauge in `chosen_gauges`:
 
 ```python
 result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01")
+
 print(result.data.select("station_id", "value").rows())
 # Output:
 # [('07374000', 10562.183778816001)]
+
 print(result.issues)
 # Output:
 # ()
@@ -122,8 +129,8 @@ The observation frame has exactly these columns, even when empty:
 | `product_id` | Canonical product identifier |
 | `value` | Float in the product's canonical unit, or a published null |
 
-The agency's timestamp is retained. `unknown` records that a zone has not been established;
-it is not a guess based on station coordinates. A null value, an absent row and a failed request
+The agency's timestamp is retained. `unknown` means there is no established time zone to use
+for conversion to UTC. A null value, an absent row and a failed request
 are different states.
 
 Discharge uses m³/s, stage uses metres, and water temperature uses degrees Celsius. Product
@@ -133,20 +140,32 @@ quality judgements uninterpreted and does not compute unpublished products at an
 
 ### Results by provider
 
-`fetch` requires a nonempty selection from one provider. `fetch_by_provider` accepts selections
-with several providers and returns a dictionary keyed by provider identifier. This small example
-uses just USGS, so it requires no credentials or national downloads:
+`fetch_by_provider` retrieves observations from several providers and returns a dictionary
+with one result per provider. Here, combine the USGS gauge with a gauge from Lithuania's
+Hydrometeorological Service (`lt_lhmt`). Both provide this daily discharge data without credentials:
 
 ```python
-provider_results = rr.fetch_by_provider(chosen_gauges, start="2023-01-01", end="2023-01-01")
-print({provider: item.data.select("station_id", "value").rows() for provider, item in provider_results.items()})
+lithuanian_gauge = rr.find(
+    provider="lt_lhmt", station="anyksciu-vms", product="discharge_daily_mean"
+)
+mixed_gauges = rr.from_frame(pl.concat([
+    rr.as_frame(chosen_gauges), rr.as_frame(lithuanian_gauge)
+]))
+provider_results = rr.fetch_by_provider(mixed_gauges, start="2023-01-01", end="2023-01-01")
+usgs_result = provider_results["usgs_nwis"]
+lithuanian_result = provider_results["lt_lhmt"]
+
+print(usgs_result.data.select("station_id", "value").rows())
 # Output:
-# {'usgs_nwis': [('07374000', 10562.183778816001)]}
+# [('07374000', 10562.183778816001)]
+
+print(lithuanian_result.data.select("station_id", "value").rows())
+# Output:
+# [('anyksciu-vms', 81.8)]
 ```
 
-A mixed selection produces a separate entry for each provider. Station identifiers, source terms
-and provenance belong to that provider. An empty selection returns `{}` from `fetch_by_provider`
-and raises from `fetch`.
+Each result has its own data, issues and provenance. Station codes belong to their provider.
+Use `fetch` for a nonempty selection from one provider.
 
 ### Request windows and UTC
 
@@ -161,55 +180,40 @@ labels. Omit `end` to use the caller machine's current local date through its fi
 A future end stays unchanged and adds an `info` issue. See the [reference](reference.md) for
 request and conversion details.
 
-UTC conversion uses each row's established zone to put its label on a common clock.
-An unknown zone gives no offset to apply, so `to_utc` refuses the whole conversion when any row
-has `unknown`. The USGS daily result above has unknown zones:
+UTC conversion uses each row's established time zone to put its timestamp on a common clock.
+USGS instantaneous observations include an offset in their timestamps. Retrieve two readings
+from the same gauge and convert them:
 
 ```python
-if not result.data["time_zone"].eq("unknown").any():
-    utc_result = rr.to_utc(result)
-else:
-    print("UTC conversion skipped: unknown time zone.")
-    # Output:
-    # UTC conversion skipped: unknown time zone.
-```
-
-This example skips conversion and does not create `utc_result`. For a separate, explicitly
-**synthetic** demonstration, construct a row whose fixed offset is given as `+02:00`.
-This row is not USGS data and establishes no zone for USGS:
-
-```python
-from datetime import datetime
-
-from rivretrieve._internal.observations import ObservationProvenance, ObservationResult, Receipts
-from rivretrieve._internal.primitives import ProviderId
-
-synthetic_result = ObservationResult(
-    data=pl.DataFrame({
-        "time": [datetime(2023, 1, 1, 12)],
-        "time_zone": ["+02:00"],
-        "station_id": ["example"],
-        "product_id": ["stage_instantaneous"],
-        "value": [1.0],
-    }),
-    provenance=ObservationProvenance(source="synthetic", provider_id=ProviderId("example")),
-    receipts=Receipts(provider_id=ProviderId("example"), entries=()),
+instant_gauge = rr.find(
+    provider="usgs_nwis", station="07374000", product="discharge_instantaneous"
 )
-synthetic_utc = rr.to_utc(synthetic_result)
-print(synthetic_utc.data.select("time", "time_zone").rows())
+instant_result = rr.fetch(
+    instant_gauge, start="2023-01-01T00:00", end="2023-01-01T00:15"
+)
+
+print(instant_result.data.select("time", "time_zone").rows())
 # Output:
-# [(datetime.datetime(2023, 1, 1, 10, 0), '+00:00')]
+# [(datetime.datetime(2023, 1, 1, 0, 0), '-06:00'), (datetime.datetime(2023, 1, 1, 0, 15), '-06:00')]
+
+utc_result = rr.to_utc(instant_result)
+
+print(utc_result.data.select("time", "time_zone").rows())
+# Output:
+# [(datetime.datetime(2023, 1, 1, 6, 0), '+00:00'), (datetime.datetime(2023, 1, 1, 6, 15), '+00:00')]
 ```
 
 The returned `time` remains naive and `time_zone` becomes `+00:00`. Other result fields remain
-unchanged. Converting a label does not establish an unknown daily aggregation interval.
+unchanged. If any row has an unknown time zone, as in the USGS daily result, `to_utc` raises
+because it cannot determine the offset needed to convert that timestamp.
+Converting timestamps preserves the source's daily aggregation definition, including unknowns.
 
 ### Issues
 
-RivRetrieve assigns issue severity: `info`, `warning` or `error`. The caller's `on_issue` choice
-controls notification, not severity. Issues describe what happened while independent successful
-series can still return rows. A failed request differs from a successful answer with no
-observations. Inspect issues alongside row counts.
+Issues describe what happened during retrieval. Each has a severity: `info`, `warning` or
+`error`. Independent successful series can still return rows when another series fails.
+Choose `on_issue` to warn and continue, stop on an issue, or handle notifications yourself.
+A failed request differs from a successful answer with no observations. Inspect issues alongside row counts.
 
 | `on_issue` | Handling of `warning` and `error` issues |
 |---|---|
@@ -217,25 +221,21 @@ observations. Inspect issues alongside row counts.
 | `"raise"` | Raise `IssuePolicyError` carrying the actionable issues. |
 | `"ignore"` | Return the result without notifications. Keep its issues. |
 
-`info` never activates this policy. Here is how to stop on warning or error issues and inspect
-the exception. The success output was checked live. The exception output was checked separately
-with an authored HTTP 503 test response, not an observed USGS outage:
+`info` issues remain available without triggering a warning or exception. To stop when a
+retrieval reports warning or error issues, choose `raise`:
 
 ```python
-from rivretrieve._internal.issues import IssuePolicyError
+checked_result = rr.fetch(
+    chosen_gauges, start="2023-01-01", end="2023-01-01", on_issue="raise"
+)
 
-try:
-    checked_result = rr.fetch(
-        chosen_gauges, start="2023-01-01", end="2023-01-01", on_issue="raise"
-    )
-    print("No warning or error issues.")
-    # Output:
-    # No warning or error issues.
-except IssuePolicyError as error:
-    print("Retrieval raised:", len(error.issues))
-    # Output:
-    # Retrieval raised: 1
+print(checked_result.issues)
+# Output:
+# ()
 ```
+
+If an issue triggers this policy, the call raises `IssuePolicyError`. You can catch it with
+`from rivretrieve._internal.issues import IssuePolicyError` and inspect its `issues`.
 
 To handle notifications yourself, use `ignore` and inspect the retained issues:
 
@@ -243,6 +243,7 @@ To handle notifications yourself, use `ignore` and inspect the retained issues:
 quiet_result = rr.fetch(
     chosen_gauges, start="2023-01-01", end="2023-01-01", on_issue="ignore"
 )
+
 print([(issue.severity, issue.code) for issue in quiet_result.issues])
 # Output:
 # []
@@ -254,8 +255,7 @@ unsuccessful statuses, rejected credentials and exhausted transport retries prod
 issues. An all-failed request can return an empty five-column frame with issues.
 
 Broken stage contracts raise independently of `on_issue`. Invalid windows, missing credentials
-and catalogue-only observation requests also raise. The current exception import is shown above;
-exception classes are not exported at the package root. See [reference](reference.md) for
+and catalogue-only observation requests also raise. See [reference](reference.md) for
 exception locations and [architecture](architecture.md) for failure isolation.
 
 ## Supplied credentials
@@ -292,20 +292,23 @@ To reuse this one-day request later:
 ```python
 cached_result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01", cache="reuse")
 status = rr.cache_status("usgs_nwis")
+
 print(status.exists)
 # Output:
 # True
 ```
 
-This output comes from a successful cache write. Coverage records a successful answer for an
-interval, including an answer with no rows. It does not promise continuous observations.
+For example, request ten stations with `cache="reuse"`. If four stations have full coverage
+for the requested product and time interval, RivRetrieve serves those four from cache and
+fetches the other six. If a station is partially covered, it fetches only the missing interval.
+Coverage is tracked for each station, product and time interval. A successful answer counts as
+coverage even when it contains no rows.
 Refreshing can leave fewer rows, or none. A failed request adds no coverage. RivRetrieve records
 retrieval times but leaves freshness judgements to you.
 
-Set `RIVRETRIEVE_CACHE_DIR` to choose a cache location. Environment values take precedence over
-the working-directory `.env` file. Without an override, RivRetrieve uses the platform's user
-cache directory. `cache_status` inspects local state without network access and refuses malformed
-or unsupported stores. `clear_cache(provider)` deletes that provider's store and pending recovery
+Set `RIVRETRIEVE_CACHE_DIR` to choose a cache location. Without an override, RivRetrieve uses
+the platform's user cache directory. `cache_status` inspects local state without network access
+and refuses malformed or unsupported stores. `clear_cache(provider)` deletes that provider's store and pending recovery
 inputs, including preserved downloads. It returns a removal summary and leaves other providers
 alone. See [architecture](architecture.md#storage-and-reuse) for storage details.
 
@@ -323,68 +326,48 @@ For bulk providers, `bypass` and `reuse` both read the compiled store; `refresh`
 transfer. Use `download(provider)` to replace it. After successful compilation the publisher
 artifact is deleted, while its identity remains recorded.
 
-## Provenance and receipts
+## Provenance
 
-Use provenance to investigate where a result came from: its provider, request and cache context.
-Print a few fields rather than the entire object:
+`result.data` contains harmonised observations. `result.provenance` records request and
+origin information, which helps you check where those observations came from:
 
 ```python
 print(result.provenance.provider_id, result.provenance.source)
 # Output:
 # usgs_nwis live
+
 print(result.provenance.request)
 # Output:
 # {'series': [{'station_id': '07374000', 'product_id': 'discharge_daily_mean'}], 'start': '2023-01-01T00:00:00', 'end': '2023-01-01T23:59:59.999999'}
 ```
 
-`calls_made` holds available source-call records, including request parameters and available
-response facts. `endpoints` lists distinct URLs from those records. Failed requests can leave
-no recorded payload origin, so these fields do not list every attempted address.
+Provenance includes available source-call records, source terms and cache context.
+Failed requests can leave no recorded payload origin. On a cache-only read, `retrieved_at`
+can be `None`; retrieval times for cached intervals are in `served_intervals`.
+See the [reference](reference.md) for the provenance fields.
 
-`requested_at` records the request instant. `retrieved_at` records the latest known newly fetched
-source retrieval instant. On a cache-only read it can be `None`; the retrieval times of already
-cached intervals are in `served_intervals`. A newly fetched interval is not also listed as a
-served cached interval in that call.
+## Receipts (optional)
 
-Other fields can hold catalogue evidence, source licence and citation, local queries, and bulk
-artifact identity. Read the populated fields for your result. This is not a complete request or
-transformation audit: software version and conversion factors are not necessarily recorded.
-Source terms are retained without interpreting permission to redistribute data.
-
-Receipts provide source bytes or stored rows for closer inspection of a value. Request them with
-`receipts=True`; otherwise `receipts.entries` is empty. This fresh request keeps publisher bytes:
+Request receipts when you want inspectable source material, for example to check values before
+unit conversion:
 
 ```python
 receipt_result = rr.fetch(
     chosen_gauges, start="2023-01-01", end="2023-01-01", receipts=True
 )
+
 print([entry.authorship.value for entry in receipt_result.receipts.entries])
 # Output:
 # ['publisher_payload']
 ```
 
-- `publisher_payload` contains the exact bytes handed to the parser. For an archive, this can
-  be an extracted member rather than the archive itself.
-- `store_excerpt` contains stored rows encoded as Parquet by RivRetrieve. Both compiled bulk
-  stores and live-provider accumulated caches can return these excerpts. They include query,
-  path and format information, with source vintage where applicable. They cannot reconstruct
-  the publisher's original bytes.
+- `publisher_payload` holds the bytes handed to the parser, such as an extracted archive member.
+- `store_excerpt` holds cached rows encoded as Parquet by RivRetrieve, rather than the original
+  publisher bytes. Both live caches and compiled bulk stores can return these excerpts.
 
-The earlier `cache="reuse"` call saved this interval. Reading it again with receipts returns a
-RivRetrieve-authored excerpt:
-
-```python
-cached_receipts = rr.fetch(
-    chosen_gauges, start="2023-01-01", end="2023-01-01", cache="reuse", receipts=True
-)
-print([entry.authorship.value for entry in cached_receipts.receipts.entries])
-# Output:
-# ['store_excerpt']
-```
-
-Receipt rows can extend beyond the final clipped result, and stored values can still be in
-native units. Receipt row counts therefore need not equal `result.data` row counts.
-See [catalogue evidence](catalogue-evidence.md) for the separate record of catalogue facts.
+Receipts can contain extra rows and values in native units. They help inspect source material;
+they are not a full reproducibility archive. Without `receipts=True`, `receipts.entries` is empty.
+See the [receipt reference](reference.md#receipts) for receipt fields and content.
 
 ## Maps
 

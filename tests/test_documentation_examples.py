@@ -18,6 +18,10 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDING = ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
+INSTANT_RECORDING = ROOT / "tests/test_data/usgs_nwis_07374000_iv_00060_2023-01-01.recording.json"
+LITHUANIAN_RECORDINGS = [
+    ROOT / f"tests/test_data/lt_lhmt_anyksciu-vms_daily_{month}.recording.json" for month in ("2022-12", "2023-01")
+]
 
 
 def blocks(page):
@@ -54,8 +58,8 @@ def test_every_newcomer_print_has_visible_output(page):
 class CountingReplay(ReplayTransport):
     """Keep transport call counts; never replace the public retrieval path."""
 
-    def __init__(self, recording):
-        super().__init__((recording,))
+    def __init__(self, recording, *additional_recordings):
+        super().__init__((recording, *additional_recordings))
         self.calls = []
 
     def send(self, request):
@@ -82,7 +86,11 @@ def execute_block(block, scope, label):
 def execute_page(page, monkeypatch, tmp_path):
     import rivretrieve._internal.discovery as discovery
 
-    replay = CountingReplay(read_recording(RECORDING))
+    replay = CountingReplay(
+        read_recording(RECORDING),
+        read_recording(INSTANT_RECORDING),
+        *(read_recording(path) for path in LITHUANIAN_RECORDINGS),
+    )
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
@@ -112,19 +120,48 @@ def assert_usage_state(scope, tmp_path):
     from polars.testing import assert_frame_equal
 
     result = scope["result"]
-    assert tuple(scope["provider_results"]) == ("usgs_nwis",)
+    assert len(scope["provider_results"]) == 2
+    assert set(scope["provider_results"]) == {"usgs_nwis", "lt_lhmt"}
+    lithuanian = scope["lithuanian_result"]
+    expected_lithuanian = pl.DataFrame(
+        {
+            "time": [datetime(2023, 1, 1)],
+            "time_zone": ["+00:00"],
+            "station_id": ["anyksciu-vms"],
+            "product_id": ["discharge_daily_mean"],
+            "value": [81.8],
+        }
+    )
+    assert_frame_equal(lithuanian.data, expected_lithuanian)
+    assert not lithuanian.issues
+    assert lithuanian.provenance.provider_id == "lt_lhmt"
+    instantaneous = scope["instant_result"]
+    assert not instantaneous.issues
+    assert instantaneous.data["time_zone"].to_list() == ["-06:00", "-06:00"]
+    assert instantaneous.data["time"].to_list() == [datetime(2023, 1, 1), datetime(2023, 1, 1, 0, 15)]
+    expected_utc = instantaneous.data.with_columns(
+        pl.Series("time", [datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 6, 15)]),
+        pl.lit("+00:00").alias("time_zone"),
+    )
+    assert_frame_equal(scope["utc_result"].data, expected_utc)
+    assert scope["utc_result"].provenance is instantaneous.provenance
+    assert scope["utc_result"].issues is instantaneous.issues
+    assert scope["utc_result"].receipts is instantaneous.receipts
     assert_frame_equal(scope["provider_results"]["usgs_nwis"].data, result.data)
     assert_frame_equal(scope["cached_result"].data, result.data)
-    assert_frame_equal(scope["cached_receipts"].data, result.data)
     assert scope["status"].store == tmp_path / "cache" / "usgs_nwis" / "store"
     calls = scope["_calls_by_block"]
     assert next(count for block, count in calls if "cached_result =" in block) == 1
-    assert next(count for block, count in calls if "cached_receipts =" in block) == 0
     assert next(count for block, count in calls if "receipt_result =" in block) == 1
     fresh = scope["receipt_result"]
     assert fresh.receipts.entries[0].content == read_recording(RECORDING).content
     assert fresh.receipts.entries[0].authorship.value == "publisher_payload"
-    cached = scope["cached_receipts"]
+    before = len(scope["_transport"].calls)
+    cached = scope["rr"].fetch(
+        scope["chosen_gauges"], start="2023-01-01", end="2023-01-01", cache="reuse", receipts=True
+    )
+    assert len(scope["_transport"].calls) == before
+    assert_frame_equal(cached.data, result.data)
     assert cached.receipts.entries[0].authorship.value == "store_excerpt"
     assert cached.receipts.entries[0].format_version == 4
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
@@ -147,29 +184,44 @@ def assert_usage_state(scope, tmp_path):
     assert "L.marker(" in html
 
 
-def test_usage_demonstrates_known_and_unknown_utc_branches(monkeypatch, tmp_path):
+def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path):
     from polars.testing import assert_frame_equal
 
-    scope = execute_page("docs/usage.md", monkeypatch, tmp_path)
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.observations import ObservationProvenance, ObservationResult, Receipts
+    from rivretrieve._internal.primitives import ProviderId
+
+    scope = execute_page("README.md", monkeypatch, tmp_path)
+    rr = scope["rr"]
     assert scope["result"].data["time_zone"].to_list() == ["unknown"]
-    assert "utc_result" not in scope, "Unknown USGS zones must skip conversion"
-    synthetic = scope["synthetic_result"]
-    assert synthetic.data["time_zone"].to_list() == ["+02:00"]
-    guard = next(block for block in blocks("docs/usage.md") if 'if not result.data["time_zone"]' in block)
-    scope["result"] = synthetic
-    exec(compile(guard, "usage-known-zone-branch", "exec"), scope)
+    with pytest.raises(FatalContractError, match="unknown"):
+        rr.to_utc(scope["result"])
+    synthetic = ObservationResult(
+        data=pl.DataFrame(
+            {
+                "time": [datetime(2023, 1, 1, 12)],
+                "time_zone": ["+02:00"],
+                "station_id": ["example"],
+                "product_id": ["stage_instantaneous"],
+                "value": [1.0],
+            }
+        ),
+        provenance=ObservationProvenance(source="synthetic", provider_id=ProviderId("example")),
+        receipts=Receipts(provider_id=ProviderId("example"), entries=()),
+    )
+    converted = rr.to_utc(synthetic)
     expected = synthetic.data.with_columns(
         pl.lit(datetime(2023, 1, 1, 10)).alias("time"),
         pl.lit("+00:00").alias("time_zone"),
     )
-    assert_frame_equal(scope["utc_result"].data, expected)
-    assert scope["utc_result"].provenance is synthetic.provenance
-    assert scope["utc_result"].issues is synthetic.issues
-    assert scope["utc_result"].receipts is synthetic.receipts
+    assert_frame_equal(converted.data, expected)
+    assert converted.provenance is synthetic.provenance
+    assert converted.issues is synthetic.issues
+    assert converted.receipts is synthetic.receipts
 
 
 def issue_example():
-    return next(block for block in blocks("docs/usage.md") if "except IssuePolicyError" in block)
+    return next(block for block in blocks("docs/usage.md") if "checked_result =" in block)
 
 
 def scripted_recording(outcome):
@@ -196,13 +248,12 @@ def issue_scope(monkeypatch, tmp_path, outcome):
     return {"rr": rr, "chosen_gauges": rr.pick(daily_gauges, station=["07374000"])}, replay
 
 
-@pytest.mark.parametrize("outcome", ["success", "empty", 404, 503])
-def test_actual_issue_example_both_print_branches(monkeypatch, tmp_path, outcome):
-    scope, replay = issue_scope(monkeypatch, tmp_path, outcome)
-    checked = execute_block(issue_example(), scope, f"usage-issues-{outcome}")
+def test_actual_issue_example_success(monkeypatch, tmp_path):
+    scope, replay = issue_scope(monkeypatch, tmp_path, "success")
+    checked = execute_block(issue_example(), scope, "usage-issues-success")
     assert len(checked) == 1
     assert len(replay.calls) == 1
-    assert ("checked_result" in scope) == (outcome == "success")
+    assert not scope["checked_result"].issues
 
 
 @pytest.mark.parametrize("policy", ["warn", "ignore", "raise"])
