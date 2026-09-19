@@ -70,6 +70,8 @@ Audit research-verifier tests by maintained purpose. Keep or consolidate checks 
 
 ## Branches, worktrees, and ongoing work
 
+You are not working alone. Another agent is implementing drainage-area metadata in PR #254. Use a separate branch and worktree. Do not modify, reset, or remove that agent’s work. Coordinate overlapping changes to packaging, catalogue evidence, and tests. Recheck active branches and worktrees before cleanup.
+
 The intended steady state is `main` plus branches being actively worked on, locally and on GitHub. A clean worktree does not mean destroying ignored credentials, local evidence, or unrelated work. Reinspect live branches, PRs, issues, commits, and all local worktree contents before acting. A squash-merged branch can contain commits not ancestral to `main`; lack of ancestry is not proof of undelivered functionality. Ordinary clean status also does not prove a worktree contains no unique ignored files.
 
 Protect ongoing work. At authoring, this includes South Africa's `vision/effort-17-za-dws` and draft PR #210, usage PR #252, drainage-area PR #254, and CAMELS documentation PR #255. This is a time-sensitive inventory, not an exhaustive or permanent allowlist. The maintainer explicitly identifies South Africa as ongoing despite issue #212's older "Deferred, not delivered" text. Do not archive that effort or close its draft PR as part of cleanup. Removing the retired reference code is distinct from removing replacement work or evidence it needs.
