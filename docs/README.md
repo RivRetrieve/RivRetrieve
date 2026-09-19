@@ -55,7 +55,7 @@ been superseded. Read them as history rather than as instructions.
   history.
 - [Provider port notes](provider_ports/): what was established about each source when it was
   added.
-- [Design analyses](design/) and [delivery records](milestones/).
+- [Observation store layout](design/observation-store-layout.md): the normative store specification.
 - [Development conventions](development-conventions.md).
 
 <details>

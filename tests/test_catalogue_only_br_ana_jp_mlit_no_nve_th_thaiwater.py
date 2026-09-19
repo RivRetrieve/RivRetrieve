@@ -1,4 +1,4 @@
-"""Catalogue-only contracts and archived-reference inventory for milestone 7 step 3."""
+"""Catalogue-only contracts and retained source evidence."""
 
 from __future__ import annotations
 
@@ -29,7 +29,6 @@ DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.p
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
-REFERENCE_ROOT = Path(__file__).parents[1] / "reference" / "legacy_observations"
 
 
 @pytest.mark.parametrize(
@@ -188,9 +187,7 @@ def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
         assert row.select("latitude", "longitude").row(0) == coordinates
 
 
-def test_verified_provider_replacements_retire_their_legacy_subtrees() -> None:
-    for provider in ("br_ana", "jp_mlit", "no_nve"):
-        assert not (REFERENCE_ROOT / provider).exists()
+def test_brazil_verification_evidence_is_available() -> None:
     evidence = Path(__file__).parent / "recordings" / "br_ana"
     assert (evidence / "daily-public-live-verification.json").is_file()
     assert (evidence / "public-live-verification.json").is_file()

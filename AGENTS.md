@@ -21,8 +21,11 @@ Format, lint, and type-check with:
 ```bash
 uv run ruff format
 uv run ruff check --fix
-uv run ty check
+uv run ty check src
 ```
+
+The type-check gate targets `src`: `tests/typecheck/nominal_window_misuse.py` is an
+intentional negative fixture checked by the engine-contract tests. Do not suppress it.
 
 ## 2. Design Doctrine
 

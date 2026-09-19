@@ -207,17 +207,6 @@ decision. Dispatching on kind rather than on provider id is what removes the las
 hand-written per-provider branch.
 _Avoid_: provider type, capability, variant, strategy
 
-**Legacy reference**:
-The pre-engine implementation of a [[catalogue-only]] provider, kept readable under
-`reference/legacy_observations/<provider>/` with the tests and payload fixtures it was
-written against. It exists so that porting a provider can start from how that source
-actually behaves — its endpoints, request construction, headers and response shapes —
-rather than from reconstruction. It is excluded from lint, typecheck, test collection and
-both distributions, and is deleted per provider as that provider is ported. It is
-evidence, not runtime code and not a live test suite.
-_Avoid_: dead code, backup, vendored, archive (which is a collection prepared for
-publication)
-
 **Selection**:
 The set of series a caller has settled on, at the grain of one
 `(provider_id, station_id, product_id)` triple, produced by `find` or narrowed by `pick` and
@@ -495,10 +484,9 @@ fixtures, which is how a belief passed for an observation), mock, stub, cassette
 **Invented payload**:
 An observation payload written by an author from what they believed a source returns. It
 proves a port reproduces its author's belief, which is how eleven providers held a
-boundary defect while their tests passed. It is never a [[recording]] and never grounds an
-expectation; the nine committed under `reference/legacy_observations/` remain as
-[[legacy-reference]] reading material, because what a previous author believed the shape
-was is worth reading, and are not promoted into a live fixture or a baseline.
+boundary defect while their tests passed. It is never a [[recording]] and never grounds an expectation. Former invented payloads and
+pre-engine implementations remain recoverable in Git history, not as live fixtures or
+baselines.
 _Avoid_: synthetic fixture, toy fixture, minimal fixture (all three describe the size
 rather than the defect, and the defect is the authorship)
 

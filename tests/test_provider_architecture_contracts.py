@@ -14,7 +14,6 @@ from rivretrieve._internal.registry import _registry
 
 ROOT = Path(__file__).parents[1]
 PROVIDERS_ROOT = ROOT / "src" / "rivretrieve" / "_internal" / "providers"
-REFERENCE_ROOT = ROOT / "reference" / "legacy_observations"
 RATIFIED_RUNTIME_ROLES = {
     "__init__.py",
     "bulk.py",
@@ -401,12 +400,9 @@ def test_bulk_modules_do_not_expose_legacy_cache_operations() -> None:
         assert not hasattr(module, "refresh_cache")
 
 
-def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
+def test_repository_configuration_enforces_transport_boundary() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    reference_path = "reference/legacy_observations/"
     ruff_lint = config["tool"]["ruff"]["lint"]
-    assert REFERENCE_ROOT.is_dir()
-    assert config["tool"]["ruff"]["extend-exclude"] == [reference_path]
     assert "TID251" in ruff_lint["extend-select"]
     assert set(ruff_lint["flake8-tidy-imports"]["banned-api"]) == {"httpx", "requests", "urllib"}
     assert ruff_lint["per-file-ignores"] == {
@@ -414,7 +410,6 @@ def test_legacy_reference_tree_is_inert_by_repository_configuration() -> None:
         "src/rivretrieve/_internal/providers/*/generate_catalogue.py": ["TID251"],
         "tests/**": ["TID251"],
     }
-    assert config["tool"]["ty"]["src"]["exclude"] == [reference_path]
     assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
 
 
