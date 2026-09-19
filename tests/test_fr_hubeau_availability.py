@@ -12,7 +12,7 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     parse_station_product_availability,
 )
 
-_LEDGER_PATH = Path(__file__).parents[1] / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+_LEDGER_PATH = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
 _DOCUMENT = json.loads(lzma.decompress(_LEDGER_PATH.read_bytes()))
 
 

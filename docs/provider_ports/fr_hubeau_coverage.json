@@ -23,7 +23,7 @@
     "temperature_stations": 869,
     "temperature_products_per_station": 1
   },
-  "governing_evidence": "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz",
+  "governing_evidence": "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
   "acquisition_dates": "Mixed; each exact instant and request retained in governing evidence and acquisition provenance. Not a simultaneous snapshot.",
   "availability_scope": "Evidence at acquisition, not guaranteed continuous or future measurements. Unknown remains selectable.",
   "instantaneous_discharge_entity": "selected station code, not shared site",

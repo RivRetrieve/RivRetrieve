@@ -23,7 +23,7 @@ from tests._provenance import legacy_provenance
 
 LEDGER_PATH = (
     Path(__file__).parents[1]
-    / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 
 

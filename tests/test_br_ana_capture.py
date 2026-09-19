@@ -177,8 +177,8 @@ def test_supporting_acquisition_evidence_digest_is_verified(capture, tmp_path):
 def test_original_failed_uf_attempts_remain_distinct_from_successful_retries(capture):
     import json
 
-    first_path = ROOT / "research/station-coverage/br_ana/inventory/inventory-ufs.json.results.json"
-    retry_path = ROOT / "research/station-coverage/br_ana/inventory/inventory-ufs-retry.json.results.json"
+    first_path = ROOT / "maintenance/catalogue/br_ana/inventory/inventory-ufs.json.results.json"
+    retry_path = ROOT / "maintenance/catalogue/br_ana/inventory/inventory-ufs-retry.json.results.json"
     first = json.loads(first_path.read_bytes())
     retry = json.loads(retry_path.read_bytes())
     failed = {item["name"] for item in first if "failure" in item}

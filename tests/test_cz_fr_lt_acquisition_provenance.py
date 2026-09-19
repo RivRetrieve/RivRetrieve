@@ -85,7 +85,7 @@ def test_native_cli_invokes_shared_recording_verifier(
     monkeypatch.setattr(generator, "verify_provenance_recordings", record_call)
     args = ["--native", str(native), "--out", str(tmp_path)]
     if provider_id == "fr_hubeau":
-        args += ["--availability-ledger", "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"]
+        args += ["--availability-ledger", "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"]
     assert generator.main(args) == 0
     assert calls == [provider_id]
 
@@ -104,7 +104,7 @@ def test_native_cli_rejects_raw_byte_substitution(tmp_path: Path, provider_id: s
         if provider_id == "fr_hubeau":
             args += [
                 "--availability-ledger",
-                "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz",
+                "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
             ]
         generator.main(args)
 

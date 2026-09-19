@@ -13,7 +13,7 @@ from rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue import main
 from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger, build_acquisition_provenance
 from tests._provenance import legacy_document, write_evidence_table
 
-_LEDGER = Path("research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json")
+_LEDGER = Path("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 
 
 def _provenance():

@@ -27,7 +27,7 @@ June 1–8, 2023 window. Its governing state is failed historical check, not two
 emptiness. No retry was used to change this account.
 
 The [machine-readable coverage account](fr_hubeau_coverage.json) and reviewed
-[governing ledger](../../research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz)
+[governing ledger](../../maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz)
 retain the counts and exact acquisition identities. Acquisition dates are mixed,
 not a simultaneous snapshot. The offline catalogue build takes that reviewed ledger
 as an explicit composition-root input. It does not open research files at runtime.
@@ -36,7 +36,7 @@ Rebuild offline from the repository root:
 ```sh
 uv run python -m rivretrieve._internal.providers.fr_hubeau.generate_catalogue \
   --native src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet \
-  --availability-ledger research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz \
+  --availability-ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz \
   --out src/rivretrieve/_internal/providers/fr_hubeau/catalogue
 ```
 

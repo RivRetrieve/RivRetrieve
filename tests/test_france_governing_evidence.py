@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "research/station-coverage/fr_hubeau/scripts/verify_governing_evidence.py"
+SCRIPT = ROOT / "maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py"
 
 
 @pytest.fixture(scope="module")
@@ -25,7 +25,7 @@ def verifier():
 
 @pytest.fixture(params=["hubeau_counts", "hydroportail_history"])
 def source(request):
-    with tarfile.open(ROOT / f"research/station-coverage/fr_hubeau/evidence/{request.param}.tar.xz") as archive:
+    with tarfile.open(ROOT / f"maintenance/catalogue/fr_hubeau/evidence/{request.param}.tar.xz") as archive:
         receipt_file = archive.extractfile("receipts.csv")
         assert receipt_file is not None
         receipts = list(csv.DictReader(io.StringIO(receipt_file.read().decode())))
@@ -66,9 +66,7 @@ def document():
     import lzma
 
     return json.loads(
-        lzma.decompress(
-            (ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes()
-        )
+        lzma.decompress((ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
     )
 
 
@@ -125,7 +123,7 @@ def test_public_mutations_fail(verifier, document, native, mutation):
 def retained_bundles(verifier):
     return {
         f"reused-pr231-head46b2fde/evidence/{name}.tar.xz": verifier.read_bundle(
-            ROOT / f"research/station-coverage/fr_hubeau/evidence/{name}.tar.xz"
+            ROOT / f"maintenance/catalogue/fr_hubeau/evidence/{name}.tar.xz"
         )
         for name in ("hubeau_counts", "hydroportail_history")
     }
@@ -194,9 +192,7 @@ def test_official_public_index_structure(verifier, mutation):
     import json
     from copy import deepcopy
 
-    document = json.loads(
-        (ROOT / "research/station-coverage/fr_hubeau/evidence/official_publication.json").read_bytes()
-    )
+    document = json.loads((ROOT / "maintenance/catalogue/fr_hubeau/evidence/official_publication.json").read_bytes())
     changed = deepcopy(document)
     entry = changed["source_documents"][0]
     if mutation == "digest":

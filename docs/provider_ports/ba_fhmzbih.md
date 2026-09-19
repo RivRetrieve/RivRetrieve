@@ -13,7 +13,7 @@ The stable provider key is `ba_fhmzbih`. The evidenced publisher is **Agencija z
 
 All 60 original stations have numerical Q and H evidence. Twelve have numerical WT evidence. The other 48 WT acquisitions are valid station/parameter/unit-matched workbooks with zero data rows. Those pairs remain **unknown and selectable**, not unsupported or permanently empty. Availability does not promise a numerical value for every source row or requested window. Timestamped blank measurement cells remain source records, distinct from numerical measurements.
 
-The machine-readable reviewed account is [`baseline_workbook_access.json`](../../research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json). Its 180 entries identify each exact request, retrieval date, response digest and byte count, observed window, numerical/blank counts, and availability conclusion. Governing acquisitions have mixed dates: three pairs on September 2, three on September 7, 48 on September 9, and 126 on September 13, 2026. This is not a simultaneous snapshot. The original native table is unchanged. The additional 39 surveyed stations, EPP layers, and other objects in the 230-object document are outside this baseline.
+The machine-readable reviewed account is [`baseline_workbook_access.json`](../../maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json). Its 180 entries identify each exact request, retrieval date, response digest and byte count, observed window, numerical/blank counts, and availability conclusion. Governing acquisitions have mixed dates: three pairs on September 2, three on September 7, 48 on September 9, and 126 on September 13, 2026. This is not a simultaneous snapshot. The original native table is unchanged. The additional 39 surveyed stations, EPP layers, and other objects in the 230-object document are outside this baseline.
 
 ## Retrieval and fidelity
 
@@ -30,7 +30,7 @@ The catalogue generator takes the native table and reviewed workbook ledger as e
 ```console
 uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
   --native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet \
-  --workbook-access-ledger research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json \
+  --workbook-access-ledger maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json \
   --out src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue
 ```
 

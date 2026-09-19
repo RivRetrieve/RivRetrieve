@@ -55,7 +55,7 @@ NATIVE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/f
 
 
 def _availability():
-    path = Path(__file__).parents[1] / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+    path = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
     return decode_availability(lzma.decompress(path.read_bytes()))
 
 
@@ -857,7 +857,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--availability-ledger",
                 str(
                     Path(__file__).parents[1]
-                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
                 ),
                 "--out",
                 "out",
@@ -873,7 +873,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--availability-ledger",
                 str(
                     Path(__file__).parents[1]
-                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
                 ),
                 "--out",
                 "out",
@@ -889,7 +889,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--availability-ledger",
                 str(
                     Path(__file__).parents[1]
-                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
                 ),
                 "--out",
                 "out",
@@ -905,7 +905,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--availability-ledger",
                 str(
                     Path(__file__).parents[1]
-                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
                 ),
                 "--out",
                 "out",
@@ -921,7 +921,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--availability-ledger",
                 str(
                     Path(__file__).parents[1]
-                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
                 ),
                 "--out",
                 "out",
@@ -1293,7 +1293,7 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
                 "--availability-ledger",
                 str(
                     Path(__file__).parents[1]
-                    / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
                 ),
                 "--out",
                 str(tmp_path),

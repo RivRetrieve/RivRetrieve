@@ -1,0 +1,17 @@
+{
+  "source_commit": "dfe2de3bb7371dfd3eb9bef5604b6f3eac52aae3",
+  "source_path": "research/station-coverage/th_thaiwater/evidence/graph_bodies_without_observations.zip",
+  "archive_sha256": "03f4c2704ef6852a2360e0d5a5a5d56d1a2477e8b5c9e872a002de6f80d0b0f9",
+  "members": [
+    {
+      "archive_member": "11688546_2026-06-08_2026-09-06_a1.body",
+      "retained_path": "recordings/11688546_2026-06-08_2026-09-06_a1.body",
+      "sha256": "710e5649afedcd48c99e76a44c568f1edd223921c28ed79aa45f03f8075a945f"
+    },
+    {
+      "archive_member": "1109499_2026-06-08_2026-09-06_a1.body",
+      "retained_path": "recordings/1109499_2026-06-08_2026-09-06_a1.body",
+      "sha256": "f20373431a6f611cb0f013d4b9ec405315344bb9157c17dd9f85586ae63c86df"
+    }
+  ]
+}
