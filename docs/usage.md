@@ -2,7 +2,37 @@
 
 [Documentation index](README.md) · [API reference](reference.md)
 
-## Discover and select series
+Working with RivRetrieve has three main steps: find the stations you want, retrieve their observations,
+and check what came back. This page walks through those steps, then through credentials, caching,
+provenance and maps.
+
+## What you get back
+
+A **product** names a variable, a statistic and a time step. `discharge_daily_mean` is the mean
+discharge over a day, while `stage_instantaneous` is a stage reading at one moment. The current supported variables are
+discharge, stage and water temperature.
+
+A **series** is one product at one station of one provider. Retrieval returns a Polars frame with
+exactly these columns, including when it is empty:
+
+| Column | Meaning |
+|---|---|
+| `time` | Source-native, naive wall-clock timestamp |
+| `time_zone` | Source-established IANA name, fixed offset, or `unknown` |
+| `station_id` | String identifier within the result's provider |
+| `product_id` | Canonical product identifier |
+| `value` | Float value in the product's canonical unit, or a published null |
+
+Read `time` together with `time_zone`. RivRetrieve keeps the agency's own timestamps instead of
+converting everything to UTC, and `unknown` means the agency does not state a zone. It is an answer,
+not a gap: you will meet it for zones, for time steps and for a station's availability.
+
+Units are harmonised: discharge uses m³/s and stage uses metres. What is not harmonised is the
+measurement itself. Equal units do not establish equal day definitions, stage datums, or scientific
+comparability. RivRetrieve does not reconstruct quality flags, infer source judgements, or compute
+an unpublished product from another frequency.
+
+## Find stations
 
 `find` reads packaged catalogues without querying observation services. A selection
 contains unique `(provider_id, station_id, product_id)` series. Keep station identifiers
@@ -19,13 +49,17 @@ print(rr.as_frame(selection))
 
 `find` accepts one identifier per filter. `pick` narrows an existing selection and
 also accepts sequences. It never adds series. Unknown identifiers raise rather than
-triggering approximate matching. Valid identifiers with no selectable catalogue edge
-produce an empty selection with an `empty_reason`.
+triggering approximate matching. A valid identifier with no station offering that product
+produces an empty selection with an `empty_reason`.
 
-Availability `unknown` remains selectable. An `available` catalogue entry does not
-promise that today's service will return the requested observations. Published record
-bounds describe a source-stated envelope, not continuity. They do not prevent retrieval.
-The snapshot can contain mixed acquisition dates.
+What the catalogue does and does not tell you:
+
+- Availability `unknown` remains selectable.
+- An `available` entry does not promise that today's service will return the requested
+  observations.
+- Published record bounds describe a source-stated envelope, not continuity. They do not prevent
+  retrieval.
+- The snapshot can contain mixed acquisition dates.
 
 For other predicates, filter the Polars frame and rebuild the selection:
 
@@ -40,12 +74,13 @@ selection = rr.from_frame(chosen)
 `from_frame` reads the three identity columns in canonical order. They must contain
 unique, non-null strings and existing selectable triples. Other columns do not override
 catalogue facts. RivRetrieve rebuilds their metadata from the packaged catalogue.
-See the [reference](reference.md) for all 18 selection-frame columns.
+See the [reference](reference.md) for every column of a selection frame.
 
-`describe(provider)` returns the packaged Croissant descriptor offline. It identifies
-catalogue files, evidence relations and recorded absences. A `withheld` fact means
-RivRetrieve lacks established acquisition evidence. It does not mean the source publishes
-nothing. See [catalogue evidence](catalogue-evidence.md) for the schema and inspection API.
+`describe(provider)` returns a machine-readable description of the packaged catalogue, in Croissant
+format, without going online. It identifies catalogue files, where facts came from, and what is
+recorded as absent. A `withheld` fact means RivRetrieve has no established record of how the fact
+was acquired. It does not mean the source publishes nothing. See
+[catalogue evidence](catalogue-evidence.md) for the schema and inspection API.
 
 ## Retrieve and inspect results
 
@@ -62,24 +97,11 @@ dictionary keyed by provider identifier for mixed selections. An empty selection
 station identifiers and provenance belong to a provider.
 
 An `ObservationResult` carries `data`, `issues`, `provenance` and `receipts`.
-`data` is a Polars frame. `to_polars()` returns that frame and `to_pandas()` converts it.
-The frame has exactly these columns, including when it is empty:
+`data` is a Polars frame, described in [what you get back](#what-you-get-back). `to_polars()`
+returns that frame and `to_pandas()` converts it. Product metadata in the selection states units
+and temporal properties.
 
-| Column | Meaning |
-|---|---|
-| `time` | Source-native, naive wall-clock timestamp |
-| `time_zone` | Source-established IANA name, fixed offset, or `unknown` |
-| `station_id` | String identifier within the result's provider |
-| `product_id` | Canonical product identifier |
-| `value` | Float value in the product's canonical unit, or a published null |
-
-Read `time` together with `time_zone`. Product metadata in the selection states units
-and temporal properties. Discharge uses m³/s and stage uses metres. Equal units do not
-establish equal day definitions, stage datums, or scientific comparability. RivRetrieve
-does not reconstruct quality flags, infer source judgements, or compute an unpublished
-product from another frequency.
-
-### Request windows and UTC
+### Time windows
 
 Both endpoints describe wall-clock time in each source's calendar. The interval is
 closed at both ends. `start` is required despite the signature's `None` default.
@@ -90,6 +112,8 @@ A bare start date begins at midnight. A bare end date includes its final instant
 For daily products, clipping compares dates. For other temporal products, it compares
 source time labels. Omitting `end` uses the caller machine's current local date through
 its last instant. A future end stays unchanged and adds an informational issue.
+
+To convert a result to UTC, every row must carry an established zone:
 
 ```python
 # Only use this when every returned row has an established zone.
@@ -102,7 +126,7 @@ It does not return a partly converted frame. The returned `time` remains naive a
 `time_zone` becomes `+00:00`. Other result fields remain unchanged. This does not
 establish an unknown daily aggregation interval.
 
-### Issues and exceptions
+### Issues
 
 Issues describe what happened without discarding rows from independent successful
 series. A failed request is not the same as a successful answer with no observations.
@@ -133,6 +157,9 @@ locations and [architecture](architecture.md) for the failure boundary.
 
 ## Supplied credentials
 
+Most providers are open. Where an agency requires credentials, you request them yourself and give
+them to RivRetrieve through the environment.
+
 `providers()` reports credential variable names and an access indicator. It does not
 report observation capability. `ready` means required values are present, not that a
 source accepted them. Consult the generated [software declarations](reference.md) for
@@ -142,14 +169,14 @@ Set supplied values in the process environment or a `.env` file in the working d
 The environment takes precedence. A blank environment value shadows the file and counts
 as missing. [.env.example](../.env.example) lists names without usable secrets.
 Do not commit credential files or put values into scripts, screenshots or issue reports.
-Instructions for obtaining credentials belong to the [provider documentation handoff](README.md#providers).
+How to obtain credentials from each agency will be covered by the provider pages.
 
 Retrieval checks required credentials before requesting observations, including cache
 hits. A mixed-provider request checks all selected providers before retrieval.
 The transport confines credential headers to declared origins. Receipt origins exclude
 request headers. Authentication traces retain header names and request shape, not secrets.
 
-## Cache and bulk access
+## Cache and bulk downloads
 
 Live retrieval defaults to `cache="bypass"`. Select another mode explicitly:
 
@@ -165,11 +192,14 @@ status = rr.cache_status("usgs_nwis")
 print(status)
 ```
 
-Coverage records that the source was successfully asked, not that every expected
-observation exists. A successful empty answer creates coverage too. Refresh can replace
-held values with fewer rows or none. Failed series do not gain new coverage.
-RivRetrieve assigns no expiry or freshness verdict. Retrieval instants travel with
-served intervals in provenance.
+What coverage means:
+
+- It records that the source was successfully asked, not that every expected observation exists.
+- A successful empty answer creates coverage too.
+- Refresh can replace held values with fewer rows or none.
+- Failed series do not gain new coverage.
+- RivRetrieve assigns no expiry or freshness verdict. Retrieval instants travel with served
+  intervals in provenance.
 
 Bulk providers read compiled stores rather than making per-request downloads.
 Without a store, retrieval returns an empty result with an issue. It never starts a
@@ -229,7 +259,7 @@ It therefore need not have the same row count as `result.data`. Check authorship
 using it to audit a value. See [catalogue evidence](catalogue-evidence.md) for the separate
 acquisition record carried by selections and provenance.
 
-## Optional mapping
+## Maps
 
 Install `uv add "rivretrieve[map]"` in your project before calling `map`.
 The function returns a Folium map with one marker per selected station:
@@ -241,5 +271,5 @@ station_map.save("stations.html")
 
 Markers show the catalogue's CRS statement. Unknown CRS markers appear orange.
 The map renders unknown-frame coordinates as if they used EPSG:4326. This display
-assumption does not establish their reference system or change the catalogue. Without Folium, `map` raises
-`MissingOptionalDependencyError`. Reading these Markdown pages needs no mapping dependency.
+assumption does not establish their reference system or change the catalogue. Without Folium, `map`
+raises `MissingOptionalDependencyError`. Reading these Markdown pages needs no mapping dependency.
