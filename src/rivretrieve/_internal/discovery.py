@@ -1,4 +1,4 @@
-"""public retrieval : Selection × WindowInputs × CacheMode × CredentialSources → ObservationResult(s); provider discovery : ProviderDeclarations × CredentialSources → ProviderAccessFrame."""
+"""public retrieval : Selection × WindowInputs × CacheMode × CredentialSources → ObservationResult(s); provider discovery : ProviderDeclarations × CredentialSources → ProviderAccessFrame; drainage metadata : Selection → SourceAreaFrame."""
 
 from __future__ import annotations
 
@@ -253,6 +253,60 @@ def from_frame(frame: pl.DataFrame) -> _Selection:
     """
     _ensure_default_providers_registered()
     return _selection_from_frame(_registry.iter_records(), frame)
+
+
+def drainage_areas(selection: _Selection) -> pl.DataFrame:
+    """Read selected gauges' packaged drainage-area metadata offline.
+
+    Parameters
+    ----------
+    selection : _Selection
+        Selection returned by find, pick or from_frame. Multiple providers and
+        products are accepted; each provider-station pair appears once per
+        source field, regardless of the number of selected products.
+
+    Returns
+    -------
+    polars.DataFrame
+        Columns: provider_id, station_id, source_field, source_value,
+        source_dtype, source_unit (String), and state (Enum). Rows sort by
+        provider, station and source field. Empty selections retain this schema.
+        source_value is JSON scalar text: json.loads decodes a non-null cell
+        to its original string or number. source_dtype names the native Polars
+        dtype. Formatted strings, blanks and numerical values are not converted.
+        source_unit preserves an already established unit, otherwise null;
+        units embedded in source fields or values remain there unchanged.
+        state is value, source_null (a known field holding null), or no_metadata
+        (no eligible field exposed for this gauge). The latter has null source
+        columns. A source_null row retains its field, dtype and established unit.
+
+    Raises
+    ------
+    TypeError
+        If selection is not a RivRetrieve selection.
+    FatalContractError
+        If the packaged projection has an invalid schema or omits a station.
+    OSError
+        If the packaged projection cannot be read.
+
+    Notes
+    -----
+    Reads only packaged metadata, without observations, credentials or network
+    access. Coverage is limited to drainage/watershed-size fields established
+    by existing repository evidence. Distinct source fields remain separate;
+    no area is preferred, inferred, converted or scientifically harmonized.
+    Neither absence state means zero or that an agency publishes no area
+    elsewhere. See docs/drainage-areas.md for an example and field coverage.
+    """
+    from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA, drainage_area_frame
+
+    stations = _selection_station_frame(selection).select("provider_id", "station_id")
+    if stations.is_empty():
+        return pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA)
+    resource = files("rivretrieve._internal.catalogues").joinpath("drainage_areas.parquet")
+    with resource.open("rb") as stream:
+        metadata = pl.read_parquet(stream)
+    return drainage_area_frame(stations, metadata)
 
 
 def map(selection: _Selection) -> object:

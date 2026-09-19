@@ -15,6 +15,7 @@ from types import FunctionType
 import polars as pl
 
 import rivretrieve
+from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA
 from rivretrieve._internal.observations import ObservationDataSchema
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
@@ -129,6 +130,8 @@ def render_reference() -> str:
             _schema("Selection frame", SELECTION_FRAME_SCHEMA),
             "See `_Series` below for column meanings. Published record bounds and "
             "native_id can be absent. Availability unknown remains selectable.\n",
+            _schema("Drainage-area frame", DRAINAGE_AREA_SCHEMA),
+            "See `drainage_areas` above and [drainage-area metadata](drainage-areas.md) for JSON decoding and absence states.\n",
             _schema("Observation frame", ObservationDataSchema.polars_schema),
             "Only value is nullable. Time precision can vary while remaining Datetime. "
             "The zone belongs to each row, not the timestamp dtype. "

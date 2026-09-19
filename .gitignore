@@ -30,3 +30,6 @@ scratchpad/*
 planning/*
 !planning/2026-08-08-the-surface-is-three-verbs-and-a-selection/
 planning/**/*.executions.json
+
+# Local installed-distribution validation environments and extracted sdists
+.distribution-checks/
