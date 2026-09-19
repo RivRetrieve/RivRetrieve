@@ -59,31 +59,39 @@ For optional station maps, install the `map` extra: `uv add "rivretrieve[map]"`.
 
 ## Quick start
 
+The packaged catalogue contains station and product lists included with the installed package.
+Searching it does not contact the agencies. The following example then contacts USGS to retrieve
+one day of daily mean streamflow, without credentials.
+
 ```python
 import rivretrieve as rr
 
-# Find a gauge and choose daily mean streamflow.
-gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
-gauge = rr.pick(gauges, station="07374000")
+# Find daily mean streamflow and choose a gauge.
+daily_gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
 
-# Download observations for January 2023.
-result = rr.fetch(gauge, start="2023-01-01", end="2023-01-31")
+result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01")
 
-print(result.data)
+# Inspect two columns as a short list of rows.
+print(result.data.select("station_id", "value").rows())
+# Output:
+# [('07374000', 10562.183778816001)]
 print(result.issues)
+# Output:
+# ()
 ```
 
-Find, select, retrieve. The same Python interface works across providers, returning consistent columns
-and units. This example downloads daily mean streamflow from a USGS gauge without credentials.
+These outputs were checked against USGS on 2026-09-19. Source responses can change.
+The empty tuple means this retrieval reported no issues.
 
 `result.data` is a Polars frame with `time`, `time_zone`, `station_id`, `product_id` and `value`.
 Discharge values use m³/s. Read timestamps together with their zone column. Inspect `result.issues`
 even when rows come back. A successful call does not establish continuous records or scientific
 comparability. Downloading observations requires internet access.
 
-Next: the [usage guide](docs/usage.md) covers selections, time windows, issues, credentials and
-caching, and the [CAMELS-US example](docs/examples/camels-us.md) retrieves streamflow for several
-gauges at once.
+Next: the [usage guide](docs/usage.md) builds on the same example and covers selections, time windows,
+issues, credentials and caching. The [CAMELS-US example](docs/examples/camels-us.md) retrieves
+streamflow for several gauges at once.
 
 ## What RivRetrieve does and does not do
 
