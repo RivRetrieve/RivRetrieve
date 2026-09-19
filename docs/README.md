@@ -10,6 +10,7 @@ comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
 - [Usage](usage.md): finding stations, selecting series, retrieving them, time windows, issues,
   credentials, cache and receipts.
 - [CAMELS-US example](examples/camels-us.md): how to extend the original CAMELS time series to recent daily streamflow for three gauges.
+- [Drainage-area metadata](drainage-areas.md): offline access to source area fields for selected gauges.
 - [API reference](reference.md): the public functions, their arguments and the columns they return.
 
 ## Providers

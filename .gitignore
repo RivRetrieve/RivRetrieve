@@ -26,3 +26,6 @@ planning/*
 !planning/visions/
 planning/visions/*
 !planning/visions/*.md
+
+# Local installed-distribution validation environments and extracted sdists
+.distribution-checks/
