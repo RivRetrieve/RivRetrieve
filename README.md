@@ -41,12 +41,9 @@ for how to supply them.
 
 </details>
 
-South Africa's Department of Water and Sanitation (`za_dws`) is in the catalogue with 2,905
-stations, but its observations cannot be retrieved yet.
-
-Our hope is that this map keeps filling up. Know a data source we're missing? Let us know:
-potential-provider suggestions can include source links and relevant access information
-in a [GitHub issue](https://github.com/RivRetrieve/RivRetrieve/issues).
+Know a data source we’re missing? Suggest it in a
+[GitHub issue](https://github.com/RivRetrieve/RivRetrieve/issues), with source links and relevant
+access information.
 
 ## Install
 
