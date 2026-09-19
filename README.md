@@ -26,18 +26,18 @@ for how to supply them.
 
 | Country | Agency | Provider | Stations | Access |
 |---|---|---|---:|---|
-| Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | open |
-| Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | credentials |
-| Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | open |
-| Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | open |
-| France | Hub'Eau / HydroPortail | `fr_hubeau` | 7,323 | open |
-| Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | open |
-| Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | open |
-| Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | API key |
-| Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | open |
-| Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 246 | open |
-| Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | open |
-| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | open |
+| Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
+| Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
+| Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Open |
+| Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
+| France | Hub'Eau / HydroPortail | `fr_hubeau` | 7,323 | Open |
+| Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
+| Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | Open |
+| Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
+| Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Open |
+| Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 246 | Open |
+| Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
+| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | Open |
 
 </details>
 
@@ -136,6 +136,5 @@ Questions, bug reports and collaboration are welcome through the
 Importantly, this project would not exist without the open APIs of so many data providers. We thank
 them for their data and for supporting the philosophy of open data.
 
-We also thank Henning Plessow at the Global Runoff Data Centre (GRDC) for the exchange around
-[hydrodownloadR](https://github.com/bafg-bund/hydrodownloadR), which pursues the same goal as
-RivRetrieve, but in R.
+We also thank Henning Plessow at the Global Runoff Data Centre (GRDC) for the exchanges leading
+up to RivRetrieve’s first release.
