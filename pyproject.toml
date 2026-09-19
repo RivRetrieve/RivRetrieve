@@ -44,7 +44,6 @@ source-exclude = [
     "/scratchpad/**",
     "/.pce/**",
     "/.worktrees/**",
-    "/.distribution-checks/**",
     "/credentials/**",
     "/.env.*",
     "/*.env",

@@ -23,8 +23,8 @@ def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) ->
 @pytest.mark.parametrize("distribution", ["wheel", "sdist-wheel"])
 def test_installed_drainage_areas_offline(distribution: str) -> None:
     repository = Path(__file__).resolve().parents[1]
-    checks = repository / ".distribution-checks"
-    checks.mkdir(exist_ok=True)
+    checks = repository / ".worktrees" / "distribution-checks"
+    checks.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=f"drainage-{distribution}-", dir=checks) as temporary:
         workspace = Path(temporary)
         dist = workspace / "dist"
