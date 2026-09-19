@@ -30,7 +30,7 @@ from rivretrieve._internal.providers.usgs_nwis.config import config
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
 from rivretrieve._internal.recordings import read_recording
 
-FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json")
+IV_RECORDING_PATH = Path("tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12.recording.json")
 CURRENT_DV_RECORDING_PATH = Path(
     "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2023-01-01_2023-01-03.recording.json"
 )
@@ -39,13 +39,16 @@ CURRENT_DV_RECORDING_PATH = Path(
 def _payload(
     content: bytes,
     station_products: tuple[tuple[str, ProductId], ...] = (("payload-station", ProductId("payload-product")),),
+    *,
+    start: datetime = datetime(2023, 1, 1),
+    end: datetime = datetime(2023, 1, 3, 23, 59, 59, 999999),
 ) -> Payload:
     return Payload(
         SourceCoordinates(object()),
         station_products,
         _make_fetch_window(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
-            WindowEndpoint.from_datetime(datetime(2023, 1, 10, 23, 59, 59, 999999)),
+            WindowEndpoint.from_datetime(start),
+            WindowEndpoint.from_datetime(end),
         ),
         content,
         _origin(),
@@ -156,29 +159,19 @@ def test_parse_refuses_naive_non_midnight_daily_timestamp() -> None:
         )
 
 
-def test_parse_fixture_emits_exact_native_rows_from_payload_identity() -> None:
-    content = FIXTURE_PATH.read_bytes()
-    payload = _payload(content)
+def test_parse_recording_emits_exact_native_rows_from_payload_identity() -> None:
+    content = read_recording(IV_RECORDING_PATH).content
+    entries = json.loads(content)["value"]["timeSeries"][0]["values"][0]["value"]
+    payload = _payload(content, start=datetime(2023, 3, 12), end=datetime(2023, 3, 12, 23, 59, 59, 999999))
     assert payload.content is content
     result = parse(payload, _provider_config())
     expected = pl.DataFrame(
         {
-            "station_id": ["payload-station"] * 10,
-            "product_id": ["payload-product"] * 10,
-            "time": [datetime(2023, 1, day, 0, 0) for day in range(1, 11)],
-            "value": [
-                373000.0,
-                373000.0,
-                373000.0,
-                377000.0,
-                382000.0,
-                386000.0,
-                390000.0,
-                393000.0,
-                395000.0,
-                397000.0,
-            ],
-            "time_zone": ["-06:00"] * 10,
+            "station_id": ["payload-station"] * len(entries),
+            "product_id": ["payload-product"] * len(entries),
+            "time": [datetime.fromisoformat(entry["dateTime"]).replace(tzinfo=None) for entry in entries],
+            "value": [float(entry["value"]) for entry in entries],
+            "time_zone": [entry["dateTime"][-6:] for entry in entries],
         },
         schema=RowsSchema.polars_schema,
     )
@@ -188,21 +181,22 @@ def test_parse_fixture_emits_exact_native_rows_from_payload_identity() -> None:
     assert validate_catalogue(result.value, RowsSchema, on_issue="raise") == []
 
 
-def test_parse_fixture_preserves_wall_clock_offset_and_ignores_cst_trap() -> None:
-    fixture = json.loads(FIXTURE_PATH.read_bytes())
-    series = fixture["value"]["timeSeries"][0]
-    source_entries = series["values"][0]["value"]
+def test_parse_recording_preserves_wall_clock_offsets_and_ignores_station_zone() -> None:
+    content = read_recording(IV_RECORDING_PATH).content
+    series = json.loads(content)["value"]["timeSeries"][0]
     assert series["sourceInfo"]["timeZoneInfo"]["defaultTimeZone"]["zoneAbbreviation"] == "CST"
-    assert source_entries[4]["dateTime"] == "2023-01-05T00:00:00.000-06:00"
+    assert series["values"][0]["value"][8]["dateTime"] == "2023-03-12T03:00:00.000-05:00"
 
-    result = parse(_payload(FIXTURE_PATH.read_bytes()), _provider_config())
+    result = parse(
+        _payload(content, start=datetime(2023, 3, 12), end=datetime(2023, 3, 12, 23, 59, 59, 999999)),
+        _provider_config(),
+    )
 
-    assert result.value["time"][4] == datetime(2023, 1, 5, 0, 0)
-    assert result.value["time_zone"][4] == "-06:00"
-    assert result.value["value"][4] == 382000.0
+    assert result.value["time"][8] == datetime(2023, 3, 12, 3)
+    assert result.value["time_zone"][8] == "-05:00"
+    assert result.value["value"][8] == 811000.0
     assert result.value["time"].dtype == pl.Datetime()
-    assert "CST" not in result.value["time_zone"].to_list()
-    assert datetime(2023, 1, 5, 6, 0) not in result.value["time"].to_list()
+    assert result.value["time_zone"].to_list() == ["-06:00"] * 8 + ["-05:00"] * 84
 
 
 def test_parse_uses_payload_pair_not_json_station_or_variable_identity() -> None:
@@ -237,7 +231,7 @@ def test_parse_requires_exactly_one_station_product_pair(
 ) -> None:
     with pytest.raises(FatalContractError):
         parse(
-            _payload(FIXTURE_PATH.read_bytes(), station_products),
+            _payload(read_recording(IV_RECORDING_PATH).content, station_products),
             _provider_config(),
         )
 
@@ -379,13 +373,13 @@ def test_parse_all_dropped_rows_preserve_all_issues_and_empty_schema() -> None:
     ]
 
 
-def test_parse_fixture_does_not_invent_a_qualifier_carrier() -> None:
-    fixture = json.loads(FIXTURE_PATH.read_bytes())
+def test_parse_recording_does_not_invent_a_qualifier_carrier() -> None:
+    fixture = json.loads(read_recording(IV_RECORDING_PATH).content)
     source_entries = fixture["value"]["timeSeries"][0]["values"][0]["value"]
     qualifiers = {qualifier for entry in source_entries for qualifier in entry.get("qualifiers", [])}
-    assert {"A", "P", "e"} <= qualifiers
+    assert qualifiers == {"A"}
 
-    result = parse(_payload(FIXTURE_PATH.read_bytes()), _provider_config())
+    result = parse(_payload(read_recording(IV_RECORDING_PATH).content), _provider_config())
 
     assert result.value.columns == [
         "station_id",

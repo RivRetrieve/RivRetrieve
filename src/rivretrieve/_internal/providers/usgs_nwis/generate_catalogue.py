@@ -844,7 +844,7 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: annual-window requests per station-product pair; "
+            "true: requests per station-product pair; "
             "DV and IV endpoints selected by product; "
             "partial failures reported as recoverable issues"
         ),
