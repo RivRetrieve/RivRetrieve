@@ -92,9 +92,14 @@ Run the builder after changing relevant native inputs or field declarations.
 The check and tests compare every projected scalar with the native input,
 including formatted strings and nulls. No command refreshes a catalogue.
 
+The recorded Polish catalogue description calls its contents "lat/lon, elevation,
+and drainage area for all stations". Its seven-column source header has one area
+field, `area`, alongside gauge identity, river, elevation, and coordinates. This
+repository record establishes eligibility, but not a unit.
+
 Field eligibility is recorded in `AREA_FIELDS` in the builder. Existing evidence
 includes the [Czech drainage-area entry](milestone-tracker.md), the
-[Polish catalogue source authority](../planning/2026-08-01-catalogue-origins/milestone-4/source-authority-pl.md),
+[recorded Polish catalogue description](https://github.com/RivRetrieve/RivRetrieve/blob/9b89e3e55154371be8afa293dbd7716948d1431e/docs/milestone-tracker.md),
 the retained [French station schema](../tests/test_data/fr_hubeau_temperature_openapi.json),
 and the [Norwegian schema](../tests/test_data/no_nve_swagger.json).
 [USGS field documentation](provider_ports/usgs_nwis.md) establishes the gross-field
