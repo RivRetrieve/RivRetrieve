@@ -180,6 +180,10 @@ See [usage](usage.md) for provenance fields, optional receipts, and credential c
 Catalogue builds check canonical columns against declared origins and acquisition evidence.
 Canonical station columns describe identity and geometry, not harmonised names, river labels, or quality judgements.
 Native tables remain repository build inputs rather than a public wheel API.
+`drainage_areas` reads a small packaged projection of established drainage-area
+fields at provider-station grain. It preserves source vocabulary and values,
+including explicit null and no-metadata states, without changing canonical facts.
+See [drainage-area metadata](drainage-areas.md) for the output and offline build.
 `describe` reads the packaged Croissant descriptor offline.
 The current evidence representation uses a typed header and five normalized relations, with explicit resolution of individual fact lineage.
 

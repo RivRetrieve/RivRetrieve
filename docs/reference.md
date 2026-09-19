@@ -15,6 +15,7 @@ The signatures below preserve runtime annotations and defaults. Some annotations
 - [clear_cache](#clear_cache)
 - [describe](#describe)
 - [download](#download)
+- [drainage_areas](#drainage_areas)
 - [fetch](#fetch)
 - [fetch_by_provider](#fetch_by_provider)
 - [find](#find)
@@ -211,6 +212,56 @@ This call can transfer a national dataset. It is not needed for live
 providers. Before publication, a failed compilation preserves the previous
 store and publisher inputs. Use clear_cache explicitly for recovery.
 Transport failures can also propagate rather than becoming result issues.
+
+### `drainage_areas`
+
+```text
+rivretrieve.drainage_areas(selection: '_Selection') -> 'pl.DataFrame'
+```
+
+Import: `from rivretrieve import drainage_areas`.
+
+Read selected gauges' packaged drainage-area metadata offline.
+
+#### Parameters
+
+- **selection : _Selection**
+  Selection returned by find, pick or from_frame. Multiple providers and
+  products are accepted; each provider-station pair appears once per
+  source field, regardless of the number of selected products.
+
+#### Returns
+
+- **polars.DataFrame**
+  Columns: provider_id, station_id, source_field, source_value,
+  source_dtype, source_unit (String), and state (Enum). Rows sort by
+  provider, station and source field. Empty selections retain this schema.
+  source_value is JSON scalar text: json.loads decodes a non-null cell
+  to its original string or number. source_dtype names the native Polars
+  dtype. Formatted strings, blanks and numerical values are not converted.
+  source_unit preserves an already established unit, otherwise null;
+  units embedded in source fields or values remain there unchanged.
+  state is value, source_null (a known field holding null), or no_metadata
+  (no eligible field exposed for this gauge). The latter has null source
+  columns. A source_null row retains its field, dtype and established unit.
+
+#### Raises
+
+- **TypeError**
+  If selection is not a RivRetrieve selection.
+- **FatalContractError**
+  If the packaged projection has an invalid schema or omits a station.
+- **OSError**
+  If the packaged projection cannot be read.
+
+#### Notes
+
+Reads only packaged metadata, without observations, credentials or network
+access. Coverage is limited to drainage/watershed-size fields established
+by existing repository evidence. Distinct source fields remain separate;
+no area is preferred, inferred, converted or scientifically harmonized.
+Neither absence state means zero or that an agency publishes no area
+elsewhere. See docs/drainage-areas.md for an example and field coverage.
 
 ### `fetch`
 
@@ -618,6 +669,20 @@ not establish a daily product's day definition or make series comparable.
 | `last_catalogue_check` | `Date` |
 
 See `_Series` below for column meanings. Published record bounds and native_id can be absent. Availability unknown remains selectable.
+
+### Drainage-area frame
+
+| Column | Polars dtype |
+| --- | --- |
+| `provider_id` | `String` |
+| `station_id` | `String` |
+| `source_field` | `String` |
+| `source_value` | `String` |
+| `source_dtype` | `String` |
+| `source_unit` | `String` |
+| `state` | `Enum(categories=['value', 'source_null', 'no_metadata'])` |
+
+See `drainage_areas` above and [drainage-area metadata](drainage-areas.md) for JSON decoding and absence states.
 
 ### Observation frame
 

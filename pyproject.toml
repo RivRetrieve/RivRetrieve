@@ -34,6 +34,7 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 # Source exclusions also apply when building wheels from the sdist.
 source-exclude = [
+    "/.distribution-checks/**",
     "/src/rivretrieve/_internal/providers/*/catalogue/native.parquet",
     "/tests/test_data/**",
     "/tests/recordings/**",
