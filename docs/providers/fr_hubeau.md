@@ -11,6 +11,7 @@
 | Stations in the catalogue | 7,323 |
 | Credentials | None |
 | Licence stated by Hub'Eau | Licence ouverte Etalab |
+| Agency documentation | [Hub'Eau hydrometry API](https://hubeau.eaufrance.fr/page/api-hydrometrie), [Hub'Eau river temperature API](https://hubeau.eaufrance.fr/page/api-temperature-continu), [HydroPortail help](https://hydro.eaufrance.fr/aide/accueil) |
 
 ```python
 import rivretrieve as rr
