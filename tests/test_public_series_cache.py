@@ -244,3 +244,24 @@ def test_public_authenticated_source_provenance_excludes_request_headers(monkeyp
         not {"headers", "request_headers", "ordinary_headers"}.intersection(call)
         for call in result.provenance.calls_made
     )
+
+
+def test_mixed_nve_finite_variant_cannot_silently_drop_unknown_selector(monkeypatch, tmp_path):
+    recording = read_recording(
+        Path(__file__).parent / "test_data" / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
+    selection = rr.pick(
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        variant=("2", "unresolved-selector"),
+        on_issue="ignore",
+    )
+    result = rr.fetch(selection, start="2024-01-02", end="2024-01-02", on_issue="ignore")
+    assert result.data.height == 1
+    assert any(
+        outcome.requested_selector is not None and outcome.requested_selector.value == "unresolved-selector"
+        for outcome in result.outcomes
+    )

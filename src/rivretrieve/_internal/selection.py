@@ -335,7 +335,10 @@ def _with_selection_diagnostics(selection: _Selection, on_issue: OnIssue) -> _Se
 
     from rivretrieve._internal.source_series import ScopeState
 
-    issues = list(selection.issues)
+    # These findings describe the current view, not an earlier, broader selection.
+    issues = [
+        item for item in selection.issues if item.code not in ("selection.no_match", "selection.unresolved_inventory")
+    ]
     reason = None
     if not selection.series:
         complete = selection.scope.state is ScopeState.EMPTY or _complete_inventory(selection)
@@ -345,17 +348,35 @@ def _with_selection_diagnostics(selection: _Selection, on_issue: OnIssue) -> _Se
             selection.scope.station_ids,
             selection.scope.product_ids,
         )
-        if selection.scope.restriction is RestrictionKind.EXPLICIT:
-            issue = Issue(
-                severity="warning",
-                code="selection.no_match" if complete else "selection.unresolved_inventory",
-                message="No source series matches the explicit restriction."
-                if complete
-                else "The acquired inventory cannot settle the explicit source restriction.",
-                details={"scope": selection.scope.model_dump(mode="json")},
+    if selection.scope.restriction is RestrictionKind.EXPLICIT:
+        members: list[tuple[str | None, str | None, SeriesScope]] = [
+            (kind, value, selection.scope.model_copy(update={field: (value,)}))
+            for kind, field in (("variant", "variants"), ("series_id", "series_ids"))
+            for value in getattr(selection.scope, field)
+        ]
+        if selection.scope.state is ScopeState.EMPTY:
+            members = [(None, None, selection.scope)]
+        for kind, value, member_scope in members:
+            if any(member_scope.matches(item) for item in selection.known_series):
+                continue
+            complete = member_scope.state is ScopeState.EMPTY or _complete_inventory(
+                replace(selection, scope=member_scope)
             )
-            if issue not in issues:
-                issues.append(issue)
+            details: dict[str, object] = {"scope": member_scope.model_dump(mode="json")}
+            if kind is not None:
+                details["requested_selector"] = {"kind": kind, "value": value}
+            issues.append(
+                Issue(
+                    severity="warning",
+                    code="selection.no_match" if complete else "selection.unresolved_inventory",
+                    message=(
+                        f"No source series matches the explicit restriction {value!r}."
+                        if complete
+                        else f"The acquired inventory cannot settle the explicit source restriction {value!r}."
+                    ),
+                    details=details,
+                )
+            )
     result = replace(selection, issues=tuple(issues), empty_reason=reason)
     apply_on_issue(result.issues, on_issue)
     return result
@@ -416,6 +437,8 @@ def _series_frame(
         "variant": pl.String,
         "requested_variants": pl.List(pl.String),
         "requested_series_ids": pl.List(pl.String),
+        "requested_selector_kind": pl.String,
+        "requested_selector_value": pl.String,
         "physical_match": pl.String,
         "admission": pl.String,
         "admission_reason": pl.String,
@@ -540,6 +563,22 @@ def _series_frame(
         for outcome in sorted(outcomes, key=lambda item: (item.station_id, item.product_id)):
             if outcome.series_id is not None:
                 continue
+            if scope.provider_ids and provider_id is not None and provider_id not in scope.provider_ids:
+                continue
+            requested = outcome.requested_selector
+            if requested is not None:
+                member_scope = _intersect_scope(scope, _selection_scope(**{requested.kind: requested.value}))
+                from rivretrieve._internal.source_series import ScopeState
+
+                if member_scope.state is ScopeState.EMPTY:
+                    continue
+                if scope.series_ids:
+                    identified = {item.series_id: item for item in definitions}
+                    if all(identifier in identified for identifier in scope.series_ids) and not any(
+                        member_scope.model_copy(update={"predicates": ()}).matches(identified[identifier])
+                        for identifier in scope.series_ids
+                    ):
+                        continue
             if scope.station_ids and outcome.station_id not in scope.station_ids:
                 continue
             if scope.product_ids and outcome.product_id not in scope.product_ids:
@@ -556,6 +595,8 @@ def _series_frame(
                     "product_id": outcome.product_id,
                     "requested_variants": list(scope.variants),
                     "requested_series_ids": list(scope.series_ids),
+                    "requested_selector_kind": requested.kind if requested is not None else None,
+                    "requested_selector_value": requested.value if requested is not None else None,
                     "physical_match": "unestablished",
                     "outcomes": [outcome.status.value],
                     "outcome_windows": [outcome.window.model_dump_json()],

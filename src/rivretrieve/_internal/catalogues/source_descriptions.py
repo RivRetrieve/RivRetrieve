@@ -76,10 +76,19 @@ def generic_source_descriptions(
             if value != "unknown":
                 day = known(value, f"mapping:{provider}:{product}:day_definition")
         zone = config.zone.value if config is not None else "unknown"
+        unit_definition = mapping.source_unit_definition if mapping is not None else None
+        unit_evidence = () if unit_definition is None else unit_definition.evidence
         facts = PhysicalFacts(
             facts_id=stable_id(provider, product, unit),
             quantity=fact(quantity, "product.observed_property"),
-            source_unit=known(unit, f"mapping:{provider}:{product}:native_unit") if unit else EvidenceFact(),
+            source_unit=EvidenceFact(
+                value=unit,
+                state=EvidenceState.KNOWN,
+                evidence=(f"mapping:{provider}:{product}:native_unit", *unit_evidence),
+            )
+            if unit
+            else EvidenceFact(),
+            source_unit_definition=unit_definition,
             normalized_unit=mapping.normalized_unit if mapping is not None else unit,
             frequency=frequency,
             statistic=fact(row["statistic"], "product.statistic"),

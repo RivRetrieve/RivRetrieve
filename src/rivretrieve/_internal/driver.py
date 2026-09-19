@@ -54,6 +54,7 @@ from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
     ParsedSeries,
+    RequestedSelector,
     RestrictionKind,
     RetrievalOutcome,
     SeriesScope,
@@ -412,6 +413,39 @@ def _merge_definitions(definitions: dict[str, SourceSeries], additions: tuple[So
         definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
 
 
+def _validate_parsed_series(parsed: ParsedSeries) -> None:
+    """Reject ambiguous coverage claims within one payload, without deduplicating source rows."""
+    identities: set[str] = set()
+    windows: dict[tuple[str, str], list[RetrievalOutcome]] = {}
+    for outcome in parsed.outcomes:
+        if outcome.outcome_id in identities:
+            raise FatalContractError(f"ParsedSeries contains duplicate outcome_id {outcome.outcome_id!r}")
+        identities.add(outcome.outcome_id)
+        if outcome.series_id is None:
+            continue
+        for facts_id in dict.fromkeys(outcome.facts_ids):
+            windows.setdefault((outcome.series_id, facts_id), []).append(outcome)
+    for (series_id, facts_id), outcomes in windows.items():
+        positive: RetrievalOutcome | None = None
+        unsuccessful: RetrievalOutcome | None = None
+        for outcome in sorted(outcomes, key=lambda item: item.window.start):
+            is_positive = outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            conflicts = (positive, unsuccessful) if is_positive else (positive,)
+            for previous in conflicts:
+                if previous is not None and outcome.window.start <= previous.window.end:
+                    raise FatalContractError(
+                        "ParsedSeries positive outcome coverage overlaps for "
+                        f"series_id={series_id!r}, facts_id={facts_id!r}: "
+                        f"outcome_id={previous.outcome_id!r} ({previous.status.value}) and "
+                        f"outcome_id={outcome.outcome_id!r} ({outcome.status.value})"
+                    )
+            if is_positive:
+                if positive is None or outcome.window.end > positive.window.end:
+                    positive = outcome
+            elif unsuccessful is None or outcome.window.end > unsuccessful.window.end:
+                unsuccessful = outcome
+
+
 def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: RequestedWindow) -> Rows:
     facts = {fact.facts_id: fact for item in series for fact in item.facts}
     start = datetime.fromisoformat(window.start.isoformat())
@@ -704,6 +738,112 @@ def _calls_in_scope(
     return tuple(retained)
 
 
+def _finite_selector_assessments(
+    provider_id: ProviderId,
+    assessments: list[tuple[SeriesScope, SeriesWindow]],
+    definitions: dict[str, SourceSeries],
+    inventories: list[InventorySnapshot],
+    outcomes: list[RetrievalOutcome],
+    issues: list[Issue],
+) -> tuple[RetrievalOutcome, ...]:
+    """Account for each finite caller member without inventing a source identity."""
+    previous = {item.outcome_id for item in outcomes if item.requested_selector is not None}
+    outcomes[:] = [item for item in outcomes if item.requested_selector is None]
+    issues[:] = [item for item in issues if (item.details or {}).get("outcome_id") not in previous]
+    generated = []
+    for scope, window in assessments:
+        if scope.restriction is not RestrictionKind.EXPLICIT:
+            continue
+        station, product = scope.station_ids[0], scope.product_ids[0]
+        selectors = (
+            *(RequestedSelector(kind="variant", value=value) for value in scope.variants),
+            *(RequestedSelector(kind="series_id", value=value) for value in scope.series_ids),
+        )
+        for selector in selectors:
+            narrowed = scope.model_copy(
+                update={"variants" if selector.kind == "variant" else "series_ids": (selector.value,)}
+            )
+            identity_scope = narrowed.model_copy(update={"predicates": ()})
+            represented = False
+            for outcome in outcomes:
+                definition = definitions.get(outcome.series_id) if outcome.series_id is not None else None
+                if definition is None or not identity_scope.matches(definition):
+                    continue
+                if outcome.window.start > window.end or outcome.window.end < window.start:
+                    continue
+                if outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                    represented = True
+                    break
+                if any(
+                    fact.facts_id in outcome.facts_ids and narrowed.matches_facts(fact) for fact in definition.facts
+                ):
+                    represented = True
+                    break
+            if represented:
+                continue
+            relevant = [
+                item
+                for item in inventories
+                if item.origin != "catalogue"
+                and (not item.scope.provider_ids or set(narrowed.provider_ids).issubset(item.scope.provider_ids))
+                and (not item.scope.station_ids or set(narrowed.station_ids).issubset(item.scope.station_ids))
+                and (not item.scope.product_ids or set(narrowed.product_ids).issubset(item.scope.product_ids))
+                and set(item.scope.predicates).issubset(narrowed.predicates)
+                and (item.window is None or (item.window.start <= window.start and item.window.end >= window.end))
+                and (
+                    not item.scope.series_ids
+                    or (bool(narrowed.series_ids) and set(narrowed.series_ids).issubset(item.scope.series_ids))
+                )
+                and (
+                    not item.scope.variants
+                    or (bool(narrowed.variants) and set(narrowed.variants).issubset(item.scope.variants))
+                )
+            ]
+            settled = bool(relevant) and relevant[-1].completeness is InventoryCompleteness.COMPLETE
+            reason = (
+                f"No source series matches requested {selector.kind} {selector.value!r} in the acquired scoped inventory"
+                if settled
+                else f"The acquired evidence cannot settle requested {selector.kind} {selector.value!r}"
+            )
+            outcome = RetrievalOutcome(
+                outcome_id=stable_id(
+                    "requested-selector",
+                    str(provider_id),
+                    station,
+                    product,
+                    narrowed.model_dump_json(),
+                    window.model_dump_json(),
+                    *(item.snapshot_id for item in relevant),
+                    reason,
+                ),
+                series_id=None,
+                station_id=station,
+                product_id=product,
+                window=window,
+                status=OutcomeStatus.NO_MATCH if settled else OutcomeStatus.UNRESOLVED,
+                reason=reason,
+                requested_selector=selector,
+            )
+            generated.append(outcome)
+            issues.append(
+                Issue(
+                    severity="warning",
+                    code="source.no_match" if settled else "source.inventory_unresolved",
+                    message=reason,
+                    details={
+                        "station_id": station,
+                        "product_id": product,
+                        "outcome_id": outcome.outcome_id,
+                        "requested_selector": selector.model_dump(mode="json"),
+                        "inventory_scope": scope.model_dump(mode="json"),
+                    },
+                    provider_id=provider_id,
+                )
+            )
+    outcomes.extend(generated)
+    return tuple(generated)
+
+
 def _result_metadata(
     scope: SeriesScope,
     definitions: dict[str, SourceSeries],
@@ -838,6 +978,7 @@ def drive(
         if isinstance(provider, TransportWindowDeclarationProvider)
         else provider.window_declarations
     )
+    finite_assessments: list[tuple[SeriesScope, SeriesWindow]] = []
     for station in request.stations:
         for product in request.products:
             pair_scope = _scope_for_pair(scope, str(request.provider_id), station, str(product))
@@ -868,6 +1009,7 @@ def drive(
             # Daily calendar-date windows retain the established clipping rule.
             interval = _requested_interval(request.window, config.products[product].semantics)
             window = SeriesWindow(start=interval.start, end=interval.end)
+            finite_assessments.append((pair_scope, window))
             reuse = _reusable_snapshot(manifest, pair_scope, window) if cache == "reuse" and manifest else None
             if reuse is not None:
                 assert manifest is not None
@@ -1170,6 +1312,7 @@ def drive(
                 parsed = provider.parse(payload, config)
                 if not isinstance(parsed, ParsedSeries):
                     raise FatalContractError("Provider parse must return ParsedSeries")
+                _validate_parsed_series(parsed)
                 validate_native_rows(parsed.rows, config.products, series=parsed.series)
                 source_series_by_payload.append(tuple(item.series_id for item in parsed.series))
                 _merge_definitions(definitions, parsed.series)
@@ -1290,7 +1433,7 @@ def drive(
             pair_outcomes = tuple(
                 item for item in outcomes if item.station_id == station and item.product_id == product
             )
-            if not pair_definitions and not pair_outcomes:
+            if pair_scope.restriction is RestrictionKind.ALL and not pair_definitions and not pair_outcomes:
                 settled = any(_snapshot_matches(item, pair_scope, window) for item in inventories)
                 status = OutcomeStatus.NO_MATCH if settled else OutcomeStatus.UNRESOLVED
                 reason = (
@@ -1325,6 +1468,11 @@ def drive(
                         provider_id=request.provider_id,
                     )
                 )
+    fresh_outcomes.extend(
+        _finite_selector_assessments(
+            request.provider_id, finite_assessments, definitions, inventories, outcomes, all_issues
+        )
+    )
     pending = _combine_replacements(pending, fresh_outcomes, outcomes)
     combined = pl.concat(rows)
     selected, retained_inventories, retained_outcomes = _result_metadata(scope, definitions, inventories, outcomes)
@@ -1470,8 +1618,25 @@ def drive_store(
                     )
                 )
     query_issues: list[Issue] = []
+    finite_assessments: list[tuple[SeriesScope, SeriesWindow]] = []
+    known_identities = {item.series_id: item for item in manifest.series}
     for station in request.stations:
         for product in request.products:
+            if scope.restriction is RestrictionKind.EXPLICIT:
+                local_ids = tuple(
+                    key
+                    for key in scope.series_ids
+                    if key not in known_identities
+                    or (known_identities[key].station_id == station and known_identities[key].product_id == product)
+                )
+                if scope.series_ids and not local_ids:
+                    continue
+                pair_scope = _scope_for_pair(scope, str(request.provider_id), station, str(product)).model_copy(
+                    update={"series_ids": local_ids}
+                )
+                interval = _requested_interval(request.window, config.products[product].semantics)
+                finite_assessments.append((pair_scope, SeriesWindow(start=interval.start, end=interval.end)))
+                continue
             if any(item.station_id == station and item.product_id == product for item in selected):
                 continue
             window = SeriesWindow(start=start, end=end)
@@ -1518,6 +1683,14 @@ def drive_store(
                     provider_id=request.provider_id,
                 )
             )
+    _finite_selector_assessments(
+        request.provider_id,
+        finite_assessments,
+        known_identities,
+        list(manifest.inventories),
+        outcomes,
+        query_issues,
+    )
     provenance = provenance.model_copy(
         update={
             "source_vintage": manifest.source_vintage,

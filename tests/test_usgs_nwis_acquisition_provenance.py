@@ -31,6 +31,9 @@ def test_usgs_build_rejects_changed_terms_recording(tmp_path: Path) -> None:
         (source / "usgs_nwis_terms_licence-1.html").read_bytes() + b"changed"
     )
     (target / "usgs_nwis_terms_citation-1.html").write_bytes((source / "usgs_nwis_terms_citation-1.html").read_bytes())
+    (target / "usgs_nwis_instantaneous_values_definition.html").write_bytes(
+        (source / "usgs_nwis_instantaneous_values_definition.html").read_bytes()
+    )
     with pytest.raises(FatalContractError, match="usgs_nwis_terms_licence.*digest mismatch"):
         verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
 

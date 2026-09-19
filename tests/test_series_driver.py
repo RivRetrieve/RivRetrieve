@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 import polars.testing as pt
+import pytest
 
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import ObservationRequest, RequestedWindow, WindowEndpoint, WithIssues
@@ -260,3 +261,234 @@ def test_explicit_failed_unknown_facts_do_not_satisfy_cache_reuse(tmp_path):
         StoreRoot(tmp_path / "store"), ProviderId("fixture_live"), StoreUpdate((definition,), (snapshot,), (), ())
     )
     assert _reusable_snapshot(manifest, scope, window) is None
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "duplicate_id",
+        "overlapping_success",
+        "overlapping_empty",
+        "touching_windows",
+        "overlapping_failed",
+        "overlapping_unsupported",
+        "failed_before_success",
+        "duplicate_unsuccessful_id",
+    ],
+)
+def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_path, monkeypatch, defect):
+    from dataclasses import replace
+
+    import rivretrieve._internal.driver as driver_module
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.source_series import OutcomeStatus, SeriesWindow
+
+    stages = declaration.observations.stages
+    parsed_counts = []
+    writes = []
+    real_accumulate = driver_module.accumulate
+
+    def tracked_accumulate(*args, **kwargs):
+        writes.append(True)
+        return real_accumulate(*args, **kwargs)
+
+    monkeypatch.setattr(driver_module, "accumulate", tracked_accumulate)
+
+    class AmbiguousPayload:
+        config = stages.config
+        window_declarations = stages.window_declarations
+        fetch = staticmethod(stages.fetch)
+
+        @staticmethod
+        def parse(payload, config):
+            parsed = stages.parse(payload, config)
+            parsed_counts.append(parsed.rows.height)
+            original = parsed.outcomes[0]
+            first = original.model_copy(
+                update={
+                    "window": SeriesWindow(start=datetime(2023, 1, 1), end=datetime(2023, 1, 1, 12)),
+                }
+            )
+            if defect in ("failed_before_success", "duplicate_unsuccessful_id"):
+                first = first.model_copy(update={"status": OutcomeStatus.FAILED, "reason": "Reported source failure"})
+            second = first.model_copy(
+                update={
+                    "outcome_id": first.outcome_id
+                    if defect in ("duplicate_id", "duplicate_unsuccessful_id")
+                    else first.outcome_id + ":overlap",
+                    "status": {
+                        "overlapping_empty": OutcomeStatus.EMPTY,
+                        "overlapping_failed": OutcomeStatus.FAILED,
+                        "overlapping_unsupported": OutcomeStatus.UNSUPPORTED,
+                        "duplicate_unsuccessful_id": OutcomeStatus.UNSUPPORTED,
+                    }.get(defect, OutcomeStatus.SUCCESS),
+                    "reason": "Conflicting source status"
+                    if defect in ("overlapping_failed", "overlapping_unsupported", "duplicate_unsuccessful_id")
+                    else None,
+                    "window": SeriesWindow(
+                        start=datetime(
+                            2023,
+                            1,
+                            1,
+                            13
+                            if defect in ("duplicate_id", "duplicate_unsuccessful_id")
+                            else 12
+                            if defect == "touching_windows"
+                            else 6,
+                        ),
+                        end=datetime(2023, 1, 1, 18),
+                    ),
+                }
+            )
+            return replace(parsed, outcomes=(first, second))
+
+    request = ObservationRequest(
+        ProviderId("usgs_nwis"),
+        ("07374000",),
+        (ProductId("discharge_daily_mean"),),
+        RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2023, 1, 1, 23, 59, 59, 999999)),
+        ),
+    )
+    replay = ReplayTransport(
+        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
+    )
+    with pytest.raises(FatalContractError, match="outcome|Outcome"):
+        drive(
+            request,
+            AmbiguousPayload(),
+            provenance=ObservationProvenance(source="USGS", provider_id=ProviderId("usgs_nwis")),
+            transport=replay,
+            cache="reuse",
+            store=StoreRoot(tmp_path / "store"),
+        )
+    assert parsed_counts == [5], "The five native rows in the original padded response must reach the provider parser"
+    assert writes == [], "Invalid parse metadata must be refused before the durable write path"
+    assert not (tmp_path / "store").exists()
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "duplicate_rows",
+        "different_facts",
+        "different_series",
+        "disjoint_windows",
+        "unknown_failure",
+        "unsuccessful_overlap",
+    ],
+)
+def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(tmp_path, case):
+    from dataclasses import replace
+
+    import polars as pl
+
+    from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome, SeriesWindow
+
+    stages = declaration.observations.stages
+
+    class IndependentPayload:
+        config = stages.config
+        window_declarations = stages.window_declarations
+        fetch = staticmethod(stages.fetch)
+
+        @staticmethod
+        def parse(payload, config):
+            parsed = stages.parse(payload, config)
+            outcome = parsed.outcomes[0]
+            definition = parsed.series[0]
+            if case == "unknown_failure":
+                failure = RetrievalOutcome(
+                    outcome_id="unknown-series-failure",
+                    series_id=None,
+                    station_id=outcome.station_id,
+                    product_id=outcome.product_id,
+                    window=outcome.window,
+                    status=OutcomeStatus.FAILED,
+                    reason="An unidentified independent source series failed",
+                )
+                return replace(parsed, outcomes=(outcome, failure))
+            if case == "unsuccessful_overlap":
+                first = outcome.model_copy(
+                    update={"status": OutcomeStatus.UNSUPPORTED, "reason": "Mixed source definitions"}
+                )
+                second = outcome.model_copy(
+                    update={
+                        "outcome_id": outcome.outcome_id + ":failed",
+                        "status": OutcomeStatus.FAILED,
+                        "reason": "Independent failure report",
+                    }
+                )
+                return replace(parsed, outcomes=(first, second))
+            if case == "duplicate_rows":
+                return replace(parsed, rows=pl.concat([parsed.rows, parsed.rows]))
+            if case == "disjoint_windows":
+                first = outcome.model_copy(
+                    update={
+                        "window": SeriesWindow(start=datetime(2023, 1, 1), end=datetime(2023, 1, 1, 12)),
+                    }
+                )
+                second = outcome.model_copy(
+                    update={
+                        "outcome_id": outcome.outcome_id + ":later",
+                        "window": SeriesWindow(
+                            start=datetime(2023, 1, 1, 12, 0, 0, 1), end=datetime(2023, 1, 1, 23, 59, 59, 999999)
+                        ),
+                    }
+                )
+                return replace(parsed, outcomes=(first, second))
+            if case == "different_facts":
+                fact = definition.facts[0].model_copy(update={"facts_id": definition.facts[0].facts_id + ":revision"})
+                definitions = (definition.model_copy(update={"facts": (*definition.facts, fact)}),)
+                additional = parsed.rows.with_columns(pl.lit(fact.facts_id).alias("facts_id"))
+                second = outcome.model_copy(
+                    update={"outcome_id": outcome.outcome_id + ":revision", "facts_ids": (fact.facts_id,)}
+                )
+                inventories = parsed.inventories
+            else:
+                other = definition.model_copy(update={"series_id": definition.series_id + ":independent"})
+                definitions = (*parsed.series, other)
+                additional = parsed.rows.with_columns(pl.lit(other.series_id).alias("series_id"))
+                second = outcome.model_copy(
+                    update={"outcome_id": outcome.outcome_id + ":independent", "series_id": other.series_id}
+                )
+                inventories = tuple(
+                    snapshot.model_copy(update={"members": (*snapshot.members, other.series_id)})
+                    for snapshot in parsed.inventories
+                )
+            return replace(
+                parsed,
+                rows=pl.concat([parsed.rows, additional]),
+                series=definitions,
+                inventories=inventories,
+                outcomes=(outcome, second),
+            )
+
+    request = ObservationRequest(
+        ProviderId("usgs_nwis"),
+        ("07374000",),
+        (ProductId("discharge_daily_mean"),),
+        RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2023, 1, 1, 23, 59, 59, 999999)),
+        ),
+    )
+    replay = ReplayTransport(
+        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
+    )
+    store = StoreRoot(tmp_path / "store")
+    result = drive(
+        request,
+        IndependentPayload(),
+        provenance=ObservationProvenance(source="USGS", provider_id=ProviderId("usgs_nwis")),
+        transport=replay,
+        cache="reuse",
+        store=store,
+    )
+    assert result.canonical_rows.height == (
+        1 if case in ("disjoint_windows", "unknown_failure", "unsuccessful_overlap") else 2
+    )
+    assert store.exists()
+    if case == "duplicate_rows":
+        pt.assert_frame_equal(result.canonical_rows.head(1), result.canonical_rows.tail(1))

@@ -13,6 +13,7 @@ from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     EvidenceFact,
+    EvidenceState,
     InventoryCompleteness,
     InventorySnapshot,
     OutcomeStatus,
@@ -23,6 +24,7 @@ from rivretrieve._internal.source_series import (
     SeriesWindow,
     SourceIdentity,
     SourceSeries,
+    SourceUnitCodeDefinition,
     known,
     stable_id,
 )
@@ -44,6 +46,7 @@ class SeriesMapping:
     statistic: str | None = None
     published_id: str | None = None
     time_zone: str | None = None
+    source_unit_definition: SourceUnitCodeDefinition | None = None
 
 
 def parse_mapped_series(
@@ -77,12 +80,21 @@ def parse_mapped_series(
             raise FatalContractError("Product has no explicit source-series mapping")
         mapping = mappings[product]
         evidence = f"{provider}/config.py and catalogue/products.parquet: {product}"
-        fact_id = stable_id(provider, product, mapping.source_unit)
+        definition = mapping.source_unit_definition
+        unit_evidence = () if definition is None else definition.evidence
+        fact_id = (
+            stable_id(provider, product, mapping.source_unit)
+            if definition is None
+            else stable_id(provider, product, mapping.source_unit, definition.model_dump_json())
+        )
         facts = PhysicalFacts(
             facts_id=fact_id,
             quantity=known(mapping.quantity, evidence),
-            source_unit=known(mapping.source_unit, evidence),
+            source_unit=EvidenceFact(
+                value=mapping.source_unit, state=EvidenceState.KNOWN, evidence=(evidence, *unit_evidence)
+            ),
             normalized_unit=mapping.normalized_unit,
+            source_unit_definition=definition,
             frequency=known(mapping.frequency, evidence) if mapping.frequency else EvidenceFact(),
             statistic=known(mapping.statistic, evidence) if mapping.statistic else EvidenceFact(),
             time_zone=known(mapping.time_zone, evidence) if mapping.time_zone else EvidenceFact(),

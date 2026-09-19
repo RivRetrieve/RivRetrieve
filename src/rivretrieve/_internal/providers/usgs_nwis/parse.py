@@ -123,24 +123,47 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     capture_id = stable_id(hashlib.sha256(payload.content).hexdigest(), acquired.isoformat() if acquired else None)
     rows: list[dict[str, object]] = []
     definitions: dict[str, SourceSeries] = {}
-    outcomes: list[RetrievalOutcome] = []
+    outcomes: dict[tuple[str | None, str | None], RetrievalOutcome] = {}
+    outcome_reasons: dict[tuple[str | None, str | None], set[str]] = {}
     issues: list[Issue] = []
     members: set[str] = set()
 
-    def outcome(series: SourceSeries | None, status: OutcomeStatus, reason: str | None = None) -> None:
+    def outcome(
+        series: SourceSeries | None,
+        status: OutcomeStatus,
+        reason: str | None = None,
+        *,
+        facts_id: str | None = None,
+    ) -> None:
+        # Blocks contribute native rows, not separate claims over the same window.
+        # One unsupported block prevents full-window coverage for its own fact segment.
         sid = series.series_id if series else None
-        outcomes.append(
-            RetrievalOutcome(
-                outcome_id=stable_id(capture_id, sid, status, reason, window.model_dump_json()),
-                series_id=sid,
-                station_id=station_id,
-                product_id=product_id,
-                window=window,
-                status=status,
-                facts_ids=tuple(f.facts_id for f in series.facts) if series else (),
-                reason=reason,
-                retrieved_at=acquired,
-            )
+        if (sid is None) != (facts_id is None):
+            raise FatalContractError("A concrete USGS outcome must identify its assessed physical facts")
+        key = (sid, facts_id)
+        reasons = outcome_reasons.setdefault(key, set())
+        if reason:
+            reasons.add(reason)
+        previous = outcomes.get(key)
+        if previous is not None:
+            statuses = {previous.status, status}
+            if OutcomeStatus.UNSUPPORTED in statuses:
+                status = OutcomeStatus.UNSUPPORTED
+            elif OutcomeStatus.UNRESOLVED in statuses:
+                status = OutcomeStatus.UNRESOLVED
+            elif OutcomeStatus.SUCCESS in statuses:
+                status = OutcomeStatus.SUCCESS
+        combined_reason = "; ".join(sorted(reasons)) if reasons else None
+        outcomes[key] = RetrievalOutcome(
+            outcome_id=stable_id(capture_id, sid, facts_id, status, combined_reason, window.model_dump_json()),
+            series_id=sid,
+            station_id=station_id,
+            product_id=product_id,
+            window=window,
+            status=status,
+            facts_ids=(facts_id,) if facts_id is not None else (),
+            reason=combined_reason,
+            retrieved_at=acquired,
         )
         if reason:
             issues.append(
@@ -254,14 +277,23 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                     )
                     members.add(sid)
                     previous = definitions.get(sid)
-                    if previous and facts.facts_id not in {f.facts_id for f in previous.facts}:
-                        series = series.model_copy(update={"facts": (*previous.facts, facts)})
+                    if previous:
+                        established = {f.facts_id: f for f in previous.facts}
+                        if facts.facts_id in established and established[facts.facts_id] != facts:
+                            raise FatalContractError("USGS fact identity reinterprets existing physical facts")
+                        established[facts.facts_id] = facts
+                        series = series.model_copy(update={"facts": tuple(established.values())})
                     definitions[sid] = series
                     if reason:
-                        outcome(series, OutcomeStatus.UNSUPPORTED, reason)
+                        outcome(series, OutcomeStatus.UNSUPPORTED, reason, facts_id=facts.facts_id)
                         continue
                     if ambiguous and not observations:
-                        outcome(series, OutcomeStatus.UNSUPPORTED, "Method association is unresolved")
+                        outcome(
+                            series,
+                            OutcomeStatus.UNSUPPORTED,
+                            "Method association is unresolved",
+                            facts_id=facts.facts_id,
+                        )
                         continue
                     native_rows = []
                     try:
@@ -286,13 +318,27 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                                 }
                             )
                     except (KeyError, TypeError, ValueError) as error:
-                        outcome(series, OutcomeStatus.UNSUPPORTED, f"Unrepresentable method observations: {error}")
+                        outcome(
+                            series,
+                            OutcomeStatus.UNSUPPORTED,
+                            f"Unrepresentable method observations: {error}",
+                            facts_id=facts.facts_id,
+                        )
                         continue
                     rows.extend(native_rows)
                     if ambiguous:
-                        outcome(series, OutcomeStatus.UNSUPPORTED, "Method association is partially unresolved")
+                        outcome(
+                            series,
+                            OutcomeStatus.UNSUPPORTED,
+                            "Method association is partially unresolved",
+                            facts_id=facts.facts_id,
+                        )
                     else:
-                        outcome(series, OutcomeStatus.SUCCESS if native_rows else OutcomeStatus.EMPTY)
+                        outcome(
+                            series,
+                            OutcomeStatus.SUCCESS if native_rows else OutcomeStatus.EMPTY,
+                            facts_id=facts.facts_id,
+                        )
             except ValidationError as error:
                 raise FatalContractError("Invalid internal USGS series definition") from error
             except (KeyError, TypeError, ValueError, AttributeError) as error:
@@ -324,7 +370,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     )
     frame = pl.DataFrame(rows, schema=RowsSchema.polars_schema)
     validate_series_rows(frame, tuple(definitions.values()))
-    return ParsedSeries(frame, tuple(definitions.values()), (inventory,), tuple(outcomes), tuple(issues))
+    return ParsedSeries(frame, tuple(definitions.values()), (inventory,), tuple(outcomes.values()), tuple(issues))
 
 
 def _parse_timestamp(raw_timestamp: str, semantics: Daily | Instant) -> tuple[datetime, ZoneValue]:

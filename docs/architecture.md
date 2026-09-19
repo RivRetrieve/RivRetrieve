@@ -156,7 +156,7 @@ They share a reader and format family but preserve different information.
 | Path | Stored information | Retrieval behavior |
 | --- | --- | --- |
 | Live `cache="bypass"` | No cache update | Fetch, parse, convert, assemble |
-| Live `cache="reuse"` | Parse output and successful requested-interval coverage | Read held rows, fetch uncovered intervals, merge native rows, convert, assemble |
+| Live `cache="reuse"` | Native rows, scoped inventory and successful per-series interval coverage | Serve locally when the complete scope is covered; otherwise reacquire the full requested scope, convert, assemble |
 | Live `cache="refresh"` | Replacement answer for the successfully retrieved requested interval | Fetch and parse again, convert, update storage, assemble |
 | Bulk | Certified compiled publisher observations | Read store, convert, assemble without provider fetch or parse |
 
@@ -164,8 +164,11 @@ Accumulated stores use format revision `6`.
 Their coverage records which closed intervals were successfully retrieved and when, including successful empty answers.
 Coverage is per concrete series and interval, separate from inventory knowledge. All-series reuse
 requires a complete inventory for the recorded scope and vintage, plus coverage of every required
-member. Subset success cannot satisfy that request. Refresh replaces successful series intervals
-without erasing siblings or treating failed refreshes as new successes.
+member. Subset success cannot satisfy that request. When this proof is insufficient, retrieval
+reacquires the full requested scope through the provider's normal padded fetch windows, rather
+than fetching only uncovered intervals. Refresh replaces successful series intervals without
+erasing siblings. Failed or unsupported acquisition can retain held successful observations
+at their original retrieval vintage, alongside the new diagnostics, not as fresh successes.
 Coverage does not assert continuous observations.
 Served intervals carry their retrieval instants in provenance, without an automatic freshness verdict.
 

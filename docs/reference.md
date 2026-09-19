@@ -241,7 +241,8 @@ Read selected gauges' packaged drainage-area metadata offline.
 #### Notes
 
 Reads only packaged metadata, without observations, credentials or network
-access. Coverage is limited to drainage/watershed-size fields established
+access. Gauge identity does not require numeric observation admission or map
+coordinates. Coverage is limited to drainage/watershed-size fields established
 by existing repository evidence. Distinct source fields remain separate;
 no area is preferred, inferred, converted or scientifically harmonized.
 Neither absence state means zero or that an agency publishes no area
@@ -344,8 +345,9 @@ Import: `from rivretrieve import pick`.
 
 Narrow immutable intent or a retrieved view without another source request.
 
-Result provenance and receipts remain unchanged. Original receipts can contain
-source rows outside the narrowed view; `view_scope` records the restriction.
+Provenance, receipts and original outcomes remain unchanged. Original issues
+stay in the history; `on_issue` reports only findings relevant to the view.
+Original receipts can contain rows outside `view_scope`.
 
 ### `products`
 
@@ -484,6 +486,8 @@ not establish a daily product's day definition or make series comparable.
 | `variant` | `String` |
 | `requested_variants` | `List(String)` |
 | `requested_series_ids` | `List(String)` |
+| `requested_selector_kind` | `String` |
+| `requested_selector_value` | `String` |
 | `physical_match` | `String` |
 | `admission` | `String` |
 | `admission_reason` | `String` |

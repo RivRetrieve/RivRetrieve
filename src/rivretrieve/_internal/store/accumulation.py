@@ -80,12 +80,16 @@ def _merge_series(held: tuple[SourceSeries, ...], additions: tuple[SourceSeries,
     return tuple(definitions.values())
 
 
-def _merge_records(held: tuple, additions: tuple, key: str) -> tuple:
+def _merge_records(held: tuple, additions: tuple, key: str, *, move_reobserved: bool = False) -> tuple:
     records = {getattr(item, key): item for item in held}
     for item in additions:
         identity = getattr(item, key)
         if identity in records and records[identity] != item:
             raise FatalContractError(f"Store update contradicts existing {key}")
+        if move_reobserved:
+            # Arrival order is knowledge about reacquisition, not an invented
+            # source timestamp or a change to the immutable snapshot itself.
+            records.pop(identity, None)
         records[identity] = item
     return tuple(records.values())
 
@@ -115,7 +119,9 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         held = previous.coverage if previous else ()
         counts = {str(key): value for key, value in previous.partition_row_counts.items()} if previous else {}
         series = _merge_series(previous.series if previous else (), update.series)
-        inventories = _merge_records(previous.inventories if previous else (), update.inventories, "snapshot_id")
+        inventories = _merge_records(
+            previous.inventories if previous else (), update.inventories, "snapshot_id", move_reobserved=True
+        )
         outcomes = _merge_records(previous.outcomes if previous else (), update.outcomes, "outcome_id")
         definitions = {item.series_id: item for item in series}
         outcome_by_id = {item.outcome_id: item for item in outcomes}

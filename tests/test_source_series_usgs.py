@@ -2,6 +2,8 @@ from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.engine import (
     Payload,
     SourceCallOrigin,
@@ -496,3 +498,135 @@ def test_public_recorded_daily_interval_support_does_not_require_known_day_defin
     result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", on_issue="raise")
     assert result.data.height == 1
     assert all(f.day_definition.value is None for s in result.source_series for f in s.facts)
+
+
+def _authored_repeated_method_document(case):
+    """Authored structural control derived from a real recording, not a new capture."""
+    import json
+    from copy import deepcopy
+
+    from rivretrieve._internal.recordings import read_recording
+
+    recording = read_recording(
+        Path(__file__).with_name("test_data") / "usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
+    )
+    document = json.loads(recording.content)
+    blocks = document["value"]["timeSeries"][0]["values"]
+    original = deepcopy(blocks[0])
+    blocks.append(deepcopy(original))
+    if case == "overlapping":
+        blocks[0]["value"] = original["value"][:3]
+        blocks[1]["value"] = original["value"][2:]
+        blocks[1]["value"][0]["value"] = "1"  # Conflict remains a distinct native observation.
+    elif case == "disjoint":
+        blocks[0]["value"] = original["value"][:2]
+        blocks[1]["value"] = original["value"][2:]
+    elif case == "unsupported":
+        blocks[1]["value"][2]["value"] = "authored invalid number"
+    return recording, document
+
+
+def _authored_method_transport(monkeypatch, tmp_path, case):
+    import json
+
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    from rivretrieve._internal.transport import TransportResponse
+
+    recording, document = _authored_repeated_method_document(case)
+    content = json.dumps(document).encode()
+    sent = []
+
+    class AuthoredTransport:
+        def send(self, request):
+            assert request.url == recording.request.url
+            assert dict(request.params) == dict(recording.request.parameters)
+            sent.append(request)
+            return TransportResponse(
+                content, 200, recording.retrieved_at, recording.content_type, request.url, request.params
+            )
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(discovery, "HttpClient", AuthoredTransport)
+    selection = rr.find(
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    return selection, document, sent
+
+
+@pytest.mark.parametrize("case", ["repeated", "overlapping", "disjoint"])
+def test_authored_same_method_blocks_have_one_coverage_owner_and_preserve_multiplicity(monkeypatch, tmp_path, case):
+    import polars as pl
+    import polars.testing as pl_testing
+
+    import rivretrieve as rr
+
+    selection, document, sent = _authored_method_transport(monkeypatch, tmp_path, case)
+    expected_values = [
+        float(entry["value"]) * 0.028316846592
+        for block in document["value"]["timeSeries"][0]["values"]
+        for entry in block["value"]
+        if entry["dateTime"].startswith("2023-01-01T")
+    ]
+
+    def fetch(mode):
+        return rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache=mode, receipts=True, on_issue="raise")
+
+    bypass = fetch("bypass")
+    expected = pl.DataFrame({"value": expected_values})
+    pl_testing.assert_frame_equal(bypass.data.select("value").sort("value"), expected.sort("value"))
+    first = fetch("reuse")
+    second = fetch("reuse")
+    assert len(sent) == 2
+    for result in (first, second, fetch("refresh"), fetch("reuse")):
+        pl_testing.assert_frame_equal(result.data, bypass.data)
+        assert len(result.outcomes) == 1
+        assert result.outcomes[0].status == "success"
+    assert len(sent) == 3
+
+
+def test_authored_unsupported_same_method_block_cannot_claim_successful_full_coverage(monkeypatch, tmp_path):
+    import rivretrieve as rr
+
+    selection, _, sent = _authored_method_transport(monkeypatch, tmp_path, "unsupported")
+    first = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="ignore")
+    assert first.data.height == 1  # Representable rows from the other block remain visible.
+    assert len(first.outcomes) == 1
+    assert first.outcomes[0].status == "unsupported"
+    again = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="ignore")
+    assert len(sent) == 2, "Unsupported partial window cannot become successful cached coverage"
+    assert again.data.height == 1
+
+
+def test_repeated_physical_fact_segment_keeps_all_definitions_and_owns_only_its_rows():
+    import json
+    from copy import deepcopy
+
+    from rivretrieve._internal.engine import Payload
+    from rivretrieve._internal.recordings import read_recording
+
+    recording = read_recording(
+        Path(__file__).with_name("test_data") / "usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
+    )
+    document = json.loads(recording.content)
+    blocks = document["value"]["timeSeries"]
+    blocks.extend([deepcopy(blocks[0]), deepcopy(blocks[0])])
+    blocks[1]["variable"]["unit"]["unitCode"] = "m3/s"
+    unknown = UnknownOriginFact()
+    payload = Payload(
+        SourceCoordinates(object()),
+        (("07374000", ProductId("discharge_daily_mean")),),
+        _make_fetch_window(
+            WindowEndpoint.from_datetime(datetime(2022, 12, 30)), WindowEndpoint.from_datetime(datetime(2023, 1, 3))
+        ),
+        json.dumps(document).encode(),
+        SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown),
+        (),
+    )
+    parsed = parse(payload, config())
+    assert parsed.rows.height == 15
+    assert len(parsed.series) == 1
+    assert len(parsed.series[0].facts) == 2
+    assert len(parsed.outcomes) == 2
+    assert all(len(o.facts_ids) == 1 for o in parsed.outcomes)
+    assert len({o.outcome_id for o in parsed.outcomes}) == 2

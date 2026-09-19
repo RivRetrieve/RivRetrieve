@@ -34,7 +34,15 @@ from rivretrieve._internal.primitives import CacheMode, OnIssue, ProductId, Prov
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
-from rivretrieve._internal.source_series import InventorySnapshot, SeriesScope, SourceSeries
+from rivretrieve._internal.source_series import (
+    InventorySnapshot,
+    OutcomeStatus,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceSeries,
+    stable_id,
+)
 from rivretrieve._internal.store import StoreRoot
 
 if TYPE_CHECKING:
@@ -294,11 +302,53 @@ class _ProviderHandle:
                 },
                 provider_id=self.provider_id,
             )
+            requested_scope = scope or SeriesScope()
+            window = SeriesWindow(
+                start=datetime.fromisoformat(request.start.isoformat()),
+                end=datetime.fromisoformat(request.end.isoformat()),
+            )
+            outcomes = []
+            for station in request.stations:
+                for product in request.products:
+                    members = tuple(
+                        definition
+                        for definition in known_series
+                        if definition.station_id == station
+                        and definition.product_id == product
+                        and requested_scope.matches(definition)
+                    )
+                    for definition in members or (None,):
+                        series_id = definition.series_id if definition is not None else None
+                        outcomes.append(
+                            RetrievalOutcome(
+                                outcome_id=stable_id(
+                                    str(self.provider_id),
+                                    station,
+                                    product,
+                                    series_id,
+                                    window.model_dump_json(),
+                                    requested_at.isoformat(),
+                                    issue.code,
+                                ),
+                                series_id=series_id,
+                                station_id=station,
+                                product_id=product,
+                                window=window,
+                                status=OutcomeStatus.UNRESOLVED,
+                                facts_ids=tuple(
+                                    facts.facts_id for facts in definition.facts if requested_scope.matches_facts(facts)
+                                )
+                                if definition is not None
+                                else (),
+                                reason=issue.message,
+                            )
+                        )
             return ObservationResult(
                 data=pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
                 source_series=known_series,
                 inventories=inventories,
-                scope=scope or SeriesScope(),
+                outcomes=tuple(outcomes),
+                scope=requested_scope,
                 provenance=ObservationProvenance(
                     source="local",
                     provider_id=self.provider_id,

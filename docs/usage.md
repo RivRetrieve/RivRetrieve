@@ -273,7 +273,7 @@ Live retrieval defaults to `cache="bypass"`. Choose another mode explicitly:
 | Mode | Live observation behavior |
 |---|---|
 | `"bypass"` | Fetch without reading or writing the observation cache |
-| `"reuse"` | Serve covered intervals and fetch their uncovered remainder |
+| `"reuse"` | Serve a fully covered scoped inventory locally; otherwise reacquire the requested scope |
 | `"refresh"` | Replace the requested interval with the source's current successful answer |
 
 To reuse this one-day request later:
@@ -288,13 +288,16 @@ print(status.exists)
 ```
 
 Reuse checks the requested source scope against held inventory and successful coverage.
-It fetches scope that the recorded inventory or member coverage cannot satisfy.
+If that proof is insufficient, it reacquires the full requested scope with the provider's
+normal padded fetch windows, not only uncovered intervals.
 Coverage is tracked per concrete source series and time interval, separately from inventory.
 An all-series request needs a complete scoped inventory and coverage of every required member;
 a cached subset is not enough. A successful empty series can establish interval coverage.
 Reuse serves the recorded inventory vintage, not a promise of current-source freshness.
-Refreshing can leave fewer rows, or none. A failed request adds no coverage. RivRetrieve records
-retrieval times but leaves freshness judgements to you.
+Refreshing can leave fewer rows, or none. Failed or unsupported acquisition can retain held
+successful observations at their original retrieval vintage, alongside the new diagnostics.
+Those held observations are not a new successful source answer. Failed requests add no
+successful coverage. RivRetrieve records retrieval times but leaves freshness judgements to you.
 
 Set `RIVRETRIEVE_CACHE_DIR` to choose a cache location. Without an override, RivRetrieve uses
 the platform's user cache directory. `cache_status` inspects local state without network access

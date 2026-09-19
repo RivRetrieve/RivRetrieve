@@ -183,8 +183,9 @@ def pick(
 ) -> _Selection | ObservationResult:
     """Narrow immutable intent or a retrieved view without another source request.
 
-    Result provenance and receipts remain unchanged. Original receipts can contain
-    source rows outside the narrowed view; ``view_scope`` records the restriction.
+    Provenance, receipts and original outcomes remain unchanged. Original issues
+    stay in the history; ``on_issue`` reports only findings relevant to the view.
+    Original receipts can contain rows outside ``view_scope``.
     """
     from rivretrieve._internal.selection import _intersect_scope, _selection_scope
 
@@ -236,11 +237,61 @@ def pick(
             outcomes=selection.outcomes,
             scope=selection.scope,
             view_scope=scope,
-            issues=(*selection.issues, *selected.issues),
+            issues=(*selection.issues, *_selection_issues_for_result(selected, selection)),
         )
-        apply_on_issue(result.issues, on_issue)
+        apply_on_issue(tuple(issue for issue in result.issues if _issue_applies_to_view(issue, result)), on_issue)
         return result
     return _selection_pick(_registry.iter_records(), selection, on_issue=on_issue, **filters)
+
+
+def _issue_applies_to_view(issue: Issue, result: ObservationResult) -> bool:
+    """Report only view-relevant findings while retaining original acquisition history."""
+    from rivretrieve._internal.selection import _intersect_scope, _selection_scope
+    from rivretrieve._internal.source_series import RequestedSelector, ScopeState, SeriesScope
+
+    scope = result.view_scope or result.scope
+    if scope.state is ScopeState.EMPTY:
+        return False
+    if scope.provider_ids and str(result.provenance.provider_id) not in scope.provider_ids:
+        return False
+    if issue.provider_id is not None and scope.provider_ids and issue.provider_id not in scope.provider_ids:
+        return False
+    details = issue.details or {}
+    for field, allowed in (("station_id", scope.station_ids), ("product_id", scope.product_ids)):
+        if allowed and isinstance(details.get(field), str) and details[field] not in allowed:
+            return False
+    raw_selector = details.get("requested_selector")
+    if raw_selector is not None:
+        selector = RequestedSelector.model_validate(raw_selector)
+        if selector.kind == "variant":
+            scope = _intersect_scope(scope, _selection_scope(variant=selector.value))
+        else:
+            scope = _intersect_scope(scope, _selection_scope(series_id=selector.value))
+    recorded_scope = details.get("scope")
+    if issue.code.startswith("selection.") and isinstance(recorded_scope, dict):
+        scope = _intersect_scope(scope, SeriesScope.model_validate(recorded_scope))
+    if scope.state is ScopeState.EMPTY:
+        return False
+    identity_scope = scope.model_copy(update={"predicates": ()})
+
+    def could_match(definition: SourceSeries) -> bool:
+        return identity_scope.matches(definition) and any(
+            all(
+                getattr(facts, predicate.field).state.value != "known"
+                or getattr(facts, predicate.field).value == predicate.value
+                for predicate in scope.predicates
+            )
+            for facts in definition.facts
+        )
+
+    definitions = {item.series_id: item for item in result.source_series}
+    identifier = details.get("series_id")
+    if isinstance(identifier, str) and identifier in definitions:
+        return could_match(definitions[identifier])
+    if scope.series_ids and all(identifier in definitions for identifier in scope.series_ids):
+        return any(could_match(definitions[identifier]) for identifier in scope.series_ids)
+    # A finding with no narrower source attribution remains relevant to the request.
+    return True
 
 
 def series(value: _Selection | ObservationResult) -> pl.DataFrame:
@@ -479,15 +530,94 @@ def fetch_by_provider(
         results[provider_id] = result.model_copy(
             update={"issues": (*_selection_issues_for_result(selection, result), *result.issues)}
         )
+    definitions = tuple(item for result in results.values() for item in result.source_series)
+    results = {
+        provider_id: _reconcile_selector_searches(result, definitions) for provider_id, result in results.items()
+    }
     apply_on_issue(tuple(issue for result in results.values() for issue in result.issues), on_issue)
     return results
 
 
-def _selection_issues_for_result(selection: _Selection, result: ObservationResult) -> tuple[Issue, ...]:
-    """Retain discovery diagnostics without reporting a settled uncertainty as a new failure."""
-    settled = any(selection.scope.matches(item) for item in result.source_series) or any(
-        item.status.value == "no_match" for item in result.outcomes
+def _reconcile_selector_searches(result: ObservationResult, definitions: tuple[SourceSeries, ...]) -> ObservationResult:
+    """A globally identified series is not missing from an unrelated search coordinate."""
+    from rivretrieve._internal.source_series import RequestedSelector
+
+    by_identity: dict[str, SourceSeries] = {}
+    for definition in definitions:
+        existing = by_identity.get(definition.series_id)
+        if existing is not None and (existing.provider_id, existing.station_id, existing.product_id) != (
+            definition.provider_id,
+            definition.station_id,
+            definition.product_id,
+        ):
+            raise FatalContractError("A global source-series identity has conflicting coordinates")
+        by_identity[definition.series_id] = definition
+    excluded = set()
+    for outcome in result.outcomes:
+        selector = outcome.requested_selector
+        if outcome.series_id is not None or selector is None or selector.kind != "series_id":
+            continue
+        if outcome.status.value not in ("no_match", "unresolved"):
+            continue
+        if outcome.calls or outcome.facts_ids or outcome.retrieved_at is not None:
+            continue
+        definition = by_identity.get(selector.value)
+        if definition is not None and (definition.provider_id, definition.station_id, definition.product_id) != (
+            str(result.provenance.provider_id),
+            outcome.station_id,
+            outcome.product_id,
+        ):
+            excluded.add(outcome.outcome_id)
+
+    def relevant(issue: Issue) -> bool:
+        details = issue.details or {}
+        linked_outcome = details.get("outcome_id")
+        if isinstance(linked_outcome, str) and linked_outcome in excluded:
+            return False
+        # Offline discovery findings are scoped to the relevant provider result,
+        # not copied as failures onto providers that cannot own the resolved ID.
+        raw_selector = details.get("requested_selector")
+        if issue.code in ("selection.no_match", "selection.unresolved_inventory") and raw_selector is not None:
+            selector = RequestedSelector.model_validate(raw_selector)
+            definition = by_identity.get(selector.value) if selector.kind == "series_id" else None
+            if definition is not None and definition.provider_id != str(result.provenance.provider_id):
+                return False
+        return True
+
+    return result.model_copy(
+        update={
+            "outcomes": tuple(item for item in result.outcomes if item.outcome_id not in excluded),
+            "issues": tuple(item for item in result.issues if relevant(item)),
+        }
     )
+
+
+def _selection_issues_for_result(selection: _Selection, result: ObservationResult) -> tuple[Issue, ...]:
+    """Settle each discovery restriction independently from its acquired evidence."""
+    from rivretrieve._internal.source_series import SeriesScope
+
+    def settled(issue: Issue) -> bool:
+        details = issue.details or {}
+        recorded_scope = details.get("scope")
+        scope = SeriesScope.model_validate(recorded_scope) if isinstance(recorded_scope, dict) else selection.scope
+        if any(scope.matches(item) for item in result.source_series):
+            return True
+        identity_scope = scope.model_copy(update={"predicates": ()})
+        identities = {item.series_id for item in result.source_series if identity_scope.matches(item)}
+        selector = details.get("requested_selector")
+        for outcome in result.outcomes:
+            if outcome.status.value == "unresolved":
+                continue
+            if outcome.series_id in identities:
+                return True
+            if (
+                isinstance(selector, dict)
+                and outcome.requested_selector is not None
+                and outcome.requested_selector.model_dump(mode="json") == selector
+            ):
+                return True
+        return False
+
     return tuple(
         issue.model_copy(
             update={
@@ -497,7 +627,7 @@ def _selection_issues_for_result(selection: _Selection, result: ObservationResul
                 "details": {"discovery_issue": issue.model_dump(mode="json")},
             }
         )
-        if settled and issue.code == "selection.unresolved_inventory"
+        if issue.code == "selection.unresolved_inventory" and settled(issue)
         else issue
         for issue in selection.issues
     )
@@ -689,6 +819,7 @@ def _fetch_provider_series(
         for station_id, product_ids in by_station.items()
     )
     result = _merge_provider_results(results, series)
+    result = _reconcile_selector_searches(result, result.source_series)
     if future_local_date is not None:
         future_issue = Issue(
             severity="info",

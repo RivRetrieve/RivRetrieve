@@ -16,7 +16,7 @@ def test_conversion_refuses_dimensionally_incompatible_series_facts(normalized_u
         facts_id="contradiction",
         quantity=known("discharge", "test source definition"),
         source_unit=known("m", "test response unit"),
-        normalized_unit=normalized_unit,
+        normalized_unit="m",
     )
     series = SourceSeries(
         series_id="series",
@@ -25,7 +25,7 @@ def test_conversion_refuses_dimensionally_incompatible_series_facts(normalized_u
         product_id="discharge_daily_mean",
         identity=SourceIdentity(namespace="methodID", published_id="1", origin="response", evidence=("test response",)),
         facts=(facts,),
-    )
+    ).model_copy(update={"facts": (facts.model_copy(update={"normalized_unit": normalized_unit}),)})
     rows = pl.DataFrame(
         [
             {

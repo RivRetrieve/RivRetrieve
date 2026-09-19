@@ -1,0 +1,21 @@
+{
+  "request_method": "GET",
+  "source_url": "https://hydro.eaufrance.fr/build/4210.e6896d9b.js",
+  "request_parameters": {},
+  "http_status": 200,
+  "retrieved_at": "2026-09-19T23:14:19.009328+00:00",
+  "content_type": "text/javascript",
+  "byte_size": 12795,
+  "sha256": "72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6",
+  "response_file": "fr_hydroportail_unit_definition_4210.e6896d9b.js",
+  "authorship": "Exact public publisher JavaScript unit-selection UI bundle; not an observation recording",
+  "discovery": "Publisher asset referenced by retained station metadata HTML for station1232000101; not referenced by the general legal page.",
+  "interpretation_authorship": "RivRetrieve analysis, not a publisher sentence",
+  "interpretation": "HydroPortail unit-selection UI dispatches quantity Q/D to code m3 with label unit.q.m3 and code l with label unit.q.l; pair with the common translation bundle for exact rate-unit labels.",
+  "discovery_page_identity": {
+    "source_url": "https://hydro.eaufrance.fr/stationhydro/1232000101/fiche",
+    "retrieved_at": "2026-09-13T17:56:18.885144+00:00",
+    "sha256": "d9be84831bd3660c76d8ea92eb33b72471049658f1422ec16f387cdfc2c9c222",
+    "byte_size": 89131
+  }
+}

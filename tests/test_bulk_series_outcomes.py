@@ -15,7 +15,7 @@ from tests.test_pl_imgw_boundary_probe import _compiled_store
 
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "pl_imgw"])
-@pytest.mark.parametrize("scenario", ["success", "empty", "explicit"])
+@pytest.mark.parametrize("scenario", ["success", "empty", "explicit", "mixed"])
 def test_public_compiled_queries_report_success_empty_and_unsettled_explicit_identity(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider: str, scenario: str
 ) -> None:
@@ -69,6 +69,18 @@ def test_public_compiled_queries_report_success_empty_and_unsettled_explicit_ide
         assert empty.outcomes[0].status is OutcomeStatus.EMPTY
         assert empty.outcomes[0].series_id == successful.data["series_id"].item()
         assert empty.outcomes[0].window.start == datetime.fromisoformat(outside)
+        return
+    if scenario == "mixed":
+        restriction = rr.pick(
+            selection, series_id=(successful.data["series_id"].item(), "unresolved-source-identity"), on_issue="ignore"
+        )
+        mixed = rr.fetch(restriction, start=inside, end=inside, on_issue="ignore")
+        assert mixed.data.height == 1
+        assert any(
+            item.requested_selector is not None and item.requested_selector.value == "unresolved-source-identity"
+            for item in mixed.outcomes
+        )
+        assert all(not item.calls and item.retrieved_at is None for item in mixed.outcomes)
         return
     restriction = rr.pick(selection, variant="unpublished-test-restriction", on_issue="ignore")
     unresolved = rr.fetch(restriction, start=inside, end=inside, on_issue="ignore")

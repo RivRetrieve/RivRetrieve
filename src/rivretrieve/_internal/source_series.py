@@ -14,7 +14,7 @@ from enum import StrEnum
 from typing import Literal
 
 import polars as pl
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from rivretrieve._internal.issues import FatalContractError, Issue
 
@@ -51,12 +51,32 @@ class ClippingAxis(StrEnum):
     SOURCE_TIMESTAMP = "source_timestamp"
 
 
+class SourceUnitCodeDefinition(BaseModel):
+    """Published meaning of a unit code for one provider access namespace."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    provider_id: str
+    namespace: str
+    code: str
+    unit: str
+    evidence: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def check(self) -> SourceUnitCodeDefinition:
+        if not all((self.provider_id, self.namespace, self.code, self.unit)):
+            raise ValueError("A source-unit code definition requires nonempty context, code, and unit")
+        if not self.evidence or any(not item for item in self.evidence):
+            raise ValueError("A source-unit code definition requires nonempty evidence")
+        return self
+
+
 class PhysicalFacts(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     facts_id: str
     quantity: EvidenceFact = EvidenceFact()
     source_unit: EvidenceFact = EvidenceFact()
     normalized_unit: str | None = None
+    source_unit_definition: SourceUnitCodeDefinition | None = None
     frequency: EvidenceFact = EvidenceFact()
     statistic: EvidenceFact = EvidenceFact()
     temporal_support: EvidenceFact = EvidenceFact()
@@ -68,12 +88,29 @@ class PhysicalFacts(BaseModel):
     clipping_axis: ClippingAxis = ClippingAxis.SOURCE_TIMESTAMP
     label_time: str | None = None
 
+    @model_serializer(mode="wrap")
+    def serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        values: dict[str, object] = handler(self)
+        if self.source_unit_definition is None:
+            values.pop("source_unit_definition", None)
+        return values
+
     @model_validator(mode="after")
     def check(self) -> PhysicalFacts:
         if not self.facts_id:
             raise ValueError("facts_id is required")
         if self.normalized_unit is not None and self.source_unit.state is not EvidenceState.KNOWN:
             raise ValueError("A normalized unit requires an established source unit")
+        if self.source_unit_definition is not None and (
+            self.source_unit.state is not EvidenceState.KNOWN
+            or self.source_unit_definition.code != self.source_unit.value
+        ):
+            raise ValueError("Source-unit code definition must match the known published source-unit code")
+        defect = _normalization_defect(
+            self.source_unit.value, self.normalized_unit, self.source_unit.evidence, self.source_unit_definition
+        )
+        if defect is not None:
+            raise ValueError(defect)
         if self.clipping_axis is ClippingAxis.CALENDAR_DATE and self.frequency.value != "daily":
             raise ValueError("Calendar-date clipping requires established daily frequency")
         return self
@@ -92,6 +129,50 @@ _UNIT_DIMENSIONS = {
 }
 _TARGET_UNITS = {"discharge": "m3/s", "stage": "m", "temperature": "degC"}
 
+# These are spelling equivalences, never physical conversions. Kelvin is named
+# only to distinguish its zero from Celsius; this does not add Kelvin retrieval.
+_UNIT_SPELLINGS = {unit: unit for unit in _UNIT_DIMENSIONS} | {
+    "m³/s": "m3/s",
+    "m^3/s": "m3/s",
+    "ft³/s": "ft3/s",
+    "ft^3/s": "ft3/s",
+    "L/s": "l/s",
+    "M3_S": "m3/s",
+    "CM": "cm",
+    "0C": "degC",
+    "°C": "degC",
+    "K": "K",
+    # Litres are a volume here, never an unqualified rate alias.
+    "l": "l",
+    "L": "l",
+}
+
+
+def _normalization_defect(
+    source_unit: str | None,
+    normalized_unit: str | None,
+    evidence: tuple[str, ...],
+    definition: SourceUnitCodeDefinition | None = None,
+) -> str | None:
+    """Normalization must preserve unit identity, including scale and zero."""
+    if normalized_unit is None:
+        return None
+    if not evidence:
+        return "unit normalization requires source-unit evidence"
+    if definition is not None and definition.code != source_unit:
+        return "source-unit code definition does not match the published code"
+    source_identity = _UNIT_SPELLINGS.get(definition.unit if definition is not None else source_unit or "")
+    normalized_identity = _UNIT_SPELLINGS.get(normalized_unit)
+    # A publisher can use a documented source-specific code rather than a unit
+    # spelling. Its explicit normalized meaning is supplied at that source
+    # boundary; an unrecognized spelling alone cannot establish a contradiction.
+    # Unknown units still lack a normalized meaning or a KNOWN source-unit fact.
+    if source_identity is None or normalized_identity is None:
+        return None
+    if source_identity != normalized_identity:
+        return "unit normalization changes the published scale, offset, or physical dimension"
+    return None
+
 
 class Admission(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -106,13 +187,15 @@ def admission(facts: PhysicalFacts) -> Admission:
         return Admission(status="unsupported", reason="physical quantity is not established")
     if facts.source_unit.state is not EvidenceState.KNOWN:
         return Admission(status="unsupported", reason=f"source unit is {facts.source_unit.state.value}")
-    conversion = _UNIT_DIMENSIONS.get(facts.normalized_unit or "")
+    defect = _normalization_defect(
+        facts.source_unit.value, facts.normalized_unit, facts.source_unit.evidence, facts.source_unit_definition
+    )
+    if defect is not None:
+        return Admission(status="unsupported", reason=defect)
+    conversion = _UNIT_DIMENSIONS.get(_UNIT_SPELLINGS.get(facts.normalized_unit or "", ""))
     if conversion is None:
         return Admission(status="unsupported", reason=f"conversion is not established for {facts.source_unit.value!r}")
     quantity, factor = conversion
-    published_dimension = _UNIT_DIMENSIONS.get(facts.source_unit.value or "")
-    if published_dimension is not None and published_dimension[0] != quantity:
-        return Admission(status="unsupported", reason="unit normalization changes the published physical dimension")
     if quantity != facts.quantity.value:
         return Admission(
             status="unsupported", reason="source unit is dimensionally incompatible with physical quantity"
@@ -156,6 +239,12 @@ class SourceSeries(BaseModel):
             raise ValueError("Source series requires nonempty identifiers")
         if not self.facts or len({fact.facts_id for fact in self.facts}) != len(self.facts):
             raise ValueError("Source series requires unique physical-fact segments")
+        for fact in self.facts:
+            definition = fact.source_unit_definition
+            if definition is not None and (
+                definition.provider_id != self.provider_id or definition.namespace != self.identity.namespace
+            ):
+                raise ValueError("Source-unit code definition does not apply to this provider and source namespace")
         return self
 
 
@@ -313,6 +402,20 @@ class OutcomeStatus(StrEnum):
     NO_MATCH = "no_match"
 
 
+class RequestedSelector(BaseModel):
+    """A caller restriction, not an assertion of published source identity."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    kind: Literal["variant", "series_id"]
+    value: str
+
+    @model_validator(mode="after")
+    def check(self) -> RequestedSelector:
+        if not self.value:
+            raise ValueError("A requested selector requires a nonempty value")
+        return self
+
+
 class RetrievalOutcome(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     outcome_id: str
@@ -325,6 +428,7 @@ class RetrievalOutcome(BaseModel):
     reason: str | None = None
     retrieved_at: datetime | None = None
     calls: tuple[str, ...] = ()
+    requested_selector: RequestedSelector | None = None
 
     @model_validator(mode="after")
     def check(self) -> RetrievalOutcome:
@@ -351,6 +455,14 @@ def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -
         raise FatalContractError("Duplicate concrete series definitions")
     facts_by_identity: dict[str, PhysicalFacts] = {}
     for definition in series:
+        # Stage output may contain unchecked internal model_copy values. Rebuild
+        # domain validation from data even when no numeric rows were returned.
+        try:
+            SourceSeries.model_validate(definition.model_dump(mode="python"))
+        except ValueError as error:
+            raise FatalContractError(
+                f"Native series requires valid admitted physical facts and context: {error}"
+            ) from error
         for facts in definition.facts:
             existing = facts_by_identity.get(facts.facts_id)
             if existing is not None and existing != facts:
