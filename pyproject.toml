@@ -38,10 +38,39 @@ source-exclude = [
     "/tests/test_data/**",
     "/tests/recordings/**",
     "/research/**",
+    "/maintenance/**",
+    "/planning/**",
+    "/scratchpad/**",
+    "/.pce/**",
+    "/.worktrees/**",
+    "/.distribution-checks/**",
+    "/credentials/**",
+    "/.env.*",
+    "/*.env",
+    "/*.pem",
+    "/*.key",
+    "/src/**/.worktrees/**",
+    "/src/**/.distribution-checks/**",
+    "/src/**/credentials/**",
+    "/src/**/.env",
+    "/src/**/.env.*",
+    "/src/**/*.env",
+    "/src/**/*.pem",
+    "/src/**/*.key",
     "/reference/legacy_observations/**",
     "/.env",
 ]
-wheel-exclude = ["/src/rivretrieve/_internal/providers/*/catalogue/native.parquet"]
+wheel-exclude = [
+    "/src/rivretrieve/_internal/providers/*/catalogue/native.parquet",
+    "/src/**/.worktrees/**",
+    "/src/**/.distribution-checks/**",
+    "/src/**/credentials/**",
+    "/src/**/.env",
+    "/src/**/.env.*",
+    "/src/**/*.env",
+    "/src/**/*.pem",
+    "/src/**/*.key",
+]
 
 [dependency-groups]
 dev = [
