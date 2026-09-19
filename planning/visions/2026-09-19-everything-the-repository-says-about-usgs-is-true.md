@@ -183,6 +183,21 @@ was reachable from the maintainer's network on 2026-09-19.
   delete. Ground every claim in code, tests, recordings, `AGENTS.md` and the live source.
 - Do not file an issue about which zone defines a USGS day (see above).
 
+## Jev authorisation
+
+The repository owner explicitly authorised, on 2026-09-19, the use of Jev (TypeSafe's hosted
+service, through the `semantic_decisions.py` helper of the `implement-vision` skill) for this
+work. This section is the project-level permission reference for it: cite it as
+`planning/visions/2026-09-19-everything-the-repository-says-about-usgs-is-true.md#jev-authorisation`
+and mark covered excerpts `"sharing": "permitted"`.
+
+The permission covers excerpts of this vision, of issue #271, and of the repository's USGS-related
+source, tests, test data, recordings, documentation and the diffs produced by this work, even
+though the repository is private. It does not cover secrets, credentials, `.env` content, or
+personal data, which are never sent. It applies to this work only and does not extend to other
+visions or other parts of the repository. Excerpts are still inspected and minimised before
+sending, as the helper's guide requires, and Jev's answers remain advisory.
+
 ## Risks and uncertainty
 
 - The origin of the offsets in the deleted daily file is not established. It is not ruled out that
