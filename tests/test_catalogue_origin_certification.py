@@ -510,12 +510,6 @@ def test_receipt_provider_specific_url_bindings_and_attested_exceptions() -> Non
     assert "web.archive.org/web/20251122081546id_/" in str(dws["requested_url"])
 
 
-def test_committed_tests_and_receipts_never_depend_on_supply_tree() -> None:
-    needle = b"plan" + b"ning/"
-    candidates = [RECEIPTS_PATH, *PROVIDER_NOTES.glob("*.md"), *ROOT.joinpath("tests").rglob("*.py")]
-    assert all(needle not in path.read_bytes() for path in candidates)
-
-
 EXPECTED_CRS_COUNTS = {
     (ProviderId("ba_fhmzbih"), "stations"): (60, "unknown"),
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),

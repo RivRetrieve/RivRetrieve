@@ -5,6 +5,7 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 import polars as pl
 import polars.testing as pl_testing
@@ -707,7 +708,10 @@ def test_fetch_without_start_raises_the_domain_error_before_fetch(
     assert recording_stages.usgs_nwis.calls == []
 
 
-def test_providers_declares_credentials_without_exposing_values(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_providers_declares_credentials_without_exposing_values(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "secret-sentinel")
     monkeypatch.delenv("ANA_IDENTIFICADOR", raising=False)
     monkeypatch.delenv("ANA_SENHA", raising=False)
