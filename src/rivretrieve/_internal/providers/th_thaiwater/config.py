@@ -22,6 +22,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import SeriesMapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,3 +68,11 @@ def config() -> ProviderConfig:
 
 def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
+
+
+# Explicit source access and physical mapping; not a completeness assertion.
+
+SERIES_MAPPINGS = {
+    "discharge_reported": SeriesMapping("th_thaiwater/discharge", "discharge", "m3/s", "m3/s", None, None, None, None),
+    "stage_reported": SeriesMapping("th_thaiwater/value", "stage", "m", "m", None, None, None, None),
+}

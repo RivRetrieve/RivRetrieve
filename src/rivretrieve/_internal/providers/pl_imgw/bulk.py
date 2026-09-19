@@ -19,12 +19,21 @@ import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
+from functools import cache
 from pathlib import Path
 from typing import Any, Final, cast
 
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.source_series import (
+    ClippingAxis,
+    PhysicalFacts,
+    SourceIdentity,
+    SourceSeries,
+    known,
+    stable_id,
+)
 from rivretrieve._internal.store import (
     ArtifactChecksum,
     Disposition,
@@ -318,6 +327,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                             _imgw_frame(rows),
                             tuple(units),
                             tuple(SourceUnitContribution(name, count) for name, count in sorted(contributions.items())),
+                            _batch_series(rows),
                         )
                         rows = []
                         units = []
@@ -327,6 +337,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                         _imgw_frame(rows),
                         tuple(units),
                         tuple(SourceUnitContribution(name, count) for name, count in sorted(contributions.items())),
+                        _batch_series(rows),
                     )
 
     return ObservationBatchStream(IMGW_SOURCE_COLUMNS, batches(), expected_records, expected_rows, inventory_sha256)
@@ -508,9 +519,29 @@ def _iter_imgw_raw_records(path: Path):
 def _imgw_frame(rows: list[dict[str, object]]) -> pl.DataFrame:
     return (
         pl.DataFrame(rows, infer_schema_length=None)
-        .select("product", "station_id", "time", "time_zone", "value", "value_state", *_RETAINED_NAMES)
+        .select(
+            "product",
+            "station_id",
+            "time",
+            "time_zone",
+            "value",
+            "value_state",
+            "series_id",
+            "facts_id",
+            "source_unit",
+            *_RETAINED_NAMES,
+        )
         .with_columns(
-            pl.col("product", "station_id", "time_zone", "value_state", *_RETAINED_NAMES).cast(pl.String),
+            pl.col(
+                "product",
+                "station_id",
+                "time_zone",
+                "value_state",
+                "series_id",
+                "facts_id",
+                "source_unit",
+                *_RETAINED_NAMES,
+            ).cast(pl.String),
             pl.col("time").cast(pl.Datetime("us")),
             pl.col("value").cast(pl.Float64),
         )
@@ -549,7 +580,7 @@ def decode_imgw(path: Path) -> NativeStoreMaterialization:
     if not rows:
         raise ValueError("IMGW publisher artifact contains no daily records")
     frame = _imgw_frame(rows)
-    return NativeStoreMaterialization(frame, IMGW_SOURCE_COLUMNS, tuple(units))
+    return NativeStoreMaterialization(frame, IMGW_SOURCE_COLUMNS, tuple(units), _batch_series(rows))
 
 
 def _decode_csv_member(raw: bytes, member: str) -> list[tuple[str, ...]]:
@@ -631,6 +662,8 @@ def _emit_source_row(
         raise ValueError(f"IMGW member {member!r} row {ordinal} has an invalid calendar date") from error
     retained = dict(zip(_RETAINED_NAMES, source, strict=True))
     for product, value_index, null_sentinels in _PRODUCT_COLUMNS:
+        definition = source_series(station, str(product))
+        facts = definition.facts[0]
         value, state = _native_value(source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels)
         output.append(
             {
@@ -640,6 +673,9 @@ def _emit_source_row(
                 "time_zone": "unknown",
                 "value": value,
                 "value_state": state,
+                "series_id": definition.series_id,
+                "facts_id": facts.facts_id,
+                "source_unit": facts.source_unit.value,
                 **retained,
             }
         )
@@ -677,3 +713,37 @@ def _sha256(path: Path) -> ArtifactChecksum:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return ArtifactChecksum(f"sha256:{digest.hexdigest()}")
+
+
+@cache
+def source_series(station: str, product: str) -> SourceSeries:
+    """Identify a native physical-cell stream without inventing a publisher variant."""
+    namespace, quantity, unit = {
+        "discharge_daily_mean": ("imgw:flow_m3s", "discharge", "m3/s"),
+        "stage_daily_mean": ("imgw:level_cm", "stage", "cm"),
+        "water_temperature_daily_mean": ("imgw:temperature_c", "temperature", "degC"),
+    }[product]
+    evidence = f"pl_imgw/config.py and declared publisher native cell schema: {product}"
+    facts = PhysicalFacts(
+        facts_id=stable_id("pl_imgw", product, unit),
+        quantity=known(quantity, evidence),
+        source_unit=known(unit, evidence),
+        normalized_unit=unit,
+        frequency=known("daily", evidence),
+        statistic=known("mean", evidence),
+        clipping_axis=ClippingAxis.CALENDAR_DATE,
+        label_time="00:00",
+    )
+    return SourceSeries(
+        series_id=stable_id("pl_imgw", station, namespace, None),
+        provider_id="pl_imgw",
+        station_id=station,
+        product_id=product,
+        identity=SourceIdentity(namespace=namespace, published_id=None, origin="mapping", evidence=(evidence,)),
+        facts=(facts,),
+    )
+
+
+def _batch_series(rows: list[dict[str, object]]) -> tuple[SourceSeries, ...]:
+    pairs = {(str(row["station_id"]), str(row["product"])) for row in rows}
+    return tuple(source_series(station, product) for station, product in sorted(pairs))

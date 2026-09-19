@@ -519,6 +519,8 @@ def _validate(
 def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.ca_eccc.catalogue_series import describe_catalogue
+    from rivretrieve._internal.providers.ca_eccc.config import config as source_config
     from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -534,6 +536,8 @@ def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) ->
         build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config,
+        source_describer=describe_catalogue,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

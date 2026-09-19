@@ -43,8 +43,11 @@ class NoNveSourceCoordinates:
     resolution_time: Literal["0", "60", "1440"]
     method: Literal["Mean", "Instantaneous"]
     source_unit: Literal["m", "m³/s", "°C"]
+    version_number: int | None = None
 
     def __post_init__(self) -> None:
+        if self.version_number is not None and type(self.version_number) is not int:
+            raise TypeError("version_number must be an integer source selector or None")
         if self.parameter not in _PARAMETERS:
             raise ValueError("parameter must be a HydAPI observation parameter number")
         if self.resolution_time not in _RESOLUTION_TIMES:

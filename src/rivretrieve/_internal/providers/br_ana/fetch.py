@@ -17,6 +17,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest
 
 _URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v1"
@@ -29,6 +30,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     payloads: list[Payload] = []
     for station in stations:
@@ -77,6 +81,8 @@ def fetch(
                             query=UnknownOriginFact(),
                         ),
                         prerequisite_calls=response.prerequisite_calls,
+                        scope=scope,
+                        known_series=known_series,
                     )
                 )
     return WithIssues(tuple(payloads))

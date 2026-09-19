@@ -66,7 +66,7 @@ def test_public_find_admits_previously_withheld_baseline_stations() -> None:
         assert selection.series
         assert not selection.acquisition_provenance[0].header.withheld_facts
 
-    selection = rr.find(provider="th_thaiwater", station="1", product="stage_reported")
+    selection = rr.find(provider="th_thaiwater", station="1", quantity="stage")
     assert rr.as_frame(selection).height == 1
     provenance = selection.acquisition_provenance[0]
     assert provenance.header.withheld_facts == ()

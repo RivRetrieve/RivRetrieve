@@ -503,6 +503,9 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
     for artifact_name in (
         "provider.json",
@@ -515,5 +518,8 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     ):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

@@ -1,0 +1,162 @@
+{
+  "built_at": "2026-08-11T10:02:00.123456Z",
+  "compiler_version": "0.1.49",
+  "format_version": 5,
+  "partition_row_counts": {
+    "product=discharge/year=2023": 1,
+    "product=discharge/year=2024": 1
+  },
+  "provider_id": "fixture_bulk",
+  "publisher_artifact": {
+    "sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "url": "https://example.invalid/imgw/codz_2024.zip"
+  },
+  "source_column_dispositions": [
+    {
+      "disposition": "retained",
+      "source_column": "station_id"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time_zone"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "value"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "native_unit"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_quality"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_note"
+    }
+  ],
+  "source_schema": {
+    "columns": [
+      {
+        "name": "station_id",
+        "type": "string"
+      },
+      {
+        "name": "time",
+        "type": "timestamp[us]"
+      },
+      {
+        "name": "time_zone",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "float64"
+      },
+      {
+        "name": "native_unit",
+        "type": "string"
+      },
+      {
+        "name": "source_quality",
+        "type": "string"
+      },
+      {
+        "name": "source_note",
+        "type": "string"
+      }
+    ],
+    "fingerprint": "sha256:fec7d282faad87c744bd83241c5be29a15b7a7254760b7a9aed0f4e27ba3ecca"
+  },
+  "source_vintage": "2024-10-31",
+  "series": [
+    {
+      "series_id": "44e6fe042b157ef7455482a642b1d8a4983aab605c68ec63788f1648c6c3bb7e",
+      "provider_id": "fixture_bulk",
+      "station_id": "pl-001",
+      "product_id": "discharge",
+      "identity": {
+        "namespace": "controlled fixture",
+        "published_id": null,
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "controlled fixture"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "78001b403c04ed543beef61175cd31cfad8d01d6d84ddb1b1f77f39ca081639c",
+          "quantity": {
+            "value": "discharge",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "source_unit": {
+            "value": "m3/s",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "normalized_unit": "m3/s",
+          "frequency": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "statistic": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "temporal_support": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    }
+  ],
+  "inventories": [],
+  "outcomes": [],
+  "issues": [],
+  "source_calls": []
+}

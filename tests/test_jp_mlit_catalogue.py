@@ -990,6 +990,9 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
     assert {item.name for item in tmp_path.iterdir()} == expected_names
     for name in expected_names:

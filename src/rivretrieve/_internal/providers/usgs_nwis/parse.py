@@ -1,163 +1,330 @@
-"""usgs_nwis parse : Payload × ProviderConfig → WithIssues[Rows]
+"""Decode USGS response-owned method identities and physical evidence.
 
 Contributed by: Thiago von Däniken
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import re
 from datetime import datetime, time
-from typing import cast
+from typing import Any
 
 import polars as pl
+from pydantic import ValidationError
 
-from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.engine import (
-    Daily,
-    Hourly,
-    Instant,
-    Payload,
-    ProviderConfig,
-    Rows,
-    RowsSchema,
-    UnknownTemporalSupport,
-    WithIssues,
-    ZoneValue,
-)
+from rivretrieve._internal.engine import Daily, Instant, Payload, ProviderConfig, RowsSchema, ZoneValue
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.usgs_nwis.issue_codes import UsgsNwisObservationIssueCodes
+from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
+from rivretrieve._internal.source_series import (
+    ClippingAxis,
+    EvidenceFact,
+    EvidenceState,
+    InventoryCompleteness,
+    InventorySnapshot,
+    OutcomeStatus,
+    ParsedSeries,
+    PhysicalFacts,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+    admission,
+    known,
+    stable_id,
+    validate_series_rows,
+)
 
-PROVIDER_ID = ProviderId("usgs_nwis")
-
-_NO_DATA_VALUE: float = -999999.0
 _WALL_CLOCK_PATTERN = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
 _OFFSET_TIMESTAMP_PATTERN = re.compile(rf"(?P<wall_clock>{_WALL_CLOCK_PATTERN})(?P<offset>Z|[+-][0-9]{{2}}:[0-9]{{2}})")
 _NAIVE_TIMESTAMP_PATTERN = re.compile(rf"(?P<wall_clock>{_WALL_CLOCK_PATTERN})")
+_EVIDENCE = "USGS Water Services WaterML 1.1 response"
+_IV_DEFINITION = "https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/"
 
 
-def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+def _method_id(value: object) -> str | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value >= 0:
+        return str(value)
+    if isinstance(value, str) and re.fullmatch(r"[0-9]+", value):
+        return str(int(value))
+    return None
+
+
+def _method_identity(method: dict[str, Any]) -> tuple[str, str]:
+    identifier = _method_id(method.get("methodID"))
+    if identifier is not None:
+        return "methodID", identifier
+    code = method.get("methodCode")
+    if "methodID" not in method and isinstance(code, str) and code.strip():
+        return "methodCode", code
+    raise ValueError("Missing or malformed published method identity")
+
+
+def _facts(variable: dict[str, Any], coordinates: UsgsNwisSourceCoordinates) -> PhysicalFacts:
+    parameter = variable.get("variableCode", [])
+    code = parameter[0].get("value") if len(parameter) == 1 else None
+    quantity = {"00060": "discharge", "00065": "stage"}.get(code) if isinstance(code, str) else None
+    raw_unit = variable.get("unit", {}).get("unitCode")
+    unit = (
+        known(raw_unit, _EVIDENCE)
+        if isinstance(raw_unit, str) and raw_unit
+        else EvidenceFact(state=EvidenceState.SOURCE_SILENT)
+    )
+    daily = coordinates.endpoint == "dv"
+    statistics = [
+        v.get("optionCode") for v in variable.get("options", {}).get("option", []) if v.get("name") == "Statistic"
+    ]
+    statistic = {"00003": "mean", "00001": "max", "00002": "min"}.get(statistics[0]) if len(statistics) == 1 else None
+    if not daily and statistics in ([], ["00000"]):
+        statistic = "instantaneous"
+    frequency = "daily" if daily else None
+    temporal_support = "interval" if daily else "instantaneous" if statistic == "instantaneous" else None
+    return PhysicalFacts(
+        facts_id=stable_id("usgs_nwis", code, raw_unit, coordinates.endpoint, statistic, frequency, temporal_support),
+        quantity=known(quantity, _EVIDENCE) if quantity else EvidenceFact(),
+        source_unit=unit,
+        normalized_unit=raw_unit if raw_unit in ("ft3/s", "ft", "m3/s", "m") else None,
+        frequency=known(frequency, "USGS daily values definition") if frequency else EvidenceFact(),
+        statistic=known(statistic, _IV_DEFINITION if statistic == "instantaneous" else _EVIDENCE)
+        if statistic
+        else EvidenceFact(),
+        temporal_support=known(temporal_support, "USGS daily values definition" if daily else _IV_DEFINITION)
+        if temporal_support
+        else EvidenceFact(),
+        timestamp_anchor=known("00:00", "USGS daily value label") if daily else EvidenceFact(),
+        clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
+        label_time="00:00" if daily else None,
+    )
+
+
+def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     if len(payload.station_products) != 1:
         raise FatalContractError("usgs_nwis payload must contain exactly one station-product pair")
     station_id, product_id = payload.station_products[0]
     try:
-        semantics = provider_config.products[product_id].semantics
+        product = provider_config.products[product_id]
     except KeyError as error:
         raise FatalContractError(f"usgs_nwis product is absent from provider config: {product_id}") from error
-    if isinstance(semantics, Hourly):
-        raise FatalContractError("usgs_nwis does not declare hourly interval product semantics")
-    if isinstance(semantics, UnknownTemporalSupport):
-        raise FatalContractError("usgs_nwis does not declare unknown temporal support")
+    coordinates = product.coordinates.value
+    if not isinstance(coordinates, UsgsNwisSourceCoordinates) or not isinstance(product.semantics, Daily | Instant):
+        raise FatalContractError("Invalid USGS product contract")
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    scope = SeriesScope(provider_ids=("usgs_nwis",), station_ids=(station_id,), product_ids=(product_id,))
+    acquired = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    capture_id = stable_id(hashlib.sha256(payload.content).hexdigest(), acquired.isoformat() if acquired else None)
+    rows: list[dict[str, object]] = []
+    definitions: dict[str, SourceSeries] = {}
+    outcomes: list[RetrievalOutcome] = []
+    issues: list[Issue] = []
+    members: set[str] = set()
 
-    if not payload.content.strip():
-        return _result(_empty_rows(), [_missing_data_issue(station_id)])
+    def outcome(series: SourceSeries | None, status: OutcomeStatus, reason: str | None = None) -> None:
+        sid = series.series_id if series else None
+        outcomes.append(
+            RetrievalOutcome(
+                outcome_id=stable_id(capture_id, sid, status, reason, window.model_dump_json()),
+                series_id=sid,
+                station_id=station_id,
+                product_id=product_id,
+                window=window,
+                status=status,
+                facts_ids=tuple(f.facts_id for f in series.facts) if series else (),
+                reason=reason,
+                retrieved_at=acquired,
+            )
+        )
+        if reason:
+            issues.append(
+                Issue(
+                    severity="warning",
+                    code="unsupported_source_series",
+                    message=reason,
+                    provider_id=ProviderId("usgs_nwis"),
+                    details={"station_id": station_id, "product_id": product_id, "series_id": sid},
+                )
+            )
 
     try:
         document = json.loads(payload.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FatalContractError("usgs_nwis payload content is not valid JSON") from error
-    if not isinstance(document, dict):
-        raise FatalContractError("usgs_nwis payload content must be a JSON object")
-
-    entries_and_sentinel = _observation_entries(document)
-    if entries_and_sentinel is None:
-        return _result(_empty_rows(), [_missing_data_issue(station_id)])
-    entries, no_data_value = entries_and_sentinel
-
-    row_data: list[dict[str, object]] = []
-    invalid_count = 0
-    no_data_count = 0
-    for entry in entries:
-        if not isinstance(entry, dict):
-            raise FatalContractError("usgs_nwis observation entry must be a JSON object")
-        entry = cast("dict[str, object]", entry)
-
-        raw_timestamp = entry.get("dateTime")
-        if not isinstance(raw_timestamp, str):
-            raise FatalContractError("usgs_nwis observation dateTime must be a string")
-        wall_clock, zone = _parse_timestamp(raw_timestamp, semantics)
-
-        raw_value = entry.get("value")
-        if not isinstance(raw_value, str | int | float) or isinstance(raw_value, bool):
-            invalid_count += 1
-            continue
+        source = document["value"]
+        time_series = source["timeSeries"]
+        if not isinstance(time_series, list):
+            raise ValueError("timeSeries is not a list")
+    except (ValueError, KeyError, TypeError) as error:
+        source = {}
+        time_series = []
+        outcome(None, OutcomeStatus.UNSUPPORTED, f"Unreadable USGS response: {error}")
+    for item in time_series:
         try:
-            native_value = float(raw_value)
-        except (TypeError, ValueError):
-            invalid_count += 1
+            variable = item["variable"]
+            facts = _facts(variable, coordinates)
+            sites = [s.get("value") for s in item["sourceInfo"]["siteCode"]]
+            parameters = [v.get("value") for v in variable["variableCode"]]
+            statistics = [
+                v.get("optionCode")
+                for v in variable.get("options", {}).get("option", [])
+                if v.get("name") == "Statistic"
+            ]
+            mismatch = None
+            if sites != [station_id] or parameters != [coordinates.parameter_code]:
+                mismatch = "Returned station or parameter contradicts requested coordinates"
+            if coordinates.statistic_code is not None and statistics != [coordinates.statistic_code]:
+                mismatch = "Returned statistic contradicts requested coordinates"
+            if coordinates.endpoint == "iv" and statistics not in ([], ["00000"]):
+                mismatch = "Returned statistic contradicts the instantaneous-values service"
+            decision = admission(facts)
+            reason = mismatch or decision.reason
+            blocks = item["values"]
+            if not isinstance(blocks, list):
+                raise ValueError("values is not a list")
+        except ValidationError as error:
+            raise FatalContractError("Invalid internal USGS physical facts") from error
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            outcome(None, OutcomeStatus.UNSUPPORTED, f"Unsupported USGS timeSeries structure: {error}")
             continue
-        if abs(native_value - no_data_value) < 1e-3:
-            no_data_count += 1
-            continue
-
-        row_data.append(
-            {
-                "station_id": station_id,
-                "product_id": product_id,
-                "time": wall_clock,
-                "value": native_value,
-                "time_zone": zone.value,
-            }
+        for block in blocks:
+            try:
+                methods = block.get("method", [])
+                method_map = {_method_identity(m): m.get("methodDescription") for m in methods}
+                if not method_map or len(method_map) != len(methods):
+                    raise ValueError("Missing or ambiguous published method identity")
+                if any(
+                    description is not None and not isinstance(description, str) for description in method_map.values()
+                ):
+                    raise ValueError("Published method description is not a string")
+                entries = block["value"]
+                if not isinstance(entries, list):
+                    raise ValueError("Observation values are not a list")
+                grouped: dict[tuple[str, str], list[dict[str, Any]]] = {identity: [] for identity in method_map}
+                ambiguous = False
+                for entry in entries:
+                    matches = [
+                        _method_identity(method)
+                        for method in methods
+                        if (
+                            "methodID" not in entry
+                            or (
+                                _method_id(entry["methodID"]) is not None
+                                and _method_id(entry["methodID"]) == _method_id(method.get("methodID"))
+                            )
+                        )
+                        and (
+                            "methodCode" not in entry
+                            or (
+                                isinstance(entry["methodCode"], str) and entry["methodCode"] == method.get("methodCode")
+                            )
+                        )
+                    ]
+                    if len(matches) != 1:
+                        ambiguous = True
+                    else:
+                        grouped[matches[0]].append(entry)
+                if ambiguous:
+                    outcome(
+                        None,
+                        OutcomeStatus.UNSUPPORTED,
+                        "Observations lack an unambiguous association with a published method",
+                    )
+                for identity, observations in grouped.items():
+                    namespace, mid = identity
+                    sid = stable_id("usgs_nwis", station_id, product_id, namespace, mid)
+                    series = SourceSeries(
+                        series_id=sid,
+                        provider_id="usgs_nwis",
+                        station_id=station_id,
+                        product_id=product_id,
+                        identity=SourceIdentity(
+                            namespace=namespace,
+                            published_id=mid,
+                            description=method_map[identity],
+                            origin="response",
+                            evidence=(_EVIDENCE,),
+                        ),
+                        variant=mid,
+                        facts=(facts,),
+                    )
+                    members.add(sid)
+                    previous = definitions.get(sid)
+                    if previous and facts.facts_id not in {f.facts_id for f in previous.facts}:
+                        series = series.model_copy(update={"facts": (*previous.facts, facts)})
+                    definitions[sid] = series
+                    if reason:
+                        outcome(series, OutcomeStatus.UNSUPPORTED, reason)
+                        continue
+                    if ambiguous and not observations:
+                        outcome(series, OutcomeStatus.UNSUPPORTED, "Method association is unresolved")
+                        continue
+                    native_rows = []
+                    try:
+                        for entry in observations:
+                            stamp, zone = _parse_timestamp(entry["dateTime"], product.semantics)
+                            raw = entry.get("value")
+                            number = None if raw is None else float(raw)
+                            if number == variable.get("noDataValue", -999999.0):
+                                number = None
+                            if number is not None and not math.isfinite(number):
+                                raise ValueError("Non-finite observation value")
+                            native_rows.append(
+                                {
+                                    "station_id": station_id,
+                                    "product_id": product_id,
+                                    "time": stamp,
+                                    "value": number,
+                                    "time_zone": zone.value,
+                                    "series_id": sid,
+                                    "facts_id": facts.facts_id,
+                                    "source_unit": facts.source_unit.value,
+                                }
+                            )
+                    except (KeyError, TypeError, ValueError) as error:
+                        outcome(series, OutcomeStatus.UNSUPPORTED, f"Unrepresentable method observations: {error}")
+                        continue
+                    rows.extend(native_rows)
+                    if ambiguous:
+                        outcome(series, OutcomeStatus.UNSUPPORTED, "Method association is partially unresolved")
+                    else:
+                        outcome(series, OutcomeStatus.SUCCESS if native_rows else OutcomeStatus.EMPTY)
+            except ValidationError as error:
+                raise FatalContractError("Invalid internal USGS series definition") from error
+            except (KeyError, TypeError, ValueError, AttributeError) as error:
+                outcome(None, OutcomeStatus.UNSUPPORTED, f"Unsupported USGS values block: {error}")
+    if not time_series and not outcomes:
+        outcome(
+            None,
+            OutcomeStatus.UNRESOLVED,
+            "Response contains no concrete method identity; empty window does not establish series absence",
         )
-
-    rows = pl.DataFrame(row_data, schema=RowsSchema.polars_schema)
-    issues: list[Issue] = []
-    if invalid_count:
-        issues.append(
-            _issue(
-                UsgsNwisObservationIssueCodes.INVALID_NUMERIC_VALUE,
-                "Dropped observation entries with missing, non-numeric, or unparseable fields",
-                {"dropped_entries": invalid_count, "station_id": station_id},
-            )
-        )
-    if no_data_count:
-        issues.append(
-            _issue(
-                UsgsNwisObservationIssueCodes.NO_DATA_VALUE,
-                "Dropped observation entries with no-data sentinel value",
-                {"dropped_entries": no_data_count, "station_id": station_id},
-            )
-        )
-    if rows.is_empty():
-        issues.append(_missing_data_issue(station_id))
-
-    return _result(rows, issues)
-
-
-def _observation_entries(document: dict[str, object]) -> tuple[list[object], float] | None:
-    value = document.get("value")
-    if not isinstance(value, dict):
-        return None
-    value = cast("dict[str, object]", value)
-
-    time_series = value.get("timeSeries")
-    if not isinstance(time_series, list) or not time_series:
-        return None
-    if len(time_series) != 1 or not isinstance(time_series[0], dict):
-        raise FatalContractError("usgs_nwis payload must contain exactly one timeSeries object")
-    series = cast("dict[str, object]", time_series[0])
-
-    values = series.get("values")
-    if not isinstance(values, list) or not values:
-        return None
-    if len(values) != 1 or not isinstance(values[0], dict):
-        raise FatalContractError("usgs_nwis timeSeries must contain exactly one values object")
-    values_block = cast("dict[str, object]", values[0])
-
-    entries = values_block.get("value")
-    if not isinstance(entries, list):
-        return None
-    entries = cast("list[object]", entries)
-
-    no_data_value = _NO_DATA_VALUE
-    variable = series.get("variable")
-    if isinstance(variable, dict):
-        variable = cast("dict[str, object]", variable)
-        raw_no_data_value = variable.get("noDataValue")
-        if isinstance(raw_no_data_value, int | float) and not isinstance(raw_no_data_value, bool):
-            no_data_value = float(raw_no_data_value)
-    return entries, no_data_value
+    query_info = source.get("queryInfo")
+    notes = query_info.get("note") if isinstance(query_info, dict) else None
+    all_methods = isinstance(notes, list) and any(
+        isinstance(n, dict) and n.get("title") == "filter:methodId" and n.get("value") == "methodIds=[ALL]"
+        for n in notes
+    )
+    complete = all_methods and not issues
+    inventory = InventorySnapshot(
+        snapshot_id=stable_id("usgs_nwis", capture_id, scope.model_dump_json(), window.model_dump_json()),
+        scope=scope,
+        members=tuple(sorted(members)),
+        completeness=InventoryCompleteness.COMPLETE if complete else InventoryCompleteness.INCOMPLETE,
+        access="USGS Water Services methodIds=[ALL]" if all_methods else "USGS Water Services response",
+        origin="response",
+        acquired_at=acquired,
+        window=window,
+        evidence=(_EVIDENCE,),
+        reason=None if complete else "Response does not establish a complete representable method inventory",
+    )
+    frame = pl.DataFrame(rows, schema=RowsSchema.polars_schema)
+    validate_series_rows(frame, tuple(definitions.values()))
+    return ParsedSeries(frame, tuple(definitions.values()), (inventory,), tuple(outcomes), tuple(issues))
 
 
 def _parse_timestamp(raw_timestamp: str, semantics: Daily | Instant) -> tuple[datetime, ZoneValue]:
@@ -169,41 +336,14 @@ def _parse_timestamp(raw_timestamp: str, semantics: Daily | Instant) -> tuple[da
         elif isinstance(semantics, Daily):
             match = _NAIVE_TIMESTAMP_PATTERN.fullmatch(raw_timestamp)
             if match is None:
-                raise FatalContractError("usgs_nwis daily observation timestamp must be strict ISO wall-clock time")
+                raise ValueError("usgs_nwis daily observation timestamp must be strict ISO wall-clock time")
             zone = ZoneValue("unknown")
         else:
-            raise FatalContractError("usgs_nwis instantaneous observation timestamp must contain a strict ISO offset")
+            raise ValueError("usgs_nwis instantaneous observation timestamp must contain a strict ISO offset")
 
         wall_clock = datetime.fromisoformat(match["wall_clock"])
         if isinstance(semantics, Daily) and zone == ZoneValue("unknown") and wall_clock.time() != time.min:
-            raise FatalContractError("usgs_nwis naive daily observation timestamp must label midnight")
+            raise ValueError("usgs_nwis naive daily observation timestamp must label midnight")
     except ValueError as error:
-        raise FatalContractError("usgs_nwis observation timestamp is unrepresentable") from error
+        raise ValueError(f"usgs_nwis observation timestamp is unrepresentable: {error}") from error
     return wall_clock, zone
-
-
-def _empty_rows() -> Rows:
-    return pl.DataFrame(schema=RowsSchema.polars_schema)
-
-
-def _missing_data_issue(station_id: str) -> Issue:
-    return _issue(
-        UsgsNwisObservationIssueCodes.MISSING_DATA,
-        "No observation rows found",
-        {"station_id": station_id},
-    )
-
-
-def _issue(code: UsgsNwisObservationIssueCodes, message: str, details: dict[str, object]) -> Issue:
-    return Issue(
-        severity="warning",
-        code=code,
-        message=message,
-        details=details,
-        provider_id=PROVIDER_ID,
-    )
-
-
-def _result(rows: Rows, issues: list[Issue]) -> WithIssues[Rows]:
-    validate_catalogue(rows, RowsSchema, on_issue="raise")
-    return WithIssues(value=rows, issues=tuple(issues))

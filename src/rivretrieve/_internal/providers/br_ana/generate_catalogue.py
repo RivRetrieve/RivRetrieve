@@ -242,8 +242,12 @@ def generate_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedBrAnaCatalogue, out_dir: Path) -> None:
+    from functools import partial
+
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.br_ana.catalogue_series import describe_catalogue
+    from rivretrieve._internal.providers.br_ana.config import config as source_config
 
     out_dir.mkdir(parents=True, exist_ok=True)
     artifact = catalogue.public_artifact
@@ -257,6 +261,8 @@ def write_catalogue(catalogue: GeneratedBrAnaCatalogue, out_dir: Path) -> None:
         catalogue.acquisition_provenance,
         (catalogue.origins,),
         {name: (out_dir / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_describer=partial(describe_catalogue, config=source_config()),
     )
     for name, content in metadata.items():
         (out_dir / name).write_bytes(content)

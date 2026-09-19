@@ -36,7 +36,7 @@ SOURCE_FIELDS = {
 
 
 def test_canadian_example_and_product_deduplication() -> None:
-    gauges = rr.find(provider="ca_eccc", product="discharge_daily_mean")
+    gauges = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
     gauge = rr.pick(gauges, station="02GA010")
     expected = pl.DataFrame(
         [
@@ -83,8 +83,9 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
 
 
 def test_empty_and_invalid_selection() -> None:
-    empty = rr.from_frame(
-        pl.DataFrame(schema={"provider_id": pl.String, "station_id": pl.String, "product_id": pl.String})
+    empty = rr.pick(
+        rr.find(provider="ca_eccc", station="02GA010", quantity="stage"),
+        quantity="discharge",
     )
     assert_frame_equal(rr.drainage_areas(empty), pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA))
     with pytest.raises(TypeError, match="RivRetrieve selection"):
@@ -151,3 +152,48 @@ def test_broken_projection_does_not_become_absence() -> None:
         drainage_area_frame(stations, pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA))
     with pytest.raises(FatalContractError, match="schema"):
         drainage_area_frame(stations, pl.DataFrame())
+
+
+def test_station_metadata_does_not_require_numeric_source_unit_admission() -> None:
+    selection = rr.find(provider="za_dws")
+    inspected = rr.as_frame(selection)
+    assert inspected["station_id"].n_unique() == 2905
+    keys = ["provider_id", "station_id"]
+    assert_frame_equal(
+        rr.drainage_areas(selection).select(keys).unique().sort(keys),
+        inspected.select(keys).unique().sort(keys),
+    )
+
+
+def test_station_metadata_is_independent_of_retained_map_coordinates() -> None:
+    from dataclasses import replace
+
+    selected = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
+    expected = rr.drainage_areas(selected)
+    assert expected.height == 2
+    without_coordinates = replace(selected, locations=())
+    assert_frame_equal(rr.drainage_areas(without_coordinates), expected)
+
+
+def test_catalogue_only_station_metadata_without_numeric_admission() -> None:
+    from dataclasses import replace
+
+    selected = rr.find(provider="za_dws", station="A1H001")
+    assert not selected.series
+    assert len(selected.locations) == 1
+    projection = pl.read_parquet(
+        Path(__file__).parents[1] / "src/rivretrieve/_internal/catalogues/drainage_areas.parquet"
+    )
+    expected = projection.filter((pl.col("provider_id") == "za_dws") & (pl.col("station_id") == "A1H001"))
+    assert expected.height > 0
+    assert_frame_equal(rr.drainage_areas(selected), expected)
+    without_geometry = replace(selected, locations=())
+    assert_frame_equal(rr.drainage_areas(without_geometry), expected)
+    assert_frame_equal(rr.drainage_areas(rr.pick(selected, quantity="discharge")), expected)
+    for narrowed in (
+        rr.pick(selected, quantity="temperature"),
+        rr.pick(selected, variant="unestablished", on_issue="ignore"),
+        rr.pick(selected, series_id=[], on_issue="ignore"),
+        rr.pick(selected, provider="ch_foen"),
+    ):
+        assert_frame_equal(rr.drainage_areas(narrowed), pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA))

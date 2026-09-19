@@ -20,6 +20,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ba_fhmzbih.config import BaFhmzbihSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _METADATA_URL = "https://vodostaji.voda.ba/data/internet/layers/20/index.json"
@@ -38,6 +39,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     for product in products:
         if rendered_windows[product] != ():
@@ -64,7 +68,16 @@ def fetch(
             )
         groups[station] = matches[0]["metadata_site_no"]
     pairs = tuple((station, product) for station in stations for product in products)
-    payloads = [_payload(SourceCoordinates(BaFhmzbihMetadataCoordinates()), pairs, fetch_window, metadata_response)]
+    payloads = [
+        _payload(
+            SourceCoordinates(BaFhmzbihMetadataCoordinates()),
+            pairs,
+            fetch_window,
+            metadata_response,
+            scope,
+            known_series,
+        )
+    ]
     for station, product in pairs:
         product_config = config.products[product]
         coordinates = product_config.coordinates.value
@@ -80,7 +93,9 @@ def fetch(
                 headers={"Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
             ),
         )
-        payloads.append(_payload(product_config.coordinates, ((station, product),), fetch_window, response))
+        payloads.append(
+            _payload(product_config.coordinates, ((station, product),), fetch_window, response, scope, known_series)
+        )
     return WithIssues(tuple(payloads))
 
 
@@ -93,6 +108,8 @@ def _payload(
     pairs: tuple[tuple[str, ProductId], ...],
     window: FetchWindow,
     response: TransportResponse,
+    scope: SeriesScope | None,
+    known_series: tuple[SourceSeries, ...],
 ) -> Payload:
     return Payload(
         coordinates,
@@ -109,4 +126,6 @@ def _payload(
             UnknownOriginFact(),
         ),
         response.prerequisite_calls,
+        scope=scope,
+        known_series=known_series,
     )

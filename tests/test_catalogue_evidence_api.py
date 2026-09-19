@@ -9,6 +9,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal import discovery
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
+from rivretrieve._internal.engine import CanonicalRowsSchema
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
@@ -16,7 +17,7 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_real_selection_exposes_normalized_metadata_without_legacy_aliases():
-    selection = rr.find(provider="fr_hubeau", station="1232000101", product="discharge_instantaneous")
+    selection = rr.find(provider="fr_hubeau", station="1232000101", quantity="discharge", statistic="instantaneous")
     assert type(selection.acquisition_provenance) is tuple
     evidence = selection.acquisition_provenance[0]
     assert type(evidence) is CatalogueEvidence
@@ -38,12 +39,14 @@ def test_recorded_public_fetch_normalized_provenance_serialization(monkeypatch: 
     recording = read_recording(ROOT / "tests/test_data/usgs_nwis_09380000_iv_00060_2020-07-01.recording.json")
     replay = ReplayTransport((recording,))
     monkeypatch.setattr(discovery, "_credentialed_transport", lambda provider_id, values: replay)
-    selection = rr.find(provider="usgs_nwis", station="09380000", product="discharge_instantaneous")
+    selection = rr.find(
+        provider="usgs_nwis", station="09380000", quantity="discharge", temporal_support="instantaneous"
+    )
     result = rr.fetch(selection, start="2020-07-01T00:00:00", end="2020-07-01T23:00:00", on_issue="ignore")
     evidence = result.provenance.acquisition_provenance
     assert type(evidence) is CatalogueEvidence
     assert evidence.header.provider_id == "usgs_nwis"
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.schema == CanonicalRowsSchema.polars_schema
     assert result.data.height > 0
     python_value = result.provenance.model_dump(mode="python")
     assert isinstance(python_value["acquisition_provenance"]["facts"], pl.DataFrame)

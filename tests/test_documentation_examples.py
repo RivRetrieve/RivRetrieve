@@ -120,21 +120,11 @@ def assert_usage_state(scope, tmp_path):
     from polars.testing import assert_frame_equal
 
     result = scope["result"]
-    assert len(scope["provider_results"]) == 2
-    assert set(scope["provider_results"]) == {"usgs_nwis", "lt_lhmt"}
-    lithuanian = scope["lithuanian_result"]
-    expected_lithuanian = pl.DataFrame(
-        {
-            "time": [datetime(2023, 1, 1)],
-            "time_zone": ["+00:00"],
-            "station_id": ["anyksciu-vms"],
-            "product_id": ["discharge_daily_mean"],
-            "value": [81.8],
-        }
-    )
-    assert_frame_equal(lithuanian.data, expected_lithuanian)
-    assert not lithuanian.issues
-    assert lithuanian.provenance.provider_id == "lt_lhmt"
+    assert_frame_equal(scope["restored_result"].data, result.data)
+    assert scope["restored_result"].source_series == result.source_series
+    assert scope["restored_result"].outcomes == result.outcomes
+    assert scope["restored_gauges"].scope == scope["chosen_gauges"].scope
+    assert scope["restored_gauges"].known_series == scope["chosen_gauges"].known_series
     instantaneous = scope["instant_result"]
     assert not instantaneous.issues
     assert instantaneous.data["time_zone"].to_list() == ["-06:00", "-06:00"]
@@ -147,7 +137,6 @@ def assert_usage_state(scope, tmp_path):
     assert scope["utc_result"].provenance is instantaneous.provenance
     assert scope["utc_result"].issues is instantaneous.issues
     assert scope["utc_result"].receipts is instantaneous.receipts
-    assert_frame_equal(scope["provider_results"]["usgs_nwis"].data, result.data)
     assert_frame_equal(scope["cached_result"].data, result.data)
     assert scope["status"].store == tmp_path / "cache" / "usgs_nwis" / "store"
     calls = scope["_calls_by_block"]
@@ -163,13 +152,13 @@ def assert_usage_state(scope, tmp_path):
     assert len(scope["_transport"].calls) == before
     assert_frame_equal(cached.data, result.data)
     assert cached.receipts.entries[0].authorship.value == "store_excerpt"
-    assert cached.receipts.entries[0].format_version == 4
+    assert cached.receipts.entries[0].format_version == 6
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
     assert excerpt.height >= cached.data.height
     assert fresh.provenance.retrieved_at == read_recording(RECORDING).retrieved_at
     assert not fresh.provenance.served_intervals
     assert cached.provenance.retrieved_at is None
-    assert not cached.provenance.calls_made
+    assert cached.provenance.calls_made
     assert cached.provenance.served_intervals
     assert all(
         interval.retrieved_at == fresh.provenance.retrieved_at for interval in cached.provenance.served_intervals
@@ -177,8 +166,8 @@ def assert_usage_state(scope, tmp_path):
     assert not result.receipts.entries
     markers = [child for child in scope["station_map"]._children.values() if isinstance(child, Marker)]
     assert len(markers) == 1
-    gauge_frame = scope["rr"].as_frame(scope["chosen_gauges"])
-    assert markers[0].location == list(gauge_frame.select("latitude", "longitude").row(0))
+    location = next(item for item in scope["chosen_gauges"].locations if item.station_id == "07374000")
+    assert markers[0].location == [location.latitude, location.longitude]
     html = (tmp_path / "stations.html").read_text()
     assert "07374000" in html
     assert "L.marker(" in html
@@ -188,26 +177,21 @@ def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path):
     from polars.testing import assert_frame_equal
 
     from rivretrieve._internal.issues import FatalContractError
-    from rivretrieve._internal.observations import ObservationProvenance, ObservationResult, Receipts
-    from rivretrieve._internal.primitives import ProviderId
 
     scope = execute_page("README.md", monkeypatch, tmp_path)
     rr = scope["rr"]
     assert scope["result"].data["time_zone"].to_list() == ["unknown"]
     with pytest.raises(FatalContractError, match="unknown"):
         rr.to_utc(scope["result"])
-    synthetic = ObservationResult(
-        data=pl.DataFrame(
-            {
-                "time": [datetime(2023, 1, 1, 12)],
-                "time_zone": ["+02:00"],
-                "station_id": ["example"],
-                "product_id": ["stage_instantaneous"],
-                "value": [1.0],
-            }
-        ),
-        provenance=ObservationProvenance(source="synthetic", provider_id=ProviderId("example")),
-        receipts=Receipts(provider_id=ProviderId("example"), entries=()),
+    # Authored clock labels test the UTC operation, retaining real identity/fact context.
+    original = scope["result"]
+    synthetic = original.model_copy(
+        update={
+            "data": original.data.with_columns(
+                pl.lit(datetime(2023, 1, 1, 12)).alias("time"),
+                pl.lit("+02:00").alias("time_zone"),
+            )
+        }
     )
     converted = rr.to_utc(synthetic)
     expected = synthetic.data.with_columns(
@@ -244,7 +228,7 @@ def issue_scope(monkeypatch, tmp_path, outcome):
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
-    daily_gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+    daily_gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
     return {"rr": rr, "chosen_gauges": rr.pick(daily_gauges, station=["07374000"])}, replay
 
 
@@ -303,10 +287,11 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
         assert issue.provider_id == "usgs_nwis"
         assert issue.details["station_id"] == "07374000"
         if outcome == "empty":
-            assert issue.code == "missing_data"
-            assert issue.message == "No observation rows found"
+            assert issue.code == "unsupported_source_series"
+            assert "no concrete method identity" in issue.message
             if policy != "raise":
                 assert result.provenance.calls_made
+                assert any(item.status == "unresolved" for item in result.outcomes)
         else:
             assert issue.details["status_code"] == outcome
             assert f"HTTP {outcome}" in issue.message
@@ -314,7 +299,7 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
                 assert not result.provenance.calls_made
 
 
-def test_usage_selection_roundtrip_keeps_repeated_identity_strings(monkeypatch, tmp_path):
+def test_usage_selection_bundle_roundtrip(monkeypatch, tmp_path):
     from polars.testing import assert_frame_equal
 
     import rivretrieve as rr
@@ -323,25 +308,11 @@ def test_usage_selection_roundtrip_keeps_repeated_identity_strings(monkeypatch, 
     scope = {}
     for block in blocks("docs/usage.md")[:2]:
         execute_block(block, scope, "usage-selection")
-    frame = scope["frame"]
-    assert frame["provider_id"].n_unique() == 1
-    assert frame["product_id"].n_unique() == 1
-    assert frame["station_id"].n_unique() == 3
-    assert_frame_equal(rr.as_frame(rr.from_frame(frame)), frame)
-    # Identity columns retain their relative order even with metadata between them.
-    reordered = frame.select("latitude", "provider_id", "longitude", "station_id", "product_id")
-    assert_frame_equal(rr.as_frame(rr.from_frame(reordered)), frame)
-    assert_frame_equal(rr.as_frame(rr.from_frame(frame.with_columns(pl.lit(0.0).alias("latitude")))), frame)
-    from rivretrieve._internal.issues import FatalContractError
-
-    invalid_frames = [
-        pl.concat([frame, frame.head(1)]),
-        frame.with_columns(pl.lit(None, dtype=pl.String).alias("station_id")),
-        frame.with_columns(pl.col("station_id").cast(pl.Int64)),
-        frame.select("station_id", "provider_id", "product_id"),
-    ]
-    for invalid in invalid_frames:
-        with pytest.raises(FatalContractError):
-            rr.from_frame(invalid)
-    assert rr.as_frame(scope["chosen_gauges"])["station_id"].to_list() == ["07374000"]
-    assert rr.as_frame(scope["northern_gauges"])["station_id"].to_list() == ["01013500"]
+    selected = scope["chosen_gauges"]
+    restored = scope["restored_gauges"]
+    assert restored.scope == selected.scope
+    assert restored.known_series == selected.known_series
+    assert restored.inventories == selected.inventories
+    assert_frame_equal(rr.series(restored), rr.series(selected))
+    with pytest.raises(ValueError, match="bundle"):
+        rr.from_frame(rr.as_frame(selected))

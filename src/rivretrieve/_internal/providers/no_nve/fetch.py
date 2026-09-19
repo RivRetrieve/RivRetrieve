@@ -6,20 +6,32 @@ Contributed by: Thiago von Däniken
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
+from datetime import datetime
 
 from rivretrieve._internal.engine import (
     FetchWindow,
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
-    WithIssues,
 )
-from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_series_request
+from rivretrieve._internal.source_series import (
+    PhysicalFacts,
+    RestrictionKind,
+    SeriesScope,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+    stable_id,
+)
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _URL = "https://hydapi.nve.no/api/v1/Observations"
@@ -32,26 +44,110 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
-) -> WithIssues[tuple[Payload, ...]]:
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
+) -> SourceAcquisition:
     resolved = tuple((product, _coordinates(product, config)) for product in products)
     payloads: list[Payload] = []
+    issues: list[Issue] = []
+    failed_requests: list[FailedSourceRequest] = []
     for station in stations:
         for product, coordinates in resolved:
-            for window in rendered_windows[product]:
-                reference_time = _reference_time(window)
-                request = _request(station, coordinates, reference_time)
-                response = transport.send(request)
-                payloads.append(
-                    Payload(
-                        source_coordinates=SourceCoordinates(coordinates),
-                        station_products=((station, product),),
-                        fetch_window=fetch_window,
-                        content=response.content,
-                        origin=_origin(response),
-                        prerequisite_calls=response.prerequisite_calls,
+            matching = tuple(
+                item
+                for item in known_series
+                if item.station_id == station and item.product_id == product and (scope is None or scope.matches(item))
+            )
+            versions = {
+                int(item.identity.published_id)
+                for item in matching
+                if item.identity.namespace == "HydAPI.version"
+                and item.identity.published_id is not None
+                and item.identity.published_id.isdecimal()
+            }
+            if coordinates.version_number is not None:
+                versions.add(coordinates.version_number)
+            if scope is not None and scope.restriction is RestrictionKind.EXPLICIT:
+                versions.update(int(value) for value in scope.variants if value.isascii() and value.isdecimal())
+            if not versions:
+                issues.append(
+                    Issue(
+                        severity="warning",
+                        code="source.inventory_unresolved",
+                        message="No established HydAPI version selector is available; upstream default is not all-series retrieval",
+                        details={"station_id": station, "product_id": product},
+                        provider_id=ProviderId("no_nve"),
                     )
                 )
-    return WithIssues(value=tuple(payloads), issues=())
+                continue
+            if scope is None or scope.restriction is RestrictionKind.ALL:
+                issues.append(
+                    Issue(
+                        severity="warning",
+                        code="source.inventory_unresolved",
+                        message="HydAPI enumeration uses the acquired catalogue version inventory; current or historical completeness remains unresolved",
+                        details={"station_id": station, "product_id": product, "versions": sorted(versions)},
+                        provider_id=ProviderId("no_nve"),
+                    )
+                )
+            for version in sorted(versions):
+                concrete = replace(coordinates, version_number=version)
+                for window in rendered_windows[product]:
+                    reference_time = _reference_time(window)
+                    request = _request(station, concrete, reference_time)
+                    target = next((item for item in matching if item.identity.published_id == str(version)), None)
+                    if target is None:
+                        identifier = stable_id(
+                            "no_nve",
+                            station,
+                            "HydAPI.requested_version",
+                            concrete.parameter,
+                            str(version),
+                            concrete.resolution_time,
+                        )
+                        target = SourceSeries(
+                            series_id=identifier,
+                            provider_id="no_nve",
+                            station_id=station,
+                            product_id=product,
+                            identity=SourceIdentity(
+                                namespace="HydAPI.requested_version",
+                                published_id=None,
+                                origin="mapping",
+                                evidence=(
+                                    f"Caller requested documented VersionNumber selector {version}; source identity remains unestablished",
+                                ),
+                            ),
+                            variant=str(version),
+                            facts=(PhysicalFacts(facts_id=stable_id(identifier, "unestablished")),),
+                        )
+                    attempted = attempt_series_request(
+                        transport,
+                        request,
+                        target,
+                        SeriesWindow(
+                            start=datetime.fromisoformat(fetch_window.start.isoformat()),
+                            end=datetime.fromisoformat(fetch_window.end.isoformat()),
+                        ),
+                    )
+                    if isinstance(attempted, FailedSourceRequest):
+                        failed_requests.append(attempted)
+                        continue
+                    response = attempted
+                    payloads.append(
+                        Payload(
+                            source_coordinates=SourceCoordinates(concrete),
+                            station_products=((station, product),),
+                            fetch_window=fetch_window,
+                            content=response.content,
+                            origin=_origin(response),
+                            prerequisite_calls=response.prerequisite_calls,
+                            scope=scope,
+                            known_series=tuple(item for item in matching if item.identity.published_id == str(version)),
+                        )
+                    )
+    return SourceAcquisition(value=tuple(payloads), issues=tuple(issues), failed_requests=tuple(failed_requests))
 
 
 def _coordinates(product: ProductId, config: ProviderConfig) -> NoNveSourceCoordinates:
@@ -79,6 +175,7 @@ def _request(station: str, coordinates: NoNveSourceCoordinates, reference_time: 
             "Parameter": coordinates.parameter,
             "ResolutionTime": coordinates.resolution_time,
             "ReferenceTime": reference_time,
+            "VersionNumber": coordinates.version_number,
         },
         headers={"Accept": "application/json"},
     )

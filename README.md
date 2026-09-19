@@ -67,7 +67,9 @@ one day of daily mean streamflow, without credentials.
 import rivretrieve as rr
 
 # Find daily mean streamflow and choose a gauge.
-daily_gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+daily_gauges = rr.find(
+    provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"
+)
 chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
 
 result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01")
@@ -84,7 +86,9 @@ print(result.issues)
 These outputs were checked against USGS on 2026-09-19. Source responses can change.
 The empty tuple means this retrieval reported no issues.
 
-`result.data` is a Polars frame with `time`, `time_zone`, `station_id`, `product_id` and `value`.
+`result.data` is a Polars frame with timestamps, source-series and physical-fact identifiers,
+quantity, source and returned units, and values. Use `rr.series(result)` to inspect series facts
+and outcomes. Matching source alternatives remain separate; RivRetrieve does not choose a winner.
 Discharge values use m³/s. Read timestamps together with their zone column. Inspect `result.issues`
 even when rows come back. A successful call does not establish continuous records or scientific
 comparability. Downloading observations requires internet access.

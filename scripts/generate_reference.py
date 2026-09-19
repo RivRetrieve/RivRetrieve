@@ -19,11 +19,12 @@ from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA
 from rivretrieve._internal.observations import ObservationDataSchema
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
-from rivretrieve._internal.selection import SELECTION_FRAME_SCHEMA
+from rivretrieve._internal.selection import _series_frame
+from rivretrieve._internal.source_series import SeriesScope
 
 # These are returned-domain contracts, not additional top-level exports.
 TYPE_LOCATIONS = {
-    "selection": ("_Selection", "_Series"),
+    "selection": ("_Selection",),
     "observations": ("ObservationResult", "ObservationProvenance", "Receipts", "ReceiptEntry", "StoreExcerptReceipt"),
     "issues": ("Issue",),
     "catalogues.evidence": ("CatalogueEvidence",),
@@ -127,9 +128,9 @@ def render_reference() -> str:
     parts.extend(
         (
             "## Frame schemas\n",
-            _schema("Selection frame", SELECTION_FRAME_SCHEMA),
-            "See `_Series` below for column meanings. Published record bounds and "
-            "native_id can be absent. Availability unknown remains selectable.\n",
+            _schema("Series inspection frame", _series_frame((), SeriesScope()).schema),
+            "Identity and facts are separate. Nullable facts carry explicit evidence states; "
+            "admission and inventory are not completeness scores. Use to_bundle for lossless exports.\n",
             _schema("Drainage-area frame", DRAINAGE_AREA_SCHEMA),
             "See `drainage_areas` above and [drainage-area metadata](drainage-areas.md) for JSON decoding and absence states.\n",
             _schema("Observation frame", ObservationDataSchema.polars_schema),
@@ -175,7 +176,7 @@ def render_reference() -> str:
             "Bulk retrieval needs explicit `download()` consent before a store exists.\n",
             "Counts describe packaged inventory accounting only. They do not establish "
             "countrywide completeness, continuous history or present-day source access. "
-            "Available and unknown pairs are selectable. Unavailable pairs are not. "
+            "Pair counts describe access routes, not concrete source-series counts or admission. "
             "See the [provider handoff](README.md#providers) for ownership and coverage qualifications.\n",
             "| Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |\n"
             "| --- | --- | --- | ---: | ---: | ---: | ---: |",
@@ -209,10 +210,12 @@ def render_reference() -> str:
             products.append(f"| `{declared.provider_id}` | `{row['product_id']}` | `{row['unit']}` |")
     parts.extend(
         (
-            "\n### Packaged product vocabulary\n",
-            "Product identifiers and output units come from products.parquet. "
-            "A provider listing a product does not imply that every station offers it. "
-            "Use `find` and inspect availability for the selected series.\n",
+            "\n### Packaged access coordinates\n",
+            "Access coordinates and declared units come from products.parquet. "
+            "These are internal routes, not public physical filters or scientific authority. "
+            "A provider listing a route does not imply that every station offers it. "
+            "Use physical filters in `find` and inspect `series` for admission, units and facts. "
+            "A product route does not select a preferred source variant.\n",
             "| Provider | Product | Canonical unit |\n| --- | --- | --- |",
             *products,
         )

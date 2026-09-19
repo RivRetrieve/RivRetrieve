@@ -154,6 +154,9 @@ def test_catalogue_only_provider_directory_retains_declared_surface(
                 "provenance_bindings.parquet",
                 "provenance_binding_facts.parquet",
                 "provenance_external_inputs.parquet",
+                "format.json",
+                "source_series.json",
+                "series_claims.parquet",
             }
         )
     for artifact_name in artifact_names:

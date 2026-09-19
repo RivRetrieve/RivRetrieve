@@ -12,8 +12,10 @@ This page explains the responsibilities behind those interfaces.
 ## Responsibilities
 
 Discovery reads packaged catalogues without contacting observation services.
-`find` returns an immutable selection at `(provider_id, station_id, product_id)` grain.
-`pick` narrows that value, while `as_frame` and `from_frame` support explicit Polars operations.
+`find` returns immutable physical and source-identity scope with acquired catalogue evidence.
+`pick` narrows a selection or a retrieved result. `series` and `as_frame` expose inspection tables;
+`to_bundle` and `from_bundle` preserve selections and results as versioned exports.
+An unrestricted selection retains all-matching intent, including identities discovered during retrieval.
 The catalogue is a recorded snapshot, not a promise that every selected series remains retrievable.
 
 Retrieval resolves the request and delegates source-specific access to a provider.
@@ -24,7 +26,7 @@ This separation prevents each provider from implementing a different interpretat
 | Responsibility | Current implementation |
 | --- | --- |
 | Public composition, credential and cache-location resolution, result grouping | [`discovery.py`](../src/rivretrieve/_internal/discovery.py) |
-| Selection identity and catalogue-backed validation | [`selection.py`](../src/rivretrieve/_internal/selection.py) |
+| Selection scope and evidence | [`selection.py`](../src/rivretrieve/_internal/selection.py) |
 | Explicit built-in inventory and declared provider kinds | [`provider_manifest.py`](../src/rivretrieve/_internal/provider_manifest.py), [`providers/registration.py`](../src/rivretrieve/_internal/providers/registration.py) |
 | Typed stage contracts and pipeline execution | [`engine.py`](../src/rivretrieve/_internal/engine.py), [`driver.py`](../src/rivretrieve/_internal/driver.py) |
 | Source request bounds | [`window_planning.py`](../src/rivretrieve/_internal/window_planning.py) |
@@ -37,7 +39,10 @@ A live provider supplies fetch and parse stages, with product facts in `config.p
 A bulk provider supplies download and compile operations, then uses the shared store reader for retrieval.
 A catalogue-only provider supports discovery but raises when asked for observations.
 
-Product declarations bind source coordinates, native units, and time semantics together.
+Source-series definitions separate published identity from independently established physical facts.
+Admission requires quantity, source unit and a dimensionally valid conversion. Optional temporal
+and vertical-reference facts can remain unknown. Precise predicates match only established facts.
+Product declarations supply source access routes; product names do not select a preferred alternative.
 Source coordinates identify such things as an endpoint, parameter code, or value column.
 Window declarations tell the engine how to split and render the fetch window.
 Providers consume those renderings without shifting their bounds.
@@ -53,7 +58,9 @@ import rivretrieve as rr
 selection = rr.find(
     provider="usgs_nwis",
     station="07374000",
-    product="discharge_daily_mean",
+    quantity="discharge",
+    frequency="daily",
+    statistic="mean",
 )
 result = rr.fetch(
     selection,
@@ -66,7 +73,8 @@ result = rr.fetch(
 Running these calls contacts USGS. The trace below follows the saved source response
 for this request.
 
-1. **Select a catalogue series.** `find` checks the provider, station, and product against the packaged catalogue.
+1. **Select physical scope.** `find` checks the provider and station, then matches established quantity,
+   frequency and statistic against packaged source-series facts.
    The station identifier remains a string, including its leading zero.
 2. **Resolve the requested window.** The bare dates become `2023-01-01 00:00:00` through `2023-01-01 23:59:59.999999`.
    These are source-calendar wall-clock bounds, not UTC instants.
@@ -75,9 +83,9 @@ for this request.
 4. **Fetch source bytes.** The USGS declaration selects the `dv` endpoint, parameter `00060`, and statistic `00003`.
    Fetch sends `sites=07374000`, `startDT=2022-12-30`, and `endDT=2023-01-03`, with `format=json`.
    The recording matches that complete request at `https://waterservices.usgs.gov/nwis/dv/`.
-5. **Parse native rows.** Parse uses the payload's tagged station-product pair and configured product semantics.
-   It reads numeric values, the no-data marker and timestamps, then attaches the tagged identifiers.
-   It does not validate the returned station, parameter, statistic or unit metadata.
+5. **Parse native rows.** Parse checks returned station, parameter and statistic against the request.
+   It establishes unit conversion from response metadata and preserves published method identity.
+   Representable method blocks remain separate. Unsupported structures retain identified outcomes.
    The recording publishes five daily values in `ft3/s`, with naive midnight labels.
    Parse retains those labels and sets `time_zone` to `unknown` rather than deriving a zone from station metadata.
 6. **Convert and clip.** The shared convert stage multiplies discharge by `0.028316846592` to return m³/s.
@@ -98,7 +106,7 @@ The trace connects the [USGS declaration](../src/rivretrieve/_internal/providers
 ## Contracts between stages
 
 Fetch returns immutable payload bytes with a source-call origin.
-Parse returns native rows and issues through `WithIssues`.
+Parse returns native rows, source-series definitions, scoped inventories, typed outcomes and issues.
 Convert checks the row contract, applies declared unit conversion, and clips to the requested window.
 Assemble combines the canonical rows with provenance, issues, and receipts.
 The driver checks that each fetch window contains its request and that converted rows stay within the requested bounds.
@@ -106,14 +114,16 @@ The driver checks that each fetch window contains its request and that converted
 The observation frame always has these columns, in this order:
 
 ```text
-time | time_zone | station_id | product_id | value
+time | time_zone | station_id | product_id | series_id | facts_id | quantity | source_unit | unit | value
 ```
 
 `time` is a naive source wall-clock timestamp.
 `time_zone` carries the row's established IANA identifier, fixed offset, or `unknown`.
 These columns must travel together.
 A null `value`, an absent row, and a failed request are distinct states.
-The product identifies the returned physical quantity and unit.
+`series_id` identifies the source series; `facts_id` identifies its physical-fact segment.
+`source_unit` preserves publisher vocabulary. `unit` describes the harmonised `value`.
+Result definitions, inventory snapshots and outcomes retain context even without observation rows.
 
 Requested windows are closed at both ends.
 Daily products clip on calendar dates, while instantaneous and other source time labels clip on their timestamp axis.
@@ -150,12 +160,16 @@ They share a reader and format family but preserve different information.
 | Live `cache="refresh"` | Replacement answer for the successfully retrieved requested interval | Fetch and parse again, convert, update storage, assemble |
 | Bulk | Certified compiled publisher observations | Read store, convert, assemble without provider fetch or parse |
 
-Accumulated stores use format revision `4`.
+Accumulated stores use format revision `6`.
 Their coverage records which closed intervals were successfully retrieved and when, including successful empty answers.
+Coverage is per concrete series and interval, separate from inventory knowledge. All-series reuse
+requires a complete inventory for the recorded scope and vintage, plus coverage of every required
+member. Subset success cannot satisfy that request. Refresh replaces successful series intervals
+without erasing siblings or treating failed refreshes as new successes.
 Coverage does not assert continuous observations.
 Served intervals carry their retrieval instants in provenance, without an automatic freshness verdict.
 
-Compiled stores use revision `2` and retain declared source columns and native value states.
+Compiled stores use revision `5` and retain declared source columns and native value states.
 An explicit `download` prepares them.
 Compilation preserves published values, nulls, and blanks, while accumulated parse output cannot recover a blank already collapsed to null.
 Bulk retrieval never silently starts a download, and replacing a compiled store requires `download`, not `cache="refresh"`.
@@ -164,6 +178,10 @@ Certified compilation writes a staged store and compares it with a second decodi
 The artifact is deleted after successful publication.
 Its URLs, checksums, and source vintage survive in the manifest, but its identity cannot reconstruct unavailable publisher bytes.
 Readers refuse unsupported manifest revisions before opening observation files.
+Packaged catalogue format revision `2`, source-series definition schema `1` and export bundle
+version `1` are explicit contracts.
+Old collapsed rows, triple-only frame imports and incompatible stores are refused, not assigned
+invented identities. Rebuild or refetch explicitly; refusal leaves old files intact.
 `cache_status` inspects local state, and `clear_cache` is the explicit destructive boundary.
 
 ### Provenance and receipts

@@ -19,12 +19,21 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from functools import cache
 from pathlib import Path
 from typing import Final
 
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.source_series import (
+    ClippingAxis,
+    PhysicalFacts,
+    SourceIdentity,
+    SourceSeries,
+    known,
+    stable_id,
+)
 from rivretrieve._internal.store import (
     ArtifactChecksum,
     Disposition,
@@ -233,6 +242,7 @@ def decode_hydat_batches(path: Path, declared_schema: _HydatSchema | None = None
                                 _hydat_frame(rows, schema),
                                 tuple(units),
                                 tuple(contributions),
+                                _batch_series(rows),
                             )
                             rows = []
                             units = []
@@ -242,6 +252,7 @@ def decode_hydat_batches(path: Path, declared_schema: _HydatSchema | None = None
                             _hydat_frame(rows, schema),
                             tuple(units),
                             tuple(contributions),
+                            _batch_series(rows),
                         )
             finally:
                 connection.close()
@@ -328,6 +339,7 @@ def decode_hydat(path: Path, declared_schema: _HydatSchema | None = None) -> Nat
         rows=frame,
         observed_source_columns=schema.source_columns,
         source_units=tuple(units),
+        series=_batch_series(rows),
     )
 
 
@@ -341,10 +353,15 @@ def _hydat_frame(rows: list[dict[str, object]], schema: _HydatSchema) -> pl.Data
             "time_zone",
             "value",
             "value_state",
+            "series_id",
+            "facts_id",
+            "source_unit",
             *schema.retained_names,
         )
         .with_columns(
-            pl.col("product", "station_id", "time_zone", "value_state").cast(pl.String),
+            pl.col("product", "station_id", "time_zone", "value_state", "series_id", "facts_id", "source_unit").cast(
+                pl.String
+            ),
             pl.col("time").cast(pl.Datetime("us")),
             pl.col("value").cast(pl.Float64),
             *(
@@ -400,6 +417,8 @@ def _unpivot_month(
             retained[qualified] = source[column]
 
     for day in range(1, valid_days + 1):
+        definition = source_series(station, str(table.product_id))
+        facts = definition.facts[0]
         raw_value = source[f"{table.value_prefix}{day}"]
         if raw_value is None:
             value = None
@@ -420,6 +439,9 @@ def _unpivot_month(
                 "time_zone": "unknown",
                 "value": value,
                 "value_state": value_state,
+                "series_id": definition.series_id,
+                "facts_id": facts.facts_id,
+                "source_unit": facts.source_unit.value,
                 **retained,
             }
         )
@@ -519,3 +541,36 @@ def _sha256(path: Path) -> ArtifactChecksum:
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
+
+
+@cache
+def source_series(station: str, product: str) -> SourceSeries:
+    """Identify a native physical-cell stream without inventing a publisher variant."""
+    namespace, quantity, unit = {
+        "discharge_daily_mean": ("hydat:DLY_FLOWS", "discharge", "m3/s"),
+        "stage_daily_mean": ("hydat:DLY_LEVELS", "stage", "m"),
+    }[product]
+    evidence = f"ca_eccc/config.py and declared publisher native cell schema: {product}"
+    facts = PhysicalFacts(
+        facts_id=stable_id("ca_eccc", product, unit),
+        quantity=known(quantity, evidence),
+        source_unit=known(unit, evidence),
+        normalized_unit=unit,
+        frequency=known("daily", evidence),
+        statistic=known("mean", evidence),
+        clipping_axis=ClippingAxis.CALENDAR_DATE,
+        label_time="00:00",
+    )
+    return SourceSeries(
+        series_id=stable_id("ca_eccc", station, namespace, None),
+        provider_id="ca_eccc",
+        station_id=station,
+        product_id=product,
+        identity=SourceIdentity(namespace=namespace, published_id=None, origin="mapping", evidence=(evidence,)),
+        facts=(facts,),
+    )
+
+
+def _batch_series(rows: list[dict[str, object]]) -> tuple[SourceSeries, ...]:
+    pairs = {(str(row["station_id"]), str(row["product"])) for row in rows}
+    return tuple(source_series(station, product) for station, product in sorted(pairs))

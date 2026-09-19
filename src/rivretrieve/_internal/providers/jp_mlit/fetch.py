@@ -22,6 +22,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.jp_mlit.config import JpMlitSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _BASE = "http://www1.river.go.jp"
@@ -136,6 +137,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     payloads: list[Payload] = []
     issues: list[Issue] = []
@@ -168,6 +172,8 @@ def fetch(
                         html.content,
                         _origin(html),
                         html.prerequisite_calls,
+                        scope=scope,
+                        known_series=known_series,
                     )
                 )
                 links = _page(html.content, coordinates.kind, station_id)
@@ -196,6 +202,8 @@ def fetch(
                         dat.content,
                         _origin(dat),
                         dat.prerequisite_calls,
+                        scope=scope,
+                        known_series=known_series,
                     )
                 )
     return WithIssues(tuple(payloads), tuple(issues))

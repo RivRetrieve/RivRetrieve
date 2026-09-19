@@ -17,6 +17,7 @@ from rivretrieve._internal.store import (
     StoreRoot,
     compile_store,
 )
+from tests.store.certification_support import fixture_series
 
 
 @pytest.mark.parametrize("native_name", ["value", "product"])
@@ -44,6 +45,9 @@ def test_compile_refuses_native_engine_column_collision(tmp_path: Path, native_n
             "time_zone": ["UTC"],
             "value": [12.4],
             "value_state": ["published_value"],
+            "series_id": [fixture_series("fixture-1", "fixture").series_id],
+            "facts_id": [fixture_series().facts[0].facts_id],
+            "source_unit": ["m3/s"],
         },
         schema={
             "product": pl.String,
@@ -52,6 +56,9 @@ def test_compile_refuses_native_engine_column_collision(tmp_path: Path, native_n
             "time_zone": pl.String,
             "value": pl.Float64,
             "value_state": pl.String,
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "source_unit": pl.String,
         },
     )
 

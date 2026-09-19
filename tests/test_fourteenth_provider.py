@@ -7,9 +7,16 @@ import os
 import shutil
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 
 import polars as pl
+
+from rivretrieve._internal.catalogue_origins import Authored, AuthoredValue
+from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES, load_packaged_catalogue_artifact
+from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+from rivretrieve._internal.catalogues.source_descriptions import generic_source_descriptions
+from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
 
 ROOT = Path(__file__).parents[1]
 PACKAGE_ROOT = ROOT / "src" / "rivretrieve"
@@ -26,6 +33,21 @@ def _copy_catalogue_with_provider_id(source: Path, destination: Path, provider_i
     for filename in ("products.parquet", "stations.parquet", "station_products.parquet"):
         frame = pl.read_parquet(source / filename).with_columns(pl.lit(provider_id).alias("provider_id"))
         frame.write_parquet(destination / filename)
+
+    template = load_packaged_catalogue_artifact(source)
+    evidence = template.acquisition_provenance
+    assert evidence is not None
+    # The plugin reuses the same acquired source data under an authored registration ID.
+    evidence = evidence.model_copy(update={"header": evidence.header.model_copy(update={"provider_id": provider_id})})
+    origins = {**STATION_CATALOGUE_ORIGINS, "provider_id": Authored(AuthoredValue(provider_id))}
+    metadata = build_catalogue_metadata(
+        evidence,
+        (origins,),
+        {name: (destination / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_describer=partial(generic_source_descriptions, config=None),
+    )
+    for name, content in metadata.items():
+        (destination / name).write_bytes(content)
 
 
 def _append_manifest_line(manifest: Path, provider_id: str) -> None:

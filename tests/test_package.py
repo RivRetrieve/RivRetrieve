@@ -35,11 +35,14 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
         "fetch",
         "fetch_by_provider",
         "find",
+        "from_bundle",
         "from_frame",
         "map",
         "pick",
         "products",
         "providers",
+        "series",
+        "to_bundle",
         "to_utc",
     ]
     removed = (

@@ -9,6 +9,9 @@ from importlib.metadata import version
 from pathlib import Path
 
 _CANONICAL_CATALOGUE_FILES = {
+    "format.json",
+    "source_series.json",
+    "series_claims.parquet",
     "croissant.json",
     "provenance_facts.parquet",
     "provenance_acquisitions.parquet",
@@ -84,7 +87,12 @@ socket.create_connection = forbid_network
 from importlib.resources import files
 
 import rivretrieve
+import polars as pl
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+
+def artifact(provider):
+    return load_packaged_catalogue_artifact(Path(str(provider_root.joinpath(provider, "catalogue"))), on_issue="raise")
 
 before_describe = set(sys.modules)
 assert rivretrieve.describe("usgs_nwis") == json.loads({json.dumps(expected_descriptor)!r})
@@ -111,20 +119,23 @@ assert not france.acquisition_provenance[0].header.withheld_facts
 bosnia = rivretrieve.find(provider="ba_fhmzbih")
 assert len(bosnia.series) == 180
 assert len({{series.station_id for series in bosnia.series}}) == 60
-assert sum(series.availability == "available" for series in bosnia.series) == 132
-assert sum(series.availability == "unknown" for series in bosnia.series) == 48
+bosnia_pairs = artifact("ba_fhmzbih").station_products
+assert bosnia_pairs["availability"].eq("available").sum() == 132
+assert bosnia_pairs["availability"].eq("unknown").sum() == 48
 assert bosnia.acquisition_provenance[0].header.withheld_facts == ()
-unknown_bosnia = rivretrieve.find(provider="ba_fhmzbih", station="2101-B", product="water_temperature_reported")
-assert len(unknown_bosnia.series) == 1 and unknown_bosnia.series[0].availability == "unknown"
+unknown_bosnia = rivretrieve.find(provider="ba_fhmzbih", station="2101-B", quantity="temperature")
+assert len(unknown_bosnia.series) == 1
+assert bosnia_pairs.filter((pl.col("station_id") == "2101-B") & (pl.col("product_id") == "water_temperature_reported"))["availability"].to_list() == ["unknown"]
 assert not provider_root.joinpath("ba_fhmzbih", "catalogue", "baseline_workbook_access.json").is_file()
 norway = rivretrieve.find(
-    provider="no_nve", station="1.200.0", product="stage_daily_mean"
+    provider="no_nve", station="1.200.0", quantity="stage", frequency="daily", statistic="mean"
 )
 assert len(norway.series) == 1
-assert norway.series[0].availability == "available"
+assert artifact("no_nve").station_products.filter((pl.col("station_id") == "1.200.0") & (pl.col("product_id") == "stage_daily_mean"))["availability"].to_list() == ["available"]
+assert rivretrieve.series(norway)["admission"].to_list() == ["supported"]
 assert norway.acquisition_provenance[0].header.native_table is not None
 thailand = rivretrieve.find(
-    provider="th_thaiwater", station="1", product="stage_reported"
+    provider="th_thaiwater", station="1", quantity="stage"
 )
 assert rivretrieve.as_frame(thailand).height == 1
 groups = thailand.acquisition_provenance[0].header.withheld_facts
@@ -352,9 +363,17 @@ for provider, oracle in closure_oracles.items():
     for case in oracle["cases"]:
         pair = CanonicalPair(**case["pair"]) if case["pair"] is not None else None
         if pair is not None:
-            selection = rivretrieve.find(provider=provider, station=pair.station_id, product=pair.product_id)
-            assert len(selection.series) == 1
-            row = rivretrieve.as_frame(selection).row(0, named=True)
+            physical_filters = {
+                "water_temperature_reported": {"quantity": "temperature"},
+                "discharge_instantaneous": {"quantity": "discharge"},
+                "discharge_reported": {"quantity": "discharge"},
+                "stage_reported": {"quantity": "stage"},
+            }
+            selection = rivretrieve.find(provider=provider, station=pair.station_id, **physical_filters[pair.product_id])
+            # Broad physical scope can include sibling routes and unknown temporal facts.
+            assert any(item.product_id == pair.product_id for item in selection.series)
+            pairs = artifact(provider).station_products
+            row = pairs.filter((pl.col("station_id") == pair.station_id) & (pl.col("product_id") == pair.product_id)).row(0, named=True)
             assert {key: row[key] for key in CanonicalPair.model_fields} == pair.model_dump()
         resolved = resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair)
         semantic = {key: value for key, value in resolved.items() if key != "@context"}

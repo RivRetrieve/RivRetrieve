@@ -179,20 +179,34 @@ def test_registered_probe_replays_and_checks_the_three_literals() -> None:
     assert result.equals(_frame())
 
 
-def test_ba_fhmzbih_daily_mean_absent_and_corrupting_request_refused_by_name() -> None:
+def test_ba_fhmzbih_daily_mean_absent_and_unestablished_physical_request_refused(monkeypatch) -> None:
     product_id = "discharge_daily_mean"
     assert product_id not in rr.products("ba_fhmzbih")
     selection = rr.find(
         provider="ba_fhmzbih",
         station="4024",
-        product=product_id,
+        quantity="discharge",
+        frequency="daily",
+        statistic="mean",
     )
+    assert [(item.field, item.value) for item in selection.scope.predicates] == [
+        ("quantity", "discharge"),
+        ("frequency", "daily"),
+        ("statistic", "mean"),
+    ]
 
-    with pytest.raises(EmptySelectionError, match="discharge_daily_mean") as exc_info:
+    def forbidden_transport():
+        pytest.fail("Unestablished physical selection must not start retrieval")
+
+    monkeypatch.setattr("rivretrieve._internal.discovery.HttpClient", forbidden_transport)
+
+    with pytest.raises(EmptySelectionError, match="ba_fhmzbih") as exc_info:
         rr.fetch(selection, start="2025-03-23", end="2025-03-26")
 
-    assert exc_info.value.reason.product_ids == (product_id,)
-    assert exc_info.value.reason.published_products == (
+    assert exc_info.value.reason.provider_ids == ("ba_fhmzbih",)
+    assert exc_info.value.reason.station_ids == ("4024",)
+    assert exc_info.value.reason.product_ids == ()
+    assert tuple(rr.products("ba_fhmzbih")) == (
         "discharge_reported",
         "stage_reported",
         "water_temperature_reported",
@@ -271,7 +285,7 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
 
 
 def test_store_boundary_probe_reads_validated_store_at_declared_query() -> None:
-    store = StoreRoot(Path(__file__).parent / "test_data" / "observation_store_conformance" / "valid_future_austria")
+    store = StoreRoot(Path(__file__).parent / "test_data" / "source_series_store_conformance" / "valid_future_austria")
     provider_id = ProviderId("fixture_bulk")
     product_id = ProductId("level")
     query = StoreQuery(

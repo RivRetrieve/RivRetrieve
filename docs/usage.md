@@ -8,90 +8,69 @@ credentials, caching, provenance and maps.
 
 Run the Python examples in page order in one session. They build on earlier variables.
 The first retrieval uses the same USGS gauge and one-day window as the README. Later examples
-add a second provider and convert established time zones to UTC.
+save selections and results, and convert established time zones to UTC.
 
 ## Find stations
 
 A **provider** supplies observations, such as the US Geological Survey (`usgs_nwis`).
 A **station** is a monitoring site, such as USGS gauge `07374000`.
-A **product** names a variable, a statistic and a time step. `discharge_daily_mean` is
-source-published daily mean discharge; `stage_instantaneous` is a stage reading at a given
-moment. Supported variables are discharge, stage and water temperature.
-A **series** is one product at one station of one provider.
+A **quantity** is discharge, stage or water temperature (`temperature`). A **source series**
+preserves a publisher's separate identifier at a station. The output `product_id` identifies
+a source access coordinate; it does not establish physical meaning by itself. Several source series can share quantity, frequency and statistic.
+Equal physical filters do not establish scientific interchangeability.
 
-`find` searches the packaged catalogue: station and product lists included with the installed
-package. This does not contact the agencies. Keep station identifiers as strings so leading
-zeros survive.
+`find` searches packaged evidence without contacting observation services. Keep station identifiers
+as strings so leading zeros survive. Start broadly, then narrow by established facts:
 
 ```python
 import rivretrieve as rr
 
-print(rr.products("usgs_nwis"))
-# Output:
-# ['discharge_daily_mean', 'discharge_instantaneous', 'stage_daily_max', 'stage_daily_mean', 'stage_daily_min', 'stage_instantaneous']
-
-daily_gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+# Unknown optional temporal facts do not exclude admitted discharge.
+discharge = rr.find(provider="usgs_nwis", quantity="discharge")
+daily_gauges = rr.pick(discharge, frequency="daily", statistic="mean")
 chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
 
-print(rr.as_frame(chosen_gauges).select("provider_id", "station_id", "product_id").rows())
+print(rr.series(chosen_gauges).select("station_id").unique().rows())
 # Output:
-# [('usgs_nwis', '07374000', 'discharge_daily_mean')]
+# [('07374000',)]
 ```
 
-`find` returns a selection object. `as_frame` turns it into a Polars table, with one row per
-series. The example prints only the three identity columns as a list of rows.
+The same physical filters work directly in `find`. Optional predicates include `temporal_support`,
+`day_definition`, `timestamp_anchor`, `time_zone`, `vertical_reference` and `vertical_datum`.
+Unknown facts cannot satisfy a precise predicate. A daily mean can have an unknown day definition.
+Admission requires established quantity, source unit and conversion; issue policy cannot bypass it.
 
-| Group | Columns |
-|---|---|
-| Identity | `provider_id`, `station_id`, `product_id` |
-| Position | `latitude`, `longitude`, `crs` (`unknown` when not established) |
-| Product | `observed_property`, `frequency`, `statistic`, `period_type`, `period_anchor`, `unit`, `native_id` |
-| Catalogue | `availability`, `availability_reason`, `published_record_start_date`, `published_record_end_date`, `last_catalogue_check` |
+`series(selection)` and `as_frame(selection)` return inspection tables. They include source identity,
+physical facts and their evidence states, admission status and reason, and inventory status.
+`known`, `source_silent` and `not_established` distinguish established facts from two reasons for unknowns.
+A missing published identifier or description does not mean a publisher called the series “standard”.
+`series_id` is RivRetrieve's internal key, not a source judgement.
 
-`native_id` is the agency's own product code. For USGS, `00060:00003` combines discharge
-(`00060`) and daily mean (`00003`).
+A selection retains request intent separately from the catalogue's known members. All-matching
+scope includes later response discoveries. A catalogue snapshot is not exhaustive historical or
+current inventory. Explicit restrictions absent from an incomplete inventory remain unresolved,
+not established no-match; `fetch` is the observation-acquisition boundary.
 
-`find` accepts one provider, station or product per filter. For example,
-`provider="usgs_nwis"` selects USGS and `product="discharge_daily_mean"` selects daily mean discharge.
-`pick` keeps matching entries from its input.
-The square brackets in `station=["07374000"]` make a Python list; add more station strings
-to select several at once. `pick` cannot introduce a station or product absent from its input.
-Unknown identifiers raise errors. When recognised identifiers have no matching selectable
-combination, the selection is empty. Its `empty_reason` explains why.
+### Narrow and save selections
 
-The catalogue helps you choose series:
+Use `pick` for physical filters or explicit `variant` and `series_id` restrictions. Source variant
+vocabulary belongs to each publisher, not a harmonised ranking. No policy substitutes a sibling.
+`pick` accepts a list of station, provider or source identifiers.
 
-- `available` means the agency listed data for that station and product. Today's request can
-  still return no observations.
-- Entries with `unknown` availability can be selected.
-- Published record dates do not establish complete records or limit the dates you can request.
-- Entries were captured on different dates.
-
-### Filter with Polars
-
-To keep stations north of a latitude, use a Polars expression. This separate regional example
-leaves `chosen_gauges` unchanged for later retrieval.
+Save the complete selection as a versioned bundle:
 
 ```python
-import polars as pl
+from pathlib import Path
 
-regional_gauges = rr.pick(daily_gauges, station=["01013500", "01022500", "07374000"])
-frame = rr.as_frame(regional_gauges)
-northern_frame = frame.filter(pl.col("latitude") > 45)
-northern_gauges = rr.from_frame(northern_frame)
-
-print(rr.as_frame(northern_gauges).select("station_id", "latitude").rows())
-# Output:
-# [('01013500', 47.2375)]
+selection_path = Path("selection.rrbundle")
+selection_path.write_bytes(rr.to_bundle(chosen_gauges))
+restored_gauges = rr.from_bundle(selection_path.read_bytes())
 ```
 
-`from_frame` rebuilds a selection after custom filtering. The columns `provider_id`,
-`station_id` and `product_id` must appear in that relative order. They must contain strings
-with no missing values. Each three-column combination must be unique and correspond to a
-selectable catalogue entry. Individual strings can repeat: several stations can share the
-same provider and product. Filtering an unchanged `as_frame` table preserves its column structure.
-Other columns do not override catalogue metadata; RivRetrieve rebuilds it from the catalogue.
-See the [reference](reference.md) for the full selection interface.
+Bundle version `1` preserves intent, identities, physical evidence and inventory state. Import validates
+the bundle without rebuilding identities from today's catalogue. Bare frame imports through
+`from_frame` are refused. For custom Polars filtering, inspect a frame and pass selected identifiers
+back to `pick`; a frame is not a lossless selection export.
 
 `describe(provider)` returns an offline, machine-readable catalogue description in
 [Croissant](https://github.com/mlcommons/croissant) format. It identifies files and the evidence
@@ -114,7 +93,8 @@ print(result.issues)
 ```
 
 The empty tuple means this retrieval reported no issues. An `ObservationResult` carries
-`data`, `issues`, `provenance` and `receipts`. `data` is a Polars frame. `to_polars()` returns
+`data`, `issues`, `provenance`, `receipts`, `source_series`, `inventories` and `outcomes`.
+`data` is a Polars frame. `to_polars()` returns
 that frame; `to_pandas()` converts it to a pandas dataframe.
 
 ### What you get back
@@ -126,46 +106,55 @@ The observation frame has exactly these columns, even when empty:
 | `time` | Naive source wall-clock timestamp, read together with `time_zone` |
 | `time_zone` | Established IANA zone, fixed offset, or `unknown` |
 | `station_id` | String identifier within the result's provider |
-| `product_id` | Canonical product identifier |
-| `value` | Float in the product's canonical unit, or a published null |
+| `product_id` | Source access coordinate, not authority for physical facts |
+| `series_id` | Internal source-series identifier |
+| `facts_id` | Physical-fact segment identifier |
+| `quantity` | Established physical quantity |
+| `source_unit` | Exact established source-unit vocabulary |
+| `unit` | Harmonised unit of `value` |
+| `value` | Float in `unit`, or a published null |
 
 The agency's timestamp is retained. `unknown` means there is no established time zone to use
 for conversion to UTC. A null value, an absent row and a failed request
 are different states.
 
-Discharge uses m³/s, stage uses metres, and water temperature uses degrees Celsius. Product
-metadata in the selection describes units and temporal properties. Equal units do not establish
+Discharge uses m³/s, stage uses metres, and water temperature uses degrees Celsius.
+Source-series facts describe units and temporal properties. Equal units do not establish
 equal day definitions, stage datums or scientific comparability. RivRetrieve leaves source
 quality judgements uninterpreted and does not compute unpublished products at another frequency.
 
-### Results by provider
+### Series inspection and result views
 
-`fetch_by_provider` retrieves observations from several providers and returns a dictionary
-with one result per provider. Here, combine the USGS gauge with a gauge from Lithuania's
-Hydrometeorological Service (`lt_lhmt`). Both provide this daily discharge data without credentials:
+`rr.series(result)` inspects response-discovered identities and physical facts, with outcomes even
+for known series that returned no rows. `result.outcomes` also retains limitations that could not
+be assigned a concrete identity. Statuses distinguish `success`, `empty`, `failed`, `unsupported`,
+`unresolved` and `no_match`. A null observation remains a row, not a failed request.
+
+An explicit restriction works before or after retrieval. For example, use
+`rr.pick(selection, variant="consistido")` before an ANA daily request, or
+`rr.pick(result, variant="consistido")` on that request's result. This is publisher identity,
+not a quality preference. Post-fetch narrowing creates a view, not another source request.
+Original provenance, receipts and diagnostics remain available; they can describe a broader request.
 
 ```python
-lithuanian_gauge = rr.find(
-    provider="lt_lhmt", station="anyksciu-vms", product="discharge_daily_mean"
-)
-mixed_gauges = rr.from_frame(pl.concat([
-    rr.as_frame(chosen_gauges), rr.as_frame(lithuanian_gauge)
-]))
-provider_results = rr.fetch_by_provider(mixed_gauges, start="2023-01-01", end="2023-01-01")
-usgs_result = provider_results["usgs_nwis"]
-lithuanian_result = provider_results["lt_lhmt"]
-
-print(usgs_result.data.select("station_id", "value").rows())
-# Output:
-# [('07374000', 10562.183778816001)]
-
-print(lithuanian_result.data.select("station_id", "value").rows())
-# Output:
-# [('anyksciu-vms', 81.8)]
+result_path = Path("result.rrbundle")
+result_path.write_bytes(rr.to_bundle(result))
+restored_result = rr.from_bundle(result_path.read_bytes())
 ```
 
-Each result has its own data, issues and provenance. Station codes belong to their provider.
-Use `fetch` for a nonempty selection from one provider.
+You can also narrow a retrieved result by an inspected internal identifier:
+
+```python
+returned_series = rr.series(result)
+series_id = returned_series["series_id"][0]
+series_view = rr.pick(result, series_id=series_id)
+```
+
+Result bundles retain observations, late identities, facts, outcomes, inventory, provenance and
+any retained receipts. Observation frames alone do not contain all this context.
+
+`fetch` requires one provider. For selections spanning providers, `fetch_by_provider` returns a
+dictionary of separate results. Each retains its provider identity, source terms and outcomes.
 
 ### Request windows and UTC
 
@@ -186,7 +175,7 @@ from the same gauge and convert them:
 
 ```python
 instant_gauge = rr.find(
-    provider="usgs_nwis", station="07374000", product="discharge_instantaneous"
+    provider="usgs_nwis", station="07374000", quantity="discharge", statistic="instantaneous"
 )
 instant_result = rr.fetch(
     instant_gauge, start="2023-01-01T00:00", end="2023-01-01T00:15"
@@ -252,7 +241,7 @@ print([(issue.severity, issue.code) for issue in quiet_result.issues])
 The first retrieval example uses the default `warn` policy. Both `warn` and `ignore` return
 issues with their severity, code, message and available failure details. HTTP 404 produces a warning issue. Other
 unsuccessful statuses, rejected credentials and exhausted transport retries produce error
-issues. An all-failed request can return an empty five-column frame with issues.
+issues. An all-failed request can return an empty observation frame with issues and outcomes.
 
 Broken stage contracts raise independently of `on_issue`. Invalid windows, missing credentials
 and catalogue-only observation requests also raise. See [reference](reference.md) for
@@ -298,17 +287,20 @@ print(status.exists)
 # True
 ```
 
-For example, request ten stations with `cache="reuse"`. If four stations have full coverage
-for the requested product and time interval, RivRetrieve serves those four from cache and
-fetches the other six. If a station is partially covered, it fetches only the missing interval.
-Coverage is tracked for each station, product and time interval. A successful answer counts as
-coverage even when it contains no rows.
+Reuse checks the requested source scope against held inventory and successful coverage.
+It fetches scope that the recorded inventory or member coverage cannot satisfy.
+Coverage is tracked per concrete source series and time interval, separately from inventory.
+An all-series request needs a complete scoped inventory and coverage of every required member;
+a cached subset is not enough. A successful empty series can establish interval coverage.
+Reuse serves the recorded inventory vintage, not a promise of current-source freshness.
 Refreshing can leave fewer rows, or none. A failed request adds no coverage. RivRetrieve records
 retrieval times but leaves freshness judgements to you.
 
 Set `RIVRETRIEVE_CACHE_DIR` to choose a cache location. Without an override, RivRetrieve uses
 the platform's user cache directory. `cache_status` inspects local state without network access
-and refuses malformed or unsupported stores. `clear_cache(provider)` deletes that provider's store and pending recovery
+and refuses malformed or unsupported stores. Current compiled stores use revision `5`; live
+accumulated stores use revision `6`. Incompatible old files remain intact until explicit cleanup
+or rebuild; old collapsed observations are not assigned invented identities. `clear_cache(provider)` deletes that provider's store and pending recovery
 inputs, including preserved downloads. It returns a removal summary and leaves other providers
 alone. See [architecture](architecture.md#storage-and-reuse) for storage details.
 
@@ -336,9 +328,9 @@ print(result.provenance.provider_id, result.provenance.source)
 # Output:
 # usgs_nwis live
 
-print(result.provenance.request)
-# Output:
-# {'series': [{'station_id': '07374000', 'product_id': 'discharge_daily_mean'}], 'start': '2023-01-01T00:00:00', 'end': '2023-01-01T23:59:59.999999'}
+# Inspect the resolved scope and original source-call records.
+request_scope = result.provenance.request
+source_calls = result.provenance.calls_made
 ```
 
 Provenance includes available source-call records, source terms and cache context.

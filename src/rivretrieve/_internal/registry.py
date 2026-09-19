@@ -34,6 +34,7 @@ from rivretrieve._internal.primitives import CacheMode, OnIssue, ProductId, Prov
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
+from rivretrieve._internal.source_series import InventorySnapshot, SeriesScope, SourceSeries
 from rivretrieve._internal.store import StoreRoot
 
 if TYPE_CHECKING:
@@ -143,6 +144,9 @@ class _ProviderHandle:
         transport: Transport | None = None,
         cache: CacheMode = "bypass",
         store: StoreRoot | None = None,
+        scope: SeriesScope | None = None,
+        known_series: tuple[SourceSeries, ...] = (),
+        inventories: tuple[InventorySnapshot, ...] = (),
     ) -> ObservationResult:
         if self._stages is None and self._store_config is None:
             if self._module is not None:
@@ -166,6 +170,9 @@ class _ProviderHandle:
                 transport=transport,
                 cache=cache,
                 store=store,
+                scope=scope,
+                known_series=known_series,
+                inventories=inventories,
             )
         elif self._store_config is not None and self._store_root is not None:
             if cache == "refresh":
@@ -174,7 +181,13 @@ class _ProviderHandle:
                     f'rivretrieve.download("{self.provider_id}"). No transfer was started.'
                 )
             result = self._drive_store(
-                request, self._store_config, self._store_root if store is None else store, receipts=receipts
+                request,
+                self._store_config,
+                self._store_root if store is None else store,
+                receipts=receipts,
+                scope=scope,
+                known_series=known_series,
+                inventories=inventories,
             )
         else:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
@@ -191,6 +204,9 @@ class _ProviderHandle:
         transport: Transport | None = None,
         cache: CacheMode = "bypass",
         store: StoreRoot | None = None,
+        scope: SeriesScope | None = None,
+        known_series: tuple[SourceSeries, ...] = (),
+        inventories: tuple[InventorySnapshot, ...] = (),
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -200,6 +216,9 @@ class _ProviderHandle:
                 start=request.start,
                 end=request.end,
             ),
+            scope=scope,
+            known_series=known_series,
+            inventories=inventories,
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
@@ -229,13 +248,11 @@ class _ProviderHandle:
             store=store,
         )
         return ObservationResult(
-            data=assembled.canonical_rows.select(
-                "time",
-                "time_zone",
-                "station_id",
-                "product_id",
-                "value",
-            ),
+            data=assembled.canonical_rows,
+            source_series=assembled.source_series,
+            inventories=assembled.inventories,
+            outcomes=assembled.outcomes,
+            scope=assembled.scope,
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),
             receipts=assembled.receipts,
@@ -248,12 +265,18 @@ class _ProviderHandle:
         store: StoreRoot,
         *,
         receipts: ReceiptMode = ReceiptMode.OMIT,
+        scope: SeriesScope | None = None,
+        known_series: tuple[SourceSeries, ...] = (),
+        inventories: tuple[InventorySnapshot, ...] = (),
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
             stations=request.stations,
             products=tuple(ProductId(product_id) for product_id in request.products),
             window=RequestedWindow(start=request.start, end=request.end),
+            scope=scope,
+            known_series=known_series,
+            inventories=inventories,
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
@@ -272,9 +295,10 @@ class _ProviderHandle:
                 provider_id=self.provider_id,
             )
             return ObservationResult(
-                data=pl.DataFrame(schema=CanonicalRowsSchema.polars_schema).select(
-                    "time", "time_zone", "station_id", "product_id", "value"
-                ),
+                data=pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
+                source_series=known_series,
+                inventories=inventories,
+                scope=scope or SeriesScope(),
                 provenance=ObservationProvenance(
                     source="local",
                     provider_id=self.provider_id,
@@ -319,7 +343,11 @@ class _ProviderHandle:
         )
         provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
         return ObservationResult(
-            data=assembled.canonical_rows.select("time", "time_zone", "station_id", "product_id", "value"),
+            data=assembled.canonical_rows,
+            source_series=assembled.source_series,
+            inventories=assembled.inventories,
+            outcomes=assembled.outcomes,
+            scope=assembled.scope,
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),
             receipts=assembled.receipts,

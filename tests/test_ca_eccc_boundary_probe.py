@@ -41,6 +41,16 @@ _DERIVED_URL = (
 )
 
 
+def _compiled_derived_store(tmp_path: Path) -> StoreRoot:
+    copied = tmp_path / "derived-input.zip"
+    shutil.copyfile(_DERIVED_INPUT, copied)
+    root = StoreRoot(tmp_path / "compiled-store")
+    compile_hydat(
+        HydatCompileRequest(copied, root, _DERIVED_URL, date(2020, 1, 31), datetime(2026, 9, 2, tzinfo=UTC), "0.1.49")
+    )
+    return root
+
+
 def test_committed_derived_input_replays_through_production_compiler(tmp_path: Path) -> None:
     assert hashlib.sha256(_DERIVED_INPUT.read_bytes()).hexdigest() == _DERIVED_SHA256
     copied_input = tmp_path / "derived-input.zip"
@@ -61,13 +71,14 @@ def test_committed_derived_input_replays_through_production_compiler(tmp_path: P
     assert compiled.manifest.publisher_artifact.url == _DERIVED_URL
 
 
-def test_hydat_attestation_executes_exact_validated_store_queries_for_both_products() -> None:
+def test_derived_compiler_preserves_attested_native_cells_for_both_products(tmp_path: Path) -> None:
+    current_store = _compiled_derived_store(tmp_path)
     probes = tuple(
         StoreBoundaryProbe(
             ProviderId("ca_eccc"),
             product,
             StoreQuery(
-                _STORE,
+                current_store,
                 ProviderId("ca_eccc"),
                 ("02GA010",),
                 (product,),
@@ -83,13 +94,13 @@ def test_hydat_attestation_executes_exact_validated_store_queries_for_both_produ
         for product in _PRODUCTS
     )
     assert len(run_manifest_boundary_probes((DeclaredProvider("ca_eccc", declaration),), probes)) == 2
-    flow_partition = pl.read_parquet(Path(_STORE) / "product=discharge_daily_mean/year=2020/part-0.parquet")
-    level_partition = pl.read_parquet(Path(_STORE) / "product=stage_daily_mean/year=2020/part-0.parquet")
+    flow_partition = pl.read_parquet(Path(current_store) / "product=discharge_daily_mean/year=2020/part-0.parquet")
+    level_partition = pl.read_parquet(Path(current_store) / "product=stage_daily_mean/year=2020/part-0.parquet")
     assert flow_partition["DLY_FLOWS.NO_DAYS"].unique().to_list() == [31]
     assert level_partition["DLY_LEVELS.NO_DAYS"].unique().to_list() == [31]
 
 
-def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input() -> None:
+def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input(tmp_path: Path) -> None:
     recording = read_recording(_DATA / "ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
     response = ReplayTransport((recording,)).send(
         TransportRequest(
@@ -101,7 +112,14 @@ def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input() -> 
     )
     attestation = json.loads((Path(_STORE) / "attestation.json").read_text())
     store = read_store(
-        StoreQuery(_STORE, ProviderId("ca_eccc"), ("02GA010",), _PRODUCTS, datetime(2020, 1, 1), datetime(2020, 1, 3))
+        StoreQuery(
+            _compiled_derived_store(tmp_path),
+            ProviderId("ca_eccc"),
+            ("02GA010",),
+            _PRODUCTS,
+            datetime(2020, 1, 1),
+            datetime(2020, 1, 3),
+        )
     )
 
     assert recording.request.url == "https://api.weather.gc.ca/collections/hydrometric-daily-mean/items"
@@ -127,7 +145,9 @@ def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input() -> 
     assert [item["LEVEL"] for item in properties] == by_product[ProductId("stage_daily_mean")]
 
 
-def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hydat_provenance(monkeypatch) -> None:
+def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hydat_provenance(
+    monkeypatch, tmp_path: Path
+) -> None:
     from io import BytesIO
 
     import polars as pl
@@ -144,15 +164,28 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
         "ca_eccc",
         load_packaged_catalogue_artifact(declaration.catalogue, on_issue="raise"),
         bulk_config=config,
-        observation_store=_STORE,
+        observation_store=_compiled_derived_store(tmp_path),
     )
     monkeypatch.setattr(discovery, "_registry", registry)
     monkeypatch.setattr(discovery, "_provider_lookup", registry.get)
     monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
-    selection = rr.find(provider="ca_eccc", station="02GA010", product="discharge_daily_mean")
+    selection = rr.find(
+        provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean"
+    )
     result = rr.fetch(selection, start="2020-01-01", end="2020-01-03", on_issue="raise", receipts=True)
 
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert result.data["value"].to_list() == [31.0, 19.299999237060547, 15.300000190734863]
     (receipt,) = result.receipts.entries
     assert isinstance(receipt, StoreExcerptReceipt)

@@ -19,6 +19,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.fr_hubeau.config import FrHubeauSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _DAILY_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab"
@@ -33,6 +34,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     payloads: list[Payload] = []
     for station in stations:
@@ -94,6 +98,8 @@ def fetch(
                         response.content,
                         _origin(response),
                         response.prerequisite_calls,
+                        scope=scope,
+                        known_series=known_series,
                     )
                 )
                 if coordinates.family == "hydroportail":

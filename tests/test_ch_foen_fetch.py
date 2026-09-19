@@ -132,4 +132,5 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
         "content_type",
         "source_path",
         "query",
+        "station_products",
     }
