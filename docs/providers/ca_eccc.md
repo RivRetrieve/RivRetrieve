@@ -30,8 +30,15 @@ The Water Survey of Canada, part of Environment and Climate Change Canada, runs 
 hydrometric network with provincial, territorial and other partners, and publishes the results
 through the [Water Office](https://wateroffice.ec.gc.ca/).
 
-Canada publishes its record in two forms: near real-time readings on the Water Office website, and
-**HYDAT**, the national archive of reviewed data. RivRetrieve reads HYDAT.
+Canada publishes its record in two forms:
+
+- **Near real-time readings**, through the Water Office and an ECCC programming interface. These
+  are minutes to a couple of hours old.
+- **HYDAT**, the national archive of reviewed data, republished from time to time as a dated
+  edition. The edition available on 19 September 2026 was dated 17 July 2026.
+
+RivRetrieve reads HYDAT. That means Canadian data arrive reviewed but not recent: the most recent
+weeks or months are not in the archive yet. RivRetrieve does not read the near real-time service.
 
 ## Downloading the archive first
 
