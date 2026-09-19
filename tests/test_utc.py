@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -28,8 +28,9 @@ from rivretrieve._internal.observations import (
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.config import config as usgs_nwis_config
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
+from rivretrieve._internal.recordings import read_recording
 
-FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12-dst.json")
+RECORDING_PATH = Path("tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12.recording.json")
 
 
 def _result(data: pl.DataFrame, provider_id: ProviderId | None = None) -> ObservationResult:
@@ -193,15 +194,16 @@ def test_to_utc_unknown_zones_refuse_atomically_with_provider_and_count(
 def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fixture_bytes = FIXTURE_PATH.read_bytes()
+    recording = read_recording(RECORDING_PATH)
+    fixture_bytes = recording.content
     origin = SourceCallOrigin(
-        UnknownOriginFact(),
-        UnknownOriginFact(),
-        UnknownOriginFact(),
-        UnknownOriginFact(),
-        UnknownOriginFact(),
-        UnknownOriginFact(),
-        UnknownOriginFact(),
+        url=recording.request.url,
+        request_parameters=recording.request.parameters,
+        status_code=recording.status_code,
+        retrieved_at=recording.retrieved_at,
+        content_type=recording.content_type,
+        source_path=UnknownOriginFact(),
+        query=UnknownOriginFact(),
     )
     payload = Payload(
         SourceCoordinates(object()),
@@ -215,6 +217,8 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
         (),
     )
     parsed = parse(payload, usgs_nwis_config())
+    assert parsed.value.height == 92
+    assert parsed.value["time_zone"].to_list() == ["-06:00"] * 8 + ["-05:00"] * 84
     native = ObservationResult(
         data=parsed.value.select(ObservationDataSchema.polars_schema.names()),
         provenance=ObservationProvenance(source="live", provider_id=ProviderId("usgs_nwis")),
@@ -228,21 +232,21 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
     )
     expected_native = pl.DataFrame(
         {
-            "time": [datetime(2023, 3, 12, 1, 30), datetime(2023, 3, 12, 3, 30)],
+            "time": [datetime(2023, 3, 12, 1, 30), datetime(2023, 3, 12, 3, 0)],
             "time_zone": ["-06:00", "-05:00"],
             "station_id": ["07374000", "07374000"],
             "product_id": ["discharge_instantaneous", "discharge_instantaneous"],
-            "value": [100.0, 101.0],
+            "value": [809000.0, 811000.0],
         },
         schema=ObservationDataSchema.polars_schema,
     )
     expected_converted = pl.DataFrame(
         {
-            "time": [datetime(2023, 3, 12, 7, 30), datetime(2023, 3, 12, 8, 30)],
+            "time": [datetime(2023, 3, 12, 7, 30), datetime(2023, 3, 12, 8, 0)],
             "time_zone": ["+00:00", "+00:00"],
             "station_id": ["07374000", "07374000"],
             "product_id": ["discharge_instantaneous", "discharge_instantaneous"],
-            "value": [100.0, 101.0],
+            "value": [809000.0, 811000.0],
         },
         schema=ObservationDataSchema.polars_schema,
     )
@@ -257,13 +261,19 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
 
     converted = rivretrieve.to_utc(native)
 
-    pl_testing.assert_frame_equal(native.data, expected_native, check_exact=True)
-    pl_testing.assert_frame_equal(converted.data, expected_converted, check_exact=True)
+    pl_testing.assert_frame_equal(native.data[[6, 8]], expected_native, check_exact=True)
+    pl_testing.assert_frame_equal(converted.data[[6, 8]], expected_converted, check_exact=True)
+    assert converted.data["time"].to_list() == [
+        datetime(2023, 3, 12, 6) + timedelta(minutes=15 * index) for index in range(92)
+    ]
+    pl_testing.assert_frame_equal(
+        converted.data.drop("time", "time_zone"), native.data.drop("time", "time_zone"), check_exact=True
+    )
     assert set(native.data["time_zone"].to_list()) == {"-06:00", "-05:00"}
-    assert native.data["time_zone"].to_list() == ["-06:00", "-05:00"]
+    assert native.data["time_zone"].to_list() == ["-06:00"] * 8 + ["-05:00"] * 84
     assert "CST" not in native.data["time_zone"].to_list()
     assert "CDT" not in native.data["time_zone"].to_list()
-    assert converted.data["time_zone"].to_list() == ["+00:00", "+00:00"]
+    assert converted.data["time_zone"].to_list() == ["+00:00"] * 92
     assert converted.provenance is native.provenance
     assert converted.issues is native.issues
     assert converted.receipts is native.receipts

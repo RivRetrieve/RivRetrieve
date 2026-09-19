@@ -1,6 +1,6 @@
 """Transport seam : EngineRequest × ProviderStages × Transport → assembled observations."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -19,17 +19,18 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.recordings import (
-    RecordedRequest,
     RecordingEnvelope,
     ReplayTransport,
     UnmatchedRequestError,
+    read_recording,
 )
-from rivretrieve._internal.transport import HttpMethod
 
 assert isinstance(declaration.observations, LiveStages)
 usgs_nwis = declaration.observations.stages
 
-_FIXTURE = Path(__file__).parent / "test_data" / "usgs_nwis_07374000_dv_00060_2023-01-01.json"
+_RECORDING = (
+    Path(__file__).parent / "test_data" / "usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
+)
 _PRODUCT = ProductId("discharge_daily_mean")
 
 
@@ -63,25 +64,7 @@ def _request() -> ObservationRequest:
 
 
 def _recording() -> RecordingEnvelope:
-    return RecordingEnvelope(
-        request=RecordedRequest(
-            method=HttpMethod.GET,
-            url="https://waterservices.usgs.gov/nwis/dv/",
-            parameters={
-                "format": "json",
-                "sites": "07374000",
-                "startDT": "2022-12-30",
-                "endDT": "2023-01-03",
-                "parameterCd": "00060",
-                "statCd": "00003",
-            },
-            ordinary_headers={"Accept": "application/json", "User-Agent": "RivRetrieve"},
-        ),
-        content=_FIXTURE.read_bytes(),
-        status_code=200,
-        retrieved_at=datetime(2026, 8, 19, tzinfo=UTC),
-        content_type="application/json",
-    )
+    return read_recording(_RECORDING)
 
 
 def _provenance() -> ObservationProvenance:
@@ -94,6 +77,8 @@ def test_stop_convention_flip_misses_exact_recording() -> None:
 
     baseline = drive(request, usgs_nwis, provenance=_provenance(), transport=replay)
     assert baseline.canonical_rows.height == 1
+    assert baseline.canonical_rows["time_zone"].to_list() == ["unknown"]
+    assert baseline.canonical_rows["value"].to_list() == [373000 * 0.028316846592]
 
     with pytest.raises(UnmatchedRequestError) as exc_info:
         drive(request, _ExclusiveStopUsgs, provenance=_provenance(), transport=replay)

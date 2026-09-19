@@ -46,8 +46,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "c0a4074f979ac2670695b08c325a55b9be548591a18db53ae7011fd054b02f59",
-      "contentSize": "410 B"
+      "sha256": "69fce539d44cae99e42bfd8e51e60b49f2e0d5e0c71a253ce7068e45eb685d38",
+      "contentSize": "396 B"
     },
     {
       "@id": "products.parquet",

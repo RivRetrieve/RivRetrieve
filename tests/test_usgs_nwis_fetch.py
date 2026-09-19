@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import fields
 from datetime import UTC, datetime
-from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast, get_type_hints
 
@@ -46,7 +45,6 @@ from rivretrieve._internal.transport import (
     TransportResponse,
 )
 
-FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json")
 RETRIEVED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
 
 Action = TransportResponse | TransportFailure
