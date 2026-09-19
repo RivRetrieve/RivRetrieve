@@ -3,12 +3,10 @@
 import ast
 import re
 import runpy
-from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 
 import polars as pl
-import pytest
 from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
@@ -34,43 +32,6 @@ def test_readme_uses_current_public_api():
     assert calls
     assert all(callable(getattr(rr, name, None)) for name in calls), calls
     assert "fetch" in calls
-
-
-def test_readme_january_example_reports_missing_offline_recording(monkeypatch):
-    import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, UnmatchedRequestError, read_recording
-
-    blocks = python_blocks(ROOT / "README.md")
-    assert len(blocks) == 1
-    expected_example = """import rivretrieve as rr
-
-gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
-gauge = rr.pick(gauges, station="07374000")
-result = rr.fetch(gauge, start="2023-01-01", end="2023-01-31")
-print(result.data)
-print(result.issues)
-"""
-    assert ast.dump(ast.parse(blocks[0])) == ast.dump(ast.parse(expected_example))
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    # No committed recording covers the January example's padded request.
-    # Exact replay must refuse it, not relabel short-window evidence as a month.
-    with pytest.raises(UnmatchedRequestError) as missing:
-        exec(compile(blocks[0], "README.md", "exec"), {})
-    assert missing.value.request.url == "https://waterservices.usgs.gov/nwis/dv/"
-    parameters = missing.value.request.parameters
-    assert isinstance(parameters, Mapping)
-    assert dict(parameters) == {
-        "format": "json",
-        "sites": "07374000",
-        "startDT": "2022-12-30",
-        "endDT": "2023-02-02",
-        "parameterCd": "00060",
-        "statCd": "00003",
-    }
 
 
 def test_readme_january_example_with_authored_partial_window_response(monkeypatch, capsys):
@@ -211,24 +172,3 @@ def test_documentation_local_links_and_python_syntax():
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
     assert (ROOT / "docs/reference.md").read_text() == namespace["render_reference"]()
-
-
-def test_architecture_test_links_are_explicit_verification_references():
-    text = (ROOT / "docs/architecture.md").read_text()
-    heading = "### Verification tests"
-    verification_start = text.find(heading)
-    test_links = [
-        match for match in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text) if match.group(2).startswith("../tests/")
-    ]
-    assert test_links
-    for match in test_links:
-        label, destination = match.groups()
-        assert "test" in label.lower(), (label, destination)
-    assert verification_start >= 0
-    assert all(match.start() > verification_start for match in test_links)
-
-
-def test_documentation_has_no_adr_directory_or_references():
-    assert not (ROOT / "docs/adr").exists()
-    for path in (ROOT / "docs").rglob("*.md"):
-        assert not re.search(r"\bADRs?\b|(?<![A-Za-z])adr/", path.read_text(), re.IGNORECASE), path

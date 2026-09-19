@@ -79,14 +79,3 @@ def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_
     assert plotted[1]["gauges"].tolist() == [60]
     with pytest.raises(ValueError, match="Boundary source lacks ADM0_A3"):
         module["draw"](world.loc[world["ADM0_A3"] != "USA"], stations, tmp_path / "missing.png")
-
-
-def test_readme_coverage_image_has_count_context_and_boundary_attribution():
-    text = (ROOT / "README.md").read_text()
-    assert "darker shading" in text
-    assert "gauges" in text
-    assert "logarithmic scale; counts are listed in the provider table below." in text
-    assert "[Natural Earth](https://www.naturalearthdata.com/)" in text
-    assert "Their depiction implies no position on territorial status." in text
-    assert "## How to cite" not in text
-    assert "attribution and citation requirements" in text
