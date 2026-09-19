@@ -22,8 +22,7 @@ from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisiti
 from tests._provenance import legacy_provenance
 
 LEDGER_PATH = (
-    Path(__file__).parents[1]
-    / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    Path(__file__).parents[1] / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 
 

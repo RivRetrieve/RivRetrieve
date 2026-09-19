@@ -41,6 +41,24 @@ independent live source, and quantify coverage and agreement against every avail
 A partial or coarser publisher route does not alone justify recovery; the provider notes must explain
 why the complete committed payload cannot be reproduced.
 
+## Retained catalogue inputs
+
+[`maintenance/catalogue/`](../maintenance/catalogue/) holds the source ledgers,
+selected real source cases, and offline integrity verifiers used by catalogue maintenance.
+Source evidence bytes retain their original digests. Case indexes are derived claims,
+not publisher payloads. Completed surveys and acquisition experiments are recoverable
+from Git history rather than maintained alongside these inputs.
+
+- [Bosnia workbook evidence](../maintenance/catalogue/ba_fhmzbih/README.md)
+- [Brazil inventory evidence](../maintenance/catalogue/br_ana/README.md)
+- [France availability evidence](../maintenance/catalogue/fr_hubeau/README.md)
+- [Thailand availability evidence](../maintenance/catalogue/th_thaiwater/README.md)
+
+These inputs remain repository-only and are excluded from distributions. Public
+verification does not certify unavailable private bodies. Private corpus verification
+requires an explicitly supplied local corpus; missing bodies fail rather than triggering
+network acquisition. Provider maintenance commands remain in the provider notes.
+
 ## Row-level withholding
 
 A committed native table and complete column origins do not by themselves establish every row-level

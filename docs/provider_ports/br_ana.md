@@ -107,7 +107,7 @@ uv run python scripts/acquire_ana_inventory.py --out <new-acquisition-directory>
 A new capture requires reconciliation, fresh native materialization, a pinned input commit and
 reviewed attestation before publishing. Do not point an old attestation at a new response.
 The original acquisition scripts and outcome reports are retained under
-`research/station-coverage/br_ana/inventory/` as historical evidence, not alternate generators.
+`maintenance/catalogue/br_ana/inventory/` as historical evidence, not alternate generators.
 Source-row occurrences bind every repeated station to all its acquired files and row indices.
 
 The old `--fixture`, `--live`, `--withhold-uncertified` and direct payload build paths now fail

@@ -97,7 +97,7 @@ acquisition date, not the native metadata capture date or a fabricated common in
 
 The 25 original IDs absent from the later 1,405-row snapshot remain. The 605 newly
 observed IDs are not added. The machine-readable source account is
-`research/station-coverage/th_thaiwater/inventory/governing_summary.json`; the exact
+`maintenance/catalogue/th_thaiwater/inventory/governing_summary.json`; the exact
 per-pair acquisition/material ledger sits beside it. The capture corpus remains private,
 not an observation archive published with these catalogues. A current caller can ask
 windows beyond the recorded research dates; the source may return measurements,

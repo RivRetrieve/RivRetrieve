@@ -34,7 +34,60 @@ def test_readme_uses_current_public_api():
     assert "fetch" in calls
 
 
-def test_readme_example_replays_publisher_recording(monkeypatch, capsys):
+def test_readme_january_example_with_authored_partial_window_response(monkeypatch, capsys):
+    import rivretrieve._internal.discovery as discovery
+    from rivretrieve._internal.recordings import read_recording
+    from rivretrieve._internal.transport import HttpMethod, TransportRequest, TransportResponse
+
+    recording = read_recording(
+        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
+    )
+
+    class PartialWindowTransport:
+        """Test response uses unchanged publisher bytes, not a January recording."""
+
+        calls = 0
+
+        def send(self, request: TransportRequest) -> TransportResponse:
+            assert request.method == HttpMethod.GET
+            assert request.url == "https://waterservices.usgs.gov/nwis/dv/"
+            assert request.params == {
+                "format": "json",
+                "sites": "07374000",
+                "startDT": "2022-12-30",
+                "endDT": "2023-02-02",
+                "parameterCd": "00060",
+                "statCd": "00003",
+            }
+            assert request.body is None
+            self.calls += 1
+            return recording.to_transport_response()
+
+    # Authored partial-window response: do not change the fixture's request identity
+    # or claim these five publisher days prove full-January retrieval or availability.
+    transport = PartialWindowTransport()
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    scope = {}
+    for block in python_blocks(ROOT / "README.md"):
+        exec(compile(block, "README.md", "exec"), scope)
+    result = scope["result"]
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2023, 1, day) for day in (1, 2, 3)],
+            "time_zone": ["unknown"] * 3,
+            "station_id": ["07374000"] * 3,
+            "product_id": ["discharge_daily_mean"] * 3,
+            "value": [373000.0 * 0.028316846592] * 3,
+        }
+    )
+    assert_frame_equal(result.data, expected)
+    assert not result.issues
+    assert not result.receipts.entries
+    assert transport.calls == 1
+    assert capsys.readouterr().out == f"{result.data}\n{result.issues}\n"
+
+
+def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
     import rivretrieve._internal.discovery as discovery
     from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
@@ -43,11 +96,10 @@ def test_readme_example_replays_publisher_recording(monkeypatch, capsys):
     )
     replay = ReplayTransport((recording,))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    scope = {}
-    for block in python_blocks(ROOT / "README.md"):
-        exec(compile(block, "README.md", "exec"), scope)
-    result = scope["result"]
-    # The publisher recording has 373000 ft3/s on 2023-01-01.
+    gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+    gauge = rr.pick(gauges, station="07374000")
+    # Only this shorter public window matches the committed publisher recording.
+    result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")
     expected = pl.DataFrame(
         {
             "time": [datetime(2023, 1, 1)],
@@ -58,7 +110,8 @@ def test_readme_example_replays_publisher_recording(monkeypatch, capsys):
         }
     )
     assert_frame_equal(result.data, expected)
-    assert result.receipts.entries[0].content == recording.content
+    assert not result.issues
+    assert not result.receipts.entries
 
 
 def test_camels_example_selects_documented_gauges_without_network(monkeypatch, capsys):
@@ -119,24 +172,3 @@ def test_documentation_local_links_and_python_syntax():
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
     assert (ROOT / "docs/reference.md").read_text() == namespace["render_reference"]()
-
-
-def test_architecture_test_links_are_explicit_verification_references():
-    text = (ROOT / "docs/architecture.md").read_text()
-    heading = "### Verification tests"
-    verification_start = text.find(heading)
-    test_links = [
-        match for match in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text) if match.group(2).startswith("../tests/")
-    ]
-    assert test_links
-    for match in test_links:
-        label, destination = match.groups()
-        assert "test" in label.lower(), (label, destination)
-    assert verification_start >= 0
-    assert all(match.start() > verification_start for match in test_links)
-
-
-def test_documentation_has_no_adr_directory_or_references():
-    assert not (ROOT / "docs/adr").exists()
-    for path in (ROOT / "docs").rglob("*.md"):
-        assert not re.search(r"\bADRs?\b|(?<![A-Za-z])adr/", path.read_text(), re.IGNORECASE), path

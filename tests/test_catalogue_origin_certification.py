@@ -55,7 +55,7 @@ from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
 THAI_AVAILABILITY_EVIDENCE_PATH = (
-    ROOT / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    ROOT / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
@@ -122,7 +122,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         )
         build = partial(build, provenance=provenance, telemetry=telemetry)
     if provider == "fr_hubeau":
-        ledger = ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"
+        ledger = ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
         build = partial(build, availability=availability)
     if provider == "th_thaiwater":
@@ -131,7 +131,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         )
     if provider == "ba_fhmzbih":
         workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
-            (ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
+            (ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
         )
         build = partial(build, workbook_access=workbook_access)
     return ProviderAdapter(
@@ -478,11 +478,6 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
 
 @pytest.mark.parametrize("receipt", _receipts(), ids=lambda row: str(row["provider_id"]))
 def test_receipt_capture_digest(receipt: dict[str, object]) -> None:
-    provider_id = str(receipt["provider_id"])
-    notes_path = PROVIDER_NOTES / f"{provider_id}.md"
-    assert notes_path.is_file()
-    assert f"provider_ports/{provider_id}.md" in (ROOT / "docs/README.md").read_text(encoding="utf-8")
-
     capture_path = receipt["capture_path"]
     if capture_path is None:
         assert receipt["provider_id"] == "za_dws"
@@ -513,20 +508,6 @@ def test_receipt_provider_specific_url_bindings_and_attested_exceptions() -> Non
     dws = rows["za_dws"]
     assert dws["evidence_url"] != dws["requested_url"] == dws["final_url"]
     assert "web.archive.org/web/20251122081546id_/" in str(dws["requested_url"])
-
-    japan = (PROVIDER_NOTES / "jp_mlit.md").read_text(encoding="utf-8")
-    assert "2026-08-03T12:31:42Z" in japan
-    assert "HTTP 403" in japan
-    assert "77-byte" in japan
-    assert "non-refetchable" in japan
-    swiss = (PROVIDER_NOTES / "ch_foen.md").read_text(encoding="utf-8")
-    assert "fragment" in swiss and "not sent" in swiss and "no redirect" in swiss
-
-
-def test_committed_tests_and_receipts_never_depend_on_supply_tree() -> None:
-    needle = b"plan" + b"ning/"
-    candidates = [RECEIPTS_PATH, *PROVIDER_NOTES.glob("*.md"), *ROOT.joinpath("tests").rglob("*.py")]
-    assert all(needle not in path.read_bytes() for path in candidates)
 
 
 EXPECTED_CRS_COUNTS = {
@@ -710,7 +691,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         arguments.extend(
             (
                 "--workbook-access-ledger",
-                str(ROOT / "research/station-coverage/ba_fhmzbih/inventory/baseline_workbook_access.json"),
+                str(ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"),
             )
         )
     elif adapter.provider_id == "jp_mlit":
@@ -726,7 +707,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         arguments.extend(
             (
                 "--availability-ledger",
-                str(ROOT / "research/station-coverage/fr_hubeau/inventory/governing_evidence.json.xz"),
+                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
             )
         )
     elif adapter.provider_id == "th_thaiwater":

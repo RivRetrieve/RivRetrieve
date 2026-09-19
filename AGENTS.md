@@ -1,75 +1,42 @@
 # Project Instructions
 
-A rule appears in this file only if (a) it encodes a project choice that cannot be inferred from the code, or (b) default model output violates it. Practices a model already follows unprompted, and anything ruff or ty enforces mechanically, are deliberately absent.
+## Purpose
 
-## 0. Project Overview
+RivRetrieve provides faithful, traceable access to river-gauge data from national hydrology agencies through one consistent shape. It harmonises objective identity and physics while leaving source judgement uninterpreted. See [architecture](docs/architecture.md) for responsibilities and stage contracts.
 
-RivRetrieve provides faithful, traceable access to river-gauge data from national hydrology agencies through one consistent shape. It harmonises objective identity and physics while leaving source judgement uninterpreted. Domain terms are defined in [`CONTEXT.md`](CONTEXT.md), and the architecture is described in [`docs/architecture.md`](docs/architecture.md).
+## Python environment
 
-## 1. Python Environment
+Use `uv` exclusively for project dependencies and execution.
 
-Use `uv` exclusively.
+- Add dependencies: `uv add <package>`; development dependencies: `uv add --dev <package>`.
+- Sync the environment: `uv sync`.
+- Run commands: `uv run <command>`.
+- Run tests: `uv run pytest`.
+- Format: `uv run ruff format`.
+- Lint: `uv run ruff check --fix`.
+- Type-check: `uv run ty check src`.
 
-- Add dependencies: `uv add <package>` (dev: `uv add --dev <package>`)
-- Sync environment: `uv sync`
-- Run anything: `uv run <command>`, tests: `uv run pytest`
+The normal type-check target is `src`. `tests/typecheck/nominal_window_misuse.py` is an intentional negative fixture exercised by the engine-contract tests. Do not suppress it.
 
-Do not use `pip`, `poetry`, `conda`, or `pip-tools` directly.
+## Library boundaries and types
 
-Format, lint, and type-check with:
+Give each module a clear responsibility and pass only the dependencies its operations need, rather than broad configuration objects. Mathematical notation is optional when it clarifies a computation; module docstrings do not require mathematical signatures.
 
-```bash
-uv run ruff format
-uv run ruff check --fix
-uv run ty check
-```
+Resolve configuration, environment variables, paths, and resource wiring at explicit composition boundaries, including public library APIs as well as CLI entry points. Lower-level operations receive resolved dependencies instead of discovering application state themselves.
 
-## 2. Design Doctrine
+Parse external inputs at the boundary where they arrive, including provider responses received after API composition. Use domain types for identifiers, physical quantities, and configuration where invariants or units matter. Keep units explicit and preserve typed stage contracts. Do not wrap every value or bulk array; retain library carriers such as Polars frames and xarray datasets.
 
-<!-- BEGIN SYNCED DOCTRINE; source-sha256=59e37fd6b3dbab27530822e6956da51bb7ae76b637e3638530f99a8b4db9038d -->
-Four rules. They are one design stance seen four ways: a module means one thing, receives exactly what it needs, in types that cannot lie, and dies rather than guess.
+Represent named domain states with enums or literals, not ambiguous booleans. Incidental boolean flags do not need domain wrappers.
 
-1. **A module means one thing.**
-2. **It receives exactly what it needs.**
-3. **Its types cannot lie.**
-4. **It dies rather than guess.**
-<!-- END SYNCED DOCTRINE -->
+## Source fidelity and failures
 
-### 2.1 Denotation line
+Preserve source facts, vocabulary, and unknowns. Do not infer source judgement, time zones, or temporal support, or invent unpublished hydrological products. Do not substitute defaults for required inputs. Keep null values, absent rows, and failed requests distinct.
 
-Before implementing a module, state in one line what it computes as a mathematical object, and record that line in the module docstring. Carriers must be named domain types, not placeholders.
+Raise on fatal internal contract errors; caller issue policy must not hide invalid stage output. Retain supported source failures as issues at the established isolation boundaries so independent series can still return results. Preserve the failure's identity and reason alongside those results. Do not silently log and continue or replace this partial-result model with a blanket crash rule.
 
-```
-preprocess : RawForcing × Attributes → Dataset   (pure)
-training run = fold(update, θ₀, batches)
-evaluation = map(metric) over (basin × model) pairs
-```
+## Complex-data assertions
 
-If the line cannot be written, the design is not ready; say so instead of coding around it. In review, when the denotation line and the diff disagree, one of them is wrong.
-
-### 2.2 Authority narrows
-
-All wiring happens at the composition root: only the entry point (CLI command or `main()`) reads config files, reads environment variables, resolves paths, and opens stores. Every other module receives what it needs as arguments.
-
-At every call, pass the narrowest argument that suffices: the two columns, not the DataFrame; the file path, not the directory; the three fields, not the config object. A function outside the entry module whose signature accepts the full config, or which constructs a `Path` from a literal, is a violation.
-
-### 2.3 Parse, don't validate
-
-Convert raw input (CLI args, YAML, NetCDF attributes) into domain types once, at the composition root. Downstream functions accept and return only domain types for concepts that carry an invariant or unit ambiguity: identifiers, physical quantities, config. A `float` that might be mm/day or m³/s must not exist past the boundary.
-
-Enums over booleans: never `bool` for a domain state with two named possibilities. Use an `Enum` or `Literal["upstream", "downstream"]`, not `upstream: bool` — applies to parameters, fields, and return values.
-
-Limits: domain types (`NewType`, frozen dataclass, enum) are for concepts with invariants, not for every value. Bulk numerical data stays in `xarray`/`polars` carriers; do not wrap arrays in classes.
-
-### 2.4 Fail loud
-
-Crash early on broken assumptions. No fallback values for required inputs (`.get(key, default)` on a required config key is a bug). No exception handler that logs and continues.
-
-The one exception: a batch loop over independent items (e.g. per-basin processing) may have exactly one named isolation point that catches per-item failure, records which item failed and why, and continues. That point exists once per pipeline, not once per function.
-
-## 3. Testing Complex Data Objects
-
-Prefer library-specific assertions over manual element-wise checks of lengths, schemas, coordinates, shapes, or dtypes.
+Prefer library-specific assertions over manual element-by-element checks of structure or values:
 
 ```python
 np.testing.assert_allclose(result, expected)

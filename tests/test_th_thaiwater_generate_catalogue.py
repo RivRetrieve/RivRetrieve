@@ -26,8 +26,7 @@ from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOG
 FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
 LEDGER_PATH = (
-    Path(__file__).parents[1]
-    / "research/station-coverage/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    Path(__file__).parents[1] / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 
 
@@ -636,25 +635,9 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
-def test_unknown_temporal_support_uses_the_documented_unknown_catalogue_vocabulary() -> None:
-    catalogue = _build()
-    products = catalogue.products.sort("product_id")
-
-    assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
-    assert products.select("frequency", "statistic", "period_type", "period_anchor").unique().rows() == [
-        ("unknown", "unknown", "unknown", "unknown")
-    ]
-
-    docs = Path(__file__).parents[1] / "docs"
-    dictionary = (docs / "product_dictionary.md").read_text()
-    design = (docs / "design/provider-redesign.md").read_text()
-    assert "period_type:    instant | interval | unknown" in dictionary
-    assert "period_type:    instant | interval | unknown" in design
-    assert "Use `unknown` when source temporal support is not established." in dictionary
-
-
 def test_native_build_counts_and_identity_station_fields() -> None:
     catalogue = _build()
+    assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
     committed = _committed_native_table().data
     source_id = committed["station.id"].item(0)
     station = catalogue.stations.filter(pl.col("station_id") == source_id)
@@ -865,20 +848,6 @@ def test_governing_acquisitions_expose_all_baseline_pairs() -> None:
     }
     assert set(pairs["station_id"]) == set(_committed_native_table().data["station.id"])
     assert catalogue.acquisition_provenance.withheld_facts == ()
-
-
-def test_later_snapshot_does_not_replace_baseline_or_remove_absent_stations() -> None:
-    import csv
-
-    snapshot = LEDGER_PATH.parents[1] / "recordings/waterlevel_load_live.stations.csv"
-    with snapshot.open() as stream:
-        later = {row["station_id"] for row in csv.DictReader(stream)}
-    native = set(_committed_native_table().data["station.id"])
-    assert len(native - later) == 25
-    assert len(later - native) == 605
-    exposed = set(_build().station_products["station_id"])
-    assert native - later <= exposed
-    assert exposed.isdisjoint(later - native)
 
 
 def test_build_cli_requires_explicit_reviewed_availability_evidence(

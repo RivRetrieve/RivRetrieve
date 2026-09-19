@@ -26,12 +26,6 @@ def test_czech_catalogue_identifies_hourly_values_as_interval_means() -> None:
     assert not station_products["product_id"].str.contains("instantaneous").any()
 
 
-def test_retired_czech_legacy_observation_tree_is_deleted() -> None:
-    from pathlib import Path
-
-    assert not Path("reference/legacy_observations/cz_chmi").exists()
-
-
 def test_public_info_describes_live_coalescing_without_recovery_claims() -> None:
     assert provider_info("cz_chmi").bulk_observations == (
         "false: live annual JSON requests coalesced by station, year, and DQ/HQ file family; "

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import zipfile
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -31,12 +30,11 @@ from rivretrieve._internal.providers.th_thaiwater.issue_codes import ThThaiWater
 def _recorded_database_failure() -> Payload:
     # This is the complete historical source answer plus its actual acquisition receipt.
     # It has no executed-header evidence, so is not relabelled as a current runtime-v2 interaction.
-    root = Path(__file__).resolve().parents[1] / "research/station-coverage/th_thaiwater"
+    root = Path(__file__).resolve().parents[1] / "maintenance/catalogue/th_thaiwater"
     request_id = "1109499_2026-06-08_2026-09-06_a1"
     with (root / "evidence/graph_receipts.csv").open(newline="") as handle:
         receipt = next(row for row in csv.DictReader(handle) if row["request_id"] == request_id)
-    with zipfile.ZipFile(root / "evidence/graph_bodies_without_observations.zip") as bundle:
-        body = bundle.read(f"{request_id}.body")
+    body = (root / "recordings" / f"{request_id}.body").read_bytes()
     assert len(body) == int(receipt["response_bytes"])
     assert hashlib.sha256(body).hexdigest() == receipt["response_sha256"]
     url = urlparse(receipt["request_url"])

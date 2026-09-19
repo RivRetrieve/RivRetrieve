@@ -600,109 +600,109 @@
   ],
   "population_scope": "Acquired all 27 documented UF filters and all 9 basin filters, including source-published foreign stations. This does not prove that undocumented records with both null UF and null basin cannot exist.",
   "attempt_record_paths": [
-    "research/station-coverage/br_ana/inventory/inventory-ufs.json.results.json",
-    "research/station-coverage/br_ana/inventory/inventory-ufs-retry.json.results.json",
-    "research/station-coverage/br_ana/inventory/population-basin9.json.results.json",
-    "research/station-coverage/br_ana/inventory/population-basins1-8.json.results.json"
+    "maintenance/catalogue/br_ana/inventory/inventory-ufs.json.results.json",
+    "maintenance/catalogue/br_ana/inventory/inventory-ufs-retry.json.results.json",
+    "maintenance/catalogue/br_ana/inventory/population-basin9.json.results.json",
+    "maintenance/catalogue/br_ana/inventory/population-basins1-8.json.results.json"
   ],
   "supporting_evidence": [
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/analyze_inventory.py.txt",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/analyze_inventory.py.txt",
       "sha256": "43f473fca992754b3d17bd2a129318e6865cac758953223a8991a44b296c4ed2",
       "byte_size": 3177
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/capture.py.txt",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/capture.py.txt",
       "sha256": "3b048059e05ac29bbafcdfad7b69a553775941457d2200a64925a8ae7d08c36e",
       "byte_size": 2737
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/inventory-accounting.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/inventory-accounting.json",
       "sha256": "856943b06de1035ce1244bacfcc249b614a1cc7ca94c33759398d78c017d416c",
       "byte_size": 20032
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/inventory-ufs-retry.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/inventory-ufs-retry.json",
       "sha256": "00be47c85a5b79bdf5dc89177c02739a90ea8fe73bfc1154a400936a4b2f4b89",
       "byte_size": 996
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/inventory-ufs-retry.json.results.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/inventory-ufs-retry.json.results.json",
       "sha256": "046a4d2b5cac0bdc9841057a4a7fb8f7068726a04617a182bbc16b1aaf7cfb57",
       "byte_size": 1526
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/inventory-ufs.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/inventory-ufs.json",
       "sha256": "a7ad7a73ec12be254893e5c2e1502d4fbe92ba59ec53d52ca743ef223956c409",
       "byte_size": 3836
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/inventory-ufs.json.results.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/inventory-ufs.json.results.json",
       "sha256": "d57d86de36c143dbd84a85f4cd7acec2f60c431386f7bde16a2b1854ff6482dc",
       "byte_size": 5032
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/population-basin9.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/population-basin9.json",
       "sha256": "f2fa7cd6f1fb30e7a0f74fa5d554be9cff08c79e1b737a5b59d423acabc13a54",
       "byte_size": 151
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/population-basin9.json.results.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/population-basin9.json.results.json",
       "sha256": "07928d0b963cb85c9c39f9e7604338d5d5ce3adac5c1b8fc8042b12f9de156a9",
       "byte_size": 233
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/population-basins1-8.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/population-basins1-8.json",
       "sha256": "1b6c3f26407150cf786f276d2833b6287268098ec996597cf492e93028071274",
       "byte_size": 1194
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/population-basins1-8.json.results.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/population-basins1-8.json.results.json",
       "sha256": "62912bfcdf8efc561a877e47b3db24c1a9c6fc30fa8cd110a8e8954c471d1b49",
       "byte_size": 1847
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/population-lookups.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/population-lookups.json",
       "sha256": "c681be94e8241b61267213d0d48860738bc4323422369bb1426245aa3f01c462",
       "byte_size": 182
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/population-lookups.json.results.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/population-lookups.json.results.json",
       "sha256": "13d604ef90a8354836bdda11a195e1d24e06ae4b30baa5e9e4a8ec6284557f84",
       "byte_size": 428
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/population-reconciliation.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/population-reconciliation.json",
       "sha256": "32ceb602ebf11bac371aa076c3a93b5218c9bc2d457d22d463ab7c0e09ce2071",
       "byte_size": 103826
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/reconcile_population.py.txt",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/reconcile_population.py.txt",
       "sha256": "cd964d3ac5bc6aafc8e480a2fb3b11b179409aecbf89d8714db5b7615dbaec09",
       "byte_size": 1846
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/reconcile_source_union.py.txt",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/reconcile_source_union.py.txt",
       "sha256": "174ade63927790c9cde2d228505fa6662a0ae791ecb57743a017de6c9d25e55f",
       "byte_size": 3299
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/recording_manifest.py.txt",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/recording_manifest.py.txt",
       "sha256": "e45dbfcae0d2090fe760099b2822f16c0666c739afa27a3eb1e0a786358296d2",
       "byte_size": 884
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/source-population-union.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/source-population-union.json",
       "sha256": "bc25ebfdaf931b2f4880ff9eca54a1c1cb0d627773d4ed1cd1d2c46f6772165d",
       "byte_size": 52953
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/source-row-conflicts.json",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/source-row-conflicts.json",
       "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
       "byte_size": 3
     },
     {
-      "repository_path": "research/station-coverage/br_ana/inventory/source-row-occurrences.json.xz",
+      "repository_path": "maintenance/catalogue/br_ana/inventory/source-row-occurrences.json.xz",
       "sha256": "1e2e514dc1ee81fa24020161987c0f9fe73aefe5155649546baf0692308fc795",
       "byte_size": 2064572
     }

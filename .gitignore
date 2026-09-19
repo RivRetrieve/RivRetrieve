@@ -20,13 +20,12 @@ Thumbs.db
 # Jupyter notebooks
 *.ipynb
 
-# Scratchpad (keep folder, ignore contents)
-scratchpad/*
-!scratchpad/.gitkeep
-
-# PCE planning artifacts: keep only the audit record of a delivered vision.
-# The immutable *.executions.json gate sidecars are raw evidence, large, and
-# regenerable from the verdicts they back, so they stay local.
+# Local scratch and execution records
+scratchpad/
 planning/*
-!planning/2026-08-08-the-surface-is-three-verbs-and-a-selection/
-planning/**/*.executions.json
+!planning/visions/
+planning/visions/*
+!planning/visions/*.md
+
+# Local installed-distribution validation environments and extracted sdists
+.distribution-checks/

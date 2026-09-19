@@ -2,41 +2,65 @@
 
 ## Getting started
 
-Follow the [installation and first retrieval](../README.md#install).
-Then inspect the [returned data and issues](usage.md#retrieve-and-inspect-results).
+New here? Install RivRetrieve and run the [first retrieval](../README.md#install), then see what
+comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
 
-## Software documentation
+## Using RivRetrieve
 
-- [Usage](usage.md): discovery, selection, retrieval, windows, issues, supplied credentials,
-  cache, receipts and optional mapping.
-- [CAMELS-US example](examples/camels-us.md): retrieve recent daily streamflow for three gauges.
-- [API and software reference](reference.md): public signatures, types and generated declarations.
-- [Architecture](architecture.md): purpose, responsibilities, a traced request, contracts and verification.
-- [Catalogue evidence](catalogue-evidence.md): normalized acquisition evidence and inspection.
-- [Catalogue absence](catalogue-absence.md): distinguish withheld facts from source silence.
+- [Usage](usage.md): finding stations, selecting series, retrieving them, time windows, issues,
+  credentials, cache and receipts.
+- [CAMELS-US example](examples/camels-us.md): how to extend the original CAMELS time series to recent daily streamflow for three gauges.
+- [Drainage-area metadata](drainage-areas.md): offline access to source area fields for selected gauges.
+- [API reference](reference.md): the public functions, their arguments and the columns they return.
 
 ## Providers
 
-Provider descriptions belong to the colleague responsible for source background, coverage
-and credential acquisition. This section is a handoff placeholder, not a provider survey.
-The [software reference](reference.md) records shipped declarations without interpreting coverage.
+RivRetrieve supports observation retrieval from 12 national agencies. The
+[README](../README.md#river-data-and-where-to-find-them) lists them with their station counts.
 
-## Detailed and historical records
+The data belong to those agencies, and they document their own networks far better than we could.
+These pages therefore cover only what you need in order to work with a provider through
+RivRetrieve, and link to the agency for everything else.
 
-The pages above describe current software. Earlier design documents preserve the reasoning
-at their recorded revision. Their API names, provider counts and execution details can be
-superseded. Use them as history rather than as current usage instructions.
+Whatever the provider, RivRetrieve gives you the same things:
 
-- [Domain vocabulary](../CONTEXT.md). Historical operational counts are not a capability census.
+- **Stations**: an identifier, a position where recorded, and the station’s catalogued products.
+- **Products**: a variable (discharge, stage or water temperature), a statistic (mean, maximum,
+  minimum or an instantaneous reading) and a time step (daily, hourly or irregular). Statistics
+  and time steps remain `unknown` where they are not established.
+- **Units**: discharge in m³/s, stage in m, and water temperature in °C.
+- **Times**: as the agency publishes them, each with its time zone, which is `unknown` when the
+  agency does not state one.
+- **Terms and citation**: these stay with the agency. Check them before using the data.
+
+A page for each provider, describing its network, what it measures and how to cite it, is being
+written.
+
+## How it works
+
+- [Architecture](architecture.md): responsibilities, a traced request, contracts and verification.
+- [Catalogue evidence](catalogue-evidence.md): what RivRetrieve records about where catalogue facts
+  came from, and how to inspect it.
+- [Catalogue absence](catalogue-absence.md): why a missing fact is not the same as a source saying
+  nothing.
+
+## Project records
+
+The pages above describe the software as it is today. The records below preserve the reasoning at
+the time they were written: their API names, provider counts and execution details may since have
+been superseded. Read them as history rather than as instructions.
+
 - [Catalogue provenance](catalogue-provenance.md).
-- [Provider port evidence](provider_ports/) and [evidenced inventory account](provider_ports/evidenced_coverage.md).
-- [Design analyses](design/) and [delivery records](milestones/).
+- [Evidenced inventory account](provider_ports/evidenced_coverage.md). Its recorded limitations
+  still apply: it does not establish countrywide inventory completeness or continuous observation
+  history.
+- [Provider port notes](provider_ports/): what was established about each source when it was
+  added.
+- [Observation store layout](design/observation-store-layout.md): the normative store specification.
 - [Development conventions](development-conventions.md).
 
-The inventory account's recorded limitations remain applicable. It does not establish
-countrywide inventory completeness or continuous observation history.
-
-Existing provider port evidence notes:
+<details>
+<summary>Port notes, one per provider</summary>
 
 - [ba_fhmzbih](provider_ports/ba_fhmzbih.md)
 - [br_ana](provider_ports/br_ana.md)
@@ -52,17 +76,16 @@ Existing provider port evidence notes:
 - [usgs_nwis](provider_ports/usgs_nwis.md)
 - [za_dws](provider_ports/za_dws.md)
 
-## Local documentation checks
+</details>
 
-Markdown reads directly on GitHub. No site build, credentials or bulk download is needed.
-From a source checkout, run:
+## Checking the docs locally
+
+No site build, credentials or bulk download is needed. From a source checkout, run:
 
 ```bash
 uv run python scripts/generate_reference.py --check
 uv run pytest -q tests/test_documentation.py
 ```
 
-The tests replay committed source bytes through the public API. They do not test current
-service availability. Validation evidence is recorded in the
-[documentation PR](https://github.com/RivRetrieve/RivRetrieve/pull/246).
-Hosting is deferred and is not delivered by these pages.
+The tests replay committed source bytes through the public API. They do not test whether a
+provider's service is available today.
