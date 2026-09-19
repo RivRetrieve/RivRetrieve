@@ -855,10 +855,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(
-                    Path(__file__).parents[1]
-                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
-                ),
+                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",
                 "out",
                 "--hydro-fixture",
@@ -871,10 +868,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(
-                    Path(__file__).parents[1]
-                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
-                ),
+                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",
                 "out",
                 "--temp-fixture",
@@ -887,10 +881,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(
-                    Path(__file__).parents[1]
-                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
-                ),
+                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",
                 "out",
                 "--native-out",
@@ -903,10 +894,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(
-                    Path(__file__).parents[1]
-                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
-                ),
+                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",
                 "out",
                 "--hydro-retrieved-at",
@@ -919,10 +907,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(
-                    Path(__file__).parents[1]
-                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
-                ),
+                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",
                 "out",
                 "--temperature-retrieved-at",
@@ -1291,10 +1276,7 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(
-                    Path(__file__).parents[1]
-                    / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
-                ),
+                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",
                 str(tmp_path),
             ]

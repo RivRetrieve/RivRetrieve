@@ -26,8 +26,7 @@ from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOG
 FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
 LEDGER_PATH = (
-    Path(__file__).parents[1]
-    / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
+    Path(__file__).parents[1] / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 
 
