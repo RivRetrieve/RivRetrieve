@@ -852,6 +852,14 @@ def _fetch_provider_series(
         if selected_series.product_id not in product_ids:
             product_ids.append(selected_series.product_id)
     transport = _credentialed_transport(provider_id, credentials)
+    if provider_id == "ch_foen":
+        from rivretrieve._internal.coverage import RequestedInterval
+        from rivretrieve._internal.driver import _padded_interval
+        from rivretrieve._internal.providers.ch_foen.access import compose_transport
+
+        transport = compose_transport(
+            transport, _padded_interval(RequestedInterval(start, end)), _SystemClock().utcnow()
+        )
     results = tuple(
         handle.observations(
             stations=station_id,
