@@ -175,9 +175,41 @@ def test_station_metadata_is_independent_of_retained_map_coordinates() -> None:
     assert_frame_equal(rr.drainage_areas(without_coordinates), expected)
 
 
-def test_catalogue_only_station_metadata_without_numeric_admission() -> None:
+def test_catalogue_only_station_metadata_without_numeric_admission(monkeypatch: pytest.MonkeyPatch) -> None:
     from dataclasses import replace
 
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.ch_foen.declaration import declaration as swiss_declaration
+    from rivretrieve._internal.providers.za_dws.declaration import declaration
+    from rivretrieve._internal.registry import ProviderRegistry
+    from rivretrieve._internal.source_series import EvidenceFact, PhysicalFacts, admission, stable_id
+
+    # Controlled missing-unit catalogue, not a claim about current DWS evidence.
+    # Keep real station metadata and pass unadmitted facts through public discovery.
+    artifact = load_packaged_catalogue_artifact(declaration.catalogue)
+    assert artifact.source_descriptions is not None
+    descriptions = []
+    for description in artifact.source_descriptions.descriptions:
+        facts = []
+        for original in description.facts:
+            unknown_unit = PhysicalFacts.model_validate(
+                original.model_dump() | {"source_unit": EvidenceFact(), "normalized_unit": None}
+            )
+            unknown_unit = unknown_unit.model_copy(
+                update={"facts_id": stable_id(unknown_unit.model_dump_json(exclude={"facts_id"}))}
+            )
+            assert admission(unknown_unit).status == "unsupported"
+            facts.append(unknown_unit)
+        descriptions.append(description.model_copy(update={"facts": tuple(facts)}))
+    unsupported = replace(
+        artifact,
+        source_descriptions=artifact.source_descriptions.model_copy(update={"descriptions": tuple(descriptions)}),
+    )
+    registry = ProviderRegistry()
+    registry.register("za_dws", unsupported)
+    registry.register("ch_foen", load_packaged_catalogue_artifact(swiss_declaration.catalogue))
+    monkeypatch.setattr(discovery, "_registry", registry)
+    monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
     selected = rr.find(provider="za_dws", station="A1H001")
     assert not selected.series
     assert len(selected.locations) == 1

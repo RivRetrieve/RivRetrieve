@@ -25,7 +25,7 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
 )
 DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py"}
-DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
+DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py", "catalogue_series.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
