@@ -124,7 +124,7 @@ class AccumulatedStoreManifest:
     Attributes
     ----------
     format_version : int
-        Accumulated layout revision, 6.
+        Accumulated layout revision, 7.
     provider_id : ProviderId
         Provider whose native observations are stored.
     built_at : datetime
@@ -135,7 +135,7 @@ class AccumulatedStoreManifest:
         Exact physical row counts keyed by product/year.
     """
 
-    format_version: Literal[6]
+    format_version: Literal[7]
     provider_id: ProviderId
     built_at: datetime
     coverage: tuple[CoverageInterval, ...]
@@ -285,7 +285,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
     version = raw["format_version"]
     if type(version) is not int:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
-    if version not in (5, 6):
+    if version not in (5, 7):
         _refuse(
             StoreRefusalKind.INCOMPATIBLE,
             store,
@@ -314,7 +314,7 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
 def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
-    if raw["format_version"] == 6:
+    if raw["format_version"] == 7:
         schema = schema["$defs"]["accumulated"]
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
@@ -613,7 +613,7 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     if raw["provider_id"] != str(provider_id):
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
     _validate_metadata(raw, store, provider_id)
-    if raw["format_version"] == 6:
+    if raw["format_version"] == 7:
         return _validate_accumulated(raw, store, provider_id)
     _validate_source_contract(raw, store, provider_id)
     partition_files = _discover_partitions(raw, store, provider_id)
@@ -700,7 +700,7 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
     _validate_series_partitions(raw, partitions, store, provider_id)
     manifest = AccumulatedStoreManifest(
-        format_version=6,
+        format_version=7,
         provider_id=provider_id,
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
         coverage=tuple(coverage),

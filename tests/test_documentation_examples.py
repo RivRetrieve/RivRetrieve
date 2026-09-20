@@ -152,7 +152,7 @@ def assert_usage_state(scope, tmp_path):
     assert len(scope["_transport"].calls) == before
     assert_frame_equal(cached.data, result.data)
     assert cached.receipts.entries[0].authorship.value == "store_excerpt"
-    assert cached.receipts.entries[0].format_version == 6
+    assert cached.receipts.entries[0].format_version == 7
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
     assert excerpt.height >= cached.data.height
     assert fresh.provenance.retrieved_at == read_recording(RECORDING).retrieved_at

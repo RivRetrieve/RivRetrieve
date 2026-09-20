@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rivretrieve.org/schemas/observation-store-manifest-5.json",
-  "$comment": "Revision 5 compiled stores and revision 6 accumulated stores retain concrete source identity, physical facts, scoped inventory and outcomes.",
+  "$comment": "Revision 5 compiled stores and revision 7 accumulated stores retain concrete source identity, physical facts, scoped inventory and outcomes.",
   "title": "RivRetrieve observation-store manifest",
   "type": "object",
   "additionalProperties": false,
@@ -282,7 +282,7 @@
       ],
       "properties": {
         "format_version": {
-          "const": 6
+          "const": 7
         },
         "provider_id": {
           "type": "string",
