@@ -354,5 +354,16 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
         assert oracle["providers"][provider]["ordered_model_sha256"] == (
             "28e9cc34f71f4fd3712c69cc205c30b8c70d55270cfc04f90e991a55121450a0"
         )
+    if provider == "no_nve":
+        model = restored.model_dump(mode="json")
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "canonical_products")
+        assert binding["transformation"]["name"] == (
+            "NVE parameter-resolution-unit access vocabulary; raw cadence and version-dependent method, "
+            "temporal support and anchor remain unknown at product grain"
+        )
+        # Verify this corrected projection wording, then compare all unchanged
+        # source assertions and ordering against the historical evidence oracle.
+        binding["transformation"]["name"] = "NVE parameter-resolution-unit vocabulary to canonical products"
+        restored = AcquisitionProvenance.model_validate(model)
     ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
     assert sha256(ordered.encode()).hexdigest() == oracle["providers"][provider]["ordered_model_sha256"]

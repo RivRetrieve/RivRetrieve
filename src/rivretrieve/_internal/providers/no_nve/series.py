@@ -28,11 +28,13 @@ def describe_series(
 ) -> SourceSeries:
     quantity, prefix = PARAMETERS[parameter]
     statistic = {"Mean": "mean", "Instantaneous": "instantaneous"}.get(method or "")
-    frequency = {0: "irregular", 60: "hourly", 1440: "daily"}[resolution]
+    frequency = {60: "hourly", 1440: "daily"}.get(resolution)
     # Product is an access coordinate, not authority for statistic or conversion.
     product = prefix + ("_instantaneous" if resolution == 0 else "_hourly_mean" if resolution == 60 else "_daily_mean")
     identity = stable_id("no_nve", station, "HydAPI.version", str(parameter), str(version), str(resolution))
     facts_kwargs = {}
+    if frequency is not None:
+        facts_kwargs["frequency"] = known(frequency, NVE_EVIDENCE + "; resTime=" + str(resolution))
     if statistic is not None:
         facts_kwargs["statistic"] = known(statistic, NVE_EVIDENCE + "; method=" + str(method))
     if source_unit is not None:
@@ -41,7 +43,6 @@ def describe_series(
         facts_id=stable_id(identity, method, source_unit),
         quantity=known(quantity, NVE_EVIDENCE + "; parameter=" + str(parameter)),
         normalized_unit=UNITS.get(source_unit or ""),
-        frequency=known(frequency, NVE_EVIDENCE + "; resTime=" + str(resolution)),
         time_zone=known("+00:00", NVE_EVIDENCE + "; explicit Z timestamp labels"),
         clipping_axis=ClippingAxis.CALENDAR_DATE if resolution == 1440 else ClippingAxis.SOURCE_TIMESTAMP,
         **facts_kwargs,
