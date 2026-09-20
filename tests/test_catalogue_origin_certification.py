@@ -688,15 +688,14 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
             monkeypatch.setattr(adapter.generator, name, denied(f"{adapter.provider_id}.{name}"))
 
     native_before = adapter.native_path.read_bytes()
+    source_inputs_before: dict[Path, bytes] = {}
     output = tmp_path / str(adapter.provider_id)
     arguments = ["--native", str(adapter.native_path), "--out", str(output)]
     if adapter.provider_id == "ba_fhmzbih":
-        arguments.extend(
-            (
-                "--workbook-access-ledger",
-                str(ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"),
-            )
-        )
+        ledger = ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
+        series_recording = ROOT / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"
+        source_inputs_before = {path: path.read_bytes() for path in (ledger, series_recording)}
+        arguments.extend(("--workbook-access-ledger", str(ledger), "--series-recording", str(series_recording)))
     elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (
@@ -731,6 +730,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     assert adapter.main(arguments) == 0
     assert calls == []
     assert adapter.native_path.read_bytes() == native_before
+    assert {path: path.read_bytes() for path in source_inputs_before} == source_inputs_before
 
     catalogue_dir = adapter.native_path.parent
     committed_names = {
