@@ -42,7 +42,8 @@ def test_public_nve_all_versions_include_null_series_without_upstream_selection(
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
+    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((*recordings, metadata)))
     selection = rr.find(
         provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
     )
@@ -51,7 +52,12 @@ def test_public_nve_all_versions_include_null_series_without_upstream_selection(
     assert result.data["series_id"].n_unique() == 3
     assert result.data["value"].null_count() == 1
     assert sorted(result.data["value"].drop_nulls().to_list()) == [26.9778, 74.33918]
-    assert {dict(call["request_parameters"])["VersionNumber"] for call in result.provenance.calls_made} == {1, 2, 3}
+    assert {
+        dict(call["request_parameters"])["VersionNumber"]
+        for call in result.provenance.calls_made
+        if call["url"].endswith("/Observations")
+    } == {1, 2, 3}
+    assert any(call["url"].endswith("/Series") for call in result.provenance.calls_made)
     assert {entry.content for entry in result.receipts.entries} == {recording.content for recording in recordings}
     assert "protocol-only-nve-key" not in repr(result)
 
