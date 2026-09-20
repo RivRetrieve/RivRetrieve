@@ -79,6 +79,8 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
                     "fr_hubeau daily response contains an unexpected grandeur_hydro_elab"
                 )
             timestamp = _naive(row.get("date_obs_elab"))
+            if any((timestamp.hour, timestamp.minute, timestamp.second, timestamp.microsecond)):
+                raise UnsupportedSourceStructureError("fr_hubeau daily observation timestamp must label midnight")
             value = _value(row, "resultat_obs_elab")
             zone = "unknown"
         elif coordinates.family == "temperature":
