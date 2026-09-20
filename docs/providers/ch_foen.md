@@ -70,7 +70,7 @@ with a long-term archive in InfluxDB.
 > These APIs with weather and water data for Switzerland are free for public and non-commercial
 > use, lovingly handcrafted by Christian Studer (Bureau für digitale Existenz).
 
-**It asks for credit to FOEN:**
+**It asks for credit to FOEN.** BAFU is FOEN’s German abbreviation, from Bundesamt für Umwelt.
 
 > BAFU data needs to be credited and linked to the BAFU.
 
