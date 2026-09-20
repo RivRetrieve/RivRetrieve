@@ -113,7 +113,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m3/s",
     ),
     ProductDefinition(
@@ -122,7 +122,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m",
     ),
 )
