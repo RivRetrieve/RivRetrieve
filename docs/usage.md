@@ -308,6 +308,8 @@ inputs, including preserved downloads. It returns a removal summary and leaves o
 alone. See [architecture](architecture.md#storage-and-reuse) for storage details.
 
 Canada (`ca_eccc`) and Poland (`pl_imgw`) use compiled stores prepared from bulk downloads.
+Polish archive series have established daily frequency but no archive-wide statistic.
+They match daily quantity filters, not a `statistic="mean"` filter.
 Without a store, retrieval returns an empty result and an issue. It does not start a national
 download. Calling `download(provider)` gives explicit consent to that transfer, which can use
 substantial bandwidth and disk space:

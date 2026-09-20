@@ -43,7 +43,7 @@
         },
         {
           "evidence_id": "za_dws_observation_terms_absence",
-          "description": "Archived observation-shaped response examined without an applicable terms or citation statement",
+          "description": "Archived A2H023 Monthly response publishes Variable 100.00 Surface Water Level and monthly volumes in million cubic metres; no equivalence with D_AVG_FR, COR_FLOW or COR_LEVEL is established. No applicable terms or citation statement.",
           "recording": {
             "recording_id": "za_dws_terms_observation_absence",
             "repository_path": "tests/test_data/za_dws_terms_licence-5.html",
@@ -59,7 +59,8 @@
   ],
   "descriptions": [
     "Internet Archive intermediary capture of DWS Verified Hydrology HyCatalogue.aspx and all eight linked WMA River PDFs; 2,905 stations",
-    "Exact DWS Verified Hydrology HyData.aspx request and response retained at runtime"
+    "Historical daily response fixture recovered unchanged from commit df1b17778fb1f5d8db8eb3a803822571dc1dde85; commit attests live capture; instant is repository provenance lower bound, not HTTP capture. Point response completeness is unestablished. Used for field definitions only.",
+    "Historical point response fixture recovered unchanged from commit df1b17778fb1f5d8db8eb3a803822571dc1dde85; commit attests live capture; instant is repository provenance lower bound, not HTTP capture. Point response completeness is unestablished. Used for field definitions only."
   ],
   "transformations": [
     {
@@ -73,22 +74,22 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "54b116c706538c5e3abd408296e334987b4bd44e8e030eaaef6ed4e285f409bc",
-      "byte_count": 2565,
+      "sha256": "d3b22ec938fa45526bc0c808727ab9e37ce2cfcfb06c2739117f2f596fa36a12",
+      "byte_count": 2548,
       "row_count": 38,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
       "path": "provenance_acquisitions.parquet",
-      "sha256": "3bfc9bd15203e80ec7f11ab1870e423b860479dbf2efec1788e8234a34dd5c18",
-      "byte_count": 6696,
-      "row_count": 2,
+      "sha256": "9a44c514ee59dc21d8f9d87b9ab492f4758722053c96928e3c488f8a33c8f1f0",
+      "byte_count": 8040,
+      "row_count": 3,
       "schema_version": 3
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "53ec0459035af80346580815ea5e1cc05116a569836eb6b4b56b4bdfa4994b22",
-      "byte_count": 2208,
+      "sha256": "d083fd5eec7135a2b24703cc8eca9341deed9cc196c144d1c0865a5f2b46b556",
+      "byte_count": 2214,
       "row_count": 7,
       "schema_version": 3
     },
@@ -101,9 +102,9 @@
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "2382d654a6f8729e752ae7067f87d6f9235d50e4c387119504c628137acbc204",
-      "byte_count": 1533,
-      "row_count": 6,
+      "sha256": "b740b785ace875dc9c2b81a395cecda901f568548f499981b95844503162b9f7",
+      "byte_count": 1541,
+      "row_count": 7,
       "schema_version": 3
     }
   }

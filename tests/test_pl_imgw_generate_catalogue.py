@@ -266,7 +266,7 @@ def test_generate_catalogue_station_fields() -> None:
 def test_generate_catalogue_product_ids() -> None:
     cat = _synthetic_catalogue()
     ids = set(cat.products["product_id"].to_list())
-    assert ids == {"discharge_daily_mean", "stage_daily_mean", "water_temperature_daily_mean"}
+    assert ids == {"discharge_daily", "stage_daily", "water_temperature_daily"}
 
 
 def test_generate_catalogue_all_availability_unknown() -> None:
@@ -756,8 +756,8 @@ def test_native_build_matches_independent_exact_full_projections() -> None:
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: the source publishes all-station yearly ZIP files; RivRetrieve's "
-            "catalogue-only provider exposes neither observation retrieval nor cache controls"
+            "true: explicit download compiles the publisher's monthly or annual ZIP archives "
+            "into a local native observation store; retrieval reads that store without network access"
         ),
         "catalogue_version": "2025-10-10",
         "license": None,
@@ -806,10 +806,10 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert (
-        hashlib.sha256(provider_bytes).hexdigest() == "0b5f0541b6a4adf464e576968837173b92dde6821c4591dfe6adf9a667b4ca2d"
+        hashlib.sha256(provider_bytes).hexdigest() == "a164bc24e10b79fafb644b6bbcb8b5321de0dfa53a8e128302783f352a3899bc"
     )
-    assert _frame_content_sha256(products) == "cd9158f219a403584ef28a1d3fe6fad80b7768b2e0440beda1a48614790addd5"
+    assert _frame_content_sha256(products) == "729522bc4646c0342f85e9d3213dba02804bd34a9104761913a73bb0389d2327"
     assert _frame_content_sha256(stations) == "738b3a71030b3ef7dfe6763a2780cabae6e00cffd2bad9e1f7b1222238de71f9"
     assert _frame_content_sha256(station_products) == (
-        "b03363ee1104062b8cc3a166873ac5c4ab54b19bb4abd49f20a74427f67ba865"
+        "aa3fce5b14c164cd896b7911aaca206eb7dafa3f0cfb731938e6481aff1eec9e"
     )
