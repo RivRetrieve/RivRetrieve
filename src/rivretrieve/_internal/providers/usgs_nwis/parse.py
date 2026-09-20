@@ -66,6 +66,22 @@ def _method_identity(method: dict[str, Any]) -> tuple[str, str]:
     raise ValueError("Missing or malformed published method identity")
 
 
+def _no_data_value(variable: dict[str, Any]) -> tuple[float | None, str | None]:
+    """Validate a declared source marker; absence does not define a default marker."""
+    if "noDataValue" not in variable:
+        return None, None
+    raw = variable["noDataValue"]
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return None, "Declared noDataValue must be a finite non-boolean number"
+    try:
+        value = float(raw)
+    except OverflowError:
+        return None, "Declared noDataValue is outside the supported finite numeric range"
+    if not math.isfinite(value):
+        return None, "Declared noDataValue must be finite"
+    return value, None
+
+
 def _facts(variable: dict[str, Any], coordinates: UsgsNwisSourceCoordinates) -> PhysicalFacts:
     parameter = variable.get("variableCode", [])
     code = parameter[0].get("value") if len(parameter) == 1 else None
@@ -204,8 +220,9 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 mismatch = "Returned statistic contradicts requested coordinates"
             if coordinates.endpoint == "iv" and statistics not in ([], ["00000"]):
                 mismatch = "Returned statistic contradicts the instantaneous-values service"
+            no_data_value, sentinel_reason = _no_data_value(variable)
             decision = admission(facts)
-            reason = mismatch or decision.reason
+            reason = mismatch or decision.reason or sentinel_reason
             blocks = item["values"]
             if not isinstance(blocks, list):
                 raise ValueError("values is not a list")
@@ -305,7 +322,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                             if isinstance(raw, bool):
                                 raise ValueError("Boolean observation value is not a numeric measurement")
                             number = None if raw is None else float(raw)
-                            if number == variable.get("noDataValue", -999999.0):
+                            if no_data_value is not None and number == no_data_value:
                                 number = None
                             if number is not None and not math.isfinite(number):
                                 raise ValueError("Non-finite observation value")

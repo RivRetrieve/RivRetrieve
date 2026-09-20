@@ -125,6 +125,9 @@ def test_narrowed_result_policy_ignores_excluded_failure_but_preserves_history(m
         failed_view = rr.pick(result, variant="99999", on_issue=policy)
         assert failed_view.data.is_empty()
         assert failed_view.outcomes == result.outcomes
+    with pytest.raises(IssuePolicyError) as empty_error:
+        rr.pick(result, series_id=[], on_issue="raise")
+    assert [item.code for item in empty_error.value.issues] == ["selection.no_match"]
 
 
 def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(monkeypatch, tmp_path):
@@ -402,3 +405,47 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch,
         rr.pick(result, series_id="unresolved-global-id", on_issue="raise")
     assert any(item.code == "source.inventory_unresolved" for item in unresolved.value.issues)
     assert len(calls) == count
+
+
+@pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.parametrize("restriction", ["disjoint", "empty-list"])
+def test_current_empty_result_view_diagnostics_follow_policy(monkeypatch, tmp_path, policy, restriction):
+    recording = read_recording(
+        Path(__file__).parent / "test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
+    calls = _counted_replay(monkeypatch, (recording,))
+    selected = rr.pick(
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        variant="2",
+        on_issue="raise",
+    )
+    result = rr.fetch(selected, start="2024-01-02", end="2024-01-02", on_issue="raise", receipts=True)
+    restriction_values = {"variant": "1"} if restriction == "disjoint" else {"series_id": []}
+
+    def check(value):
+        if policy == "raise":
+            with pytest.raises(IssuePolicyError) as raised:
+                rr.pick(value, **restriction_values, on_issue=policy)
+            assert any(item.code == "selection.no_match" for item in raised.value.issues)
+            return None
+        if policy == "warn":
+            with pytest.warns(RuntimeWarning, match="No source series matches"):
+                return rr.pick(value, **restriction_values, on_issue=policy)
+        return rr.pick(value, **restriction_values, on_issue=policy)
+
+    check(selected)
+    check(rr.pick(selected, **restriction_values, on_issue="ignore"))
+    check(rr.pick(result, **restriction_values, on_issue="ignore"))
+    narrowed = check(result)
+    if narrowed is not None:
+        assert narrowed.data.is_empty()
+        assert narrowed.scope == result.scope
+        assert narrowed.outcomes == result.outcomes
+        assert narrowed.provenance == result.provenance
+        assert narrowed.receipts == result.receipts
+        assert narrowed.issues[: len(result.issues)] == result.issues
+        assert any(item.code == "selection.no_match" for item in narrowed.issues)
+        check(narrowed)
+    assert len(calls) == 1

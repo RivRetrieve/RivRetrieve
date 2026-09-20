@@ -228,6 +228,7 @@ def pick(
         from rivretrieve._internal.selection import _with_selection_diagnostics
 
         selected = _with_selection_diagnostics(selected, "ignore")
+        current_issues = _selection_issues_for_result(selected, selection)
         result = ObservationResult(
             data=selection.data.filter(predicate),
             provenance=selection.provenance,
@@ -237,9 +238,10 @@ def pick(
             outcomes=selection.outcomes,
             scope=selection.scope,
             view_scope=scope,
-            issues=(*selection.issues, *_selection_issues_for_result(selected, selection)),
+            issues=(*selection.issues, *current_issues),
         )
-        apply_on_issue(tuple(issue for issue in result.issues if _issue_applies_to_view(issue, result)), on_issue)
+        historical_issues = tuple(issue for issue in selection.issues if _issue_applies_to_view(issue, result))
+        apply_on_issue((*historical_issues, *current_issues), on_issue)
         return result
     return _selection_pick(_registry.iter_records(), selection, on_issue=on_issue, **filters)
 
