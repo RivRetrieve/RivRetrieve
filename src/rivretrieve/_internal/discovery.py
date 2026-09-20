@@ -370,7 +370,7 @@ def as_frame(selection: _Selection) -> pl.DataFrame:
 
 
 def from_frame(frame: pl.DataFrame) -> _Selection:
-    """Refuse obsolete triple-only imports; use a validated versioned export bundle."""
+    """Frame imports are unsupported; use a validated versioned export bundle."""
     return _selection_from_frame((), frame)
 
 

@@ -304,7 +304,7 @@ rivretrieve.from_frame(frame: 'pl.DataFrame') -> '_Selection'
 
 Import: `from rivretrieve import from_frame`.
 
-Refuse obsolete triple-only imports; use a validated versioned export bundle.
+Frame imports are unsupported; use a validated versioned export bundle.
 
 ### `map`
 
