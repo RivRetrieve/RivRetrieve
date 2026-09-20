@@ -1,4 +1,4 @@
-# Switzerland — FOEN, through Existenz.ch
+# Switzerland: FOEN, through Existenz.ch
 
 [Documentation index](../README.md) · [Usage](../usage.md)
 
@@ -11,7 +11,7 @@
 | Quantities | Discharge, stage, water temperature |
 | Stations in the catalogue | 246 locations, not confirmed availability for every quantity |
 | Credentials | No personal credentials required |
-| Terms | BAFU: free use, citation recommended; Existenz.ch: public and non-commercial use, BAFU credit and link requested |
+| Terms | FOEN: free use, citation recommended; Existenz.ch: public and non-commercial use, FOEN credit and link requested |
 | Agency documentation | [hydrodaten.admin.ch](https://www.hydrodaten.admin.ch/en), [Existenz.ch API](https://api.existenz.ch/) |
 
 Retrieve January 2024 discharge at station `2018`, selecting the source's `flow` field:
@@ -21,9 +21,12 @@ import rivretrieve as rr
 
 selection = rr.find(provider="ch_foen", station="2018", quantity="discharge")
 flow = rr.pick(selection, variant="flow")
+
 result = rr.fetch(flow, start="2024-01-01", end="2024-01-31", cache="bypass")
 
-print(result.data.select("time", "time_zone", "value", "unit").head(3).write_csv(), end="")
+preview = result.data.select("time", "time_zone", "value", "unit").head(3)
+print(preview.write_csv(), end="")
+
 print(result.data.height)
 print(result.issues)
 ```
@@ -49,30 +52,30 @@ Run the examples below in the same Python session.
 
 ## Who measures, and who publishes
 
-The measurements are BAFU's: the Federal Office for the Environment runs Switzerland's
+The measurements are FOEN's: the Federal Office for the Environment runs Switzerland's
 national hydrological monitoring network and publishes current values on
 [hydrodaten.admin.ch](https://www.hydrodaten.admin.ch/en).
 
-RivRetrieve does not read BAFU directly. It reads **Existenz.ch**, a service built by Christian
-Studer (Bureau für digitale Existenz) that republishes BAFU's hydrology data through an API,
-with a long-term archive in InfluxDB. This intermediary matters for three reasons.
+RivRetrieve does not read FOEN directly. It reads **Existenz.ch**, a service built by Christian
+Studer (Bureau für digitale Existenz) that republishes FOEN's hydrology data through an API,
+with a long-term archive in InfluxDB.
 
 **It is unofficial.** Existenz.ch says:
 
 > These APIs are unofficial. There is no guarantee of availability or top performance. They are
 > actively monitored though.
 
-**It states a non-commercial condition of its own**, separate from BAFU's data terms:
+**It states a non-commercial condition of its own**, separate from FOEN's data terms:
 
 > These APIs with weather and water data for Switzerland are free for public and non-commercial
 > use, lovingly handcrafted by Christian Studer (Bureau für digitale Existenz).
 
-**It asks for credit to BAFU:**
+**It asks for credit to FOEN:**
 
 > BAFU data needs to be credited and linked to the BAFU.
 
-BAFU's own terms allow commercial use (see [Terms](#terms)). If Existenz.ch's conditions do
-not suit your work, obtain data directly from BAFU instead. RivRetrieve does not decide that
+FOEN's own terms allow commercial use (see [Terms](#terms)). If Existenz.ch's conditions do
+not suit your work, obtain data directly from FOEN instead. RivRetrieve does not decide that
 for you.
 
 ## What you can retrieve
@@ -86,8 +89,9 @@ for you.
 | `temperature` | `temperature` | °C | °C |
 
 Swiss variants identify **source fields**, not processing or consistency statuses.
-`flow_ls` retains a separate series identity from `flow`; its values are converted from
-litres per second to cubic metres per second.
+Existenz publishes discharge in two fields: `flow` in m³/s and `flow_ls` in litres per second.
+RivRetrieve returns both in m³/s, dividing `flow_ls` values by 1,000. The original field names
+remain visible so you can identify the source. A station may provide only one of these fields.
 
 The parameter dictionary labels `height` as **Pegel m ü. M.**, establishing a reference above
 sea level but not a specific vertical datum. It labels `height_abs` as **Pegel m**, without
@@ -97,9 +101,11 @@ interchangeable.
 Inspect the discharge candidates before deciding which field to request:
 
 ```python
-print(rr.series(selection).select(
+candidates = rr.series(selection).select(
     "station_id", "variant", "quantity", "source_unit", "unit", "frequency", "statistic"
-).rows())
+)
+
+print(candidates.rows())
 ```
 
 Output:
@@ -118,6 +124,7 @@ The example above selects `flow`. To select the other candidate:
 
 ```python
 flow_ls = rr.pick(selection, variant="flow_ls")
+
 print(rr.series(flow).select("variant").rows())
 print(rr.series(flow_ls).select("variant").rows())
 ```
@@ -132,20 +139,22 @@ Output:
 This only narrows the selection; it does not retrieve `flow_ls` observations or promise that
 they exist at this station.
 
-`None` in the inspection output means frequency and statistic are not established. Temporal
-support, the interval represented by a value, is also unestablished for these fields.
-Existenz.ch documents a ten-minute feed periodicity. BAFU's FAQ describes normally five- or
-ten-minute means, rarely two-minute means, and beginning-of-interval labels in exported files.
-Those descriptions are not yet bound to each intermediary field in RivRetrieve. Feed updates
-alone do not establish a field's frequency or averaging interval. RivRetrieve does not turn
-these values into unpublished daily means.
+RivRetrieve does not yet know the averaging period of these fields, so frequency and statistic
+appear as `None`. Existenz updates its feed every ten minutes. FOEN describes its measurements
+as usually five- or ten-minute averages, occasionally two-minute averages. However, we have not
+established which averaging period applies to each Existenz field.
+
+FOEN also labels exported values at the beginning of the measurement interval. RivRetrieve has
+not established whether that convention applies to each Existenz field. It does not calculate
+daily means from these values.
 
 ## Recent and older values
 
 Existenz.ch's REST API serves the last 32 days; older values are available through its
-InfluxDB archive. RivRetrieve uses REST when its padded request window stays within that
-horizon, and the archive for older or horizon-crossing windows. Padding can make a request
-near the cutoff use the archive even when its requested dates are within 32 days.
+InfluxDB archive. To retrieve observations, RivRetrieve requests a slightly wider period than
+the dates supplied, then removes values outside the requested dates. It uses REST when that
+wider period stays within the last 32 days. Otherwise, it uses the archive. A request near the
+32-day cutoff can therefore use the archive even when the supplied dates are more recent.
 
 Neither route requires you to supply personal credentials. Archive access uses Existenz.ch's
 published shared read-only credential, supplied internally by RivRetrieve. If the publisher
@@ -154,7 +163,7 @@ Availability still depends on what the intermediary has retained for the station
 
 ## Data status
 
-BAFU's conditions for downloading **current measurements** describe them as provisional:
+FOEN's conditions for downloading **current measurements** describe them as provisional:
 
 > Da es sich bei den Messdaten um provisorische Daten handelt, sind Abweichungen gegenüber den
 > definitiven Daten nicht auszuschliessen.
@@ -169,14 +178,12 @@ assign a quality judgement to the archived values.
 For this intermediary route, returned `time` values are UTC wall-clock labels accompanied by
 `time_zone="+00:00"`. Read those columns together: the datetime column itself is timezone-naive.
 This describes Existenz.ch's timestamps, not every FOEN product or export. In particular,
-BAFU's FAQ describes historical agency data in year-round winter time (UTC+1), while current
+FOEN's FAQ describes historical agency data in year-round winter time (UTC+1), while current
 raw data and forecasts use local time with seasonal offsets.
 
 ## Terms
 
-Two layers apply, and they differ.
-
-**BAFU, the data owner.** Its
+**FOEN, the data owner.** Its
 [general conditions for obtaining, downloading and using current hydrological raw data and forecasts](https://www.bafu.admin.ch/dam/en/sd-web/5NAitqNKub6m/allgemeine_bedingungenfuerdasherunterladenaktuellerhydrologische.pdf)
 (16 September 2019), section 8, state:
 
@@ -187,7 +194,7 @@ In English, unofficially: the user may use the data for commercial and non-comme
 citing the source is recommended. The same conditions ask users not to download more often
 than every ten minutes.
 
-BAFU's [terms of use and source citation](https://www.hydrodaten.admin.ch/en/questions#faq-7)
+FOEN's [terms of use and source citation](https://www.hydrodaten.admin.ch/en/questions#faq-7)
 put it in English:
 
 > Data can be used freely; we recommend citing the source.
@@ -197,9 +204,9 @@ They suggest this citation for surface-water data:
 > Hydrology Division, Federal Office for the Environment FOEN (reference date).
 
 **Existenz.ch, the route RivRetrieve reads.** The service states public and non-commercial use,
-asks for BAFU credit and a link, and gives no availability guarantee. It also asks callers to
+asks for FOEN credit and a link, and gives no availability guarantee. It also asks callers to
 identify their application for statistics; RivRetrieve sends its name on REST requests.
-These service conditions are separate from BAFU's data-use terms. Check both before using the
+These service conditions are separate from FOEN's data-use terms. Check both before using the
 data; RivRetrieve does not resolve their legal effect for your use.
 
 ## Sources

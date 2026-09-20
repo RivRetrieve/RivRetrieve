@@ -36,7 +36,7 @@ Whatever the provider, RivRetrieve gives you the same things:
 A page for each provider, describing its network, what it measures and how to cite it, is being
 written:
 
-- [Switzerland — FOEN, through Existenz.ch](providers/ch_foen.md)
+- [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
 
 ## How it works
 
