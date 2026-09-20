@@ -10,8 +10,8 @@ from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries, known, stable_id
 from rivretrieve._internal.store import (
     ArtifactChecksum,
-    DecodedPublisherArtifact,
     Disposition,
+    NativeStoreMaterialization,
     PublisherArtifact,
     SourceColumn,
     SourceColumnDisposition,
@@ -93,7 +93,7 @@ def artifact_and_request(tmp_path: Path, *, columns: tuple[SourceColumn, ...] = 
 
 
 def complete(decoded_rows: pl.DataFrame, *, columns: tuple[SourceColumn, ...] = COLUMNS):
-    return DecodedPublisherArtifact(
+    return NativeStoreMaterialization(
         decoded_rows,
         columns,
         (SourceUnitCount("1998.csv", 1, decoded_rows.height),),
