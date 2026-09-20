@@ -285,6 +285,7 @@ def test_response_discovered_global_ids_are_settled_across_station_results(monke
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypatch, tmp_path, policy):
     import warnings
+    from dataclasses import replace
 
     recordings = tuple(
         read_recording(
@@ -296,6 +297,9 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypa
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     metadata = read_recording(Path(__file__).parent / "test_data/no_nve_109.42.0_1001_series.recording.json")
+    # Authored service-failure control over an exact matched request. A successful
+    # current Series response now settles inventory, so it cannot test uncertainty.
+    metadata = replace(metadata, status_code=503, content=b"Service unavailable", content_type="text/plain")
     calls = _counted_replay(monkeypatch, (*recordings, metadata))
     broad = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean")
     result = rr.fetch(broad, start="2024-01-02", end="2024-01-02", receipts=True, on_issue="ignore")
