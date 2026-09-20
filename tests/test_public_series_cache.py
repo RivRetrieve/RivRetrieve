@@ -162,7 +162,19 @@ def test_nve_explicit_versions_reuse_independent_acquired_inventories(monkeypatc
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
+    # Authored current-metadata failure keeps the acquired all-series inventory incomplete.
+    # Exact observation bytes still establish each independently reusable version.
+    from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
+
+    replay = ReplayTransport(recordings)
+
+    class FailedMetadata:
+        def send(self, request):
+            if request.url.endswith("/Series"):
+                raise TransportFailure(request, TransportFailureReason.RETRY_EXHAUSTED, 3, status_code=503)
+            return replay.send(request)
+
+    monkeypatch.setattr(discovery, "HttpClient", FailedMetadata)
     selection = rr.find(
         provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
     )
@@ -179,9 +191,11 @@ def test_nve_explicit_versions_reuse_independent_acquired_inventories(monkeypatc
     reused = rr.fetch(explicit, start="2024-01-02", end="2024-01-02", cache="reuse", on_issue="raise")
     assert attempted == []
     pt.assert_frame_equal(reused.data, rr.pick(initial, variant=variants, on_issue="ignore").data)
-    assert {int(call["request_parameters"]["VersionNumber"]) for call in reused.provenance.calls_made} == {
-        int(v) for v in variants
-    }
+    assert {
+        int(call["request_parameters"]["VersionNumber"])
+        for call in reused.provenance.calls_made
+        if call["url"].endswith("/Observations")
+    } == {int(v) for v in variants}
 
     assert not any(issue.code == "source.inventory_unresolved" for issue in reused.issues)
     assert all(item.completeness.value == "incomplete" for item in reused.inventories if item.origin != "catalogue")

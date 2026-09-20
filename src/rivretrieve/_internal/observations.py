@@ -204,7 +204,7 @@ class StoreExcerptReceipt(ReceiptEntry):
     executed_query : ExecutedStoreQuery
         Product, year, station and closed wall-clock predicates used by the scan.
     format_version : int
-        Store layout revision, 5 for compiled or 6 for accumulated stores.
+        Store layout revision, 5 for compiled or 7 for accumulated stores.
     source_vintage : datetime.date or None
         Bulk release date. None for an accumulated store.
     """

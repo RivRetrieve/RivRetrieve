@@ -285,6 +285,7 @@ def test_response_discovered_global_ids_are_settled_across_station_results(monke
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypatch, tmp_path, policy):
     import warnings
+    from dataclasses import replace
 
     recordings = tuple(
         read_recording(
@@ -295,10 +296,16 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypa
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
-    calls = _counted_replay(monkeypatch, recordings)
+    metadata = read_recording(Path(__file__).parent / "test_data/no_nve_109.42.0_1001_series.recording.json")
+    # Authored service-failure control over an exact matched request. A successful
+    # current Series response now settles inventory, so it cannot test uncertainty.
+    metadata = replace(metadata, status_code=503, content=b"Service unavailable", content_type="text/plain")
+    calls = _counted_replay(monkeypatch, (*recordings, metadata))
     broad = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean")
     result = rr.fetch(broad, start="2024-01-02", end="2024-01-02", receipts=True, on_issue="ignore")
-    assert len(calls) == 3
+    assert [call.url.rsplit("/", 1)[-1] for call in calls] == ["Series", "Observations", "Observations", "Observations"]
+    assert [call.params["VersionNumber"] for call in calls[1:]] == [1, 2, 3]
+    request_count = len(calls)
     inventory_warning = next(item for item in result.issues if item.code == "source.inventory_unresolved")
 
     def forbidden(*args, **kwargs):
@@ -329,7 +336,7 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypa
     assert inventory_warning in unresolved.value.issues
     with pytest.warns(RuntimeWarning):
         rr.pick(result, variant=("2", "not-established"), on_issue="warn")
-    assert len(calls) == 3
+    assert len(calls) == request_count
 
     with warnings.catch_warnings(record=True) as positive_warnings:
         warnings.simplefilter("always")

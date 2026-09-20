@@ -30,7 +30,7 @@ from rivretrieve._internal.selection import StationLocation, _EmptyReason, _Sele
 from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
 
 _FORMAT = "rivretrieve-source-series"
-_VERSION = 1
+_VERSION = 2
 _PROVENANCE_VALUES = ("request", "calls_made", "time_windows", "query")
 
 

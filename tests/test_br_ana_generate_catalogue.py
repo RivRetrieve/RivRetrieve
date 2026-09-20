@@ -12,14 +12,9 @@ from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.br_ana.generate_catalogue import (
     build_stations,
-    generate_catalogue,
-    generate_catalogue_from_fixture,
-    generate_catalogue_from_live,
     main,
     project_stations,
 )
-
-_METADATA_FIXTURE = Path(__file__).parent / "test_data" / "br_ana_metadata.json"
 
 
 def inventory() -> NativeTable:
@@ -38,28 +33,17 @@ def inventory() -> NativeTable:
     )
 
 
-def test_legacy_fixture_cannot_certify_catalogue() -> None:
-    with pytest.raises(FatalContractError, match="retired"):
-        generate_catalogue_from_fixture(_METADATA_FIXTURE)
-
-
-def test_legacy_live_does_not_acquire_or_echo_credentials() -> None:
-    with pytest.raises(FatalContractError, match="retired") as caught:
-        generate_catalogue_from_live(username="private-identifier", password="private-password")
-    assert "private-" not in str(caught.value)
-
-
-def test_unattested_payload_cannot_build_catalogue() -> None:
-    with pytest.raises(FatalContractError, match="retired"):
-        generate_catalogue([])
-
-
 @pytest.mark.parametrize("mode", [["--fixture", "absent.json"], ["--live"], ["--withhold-uncertified"]])
-def test_retired_cli_fails_before_io(mode: list[str], tmp_path: Path) -> None:
-    output = tmp_path / "not-created"
-    with pytest.raises(FatalContractError, match="retired"):
+def test_removed_cli_is_unrecognized_and_preserves_files(mode: list[str], tmp_path: Path) -> None:
+    output = tmp_path / "existing"
+    output.mkdir()
+    marker = output / "unrelated.bin"
+    marker.write_bytes(b"preserve existing material")
+    with pytest.raises(SystemExit) as caught:
         main([*mode, "--out", str(output)])
-    assert not output.exists()
+    assert caught.value.code == 2
+    assert marker.read_bytes() == b"preserve existing material"
+    assert list(output.iterdir()) == [marker]
 
 
 def test_projection_is_exact_partition_and_preserves_native_strings() -> None:
@@ -142,3 +126,12 @@ def test_attested_inventory_build_has_only_evidenced_station_facts(tmp_path: Pat
     assert pl.read_parquet(tmp_path / "products.parquet").is_empty()
     assert pl.read_parquet(tmp_path / "station_products.parquet").is_empty()
     assert (tmp_path / "croissant.json").is_file()
+
+
+def test_catalogue_date_cannot_override_attested_acquisition(tmp_path: Path) -> None:
+    # The attested native retrieval instant owns catalogue_version. An obsolete
+    # caller date must not be silently accepted or cause input-file I/O.
+    with pytest.raises(SystemExit) as caught:
+        main(["--native", "absent.parquet", "--out", str(tmp_path), "--catalogue-date", "2000-01-01"])
+    assert caught.value.code == 2
+    assert list(tmp_path.iterdir()) == []

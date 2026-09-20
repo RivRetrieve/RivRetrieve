@@ -67,7 +67,13 @@ from rivretrieve._internal.source_series import (
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
 from rivretrieve._internal.store.receipts import encode_store_excerpt
-from rivretrieve._internal.store.validation import AccumulatedStoreManifest, StoreManifest
+from rivretrieve._internal.store.validation import (
+    AccumulatedStoreManifest,
+    ObservationStoreRefusedError,
+    StoreManifest,
+    StoreRefusal,
+    StoreRefusalKind,
+)
 from rivretrieve._internal.transport import (
     AuthenticationCapability,
     HttpClient,
@@ -488,6 +494,103 @@ def _snapshot_matches(snapshot: InventorySnapshot, scope: SeriesScope, window: S
 class _ReusePlan:
     inventories: tuple[InventorySnapshot, ...]
     series: tuple[SourceSeries, ...]
+
+
+def _reconcile_acquired_inventories(
+    acquired: SourceAcquisition,
+    parsed_results: tuple[ParsedSeries, ...],
+    scope: SeriesScope,
+    window: SeriesWindow,
+) -> tuple[InventorySnapshot, ...]:
+    """Keep current inventory knowledge separate from transaction-bounded retrieval proof."""
+    declared = {item.series_id: item for item in acquired.series}
+    observed = tuple(item for parsed in parsed_results for item in parsed.series)
+    outcomes = (*acquired.outcomes, *(item for parsed in parsed_results for item in parsed.outcomes))
+    reconciled = []
+    for snapshot in acquired.inventories:
+        if not _snapshot_matches(snapshot, scope, window):
+            continue
+        reasons: list[str] = []
+        members = set(snapshot.members)
+        declared_facts = dict(snapshot.member_facts)
+        if not members.issubset(declared):
+            reasons.append("Acquisition inventory members lack declared physical definitions")
+        for item in observed:
+            definition = declared.get(item.series_id)
+            if item.series_id not in members or definition is None:
+                reasons.append("An observation response identifies a member outside the acquired inventory")
+                continue
+            if any(
+                fact not in definition.facts
+                or (item.series_id in declared_facts and fact.facts_id not in declared_facts[item.series_id])
+                for fact in item.facts
+            ):
+                reasons.append("Observation physical facts differ from the acquired inventory facts")
+        if acquired.failed_requests or any(
+            outcome.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+            for outcome in outcomes
+        ):
+            reasons.append("This acquisition has failed, unsupported or unresolved observation outcomes")
+        for key in snapshot.members:
+            definition = declared.get(key)
+            if definition is None or not scope.matches(definition):
+                continue
+            for fact in definition.facts:
+                if key in declared_facts and fact.facts_id not in declared_facts[key]:
+                    continue
+                if not scope.matches_facts(fact) or admission(fact).status != "supported":
+                    continue
+                if not any(item.series_id == key and fact in item.facts for item in observed):
+                    reasons.append("A matching admitted member lacks a concrete response definition")
+                coverage = tuple(
+                    RequestedInterval(outcome.window.start, outcome.window.end)
+                    for outcome in outcomes
+                    if outcome.series_id == key
+                    and fact.facts_id in outcome.facts_ids
+                    and outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+                )
+                if remainder(RequestedInterval(window.start, window.end), coverage):
+                    reasons.append("A matching admitted member lacks successful coverage in this acquisition")
+        reason = "; ".join(dict.fromkeys(reasons)) if reasons else None
+        evidence = (
+            *snapshot.evidence,
+            f"source-inventory:{snapshot.snapshot_id}",
+            *(f"retrieval-outcome:{outcome.outcome_id}" for outcome in outcomes),
+        )
+        instants = tuple(
+            instant
+            for instant in (snapshot.acquired_at, *(outcome.retrieved_at for outcome in outcomes))
+            if instant is not None
+        )
+        reconciled.append(
+            InventorySnapshot(
+                snapshot_id=stable_id(
+                    snapshot.snapshot_id, scope.model_dump_json(), window.model_dump_json(), *evidence, reason
+                ),
+                scope=scope,
+                members=snapshot.members,
+                member_facts=tuple(
+                    (
+                        key,
+                        tuple(
+                            fact.facts_id
+                            for fact in declared[key].facts
+                            if key not in declared_facts or fact.facts_id in declared_facts[key]
+                        ),
+                    )
+                    for key in snapshot.members
+                    if key in declared
+                ),
+                completeness=InventoryCompleteness.INCOMPLETE if reasons else InventoryCompleteness.COMPLETE,
+                access=f"{snapshot.access}; reconciled against this retrieval's concrete outcomes",
+                origin="response",
+                acquired_at=max(instants) if instants else None,
+                window=window,
+                evidence=evidence,
+                reason=reason,
+            )
+        )
+    return tuple(reconciled)
 
 
 def _covered_facts(
@@ -1225,7 +1328,9 @@ def drive(
                 fresh_inventories.extend(fetched.inventories)
                 outcomes.extend(fetched.outcomes)
                 fresh_outcomes.extend(fetched.outcomes)
-                cached_calls.extend(_origin_call(origin) for origin in fetched.calls)
+                cached_calls.extend(
+                    {**_origin_call(origin), "station_products": ((station, str(product)),)} for origin in fetched.calls
+                )
                 for event in fetched.failed_requests:
                     target = event.series
                     retain_held_successes((target.series_id,))
@@ -1300,6 +1405,7 @@ def drive(
                         provider_id=request.provider_id,
                     )
                 )
+            transaction_parsed: list[ParsedSeries] = []
             for received in fetched.value:
                 payload = replace(
                     received, scope=received.scope or pair_scope, known_series=received.known_series or pair_series
@@ -1314,6 +1420,7 @@ def drive(
                     raise FatalContractError("Provider parse must return ParsedSeries")
                 _validate_parsed_series(parsed)
                 validate_native_rows(parsed.rows, config.products, series=parsed.series)
+                transaction_parsed.append(parsed)
                 source_series_by_payload.append(tuple(item.series_id for item in parsed.series))
                 _merge_definitions(definitions, parsed.series)
                 _merge_definitions(fresh_definitions, parsed.series)
@@ -1366,10 +1473,24 @@ def drive(
                 failed_ids.difference_update(native.get_column("series_id").to_list())
                 if failed_ids:
                     retain_held_successes(tuple(sorted(failed_ids)))
+                identity_scope = pair_scope.model_copy(update={"predicates": ()})
+                requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
                 for original in parsed.outcomes:
-                    if original.series_id is not None and original.series_id not in selected_ids:
+                    # Failure facts describe the source limitation, not admitted observations.
+                    # Keep that context without relaxing physical filtering of successful rows.
+                    failed = original.status in (
+                        OutcomeStatus.FAILED,
+                        OutcomeStatus.UNSUPPORTED,
+                        OutcomeStatus.UNRESOLVED,
+                    )
+                    eligible_ids = requested_ids if failed else selected_ids
+                    if original.series_id is not None and original.series_id not in eligible_ids:
                         continue
-                    matching_outcome_facts = tuple(key for key in original.facts_ids if key in selected_facts)
+                    matching_outcome_facts = (
+                        original.facts_ids
+                        if failed
+                        else tuple(key for key in original.facts_ids if key in selected_facts)
+                    )
                     if original.facts_ids and not matching_outcome_facts:
                         continue
                     overlap_start = max(window.start, original.window.start)
@@ -1425,6 +1546,10 @@ def drive(
                                 ),
                             )
                         )
+            if isinstance(fetched, SourceAcquisition):
+                reconciled = _reconcile_acquired_inventories(fetched, tuple(transaction_parsed), pair_scope, window)
+                inventories.extend(reconciled)
+                fresh_inventories.extend(reconciled)
             pair_definitions = tuple(
                 item
                 for item in definitions.values()
@@ -1530,6 +1655,16 @@ def drive_store(
     if not isinstance(status.manifest, StoreManifest):
         raise FatalContractError("Bulk retrieval requires a compiled store")
     manifest = status.manifest
+    retired_products = sorted({item.product_id for item in manifest.series} - set(config.products))
+    if retired_products:
+        raise ObservationStoreRefusedError(
+            StoreRefusal(
+                StoreRefusalKind.INCOMPATIBLE,
+                store,
+                request.provider_id,
+                f"compiled source products are no longer supported: {', '.join(retired_products)}",
+            )
+        )
     selected = tuple(item for item in manifest.series if scope.matches(item))
     matching_facts = tuple(
         dict.fromkeys(

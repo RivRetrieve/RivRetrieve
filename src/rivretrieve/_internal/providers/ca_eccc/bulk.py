@@ -20,26 +20,18 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from functools import cache
 from pathlib import Path
 from typing import Final
 
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.source_series import (
-    ClippingAxis,
-    PhysicalFacts,
-    SourceIdentity,
-    SourceSeries,
-    known,
-    stable_id,
-)
+from rivretrieve._internal.providers.ca_eccc.series import source_series
+from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store import (
     ArtifactChecksum,
     Disposition,
     NativeObservationBatch,
-    NativeStoreMaterialization,
     ObservationBatchStream,
     PublisherArtifact,
     SourceColumn,
@@ -54,7 +46,6 @@ from rivretrieve._internal.store import (
 )
 
 PROVIDER_ID: Final = ProviderId("ca_eccc")
-FORMAT_VERSION: Final = 1
 HYDAT_MONTHS_PER_BATCH: Final = 512
 
 
@@ -126,7 +117,7 @@ def download_hydat(
 ) -> DownloadedHydat:
     """Resolve and transfer the latest dated HYDAT release after shared consent checks.
 
-    RR5 owns consent, disk-space refusal and the public verb. This source operation
+    Public composition owns consent, disk-space refusal and the download operation. This source operation
     only knows HYDAT's dated URL vocabulary and transfers to the already-resolved
     publisher-artifact path supplied by the composition root.
     """
@@ -151,10 +142,6 @@ def download_hydat(
                 raise
             return DownloadedHydat(path=target, url=url, source_vintage=vintage)
     raise FileNotFoundError(f"no HYDAT release found within {max_back_days} days of {today.isoformat()}")
-
-
-# The provider contract's short operation name.
-download = download_hydat
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,11 +191,6 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
         artifact,
         lambda path: decode_hydat_batches(_require_single_path(path), schema),
     )
-
-
-# The provider contract calls its source-specific operation ``compile``. The longer
-# spelling is retained to make direct imports unambiguous in tests and tooling.
-compile = compile_hydat
 
 
 def decode_hydat_batches(path: Path, declared_schema: _HydatSchema | None = None) -> ObservationBatchStream:
@@ -303,45 +285,6 @@ def _require_single_path(path: Path | tuple[Path, ...]) -> Path:
     if not isinstance(path, Path):
         raise TypeError("HYDAT compilation requires exactly one publisher artifact")
     return path
-
-
-def decode_hydat(path: Path, declared_schema: _HydatSchema | None = None) -> NativeStoreMaterialization:
-    """Decode every published HYDAT daily cell without unit conversion."""
-    with _sqlite_payload(path) as sqlite_path:
-        schema = _inspect_schema(sqlite_path)
-        if declared_schema is not None and schema.source_columns != declared_schema.source_columns:
-            # certify_store also checks this boundary; failing here avoids materialising a
-            # changed SQLite schema into memory.
-            raise ValueError("HYDAT source schema changed between declaration and decoding")
-        rows: list[dict[str, object]] = []
-        units: list[SourceUnitCount] = []
-        connection = _open_read_only(sqlite_path)
-        try:
-            for table in HYDAT_TABLES:
-                quoted = _quote_identifier(table.table_name)
-                cursor = connection.execute(f"SELECT rowid AS __rivretrieve_rowid, * FROM {quoted} ORDER BY rowid")
-                for ordinal, source_row in enumerate(cursor, start=1):
-                    native = dict(source_row)
-                    rowid = native.pop("__rivretrieve_rowid")
-                    emitted = _unpivot_month(table, native, schema, rows)
-                    units.append(
-                        SourceUnitCount(
-                            source_unit=f"{table.table_name}:rowid={rowid!s}:ordinal={ordinal}",
-                            publisher_records=1,
-                            expected_emitted_rows=emitted,
-                        )
-                    )
-        finally:
-            connection.close()
-    if not rows:
-        raise ValueError("HYDAT contains no daily flow or level rows")
-    frame = _hydat_frame(rows, schema)
-    return NativeStoreMaterialization(
-        rows=frame,
-        observed_source_columns=schema.source_columns,
-        source_units=tuple(units),
-        series=_batch_series(rows),
-    )
 
 
 def _hydat_frame(rows: list[dict[str, object]], schema: _HydatSchema) -> pl.DataFrame:
@@ -547,34 +490,6 @@ def _sha256(path: Path) -> ArtifactChecksum:
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
-
-
-@cache
-def source_series(station: str, product: str) -> SourceSeries:
-    """Identify a native physical-cell stream without inventing a publisher variant."""
-    namespace, quantity, unit = {
-        "discharge_daily_mean": ("hydat:DLY_FLOWS", "discharge", "m3/s"),
-        "stage_daily_mean": ("hydat:DLY_LEVELS", "stage", "m"),
-    }[product]
-    evidence = f"ca_eccc/config.py and declared publisher native cell schema: {product}"
-    facts = PhysicalFacts(
-        facts_id=stable_id("ca_eccc", product, unit),
-        quantity=known(quantity, evidence),
-        source_unit=known(unit, evidence),
-        normalized_unit=unit,
-        frequency=known("daily", evidence),
-        statistic=known("mean", evidence),
-        clipping_axis=ClippingAxis.CALENDAR_DATE,
-        label_time="00:00",
-    )
-    return SourceSeries(
-        series_id=stable_id("ca_eccc", station, namespace, None),
-        provider_id="ca_eccc",
-        station_id=station,
-        product_id=product,
-        identity=SourceIdentity(namespace=namespace, published_id=None, origin="mapping", evidence=(evidence,)),
-        facts=(facts,),
-    )
 
 
 def _batch_series(rows: list[dict[str, object]]) -> tuple[SourceSeries, ...]:

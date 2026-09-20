@@ -44,6 +44,7 @@ from rivretrieve._internal.providers.ca_eccc.origins import (
     NATIVE_TABLE_SHA256,
     build_acquisition_provenance,
 )
+from rivretrieve._internal.providers.ca_eccc.series import source_description
 
 PROVIDER_ID = ProviderId("ca_eccc")
 PROVIDER_NAME = "ECCC Hydrometric — Environment and Climate Change Canada"
@@ -103,7 +104,6 @@ class ProductDefinition:
     period_type: str
     period_anchor: str
     canonical_unit: str
-    ogc_field: str
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
@@ -113,9 +113,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m3/s",
-        ogc_field="DISCHARGE",
     ),
     ProductDefinition(
         product_id="stage_daily_mean",
@@ -123,9 +122,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m",
-        ogc_field="LEVEL",
     ),
 )
 
@@ -362,7 +360,7 @@ def build_products() -> ProductCatalog:
             "period_type": definition.period_type,
             "period_anchor": definition.period_anchor,
             "unit": definition.canonical_unit,
-            "native_id": definition.ogc_field,
+            "native_id": source_description(definition.product_id).native_coordinate,
         }
         for definition in PRODUCT_DEFINITIONS
     ]
@@ -453,8 +451,9 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
         for definition in PRODUCT_DEFINITIONS:
             availability_reason = (
                 "ECCC OGC hydrometric-stations endpoint does not expose per-variable availability. "
-                f"Actual availability depends on whether the station has {definition.ogc_field!r} values "
-                "in the daily-mean collection."
+                f"Actual availability depends on whether the station has rows in "
+                f"{source_description(definition.product_id).native_coordinate!r} "
+                "in the prepared HYDAT store."
             )
             rows.append(
                 {
@@ -481,10 +480,9 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: HYDAT SQLite queried locally (downloaded on first use, ~1 GB, cached in platformdirs user "
-            "cache dir); one SQL query per station/product over the full requested year range; no windowing; "
-            "quality flags from DATA_SYMBOLS table; no authentication required; partial failures reported as "
-            "recoverable issues"
+            "true: explicit download and certified compilation of HYDAT daily tables into a local native store; "
+            "retrieval reads the compiled store without network access or implicit download; source symbols, "
+            "precision and completeness cells are retained; no authentication required"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,

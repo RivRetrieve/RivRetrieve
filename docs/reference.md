@@ -677,7 +677,7 @@ A Parquet re-encoding of the exact rows returned by a store query.
 - **executed_query : ExecutedStoreQuery**
   Product, year, station and closed wall-clock predicates used by the scan.
 - **format_version : int**
-  Store layout revision, 5 for compiled or 6 for accumulated stores.
+  Store layout revision, 5 for compiled or 7 for accumulated stores.
 - **source_vintage : datetime.date or None**
   Bulk release date. None for an accumulated store.
 
@@ -860,7 +860,7 @@ Manifest of accumulated live parse output.
 #### Attributes
 
 - **format_version : int**
-  Accumulated layout revision, 6.
+  Accumulated layout revision, 7.
 - **provider_id : ProviderId**
   Provider whose native observations are stored.
 - **built_at : datetime**
@@ -983,9 +983,9 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `no_nve` | `water_temperature_daily_mean` | `degC` |
 | `no_nve` | `water_temperature_hourly_mean` | `degC` |
 | `no_nve` | `water_temperature_instantaneous` | `degC` |
-| `pl_imgw` | `discharge_daily_mean` | `m3/s` |
-| `pl_imgw` | `stage_daily_mean` | `m` |
-| `pl_imgw` | `water_temperature_daily_mean` | `degC` |
+| `pl_imgw` | `discharge_daily` | `m3/s` |
+| `pl_imgw` | `stage_daily` | `m` |
+| `pl_imgw` | `water_temperature_daily` | `degC` |
 | `th_thaiwater` | `discharge_reported` | `m3/s` |
 | `th_thaiwater` | `stage_reported` | `m` |
 | `usgs_nwis` | `discharge_daily_mean` | `m3/s` |

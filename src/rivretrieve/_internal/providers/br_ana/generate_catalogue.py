@@ -6,7 +6,7 @@ import argparse
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -35,7 +35,6 @@ from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordi
 
 PROVIDER_ID = ProviderId("br_ana")
 PROVIDER_NAME = "ANA Hidroweb — Brazilian National Water and Sanitation Agency"
-_MIGRATION = "br_ana legacy catalogue generation is retired; use --native with an attested inventory capture record"
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +76,7 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
 
 
 def build_products(daily: ConventionalDailyEvidence | None = None) -> ProductCatalog:
-    """Documented source variants → canonical instantaneous and daily mean products."""
+    """Project established adopted-field and daily-mean facts at access-route grain."""
     rows = []
     for product, definition in config().products.items():
         coordinates = definition.coordinates.value
@@ -100,10 +99,10 @@ def build_products(daily: ConventionalDailyEvidence | None = None) -> ProductCat
                 "provider_id": PROVIDER_ID,
                 "product_id": product,
                 "observed_property": "stage" if stage else "discharge",
-                "frequency": "daily" if daily_product else "irregular",
-                "statistic": "mean" if daily_product else "instantaneous",
-                "period_type": "daily" if daily_product else "instant",
-                "period_anchor": "unknown" if daily_product else "instant",
+                "frequency": "daily" if daily_product else "unknown",
+                "statistic": "mean" if daily_product else "unknown",
+                "period_type": "daily" if daily_product else "unknown",
+                "period_anchor": "unknown",
                 "unit": "m" if stage else "m3/s",
                 "native_id": native_id,
             }
@@ -223,24 +222,6 @@ def build_catalogue(
     )
 
 
-def generate_catalogue_from_fixture(
-    fixture_path: Path | str, *, catalogue_date: date | None = None
-) -> GeneratedBrAnaCatalogue:
-    raise FatalContractError(_MIGRATION)
-
-
-def generate_catalogue_from_live(
-    *, catalogue_date: date | None = None, username: str | None = None, password: str | None = None
-) -> GeneratedBrAnaCatalogue:
-    raise FatalContractError(_MIGRATION)
-
-
-def generate_catalogue(
-    raw_payload: list[dict[str, object]], *, catalogue_date: date | None = None, generator_input: str = "fixture"
-) -> GeneratedBrAnaCatalogue:
-    raise FatalContractError(_MIGRATION)
-
-
 def write_catalogue(catalogue: GeneratedBrAnaCatalogue, out_dir: Path) -> None:
     from functools import partial
 
@@ -275,17 +256,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--native", type=Path)
     source.add_argument("--materialize-record", type=Path)
-    source.add_argument("--fixture", type=Path)
-    source.add_argument("--live", action="store_true")
-    source.add_argument("--withhold-uncertified", action="store_true")
-    parser.add_argument("--catalogue-date", type=date.fromisoformat)
     parser.add_argument("--capture-record", type=Path)
     parser.add_argument("--native-out", type=Path)
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
-    if args.native is None and args.materialize_record is None:
-        raise FatalContractError(_MIGRATION)
     if args.materialize_record is not None:
         from rivretrieve._internal.catalogues.native import write_native_table
         from rivretrieve._internal.providers.br_ana.capture import (

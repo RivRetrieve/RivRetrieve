@@ -22,14 +22,19 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
+from rivretrieve._internal.providers.no_nve.metadata import acquire_inventory
 from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_series_request
 from rivretrieve._internal.source_series import (
+    InventoryCompleteness,
+    OutcomeStatus,
     PhysicalFacts,
     RestrictionKind,
+    RetrievalOutcome,
     SeriesScope,
     SeriesWindow,
     SourceIdentity,
     SourceSeries,
+    admission,
     stable_id,
 )
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
@@ -52,6 +57,14 @@ def fetch(
     payloads: list[Payload] = []
     issues: list[Issue] = []
     failed_requests: list[FailedSourceRequest] = []
+    inventories = []
+    definitions = []
+    outcomes = []
+    calls = []
+    requested_window = SeriesWindow(
+        start=datetime.fromisoformat(fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(fetch_window.end.isoformat()),
+    )
     for station in stations:
         for product, coordinates in resolved:
             matching = tuple(
@@ -59,6 +72,38 @@ def fetch(
                 for item in known_series
                 if item.station_id == station and item.product_id == product and (scope is None or scope.matches(item))
             )
+            if coordinates.version_number is None and (scope is None or scope.restriction is RestrictionKind.ALL):
+                inventory = acquire_inventory(station, str(product), coordinates, transport, requested_window)
+                current = {item.series_id: item for item in inventory.series}
+                historical = {item.series_id: item for item in matching if item.series_id not in current}
+                snapshot = inventory.inventories[0]
+                if historical and snapshot.completeness is InventoryCompleteness.COMPLETE:
+                    # A disappeared catalogue member is still independently requested. Its absence
+                    # from current metadata does not establish historical nonexistence.
+                    reason = "Acquired catalogue versions are absent from current HydAPI metadata; historical inventory remains unresolved"
+                    snapshot = snapshot.model_copy(
+                        update={
+                            "completeness": InventoryCompleteness.INCOMPLETE,
+                            "reason": reason,
+                            "snapshot_id": stable_id(snapshot.snapshot_id, reason, *sorted(historical)),
+                        }
+                    )
+                    issues.append(
+                        Issue(
+                            severity="warning",
+                            code="source.inventory_unresolved",
+                            message=reason,
+                            details={"station_id": station, "product_id": product},
+                            provider_id=ProviderId("no_nve"),
+                        )
+                    )
+                inventories.append(snapshot)
+                definitions.extend(inventory.series)
+                outcomes.extend(inventory.outcomes)
+                calls.extend(inventory.calls)
+                issues.extend(inventory.issues)
+                candidates = {**historical, **current}
+                matching = tuple(item for item in candidates.values() if scope is None or scope.matches(item))
             versions = {
                 int(item.identity.published_id)
                 for item in matching
@@ -71,6 +116,47 @@ def fetch(
             if scope is not None and scope.restriction is RestrictionKind.EXPLICIT:
                 versions.update(int(value) for value in scope.variants if value.isascii() and value.isdecimal())
             if not versions:
+                if inventories and inventories[-1].completeness is InventoryCompleteness.COMPLETE:
+                    if not inventory.outcomes:
+                        unresolved = any(
+                            admission(fact).status != "supported"
+                            or any(
+                                getattr(fact, predicate.field).value is None
+                                for predicate in (scope.predicates if scope else ())
+                            )
+                            for item in inventory.series
+                            for fact in item.facts
+                        )
+                        reason = (
+                            "Current HydAPI metadata cannot settle physical matching or admission for every version"
+                            if unresolved
+                            else "Current HydAPI inventory has no version matching the requested physical facts"
+                        )
+                        if unresolved:
+                            issues.append(
+                                Issue(
+                                    severity="warning",
+                                    code="source.inventory_unresolved",
+                                    message=reason,
+                                    provider_id=ProviderId("no_nve"),
+                                    details={"station_id": station, "product_id": product},
+                                )
+                            )
+                        outcomes.append(
+                            RetrievalOutcome(
+                                outcome_id=stable_id(
+                                    inventories[-1].snapshot_id, reason, scope.model_dump_json() if scope else None
+                                ),
+                                series_id=None,
+                                station_id=station,
+                                product_id=product,
+                                window=requested_window,
+                                status=OutcomeStatus.UNRESOLVED if unresolved else OutcomeStatus.NO_MATCH,
+                                reason=reason,
+                                retrieved_at=inventories[-1].acquired_at,
+                            )
+                        )
+                    continue
                 issues.append(
                     Issue(
                         severity="warning",
@@ -81,29 +167,6 @@ def fetch(
                     )
                 )
                 continue
-            if scope is None or scope.restriction is RestrictionKind.ALL:
-                issues.append(
-                    Issue(
-                        severity="warning",
-                        code="source.inventory_unresolved",
-                        message="HydAPI enumeration uses the acquired catalogue version inventory; current or historical completeness remains unresolved",
-                        details={
-                            "station_id": station,
-                            "product_id": product,
-                            "versions": sorted(versions),
-                            "inventory_scope": (scope or SeriesScope())
-                            .model_copy(
-                                update={
-                                    "provider_ids": ("no_nve",),
-                                    "station_ids": (station,),
-                                    "product_ids": (str(product),),
-                                }
-                            )
-                            .model_dump(mode="json"),
-                        },
-                        provider_id=ProviderId("no_nve"),
-                    )
-                )
             for version in sorted(versions):
                 concrete = replace(coordinates, version_number=version)
                 for window in rendered_windows[product]:
@@ -160,7 +223,15 @@ def fetch(
                             known_series=tuple(item for item in matching if item.identity.published_id == str(version)),
                         )
                     )
-    return SourceAcquisition(value=tuple(payloads), issues=tuple(issues), failed_requests=tuple(failed_requests))
+    return SourceAcquisition(
+        value=tuple(payloads),
+        issues=tuple(issues),
+        failed_requests=tuple(failed_requests),
+        series=tuple(definitions),
+        inventories=tuple(inventories),
+        outcomes=tuple(outcomes),
+        calls=tuple(calls),
+    )
 
 
 def _coordinates(product: ProductId, config: ProviderConfig) -> NoNveSourceCoordinates:

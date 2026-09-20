@@ -429,7 +429,7 @@ def test_native_build_counts_crs_and_dates() -> None:
     assert set(catalogue.stations["crs"]) == {"EPSG:4326"}
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
     assert set(catalogue.station_products["last_catalogue_check"]) == {date(2026, 8, 2)}
-    assert set(catalogue.products["native_id"]) == {"DISCHARGE", "LEVEL"}
+    assert set(catalogue.products["native_id"]) == {"DLY_FLOWS", "DLY_LEVELS"}
 
 
 def test_build_catalogue_is_gated_on_origins() -> None:

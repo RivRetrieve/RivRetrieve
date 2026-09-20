@@ -15,13 +15,11 @@ from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
 from rivretrieve._internal.providers.ba_fhmzbih.config import SERIES_MAPPINGS, BaFhmzbihSourceCoordinates
-from rivretrieve._internal.providers.ba_fhmzbih.fetch import BaFhmzbihMetadataCoordinates
-from rivretrieve._internal.source_series import ParsedSeries
+from rivretrieve._internal.providers.ba_fhmzbih.fetch import BaFhmzbihMetadataCoordinates, metadata_groups
+from rivretrieve._internal.source_series import OutcomeStatus, ParsedSeries, RetrievalOutcome, SeriesWindow, stable_id
 
 
 def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
-    if isinstance(payload.source_coordinates.value, BaFhmzbihMetadataCoordinates):
-        return WithIssues(_empty())
     if len(payload.station_products) != 1:
         raise FatalContractError("ba_fhmzbih workbook payload must contain one station-product pair")
     station, product = payload.station_products[0]
@@ -30,7 +28,12 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
         raise FatalContractError("ba_fhmzbih workbook has invalid source coordinates")
     try:
         workbook = openpyxl.load_workbook(BytesIO(payload.content), read_only=True, data_only=True)
-        sheet = workbook.worksheets[0]
+        if len(workbook.worksheets) != 1:
+            workbook.close()
+            raise UnsupportedSourceStructureError(
+                "ba_fhmzbih workbook has multiple worksheets; their source-series relationship is not established"
+            )
+        (sheet,) = workbook.worksheets
         headers = tuple(
             tuple(cell for cell in row[:2]) for row in sheet.iter_rows(min_row=1, max_row=8, values_only=True)
         )
@@ -88,21 +91,12 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA).sort("time")
     issues = []
     if invalid_count:
-        issues.append(
-            _issue(
-                "invalid_workbook_row",
-                "Workbook rows with invalid timestamp or value were dropped",
-                station,
-                invalid_count,
-            )
+        raise UnsupportedSourceStructureError(
+            f"ba_fhmzbih workbook has {invalid_count} rows with unrepresentable timestamps or values; complete interval coverage is not established"
         )
     if frame.is_empty():
         issues.append(_issue("missing_data", "Workbook contains no observation rows", station, 0))
     return WithIssues(frame, tuple(issues))
-
-
-def _empty() -> Rows:
-    return pl.DataFrame(schema=NATIVE_SCHEMA)
 
 
 def _issue(code: str, message: str, station: str, count: int) -> Issue:
@@ -117,7 +111,42 @@ def _issue(code: str, message: str, station: str, count: int) -> Issue:
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     if isinstance(payload.source_coordinates.value, BaFhmzbihMetadataCoordinates):
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
+        outcomes = []
+        issues = []
+        for station, product in payload.station_products:
+            if product not in provider_config.products:
+                raise FatalContractError("ba_fhmzbih metadata payload has an undeclared product")
+            try:
+                metadata_groups(payload.content, (station,))
+            except UnsupportedSourceStructureError as error:
+                reason = str(error)
+                outcomes.append(
+                    RetrievalOutcome(
+                        outcome_id=stable_id(station, product, reason, str(payload.origin.retrieved_at)),
+                        series_id=None,
+                        station_id=station,
+                        product_id=product,
+                        window=SeriesWindow(
+                            start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+                            end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+                        ),
+                        status=OutcomeStatus.UNSUPPORTED,
+                        reason=reason,
+                        retrieved_at=payload.origin.retrieved_at
+                        if isinstance(payload.origin.retrieved_at, datetime)
+                        else None,
+                    )
+                )
+                issues.append(
+                    Issue(
+                        severity="error",
+                        code="unsupported_source_structure",
+                        message=reason,
+                        provider_id=ProviderId("ba_fhmzbih"),
+                        details={"station_id": station, "product_id": product},
+                    )
+                )
+        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), tuple(outcomes), tuple(issues))
     return parse_mapped_series(
         payload, provider_config, provider="ba_fhmzbih", mappings=SERIES_MAPPINGS, native_parse=_parse_native
     )

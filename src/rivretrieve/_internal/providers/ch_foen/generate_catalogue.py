@@ -46,7 +46,6 @@ from rivretrieve._internal.providers.ch_foen.origins import (
 PROVIDER_ID = ProviderId("ch_foen")
 PROVIDER_NAME = "Swiss Federal Office for the Environment FOEN / BAFU"
 SOURCE_URL = "https://api.existenz.ch/apiv1/hydro/locations"
-LEGACY_SOURCE = "thirdparty/RivRetrieve-Python @ origin/switzerland"
 AVAILABILITY_REASON = "Existenz.ch locations catalogue does not expose per-variable station availability"
 AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 LIVE_MINIMUM_STATIONS = 200
@@ -82,7 +81,6 @@ class GeneratedChFoenCatalogue:
 
 @dataclass(frozen=True)
 class ProductDefinition:
-    legacy_variable: str
     product_id: str
     observed_property: str
     frequency: str
@@ -91,12 +89,10 @@ class ProductDefinition:
     period_anchor: str
     unit: str
     parameters: tuple[str, ...]
-    preferred_parameter: str
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        legacy_variable="DISCHARGE_REPORTED",
         product_id="discharge_reported",
         observed_property="discharge",
         frequency="unknown",
@@ -105,10 +101,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="unknown",
         unit="m3/s",
         parameters=("flow", "flow_ls"),
-        preferred_parameter="flow",
     ),
     ProductDefinition(
-        legacy_variable="STAGE_REPORTED",
         product_id="stage_reported",
         observed_property="stage",
         frequency="unknown",
@@ -117,10 +111,8 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="unknown",
         unit="m",
         parameters=("height_abs", "height"),
-        preferred_parameter="height_abs",
     ),
     ProductDefinition(
-        legacy_variable="WATER_TEMPERATURE_REPORTED",
         product_id="water_temperature_reported",
         observed_property="water_temperature",
         frequency="unknown",
@@ -129,11 +121,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         period_anchor="unknown",
         unit="degC",
         parameters=("temperature",),
-        preferred_parameter="temperature",
     ),
 )
 
-EXPECTED_LEGACY_VARIABLES = frozenset(definition.legacy_variable for definition in PRODUCT_DEFINITIONS)
+EXPECTED_PRODUCT_IDS = frozenset(definition.product_id for definition in PRODUCT_DEFINITIONS)
 
 
 def refresh_native_table(
@@ -208,7 +199,7 @@ def build_products(product_definitions: Sequence[ProductDefinition] = PRODUCT_DE
             "period_type": definition.period_type,
             "period_anchor": definition.period_anchor,
             "unit": definition.unit,
-            "native_id": definition.preferred_parameter,
+            "native_id": ",".join(definition.parameters),
         }
         for definition in product_definitions
     ]
@@ -249,15 +240,6 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
 
 
 def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str]) -> dict[str, object]:
-    {
-        "source_url": SOURCE_URL,
-        "legacy_source": LEGACY_SOURCE,
-        "generator_input": "native",
-        "source": envelope["source"],
-        "apiurl": envelope["apiurl"],
-        "opendata": envelope["opendata"],
-        "license": envelope["license"],
-    }
     return {
         "provider_id": PROVIDER_ID,
         "name": PROVIDER_NAME,
@@ -425,10 +407,10 @@ def _read_live_json(url: str) -> Mapping[str, object]:
 
 
 def _validate_product_definitions(product_definitions: Sequence[ProductDefinition]) -> None:
-    observed = frozenset(definition.legacy_variable for definition in product_definitions)
-    if observed != EXPECTED_LEGACY_VARIABLES:
-        missing = sorted(EXPECTED_LEGACY_VARIABLES - observed)
-        unknown = sorted(observed - EXPECTED_LEGACY_VARIABLES)
+    observed = frozenset(definition.product_id for definition in product_definitions)
+    if observed != EXPECTED_PRODUCT_IDS:
+        missing = sorted(EXPECTED_PRODUCT_IDS - observed)
+        unknown = sorted(observed - EXPECTED_PRODUCT_IDS)
         parts = []
         if missing:
             parts.append(f"missing: {', '.join(missing)}")
@@ -436,8 +418,8 @@ def _validate_product_definitions(product_definitions: Sequence[ProductDefinitio
             parts.append(f"unknown: {', '.join(unknown)}")
         raise FatalContractError(f"Swiss product definition drift ({'; '.join(parts)})")
     for definition in product_definitions:
-        if definition.preferred_parameter not in definition.parameters:
-            raise FatalContractError(f"{definition.legacy_variable} preferred parameter is absent from parameters")
+        if not definition.parameters or len(set(definition.parameters)) != len(definition.parameters):
+            raise FatalContractError(f"{definition.product_id} requires distinct source parameters")
 
 
 def _validate_native_build_rows(native_table: NativeTable) -> dict[str, str]:

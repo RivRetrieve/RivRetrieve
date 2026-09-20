@@ -9,9 +9,6 @@ import argparse
 import hashlib
 import json
 import re
-import time
-import urllib.error
-import urllib.request
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -32,6 +29,7 @@ from rivretrieve._internal.catalogues.artifact import (
     packaged_catalogue_artifact_from_components,
 )
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, read_native_table
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -46,6 +44,8 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.jp_mlit.config import SERIES_MAPPINGS, JpMlitSourceCoordinates
+from rivretrieve._internal.providers.jp_mlit.config import config as source_config
 from rivretrieve._internal.providers.jp_mlit.origins import (
     NATIVE_TABLE_SHA256,
     ImpossibleWorldGeodeticCoordinateError,
@@ -58,16 +58,8 @@ PROVIDER_ID = ProviderId("jp_mlit")
 PROVIDER_NAME = "MLIT Water Information System — Japan national hydrometric network"
 
 SITE_INFO_DETAIL_URL = "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe"
-DSP_URL = "http://www1.river.go.jp/cgi-bin/DspWaterData.exe"
-CATALOGUE_SOURCE = "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet"
-
-_LIVE_REQUEST_DELAY_SECONDS = 0.3  # polite rate limit between SiteInfoDetail requests
-_LIVE_TIMEOUT_SECONDS = 20
 
 AVAILABILITY_REASON = "jp_mlit native station table does not publish per-KIND station availability"
-AVAILABILITY_SOURCE = "native_station_table_not_published"
-
-MIN_LIVE_STATIONS = 500
 
 NATIVE_COLUMNS = (
     "観測所名",
@@ -95,8 +87,6 @@ class CatalogueIssueCode(StrEnum):
     REFRESH_RESPONSE_REJECTED = "refresh_response_rejected"
     REFRESH_DECODE_FAILED = "refresh_decode_failed"
     INVALID_STATION_COORDINATES = "invalid_station_coordinates"
-    REFRESH_REQUEST_FAILED = "refresh_request_failed"
-    REFRESH_HTTP_FAILED = "refresh_http_failed"
 
 
 @dataclass(frozen=True)
@@ -106,64 +96,6 @@ class GeneratedJpMlitCatalogue:
     stations: StationCatalog
     station_products: StationProductCatalog
     acquisition_provenance: AcquisitionProvenance
-
-
-@dataclass(frozen=True)
-class ProductDefinition:
-    product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    canonical_unit: str
-    kind: int
-
-
-PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    ProductDefinition(
-        product_id="stage_hourly",
-        observed_property="stage",
-        frequency="hourly",
-        statistic="unknown",
-        period_type="interval",
-        period_anchor="unknown",
-        canonical_unit="m",
-        kind=2,
-    ),
-    ProductDefinition(
-        product_id="stage_daily",
-        observed_property="stage",
-        frequency="daily",
-        statistic="unknown",
-        period_type="interval",
-        period_anchor="unknown",
-        canonical_unit="m",
-        kind=3,
-    ),
-    ProductDefinition(
-        product_id="discharge_hourly",
-        observed_property="discharge",
-        frequency="hourly",
-        statistic="unknown",
-        period_type="interval",
-        period_anchor="unknown",
-        canonical_unit="m3/s",
-        kind=6,
-    ),
-    ProductDefinition(
-        product_id="discharge_daily",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="unknown",
-        period_type="interval",
-        period_anchor="unknown",
-        canonical_unit="m3/s",
-        kind=7,
-    ),
-)
-
-EXPECTED_PRODUCT_IDS = frozenset(d.product_id for d in PRODUCT_DEFINITIONS)
 
 
 def build_catalogue(
@@ -199,20 +131,16 @@ def build_catalogue(
 
 
 def build_products() -> ProductCatalog:
-    rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": d.product_id,
-            "observed_property": d.observed_property,
-            "frequency": d.frequency,
-            "statistic": d.statistic,
-            "period_type": d.period_type,
-            "period_anchor": d.period_anchor,
-            "unit": d.canonical_unit,
-            "native_id": str(d.kind),
-        }
-        for d in PRODUCT_DEFINITIONS
-    ]
+    rows = []
+    for product_id, declared in source_config().products.items():
+        coordinates = declared.coordinates.value
+        if not isinstance(coordinates, JpMlitSourceCoordinates):
+            raise FatalContractError("jp_mlit product has invalid source coordinates")
+        rows.append(
+            product_row(
+                str(PROVIDER_ID), str(product_id), str(coordinates.kind), SERIES_MAPPINGS[product_id].physical_facts()
+            )
+        )
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
@@ -250,12 +178,12 @@ def build_station_products(
     for station_id, catalogue_date in station_dates.iter_rows():
         if not isinstance(station_id, str):
             raise FatalContractError("station_id must be a string")
-        for d in PRODUCT_DEFINITIONS:
+        for product_id in SERIES_MAPPINGS:
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
-                    "product_id": d.product_id,
+                    "product_id": product_id,
                     "availability": "unknown",
                     "availability_reason": AVAILABILITY_REASON,
                     "published_record_start_date": None,
@@ -313,8 +241,6 @@ def _validate(
 def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.jp_mlit.config import SERIES_MAPPINGS
-    from rivretrieve._internal.providers.jp_mlit.config import config as source_config
     from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -509,65 +435,6 @@ def refresh_native_table(
             issues.append(issue)
             continue
         rows.append({**parsed, "retrieved_at": retrieved_at_by_station[station_id].value})
-    return WithIssues(value=_native_table_from_rows(rows), issues=tuple(issues))
-
-
-def _fetch_site_detail_response(station_id: str) -> tuple[int, bytes]:
-    url = f"{SITE_INFO_DETAIL_URL}?ID={station_id}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "http://www1.river.go.jp"})
-    with urllib.request.urlopen(req, timeout=_LIVE_TIMEOUT_SECONDS) as response:
-        return response.status, response.read()
-
-
-def refresh_native_table_from_live(
-    station_ids: Sequence[object],
-    *,
-    prior: NativeTable | None = None,
-) -> WithIssues[NativeTable]:
-    """Refresh the native table through the maintainer-only per-station seam.
-
-    MLIT warns at http://www1.river.go.jp/caution.html against automated bulk
-    collection. This compatibility seam retains a polite delay and is not used
-    by supplied-capture materialization.
-    """
-    ids = _validate_station_ids(station_ids)
-    if len(ids) < MIN_LIVE_STATIONS:
-        raise FatalContractError(f"jp_mlit live station count {len(ids)} is below minimum 500")
-    rows: list[dict[str, object]] = []
-    issues: list[Issue] = []
-    responses: dict[str, bytes] = {}
-    instants: dict[str, RetrievedAt] = {}
-    for station_id in ids:
-        try:
-            status, body = _fetch_site_detail_response(station_id)
-        except urllib.error.HTTPError as exc:
-            issue = _issue(CatalogueIssueCode.REFRESH_HTTP_FAILED, station_id, f"HTTP status {exc.code}")
-            rows.append(_carry_or_raise(station_id, issue, prior))
-            issues.append(issue)
-            continue
-        except Exception as exc:
-            issue = _issue(CatalogueIssueCode.REFRESH_REQUEST_FAILED, station_id, f"request failed: {exc}")
-            rows.append(_carry_or_raise(station_id, issue, prior))
-            issues.append(issue)
-            continue
-        instant = RetrievedAt(datetime.now(UTC))
-        if status != 200:
-            issue = _issue(CatalogueIssueCode.REFRESH_HTTP_FAILED, station_id, f"HTTP status {status}")
-            rows.append(_carry_or_raise(station_id, issue, prior))
-            issues.append(issue)
-            continue
-        responses[station_id] = body
-        instants[station_id] = instant
-        time.sleep(_LIVE_REQUEST_DELAY_SECONDS)
-    if responses:
-        fresh = refresh_native_table(
-            responses,
-            station_ids=tuple(responses),
-            retrieved_at_by_station=instants,
-            prior=prior,
-        )
-        rows.extend(fresh.value.data.iter_rows(named=True))
-        issues.extend(fresh.issues)
     return WithIssues(value=_native_table_from_rows(rows), issues=tuple(issues))
 
 

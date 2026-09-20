@@ -85,10 +85,6 @@ class StoreCompileRequest:
         return self.destination
 
 
-# A second, descriptive name keeps call sites readable without creating another contract.
-CompileStoreRequest = StoreCompileRequest
-
-
 def source_schema_fingerprint(columns: tuple[SourceColumn, ...]) -> SourceSchemaFingerprint:
     """Return the revision-5 fingerprint of an ordered publisher schema."""
     encoded_columns = [{"name": column.name, "type": column.type} for column in columns]

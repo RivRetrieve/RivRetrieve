@@ -40,6 +40,7 @@ from rivretrieve._internal.catalogues.native import (
     stamp_native_table,
     write_native_table,
 )
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -54,11 +55,12 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.th_thaiwater.config import SERIES_MAPPINGS, ThThaiWaterSourceCoordinates
+from rivretrieve._internal.providers.th_thaiwater.config import config as source_config
 
 PROVIDER_ID = ProviderId("th_thaiwater")
 PROVIDER_NAME = "ThaiWater public API / Hydro-Informatics Institute (HII)"
 METADATA_URL = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
-VERTICAL_DATUM = "MSL"
 STATION_TYPE_FILTER = "tele_waterlevel"
 
 # Accepted governing station/product ledger, September 11 and 13, 2026.
@@ -252,44 +254,6 @@ class GeneratedThThaiWaterCatalogue:
     station_products: StationProductCatalog
     acquisition_provenance: AcquisitionProvenance
     public_artifact: PackagedCatalogArtifact
-
-
-@dataclass(frozen=True)
-class ProductDefinition:
-    product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    canonical_unit: str
-    native_field: str
-
-
-PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    ProductDefinition(
-        product_id="stage_reported",
-        observed_property="stage",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        canonical_unit="m",
-        native_field="value",
-    ),
-    ProductDefinition(
-        product_id="discharge_reported",
-        observed_property="discharge",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        canonical_unit="m3/s",
-        native_field="discharge",
-    ),
-)
-
-EXPECTED_PRODUCT_IDS = frozenset(d.product_id for d in PRODUCT_DEFINITIONS)
 
 
 def refresh_native_table(
@@ -509,23 +473,20 @@ def _validate_canonical_native_table(native_table: NativeTable) -> None:
         raise FatalContractError(f"ThaiWater native table contains duplicate station.id {duplicate_id}")
 
 
-def build_products(
-    product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS,
-) -> ProductCatalog:
-    rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": d.product_id,
-            "observed_property": d.observed_property,
-            "frequency": d.frequency,
-            "statistic": d.statistic,
-            "period_type": d.period_type,
-            "period_anchor": d.period_anchor,
-            "unit": d.canonical_unit,
-            "native_id": d.native_field,
-        }
-        for d in product_definitions
-    ]
+def build_products() -> ProductCatalog:
+    rows = []
+    for product_id, declared in source_config().products.items():
+        coordinates = declared.coordinates.value
+        if not isinstance(coordinates, ThThaiWaterSourceCoordinates):
+            raise FatalContractError("th_thaiwater product has invalid source coordinates")
+        rows.append(
+            product_row(
+                str(PROVIDER_ID),
+                str(product_id),
+                str(coordinates.native_field),
+                SERIES_MAPPINGS[product_id].physical_facts(),
+            )
+        )
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
@@ -615,8 +576,6 @@ def validate_generated_catalogue(
 def write_catalogue(catalogue: GeneratedThThaiWaterCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.th_thaiwater.config import SERIES_MAPPINGS
-    from rivretrieve._internal.providers.th_thaiwater.config import config as source_config
     from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)

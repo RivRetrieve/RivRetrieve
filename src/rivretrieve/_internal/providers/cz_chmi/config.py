@@ -79,14 +79,77 @@ def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
 
 
-# Explicit source access and physical mapping; not a completeness assertion.
+# Publisher dictionary defines means and units; response labels explicitly carry UTC.
+def _evidence(code: str, family: str) -> tuple[str, ...]:
+    return (
+        f"https://opendata.chmi.cz/hydrology/historical/metadata/meta2.json: {code} TSCON_DS, UNIT_ID, UNIT_DS",
+        "tests/test_data/cz_meta2.json",
+        f"tests/test_data/cz_chmi_0-203-1-000400_{family}_2023.recording.json: tsConID, unit and DT UTC Z labels",
+    )
+
 
 SERIES_MAPPINGS = {
-    "discharge_daily_mean": SeriesMapping("cz_chmi/QD", "discharge", "M3_S", "m3/s", "daily", "mean", "QD", "+00:00"),
-    "stage_daily_mean": SeriesMapping("cz_chmi/HD", "stage", "CM", "cm", "daily", "mean", "HD", "+00:00"),
-    "water_temperature_daily_mean": SeriesMapping(
-        "cz_chmi/TD", "temperature", "0C", "degC", "daily", "mean", "TD", "+00:00"
+    "discharge_daily_mean": SeriesMapping(
+        "cz_chmi/QD",
+        "discharge",
+        "M3_S",
+        "m3/s",
+        "daily",
+        "mean",
+        "QD",
+        "+00:00",
+        evidence=_evidence("QD", "DQ"),
+        temporal_support="interval",
+        label_time="00:00",
     ),
-    "discharge_hourly_mean": SeriesMapping("cz_chmi/QH", "discharge", "M3_S", "m3/s", "hourly", "mean", "QH", "+00:00"),
-    "stage_hourly_mean": SeriesMapping("cz_chmi/HH", "stage", "CM", "cm", "hourly", "mean", "HH", "+00:00"),
+    "stage_daily_mean": SeriesMapping(
+        "cz_chmi/HD",
+        "stage",
+        "CM",
+        "cm",
+        "daily",
+        "mean",
+        "HD",
+        "+00:00",
+        evidence=_evidence("HD", "DQ"),
+        temporal_support="interval",
+        label_time="00:00",
+    ),
+    "water_temperature_daily_mean": SeriesMapping(
+        "cz_chmi/TD",
+        "temperature",
+        "0C",
+        "degC",
+        "daily",
+        "mean",
+        "TD",
+        "+00:00",
+        evidence=_evidence("TD", "DQ"),
+        temporal_support="interval",
+        label_time="00:00",
+    ),
+    "discharge_hourly_mean": SeriesMapping(
+        "cz_chmi/QH",
+        "discharge",
+        "M3_S",
+        "m3/s",
+        "hourly",
+        "mean",
+        "QH",
+        "+00:00",
+        evidence=_evidence("QH", "HQ"),
+        temporal_support="interval",
+    ),
+    "stage_hourly_mean": SeriesMapping(
+        "cz_chmi/HH",
+        "stage",
+        "CM",
+        "cm",
+        "hourly",
+        "mean",
+        "HH",
+        "+00:00",
+        evidence=_evidence("HH", "HQ"),
+        temporal_support="interval",
+    ),
 }

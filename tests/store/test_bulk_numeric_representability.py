@@ -16,7 +16,7 @@ import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.ca_eccc.bulk import HydatCompileRequest, compile_hydat, decode_hydat
+from rivretrieve._internal.providers.ca_eccc.bulk import HydatCompileRequest, compile_hydat, decode_hydat_batches
 from rivretrieve._internal.providers.pl_imgw.bulk import ImgwCompileRequest, compile_imgw
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from tests.store.test_ca_eccc_provenance import _hydat
@@ -66,7 +66,14 @@ def _read_flow(provider: str, store: Path):
         else ("154210010", datetime(2021, 11, 1), datetime(2021, 11, 1))
     )
     return StoreReader().query(
-        StoreQuery(StoreRoot(store), ProviderId(provider), (station,), ("discharge_daily_mean",), start, end)
+        StoreQuery(
+            StoreRoot(store),
+            ProviderId(provider),
+            (station,),
+            ("discharge_daily_mean" if provider == "ca_eccc" else "discharge_daily",),
+            start,
+            end,
+        )
     )
 
 
@@ -146,7 +153,8 @@ def test_unrepresentable_refresh_preserves_previous_compiled_store_and_entire_ar
         ("pl_imgw", "0", 0.0, "published_value"),
         ("pl_imgw", "-12.4", -12.4, "published_value"),
         ("pl_imgw", "1.7976931348623157e308", 1.7976931348623157e308, "published_value"),
-        ("pl_imgw", "999.0", None, "published_null"),
+        ("pl_imgw", "999.0", 999.0, "published_value"),
+        ("pl_imgw", "99999.999", None, "published_null"),
         ("pl_imgw", "", None, "published_blank"),
     ],
 )
@@ -178,7 +186,7 @@ def test_hydat_sqlite_integer_range_and_nan_binding_are_native_boundary_facts(tm
         assert storage_class == "real" and isinstance(native, float) and math.isfinite(native)
         connection.execute("UPDATE DLY_FLOWS SET FLOW1 = ?", (float("nan"),))
         assert connection.execute("SELECT FLOW1, typeof(FLOW1) FROM DLY_FLOWS").fetchone() == (None, "null")
-    decoded = decode_hydat(sqlite).rows
+    decoded = pl.concat(batch.rows for batch in decode_hydat_batches(sqlite).batches)
     row = decoded.filter((pl.col("product") == "discharge_daily_mean") & (pl.col("time") == datetime(2020, 1, 1)))
     assert row["value"].to_list() == [None]
     assert row["value_state"].to_list() == ["published_null"]

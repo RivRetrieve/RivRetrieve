@@ -270,9 +270,9 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
         (ProviderId("no_nve"), ProductId("water_temperature_daily_mean")),
         (ProviderId("no_nve"), ProductId("water_temperature_hourly_mean")),
         (ProviderId("no_nve"), ProductId("water_temperature_instantaneous")),
-        (ProviderId("pl_imgw"), ProductId("discharge_daily_mean")),
-        (ProviderId("pl_imgw"), ProductId("stage_daily_mean")),
-        (ProviderId("pl_imgw"), ProductId("water_temperature_daily_mean")),
+        (ProviderId("pl_imgw"), ProductId("discharge_daily")),
+        (ProviderId("pl_imgw"), ProductId("stage_daily")),
+        (ProviderId("pl_imgw"), ProductId("water_temperature_daily")),
         (ProviderId("th_thaiwater"), ProductId("discharge_reported")),
         (ProviderId("th_thaiwater"), ProductId("stage_reported")),
         (ProviderId("usgs_nwis"), ProductId("discharge_daily_mean")),
@@ -338,7 +338,7 @@ def test_manifest_probe_run_refuses_missing_declared_products_by_name() -> None:
 
     message = str(exc_info.value)
     assert "ca_eccc/discharge_daily_mean" in message
-    assert "pl_imgw/water_temperature_daily_mean" in message
+    assert "pl_imgw/water_temperature_daily" in message
     assert "usgs_nwis/stage_instantaneous" in message
 
 

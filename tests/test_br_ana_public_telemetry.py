@@ -76,7 +76,7 @@ def _authenticated_replay(monkeypatch: pytest.MonkeyPatch) -> _AuthenticatedRepl
 
 
 def test_public_catalogue_exposes_national_candidates_without_claiming_availability() -> None:
-    selection = rr.find(provider="br_ana", statistic="instantaneous")
+    selection = rr.find(provider="br_ana", timestamp_anchor="measurement_time")
     frame = rr.as_frame(selection)
     assert frame["station_id"].n_unique() == 17914
     assert frame.height == 17914 * 2
@@ -84,7 +84,7 @@ def test_public_catalogue_exposes_national_candidates_without_claiming_availabil
     assert set(frame["inventory_status"].explode()) == {"incomplete"}
     assert all(snapshot.window is None for snapshot in selection.inventories)
     station = frame.filter(pl.col("station_id") != "15400000").item(0, "station_id")
-    explicit = rr.find(provider="br_ana", station=station, quantity="discharge", statistic="instantaneous")
+    explicit = rr.find(provider="br_ana", station=station, quantity="discharge", timestamp_anchor="measurement_time")
     picked = rr.pick(selection, station=station, quantity="discharge")
     pl_testing.assert_frame_equal(rr.as_frame(explicit), rr.as_frame(picked))
     assert len(explicit.series) == 1
@@ -94,7 +94,7 @@ def test_public_catalogue_exposes_national_candidates_without_claiming_availabil
 
 def test_public_fetch_requires_both_ana_credentials_before_transport() -> None:
     selection = rr.pick(
-        rr.find(provider="br_ana", statistic="instantaneous"),
+        rr.find(provider="br_ana", timestamp_anchor="measurement_time"),
         station="15400000",
         quantity="discharge",
         variant="Vazao_Adotada",
@@ -110,13 +110,15 @@ def test_public_fetch_requires_both_ana_credentials_before_transport() -> None:
 def test_public_native_midnight_values_receipts_and_provenance(monkeypatch: pytest.MonkeyPatch, product: str) -> None:
     transport = _authenticated_replay(monkeypatch)
     selection = rr.pick(
-        rr.find(provider="br_ana", statistic="instantaneous"),
+        rr.find(provider="br_ana", timestamp_anchor="measurement_time"),
         station="15400000",
         quantity="stage" if product.startswith("stage") else "discharge",
         variant="Cota_Adotada" if product.startswith("stage") else "Vazao_Adotada",
     )
     result = rr.fetch(selection, start=_START, end=_END, receipts=True, on_issue="ignore")
     data = result.data.sort("time")
+    assert all(f.frequency.value is None and f.statistic.value is None for s in result.source_series for f in s.facts)
+    assert all(f.timestamp_anchor.value == "measurement_time" for s in result.source_series for f in s.facts)
     # The independent author supplied these three literals before reading port code.
     assert data.height == 5
     assert data.item(0, "time") == datetime(2024, 1, 1, 23, 30)
@@ -168,7 +170,7 @@ def test_public_cache_reuse_needs_no_new_exchange_or_observation(monkeypatch: py
             provider="br_ana",
             station="15400000",
             quantity="stage" if product.startswith("stage") else "discharge",
-            statistic="instantaneous",
+            timestamp_anchor="measurement_time",
         ),
         variant="Cota_Adotada" if product.startswith("stage") else "Vazao_Adotada",
     )
@@ -183,3 +185,23 @@ def test_public_cache_reuse_needs_no_new_exchange_or_observation(monkeypatch: py
     assert live.receipts.entries == cached.receipts.entries == ()
     assert cached.provenance.served_intervals
     assert transport.exchange_calls == transport.observation_calls == 1
+
+
+def test_unrestricted_telemetry_keeps_incomplete_inventory_and_reacquires(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = _authenticated_replay(monkeypatch)
+    selection = rr.find(provider="br_ana", station="15400000", quantity="stage", timestamp_anchor="measurement_time")
+    first = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
+    assert first.data.height == 5
+    assert all(snapshot.completeness.value == "incomplete" for snapshot in first.inventories)
+    assert any("Cota_Sensor" in (snapshot.reason or "") for snapshot in first.inventories)
+    calls = transport.observation_calls
+    repeated = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
+    assert transport.observation_calls > calls
+    pl_testing.assert_frame_equal(first.data, repeated.data)
+    assert all(entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for entry in repeated.receipts.entries)
+    restricted = rr.pick(selection, variant="Cota_Adotada")
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
+    cached = rr.fetch(restricted, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
+    pl_testing.assert_frame_equal(cached.data, first.data)
+    assert all(entry.authorship is ReceiptAuthorship.STORE_EXCERPT for entry in cached.receipts.entries)
+    assert cached.provenance.served_intervals

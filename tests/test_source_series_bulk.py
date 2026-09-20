@@ -52,7 +52,14 @@ def test_certified_native_bulk_retains_concrete_identity_and_physical_units(tmp_
     assert compiled.manifest.series
     assert not artifact.exists()
     selected = StoreReader().query(
-        StoreQuery(store, ProviderId(provider), (station,), ("stage_daily_mean",), start, end)
+        StoreQuery(
+            store,
+            ProviderId(provider),
+            (station,),
+            ("stage_daily_mean" if provider == "ca_eccc" else "stage_daily",),
+            start,
+            end,
+        )
     )
     assert selected.rows.height == 3
     assert selected.rows["series_id"].n_unique() == 1
@@ -67,3 +74,9 @@ def test_certified_native_bulk_retains_concrete_identity_and_physical_units(tmp_
         assert selected.physical_rows["IMGW_DAILY.level_cm"].to_list() == ["103", "102", "103"]
     else:
         assert selected.physical_rows["DLY_LEVELS.NO_DAYS"].unique().to_list() == [31]
+
+    import rivretrieve as rr
+
+    public = rr.find(provider=provider, station=station, quantity="stage")
+    catalogue_facts = public.series[0].facts[0]
+    assert definition.facts[0] == catalogue_facts

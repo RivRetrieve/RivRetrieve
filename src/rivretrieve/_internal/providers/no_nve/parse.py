@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from datetime import datetime
 from math import isfinite
 from typing import cast
@@ -104,6 +105,18 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     except (ValueError, UnicodeDecodeError) as exc:
         unsupported("HydAPI response is unreadable: " + str(exc))
         data = []
+    # An observation response provides no segment identity for repeated versions.
+    # Preflight the entire identity before admitting any block: equality or disjoint
+    # timestamps cannot establish an undocumented concatenation/deduplication rule.
+    version_counts = Counter(
+        raw["serieVersionNo"]
+        for raw in data
+        if isinstance(raw, dict)
+        and raw.get("stationId") == station
+        and raw.get("parameter") == int(coordinates.parameter)
+        and type(raw.get("serieVersionNo")) is int
+    )
+    refused_versions = set()
     for raw in data:
         definition = None
         try:
@@ -118,6 +131,40 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 raise SourceStructureError("HydAPI series version identifier is absent or malformed")
             if coordinates.version_number is not None and version != coordinates.version_number:
                 raise SourceStructureError("HydAPI returned version differs from explicitly requested version")
+            if version_counts[version] > 1:
+                if version in refused_versions:
+                    continue
+                refused_versions.add(version)
+                # Retain only facts shared by every block, never first-block facts.
+                repeated = [
+                    item
+                    for item in data
+                    if isinstance(item, dict)
+                    and item.get("stationId") == station
+                    and item.get("parameter") == int(coordinates.parameter)
+                    and type(item.get("serieVersionNo")) is int
+                    and item["serieVersionNo"] == version
+                ]
+                methods = [item.get("method") for item in repeated]
+                units = [item.get("unit") for item in repeated]
+                shared_method = (
+                    methods[0] if isinstance(methods[0], str) and all(m == methods[0] for m in methods) else None
+                )
+                shared_unit = (
+                    units[0] if isinstance(units[0], str) and units[0] and all(u == units[0] for u in units) else None
+                )
+                definition = describe_series(
+                    station,
+                    int(coordinates.parameter),
+                    version,
+                    int(coordinates.resolution_time),
+                    shared_method,
+                    shared_unit,
+                )
+                definitions.append(definition)
+                raise SourceStructureError(
+                    "HydAPI response repeats a version identity without an established segment distinction"
+                )
             method = raw.get("method")
             if method is not None and not isinstance(method, str):
                 raise SourceStructureError("HydAPI series method is malformed")
@@ -135,10 +182,6 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             definition = describe_series(
                 station, int(coordinates.parameter), version, int(coordinates.resolution_time), method, unit
             )
-            if any(s.series_id == definition.series_id for s in definitions):
-                raise SourceStructureError(
-                    "HydAPI response repeats a version identity without an established segment distinction"
-                )
             definitions.append(definition)
             decision = admission(definition.facts[0])
             if decision.status != "supported":

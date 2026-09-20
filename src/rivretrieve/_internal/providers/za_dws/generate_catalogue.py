@@ -196,11 +196,6 @@ _EXPECTED_BINDINGS: tuple[dict[str, object], ...] = (
 EXPECTED_SOURCE_BINDINGS = {str(entry["file"]): entry for entry in _EXPECTED_BINDINGS}
 EXPECTED_PDF_FILENAMES = tuple(EXPECTED_SOURCE_BINDINGS)[1:]
 
-_TIMEZONE_NOTE = (
-    "Daily timestamps are date-only (YYYYMMDD), interpreted as UTC midnight (T00:00:00Z). "
-    "Point/instantaneous timestamps are SAST (Africa/Johannesburg, UTC+2, no DST) converted to UTC."
-)
-
 
 @dataclass(frozen=True)
 class GeneratedZaDwsCatalogue:
@@ -229,29 +224,29 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="provider_defined",
+        period_anchor="unknown",
         canonical_unit="m3/s",
-        value_column="D_AVG_FR",
+        value_column="D AVG F/R",
     ),
     ProductDefinition(
         product_id="discharge_instantaneous",
         observed_property="discharge",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m3/s",
-        value_column="COR_FLOW",
+        value_column="COR.FLOW",
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
         observed_property="stage",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
+        frequency="unknown",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m",
-        value_column="COR_LEVEL",
+        value_column="COR.LEVEL",
     ),
 )
 
@@ -361,11 +356,7 @@ def build_provider_info(
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": (
-            "true: per (station, product) window requests; "
-            "Point requests shared between discharge_instantaneous and stage_instantaneous "
-            "for the same station/window; partial failures reported as recoverable issues"
-        ),
+        "bulk_observations": ("false: catalogue-only station discovery; observation retrieval is unavailable"),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
         "citation": None,
@@ -373,11 +364,9 @@ def build_provider_info(
 
 
 def write_catalogue(catalogue: GeneratedZaDwsCatalogue, out_dir: Path | str) -> None:
-    from functools import partial
-
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.catalogues.source_descriptions import generic_source_descriptions
+    from rivretrieve._internal.providers.za_dws.catalogue_series import catalogue_claims, describe_catalogue
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -394,7 +383,8 @@ def write_catalogue(catalogue: GeneratedZaDwsCatalogue, out_dir: Path | str) -> 
         ).build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
-        source_describer=partial(generic_source_descriptions, config=None),
+        source_describer=describe_catalogue,
+        catalogue_claims=catalogue_claims(catalogue.stations["station_id"].to_list()),
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
