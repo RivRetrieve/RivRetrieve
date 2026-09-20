@@ -6,7 +6,7 @@
 |---|---|
 | Provider | `ch_foen` |
 | Country | Switzerland |
-| Data owner | Bundesamt für Umwelt / Federal Office for the Environment (BAFU/FOEN) |
+| Data owner | Federal Office for the Environment (FOEN) |
 | Read from | Existenz.ch's API and InfluxDB archive, an unofficial third-party service |
 | Quantities | Discharge, stage, water temperature |
 | Stations in the catalogue | 246 locations, not confirmed availability for every quantity |
