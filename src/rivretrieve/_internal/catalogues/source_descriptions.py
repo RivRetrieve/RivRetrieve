@@ -60,7 +60,17 @@ def generic_source_descriptions(
         product = row["product_id"]
         declared = config.products.get(product) if config is not None else None
         mapping = mappings.get(product) if mappings is not None else None
-        unit = mapping.source_unit if mapping is not None else declared.unit.value if declared is not None else None
+        if mapping is not None:
+            result.append(
+                SourceDescription(
+                    product_id=product,
+                    native_coordinate=row["native_id"],
+                    identity=mapping.identity(),
+                    facts=(mapping.physical_facts(),),
+                )
+            )
+            continue
+        unit = declared.unit.value if declared is not None else None
         quantity = row["observed_property"]
         # The catalogue uses the established water_temperature quantity spelling.
         quantity = "temperature" if quantity == "water_temperature" else quantity
@@ -76,20 +86,17 @@ def generic_source_descriptions(
             if value != "unknown":
                 day = known(value, f"mapping:{provider}:{product}:day_definition")
         zone = config.zone.value if config is not None else "unknown"
-        unit_definition = mapping.source_unit_definition if mapping is not None else None
-        unit_evidence = () if unit_definition is None else unit_definition.evidence
         facts = PhysicalFacts(
             facts_id=stable_id(provider, product, unit),
             quantity=fact(quantity, "product.observed_property"),
             source_unit=EvidenceFact(
                 value=unit,
                 state=EvidenceState.KNOWN,
-                evidence=(f"mapping:{provider}:{product}:native_unit", *unit_evidence),
+                evidence=(f"mapping:{provider}:{product}:native_unit",),
             )
             if unit
             else EvidenceFact(),
-            source_unit_definition=unit_definition,
-            normalized_unit=mapping.normalized_unit if mapping is not None else unit,
+            normalized_unit=unit,
             frequency=frequency,
             statistic=fact(row["statistic"], "product.statistic"),
             temporal_support=fact(row["period_type"], "product.period_type"),
@@ -105,8 +112,8 @@ def generic_source_descriptions(
                 product_id=product,
                 native_coordinate=row["native_id"],
                 identity=SourceIdentity(
-                    namespace=mapping.namespace if mapping is not None else f"{provider}/{product}",
-                    published_id=mapping.published_id if mapping is not None else None,
+                    namespace=f"{provider}/{product}",
+                    published_id=None,
                     origin="mapping",
                     evidence=(f"catalogue:{provider}:product.native_id",),
                 ),
