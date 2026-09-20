@@ -116,7 +116,9 @@ def generic_source_descriptions(
             normalized_unit=unit,
             frequency=frequency,
             statistic=fact(row["statistic"], "product.statistic"),
-            temporal_support=fact(row["period_type"], "product.period_type"),
+            temporal_support=fact(
+                "instantaneous" if row["period_type"] == "instant" else row["period_type"], "product.period_type"
+            ),
             day_definition=day,
             time_zone=known(zone, f"mapping:{provider}:time_zone") if zone != "unknown" else EvidenceFact(),
             clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,

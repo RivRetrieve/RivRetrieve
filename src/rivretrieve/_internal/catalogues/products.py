@@ -16,7 +16,9 @@ def product_row(provider_id: str, product_id: str, native_id: str | None, facts:
         "observed_property": "water_temperature" if quantity == "temperature" else quantity,
         "frequency": facts.frequency.value or "unknown",
         "statistic": facts.statistic.value or "unknown",
-        "period_type": facts.temporal_support.value or "unknown",
+        "period_type": "instant"
+        if facts.temporal_support.value == "instantaneous"
+        else facts.temporal_support.value or "unknown",
         "period_anchor": facts.timestamp_anchor.value or "unknown",
         "unit": decision.target_unit,
         "native_id": native_id,
