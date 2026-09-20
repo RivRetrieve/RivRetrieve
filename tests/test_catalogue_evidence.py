@@ -343,12 +343,125 @@ def _assert_usgs_definition_extension_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
+def _assert_bulk_source_history_preserved(provider, provenance):
+    """Compare retained source inputs, not superseded output/authority assertions."""
+    path = Path(__file__).parent / "test_data/catalogue_provenance_original_v2" / f"{provider}.json"
+    original = AcquisitionProvenance.model_validate_json(path.read_bytes())
+    before = original.model_dump(mode="json")
+    after = provenance.model_dump(mode="json")
+    if provider == "ca_eccc":
+        # The observation carrier changed; publisher evidence did not.
+        assert before["fact_universe"][7] == "observation.canonical_five_column_shape"
+        assert after["fact_universe"][7] == "observation.identity_bearing_shape"
+        after["fact_universe"][7] = before["fact_universe"][7]
+        old_binding = next(x for x in before["fact_bindings"] if x["fact_group"] == "canonical_observation_shape")
+        new_binding = next(x for x in after["fact_bindings"] if x["fact_group"] == "canonical_observation_shape")
+        assert new_binding["facts"] == ["observation.identity_bearing_shape"]
+        assert (
+            new_binding["transformation"]["name"]
+            == "HYDAT observations to identity-bearing RivRetrieve observation rows"
+        )
+        new_binding["facts"] = old_binding["facts"]
+        new_binding["transformation"]["name"] = old_binding["transformation"]["name"]
+    elif provider == "pl_imgw":
+        source = next(x for x in after["source_records"] if x["source_id"] == "sr.pl.imgw")
+        assert source["acquisitions"][0]["acquisition_id"] == "imgw_archive_definitions_2026_09_20"
+        assert source["acquisitions"][0]["recording_ids"] == ["pl_imgw_codz_format", "pl_imgw_yearbook_2025"]
+        source["acquisitions"].pop(0)
+        assert [x["evidence_id"] for x in source["evidence"][:2]] == [
+            "pl_imgw_codz_definition",
+            "pl_imgw_yearbook_methods",
+        ]
+        del source["evidence"][:2]
+        physics = next(x for x in after["fact_bindings"] if x["fact_group"] == "imgw_archive_physics")
+        assert physics == {
+            "fact_group": "imgw_archive_physics",
+            "facts": ["source.imgw.observation_archive_product_semantics"],
+            "source_id": "sr.pl.imgw",
+            "acquisition_id": "imgw_archive_definitions_2026_09_20",
+        }
+        after["fact_bindings"].remove(physics)
+        roster = next(x for x in after["fact_bindings"] if x["fact_group"] == "imgw_catalogue_inputs")
+        assert "source.imgw.observation_archive_product_semantics" not in roster["facts"]
+        roster["facts"].insert(1, "source.imgw.observation_archive_product_semantics")
+    else:
+        # CatalogueOnly has no runtime observation acquisition. Its field facts
+        # now cite recovered publisher legends rather than a station catalogue.
+        (old_source,) = before["source_records"]
+        (new_source,) = after["source_records"]
+        assert [x["acquisition_id"] for x in old_source["acquisitions"]] == [
+            "verified_hydrology_archive_campaign_2026_08_02",
+            "observation_request",
+        ]
+        assert [x["acquisition_id"] for x in new_source["acquisitions"]] == [
+            "verified_hydrology_archive_campaign_2026_08_02",
+            "daily_field_definitions_repository_recovery",
+            "point_field_definitions_repository_recovery",
+        ]
+        old_note = next(x for x in old_source["evidence"] if x["evidence_id"] == "za_dws_observation_terms_absence")
+        new_note = next(x for x in new_source["evidence"] if x["evidence_id"] == "za_dws_observation_terms_absence")
+        assert new_note["description"] == (
+            "Archived A2H023 Monthly response publishes Variable 100.00 Surface Water Level and monthly volumes "
+            "in million cubic metres; no equivalence with D_AVG_FR, COR_FLOW or COR_LEVEL is established. "
+            "No applicable terms or citation statement."
+        )
+        new_note["description"] = old_note["description"]
+        old_source["acquisitions"].pop()
+        del new_source["acquisitions"][1:]
+        removed = {
+            "source.product.dws_datatype_and_file_semantics",
+            "source.observation.dws_fixed_format_values_quality_and_time",
+        }
+        added = {"source.product.daily_field_definition", "source.product.point_field_definitions"}
+        assert set(before["fact_universe"]) - set(after["fact_universe"]) == removed
+        assert set(after["fact_universe"]) - set(before["fact_universe"]) == added
+        before["fact_universe"] = [x for x in before["fact_universe"] if x not in removed]
+        after["fact_universe"] = [x for x in after["fact_universe"] if x not in added]
+        for group, fact, acquisition in (
+            (
+                "daily_product_identity",
+                "source.product.daily_field_definition",
+                "daily_field_definitions_repository_recovery",
+            ),
+            (
+                "point_product_identity",
+                "source.product.point_field_definitions",
+                "point_field_definitions_repository_recovery",
+            ),
+        ):
+            assert next(x for x in after["fact_bindings"] if x["fact_group"] == group) == {
+                "fact_group": group,
+                "facts": [fact],
+                "source_id": "za_dws",
+                "acquisition_id": acquisition,
+            }
+        before["fact_bindings"] = [
+            x for x in before["fact_bindings"] if x["fact_group"] not in {"product_identity", "observation_values"}
+        ]
+        after["fact_bindings"] = [
+            x
+            for x in after["fact_bindings"]
+            if x["fact_group"] not in {"daily_product_identity", "point_product_identity"}
+        ]
+        for model, omitted in ((before, removed), (after, added)):
+            carrier = next(x for x in model["fact_bindings"] if x["fact_group"] == "canonical_catalogue_carrier")
+            carrier["transformation"]["external_inputs"] = [
+                x for x in carrier["transformation"]["external_inputs"] if x["fact"] not in omitted
+            ]
+    assert after == before
+    # The immutable historical fixture, not today's corrected assertions, remains
+    # subject to the original full ordered digest below.
+    return original
+
+
 @pytest.mark.parametrize("provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider != "br_ana"))
 def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
     assert oracle["revision"] == "6f0edf6a455735cb1f8c858a1a9f35d4245cf209"
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
     restored = _legacy(provider)
+    if provider in {"ca_eccc", "pl_imgw", "za_dws"}:
+        restored = _assert_bulk_source_history_preserved(provider, restored)
     if provider == "usgs_nwis":
         restored = _assert_usgs_definition_extension_and_restore_original(restored)
         assert oracle["providers"][provider]["ordered_model_sha256"] == (
