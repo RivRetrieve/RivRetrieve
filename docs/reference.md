@@ -304,7 +304,7 @@ rivretrieve.from_frame(frame: 'pl.DataFrame') -> '_Selection'
 
 Import: `from rivretrieve import from_frame`.
 
-Refuse obsolete triple-only imports; use a validated versioned export bundle.
+Frame imports are unsupported; use a validated versioned export bundle.
 
 ### `map`
 
@@ -589,6 +589,18 @@ and outcomes remain inspectable even when a series has no observation rows.
 `scope` is the original request; `view_scope` records explicit post-fetch
 narrowing without pretending another source request occurred.
 
+| Field | Python type | Required |
+| --- | --- | --- |
+| `data` | `polars.dataframe.frame.DataFrame` | yes |
+| `provenance` | `rivretrieve._internal.observations.ObservationProvenance` | yes |
+| `issues` | `tuple[rivretrieve._internal.issues.Issue, ...]` | no |
+| `receipts` | `rivretrieve._internal.observations.Receipts` | yes |
+| `source_series` | `tuple[rivretrieve._internal.source_series.SourceSeries, ...]` | no |
+| `inventories` | `tuple[rivretrieve._internal.source_series.InventorySnapshot, ...]` | no |
+| `outcomes` | `tuple[rivretrieve._internal.source_series.RetrievalOutcome, ...]` | no |
+| `scope` | `rivretrieve._internal.source_series.SeriesScope` | no |
+| `view_scope` | `rivretrieve._internal.source_series.SeriesScope &#124; None` | no |
+
 ### `ObservationProvenance`
 
 Type location: `rivretrieve._internal.observations.ObservationProvenance`.
@@ -632,6 +644,31 @@ Source and request facts that accompany observations.
   Ordered identities of all compiled publisher artifacts.
 - **acquisition_provenance : CatalogueEvidence or None**
   Normalized evidence for the packaged catalogue, not observation quality.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `source` | `str` | yes |
+| `provider_id` | `rivretrieve._internal.primitives.ProviderId` | yes |
+| `rivretrieve_version` | `str &#124; None` | no |
+| `catalogue_version` | `str &#124; None` | no |
+| `license` | `str &#124; None` | no |
+| `citation` | `str &#124; None` | no |
+| `requested_at` | `datetime.datetime &#124; None` | no |
+| `retrieved_at` | `datetime.datetime &#124; None` | no |
+| `request` | `dict[str, object] &#124; None` | no |
+| `calls_made` | `tuple[dict[str, object], ...]` | no |
+| `time_windows` | `tuple[dict[str, object], ...]` | no |
+| `decomposition` | `tuple[str, ...]` | no |
+| `endpoints` | `tuple[str, ...]` | no |
+| `query` | `dict[str, object] &#124; None` | no |
+| `response_version` | `str &#124; None` | no |
+| `metadata` | `str &#124; None` | no |
+| `served_intervals` | `tuple[rivretrieve._internal.coverage.CoverageInterval, ...]` | no |
+| `source_vintage` | `datetime.date &#124; None` | no |
+| `publisher_artifact_checksum` | `str &#124; None` | no |
+| `publisher_artifact_checksums` | `tuple[str, ...]` | no |
+| `publisher_artifact_urls` | `tuple[str, ...]` | no |
+| `acquisition_provenance` | `rivretrieve._internal.catalogues.evidence.CatalogueEvidence &#124; None` | no |
 
 ### `Receipts`
 
@@ -700,6 +737,306 @@ ObservationResult.to_pandas(self) -> 'Any'
 
 Convert identity-bearing observation rows using Polars' Pandas conversion.
 
+### `EvidenceState`
+
+Type location: `rivretrieve._internal.source_series.EvidenceState`.
+
+Whether a physical fact is known, absent from the source, or not established here.
+
+Values: `known`, `source_silent`, `not_established`.
+
+### `EvidenceFact`
+
+Type location: `rivretrieve._internal.source_series.EvidenceFact`.
+
+One independently established physical fact and its evidence.
+
+`known` requires a nonempty value and evidence. `source_silent` means
+the source does not state the fact; `not_established` means it has not
+been established here. Both unknown states retain a null value.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `value` | `str &#124; None` | no |
+| `state` | `rivretrieve._internal.source_series.EvidenceState` | no |
+| `evidence` | `tuple[str, ...]` | no |
+
+### `ClippingAxis`
+
+Type location: `rivretrieve._internal.source_series.ClippingAxis`.
+
+Whether a request clips daily calendar labels or source wall-clock timestamps.
+
+Values: `calendar_date`, `source_timestamp`.
+
+### `SourceUnitCodeDefinition`
+
+Type location: `rivretrieve._internal.source_series.SourceUnitCodeDefinition`.
+
+Published meaning of a unit code for one provider access namespace.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `provider_id` | `str` | yes |
+| `namespace` | `str` | yes |
+| `code` | `str` | yes |
+| `unit` | `str` | yes |
+| `evidence` | `tuple[str, ...]` | yes |
+
+### `PhysicalFacts`
+
+Type location: `rivretrieve._internal.source_series.PhysicalFacts`.
+
+Physical meaning for one fact segment within a source series.
+
+Each EvidenceFact retains its own knowledge state. Frequency and statistic
+describe observations, not how often the service updates. Temporal support
+describes the interval represented by a value. Day definition, timestamp
+anchor and time zone remain independent facts; none is inferred from another.
+`normalized_unit` preserves the source unit scale and zero. Conversion
+to the output unit is described by Admission, not by unit normalization.
+`facts_id` joins this segment to observation rows and retrieval outcomes.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `facts_id` | `str` | yes |
+| `quantity` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `source_unit` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `normalized_unit` | `str &#124; None` | no |
+| `source_unit_definition` | `rivretrieve._internal.source_series.SourceUnitCodeDefinition &#124; None` | no |
+| `frequency` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `statistic` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `temporal_support` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `day_definition` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `timestamp_anchor` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `time_zone` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `vertical_reference` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `vertical_datum` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `clipping_axis` | `rivretrieve._internal.source_series.ClippingAxis` | no |
+| `label_time` | `str &#124; None` | no |
+
+### `Admission`
+
+Type location: `rivretrieve._internal.source_series.Admission`.
+
+Whether established quantity and unit facts permit harmonised numeric rows.
+
+`supported` carries the target unit and multiplicative conversion factor.
+`unsupported` carries a reason. Admission does not rank source quality or
+require every temporal fact to be known.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `status` | `Literal['supported', 'unsupported']` | yes |
+| `reason` | `str &#124; None` | no |
+| `target_unit` | `str &#124; None` | no |
+| `factor` | `float &#124; None` | no |
+
+### `SourceIdentity`
+
+Type location: `rivretrieve._internal.source_series.SourceIdentity`.
+
+Agency-published identity within a source namespace, with origin and evidence.
+
+`published_id` and description can be absent. Origin records whether the
+identity was acquired from a catalogue, response or established mapping.
+An identity is not a harmonised quality score.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `namespace` | `str` | yes |
+| `published_id` | `str &#124; None` | no |
+| `description` | `str &#124; None` | no |
+| `origin` | `Literal['catalogue', 'response', 'mapping']` | yes |
+| `evidence` | `tuple[str, ...]` | yes |
+
+### `SourceSeries`
+
+Type location: `rivretrieve._internal.source_series.SourceSeries`.
+
+One concrete source identity at a provider, station and access route.
+
+`series_id` joins the definition to rows, inventories and outcomes.
+`product_id` is an internal access route, not a physical classification.
+`variant` preserves a selectable source alternative when established.
+`facts` contains independently identified physical-fact segments.
+Matching physical facts do not establish scientific interchangeability.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `series_id` | `str` | yes |
+| `provider_id` | `str` | yes |
+| `station_id` | `str` | yes |
+| `product_id` | `str` | yes |
+| `identity` | `rivretrieve._internal.source_series.SourceIdentity` | yes |
+| `variant` | `str &#124; None` | no |
+| `facts` | `tuple[rivretrieve._internal.source_series.PhysicalFacts, ...]` | yes |
+
+### `PhysicalPredicate`
+
+Type location: `rivretrieve._internal.source_series.PhysicalPredicate`.
+
+An exact filter on a known physical fact; unknown facts do not match.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `field` | `Literal['quantity', 'frequency', 'statistic', 'temporal_support', 'day_definition', 'timestamp_anchor', 'time_zone', 'vertical_reference', 'vertical_datum']` | yes |
+| `value` | `str` | yes |
+
+### `RestrictionKind`
+
+Type location: `rivretrieve._internal.source_series.RestrictionKind`.
+
+All matching identities, or an explicit variant or series-ID restriction.
+
+Values: `all`, `explicit`.
+
+### `ScopeState`
+
+Type location: `rivretrieve._internal.source_series.ScopeState`.
+
+An active request scope or an empty intersection of filters.
+
+Values: `active`, `empty`.
+
+### `SeriesScope`
+
+Type location: `rivretrieve._internal.source_series.SeriesScope`.
+
+Physical filters and source restrictions retained by a selection or result.
+
+Empty coordinate tuples impose no coordinate restriction. `all` includes
+matching identities discovered during retrieval, not only packaged members.
+`explicit` retains requested variants or series IDs without fallback to
+other identities. Variant matching accepts a variant or published source ID.
+All physical predicates must match known facts within a fact segment.
+An `empty` scope matches nothing.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `state` | `rivretrieve._internal.source_series.ScopeState` | no |
+| `provider_ids` | `tuple[str, ...]` | no |
+| `station_ids` | `tuple[str, ...]` | no |
+| `product_ids` | `tuple[str, ...]` | no |
+| `predicates` | `tuple[rivretrieve._internal.source_series.PhysicalPredicate, ...]` | no |
+| `restriction` | `rivretrieve._internal.source_series.RestrictionKind` | no |
+| `variants` | `tuple[str, ...]` | no |
+| `series_ids` | `tuple[str, ...]` | no |
+
+### `SeriesWindow`
+
+Type location: `rivretrieve._internal.source_series.SeriesWindow`.
+
+Closed request interval with ordered, naive source wall-clock endpoints.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `start` | `datetime.datetime` | yes |
+| `end` | `datetime.datetime` | yes |
+
+### `InventoryCompleteness`
+
+Type location: `rivretrieve._internal.source_series.InventoryCompleteness`.
+
+Completeness of one scoped inventory: complete, incomplete or unresolved.
+
+Values: `complete`, `incomplete`, `unresolved`.
+
+### `CatalogueSeriesClaim`
+
+Type location: `rivretrieve._internal.source_series.CatalogueSeriesClaim`.
+
+A scoped publisher catalogue claim, not an alias for a response series.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `provider_id` | `str` | yes |
+| `station_id` | `str` | yes |
+| `product_id` | `str` | yes |
+| `identity` | `rivretrieve._internal.source_series.SourceIdentity` | yes |
+| `native_coordinates` | `tuple[tuple[str, str &#124; None], ...]` | no |
+
+### `InventorySnapshot`
+
+Type location: `rivretrieve._internal.source_series.InventorySnapshot`.
+
+What is known about source-series membership for a scope and access route.
+
+`members` holds concrete series IDs; `member_facts` can identify their
+fact segments. Catalogue claims retain separately published catalogue
+identities rather than pretending they are response series.
+Completeness applies only to this scope, access and optional window, not
+countrywide coverage or a full historical census. Incomplete and unresolved
+snapshots carry a reason. Acquisition time and catalogue check date record
+evidence timing, not continuous observation coverage.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `snapshot_id` | `str` | yes |
+| `scope` | `rivretrieve._internal.source_series.SeriesScope` | yes |
+| `members` | `tuple[str, ...]` | yes |
+| `member_facts` | `tuple[tuple[str, tuple[str, ...]], ...]` | no |
+| `completeness` | `rivretrieve._internal.source_series.InventoryCompleteness` | yes |
+| `access` | `str` | yes |
+| `origin` | `Literal['catalogue', 'response', 'compiled']` | yes |
+| `acquired_at` | `datetime.datetime &#124; None` | no |
+| `catalogue_check_date` | `datetime.date &#124; None` | no |
+| `catalogue_claims` | `tuple[rivretrieve._internal.source_series.CatalogueSeriesClaim, ...]` | no |
+| `window` | `rivretrieve._internal.source_series.SeriesWindow &#124; None` | no |
+| `evidence` | `tuple[str, ...]` | yes |
+| `reason` | `str &#124; None` | no |
+
+### `OutcomeStatus`
+
+Type location: `rivretrieve._internal.source_series.OutcomeStatus`.
+
+Result of one retrieval: success, empty, failed, unsupported, unresolved or no_match.
+
+`success` and `empty` retain a concrete series and fact IDs. `empty`
+means no observation rows, not a row with a null value. `failed` records
+a source failure; `unsupported` records an unsupported series.
+`unresolved` means availability cannot be established. `no_match` means
+the available evidence establishes that nothing matches the request.
+
+Values: `success`, `empty`, `failed`, `unsupported`, `unresolved`, `no_match`.
+
+### `RequestedSelector`
+
+Type location: `rivretrieve._internal.source_series.RequestedSelector`.
+
+A caller restriction, not an assertion of published source identity.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `kind` | `Literal['variant', 'series_id']` | yes |
+| `value` | `str` | yes |
+
+### `RetrievalOutcome`
+
+Type location: `rivretrieve._internal.source_series.RetrievalOutcome`.
+
+Retrieval status for a source series or an unresolved requested selector.
+
+`series_id` can be absent when no concrete identity is established.
+`requested_selector` preserves the caller restriction without inventing
+a source identity. Unsuccessful outcomes retain a reason. `calls` links
+source-call evidence; `retrieved_at` records retrieval timing when known.
+Outcomes remain present even when there are no observation rows.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `outcome_id` | `str` | yes |
+| `series_id` | `str &#124; None` | yes |
+| `station_id` | `str` | yes |
+| `product_id` | `str` | yes |
+| `window` | `rivretrieve._internal.source_series.SeriesWindow` | yes |
+| `status` | `rivretrieve._internal.source_series.OutcomeStatus` | yes |
+| `facts_ids` | `tuple[str, ...]` | no |
+| `reason` | `str &#124; None` | no |
+| `retrieved_at` | `datetime.datetime &#124; None` | no |
+| `calls` | `tuple[str, ...]` | no |
+| `requested_selector` | `rivretrieve._internal.source_series.RequestedSelector &#124; None` | no |
+
 ### `Issue`
 
 Type location: `rivretrieve._internal.issues.Issue`.
@@ -718,6 +1055,14 @@ A retained finding distinct from a fatal contract exception.
   Structured context, such as station, product and source failure reason.
 - **provider_id : ProviderId or None**
   Provider responsible for the affected series when known.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `severity` | `Literal['info', 'warning', 'error']` | yes |
+| `code` | `str` | yes |
+| `message` | `str` | yes |
+| `details` | `dict[str, object] &#124; None` | no |
+| `provider_id` | `Optional[rivretrieve._internal.primitives.ProviderId]` | no |
 
 ### `CatalogueEvidence`
 
@@ -741,6 +1086,15 @@ Validated catalogue evidence in normalized Polars relations.
 - **external_inputs : polars.DataFrame**
   Exact ordered input facts for transformations. JSON serialization uses
   one array per physical column and is explicit, not part of discovery.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `header` | `rivretrieve._internal.catalogues.evidence.EvidenceHeader` | yes |
+| `facts` | `polars.dataframe.frame.DataFrame` | yes |
+| `acquisitions` | `polars.dataframe.frame.DataFrame` | yes |
+| `bindings` | `polars.dataframe.frame.DataFrame` | yes |
+| `binding_facts` | `polars.dataframe.frame.DataFrame` | yes |
+| `external_inputs` | `polars.dataframe.frame.DataFrame` | yes |
 
 ### `RequestedInterval`
 

@@ -20,12 +20,20 @@ from rivretrieve._internal.issues import FatalContractError, Issue
 
 
 class EvidenceState(StrEnum):
+    """Whether a physical fact is known, absent from the source, or not established here."""
+
     KNOWN = "known"
     SOURCE_SILENT = "source_silent"
     NOT_ESTABLISHED = "not_established"
 
 
 class EvidenceFact(BaseModel):
+    """One independently established physical fact and its evidence.
+
+    ``known`` requires a nonempty value and evidence. ``source_silent`` means
+    the source does not state the fact; ``not_established`` means it has not
+    been established here. Both unknown states retain a null value."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     value: str | None = None
     state: EvidenceState = EvidenceState.NOT_ESTABLISHED
@@ -47,6 +55,8 @@ def known(value: str, evidence: str) -> EvidenceFact:
 
 
 class ClippingAxis(StrEnum):
+    """Whether a request clips daily calendar labels or source wall-clock timestamps."""
+
     CALENDAR_DATE = "calendar_date"
     SOURCE_TIMESTAMP = "source_timestamp"
 
@@ -71,6 +81,16 @@ class SourceUnitCodeDefinition(BaseModel):
 
 
 class PhysicalFacts(BaseModel):
+    """Physical meaning for one fact segment within a source series.
+
+    Each EvidenceFact retains its own knowledge state. Frequency and statistic
+    describe observations, not how often the service updates. Temporal support
+    describes the interval represented by a value. Day definition, timestamp
+    anchor and time zone remain independent facts; none is inferred from another.
+    ``normalized_unit`` preserves the source unit scale and zero. Conversion
+    to the output unit is described by Admission, not by unit normalization.
+    ``facts_id`` joins this segment to observation rows and retrieval outcomes."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     facts_id: str
     quantity: EvidenceFact = EvidenceFact()
@@ -175,6 +195,12 @@ def _normalization_defect(
 
 
 class Admission(BaseModel):
+    """Whether established quantity and unit facts permit harmonised numeric rows.
+
+    ``supported`` carries the target unit and multiplicative conversion factor.
+    ``unsupported`` carries a reason. Admission does not rank source quality or
+    require every temporal fact to be known."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     status: Literal["supported", "unsupported"]
     reason: str | None = None
@@ -204,6 +230,12 @@ def admission(facts: PhysicalFacts) -> Admission:
 
 
 class SourceIdentity(BaseModel):
+    """Agency-published identity within a source namespace, with origin and evidence.
+
+    ``published_id`` and description can be absent. Origin records whether the
+    identity was acquired from a catalogue, response or established mapping.
+    An identity is not a harmonised quality score."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     namespace: str
     published_id: str | None = None
@@ -224,6 +256,14 @@ def stable_id(*components: str | None) -> str:
 
 
 class SourceSeries(BaseModel):
+    """One concrete source identity at a provider, station and access route.
+
+    ``series_id`` joins the definition to rows, inventories and outcomes.
+    ``product_id`` is an internal access route, not a physical classification.
+    ``variant`` preserves a selectable source alternative when established.
+    ``facts`` contains independently identified physical-fact segments.
+    Matching physical facts do not establish scientific interchangeability."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     series_id: str
     provider_id: str
@@ -249,6 +289,8 @@ class SourceSeries(BaseModel):
 
 
 class PhysicalPredicate(BaseModel):
+    """An exact filter on a known physical fact; unknown facts do not match."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     field: Literal[
         "quantity",
@@ -265,16 +307,29 @@ class PhysicalPredicate(BaseModel):
 
 
 class RestrictionKind(StrEnum):
+    """All matching identities, or an explicit variant or series-ID restriction."""
+
     ALL = "all"
     EXPLICIT = "explicit"
 
 
 class ScopeState(StrEnum):
+    """An active request scope or an empty intersection of filters."""
+
     ACTIVE = "active"
     EMPTY = "empty"
 
 
 class SeriesScope(BaseModel):
+    """Physical filters and source restrictions retained by a selection or result.
+
+    Empty coordinate tuples impose no coordinate restriction. ``all`` includes
+    matching identities discovered during retrieval, not only packaged members.
+    ``explicit`` retains requested variants or series IDs without fallback to
+    other identities. Variant matching accepts a variant or published source ID.
+    All physical predicates must match known facts within a fact segment.
+    An ``empty`` scope matches nothing."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     state: ScopeState = ScopeState.ACTIVE
     provider_ids: tuple[str, ...] = ()
@@ -330,6 +385,8 @@ class SeriesScope(BaseModel):
 
 
 class SeriesWindow(BaseModel):
+    """Closed request interval with ordered, naive source wall-clock endpoints."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     start: datetime
     end: datetime
@@ -342,6 +399,8 @@ class SeriesWindow(BaseModel):
 
 
 class InventoryCompleteness(StrEnum):
+    """Completeness of one scoped inventory: complete, incomplete or unresolved."""
+
     COMPLETE = "complete"
     INCOMPLETE = "incomplete"
     UNRESOLVED = "unresolved"
@@ -359,6 +418,16 @@ class CatalogueSeriesClaim(BaseModel):
 
 
 class InventorySnapshot(BaseModel):
+    """What is known about source-series membership for a scope and access route.
+
+    ``members`` holds concrete series IDs; ``member_facts`` can identify their
+    fact segments. Catalogue claims retain separately published catalogue
+    identities rather than pretending they are response series.
+    Completeness applies only to this scope, access and optional window, not
+    countrywide coverage or a full historical census. Incomplete and unresolved
+    snapshots carry a reason. Acquisition time and catalogue check date record
+    evidence timing, not continuous observation coverage."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     snapshot_id: str
     scope: SeriesScope
@@ -394,6 +463,14 @@ class InventorySnapshot(BaseModel):
 
 
 class OutcomeStatus(StrEnum):
+    """Result of one retrieval: success, empty, failed, unsupported, unresolved or no_match.
+
+    ``success`` and ``empty`` retain a concrete series and fact IDs. ``empty``
+    means no observation rows, not a row with a null value. ``failed`` records
+    a source failure; ``unsupported`` records an unsupported series.
+    ``unresolved`` means availability cannot be established. ``no_match`` means
+    the available evidence establishes that nothing matches the request."""
+
     SUCCESS = "success"
     EMPTY = "empty"
     FAILED = "failed"
@@ -417,6 +494,14 @@ class RequestedSelector(BaseModel):
 
 
 class RetrievalOutcome(BaseModel):
+    """Retrieval status for a source series or an unresolved requested selector.
+
+    ``series_id`` can be absent when no concrete identity is established.
+    ``requested_selector`` preserves the caller restriction without inventing
+    a source identity. Unsuccessful outcomes retain a reason. ``calls`` links
+    source-call evidence; ``retrieved_at`` records retrieval timing when known.
+    Outcomes remain present even when there are no observation rows."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     outcome_id: str
     series_id: str | None

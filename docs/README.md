@@ -27,10 +27,10 @@ Whatever the provider, RivRetrieve gives you the same things:
 - **Stations**: an identifier, a position where recorded, and the station’s catalogued products.
 - **Products**: a variable (discharge, stage or water temperature), a statistic (mean, maximum,
   minimum or an instantaneous reading) and a time step (daily, hourly or irregular). Statistics
-  and time steps remain `unknown` where they are not established.
+  and time steps remain unknown where they are not established.
 - **Units**: discharge in m³/s, stage in m, and water temperature in °C.
 - **Times**: as the agency publishes them, each with its time zone, which is `unknown` when the
-  agency does not state one.
+  source meaning has not been established.
 - **Terms and citation**: these stay with the agency. Check them before using the data.
 
 A page for each provider, describing its network, what it measures and how to cite it, is being
@@ -44,20 +44,25 @@ written.
 - [Catalogue absence](catalogue-absence.md): why a missing fact is not the same as a source saying
   nothing.
 
-## Project records
+## Maintaining the software
 
-The pages above describe the software as it is today. The records below preserve the reasoning at
-the time they were written: their API names, provider counts and execution details may since have
-been superseded. Read them as history rather than as instructions.
+- [Physical products and source series](product_dictionary.md): structured physical meaning and source identity.
+- [Catalogue provenance](catalogue-provenance.md): current catalogue maintenance conventions.
+- [Observation store layout](design/observation-store-layout.md): the current normative store specification.
+- [Development conventions](development-conventions.md).
 
-- [Catalogue provenance](catalogue-provenance.md).
+## Provider evidence records
+
+Provider port notes retain source research and acquisition history. Use the
+[API reference](reference.md#shipped-software-capabilities) for current software access:
+ten live providers, Canada and Poland through bulk stores, and South Africa for
+catalogue discovery only.
+
 - [Evidenced inventory account](provider_ports/evidenced_coverage.md). Its recorded limitations
   still apply: it does not establish countrywide inventory completeness or continuous observation
   history.
 - [Provider port notes](provider_ports/): what was established about each source when it was
   added.
-- [Observation store layout](design/observation-store-layout.md): the normative store specification.
-- [Development conventions](development-conventions.md).
 
 <details>
 <summary>Port notes, one per provider</summary>
@@ -84,7 +89,7 @@ No site build, credentials or bulk download is needed. From a source checkout, r
 
 ```bash
 uv run python scripts/generate_reference.py --check
-uv run pytest -q tests/test_documentation.py
+uv run --with rdflib pytest -q tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
 ```
 
 The tests replay committed source bytes through the public API. They do not test whether a
