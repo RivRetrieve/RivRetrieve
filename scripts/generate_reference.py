@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import argparse
 import inspect
+from enum import Enum
 from importlib import import_module
 from pathlib import Path
 from types import FunctionType
 
 import polars as pl
+from pydantic import BaseModel
 
 import rivretrieve
 from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA
@@ -26,6 +28,27 @@ from rivretrieve._internal.source_series import SeriesScope
 TYPE_LOCATIONS = {
     "selection": ("_Selection",),
     "observations": ("ObservationResult", "ObservationProvenance", "Receipts", "ReceiptEntry", "StoreExcerptReceipt"),
+    "source_series": (
+        "EvidenceState",
+        "EvidenceFact",
+        "ClippingAxis",
+        "SourceUnitCodeDefinition",
+        "PhysicalFacts",
+        "Admission",
+        "SourceIdentity",
+        "SourceSeries",
+        "PhysicalPredicate",
+        "RestrictionKind",
+        "ScopeState",
+        "SeriesScope",
+        "SeriesWindow",
+        "InventoryCompleteness",
+        "CatalogueSeriesClaim",
+        "InventorySnapshot",
+        "OutcomeStatus",
+        "RequestedSelector",
+        "RetrievalOutcome",
+    ),
     "issues": ("Issue",),
     "catalogues.evidence": ("CatalogueEvidence",),
     "coverage": ("RequestedInterval", "CoverageInterval"),
@@ -88,7 +111,16 @@ def _contract(name: str, value: FunctionType | type, *, public: bool) -> str:
         header += f"Import: `from rivretrieve import {name}`.\n\n"
     else:
         header += f"Type location: `{location}`.\n\n"
-    return header + _doc_markdown(doc) + "\n"
+    text = header + _doc_markdown(doc) + "\n"
+    if inspect.isclass(value) and issubclass(value, Enum):
+        text += "\nValues: " + ", ".join(f"`{member.value}`" for member in value) + ".\n"
+    if inspect.isclass(value) and issubclass(value, BaseModel):
+        text += "\n| Field | Python type | Required |\n| --- | --- | --- |\n"
+        for field_name, field in value.model_fields.items():
+            annotation = inspect.formatannotation(field.annotation).replace("|", "&#124;")
+            required = "yes" if field.is_required() else "no"
+            text += f"| `{field_name}` | `{annotation}` | {required} |\n"
+    return text
 
 
 def _schema(title: str, schema: pl.Schema) -> str:

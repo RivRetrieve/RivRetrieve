@@ -60,8 +60,8 @@ Poland's coordinate reference system has a different reason for being unavailabl
 ```
 
 These excerpts show the property shape, not complete Croissant documents. The packaged
-descriptors provide the complete examples and the literal evidence URLs. France's baseline station and station-product rows now have acquisition bindings;
-unknown availability remains explicit rather than being encoded as missing acquisition. Brazil's certified inventory and six source products retain unknown availability where no
+descriptors provide the complete examples and the literal evidence URLs. France's baseline station and station-product rows have acquisition bindings;
+unknown availability remains explicit rather than being encoded as missing acquisition. Brazil's certified inventory and six internal access routes retain unknown availability where no
 exact station/variant observations were acquired. Unestablished CRS, citation and published
 record bounds remain explicit absences rather than inferred facts.
 
