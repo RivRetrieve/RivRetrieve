@@ -70,7 +70,7 @@ def test_repeated_identity_refuses_every_block_independently_of_order(kind):
     assert results[0].series == results[1].series
 
 
-@pytest.mark.parametrize("kind", ["equal", "conflicting", "disjoint"])
+@pytest.mark.parametrize("kind", ["equal", "conflicting", "disjoint", "different-facts"])
 def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(kind, monkeypatch, tmp_path):
     recordings = tuple(
         read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
@@ -106,9 +106,57 @@ def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(k
         assert result.data.height == 2
         assert {item.status.value for item in result.outcomes if item.series_id == ambiguous_id} == {"unsupported"}
         assert contents[-1] in {entry.content for entry in result.receipts.entries}
+        failed = next(item for item in result.outcomes if item.series_id == ambiguous_id)
+        definition = next(item for item in result.source_series if item.series_id == ambiguous_id)
+        assert "repeats a version identity" in failed.reason
+        diagnostic_facts = tuple(fact for fact in definition.facts if fact.facts_id in failed.facts_ids)
+        assert {fact.facts_id for fact in diagnostic_facts} == set(failed.facts_ids)
+        assert diagnostic_facts
+        assert any(
+            issue.code == "source.unsupported_series" and issue.details["series_id"] == ambiguous_id
+            for issue in result.issues
+        )
+        if kind == "different-facts":
+            assert all(fact.statistic.state.value != "known" for fact in diagnostic_facts)
+        restored = rr.from_bundle(rr.to_bundle(result))
+        assert restored.outcomes == result.outcomes
+        assert restored.source_series == result.source_series
+        assert restored.issues == result.issues
+        pt.assert_frame_equal(restored.data, result.data)
     assert len(contents) == 2  # Reuse must reacquire the unsupported identity.
     before = len(calls)
     siblings = rr.pick(selection, variant=("1", "3"))
     cached = rr.fetch(siblings, start="2024-01-02", end="2024-01-02", cache="reuse", on_issue="ignore")
     assert len(calls) == before
     pt.assert_frame_equal(cached.data, result.data)
+    assert not any(item.series_id == ambiguous_id for item in cached.outcomes)
+
+
+def test_public_supported_nonmatching_facts_are_not_retained_as_failures(monkeypatch):
+    recordings = tuple(
+        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        for v in (1, 2, 3)
+    )
+    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    replay = ReplayTransport((*recordings, metadata))
+
+    class DifferentStatistic:
+        def send(self, request):
+            response = replay.send(request)
+            if request.url.endswith("/Observations") and request.params["VersionNumber"] == 2:
+                document = json.loads(response.content)
+                document["data"][0]["method"] = "Instantaneous"
+                return replace(response, content=json.dumps(document).encode())
+            return response
+
+    monkeypatch.setenv("NVE_API_KEY", "protocol-only-key")
+    monkeypatch.setattr(discovery, "HttpClient", DifferentStatistic)
+    selection = rr.find(
+        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    excluded = next(item.series_id for item in selection.series if item.variant == "2")
+    result = rr.fetch(selection, start="2024-01-02", end="2024-01-02", cache="bypass", on_issue="ignore")
+    assert result.data.height == 2
+    assert result.data.filter(pl.col("series_id") == excluded).is_empty()
+    assert not any(item.series_id == excluded for item in result.outcomes)
+    assert not any(item.code == "source.unsupported_series" for item in result.issues)
