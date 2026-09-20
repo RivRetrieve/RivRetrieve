@@ -168,13 +168,18 @@ Fail-first proof is recorded under `.worktrees/evidence/effort-286/`:
 - `source-fields-red.log`: eight failures through actual worksheet, fetch,
   catalogue and lineage paths; `source-fields-green.log`: the same eight pass.
 - `source-fields-facts-red.log`: source unit spelling/contradiction and missing L1
-  claims. Final temporal assertions use the exact HydroPortail title evidence.
+  claims.
 - `source-fields-title-red.log`: unvalidated contradictory publisher temporal title.
 - `source-fields-projection-red.log`: divergent canonical product support/anchor.
 - `source-fields-row-red.log`: unrepresentable workbook row still receiving successful coverage.
 - `source-fields-lineage-red.log`: product physics attributed to metadata instead of Q/H/WT source headers.
 
 The final checked-in tests preserve positive exact recordings and distinguish
-negative authored mutations. Validation commands use the project `uv` environment.
+negative authored mutations. Validation commands use the project `uv` environment. The final new conformance
+slice passed 29 tests. The final public regression slice passed 27 tests. The
+24-file owned-provider run passed 366 tests with one changed-output digest pin
+failure; after updating only the generated provider/product pins, that independent
+content-and-pin test passed. Native station and availability pins were unchanged.
+`uv run ruff check`, `uv run ruff format --check`, and `uv run ty check src` passed.
 No controlled source corpus, credential value, or colleague-owned provider narrative
 was added or rewritten.
