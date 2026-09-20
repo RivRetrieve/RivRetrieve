@@ -343,6 +343,97 @@ def _assert_usgs_definition_extension_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
+def _assert_semantic_lineage_repair_and_restore_original(provenance):
+    """Verify intentional repairs before comparing every unchanged ordered assertion.
+
+    This restoration is only an oracle projection, not usable provider lineage.
+    Publisher content and current fact bindings are tested in
+    test_provider_semantic_lineage.py.
+    """
+    model = provenance.model_dump(mode="json")
+    provider = model["provider_id"]
+    (source,) = model["source_records"]
+    bindings = {item["fact_group"]: item for item in model["fact_bindings"]}
+    catalogue = bindings["catalogue_external"]
+    if provider == "cz_chmi":
+        added = ["source.product.daily_mean_semantics"]
+        assert model["fact_universe"][9:10] == added
+        assert catalogue["facts"] == [
+            "source.provider.service",
+            "source.station.native_identity",
+            "source.station.native_location",
+            "source.station.crs_not_published",
+            "source.station_product.availability_not_published",
+        ]
+        catalogue["facts"].insert(1, "source.product.native_identity")
+        semantics = bindings["product_semantics"]
+        assert semantics == {
+            "fact_group": "product_semantics",
+            "facts": [
+                "source.product.native_identity",
+                "source.product.hourly_mean_semantics",
+                "source.product.hourly_interval_anchor_not_established",
+                *added,
+            ],
+            "source_id": provider,
+            "acquisition_id": "product_semantics_capture_2026_09_02",
+        }
+        semantics["fact_group"] = "hourly_product_semantics"
+        semantics["facts"] = semantics["facts"][1:-1]
+        acquisition = source["acquisitions"][2]
+        assert acquisition["acquisition_id"] == "product_semantics_capture_2026_09_02"
+        assert acquisition["description"] == (
+            "CHMI TSCON_ID/TSCON_DS and UNIT_ID/UNIT_DS dictionary: "
+            "HD/QD/TD daily means and HH/QH hourly means, quantities and coded units"
+        )
+        acquisition["description"] = "CHMI product dictionary establishing HH and QH as hourly means"
+        input_positions = {"canonical_catalogue": 8, "canonical_catalogue_carrier": 7}
+    else:
+        assert provider == "lt_lhmt"
+        added = ["source.product.historical_daily_mean_semantics", "source.product.historical_time_zone"]
+        assert model["fact_universe"][6:8] == added
+        assert catalogue["facts"] == [
+            "source.provider.service",
+            "source.station.native_identity",
+            "source.station.native_location",
+            "source.station_product.availability_not_published",
+        ]
+        catalogue["facts"].insert(1, "source.product.native_fields")
+        catalogue["facts"].insert(4, "source.station.crs_documentation")
+        semantics = bindings["api_documented_semantics"]
+        assert semantics == {
+            "fact_group": "api_documented_semantics",
+            "facts": ["source.product.native_fields", "source.station.crs_documentation", *added],
+            "source_id": provider,
+            "acquisition_id": "terms_capture_2026_08_21",
+        }
+        assert model["fact_bindings"][2] == semantics
+        model["fact_bindings"].pop(2)
+        acquisition = source["acquisitions"][1]
+        assert acquisition["acquisition_id"] == "terms_capture_2026_08_21"
+        assert acquisition["description"] == "Meteo LT API documentation and data-use conditions HTML recording"
+        acquisition["description"] = "Meteo LT API data-use conditions HTML recording"
+        (evidence,) = source["evidence"]
+        assert evidence["description"] == (
+            "Meteo LT API documentation and data-use conditions: historical observations "
+            "waterLevel (cm) and waterDischarge (m3/s), Vidurkis per parą; "
+            "observationDateUtc (UTC laiko juosta); coordinates (WGS 84)"
+        )
+        evidence["description"] = "Meteo LT API data-use conditions"
+        input_positions = {"canonical_catalogue": 6, "canonical_catalogue_carrier": 2}
+    # Both transformations must include precisely the new publisher facts at
+    # their declared positions. All other input ordering remains oracle-checked.
+    for group, position in input_positions.items():
+        binding = bindings[group]
+        inputs = binding["transformation"]["external_inputs"]
+        assert inputs[position : position + len(added)] == [{"source_id": provider, "fact": fact} for fact in added]
+        del inputs[position : position + len(added)]
+    for fact in added:
+        assert model["fact_universe"].count(fact) == 1
+        model["fact_universe"].remove(fact)
+    return AcquisitionProvenance.model_validate(model)
+
+
 @pytest.mark.parametrize("provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider != "br_ana"))
 def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
@@ -354,5 +445,7 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
         assert oracle["providers"][provider]["ordered_model_sha256"] == (
             "28e9cc34f71f4fd3712c69cc205c30b8c70d55270cfc04f90e991a55121450a0"
         )
+    if provider in {"cz_chmi", "lt_lhmt"}:
+        restored = _assert_semantic_lineage_repair_and_restore_original(restored)
     ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
     assert sha256(ordered.encode()).hexdigest() == oracle["providers"][provider]["ordered_model_sha256"]

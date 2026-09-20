@@ -13,7 +13,7 @@ import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
 from rivretrieve._internal.providers.jp_mlit.config import SERIES_MAPPINGS, JpMlitSourceCoordinates
 from rivretrieve._internal.providers.jp_mlit.fetch import JpMlitPayloadCoordinates, _page
@@ -69,7 +69,9 @@ def _aggregate(issues: list[Issue]) -> tuple[Issue, ...]:
     )
 
 
-def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+def _payload_identity(
+    payload: Payload, provider_config: ProviderConfig
+) -> tuple[JpMlitPayloadCoordinates, str, ProductId]:
     coordinates = payload.source_coordinates.value
     if not isinstance(coordinates, JpMlitPayloadCoordinates):
         raise FatalContractError("jp_mlit payload has invalid request coordinates")
@@ -83,6 +85,11 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     source = product.coordinates.value
     if not isinstance(source, JpMlitSourceCoordinates) or source.kind != coordinates.kind:
         raise FatalContractError("jp_mlit payload KIND differs from its product tag")
+    return coordinates, station_id, product_id
+
+
+def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+    coordinates, station_id, product_id = _payload_identity(payload, provider_config)
     if coordinates.role == "html":
         _page(payload.content, coordinates.kind, station_id)
         return WithIssues(_empty(), ())
@@ -225,12 +232,16 @@ def _daily(lines: list[str], station: str, product: str, count: int) -> WithIssu
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
-    if (
-        isinstance(payload.source_coordinates.value, JpMlitPayloadCoordinates)
-        and payload.source_coordinates.value.role == "html"
-    ):
-        _parse_native(payload, provider_config)
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
+    coordinates, station_id, _ = _payload_identity(payload, provider_config)
+    if coordinates.role == "html":
+        try:
+            links = _page(payload.content, coordinates.kind, station_id)
+        except UnsupportedSourceStructureError:
+            pass  # The mapped parser identifies this failed HTML boundary below.
+        else:
+            if links:
+                # A valid HTML prerequisite is not a successful empty observation series.
+                return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
     return parse_mapped_series(
         payload, provider_config, provider="jp_mlit", mappings=SERIES_MAPPINGS, native_parse=_parse_native
     )

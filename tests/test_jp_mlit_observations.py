@@ -19,9 +19,9 @@ from rivretrieve._internal.engine import (
     WindowEndpoint,
     _make_fetch_window,
 )
-from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.jp_mlit.config import config
 from rivretrieve._internal.providers.jp_mlit.declaration import declaration
 from rivretrieve._internal.providers.jp_mlit.fetch import _page, fetch
@@ -62,7 +62,7 @@ def test_page_rejects_stage_html_when_exact_recorded_unit_is_mutated() -> None:
     content = read_recording(_PATHS[0]).content
     mutated = content.replace("単位：m".encode("euc-jp"), "単位：cm".encode("euc-jp"))
 
-    with pytest.raises(FatalContractError, match="unit"):
+    with pytest.raises(UnsupportedSourceStructureError, match="unit"):
         _page(mutated, 2, _STATION)
 
 
@@ -93,7 +93,7 @@ def test_page_rejects_wrong_missing_ambiguous_or_unstructured_units(
     assert content.count(source) == 1
     mutated = content.replace(source, replacement.encode("euc-jp"))
 
-    with pytest.raises(FatalContractError, match="exact publisher unit"):
+    with pytest.raises(UnsupportedSourceStructureError, match="exact publisher unit"):
         _page(mutated, kind, _STATION)
 
 
@@ -101,7 +101,7 @@ def test_page_rejects_discharge_unit_when_title_is_mutated_to_stage_product() ->
     content = read_recording(_PATHS[4]).content
     mutated = content.replace("時刻流量月表検索結果".encode("euc-jp"), "時刻水位月表検索結果".encode("euc-jp"))
 
-    with pytest.raises(FatalContractError, match="exact publisher unit"):
+    with pytest.raises(UnsupportedSourceStructureError, match="exact publisher unit"):
         _page(mutated, 2, _STATION)
 
 
