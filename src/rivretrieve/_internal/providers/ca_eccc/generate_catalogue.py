@@ -44,7 +44,7 @@ from rivretrieve._internal.providers.ca_eccc.origins import (
     NATIVE_TABLE_SHA256,
     build_acquisition_provenance,
 )
-from rivretrieve._internal.providers.ca_eccc.source_series import source_description
+from rivretrieve._internal.providers.ca_eccc.series import source_description
 
 PROVIDER_ID = ProviderId("ca_eccc")
 PROVIDER_NAME = "ECCC Hydrometric — Environment and Climate Change Canada"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
-from rivretrieve._internal.providers.pl_imgw.source_series import describe_product
+from rivretrieve._internal.providers.pl_imgw.series import describe_product
 
 
 def describe_catalogue(artifact: PackagedCatalogArtifact) -> SourceDescriptions:

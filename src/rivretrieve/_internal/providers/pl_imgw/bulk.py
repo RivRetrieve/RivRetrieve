@@ -26,7 +26,7 @@ from typing import Any, Final, cast
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.pl_imgw.source_series import source_series
+from rivretrieve._internal.providers.pl_imgw.series import source_series
 from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store import (
     ArtifactChecksum,

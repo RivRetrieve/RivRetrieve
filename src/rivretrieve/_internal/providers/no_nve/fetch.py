@@ -22,7 +22,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
-from rivretrieve._internal.providers.no_nve.inventory import acquire_inventory
+from rivretrieve._internal.providers.no_nve.metadata import acquire_inventory
 from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_series_request
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
