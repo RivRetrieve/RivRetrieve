@@ -35,7 +35,7 @@ def describe_product(product: str) -> SourceDescription:
     }[product]
     namespace = f"imgw:{coordinate}"
     facts = PhysicalFacts(
-        facts_id=stable_id("pl_imgw", product, unit),
+        facts_id=product,
         quantity=known(quantity, FORMAT_DEFINITION),
         source_unit=known(unit, FORMAT_DEFINITION),
         normalized_unit=unit,
@@ -44,6 +44,7 @@ def describe_product(product: str) -> SourceDescription:
         clipping_axis=ClippingAxis.CALENDAR_DATE,
         label_time="00:00",
     )
+    facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
     return SourceDescription(
         product_id=product,
         native_coordinate={"flow_m3s": "COPRZP", "level_cm": "COSTAN", "temperature_c": "COPTMP"}[coordinate],

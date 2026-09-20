@@ -172,7 +172,9 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
     selection = rr.find(
         provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean"
     )
+    selection = rr.pick(selection, temporal_support="interval")
     result = rr.fetch(selection, start="2020-01-01", end="2020-01-03", on_issue="raise", receipts=True)
+    assert result.data["facts_id"].unique().to_list() == [selection.series[0].facts[0].facts_id]
 
     assert result.data.columns == [
         "time",
@@ -193,6 +195,7 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
     assert receipt.executed_query.stations == ("02GA010",)
     assert receipt.executed_query.products == (ProductId("discharge_daily_mean"),)
     excerpt = pl.read_parquet(BytesIO(receipt.content))
+    assert excerpt["facts_id"].unique().to_list() == [selection.series[0].facts[0].facts_id]
     assert excerpt["value"].to_list() == [31.0, 19.299999237060547, 15.300000190734863, 15.899999618530272, 23.0]
     assert excerpt["DLY_FLOWS.FLOW_SYMBOL1"].to_list() == [None] * 5
     assert excerpt["DLY_FLOWS.NO_DAYS"].to_list() == [31] * 5

@@ -25,15 +25,17 @@ def source_description(product: str) -> SourceDescription:
         "pp. 4-5: daily flow (m^3/s), daily water level (m), daily mean symbol definitions"
     )
     facts = PhysicalFacts(
-        facts_id=stable_id("ca_eccc", product, unit),
+        facts_id=product,
         quantity=known(quantity, evidence),
         source_unit=known(unit, evidence),
         normalized_unit=unit,
         frequency=known("daily", evidence),
         statistic=known("mean", evidence),
+        temporal_support=known("interval", evidence),
         clipping_axis=ClippingAxis.CALENDAR_DATE,
         label_time="00:00",
     )
+    facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
     identity = SourceIdentity(namespace=namespace, published_id=None, origin="mapping", evidence=(evidence,))
     return SourceDescription(
         product_id=product,
