@@ -50,3 +50,16 @@ def test_generated_products_use_authoritative_hydat_table_coordinates():
             }
         ),
     )
+
+
+def test_public_daily_mean_filter_preserves_established_interval_support():
+    import rivretrieve as rr
+
+    broad = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
+    interval = rr.pick(broad, temporal_support="interval", on_issue="ignore")
+    assert interval.series == broad.series
+    assert broad.series
+    facts = interval.series[0].facts[0]
+    assert facts.day_definition.value is None
+    assert facts.timestamp_anchor.value is None
+    assert facts.time_zone.value is None

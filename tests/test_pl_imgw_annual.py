@@ -68,9 +68,11 @@ def test_exact_annual_archive_compiles_without_losing_native_cells(tmp_path: Pat
         pl.DataFrame({"value": [999.0], "source_unit": ["m3/s"], "unit": ["m3/s"]}),
     )
     assert result.data["series_id"].n_unique() == 1
+    assert result.data["facts_id"].unique().to_list() == [selection.series[0].facts[0].facts_id]
     (receipt,) = result.receipts.entries
     assert receipt.authorship is ReceiptAuthorship.STORE_EXCERPT
     native = pl.read_parquet(BytesIO(receipt.content))
+    assert native["facts_id"].unique().to_list() == [selection.series[0].facts[0].facts_id]
     assert native.filter(pl.col("time") == datetime(2024, 1, 1))["IMGW_DAILY.flow_m3s"].item() == "999.000"
     assert result.provenance.publisher_artifact_urls == (URL,)
     for quantity, expected, unit in (("stage", 1.13, "cm"), ("temperature", None, "degC")):
@@ -82,6 +84,8 @@ def test_exact_annual_archive_compiles_without_losing_native_cells(tmp_path: Pat
         )
         assert fetched.data["source_unit"].to_list() == [unit]
         raw = pl.read_parquet(BytesIO(fetched.receipts.entries[0].content))
+        assert fetched.data["facts_id"].unique().to_list() == [selected.series[0].facts[0].facts_id]
+        assert raw["facts_id"].unique().to_list() == [selected.series[0].facts[0].facts_id]
         if quantity == "temperature":
             assert raw["IMGW_DAILY.temperature_c"].to_list() == [""] * raw.height
             assert raw["value_state"].to_list() == ["published_blank"] * raw.height

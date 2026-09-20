@@ -42,3 +42,8 @@ retained audit attests the 2026-07-17 ZIP at 278,852,677 bytes with SHA-256
 monthly source records. No complete ZIP was found in the local evidence directory;
 reacquisition and certification of approximately 80 million daily rows was not
 attempted. This limit does not turn derived fixtures into exact publisher bytes.
+
+Catalogue descriptions and compiled cells share the same full-content physical-fact
+identifier. A documented daily mean has interval support; this establishes neither
+the day boundary nor timestamp anchor or time zone. Public interval filtering and
+retrieval are tested against the certified derived-input store.

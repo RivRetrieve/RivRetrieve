@@ -74,3 +74,9 @@ def test_certified_native_bulk_retains_concrete_identity_and_physical_units(tmp_
         assert selected.physical_rows["IMGW_DAILY.level_cm"].to_list() == ["103", "102", "103"]
     else:
         assert selected.physical_rows["DLY_LEVELS.NO_DAYS"].unique().to_list() == [31]
+
+    import rivretrieve as rr
+
+    public = rr.find(provider=provider, station=station, quantity="stage")
+    catalogue_facts = public.series[0].facts[0]
+    assert definition.facts[0] == catalogue_facts
