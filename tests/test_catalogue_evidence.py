@@ -434,6 +434,137 @@ def _assert_semantic_lineage_repair_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
+def _assert_field_source_lineage_repair_and_restore_original(provenance):
+    """Check exact source-field repairs, then retain the original full ordered oracle.
+
+    See source-field-conformance.md and test_source_field_boundaries.py for
+    independent source headers, L1 identity, title and observation-carrier proof.
+    This projection is test-only; it does not restore obsolete runtime lineage.
+    """
+    model = provenance.model_dump(mode="json")
+    provider = model["provider_id"]
+    if provider == "ch_foen":
+        assert model["fact_universe"][11] == "observation.source_series_shape"
+        model["fact_universe"][11] = "observation.canonical_five_column_shape"
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "canonical_observation_shape")
+        assert binding["facts"] == ["observation.source_series_shape"]
+        assert binding["transformation"]["name"] == "BAFU observations to identified RivRetrieve observations"
+        binding["facts"] = ["observation.canonical_five_column_shape"]
+        binding["transformation"]["name"] = "BAFU observations to RivRetrieve five-column result shape"
+    elif provider == "fr_hubeau":
+        acquisition = next(
+            item
+            for source in model["source_records"]
+            for item in source["acquisitions"]
+            if item["acquisition_id"] == "station_observation_publication"
+        )
+        assert acquisition["description"] == (
+            "HydroPortail station-own Q/H publication from PHyC; response titles establish instantaneous quantities; "
+            "not a shared-site series or original-producer assertion"
+        )
+        acquisition["description"] = (
+            "HydroPortail station-own instantaneous Q/H publication from PHyC; "
+            "not a shared-site series or original-producer assertion"
+        )
+    else:
+        assert provider == "ba_fhmzbih"
+        (source,) = model["source_records"]
+        assert source["source_id"] == "ba_avp_sava"
+        fact = "source.series.layer20_discharge_identity"
+        assert model["fact_universe"].count(fact) == 1
+        assert model["fact_universe"][484] == fact
+        model["fact_universe"].pop(484)
+        assert model["fact_bindings"].pop(0) == {
+            "fact_group": "layer20_discharge_series",
+            "facts": [fact],
+            "source_id": "ba_avp_sava",
+            "acquisition_id": "layer20_series_capture",
+        }
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "canonical_products")
+        assert binding == {
+            "fact_group": "canonical_products",
+            "facts": ["source.product.native_identifiers", "source.product.native_physics"],
+            "source_id": "ba_avp_sava",
+            "acquisition_id": "product_workbook_headers",
+        }
+        binding["acquisition_id"] = "catalogue_capture_2026_08_02"
+        recordings = [
+            (
+                "ba_fhmzbih_4024_Q_1Y",
+                "stations/4/4024/Q/Q_1Y.xlsx",
+                "2026-09-02T14:45:27.662275Z",
+                "e40e760cf99d4e23b62b8d5d95edc86af01ddca9aa6c55226d59c859e8801d05",
+            ),
+            (
+                "ba_fhmzbih_4024_H_1Y",
+                "stations/4/4024/H/H_1Y.xlsx",
+                "2026-09-02T14:45:27.984829Z",
+                "45b5663132a58f5bdcf3ee29c5cdd8c5f83389dabb80d3716b5e318b77ca79a0",
+            ),
+            (
+                "ba_fhmzbih_4110_Tvode_1Y",
+                "stations/4/4110/WT/Tvode_1Y.xlsx",
+                "2026-09-02T14:46:35.312471Z",
+                "e0532ec0a269acb735db6957a478652ac0fb7ece9194b688852478d6d186dbb3",
+            ),
+            (
+                "ba_fhmzbih_layer20_series",
+                "layers/20/index.json",
+                "2026-09-02T14:45:07.284216Z",
+                "afb0dbd8530f1b589028731a42611e933d6991ec35414bdaba071c7a3180dabf",
+            ),
+        ]
+        expected_evidence = []
+        for index, (recording_id, route, instant, digest) in enumerate(recordings):
+            filename = recording_id if index < 3 else "ba_fhmzbih_metadata_index"
+            repository_path = f"tests/test_data/{filename}.recording.json"
+            assert sha256((Path(__file__).parents[1] / repository_path).read_bytes()).hexdigest() == digest
+            expected_evidence.append(
+                {
+                    "evidence_id": recording_id if index < 3 else "layer20_discharge_series",
+                    "description": "Published workbook parameter, unit and series-name headers"
+                    if index < 3
+                    else "Published L1_ts_id, L1_ts_name, parameter and unit",
+                    "recording": {
+                        "recording_id": recording_id,
+                        "repository_path": repository_path,
+                        "source_url": f"https://vodostaji.voda.ba/data/internet/{route}",
+                        "retrieved_at": instant,
+                        "media_type": "application/vnd.rivretrieve.recording+json",
+                        "sha256": digest,
+                    },
+                }
+            )
+        assert source["evidence"][:4] == expected_evidence
+        assert source["acquisitions"][:2] == [
+            {
+                "acquisition_id": "product_workbook_headers",
+                "method": "http_request",
+                "instant_type": "retrieval_interval",
+                "description": "Exact Q, H and water-temperature workbook parameter, unit and source-series headers",
+                "requested_from": [item["recording"]["source_url"] for item in expected_evidence[:3]],
+                "retrieved_at_start": recordings[0][2],
+                "retrieved_at_end": recordings[2][2],
+                "recording_ids": [item[0] for item in recordings[:3]],
+                "material": None,
+            },
+            {
+                "acquisition_id": "layer20_series_capture",
+                "method": "http_request",
+                "instant_type": "retrieval",
+                "description": "Exact layer-20 L1 discharge series identities; no workbook-ID equivalence established",
+                "requested_from": [expected_evidence[3]["recording"]["source_url"]],
+                "retrieved_at_start": recordings[3][2],
+                "retrieved_at_end": None,
+                "recording_ids": [recordings[3][0]],
+                "material": None,
+            },
+        ]
+        del source["evidence"][:4]
+        del source["acquisitions"][:2]
+    return AcquisitionProvenance.model_validate(model)
+
+
 def _assert_bulk_source_history_preserved(provider, provenance):
     """Compare retained source inputs, not superseded output/authority assertions."""
     path = Path(__file__).parent / "test_data/catalogue_provenance_original_v2" / f"{provider}.json"
@@ -551,6 +682,8 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     assert oracle["revision"] == "6f0edf6a455735cb1f8c858a1a9f35d4245cf209"
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
     restored = _legacy(provider)
+    if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
+        restored = _assert_field_source_lineage_repair_and_restore_original(restored)
     if provider in {"ca_eccc", "pl_imgw", "za_dws"}:
         restored = _assert_bulk_source_history_preserved(provider, restored)
     if provider == "usgs_nwis":
