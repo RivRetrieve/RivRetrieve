@@ -2,7 +2,7 @@
 
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
-from rivretrieve._internal.providers.ca_eccc.source_series import source_description
+from rivretrieve._internal.providers.ca_eccc.series import source_description
 
 
 def describe_catalogue(artifact: PackagedCatalogArtifact) -> SourceDescriptions:

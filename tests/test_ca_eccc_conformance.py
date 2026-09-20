@@ -13,7 +13,7 @@ def test_provider_metadata_describes_explicit_compilation():
 
 
 def test_catalogue_and_compiler_share_station_independent_publisher_facts():
-    from rivretrieve._internal.providers.ca_eccc.source_series import source_description, source_series
+    from rivretrieve._internal.providers.ca_eccc.series import source_description, source_series
     from rivretrieve._internal.source_series import EvidenceState
 
     for product, namespace, unit in (

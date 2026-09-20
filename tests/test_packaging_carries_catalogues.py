@@ -307,6 +307,65 @@ def decode(value):
         return [decode(item) for item in value]
     return value
 
+def historical_closure_evidence(provider, evidence):
+    # Project only verified additions out of the historical closure oracle. The
+    # installed current relations above and current RDF ancestry below stay intact.
+    if provider not in {"ba_fhmzbih", "pl_imgw"}:
+        return evidence
+    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+    from rivretrieve._internal.catalogues.evidence import normalize_provenance
+    from rivretrieve._internal.catalogues.evidence_encoding import reconstruct_provenance
+
+    model = reconstruct_provenance(evidence).model_dump(mode="json")
+    if provider == "ba_fhmzbih":
+        (source,) = model["source_records"]
+        assert source["source_id"] == "ba_avp_sava"
+        added = [
+            ("ba_fhmzbih_4024_Q_1Y", "e40e760cf99d4e23b62b8d5d95edc86af01ddca9aa6c55226d59c859e8801d05"),
+            ("ba_fhmzbih_4024_H_1Y", "45b5663132a58f5bdcf3ee29c5cdd8c5f83389dabb80d3716b5e318b77ca79a0"),
+            ("ba_fhmzbih_4110_Tvode_1Y", "e0532ec0a269acb735db6957a478652ac0fb7ece9194b688852478d6d186dbb3"),
+            ("ba_fhmzbih_layer20_series", "afb0dbd8530f1b589028731a42611e933d6991ec35414bdaba071c7a3180dabf"),
+        ]
+        assert [(item["recording"]["recording_id"], item["recording"]["sha256"]) for item in source["evidence"][:4]] == added
+        assert [(item["acquisition_id"], item["recording_ids"]) for item in source["acquisitions"][:2]] == [
+            ("product_workbook_headers", [item[0] for item in added[:3]]),
+            ("layer20_series_capture", [added[3][0]]),
+        ]
+        del source["evidence"][:4]
+        del source["acquisitions"][:2]
+        assert model["fact_bindings"].pop(0) == {
+            "fact_group": "layer20_discharge_series",
+            "facts": ["source.series.layer20_discharge_identity"],
+            "source_id": "ba_avp_sava", "acquisition_id": "layer20_series_capture",
+        }
+        assert model["fact_universe"].pop(484) == "source.series.layer20_discharge_identity"
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "canonical_products")
+        assert binding["acquisition_id"] == "product_workbook_headers"
+        binding["acquisition_id"] = "catalogue_capture_2026_08_02"
+    else:
+        source = next(item for item in model["source_records"] if item["source_id"] == "sr.pl.imgw")
+        added = [
+            ("pl_imgw_codz_format", "d8e7cbbc7680663d99813dd5f9abd793384b2f560600229625bb808ea71ef362"),
+            ("pl_imgw_yearbook_2025", "c2ad75c472ab46363fb149ac5cf982230e2506d7e0b73b8e4eecb6623fa2a916"),
+        ]
+        assert [(item["recording"]["recording_id"], item["recording"]["sha256"]) for item in source["evidence"][:2]] == added
+        acquisition = source["acquisitions"].pop(0)
+        assert acquisition["acquisition_id"] == "imgw_archive_definitions_2026_09_20"
+        assert acquisition["recording_ids"] == [item[0] for item in added]
+        del source["evidence"][:2]
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "imgw_archive_physics")
+        assert binding == {
+            "fact_group": "imgw_archive_physics", "facts": ["source.imgw.observation_archive_product_semantics"],
+            "source_id": "sr.pl.imgw", "acquisition_id": "imgw_archive_definitions_2026_09_20",
+        }
+        model["fact_bindings"].remove(binding)
+        roster = next(item for item in model["fact_bindings"] if item["fact_group"] == "imgw_catalogue_inputs")
+        assert "source.imgw.observation_archive_product_semantics" not in roster["facts"]
+        roster["facts"].insert(1, "source.imgw.observation_archive_product_semantics")
+    catalogue = artifact(provider)
+    return normalize_provenance(AcquisitionProvenance.model_validate(model), stations=catalogue.stations,
+                                station_products=catalogue.station_products)
+
 for provider, oracle in closure_oracles.items():
     catalogue = provider_root.joinpath(provider, "catalogue")
     descriptor = rivretrieve.describe(provider)
@@ -376,7 +435,8 @@ for provider, oracle in closure_oracles.items():
             row = pairs.filter((pl.col("station_id") == pair.station_id) & (pl.col("product_id") == pair.product_id)).row(0, named=True)
             assert {key: row[key] for key in CanonicalPair.model_fields} == pair.model_dump()
         resolved = resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair)
-        semantic = {key: value for key, value in resolved.items() if key != "@context"}
+        historical = resolve_evidence(historical_closure_evidence(provider, evidence), FactSelection(names=tuple(case["names"])), pair)
+        semantic = {key: value for key, value in historical.items() if key != "@context"}
         assert hashlib.sha256(json.dumps(semantic, sort_keys=True, ensure_ascii=False).encode()).hexdigest() == case["sha256"]
         if provider == "pl_imgw":
             graph = Graph().parse(data=json.dumps(resolved), format="json-ld", publicID=BASE)
