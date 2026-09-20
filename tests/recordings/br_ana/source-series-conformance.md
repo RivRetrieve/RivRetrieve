@@ -11,7 +11,9 @@ and exact `HidroSerieCotas` / `HidroSerieVazao` recordings in this directory.
 
 Adopted telemetry retains `Cota_Adotada` and `Vazao_Adotada` identities. Manual
 page 11 establishes cm, m3/s and measurement/collection time. It does not establish
-a zone or stage datum. The current detailed endpoint is not equivalent to the
+sampling cadence, an instantaneous statistic, temporal support, a zone or a stage
+datum. Those facts remain unknown; the documented measurement-time anchor remains
+separate. Catalogue products, source descriptions and lineage use these same limits. The current detailed endpoint is not equivalent to the
 adopted endpoint and adopted access is not exhaustive telemetry discovery.
 
 ## Detailed sensor/manual/display investigation, 2026-09-20

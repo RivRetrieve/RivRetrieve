@@ -80,8 +80,11 @@ acquisition into successful empty observation coverage.
 resolution and optional concrete version. Its old fixed method/source-unit fields
 were not request parameters and no longer controlled parsing. Source-owned
 version/resolution facts remain authoritative. The unused static inventory wrapper
-was replaced by the scoped inventory acquisition operation. No physical catalogue
-facts changed, so the existing certified catalogue and lineage were not rebuilt.
+was replaced by the scoped inventory acquisition operation. The catalogue and
+lineage were rebuilt to keep raw-resolution cadence unknown and to remove fixed
+method, temporal-support and anchor claims at the access-product grain. Published
+version-specific methods remain available in source-series facts; a raw resolution
+does not itself establish irregular sampling or an instantaneous statistic.
 
 Stage reference/datum and exact interval/day support remain unknown where source
 evidence does not establish them. Source quality and correction codes remain
