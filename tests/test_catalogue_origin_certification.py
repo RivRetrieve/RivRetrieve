@@ -102,7 +102,10 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     build = generator.build_catalogue
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
-        from rivretrieve._internal.providers.br_ana.origins import build_acquisition_provenance, with_adopted_telemetry
+        from rivretrieve._internal.providers.br_ana.origins import (
+            build_acquisition_provenance,
+            with_observation_products,
+        )
         from rivretrieve._internal.recordings import read_recording
 
         capture = read_capture_record(ROOT / "tests/test_data/br_ana_inventory/capture.json")
@@ -114,7 +117,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
             read_recording(recorded_path),
             str(recorded_path.relative_to(ROOT)),
         )
-        provenance = with_adopted_telemetry(
+        provenance = with_observation_products(
             build_acquisition_provenance(capture),
             capture,
             generator.project_stations(read_native_table(native_path)).data,

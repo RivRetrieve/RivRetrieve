@@ -284,3 +284,18 @@ def test_duplicate_multiplicity_is_not_a_quality_selection_rule() -> None:
             ]
         ).sort("time", maintain_order=True),
     )
+
+
+def test_exact_detailed_recording_does_not_establish_adopted_equivalence() -> None:
+    recording = read_recording(
+        _DATA / "HidroinfoanaSerieTelemetricaDetalhada_15400000_2024-01-02_HORA_24.recording.json"
+    )
+    assert recording.sha256 == "8f4049713c0b2e46b886052092191ae9d42a0def9047543a74b17eb1bf620feb"
+    rows = json.loads(recording.content)["items"]
+    assert len(rows) == 96
+    sensor = [row for row in rows if row["Cota_Sensor"] is not None]
+    assert len(sensor) == 92
+    assert sum(float(row["Cota_Sensor"]) != float(row["Cota_Adotada"]) for row in sensor) == 20
+    assert all(row["Cota_Manual"] is None and row["Cota_Display"] is None for row in rows)
+    # Numeric comparison disproves equality; it does not establish units, datum,
+    # temporal support, or general absence of the all-null manual/display fields.

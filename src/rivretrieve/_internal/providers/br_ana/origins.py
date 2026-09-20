@@ -583,13 +583,3 @@ def with_observation_products(
         fact_bindings=tuple(bindings),
         withheld_facts=withheld,
     )
-
-
-def with_adopted_telemetry(
-    inventory: AcquisitionProvenance,
-    capture: InventoryCapture,
-    candidates: pl.DataFrame,
-    telemetry: AdoptedTelemetryEvidence,
-) -> AcquisitionProvenance:
-    """Compatibility entry point for the telemetry-only catalogue builder."""
-    return with_observation_products(inventory, capture, candidates, telemetry)
