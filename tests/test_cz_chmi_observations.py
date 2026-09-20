@@ -259,3 +259,74 @@ def test_public_selection_routes_to_czech_live_engine(monkeypatch: pytest.Monkey
     result = rr.fetch(selection, start="2023-06-01", end="2023-06-02T23:00:00", receipts=True, on_issue="ignore")
     assert result.data.height == 48
     assert len(result.receipts.entries) == 1
+
+
+@pytest.mark.parametrize("malformed_id", [{"malformed": "HD"}, ["HD"]])
+def test_malformed_external_identity_retains_supported_siblings(malformed_id):
+    from dataclasses import replace
+
+    from polars.testing import assert_frame_equal
+
+    fetched = fetch(
+        (_STATION,),
+        _PRODUCTS[:3],
+        {p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]},
+        _window(),
+        config(),
+        ReplayTransport([_DQ]),
+    ).value[0]
+    expected = parse(fetched, config())
+    document = json.loads(fetched.content)
+    assert document["tsList"][0]["tsConID"] == "HD"
+    document["tsList"][0]["tsConID"] = malformed_id
+    result = parse(replace(fetched, content=json.dumps(document).encode()), config())
+    assert_frame_equal(result.rows, expected.rows.filter(pl.col("product_id") != "stage_daily_mean"))
+    failed = [outcome for outcome in result.outcomes if outcome.status == "unsupported"]
+    assert len(failed) == 1
+    assert failed[0].product_id == "stage_daily_mean"
+    assert "identity" in failed[0].reason
+    assert len(result.issues) == 1
+
+
+@pytest.mark.parametrize("timestamp", ["2023-01-01T00:00:00+01:00Z", "2023-01-01T00:00:00+00:00Z"])
+def test_double_zone_external_timestamp_retains_supported_siblings(timestamp):
+    from dataclasses import replace
+
+    from polars.testing import assert_frame_equal
+
+    fetched = fetch(
+        (_STATION,),
+        _PRODUCTS[:3],
+        {p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]},
+        _window(),
+        config(),
+        ReplayTransport([_DQ]),
+    ).value[0]
+    expected = parse(fetched, config())
+    document = json.loads(fetched.content)
+    document["tsList"][0]["tsData"]["data"]["values"][0][0] = timestamp
+    result = parse(replace(fetched, content=json.dumps(document).encode()), config())
+    assert_frame_equal(result.rows, expected.rows.filter(pl.col("product_id") != "stage_daily_mean"))
+    failed = [outcome for outcome in result.outcomes if outcome.status == "unsupported"]
+    assert len(failed) == 1
+    assert failed[0].product_id == "stage_daily_mean"
+    assert "timestamp" in failed[0].reason
+    assert len(result.issues) == 1
+
+
+def test_invalid_internal_request_tag_remains_fatal():
+    from dataclasses import replace
+
+    from rivretrieve._internal.engine import SourceCoordinates
+    from rivretrieve._internal.issues import FatalContractError
+
+    fetched = fetch(
+        (_STATION,),
+        _PRODUCTS[:3],
+        {p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]},
+        _window(),
+        config(),
+        ReplayTransport([_DQ]),
+    ).value[0]
+    with pytest.raises(FatalContractError, match="invalid request coordinates"):
+        parse(replace(fetched, source_coordinates=SourceCoordinates(None)), config())
