@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -31,6 +31,7 @@ from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
     AuthenticatedTransport,
+    AuthenticationCapability,
     CredentialHeader,
     HttpClient,
     Transport,
@@ -40,7 +41,9 @@ from rivretrieve._internal.transport import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from rivretrieve._internal.engine import FetchWindow
     from rivretrieve._internal.primitives import OnIssue
+    from rivretrieve._internal.providers.registration import PublicArchiveAccess
 
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 
@@ -824,6 +827,18 @@ def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transpo
     )
 
 
+def _public_archive_transport(
+    base: Transport, access: PublicArchiveAccess, fetch_window: FetchWindow, now: datetime
+) -> Transport:
+    """Resolve declared public archive access using engine-padded UTC source bounds."""
+    if isinstance(base, AuthenticationCapability) and base.can_authenticate(access.endpoint):
+        return base
+    start = datetime.fromisoformat(fetch_window.start.isoformat()).replace(tzinfo=UTC)
+    if start >= now - access.recent_horizon:
+        return base
+    return AuthenticatedTransport(base, (access.credential,))
+
+
 def _partition_by_provider(series: tuple[SourceSeries, ...]) -> dict[str, tuple[SourceSeries, ...]]:
     partitions: dict[str, list[SourceSeries]] = {}
     for selected_series in series:
@@ -852,6 +867,16 @@ def _fetch_provider_series(
         if selected_series.product_id not in product_ids:
             product_ids.append(selected_series.product_id)
     transport = _credentialed_transport(provider_id, credentials)
+    if handle.public_archive_access is not None:
+        from rivretrieve._internal.coverage import RequestedInterval
+        from rivretrieve._internal.driver import _padded_interval
+
+        transport = _public_archive_transport(
+            transport,
+            handle.public_archive_access,
+            _padded_interval(RequestedInterval(start, end)),
+            _SystemClock().utcnow(),
+        )
     results = tuple(
         handle.observations(
             stations=station_id,

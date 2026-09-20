@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
 
@@ -115,6 +115,27 @@ class CredentialExchangeBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class PublicArchiveAccess:
+    """Shared source credential for an archive beyond a UTC-labelled recent horizon.
+
+    This is published source access data, not a caller credential requirement.
+    Public composition owns clock resolution and the comparison with engine bounds.
+    """
+
+    credential: CredentialHeader
+    endpoint: str
+    recent_horizon: timedelta
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.credential, CredentialHeader) or len(self.credential.origins) != 1:
+            raise TypeError("public archive access requires one origin-scoped credential")
+        if _request_origin(self.endpoint) != self.credential.origins[0]:
+            raise ValueError("public archive endpoint must match its credential origin")
+        if not isinstance(self.recent_horizon, timedelta) or self.recent_horizon <= timedelta(0):
+            raise ValueError("public archive recent horizon must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderDeclaration:
     """State one provider's packaged catalogue, observation kind, and credentials."""
 
@@ -123,6 +144,7 @@ class ProviderDeclaration:
     required_credentials: tuple[str, ...] = ()
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
     credential_exchange: CredentialExchangeBinding | None = None
+    public_archive_access: PublicArchiveAccess | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +208,14 @@ def load_manifest(
             or len(credentials) != len(set(credentials))
         ):
             raise FatalContractError(f"Provider {provider_id} has malformed required credentials: {credentials!r}")
+        archive = value.public_archive_access
+        if archive is not None:
+            if not isinstance(archive, PublicArchiveAccess) or not isinstance(value.observations, LiveStages):
+                raise FatalContractError(f"Provider {provider_id} public archive access requires LiveStages")
+            if credentials or value.credential_headers or value.credential_exchange is not None:
+                raise FatalContractError(f"Provider {provider_id} cannot mix public archive and caller credentials")
+            if value.observations.stages.config.zone.value != "+00:00":
+                raise FatalContractError(f"Provider {provider_id} public archive horizon requires UTC source labels")
         exchange = value.credential_exchange
         if exchange is not None:
             if not isinstance(exchange, CredentialExchangeBinding) or not isinstance(exchange.spec, ExchangeSpec):
@@ -314,6 +344,7 @@ def register_manifest(
                 required_credentials=declaration.required_credentials,
                 credential_headers=declaration.credential_headers,
                 credential_exchange=declaration.credential_exchange,
+                public_archive_access=declaration.public_archive_access,
             )
         elif isinstance(kind, LiveStages):
             registry.register(
@@ -323,6 +354,7 @@ def register_manifest(
                 required_credentials=declaration.required_credentials,
                 credential_headers=declaration.credential_headers,
                 credential_exchange=declaration.credential_exchange,
+                public_archive_access=declaration.public_archive_access,
             )
         elif isinstance(kind, BulkStore):
             registry.register(
@@ -334,6 +366,7 @@ def register_manifest(
                 required_credentials=declaration.required_credentials,
                 credential_headers=declaration.credential_headers,
                 credential_exchange=declaration.credential_exchange,
+                public_archive_access=declaration.public_archive_access,
             )
         else:  # load_manifest closes this union before any catalogue is loaded.
             raise AssertionError(f"unreachable provider kind for {item.provider_id}")

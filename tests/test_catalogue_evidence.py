@@ -565,6 +565,48 @@ def _assert_field_source_lineage_repair_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
+def _assert_swiss_credential_redaction_and_restore_original(provenance):
+    """Verify the redacted fixture before applying the immutable historical oracle.
+
+    Only this comparison projection restores the old description and digest.
+    The fixture and packaged evidence retain their credential-safe form.
+    """
+    model = provenance.model_dump(mode="json")
+    source = next(item for item in model["source_records"] if item["source_id"] == "ch_existenz")
+    repository_path = "tests/test_data/ch_foen_terms_existenz.html"
+    digest = "b353852a474516acf404c1d8b775cc77c5cf3c97bd3055380fc4534bcba9111c"
+    source_bytes = (Path(__file__).parents[1] / repository_path).read_bytes()
+    assert sha256(source_bytes).hexdigest() == digest
+    assert source_bytes.count(b"REDACTED-PUBLISHED-READ-ONLY-TOKEN") == 1
+    assert source["evidence"] == [
+        {
+            "evidence_id": "existenz_api_terms",
+            "description": (
+                "Intermediary API conditions and BAFU credit statement; "
+                "retained fixture has published archive credential redacted"
+            ),
+            "recording": {
+                "recording_id": "ch_foen_terms_existenz",
+                "repository_path": repository_path,
+                "source_url": "https://api.existenz.ch/",
+                "retrieved_at": "2026-08-20T13:12:58Z",
+                "media_type": "text/html; charset=UTF-8",
+                "sha256": digest,
+            },
+        }
+    ]
+    acquisition = source["acquisitions"][2]
+    assert acquisition["recording_ids"] == ["ch_foen_terms_existenz"]
+    assert acquisition["description"] == (
+        "Existenz API conditions and BAFU credit response; published archive credential redacted in retained fixture"
+    )
+    acquisition["description"] = "Existenz API conditions and BAFU credit response"
+    evidence = source["evidence"][0]
+    evidence["description"] = "Intermediary API conditions and BAFU credit statement"
+    evidence["recording"]["sha256"] = "488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df"
+    return AcquisitionProvenance.model_validate(model)
+
+
 def _assert_bulk_source_history_preserved(provider, provenance):
     """Compare retained source inputs, not superseded output/authority assertions."""
     path = Path(__file__).parent / "test_data/catalogue_provenance_original_v2" / f"{provider}.json"
@@ -684,6 +726,8 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     restored = _legacy(provider)
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(restored)
+    if provider == "ch_foen":
+        restored = _assert_swiss_credential_redaction_and_restore_original(restored)
     if provider in {"ca_eccc", "pl_imgw", "za_dws"}:
         restored = _assert_bulk_source_history_preserved(provider, restored)
     if provider == "usgs_nwis":

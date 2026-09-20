@@ -195,6 +195,11 @@ Their authorship distinguishes publisher bytes from RivRetrieve's encoding of st
 Receipt origins exclude request headers, and shared credential transport binds supplied secrets to declared source origins.
 See [usage](usage.md) for provenance fields, optional receipts, and credential configuration.
 
+Swiss public retrieval uses Existenz's recent REST service when the engine-padded window stays
+within its 32-day horizon. Older and horizon-crossing windows use the archive with the publisher's
+shared read-only credential, bundled internally and restricted to the archive origin.
+Users do not supply this credential. Publisher credential rotation requires a library update.
+
 ## Evidence and verification
 
 Catalogue builds check canonical columns against declared origins and acquisition evidence.
