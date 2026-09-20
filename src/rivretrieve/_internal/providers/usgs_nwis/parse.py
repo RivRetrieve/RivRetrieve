@@ -113,7 +113,8 @@ def _facts(variable: dict[str, Any], coordinates: UsgsNwisSourceCoordinates) -> 
         temporal_support=known(temporal_support, "USGS daily values definition" if daily else _IV_DEFINITION)
         if temporal_support
         else EvidenceFact(),
-        timestamp_anchor=known("00:00", "USGS daily value label") if daily else EvidenceFact(),
+        # A midnight serialization label does not establish a physical timestamp anchor.
+        timestamp_anchor=EvidenceFact(),
         clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
         label_time="00:00" if daily else None,
     )
@@ -414,8 +415,8 @@ def _parse_timestamp(raw_timestamp: str, semantics: Daily | Instant) -> tuple[da
             raise ValueError("usgs_nwis instantaneous observation timestamp must contain a strict ISO offset")
 
         wall_clock = datetime.fromisoformat(match["wall_clock"])
-        if isinstance(semantics, Daily) and zone == ZoneValue("unknown") and wall_clock.time() != time.min:
-            raise ValueError("usgs_nwis naive daily observation timestamp must label midnight")
+        if isinstance(semantics, Daily) and wall_clock.time() != time.min:
+            raise ValueError("usgs_nwis daily observation timestamp must label midnight")
     except ValueError as error:
         raise ValueError(f"usgs_nwis observation timestamp is unrepresentable: {error}") from error
     return wall_clock, zone
