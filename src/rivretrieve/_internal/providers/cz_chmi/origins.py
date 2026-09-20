@@ -71,6 +71,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         "source.observation.native_value",
         "source.product.hourly_mean_semantics",
         "source.product.hourly_interval_anchor_not_established",
+        "source.product.daily_mean_semantics",
     )
     canonical = (
         "canonical.provider_id",
@@ -121,7 +122,10 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         acquisition_id="product_semantics_capture_2026_09_02",
                         method="http_request",
                         instant_type="retrieval",
-                        description="CHMI product dictionary establishing HH and QH as hourly means",
+                        description=(
+                            "CHMI TSCON_ID/TSCON_DS and UNIT_ID/UNIT_DS dictionary: "
+                            "HD/QD/TD daily means and HH/QH hourly means, quantities and coded units"
+                        ),
                         requested_from=(semantics_recording.source_url,),
                         retrieved_at_start=semantics_recording.retrieved_at,
                         recording_ids=(semantics_recording.recording_id,),
@@ -171,13 +175,13 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             ),
             FactBinding(
                 fact_group="catalogue_external",
-                facts=external[:6],
+                facts=(external[0], *external[2:6]),
                 source_id="cz_chmi",
                 acquisition_id="catalogue_capture_2026_08_02",
             ),
             FactBinding(
-                fact_group="hourly_product_semantics",
-                facts=external[7:],
+                fact_group="product_semantics",
+                facts=(external[1], *external[7:]),
                 source_id="cz_chmi",
                 acquisition_id="product_semantics_capture_2026_09_02",
             ),
@@ -228,6 +232,7 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
                 ExternalFactReference(source_id="cz_chmi", fact="source.station.crs_not_published"),
                 ExternalFactReference(source_id="cz_chmi", fact="source.station_product.availability_not_published"),
                 ExternalFactReference(source_id="cz_chmi", fact="source.product.hourly_mean_semantics"),
+                ExternalFactReference(source_id="cz_chmi", fact="source.product.daily_mean_semantics"),
                 ExternalFactReference(
                     source_id="cz_chmi", fact="source.product.hourly_interval_anchor_not_established"
                 ),

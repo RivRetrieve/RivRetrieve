@@ -68,11 +68,36 @@ def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
 
 
-# Explicit source access and physical mapping; not a completeness assertion.
+_HISTORICAL_EVIDENCE = (
+    "https://api.meteo.lt/: Stoties istoriniai hidrologiniai duomenys; waterLevel/waterDischarge Vidurkis per parą and observationDateUtc",
+    "tests/test_data/lt_lhmt_terms_licence.html: full publisher API documentation captured 2026-08-21",
+)
 
 SERIES_MAPPINGS = {
     "discharge_daily_mean": SeriesMapping(
-        "lt_lhmt/waterDischarge", "discharge", "m3/s", "m3/s", "daily", "mean", None, "+00:00"
+        "lt_lhmt/waterDischarge",
+        "discharge",
+        "m3/s",
+        "m3/s",
+        "daily",
+        "mean",
+        None,
+        "+00:00",
+        evidence=_HISTORICAL_EVIDENCE,
+        temporal_support="interval",
+        label_time="00:00",
     ),
-    "stage_daily_mean": SeriesMapping("lt_lhmt/waterLevel", "stage", "cm", "cm", "daily", "mean", None, "+00:00"),
+    "stage_daily_mean": SeriesMapping(
+        "lt_lhmt/waterLevel",
+        "stage",
+        "cm",
+        "cm",
+        "daily",
+        "mean",
+        None,
+        "+00:00",
+        evidence=_HISTORICAL_EVIDENCE,
+        temporal_support="interval",
+        label_time="00:00",
+    ),
 }

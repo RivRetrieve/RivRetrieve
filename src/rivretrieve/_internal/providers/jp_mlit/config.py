@@ -76,11 +76,30 @@ def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
 
 
-# Explicit source access and physical mapping; not a completeness assertion.
+# Titles and unit cells establish quantity and label frequency, not interval support.
+def _evidence(quantity: str, frequency: str) -> tuple[str, ...]:
+    return (
+        "http://www1.river.go.jp/cgi-bin/DspWaterData.exe: KIND title and exact unit cell",
+        f"tests/test_data/jp_mlit_{quantity}_{frequency}_2023_html.recording.json",
+        f"tests/test_data/jp_mlit_{quantity}_{frequency}_2023_dat.recording.json: native date/hour labels",
+    )
+
 
 SERIES_MAPPINGS = {
-    "stage_hourly": SeriesMapping("jp_mlit/KIND/2", "stage", "m", "m", "hourly", None, None, None),
-    "stage_daily": SeriesMapping("jp_mlit/KIND/3", "stage", "m", "m", "daily", None, None, None),
-    "discharge_hourly": SeriesMapping("jp_mlit/KIND/6", "discharge", "m3/s", "m3/s", "hourly", None, None, None),
-    "discharge_daily": SeriesMapping("jp_mlit/KIND/7", "discharge", "m3/s", "m3/s", "daily", None, None, None),
+    "stage_hourly": SeriesMapping("jp_mlit/KIND/2", "stage", "m", "m", "hourly", evidence=_evidence("stage", "hourly")),
+    "stage_daily": SeriesMapping(
+        "jp_mlit/KIND/3", "stage", "m", "m", "daily", evidence=_evidence("stage", "daily"), label_time="00:00"
+    ),
+    "discharge_hourly": SeriesMapping(
+        "jp_mlit/KIND/6", "discharge", "m3/s", "m3/s", "hourly", evidence=_evidence("discharge", "hourly")
+    ),
+    "discharge_daily": SeriesMapping(
+        "jp_mlit/KIND/7",
+        "discharge",
+        "m3/s",
+        "m3/s",
+        "daily",
+        evidence=_evidence("discharge", "daily"),
+        label_time="00:00",
+    ),
 }
