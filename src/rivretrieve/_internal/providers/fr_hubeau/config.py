@@ -10,6 +10,7 @@ from rivretrieve._internal.engine import (
     Daily,
     DailyLabelTime,
     DayDefinition,
+    Instant,
     ProductConfig,
     ProductWindowDeclarations,
     ProviderConfig,
@@ -37,10 +38,10 @@ _CONFIG = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={
         ProductId("discharge_instantaneous"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "Q")), Unit.L_S, UnknownTemporalSupport()
+            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "Q")), Unit.L_S, Instant()
         ),
         ProductId("stage_instantaneous"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "H")), Unit.MM, UnknownTemporalSupport()
+            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "H")), Unit.MM, Instant()
         ),
         ProductId("discharge_daily_mean"): ProductConfig(
             SourceCoordinates(FrHubeauSourceCoordinates("daily", "QmnJ")),
@@ -93,11 +94,12 @@ SERIES_MAPPINGS = {
         "l",
         "l/s",
         None,
-        None,
+        "instantaneous",
         "raw",
         "+00:00",
+        temporal_support="instant",
         evidence=(
-            "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
+            "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
         ),
         source_unit_definition=SourceUnitCodeDefinition(
             provider_id="fr_hubeau",
@@ -120,11 +122,12 @@ SERIES_MAPPINGS = {
         "mm",
         "mm",
         None,
-        None,
+        "instantaneous",
         "raw",
         "+00:00",
+        temporal_support="instant",
         evidence=(
-            "tests/test_data/fr_hydroportail_H_padded.recording.json: station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z",
+            "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z",
         ),
     ),
     "discharge_daily_mean": SeriesMapping(
