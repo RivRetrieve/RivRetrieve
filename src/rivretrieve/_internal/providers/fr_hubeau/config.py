@@ -97,7 +97,7 @@ SERIES_MAPPINGS = {
         "instantaneous",
         "raw",
         "+00:00",
-        temporal_support="instant",
+        temporal_support="instantaneous",
         evidence=(
             "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
         ),
@@ -125,7 +125,7 @@ SERIES_MAPPINGS = {
         "instantaneous",
         "raw",
         "+00:00",
-        temporal_support="instant",
+        temporal_support="instantaneous",
         evidence=(
             "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z",
         ),
