@@ -67,7 +67,8 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     records: list[dict[str, object]] = []
     for raw_series in series:
         if not isinstance(raw_series, dict):
-            raise UnsupportedSourceStructureError("cz_chmi time-series entry must be an object")
+            malformed_identity = True
+            continue
         ts_con_id = raw_series.get("tsConID")
         if not isinstance(ts_con_id, str):
             # An unassignable source entry must not discard identified siblings.
@@ -88,6 +89,12 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
                 raise UnsupportedSourceStructureError(f"cz_chmi {ts_con_id} row {row_number} must contain DT and VAL")
             raw_time, raw_value = raw_row
             wall_clock = _utc_wall_clock(raw_time, ts_con_id, row_number)
+            if request_coordinates.file_code == "DQ" and any(
+                (wall_clock.hour, wall_clock.minute, wall_clock.second, wall_clock.microsecond)
+            ):
+                raise UnsupportedSourceStructureError(
+                    f"cz_chmi {ts_con_id} row {row_number} daily timestamp must label midnight"
+                )
             if raw_value is not None and (isinstance(raw_value, bool) or not isinstance(raw_value, int | float)):
                 raise UnsupportedSourceStructureError(
                     f"cz_chmi {ts_con_id} row {row_number} value must be numeric or null"
