@@ -5,6 +5,7 @@ Contributed by: Thiago von Däniken
 
 from datetime import datetime
 from io import BytesIO
+from math import isfinite
 
 import openpyxl
 import polars as pl
@@ -55,11 +56,19 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             if not isinstance(timestamp, datetime):
                 invalid_count += 1
                 continue
+            if isinstance(value, bool):
+                raise UnsupportedSourceStructureError("ba_fhmzbih workbook observation value cannot be boolean")
             try:
                 native_value = None if value is None else float(value)
+            except OverflowError as error:
+                raise UnsupportedSourceStructureError(
+                    "ba_fhmzbih workbook observation value is not representable as a finite number"
+                ) from error
             except (TypeError, ValueError):
                 invalid_count += 1
                 continue
+            if native_value is not None and not isfinite(native_value):
+                raise UnsupportedSourceStructureError("ba_fhmzbih workbook observation value must be finite")
             rows.append(
                 {
                     "station_id": station,

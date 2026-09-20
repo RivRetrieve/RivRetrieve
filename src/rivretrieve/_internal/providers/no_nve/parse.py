@@ -277,7 +277,12 @@ def _value(observation: dict[str, object], index: int) -> float | None:
         return None
     if type(value) not in (int, float):
         raise SourceStructureError(f"no_nve observation {index} value must be numeric or null")
-    number = float(cast("int | float", value))
+    try:
+        number = float(cast("int | float", value))
+    except OverflowError as error:
+        raise SourceStructureError(
+            f"no_nve observation {index} value is not representable as a finite number"
+        ) from error
     if not isfinite(number):
         raise SourceStructureError(f"no_nve observation {index} value must be finite")
     return number

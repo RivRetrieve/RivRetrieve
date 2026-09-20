@@ -14,6 +14,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import re
 import zipfile
 from collections.abc import Callable, Iterator
@@ -702,6 +703,8 @@ def _native_value(
         value = float(stripped)
     except ValueError as error:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has non-numeric {field}") from error
+    if not math.isfinite(value):
+        raise ValueError(f"IMGW member {member!r} row {ordinal} has non-finite {field}")
     if value in null_sentinels:
         return None, "published_null"
     return value, "published_value"

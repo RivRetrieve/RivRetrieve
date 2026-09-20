@@ -5,6 +5,7 @@ Contributed by: Thiago von Däniken
 
 import json
 from datetime import datetime
+from math import isfinite
 from typing import cast
 
 import polars as pl
@@ -118,7 +119,15 @@ def _value(row: dict[str, object], field: str) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise UnsupportedSourceStructureError("fr_hubeau observation value must be numeric or null")
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError as error:
+        raise UnsupportedSourceStructureError(
+            "fr_hubeau observation value is not representable as a finite number"
+        ) from error
+    if not isfinite(number):
+        raise UnsupportedSourceStructureError("fr_hubeau observation value must be finite")
+    return number
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:

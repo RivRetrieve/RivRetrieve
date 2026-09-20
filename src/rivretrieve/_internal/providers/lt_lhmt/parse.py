@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from math import isfinite
 from typing import cast
 
 import polars as pl
@@ -45,12 +46,20 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
                 raise UnsupportedSourceStructureError(
                     f"lt_lhmt observation {index} field {field} must be numeric or null"
                 )
+            try:
+                number = None if value is None else float(cast("int | float", value))
+            except OverflowError as error:
+                raise UnsupportedSourceStructureError(
+                    f"lt_lhmt observation {index} field {field} is not representable as a finite number"
+                ) from error
+            if number is not None and not isfinite(number):
+                raise UnsupportedSourceStructureError(f"lt_lhmt observation {index} field {field} must be finite")
             rows.append(
                 {
                     "station_id": station_id,
                     "product_id": product,
                     "time": wall_clock,
-                    "value": None if value is None else float(cast("int | float", value)),
+                    "value": number,
                     "time_zone": "+00:00",
                 }
             )

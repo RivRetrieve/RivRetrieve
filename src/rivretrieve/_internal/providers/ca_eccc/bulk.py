@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import math
 import sqlite3
 import tempfile
 import zipfile
@@ -430,6 +431,11 @@ def _unpivot_month(
             raise TypeError(f"{table.table_name}.{table.value_prefix}{day} is not numeric, null, or blank")
         else:
             value = float(raw_value)
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"{table.table_name}.{table.value_prefix}{day} has a non-finite numeric observation "
+                    f"for station {station!r}, year {year}, month {month}"
+                )
             value_state = "published_value"
         output.append(
             {

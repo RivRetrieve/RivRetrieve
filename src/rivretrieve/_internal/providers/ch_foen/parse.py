@@ -282,8 +282,8 @@ def _number_or_none(value: object) -> float | None:
         raise SourceStructureError("Swiss observation value is not numeric or null")
     try:
         number = float(value)
-    except ValueError as exc:
-        raise SourceStructureError("Swiss observation value is not numeric or null") from exc
+    except (ValueError, OverflowError) as exc:
+        raise SourceStructureError("Swiss observation value is not representable as a finite number") from exc
     if not isfinite(number):
         raise SourceStructureError("Swiss observation value is not finite")
     return number

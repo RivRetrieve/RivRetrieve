@@ -7,6 +7,7 @@ import csv
 import re
 from calendar import monthrange
 from datetime import datetime, timedelta
+from math import isfinite
 
 import polars as pl
 
@@ -139,8 +140,12 @@ def _cell(
         raise UnsupportedSourceStructureError(f"jp_mlit usable cell is blank at {label}")
     try:
         number = float(raw)
-    except ValueError as error:
-        raise UnsupportedSourceStructureError(f"jp_mlit usable cell is nonnumeric at {label}") from error
+    except (ValueError, OverflowError) as error:
+        raise UnsupportedSourceStructureError(
+            f"jp_mlit usable cell is nonnumeric or unrepresentable at {label}"
+        ) from error
+    if not isfinite(number):
+        raise UnsupportedSourceStructureError(f"jp_mlit usable cell must be finite at {label}")
     if flag == "*":
         issues.append(_issue(_FLAG_CODES[flag], station, product, label))
     rows.append({"station_id": station, "product_id": product, "time": time, "value": number, "time_zone": "unknown"})

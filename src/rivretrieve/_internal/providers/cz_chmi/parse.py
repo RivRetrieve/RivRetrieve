@@ -5,6 +5,7 @@ Contributed by: Thiago von Däniken
 
 import json
 from datetime import datetime
+from math import isfinite
 from typing import cast
 
 import polars as pl
@@ -86,12 +87,20 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
                 raise UnsupportedSourceStructureError(
                     f"cz_chmi {ts_con_id} row {row_number} value must be numeric or null"
                 )
+            try:
+                number = None if raw_value is None else float(raw_value)
+            except OverflowError as error:
+                raise UnsupportedSourceStructureError(
+                    f"cz_chmi {ts_con_id} row {row_number} value is not representable as a finite number"
+                ) from error
+            if number is not None and not isfinite(number):
+                raise UnsupportedSourceStructureError(f"cz_chmi {ts_con_id} row {row_number} value must be finite")
             records.append(
                 {
                     "station_id": station_id,
                     "product_id": product_id,
                     "time": wall_clock,
-                    "value": None if raw_value is None else float(raw_value),
+                    "value": number,
                     "time_zone": "+00:00",
                 }
             )

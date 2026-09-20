@@ -321,7 +321,12 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                             raw = entry["value"]
                             if isinstance(raw, bool):
                                 raise ValueError("Boolean observation value is not a numeric measurement")
-                            number = None if raw is None else float(raw)
+                            try:
+                                number = None if raw is None else float(raw)
+                            except OverflowError as error:
+                                raise ValueError(
+                                    "Observation value is outside the supported finite numeric range"
+                                ) from error
                             if no_data_value is not None and number == no_data_value:
                                 number = None
                             if number is not None and not math.isfinite(number):
