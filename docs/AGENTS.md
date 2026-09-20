@@ -87,3 +87,64 @@ first matter.
 - Apply these principles without claiming formal ASD-STE100 compliance. They
   draw on plain-language and Simplified Technical English principles for
   human-readable documentation.
+
+## Before and after
+
+State what the reader needs to understand or do. Leave the evidence-gathering
+method in maintainer records unless the method itself is the subject of the page.
+These examples illustrate the writing style; they are not universal claims about
+all providers.
+
+### Explain availability in practical terms
+
+Before:
+
+> Positive catalogue evidence does not establish continuous records or values in
+> a particular requested period.
+
+After:
+
+> A station being listed does not guarantee that it has data for every quantity
+> or requested period.
+
+The useful point is the limit on what a station listing tells the reader. A provider
+introduction does not need to explain how maintainers counted evidence.
+
+### Describe the conversion, not the internal unit code
+
+Before:
+
+> HydroPortail's discharge unit code is `l`, which its unit dictionary defines as
+> l/s; it does not mean a volume in litres here.
+
+After:
+
+> RivRetrieve converts discharge from litres per second to cubic metres per
+> second, and stage from millimetres to metres.
+
+Keep the code-to-unit mapping in implementation evidence. The reader needs to know
+the source units and returned units.
+
+### Explain the consequence of a network distinction
+
+Before:
+
+> The packaged catalogue contains 869 temperature stations and 6,454 hydrometric
+> stations, with no shared station identifiers.
+
+After:
+
+> Temperature comes from a separate monitoring network. Do not assume that a
+> station selected for discharge also provides temperature.
+
+Distinct identifiers alone do not establish geographically separate stations.
+Explain the supported practical consequence rather than leaving readers to infer it.
+
+### Keep provider introductions focused
+
+Introduce who measures and publishes the data, what RivRetrieve provides, and how
+to interpret one practical retrieval example. Include source-specific conditions
+that affect use, such as units, time, status, coverage, and terms. Link to the usage
+guide for general API instruction. Keep catalogue verification methods, receipt
+internals, and implementation details out of the introduction unless they are
+needed to understand the returned data.

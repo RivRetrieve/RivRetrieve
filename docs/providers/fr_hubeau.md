@@ -50,9 +50,10 @@ The request returned seven daily values and no issues (the empty tuple `()`).
 The values are source-published daily means, returned in m³/s. RivRetrieve does not
 calculate them from instantaneous observations. Bare dates include the whole first
 and last day. `cache="bypass"` requests the source rather than a local cache.
-Source values can change, so a later retrieval need not reproduce this output exactly.
-
-Run the examples below in the same Python session.
+The preview shows the first three values, rounded to three decimal places. `unknown`
+means RivRetrieve has not established the time zone of these daily labels. Source values
+can change, so a later retrieval need not reproduce this output exactly.
+See [Usage](../usage.md) for selection options and working with returned data.
 
 ## Who measures, and who publishes
 
@@ -80,191 +81,59 @@ matters when citing a dataset (see [Terms and citation](#terms-and-citation)).
 
 ## What you can retrieve
 
-Select series by physical properties, using `quantity`, `frequency` and `statistic`.
-The table gives the established filters and the source fields behind them. A dash means
-the fact is unknown; leave that filter unset.
+| Data | Source field | Returned unit |
+|---|---|---|
+| Daily mean discharge | Hub'Eau `QmnJ` | m³/s |
+| Daily maximum discharge | Hub'Eau `QIXnJ` | m³/s |
+| Daily maximum stage | Hub'Eau `HIXnJ` | m |
+| Instantaneous discharge | HydroPortail `Q` | m³/s |
+| Instantaneous stage | HydroPortail `H` | m |
+| Water temperature | Hub'Eau `resultat`, parameter `1301` | °C |
 
-| Quantity | Frequency | Statistic | Source field | Returned unit |
-|---|---|---|---|---|
-| `discharge` | `daily` | `mean` | Hub'Eau `QmnJ` | m³/s |
-| `discharge` | `daily` | `max` | Hub'Eau `QIXnJ` | m³/s |
-| `stage` | `daily` | `max` | Hub'Eau `HIXnJ` | m |
-| `discharge` | — | `instantaneous` | HydroPortail `Q` | m³/s |
-| `stage` | — | `instantaneous` | HydroPortail `H` | m |
-| `temperature` | — | — | Hub'Eau `resultat`, parameter `1301` | °C |
+RivRetrieve converts discharge from litres per second to cubic metres per second, and stage from millimetres to metres.
+Temperature is already in °C. The daily maxima are maxima of instantaneous values,
+not maxima of daily means. RivRetrieve does not calculate additional daily statistics
+from instantaneous records.
 
-Discharge arrives in litres per second and stage in millimetres. RivRetrieve divides
-both by 1,000 to return m³/s and m. HydroPortail's discharge unit code is `l`, which
-its unit dictionary defines as l/s; it does not mean a volume in litres here.
-Temperature is already in °C and appears with returned unit code `degC`.
-The daily maxima are maxima of instantaneous values, not maxima of daily means.
-No stage datum is established by these conversions.
-
-Inspect the daily discharge candidates at the example station and select the maximum:
-
-```python
-daily = rr.find(
-    provider="fr_hubeau",
-    station="Y251002001",
-    quantity="discharge",
-    frequency="daily",
-)
-
-candidates = rr.series(daily).select("quantity", "frequency", "statistic", "unit")
-print(candidates.sort("statistic").rows())
-
-daily_max = rr.pick(daily, statistic="max")
-print(rr.series(daily_max).select("statistic").rows())
-```
-
-Output:
-
-```text
-[('discharge', 'daily', 'max', 'm3/s'), ('discharge', 'daily', 'mean', 'm3/s')]
-[('max',)]
-```
-
-`find` reads the packaged catalogue without contacting the observation service.
-`pick` narrows that selection. This example does not retrieve daily maxima.
-RivRetrieve provides the three published daily products above; it does not calculate
-other daily statistics from instantaneous records.
-
-### Catalogue candidates and observed availability
-
-| Quantity and statistic | Positive catalogue evidence | Stations listed |
-|---|---:|---:|
-| Daily mean discharge | 4,942 | 6,454 |
-| Daily maximum discharge | 4,206 | 6,454 |
-| Daily maximum stage | 5,266 | 6,454 |
-| Instantaneous discharge | 2,462 | 6,454 |
-| Instantaneous stage | 3,221 | 6,454 |
-| Reported water temperature | 869 | 869 |
-
-These counts describe the packaged catalogue, not current availability. Positive evidence
-means a positive publisher observation count or an exact historical witness at acquisition.
-A positive count alone does not establish non-null numerical values. Instantaneous evidence
-includes Hub'Eau's recent observation counts and selected historical HydroPortail checks;
-it is not a complete survey of historical HydroPortail records.
-
-The remaining candidates have availability `unknown` and remain selectable. Their evidence
-includes empty responses, failed checks and unchecked history. These are different reasons
-for uncertainty, not proof that a station never measured the quantity. The acquisitions
-were made on different dates. None of the counts establishes continuous records or values
-in a particular requested period.
-
-Hub'Eau describes daily hydrometric records reaching back to 1900, but this is a service-wide
-historical extent, not a start date for every station. Historical instantaneous access through
-HydroPortail also depends on the station and period. The catalogue does not establish
-per-series record start and end dates.
+A station being listed does not guarantee that it has data for every quantity or requested period.
+Hub'Eau describes daily hydrometric records reaching back to 1900 at some stations.
+Historical instantaneous records are also available through HydroPortail, but their
+length varies by station.
 
 ## Stations and sites
 
-France distinguishes two things, and the difference matters when you select discharge:
+A **site** is a reach of river where discharge measurements are considered homogeneous
+and comparable. A **station** is a measuring installation within that site. It can
+provide stage, discharge, or both.
 
-- A **site** is a reach of river where discharge measurements are considered homogeneous and
-  comparable. It carries discharge only.
-- A **station** is the equipment at one point of that reach. It belongs to one site and measures
-  stage, discharge, or both.
+One site can hold several stations. HydroPortail states that at most one is active
+at a time for producing the site's discharge. RivRetrieve retrieves the selected
+station's own record, rather than the site's combined discharge record.
 
-One site can hold several stations. HydroPortail states that at most one is active at a time, and
-that it is the one producing the site's discharge. Station codes and site codes therefore identify different things.
-
-RivRetrieve selects **station** records. It does not replace a station's discharge with
-its site's discharge, or expose the site's station-activation calendar. Use the complete
-station identifier rather than deriving a site code from it.
-
-The packaged catalogue contains 869 temperature stations and 6,454 hydrometric stations,
-with no shared station identifiers. Temperature candidates belong only to the former;
-the five hydrometric candidates belong only to the latter. This describes the packaged
-snapshot, not every possible overlap between French monitoring networks.
+Temperature comes from a separate monitoring network. Do not assume that a station selected for discharge also provides temperature.
 
 ## Time
 
-Read `time` and `time_zone` together. The datetime column itself is timezone-naive.
-Instantaneous HydroPortail values have UTC wall-clock labels and `time_zone="+00:00"`.
-Daily values and water temperature have `time_zone="unknown"`.
+The example's `time` column contains daily dates represented at midnight. Its
+`time_zone="unknown"` means that RivRetrieve has not established the clock defining
+the start and end of those days. Hub'Eau describes its hydrometric dates as UTC,
+but that statement alone does not establish which 24 hours a daily value covers.
 
-Hub'Eau's hydrometry documentation states that dates are UTC. However, RivRetrieve has
-not established the clock defining the beginning and end of the day represented by each
-daily value. It retains daily calendar labels at midnight without assigning a time zone
-or assuming a 24-hour support window from that label alone.
+For instantaneous values retrieved from HydroPortail, `time` contains UTC clock labels
+and `time_zone` is `+00:00`. Read the two columns together: the datetime column itself
+does not carry a time zone.
 
-Temperature observations carry separate source date and clock fields. RivRetrieve has
-not established their zone, frequency, statistic, or whether a value represents an instant
-or an interval. It preserves those unknowns rather than deriving them from the spacing
-between returned timestamps.
-
-Retrieve historical instantaneous stage from the station's HydroPortail record:
-
-```python
-stage = rr.find(
-    provider="fr_hubeau",
-    station="Y251002001",
-    quantity="stage",
-    statistic="instantaneous",
-    variant="raw",
-)
-
-instantaneous = rr.fetch(
-    stage,
-    start="2020-01-01",
-    end="2020-01-02",
-    cache="bypass",
-    receipts=True,
-)
-
-preview = instantaneous.data.select("time", "time_zone", "value", "unit").head(3)
-print(preview.write_csv(float_precision=3), end="")
-
-print(rr.series(instantaneous).select("published_id").rows())
-print(instantaneous.data.height)
-print(instantaneous.issues)
-```
-
-Output:
-
-```text
-time,time_zone,value,unit
-2020-01-01T00:00:00.000000,+00:00,0.347,m
-2020-01-01T00:05:00.000000,+00:00,0.345,m
-2020-01-01T00:10:00.000000,+00:00,0.343,m
-[('raw',)]
-576
-()
-```
-
-The first timestamps are five minutes apart, but the selection does not promise a fixed
-sampling frequency or a complete record. This request returned 576 rows and no issues.
-`receipts=True` keeps the source response bytes in `instantaneous.receipts`, including
-source fields that do not appear in the observation table.
-
-A null `value` is a published missing measurement. An absent row is no observation at
-that label. A failed source request is reported through `issues`; it is not an empty
-successful record. Check issues alongside the returned data.
+Temperature observations have separate source date and clock fields. Their time zone
+is also `unknown`. RivRetrieve has not established whether each value represents an
+instant or an interval, or what sampling or averaging period applies.
 
 ## Data status
 
-RivRetrieve requests HydroPortail's `raw` series and verifies that the response identifies
-that status. The source identifier appears as `published_id="raw"` in `rr.series(instantaneous)`.
-The `variant="raw"` filter accepts this published identifier. Corrected, pre-validated and
-validated series are not alternative selections supported by this route. Per-observation
-status, quality, method and continuity fields remain in the optional source receipts;
-they are not added as columns to the observation table or interpreted as quality judgements.
-The same distinction applies to source quality fields in Hub'Eau responses.
-
-HydroPortail uses the following source vocabulary. Its
-[glossary](https://hydro.eaufrance.fr/glossaire) defines the four (translations are ours; the
-French text is authoritative):
-
-| Status | HydroPortail's definition and unofficial English translation |
-|---|---|
-| *Donnée brute* | “Statut d'une série de mesures issue des capteurs ou d'un concentrateur, et n’ayant subi aucune correction ni critique.” A series from sensors or a data logger, without correction or review. |
-| *Donnée corrigée* | “Statut d'une série de mesures pour laquelle la donnée brute a subi une correction, essentiellement par un prévisionniste et en temps quasi réel, par exemple pour les besoins de la modélisation (élimination d’une valeur aberrante du jeu de données via le Superviseur).” Raw data corrected, mainly by a forecaster in near real time, for example for modelling by removing an outlier through the Superviseur tool. |
-| *Donnée pré-validée* | “Statut d'une série de mesure, où la donnée brute (ou éventuellement corrigée), a fait l'objet d’une première étape de critique. Elle est expertisée quotidiennement, hebdomadairement ou mensuellement suivant les services.” Raw or corrected data after an initial review, examined daily, weekly or monthly depending on the service. |
-| *Donnée validée* | “Statut d'une série de mesures où la donnée brute (ou éventuellement corrigée), voire la donnée pré-validée, a fait l'objet d’une critique approfondie. Généralement, elle est expertisée annuellement par les services.” Raw, corrected or pre-validated data after a thorough review, generally examined annually by the services. |
-
-An empty raw-series response does not establish that every other status is empty.
-RivRetrieve does not substitute another status automatically.
+RivRetrieve currently retrieves only HydroPortail's raw instantaneous series.
+HydroPortail defines raw data as measurements without correction or review.
+Corrected, pre-validated and validated series are not available through RivRetrieve. HydroPortail's [glossary](https://hydro.eaufrance.fr/glossaire) explains
+these source statuses. An empty raw record does not establish that the other statuses
+are also empty.
 
 ## Terms and citation
 
@@ -281,16 +150,14 @@ commercial reuse, and requires citation of the dataset author. The linked
 the source (at least the licensor) and the last-update date of the reused information.
 A retrieval date does not necessarily establish that last-update date.
 
-No ready-made citation string was identified in the checked Hub'Eau terms. Hub'Eau
-distributes data produced by actors in the French water information system, who remain
-responsible for those data. Identify the dataset author rather than assuming the API
-operator produced every observation. The terms' description of supplied “raw data”
-is separate from HydroPortail's sensor-validation status *Donnée brute*.
+Hub'Eau distributes data from several producers. Cite the dataset author rather than
+assuming the API operator produced every observation. No ready-made citation string
+was identified in its terms.
 
-These Hub'Eau terms govern the Hub'Eau route. HydroPortail's checked legal and FAQ pages
-establish public access but do not establish the same licence or a standard citation
-for its station-series route. Check the applicable source terms before reusing those
-records. Neither retrieval route requires personal credentials in RivRetrieve.
+These Hub'Eau terms apply to the Hub'Eau route. HydroPortail provides public access,
+but its legal and FAQ pages do not specify the same licence or a standard citation
+for station records. Check the applicable terms before reusing those records.
+Neither retrieval route requires personal credentials in RivRetrieve.
 
 ## Sources
 
@@ -309,5 +176,5 @@ records. Neither retrieval route requires personal credentials in RivRetrieve.
 | [HydroPortail — Les séries de mesures](https://hydro.eaufrance.fr/aide/les-series-de-mesures) | 2026-09-20 |
 | [HydroPortail — FAQ](https://hydro.eaufrance.fr/faq) | 2026-09-20 |
 
-Station and availability counts describe the packaged catalogue. Example observations
-were retrieved on 2026-09-20.
+The station count describes the packaged catalogue. The example observations were
+retrieved on 2026-09-20.
