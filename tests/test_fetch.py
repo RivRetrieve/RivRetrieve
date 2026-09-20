@@ -316,7 +316,10 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        variant=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     assert _keys(sparse) == (
         ("usgs_nwis", "station-1", "level"),
@@ -457,7 +460,10 @@ def test_fetch_receipts_true_retains_every_selected_series_parse_input_and_origi
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        variant=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
 
     result = rr.fetch(sparse, start="2026-01-01", end="2026-01-01", receipts=True)
@@ -546,7 +552,10 @@ def test_fetch_default_warns_once_per_actionable_merged_issue(
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        variant=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     first_issue = Issue(
         severity="warning",
@@ -583,7 +592,10 @@ def test_fetch_on_issue_ignore_returns_all_merged_issues_without_warnings(
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        variant=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     first_issue = Issue(
         severity="warning",
@@ -622,7 +634,10 @@ def test_fetch_on_issue_raise_fetches_all_series_then_raises_for_merged_issues(
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        variant=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     first_issue = Issue(
         severity="warning",
@@ -877,3 +892,42 @@ def test_fetch_by_provider_on_issue_raise_attempts_every_series_and_carries_all_
     assert raised.value.issues == (ca_issue, us_issue)
     assert recording_stages.ca_eccc.calls == [(("station-1",), ("level",))]
     assert recording_stages.usgs_nwis.calls == [(("station-1",), ("level",))]
+
+
+def test_local_variants_remain_explicit_across_sparse_source_coordinates(recording_stages):
+    selection = rr.pick(
+        rr.find(provider="usgs_nwis"),
+        station=["station-1", "station-2"],
+        variant=["level", "level_hourly"],
+    )
+    result = rr.fetch(selection, start="2026-01-01", end="2026-01-01", on_issue="ignore")
+    assert recording_stages.usgs_nwis.calls == [
+        (("station-1",), ("level",)),
+        (("station-2",), ("level_hourly",)),
+    ]
+    assert len(result.provenance.calls_made) == 2
+    unresolved = [item for item in result.outcomes if item.requested_selector is not None]
+    assert [
+        (item.station_id, item.product_id, item.requested_selector.kind, item.requested_selector.value)
+        for item in unresolved
+    ] == [
+        ("station-1", "level", "variant", "level_hourly"),
+        ("station-2", "level_hourly", "variant", "level"),
+    ]
+    assert all(item.status is OutcomeStatus.UNRESOLVED for item in unresolved)
+    assert all(
+        item.series_id is None and item.facts_ids == () and item.calls == () and item.retrieved_at is None
+        for item in unresolved
+    )
+    assert len(result.issues) == 2
+    assert all(item.code == "source.inventory_unresolved" for item in result.issues)
+    expected = _expected_frame(
+        {
+            "time": [datetime(2026, 1, 1, 12), datetime(2026, 1, 1, 12)],
+            "time_zone": ["+00:00", "+00:00"],
+            "station_id": ["station-1", "station-2"],
+            "product_id": ["level", "level_hourly"],
+            "value": [30.0, 40.0],
+        }
+    )
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
