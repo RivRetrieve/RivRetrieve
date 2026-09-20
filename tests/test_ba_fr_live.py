@@ -48,7 +48,7 @@ def _probe(provider, station, product, start, stop, paths, expected):
                 ),
             )
         fetched = stages.fetch((station,), (product_id,), {product_id: rendered}, window, stages.config, replay)
-        return pl.concat([stages.parse(payload, stages.config).value for payload in fetched.value])
+        return pl.concat([stages.parse(payload, stages.config).rows for payload in fetched.value])
 
     return BoundaryProbe(
         pid,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from rivretrieve._internal.providers.ca_eccc.bulk import decode_hydat
+from tests.store.test_ca_eccc_streaming import _compile_rows
 
 
 def _publisher_columns(table: str) -> tuple[tuple[str, str], ...]:
@@ -57,9 +57,9 @@ def test_decoder_accepts_publisher_declared_double_columns(tmp_path: Path) -> No
     artifact = tmp_path / "Hydat.sqlite3"
     _publisher_shaped_hydat(artifact)
 
-    materialized = decode_hydat(artifact)
+    rows = _compile_rows(artifact)
 
-    assert materialized.rows.filter(materialized.rows["value"].is_not_null()).select("product", "value").rows() == [
+    assert rows.filter(rows["value"].is_not_null()).select("product", "value").rows() == [
         ("discharge_daily_mean", 12.4),
         ("stage_daily_mean", 1.2),
     ]

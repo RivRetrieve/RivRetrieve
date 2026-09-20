@@ -25,6 +25,7 @@ RATIFIED_RUNTIME_ROLES = {
     "module.py",
     "origins.py",
     "parse.py",
+    "series.py",  # Source identity and independently established physical facts.
 }
 CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
 OBSERVATION_ADAPTER_ROLES = {
@@ -42,7 +43,12 @@ CONTRIBUTORS = {
 }
 
 
-MAINTAINER_ROLES = {"generate_catalogue.py", "capture.py", "inventory.py"}
+MAINTAINER_ROLES = {
+    "generate_catalogue.py",
+    "capture.py",
+    "inventory.py",
+    "catalogue_series.py",  # Build-time source-description evidence; never runtime discovery.
+}
 
 
 def _runtime_provider_files() -> list[Path]:
@@ -69,6 +75,12 @@ def test_runtime_declarations_transitively_do_not_import_maintainer_roles() -> N
                     names.append(node.module)
                 elif isinstance(node, ast.Import):
                     names.extend(alias.name for alias in node.names)
+                assert not set(names) & {
+                    "rivretrieve._internal.catalogues.schemas",
+                    "rivretrieve._internal.catalogues.native",
+                    "rivretrieve._internal.catalogues.publication",
+                    "rivretrieve._internal.catalogue_origins",
+                }, (provider, module, names)
                 pending.extend(name.removeprefix(prefix) for name in names if name.startswith(prefix))
 
 
@@ -328,15 +340,59 @@ def test_observation_adapter_module_docstrings_preserve_contributor_attribution(
             assert f"Contributed by: {CONTRIBUTORS[item.provider_id]}" in docstring
 
 
-def test_provider_runtime_contains_no_pydantic_catalogue_models() -> None:
-    model_names = {
-        node.name
-        for path in _runtime_provider_files()
-        for node in _tree(path).body
-        if isinstance(node, ast.ClassDef)
-        and any(isinstance(base, ast.Name) and base.id == "BaseModel" for base in node.bases)
+def test_provider_runtime_contains_no_catalogue_build_models() -> None:
+    # Response schemas belong at provider boundaries. Catalogue authoring schemas
+    # and build operations do not belong in those runtime modules.
+    forbidden_modules = {
+        "rivretrieve._internal.catalogues.schemas",
+        "rivretrieve._internal.catalogues.native",
+        "rivretrieve._internal.catalogues.publication",
+        "rivretrieve._internal.catalogue_origins",
     }
-    assert model_names == set()
+    violations = []
+    for path in _runtime_provider_files():
+        if path.name == "origins.py":
+            continue  # Maintainer evidence declarations are checked transitively above.
+        for node in ast.walk(_tree(path)):
+            names = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                names.append(node.module)
+            elif isinstance(node, ast.Import):
+                names.extend(alias.name for alias in node.names)
+            violations.extend(
+                (str(path.relative_to(PROVIDERS_ROOT)), name) for name in names if name in forbidden_modules
+            )
+    assert violations == []
+
+
+def test_runtime_response_models_are_validated_at_the_provider_boundary() -> None:
+    for path in _runtime_provider_files():
+        tree = _tree(path)
+        models = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and any(isinstance(base, ast.Name) and base.id == "BaseModel" for base in node.bases)
+        }
+        validated = {
+            node.func.value.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"model_validate", "model_validate_json"}
+            and isinstance(node.func.value, ast.Name)
+        }
+        pending = list(validated & models.keys())
+        reached = set()
+        while pending:
+            name = pending.pop()
+            if name in reached:
+                continue
+            reached.add(name)
+            pending.extend(
+                node.id for node in ast.walk(models[name]) if isinstance(node, ast.Name) and node.id in models
+            )
+        assert set(models) <= reached, path.relative_to(PROVIDERS_ROOT)
 
 
 def test_no_provider_module() -> None:

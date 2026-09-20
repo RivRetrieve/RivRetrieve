@@ -221,7 +221,18 @@ def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic
             if "window" not in function.name.lower() and "FetchWindow" not in source:
                 continue
             for node in ast.walk(function):
-                if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+                if (
+                    isinstance(node, ast.BinOp)
+                    and isinstance(node.op, (ast.Add, ast.Sub))
+                    and not (
+                        isinstance(node.op, ast.Add)
+                        and (
+                            isinstance(node.left, ast.JoinedStr)
+                            or isinstance(node.left, ast.Constant)
+                            and isinstance(node.left.value, str)
+                        )
+                    )
+                ):
                     violations.append(f"{path}:{function.name}:binary arithmetic")
                 if isinstance(node, ast.Call):
                     called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
@@ -417,6 +428,9 @@ def test_rows_schema_declares_exact_native_row_shape() -> None:
         "time",
         "value",
         "time_zone",
+        "series_id",
+        "facts_id",
+        "source_unit",
     )
     assert RowsSchema.polars_schema == pl.Schema(
         {
@@ -425,6 +439,9 @@ def test_rows_schema_declares_exact_native_row_shape() -> None:
             "time": pl.Datetime(),
             "value": pl.Float64,
             "time_zone": pl.Utf8,
+            "series_id": pl.Utf8,
+            "facts_id": pl.Utf8,
+            "source_unit": pl.Utf8,
         }
     )
     assert tuple(column.name for column in RowsSchema.columns if column.nullable) == ("value",)
@@ -435,6 +452,9 @@ def test_rows_schema_declares_exact_native_row_shape() -> None:
             "time": [datetime(2026, 1, 1)],
             "value": [1.0],
             "time_zone": ["unknown"],
+            "series_id": ["series"],
+            "facts_id": ["facts"],
+            "source_unit": ["m3/s"],
         },
         schema=RowsSchema.polars_schema,
     )
@@ -449,6 +469,11 @@ def test_canonical_rows_schema_declares_exact_canonical_shape() -> None:
         "time_zone",
         "station_id",
         "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
         "value",
     )
     assert CanonicalRowsSchema.polars_schema == pl.Schema(
@@ -457,6 +482,11 @@ def test_canonical_rows_schema_declares_exact_canonical_shape() -> None:
             "time_zone": pl.Utf8,
             "station_id": pl.Utf8,
             "product_id": pl.Utf8,
+            "series_id": pl.Utf8,
+            "facts_id": pl.Utf8,
+            "quantity": pl.Utf8,
+            "source_unit": pl.Utf8,
+            "unit": pl.Utf8,
             "value": pl.Float64,
         }
     )
@@ -468,6 +498,11 @@ def test_canonical_rows_schema_declares_exact_canonical_shape() -> None:
             "station_id": ["station"],
             "product_id": ["flow"],
             "value": [1.0],
+            "series_id": ["series"],
+            "facts_id": ["facts"],
+            "source_unit": ["m3/s"],
+            "quantity": ["discharge"],
+            "unit": ["m3/s"],
         },
         schema=CanonicalRowsSchema.polars_schema,
     )
@@ -506,11 +541,16 @@ def test_fetch_window_is_rejected_where_requested_window_is_required() -> None:
 
 def _valid_frame(schema: CatalogueSchema) -> pl.DataFrame:
     values = {
+        "quantity": ["discharge"],
+        "unit": ["m3/s"],
         "station_id": ["station"],
         "product_id": ["flow"],
         "time": [datetime(2026, 1, 1)],
         "value": [1.0],
         "time_zone": ["unknown"],
+        "series_id": ["series"],
+        "facts_id": ["facts"],
+        "source_unit": ["m3/s"],
     }
     return pl.DataFrame(
         {column.name: values[column.name] for column in schema.columns},

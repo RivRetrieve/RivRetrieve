@@ -391,8 +391,9 @@ def test_successful_malformed_body_stays_opaque_until_parse(
     assert len(fetched.value) == 1
     assert fetched.value[0].content == b"not-json"
     assert fetched.issues == ()
-    with pytest.raises(FatalContractError, match="not valid JSON"):
-        parse(fetched.value[0], provider_config)
+    parsed = parse(fetched.value[0], provider_config)
+    assert parsed.outcomes[0].status == "unsupported"
+    assert parsed.issues
 
 
 def test_usgs_fetch_uses_engine_rendered_dates_without_reading_fetch_window_endpoints(

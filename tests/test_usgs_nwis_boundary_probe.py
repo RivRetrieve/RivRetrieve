@@ -86,7 +86,7 @@ def _run_current_recording(product_id: ProductId, replay: ReplayTransport) -> pl
         replay,
     )
     assert fetched.issues == ()
-    return pl.concat([usgs_nwis.parse(payload, usgs_nwis.config).value for payload in fetched.value])
+    return pl.concat([usgs_nwis.parse(payload, usgs_nwis.config).rows for payload in fetched.value])
 
 
 def _current_probe(product_id: ProductId, assertions: Mapping[str, object]) -> BoundaryProbe:

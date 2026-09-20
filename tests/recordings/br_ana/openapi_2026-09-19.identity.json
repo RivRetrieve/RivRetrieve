@@ -1,0 +1,12 @@
+{
+  "source_url": "https://www.ana.gov.br/hidrowebservice/api-docs",
+  "request_method": "GET",
+  "request_parameters": {},
+  "retrieved_at": "2026-09-19T19:39:37.973419+00:00",
+  "status_code": 200,
+  "content_type": "application/json",
+  "sha256": "ab715ea45626d45a6c9c9fd6d344dec74200cd0a94d7ce550396410b54dd481d",
+  "bytes": 41928,
+  "authorship": "exact unauthenticated public API definition response; not observations",
+  "evidence_carrier_reason": "Public API definition, not observation recording. RecordingEnvelope secret-field guard flags security/0/Authorization=[] and components/securitySchemes/Authorization={type:http,scheme:bearer,bearerFormat:JWT}; manually reviewed schema declarations, not credentials or populated examples. Guard unchanged."
+}

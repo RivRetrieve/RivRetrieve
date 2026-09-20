@@ -24,9 +24,7 @@ from rivretrieve._internal.transport import HttpMethod, TransportRequest
 
 _RECORDING = Path(__file__).parent / "test_data" / "pl_imgw_codz_2022_01.recording.json"
 _URL = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/2022/codz_2022_01.zip"
-_PRODUCTS = tuple(
-    ProductId(value) for value in ("discharge_daily_mean", "stage_daily_mean", "water_temperature_daily_mean")
-)
+_PRODUCTS = tuple(ProductId(value) for value in ("discharge_daily", "stage_daily", "water_temperature_daily"))
 
 
 def _compiled_store(tmp_path: Path) -> StoreRoot:
@@ -79,15 +77,15 @@ def test_monthly_hydrological_mapping_and_source_values_are_not_inferred(tmp_pat
         StoreQuery(root, ProviderId("pl_imgw"), ("154210010",), _PRODUCTS, datetime(2021, 11, 1), datetime(2021, 11, 3))
     )
     assert result.rows.select("product_id", "time", "value").sort("product_id", "time").to_dicts() == [
-        {"product_id": "discharge_daily_mean", "time": datetime(2021, 11, 1), "value": 11.0},
-        {"product_id": "discharge_daily_mean", "time": datetime(2021, 11, 2), "value": 10.9},
-        {"product_id": "discharge_daily_mean", "time": datetime(2021, 11, 3), "value": 11.2},
-        {"product_id": "stage_daily_mean", "time": datetime(2021, 11, 1), "value": 103.0},
-        {"product_id": "stage_daily_mean", "time": datetime(2021, 11, 2), "value": 102.0},
-        {"product_id": "stage_daily_mean", "time": datetime(2021, 11, 3), "value": 103.0},
-        {"product_id": "water_temperature_daily_mean", "time": datetime(2021, 11, 1), "value": 7.5},
-        {"product_id": "water_temperature_daily_mean", "time": datetime(2021, 11, 2), "value": 6.9},
-        {"product_id": "water_temperature_daily_mean", "time": datetime(2021, 11, 3), "value": 7.1},
+        {"product_id": "discharge_daily", "time": datetime(2021, 11, 1), "value": 11.0},
+        {"product_id": "discharge_daily", "time": datetime(2021, 11, 2), "value": 10.9},
+        {"product_id": "discharge_daily", "time": datetime(2021, 11, 3), "value": 11.2},
+        {"product_id": "stage_daily", "time": datetime(2021, 11, 1), "value": 103.0},
+        {"product_id": "stage_daily", "time": datetime(2021, 11, 2), "value": 102.0},
+        {"product_id": "stage_daily", "time": datetime(2021, 11, 3), "value": 103.0},
+        {"product_id": "water_temperature_daily", "time": datetime(2021, 11, 1), "value": 7.5},
+        {"product_id": "water_temperature_daily", "time": datetime(2021, 11, 2), "value": 6.9},
+        {"product_id": "water_temperature_daily", "time": datetime(2021, 11, 3), "value": 7.1},
     ]
 
 
@@ -109,9 +107,9 @@ def test_warsaw_source_sentinel_remains_null_state_without_losing_stage_or_disch
         product: frame.sort("time")
         for (product,), frame in result.physical_rows.partition_by("product", as_dict=True).items()
     }
-    assert by_product["stage_daily_mean"]["value"].to_list() == [83.0, 85.0, 82.0]
-    assert by_product["discharge_daily_mean"]["value"].to_list() == [351.0, 358.0, 350.0]
-    temperature = by_product["water_temperature_daily_mean"]
+    assert by_product["stage_daily"]["value"].to_list() == [83.0, 85.0, 82.0]
+    assert by_product["discharge_daily"]["value"].to_list() == [351.0, 358.0, 350.0]
+    temperature = by_product["water_temperature_daily"]
     assert temperature["value"].to_list() == [None, None, None]
     assert temperature["value_state"].to_list() == ["published_null"] * 3
     assert temperature["IMGW_DAILY.temperature_c"].to_list() == ["99.9"] * 3
@@ -134,7 +132,7 @@ def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(tmp_
     )
     result = registry.get("pl_imgw").observations(
         stations="154210010",
-        products="discharge_daily_mean",
+        products="discharge_daily",
         start="2021-11-01",
         end="2021-11-03",
         on_issue="raise",
@@ -142,7 +140,18 @@ def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(tmp_
     )
 
     assert result.data.height == 3
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert result.provenance.publisher_artifact_checksums == (
         "sha256:4b9a400cd83f06856e4c16c7912573bf1d9d83e74a13a832742b7c62e1fa8119",
     )
@@ -151,7 +160,7 @@ def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(tmp_
     assert isinstance(receipt, StoreExcerptReceipt)
     assert receipt.authorship is ReceiptAuthorship.STORE_EXCERPT
     assert receipt.executed_query.stations == ("154210010",)
-    assert receipt.executed_query.products == (ProductId("discharge_daily_mean"),)
+    assert receipt.executed_query.products == (ProductId("discharge_daily"),)
     from io import BytesIO
 
     import polars as pl
@@ -163,7 +172,7 @@ def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(tmp_
     assert excerpt.unique().height == excerpt.height
     omitted = registry.get("pl_imgw").observations(
         stations="154210010",
-        products="discharge_daily_mean",
+        products="discharge_daily",
         start="2021-11-01",
         end="2021-11-03",
         on_issue="raise",

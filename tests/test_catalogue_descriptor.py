@@ -67,7 +67,14 @@ def _inputs(provider: str):
         if provider == "fr_hubeau"
         else (module.STATION_CATALOGUE_ORIGINS,)
     )
-    files = {**canonical, **evidence_files}
+    files = {
+        **canonical,
+        **evidence_files,
+        **{
+            name: (directory / name).read_bytes()
+            for name in ("format.json", "source_series.json", "series_claims.parquet")
+        },
+    }
     return provenance, origins, files
 
 
@@ -406,7 +413,7 @@ def test_reference_loader_extracts_all_five_evidence_relations(provider, monkeyp
 def test_descriptor_rejects_unexpected_file_authority():
     evidence, origins, files = _inputs("pl_imgw")
     for name in ("native.parquet", "../private.parquet", "https://example.org/input"):
-        with pytest.raises(FatalContractError, match="exactly the ten"):
+        with pytest.raises(FatalContractError, match="exactly the public"):
             build_catalogue_descriptor(evidence, origins, {**files, name: b"unexpected"})
 
 

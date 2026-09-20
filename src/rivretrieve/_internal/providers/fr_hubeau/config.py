@@ -24,6 +24,8 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import SeriesMapping
+from rivretrieve._internal.source_series import SourceUnitCodeDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,3 +83,114 @@ def config() -> ProviderConfig:
 
 def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
+
+
+# Explicit source access and physical mapping; not a completeness assertion.
+
+SERIES_MAPPINGS = {
+    "discharge_instantaneous": SeriesMapping(
+        "fr_hubeau/hydroportail/Q",
+        "discharge",
+        "l",
+        "l/s",
+        None,
+        "instantaneous",
+        "raw",
+        "+00:00",
+        temporal_support="instantaneous",
+        evidence=(
+            "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
+        ),
+        source_unit_definition=SourceUnitCodeDefinition(
+            provider_id="fr_hubeau",
+            namespace="fr_hubeau/hydroportail/Q",
+            code="l",
+            unit="l/s",
+            evidence=(
+                "https://hydro.eaufrance.fr/build/4210.e6896d9b.js "
+                "sha256:72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6 "
+                "HydroPortail Q unit selector: code=l, label=unit.q.l",
+                "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js "
+                "sha256:ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823 "
+                "HydroPortail common.unit.q.l=l/s",
+            ),
+        ),
+    ),
+    "stage_instantaneous": SeriesMapping(
+        "fr_hubeau/hydroportail/H",
+        "stage",
+        "mm",
+        "mm",
+        None,
+        "instantaneous",
+        "raw",
+        "+00:00",
+        temporal_support="instantaneous",
+        evidence=(
+            "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z",
+        ),
+    ),
+    "discharge_daily_mean": SeriesMapping(
+        "fr_hubeau/daily/QmnJ",
+        "discharge",
+        "l/s",
+        "l/s",
+        "daily",
+        "mean",
+        None,
+        None,
+        temporal_support="interval",
+        label_time="00:00",
+        evidence=(
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+            "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
+        ),
+    ),
+    "discharge_daily_max": SeriesMapping(
+        "fr_hubeau/daily/QIXnJ",
+        "discharge",
+        "l/s",
+        "l/s",
+        "daily",
+        "max",
+        None,
+        None,
+        label_time="00:00",
+        evidence=(
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+            "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
+        ),
+    ),
+    "stage_daily_max": SeriesMapping(
+        "fr_hubeau/daily/HIXnJ",
+        "stage",
+        "mm",
+        "mm",
+        "daily",
+        "max",
+        None,
+        None,
+        label_time="00:00",
+        evidence=(
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+            "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
+        ),
+    ),
+    "water_temperature_reported": SeriesMapping(
+        "fr_hubeau/temperature/resultat",
+        "temperature",
+        "°C",
+        "degC",
+        None,
+        None,
+        None,
+        None,
+        evidence=(
+            "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: libelle_parametre=Température de l'Eau, symbole_unite=°C, code_unite=27",
+            "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: separate source date_mesure_temp/heure_mesure_temp without zone",
+        ),
+    ),
+}

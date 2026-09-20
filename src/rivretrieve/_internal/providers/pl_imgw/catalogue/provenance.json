@@ -18,6 +18,30 @@
       "operator": "IMGW public-data portal",
       "evidence": [
         {
+          "evidence_id": "pl_imgw_codz_definition",
+          "description": "Exact publisher CODZ physical columns and missing-cell definitions",
+          "recording": {
+            "recording_id": "pl_imgw_codz_format",
+            "repository_path": "tests/test_data/pl_imgw_annual/CODZ_publiczne_format.txt",
+            "source_url": "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/CODZ_publiczne_format.txt",
+            "retrieved_at": "2026-09-20T09:52:00.066902Z",
+            "media_type": "text/plain; charset=windows-1250",
+            "sha256": "d8e7cbbc7680663d99813dd5f9abd793384b2f560600229625bb808ea71ef362"
+          }
+        },
+        {
+          "evidence_id": "pl_imgw_yearbook_methods",
+          "description": "Exact publisher yearbook methods, selected stations only, pp. 7-9",
+          "recording": {
+            "recording_id": "pl_imgw_yearbook_2025",
+            "repository_path": "tests/test_data/pl_imgw_annual/yearbook-2025.pdf",
+            "source_url": "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/Roczniki/Rocznik%20hydrologiczny/Rocznik%20Hydrologiczny%202025.pdf",
+            "retrieved_at": "2026-09-20T09:59:57.031773Z",
+            "media_type": "application/pdf",
+            "sha256": "c2ad75c472ab46363fb149ac5cf982230e2506d7e0b73b8e4eecb6623fa2a916"
+          }
+        },
+        {
           "evidence_id": "pl_imgw_terms",
           "description": "IMGW public-data regulations recording",
           "recording": {
@@ -76,6 +100,7 @@
     }
   ],
   "descriptions": [
+    "CODZ units/daily fields and yearbook station-dependent methods; archive-wide statistics remain unestablished",
     "IMGW public station roster and API documentation establish provider membership and the station-product availability statement; the roster contains no geometry",
     "IMGW public-data regulations HTML recording",
     "Observation archive requests are acquired from IMGW at runtime",
@@ -135,28 +160,28 @@
     },
     "provenance_acquisitions.parquet": {
       "path": "provenance_acquisitions.parquet",
-      "sha256": "35a0bc6e048b2f623ab9de278a4a41ebe34cff303b3a7e763f6ad46515f391ab",
-      "byte_count": 8139,
-      "row_count": 5,
+      "sha256": "ad0ec59fa87a9e4d3eac4e52eca6404169d37781ee43de7cc48c3576f8e1404e",
+      "byte_count": 8333,
+      "row_count": 6,
       "schema_version": 3
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "5320dd197a74f6acd59b016f748fb3c2c02c5cf0047033d5dae572800fd59657",
-      "byte_count": 2370,
-      "row_count": 10,
+      "sha256": "452234f1174fba5d02f5ca6b54a6f34bd321bbc26e8bf937e30b424f3681869f",
+      "byte_count": 2392,
+      "row_count": 11,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "47323265b20fb850eaae29590b2e0e6cdcbba0bc755d37fe2024bd7cfa2f3751",
-      "byte_count": 1374,
+      "sha256": "b2e8a837a972169efb4ddabdb44d4f06d25cc6043c30712d5aaa8035ad503f6d",
+      "byte_count": 1378,
       "row_count": 48,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "6c2b9ce5c459dd8d4907c7b315f7c1345750e53333b2207d45c8d8fa9ae7ba6f",
+      "sha256": "19bb0d724d2694539703c53029b1d91132eb86c79f675dfe7e19f488c1790159",
       "byte_count": 1583,
       "row_count": 15,
       "schema_version": 3

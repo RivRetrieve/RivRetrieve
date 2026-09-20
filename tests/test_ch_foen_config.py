@@ -3,7 +3,7 @@ from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ch_foen.config import ChFoenSourceCoordinates, config, window_declarations
 
 
-def test_three_reported_products_and_exact_source_fallback_units() -> None:
+def test_three_reported_products_preserve_all_established_field_units() -> None:
     value = config()
     assert value.zone == ZoneValue("+00:00")
     assert set(value.products) == {
@@ -12,7 +12,7 @@ def test_three_reported_products_and_exact_source_fallback_units() -> None:
         ProductId("water_temperature_reported"),
     }
     expected = {
-        "discharge_reported": (("flow", Unit.M3_S),),
+        "discharge_reported": (("flow", Unit.M3_S), ("flow_ls", Unit.L_S)),
         "stage_reported": (("height_abs", Unit.M), ("height", Unit.M)),
         "water_temperature_reported": (("temperature", Unit.DEG_C),),
     }

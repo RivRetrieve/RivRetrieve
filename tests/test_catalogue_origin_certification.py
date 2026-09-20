@@ -102,7 +102,10 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     build = generator.build_catalogue
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
-        from rivretrieve._internal.providers.br_ana.origins import build_acquisition_provenance, with_adopted_telemetry
+        from rivretrieve._internal.providers.br_ana.origins import (
+            build_acquisition_provenance,
+            with_observation_products,
+        )
         from rivretrieve._internal.recordings import read_recording
 
         capture = read_capture_record(ROOT / "tests/test_data/br_ana_inventory/capture.json")
@@ -114,7 +117,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
             read_recording(recorded_path),
             str(recorded_path.relative_to(ROOT)),
         )
-        provenance = with_adopted_telemetry(
+        provenance = with_observation_products(
             build_acquisition_provenance(capture),
             capture,
             generator.project_stations(read_native_table(native_path)).data,
@@ -685,15 +688,14 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
             monkeypatch.setattr(adapter.generator, name, denied(f"{adapter.provider_id}.{name}"))
 
     native_before = adapter.native_path.read_bytes()
+    source_inputs_before: dict[Path, bytes] = {}
     output = tmp_path / str(adapter.provider_id)
     arguments = ["--native", str(adapter.native_path), "--out", str(output)]
     if adapter.provider_id == "ba_fhmzbih":
-        arguments.extend(
-            (
-                "--workbook-access-ledger",
-                str(ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"),
-            )
-        )
+        ledger = ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
+        series_recording = ROOT / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"
+        source_inputs_before = {path: path.read_bytes() for path in (ledger, series_recording)}
+        arguments.extend(("--workbook-access-ledger", str(ledger), "--series-recording", str(series_recording)))
     elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (
@@ -728,6 +730,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     assert adapter.main(arguments) == 0
     assert calls == []
     assert adapter.native_path.read_bytes() == native_before
+    assert {path: path.read_bytes() for path in source_inputs_before} == source_inputs_before
 
     catalogue_dir = adapter.native_path.parent
     committed_names = {
@@ -745,6 +748,9 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
         "croissant.json",
     }
     assert committed_names == rebuilt_names == expected_names

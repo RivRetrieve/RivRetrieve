@@ -70,7 +70,7 @@ def test_recorded_public_boundaries_keep_exact_identity_and_blank_rows(
 
     def run(replay):
         monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-        selection = rr.find(provider="ba_fhmzbih", station=station, product=product)
+        selection = rr.find(provider="ba_fhmzbih", station=station, quantity={"Q": "discharge", "H": "stage"}[code])
         result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
         results.append(result)
         return result.data
@@ -107,9 +107,21 @@ def test_recorded_empty_temperature_remains_selectable_and_keeps_receipts(monkey
     )
     replay = ReplayTransport(recordings)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="ba_fhmzbih", station="2101-B", product="water_temperature_reported")
-    assert len(selection.series) == 1 and selection.series[0].availability == "unknown"
+    selection = rr.find(provider="ba_fhmzbih", station="2101-B", quantity="temperature")
+    assert len(selection.series) == 1
+    assert all(inventory.completeness == "incomplete" for inventory in selection.inventories)
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-03T23:59:59", receipts=True, on_issue="ignore")
     assert result.data.is_empty()
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert [receipt.content for receipt in result.receipts.entries] == [recording.content for recording in recordings]

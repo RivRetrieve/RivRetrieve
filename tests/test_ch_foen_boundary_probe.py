@@ -32,7 +32,7 @@ def _run(replay):
         {product: (RenderedWindow("2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z"),) for product in _PRODUCTS}
     )
     (payload,) = fetch(("2135",), _PRODUCTS, rendered, window, config(), replay).value
-    return parse(payload, config()).value
+    return parse(payload, config()).rows
 
 
 _PROBES = tuple(
