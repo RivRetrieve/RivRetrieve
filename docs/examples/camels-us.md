@@ -35,6 +35,7 @@ selection = rr.pick(selection, station=["01013500", "01022500", "01030500"])
 result = rr.fetch(selection, start="2025-01-01", end="2025-12-31")
 
 print(result.issues)
+
 # Output:
 # ()
 ```
@@ -52,6 +53,7 @@ identifier is a source identity, not a harmonised quality rating.
 ```python
 source_series = rr.series(result)
 print(source_series.select("station_id", "identity_namespace", "published_id").sort("station_id").rows())
+
 # Output:
 # [('01013500', 'methodID', '63596'), ('01022500', 'methodID', '63716'), ('01030500', 'methodID', '63740')]
 ```
@@ -74,6 +76,7 @@ coverage = (
     .sort("station_id", "series_id")
 )
 print(coverage.select("station_id", "rows", "first", "last", "nulls").rows())
+
 # Output:
 # [('01013500', 365, '2025-01-01', '2025-12-31', 0), ('01022500', 365, '2025-01-01', '2025-12-31', 0), ('01030500', 365, '2025-01-01', '2025-12-31', 0)]
 ```
@@ -113,6 +116,7 @@ bundle_path = Path("usgs_daily_2025.rrbundle")
 bundle_path.write_bytes(rr.to_bundle(result))
 restored = rr.from_bundle(bundle_path.read_bytes())
 print(restored.data.height)
+
 # Output:
 # 1095
 ```

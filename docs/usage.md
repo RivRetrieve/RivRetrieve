@@ -8,7 +8,8 @@ credentials, caching, provenance and maps.
 
 Run the Python examples in page order in one session. They build on earlier variables.
 The first retrieval uses the same USGS gauge and one-day window as the README. Later examples
-save selections and results, and convert established time zones to UTC.
+save selections and results, and convert established time zones to UTC. The Brazil download
+example needs ANA credentials; the USGS and Lithuanian examples do not.
 
 ## Find stations
 
@@ -17,7 +18,7 @@ A **station** is a monitoring site, such as USGS gauge `07374000`.
 A **quantity** is discharge, stage or water temperature (`temperature`). A **source series**
 is a separately published record at a station. Several source series can share quantity,
 frequency and statistic. Finding daily mean discharge can therefore select more than one record.
-Equal physical filters do not establish scientific interchangeability.
+Two records that match these filters can still differ in ways that matter for your study.
 
 `find` searches packaged evidence without contacting observation services. Keep station identifiers
 as strings so leading zeros survive. Start broadly, then narrow by established facts:
@@ -27,10 +28,13 @@ import rivretrieve as rr
 
 # Start with discharge, then ask for established daily means.
 discharge = rr.find(provider="usgs_nwis", quantity="discharge")
+
 daily_gauges = rr.pick(discharge, frequency="daily", statistic="mean")
+
 chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
 
 print(rr.series(chosen_gauges).select("station_id").unique().rows())
+
 # Output:
 # [('07374000',)]
 ```
@@ -40,10 +44,10 @@ frequency and statistic describe **how it was published**, such as a daily mean.
 uses published daily means rather than calculating them from sub-daily observations.
 A service's update cadence does not establish the time span represented by a value.
 
-Known facts are independent. For example, Swiss discharge has established units but incomplete
-temporal knowledge. It matches a broad discharge search, not an established daily-mean search.
-A daily mean elsewhere can still have an unknown day definition. More specific filters are
-not information tiers or quality rankings.
+For example, RivRetrieve knows the units of the Swiss discharge values, but not whether they
+represent a daily mean. In other words, you can find those values by asking for discharge,
+but not by asking specifically for daily mean discharge. A value updated every ten minutes
+is not necessarily an average over ten minutes.
 
 `rr.series(selection)` shows the source records known before retrieval. `rr.series(result)`
 also shows identities found in the response. The packaged catalogue is a snapshot, not an
@@ -52,9 +56,10 @@ matching discoveries; it does not freeze retrieval to the catalogue's known memb
 
 ### Narrow and save selections
 
-Use `pick` for physical filters or explicit `variant` and `series_id` restrictions. Source variant
-vocabulary belongs to each publisher, not a harmonised ranking. No policy substitutes a sibling.
-`pick` accepts a list of station, provider or source identifiers.
+Use `pick` to narrow a selection by physical facts or by `variant` and `series_id`.
+A variant is a separately published version of a series, using the agency's own name.
+`pick` accepts a list of station, provider or source identifiers. It keeps only what you ask for;
+it does not substitute another version.
 
 Save the complete selection as a versioned bundle:
 
@@ -83,10 +88,12 @@ Retrieve observations for the gauge in `chosen_gauges`:
 result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01")
 
 print(result.data.select("station_id", "value").rows())
+
 # Output:
 # [('07374000', 10562.183778816001)]
 
 print(result.issues)
+
 # Output:
 # ()
 ```
@@ -129,11 +136,9 @@ for known series that returned no rows. `result.outcomes` also retains limitatio
 be assigned a concrete identity. Statuses distinguish `success`, `empty`, `failed`, `unsupported`,
 `unresolved` and `no_match`. A null observation remains a row, not a failed request.
 
-An explicit restriction works before or after retrieval. For example, use
-`rr.pick(selection, variant="consistido")` before an ANA daily request, or
-`rr.pick(result, variant="consistido")` on that request's result. This is publisher identity,
-not a quality preference. Post-fetch narrowing creates a view, not another source request.
-Original provenance, receipts and diagnostics remain available; they can describe a broader request.
+You can narrow a selection before retrieval or filter a result afterwards with `pick`.
+Filtering a result makes no new source request. Original provenance, receipts and issues remain
+available, so they can still describe the broader request.
 
 ```python
 result_path = Path("result.rrbundle")
@@ -155,71 +160,119 @@ any retained receipts. Observation frames alone do not contain all this context.
 `fetch` requires one provider. For selections spanning providers, `fetch_by_provider` returns a
 dictionary of separate results. Each retains its provider identity, source terms and outcomes.
 
-### Known facts and source alternatives
+### When the time step is unknown
 
-The Swiss gauge below illustrates unknown temporal meaning. The Brazilian gauge illustrates
-a different property: two separately published series with the same established physical facts.
-Neither case implies a quality ranking. These searches do not require credentials or network access.
+This Swiss gauge provides discharge values, but their exact time span and statistic are not
+established. The first search includes them. Adding daily-mean filters excludes them.
+Both searches use the packaged catalogue without contacting the source.
 
 ```python
 swiss = rr.find(provider="ch_foen", station="2251", quantity="discharge")
 swiss_daily = rr.pick(swiss, frequency="daily", statistic="mean")
+
 print(rr.series(swiss_daily).height)
+
 # Output:
 # 0
+```
 
+### When an agency publishes more than one version
+
+Brazil's ANA publishes **Bruto** (raw) and **Consistido** (quality-checked) daily records.
+ANA performs that checking, not RivRetrieve. Both are available: RivRetrieve requests both
+unless you explicitly choose one. A source may not have observations for both in every period.
+The labels do not tell you which record suits your study.
+Provider-specific observation quality flags are not added to the returned table.
+
+Find the two daily mean water-level series (`quantity="stage"`), then optionally choose Consistido:
+
+```python
 brazil = rr.find(
-    provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
+    provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"
 )
+
 print(sorted(rr.series(brazil)["variant"].to_list()))
+
 # Output:
 # ['bruto', 'consistido']
+
 consistido = rr.pick(brazil, variant="consistido")
 ```
 
-Fetching `brazil` requests both Bruto and Consistido. Fetching `consistido` explicitly requests
-only that source alternative. Brazil requires the credentials described below. There is no
-library preference between the two. Source vocabulary is preserved, not converted into a
-harmonised quality score. Provider-specific observation quality flags are not added to the output.
+The search above works offline. To run the downloads below, first set `ANA_IDENTIFICADOR` and
+`ANA_SENHA` in your environment or working-directory `.env` file. See
+[supplied credentials](#supplied-credentials). Do not put credential values in the code.
 
-For a supported singleton, no variant choice is needed. Lithuania's Anykščiai gauge uses the
-same workflow:
+```python
+brazil_result = rr.fetch(brazil, start="2020-01-10", end="2020-01-20")
+
+print(sorted(rr.series(brazil_result)["variant"].to_list()))
+
+# Output:
+# ['bruto', 'consistido']
+
+consistido_result = rr.fetch(consistido, start="2020-01-10", end="2020-01-20")
+
+print(sorted(rr.series(consistido_result)["variant"].to_list()))
+
+# Output:
+# ['consistido']
+```
+
+### When only one series is available
+
+For Lithuania's Anykščiai gauge, this request returns one daily discharge series.
+There is no extra version to choose in this example:
 
 ```python
 lithuania = rr.find(
     provider="lt_lhmt", station="anyksciu-vms", quantity="discharge", frequency="daily", statistic="mean"
 )
+
 lithuanian_result = rr.fetch(lithuania, start="2023-01-01", end="2023-01-01")
+
 print(lithuanian_result.data["series_id"].n_unique())
+
 # Output:
 # 1
 ```
 
-An unknown variant never falls back to the singleton. `on_issue="ignore"` keeps the diagnostic
-without a notification; `"warn"` also emits a warning, and `"raise"` raises `IssuePolicyError`.
-Lithuania's supported singleton does not establish an exhaustive source inventory:
+### When a requested variant is not found
+
+The catalogue does not always list every variant a source may provide. Asking for a name that
+is not listed can therefore mean **“I cannot tell whether that variant is available.”**
+RivRetrieve reports this as `selection.unresolved_inventory`:
 
 ```python
 no_variant = rr.pick(lithuania, variant="nonexistent", on_issue="ignore")
+
 print(rr.series(no_variant).height, [issue.code for issue in no_variant.issues])
+
 # Output:
 # 0 ['selection.unresolved_inventory']
 ```
 
-This empty inspection table does not prove that the requested source identity does not exist.
-The restriction remains unresolved and is retained for retrieval, rather than replaced by a known
-series. By contrast, contradictory restrictions establish no match. Asking for `"nonexistent"`
-within the already restricted Consistido selection cannot match:
+The empty table means no known series matches. RivRetrieve keeps your requested name for
+retrieval; it does not replace it with the one known series.
+
+Sometimes RivRetrieve can tell that nothing matches. The selection `consistido` already allows
+only that variant, so filtering it again for `"nonexistent"` leaves nothing:
 
 ```python
 no_match = rr.pick(consistido, variant="nonexistent", on_issue="ignore")
+
 print(rr.series(no_match).height, [issue.code for issue in no_match.issues])
+
 # Output:
 # 0 ['selection.no_match']
 ```
 
-A complete acquired inventory can also establish no match. No issue policy substitutes another
-series. Inspect selection issues and retrieved outcomes to distinguish no-match from uncertainty.
+`selection.no_match` means **“I can tell, and the answer is no: nothing matches these filters.”**
+A complete source inventory can also establish that a requested variant is absent.
+
+Both examples use `on_issue="ignore"` to keep the issue without a notification. With `"warn"`,
+you also get a warning; with `"raise"`, the call raises `IssuePolicyError`. None of these choices
+substitutes a different series.
 
 ### Request windows and UTC
 
@@ -242,17 +295,20 @@ from the same gauge and convert them:
 instant_gauge = rr.find(
     provider="usgs_nwis", station="07374000", quantity="discharge", statistic="instantaneous"
 )
+
 instant_result = rr.fetch(
     instant_gauge, start="2023-01-01T00:00", end="2023-01-01T00:15"
 )
 
 print(instant_result.data.select("time", "time_zone").rows())
+
 # Output:
 # [(datetime.datetime(2023, 1, 1, 0, 0), '-06:00'), (datetime.datetime(2023, 1, 1, 0, 15), '-06:00')]
 
 utc_result = rr.to_utc(instant_result)
 
 print(utc_result.data.select("time", "time_zone").rows())
+
 # Output:
 # [(datetime.datetime(2023, 1, 1, 6, 0), '+00:00'), (datetime.datetime(2023, 1, 1, 6, 15), '+00:00')]
 ```
@@ -284,6 +340,7 @@ checked_result = rr.fetch(
 )
 
 print(checked_result.issues)
+
 # Output:
 # ()
 ```
@@ -299,6 +356,7 @@ quiet_result = rr.fetch(
 )
 
 print([(issue.severity, issue.code) for issue in quiet_result.issues])
+
 # Output:
 # []
 ```
@@ -338,7 +396,7 @@ Live retrieval defaults to `cache="bypass"`. Choose another mode explicitly:
 | Mode | Live observation behavior |
 |---|---|
 | `"bypass"` | Fetch without reading or writing the observation cache |
-| `"reuse"` | Serve a fully covered scoped inventory locally; otherwise reacquire the requested scope |
+| `"reuse"` | Use cached observations when the complete request is covered; otherwise fetch again |
 | `"refresh"` | Replace the requested interval with the source's current successful answer |
 
 To reuse this one-day request later:
@@ -348,28 +406,27 @@ cached_result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01", ca
 status = rr.cache_status("usgs_nwis")
 
 print(status.exists)
+
 # Output:
 # True
 ```
 
-Reuse checks the requested source scope against held inventory and successful coverage.
-If that proof is insufficient, it reacquires the full requested scope with the provider's
-normal padded fetch windows, not only uncovered intervals.
-Coverage is tracked per concrete source series and time interval, separately from inventory.
-An all-series request needs a complete scoped inventory and coverage of every required member;
-a cached subset is not enough. A successful empty series can establish interval coverage.
-Reuse serves the recorded inventory vintage, not a promise of current-source freshness.
-Refreshing can leave fewer rows, or none. Failed or unsupported acquisition can retain held
-successful observations at their original retrieval vintage, alongside the new diagnostics.
-Those held observations are not a new successful source answer. Failed requests add no
-successful coverage. RivRetrieve records retrieval times but leaves freshness judgements to you.
+Reuse needs enough cached information to answer the whole request: which series belong to it,
+and whether each was successfully retrieved for the requested interval. For example, cached
+Consistido data alone cannot answer a request for both Brazilian series. If coverage is incomplete,
+RivRetrieve fetches the full requested scope again, with the provider's normal padded windows.
+It does not request only the missing dates.
+
+A successful answer with no rows can still cover an interval. A failed request cannot.
+Reuse returns the saved answer, which may differ from what the source publishes now. Use
+`refresh` to request a current answer. Refresh can return fewer rows, or none. If a series fails,
+RivRetrieve can retain its previously cached observations alongside the new issues. Those rows
+keep their original retrieval time; they are not presented as a fresh successful download.
 
 Set `RIVRETRIEVE_CACHE_DIR` to choose a cache location. Without an override, RivRetrieve uses
 the platform's user cache directory. `cache_status` inspects local state without network access
-and refuses malformed or unsupported stores. Current compiled stores use revision `5`; live
-accumulated stores use revision `7`. Incompatible old files remain intact until explicit cleanup
-or rebuild; old collapsed observations are not assigned invented identities. `clear_cache(provider)` deletes that provider's store and pending recovery
-inputs, including preserved downloads. It returns a removal summary and leaves other providers
+and refuses malformed or unsupported stores without deleting them. `clear_cache(provider)`
+deletes that provider's store and pending recovery inputs, including preserved downloads. It returns a removal summary and leaves other providers
 alone. See [architecture](architecture.md#storage-and-reuse) for storage details.
 
 Canada (`ca_eccc`) and Poland (`pl_imgw`) use compiled stores prepared from bulk downloads.
@@ -395,6 +452,7 @@ origin information, which helps you check where those observations came from:
 
 ```python
 print(result.provenance.provider_id, result.provenance.source)
+
 # Output:
 # usgs_nwis live
 
@@ -419,6 +477,7 @@ receipt_result = rr.fetch(
 )
 
 print([entry.authorship.value for entry in receipt_result.receipts.entries])
+
 # Output:
 # ['publisher_payload']
 ```
@@ -446,29 +505,3 @@ Open `stations.html` in a browser. Markers show the catalogue's CRS statement. U
 are orange; their coordinates are rendered as if they used EPSG:4326. That display assumption
 does not establish their reference system or change the catalogue. Without Folium, `map` raises
 `MissingOptionalDependencyError`.
-
-## Moving from the old interface
-
-Replace `product="discharge_daily_mean"` in `find` or `pick` with
-`quantity="discharge", frequency="daily", statistic="mean"`. The `product=` input was removed;
-it is not an alias. Do not translate a source-specific suffix into a physical statistic.
-For ANA's former Consistido product, use the physical filters plus `variant="consistido"`.
-Without that restriction, both matching daily series are requested.
-
-Results are no longer five-column, station/product-only tables. Preserve `series_id` and
-`facts_id` when saving observations, and use `rr.series(result)` for their meaning. Joining only
-on station and time can combine distinct source records. The output `product_id` remains an
-access coordinate, not authority for physical facts. Use version-2 bundles to retain the full
-selection or result; bare frames and version-1 bundles are not lossless imports.
-
-Old accumulated caches (including revision 6) and incompatible compiled stores are refused,
-not silently upgraded. Current revisions are 7 for accumulated caches and 5 for compiled stores.
-Preserve any needed old files before explicit cleanup with `rr.clear_cache(provider)`, which
-also deletes pending downloads. For live sources, fetch again with `cache="reuse"` to rebuild.
-For Canada or Poland, call `rr.download(provider)` to download and rebuild the compiled store.
-Refusal alone leaves old files intact; no source identities are invented for collapsed old rows.
-
-For less common filters (`temporal_support`, `day_definition`, `timestamp_anchor`, `time_zone`,
-`vertical_reference`, `vertical_datum`) and inspection evidence states, see the
-[API reference](reference.md). Unknown facts cannot satisfy precise predicates. Established
-quantity, source unit and conversion are required; `on_issue` cannot bypass that requirement.

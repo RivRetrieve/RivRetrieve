@@ -7,7 +7,8 @@ Python interface.
 
 RivRetrieve helps you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map shows providers with
-observation access, with darker shading indicating more gauges.
+observation access, with darker shading indicating more gauges. RivRetrieve retrieves observations
+from twelve providers: ten live services and two bulk sources.
 
 ![Countries with supported providers, shaded by gauge count on a logarithmic scale; counts are listed in the provider table below.](docs/assets/coverage-map.png)
 
@@ -39,9 +40,7 @@ for how to supply them.
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | Open |
 
-There are thirteen enrolled providers: ten live services, two bulk sources, and South Africa
-(`za_dws`), which supports catalogue discovery only, not observation retrieval. Station counts
-above describe packaged catalogues, not guaranteed current data availability.
+Station counts describe packaged catalogues, not guaranteed current data availability.
 
 </details>
 
@@ -74,15 +73,19 @@ import rivretrieve as rr
 daily_gauges = rr.find(
     provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"
 )
+
 chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
 
 result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01")
 
 # Inspect two columns as a short list of rows.
 print(result.data.select("station_id", "value").rows())
+
 # Output:
 # [('07374000', 10562.183778816001)]
+
 print(result.issues)
+
 # Output:
 # ()
 ```
@@ -92,8 +95,8 @@ The empty tuple means this retrieval reported no issues.
 
 `result.data` is a Polars table of observations. Use `rr.series(result)` to inspect the returned
 source series and their outcomes. A physical filter can match several separately published
-series, such as Brazil’s Bruto and Consistido daily records. Retrieval keeps both by default;
-it does not choose a preferred alternative.
+series, such as Brazil’s Bruto (raw) and Consistido (quality-checked by ANA) daily records.
+RivRetrieve makes both available and returns both unless you choose one.
 Discharge values use m³/s. Read timestamps together with their zone column. Inspect `result.issues`
 even when rows come back. A successful call does not establish continuous records or scientific
 comparability. Downloading observations requires internet access.
@@ -104,9 +107,9 @@ streamflow for several gauges at once.
 
 ## What RivRetrieve does and does not do
 
-- **Filter facts, not quality.** Search broadly for discharge or narrow to established daily
-  means. Unknown temporal meaning cannot satisfy a daily-mean filter. Source-series identity
-  is not a quality score, and matching physical facts do not imply scientific interchangeability.
+- **Choose the observations you need.** Search for discharge or narrow to daily means. A source
+  appears in a daily-mean search only when its values are known to be daily means. Two matching
+  records can still differ in ways that matter for your study.
 - **No quality control or gap filling.** RivRetrieve does not assess scientific quality.
   It converts units and formats, and reports retrieval and parsing issues. Provider-specific
   observation quality flags are not added to harmonised output.

@@ -14,7 +14,9 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from rivretrieve._internal.authentication import ExchangeSpec
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from tests.test_br_ana_public_daily import _IDENTIFIER, _PASSWORD, _AuthenticatedReplay
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDING = ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
@@ -36,6 +38,8 @@ def output_contracts(block):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.func.id != "print":
             continue
         end = node.end_lineno
+        while end < len(lines) and not lines[end].strip():
+            end += 1
         assert end < len(lines) and lines[end].strip() == "# Output:", (
             f"Missing output after print at line {node.lineno}"
         )
@@ -67,6 +71,24 @@ class CountingReplay(ReplayTransport):
         return super().send(request)
 
 
+class NewcomerReplay(CountingReplay):
+    """Route ANA through its credential protocol and all observations through exact replay."""
+
+    def __init__(self):
+        super().__init__(
+            read_recording(RECORDING),
+            read_recording(INSTANT_RECORDING),
+            *(read_recording(path) for path in LITHUANIAN_RECORDINGS),
+        )
+        self.ana = _AuthenticatedReplay("stage_daily_mean_bruto")
+
+    def send(self, request):
+        if request.url in (ExchangeSpec.ana().exchange_url, self.ana.recording.request.url):
+            self.calls.append(request)
+            return self.ana.send(request)
+        return super().send(request)
+
+
 def execute_block(block, scope, label):
     expected = output_contracts(block)
     checked = []
@@ -86,11 +108,9 @@ def execute_block(block, scope, label):
 def execute_page(page, monkeypatch, tmp_path):
     import rivretrieve._internal.discovery as discovery
 
-    replay = CountingReplay(
-        read_recording(RECORDING),
-        read_recording(INSTANT_RECORDING),
-        *(read_recording(path) for path in LITHUANIAN_RECORDINGS),
-    )
+    replay = NewcomerReplay()
+    monkeypatch.setenv("ANA_IDENTIFICADOR", _IDENTIFIER)
+    monkeypatch.setenv("ANA_SENHA", _PASSWORD)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
@@ -125,6 +145,46 @@ def assert_usage_state(scope, tmp_path):
     assert rr.series(scope["swiss_daily"]).is_empty()
     assert set(rr.series(scope["brazil"])["variant"]) == {"bruto", "consistido"}
     assert rr.series(scope["consistido"])["variant"].to_list() == ["consistido"]
+    both = scope["brazil_result"]
+    explicit = scope["consistido_result"]
+    expected_issues = {("info", "source_status"), ("info", "provenance.citation_not_established")}
+    assert {(issue.severity, issue.code) for issue in both.issues} == expected_issues
+    assert {(issue.severity, issue.code) for issue in explicit.issues} == expected_issues
+    assert both.data.height == 22
+    assert both.data["series_id"].n_unique() == 2
+    assert set(rr.series(both)["variant"]) == {"bruto", "consistido"}
+    assert rr.series(explicit)["variant"].to_list() == ["consistido"]
+    # Decode the exact monthly source cells independently of the provider parser.
+    source = json.loads(scope["_transport"].ana.recording.content)["items"]
+    expected_rows = []
+    for item in source:
+        if item["Mediadiaria"] != "1":
+            continue
+        variant = {"1": "bruto", "2": "consistido"}[item["nivelconsistencia"]]
+        for day in range(10, 21):
+            raw = item[f"Cota_{day:02d}"]
+            value = None if raw is None or not raw.strip() else float(raw) / 100
+            expected_rows.append(
+                (datetime(2020, 1, day), "unknown", "15400000", f"stage_daily_mean_{variant}", "m", value)
+            )
+    expected = pl.DataFrame(
+        expected_rows,
+        schema={
+            name: both.data.schema[name] for name in ("time", "time_zone", "station_id", "product_id", "unit", "value")
+        },
+        orient="row",
+    )
+    assert_frame_equal(
+        both.data.select(expected.columns).sort("product_id", "time"), expected.sort("product_id", "time")
+    )
+    narrowed = rr.pick(both, variant="consistido")
+    assert_frame_equal(explicit.data, narrowed.data)
+    assert_frame_equal(
+        rr.series(explicit).select("series_id", "variant"),
+        rr.series(narrowed).select("series_id", "variant"),
+    )
+    assert scope["_transport"].ana.exchange_calls == 2
+    assert scope["_transport"].ana.observation_calls >= 2
     singleton = scope["lithuanian_result"]
     assert not singleton.issues
     expected_singleton = pl.DataFrame(
