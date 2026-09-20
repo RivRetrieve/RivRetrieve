@@ -14,6 +14,7 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, WithIssu
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
 from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS, FrHubeauSourceCoordinates
+from rivretrieve._internal.providers.fr_hubeau.fetch import next_url_from_response
 from rivretrieve._internal.source_series import ParsedSeries
 
 
@@ -42,6 +43,12 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             )
         if series.get("metric") != coordinates.field:
             raise UnsupportedSourceStructureError("fr_hubeau HydroPortail response contains an unexpected metric")
+        title = series.get("title")
+        expected_title = "Hauteur instantanée" if coordinates.field == "H" else "Débit instantané"
+        if not isinstance(title, str) or title.partition(" - ")[0] != expected_title:
+            raise UnsupportedSourceStructureError(
+                "fr_hubeau HydroPortail title does not establish the requested instantaneous quantity"
+            )
         expected_unit = "mm" if coordinates.field == "H" else "l"
         if series.get("unit") != expected_unit or root.get("timezone") != "UTC":
             raise UnsupportedSourceStructureError(
@@ -53,6 +60,7 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             )
         raw_rows = series.get("data")
     else:
+        next_url_from_response(payload.content)
         raw_rows = root.get("data")
     if not isinstance(raw_rows, list):
         raise UnsupportedSourceStructureError("fr_hubeau payload has no observation data list")
@@ -74,6 +82,12 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             value = _value(row, "resultat_obs_elab")
             zone = "unknown"
         elif coordinates.family == "temperature":
+            if row.get("symbole_unite") != "°C" or row.get("code_unite") != "27":
+                raise UnsupportedSourceStructureError(
+                    "fr_hubeau temperature unit differs from the published Celsius contract"
+                )
+            if row.get("code_parametre") != "1301":
+                raise UnsupportedSourceStructureError("fr_hubeau temperature parameter is not 1301")
             if row.get("code_station") != station:
                 raise UnsupportedSourceStructureError(
                     "fr_hubeau temperature response contains an unexpected station identity"

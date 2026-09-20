@@ -40,7 +40,6 @@ def fetch(
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
-    fields: list[str] = []
     for product in products:
         try:
             coordinates = config.products[product].coordinates.value
@@ -48,8 +47,6 @@ def fetch(
             raise FatalContractError(f"ch_foen product is absent from provider config: {product}") from exc
         if not isinstance(coordinates, ChFoenSourceCoordinates):
             raise FatalContractError(f"ch_foen product has invalid source coordinates: {product}")
-        fields.extend(field.name for field in coordinates.fields)
-    fields = list(dict.fromkeys(fields))
     query_fields = ["flow", "flow_ls", "height_abs", "height", "temperature"]
     if not products or not stations:
         return WithIssues(())

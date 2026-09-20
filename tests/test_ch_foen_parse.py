@@ -41,7 +41,7 @@ def payload(path):
     )
 
 
-def test_rest_parser_maps_all_three_products_utc_and_drops_null_without_quality_inference():
+def test_rest_parser_maps_all_three_products_utc_without_quality_inference():
     result = parse(payload("ch_foen_2135_rest_2026-09-01.recording.json"), config())
     assert result.rows.columns == [
         "station_id",

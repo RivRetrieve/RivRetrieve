@@ -1201,23 +1201,38 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
         check_exact=True,
     )
 
-    definitions = HYDRO_PRODUCT_DEFS + TEMP_PRODUCT_DEFS
+    # Physical labels follow the retained API definitions, not a second generator declaration.
     expected_products = pl.DataFrame(
         [
-            {
-                "provider_id": "fr_hubeau",
-                "product_id": definition.product_id,
-                "observed_property": definition.observed_property,
-                "frequency": definition.frequency,
-                "statistic": definition.statistic,
-                "period_type": definition.period_type,
-                "period_anchor": definition.period_anchor,
-                "unit": definition.canonical_unit,
-                "native_id": definition.grandeur_code or definition.api_type,
-            }
-            for definition in definitions
+            (
+                "fr_hubeau",
+                "discharge_instantaneous",
+                "discharge",
+                "unknown",
+                "instantaneous",
+                "instant",
+                "unknown",
+                "m3/s",
+                "Q",
+            ),
+            ("fr_hubeau", "stage_instantaneous", "stage", "unknown", "instantaneous", "instant", "unknown", "m", "H"),
+            ("fr_hubeau", "discharge_daily_mean", "discharge", "daily", "mean", "interval", "unknown", "m3/s", "QmnJ"),
+            ("fr_hubeau", "discharge_daily_max", "discharge", "daily", "max", "unknown", "unknown", "m3/s", "QIXnJ"),
+            ("fr_hubeau", "stage_daily_max", "stage", "daily", "max", "unknown", "unknown", "m", "HIXnJ"),
+            (
+                "fr_hubeau",
+                "water_temperature_reported",
+                "water_temperature",
+                "unknown",
+                "unknown",
+                "unknown",
+                "unknown",
+                "degC",
+                "temperature",
+            ),
         ],
         schema=PRODUCT_CATALOG_SCHEMA.polars_schema,
+        orient="row",
     ).sort("product_id")
     pl_testing.assert_frame_equal(committed_products, expected_products, check_exact=True)
 
@@ -1242,8 +1257,8 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: 365-day window decomposition with paginated obs_elab, observations_tr, "
-            "and temperature/chronique requests; partial failures reported as recoverable issues"
+            "true: station HydroPortail queries and paginated obs_elab and temperature/chronique requests; "
+            "partial failures reported as recoverable issues"
         ),
         "catalogue_version": "2026-08-02",
         "license": None,

@@ -114,7 +114,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         "source.station_product.availability_not_published",
         "source.observation.transport",
     )
-    canonical_observation_facts = ("observation.canonical_five_column_shape",)
+    canonical_observation_facts = ("observation.source_series_shape",)
     acq = AcquisitionRecord(
         acquisition_id="existenz_catalogue_capture_2026_08_02",
         method="http_request",
@@ -321,7 +321,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 source_id=None,
                 acquisition_id=None,
                 transformation=Transformation(
-                    name="BAFU observations to RivRetrieve five-column result shape",
+                    name="BAFU observations to identified RivRetrieve observations",
                     external_inputs=(
                         ExternalFactReference(source_id="ch_bafu", fact="source.observation.value"),
                         ExternalFactReference(source_id="ch_bafu", fact="source.observation.quality"),

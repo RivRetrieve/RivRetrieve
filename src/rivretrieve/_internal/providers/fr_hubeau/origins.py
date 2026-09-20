@@ -269,7 +269,7 @@ def build_acquisition_provenance(
                 acquisition_id="station_observation_publication",
                 method="runtime_http_request",
                 instant_type="runtime",
-                description="HydroPortail station-own instantaneous Q/H publication from PHyC; not a shared-site series or original-producer assertion",
+                description="HydroPortail station-own Q/H publication from PHyC; response titles establish instantaneous quantities; not a shared-site series or original-producer assertion",
                 requested_from=("https://hydro.eaufrance.fr/stationhydro/ajax/{station}/series",),
             )
         ],
