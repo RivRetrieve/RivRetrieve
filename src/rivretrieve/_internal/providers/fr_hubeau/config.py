@@ -97,6 +97,10 @@ SERIES_MAPPINGS = {
         "instantaneous",
         "raw",
         "+00:00",
+        evidence=(
+            "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
+            "tests/test_data/fr_hubeau_openapi_v2.json: hydrometrie/observations_tr instantaneous discharge",
+        ),
         source_unit_definition=SourceUnitCodeDefinition(
             provider_id="fr_hubeau",
             namespace="fr_hubeau/hydroportail/Q",
@@ -113,16 +117,76 @@ SERIES_MAPPINGS = {
         ),
     ),
     "stage_instantaneous": SeriesMapping(
-        "fr_hubeau/hydroportail/H", "stage", "mm", "mm", "irregular", "instantaneous", "raw", "+00:00"
+        "fr_hubeau/hydroportail/H",
+        "stage",
+        "mm",
+        "mm",
+        "irregular",
+        "instantaneous",
+        "raw",
+        "+00:00",
+        evidence=(
+            "tests/test_data/fr_hydroportail_H_padded.recording.json: station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z",
+            "tests/test_data/fr_hubeau_openapi_v2.json: hydrometrie/observations_tr instantaneous height",
+        ),
     ),
     "discharge_daily_mean": SeriesMapping(
-        "fr_hubeau/daily/QmnJ", "discharge", "l/s", "l/s", "daily", "mean", None, None
+        "fr_hubeau/daily/QmnJ",
+        "discharge",
+        "l/s",
+        "l/s",
+        "daily",
+        "mean",
+        None,
+        None,
+        label_time="00:00",
+        evidence=(
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition and result unit",
+            "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
+        ),
     ),
     "discharge_daily_max": SeriesMapping(
-        "fr_hubeau/daily/QIXnJ", "discharge", "l/s", "l/s", "daily", "max", None, None
+        "fr_hubeau/daily/QIXnJ",
+        "discharge",
+        "l/s",
+        "l/s",
+        "daily",
+        "max",
+        None,
+        None,
+        label_time="00:00",
+        evidence=(
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition and result unit",
+            "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
+        ),
     ),
-    "stage_daily_max": SeriesMapping("fr_hubeau/daily/HIXnJ", "stage", "mm", "mm", "daily", "max", None, None),
+    "stage_daily_max": SeriesMapping(
+        "fr_hubeau/daily/HIXnJ",
+        "stage",
+        "mm",
+        "mm",
+        "daily",
+        "max",
+        None,
+        None,
+        label_time="00:00",
+        evidence=(
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition and result unit",
+            "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
+        ),
+    ),
     "water_temperature_reported": SeriesMapping(
-        "fr_hubeau/temperature/resultat", "temperature", "degC", "degC", None, None, None, None
+        "fr_hubeau/temperature/resultat",
+        "temperature",
+        "degC",
+        "degC",
+        None,
+        None,
+        None,
+        None,
+        evidence=(
+            "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: libelle_parametre=Température de l'Eau, symbole_unite=°C, code_unite=27",
+            "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: separate source date_mesure_temp/heure_mesure_temp without zone",
+        ),
     ),
 }
