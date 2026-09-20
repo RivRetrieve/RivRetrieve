@@ -24,6 +24,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import SeriesMapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,3 +77,16 @@ def config() -> ProviderConfig:
 
 def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
+
+
+# Explicit source access and physical mapping; not a completeness assertion.
+
+SERIES_MAPPINGS = {
+    "discharge_daily_mean": SeriesMapping("cz_chmi/QD", "discharge", "M3_S", "m3/s", "daily", "mean", "QD", "+00:00"),
+    "stage_daily_mean": SeriesMapping("cz_chmi/HD", "stage", "CM", "cm", "daily", "mean", "HD", "+00:00"),
+    "water_temperature_daily_mean": SeriesMapping(
+        "cz_chmi/TD", "temperature", "0C", "degC", "daily", "mean", "TD", "+00:00"
+    ),
+    "discharge_hourly_mean": SeriesMapping("cz_chmi/QH", "discharge", "M3_S", "m3/s", "hourly", "mean", "QH", "+00:00"),
+    "stage_hourly_mean": SeriesMapping("cz_chmi/HH", "stage", "CM", "cm", "hourly", "mean", "HH", "+00:00"),
+}

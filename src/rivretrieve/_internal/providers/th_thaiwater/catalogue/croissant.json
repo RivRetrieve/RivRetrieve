@@ -130,6 +130,30 @@
       "encodingFormat": "application/x-parquet",
       "sha256": "db8feda961de86dfbf375c88e8a1d408f6b7566ecbadfff662197cc0bd929e31",
       "contentSize": "13789 B"
+    },
+    {
+      "@id": "format.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "format.json",
+      "encodingFormat": "application/json",
+      "sha256": "c4bab2060a5568dbe61d84e8f505c3c2ae0f09484afb2f3146b6c1e87f67b00f",
+      "contentSize": "31 B"
+    },
+    {
+      "@id": "source_series.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "source_series.json",
+      "encodingFormat": "application/json",
+      "sha256": "d0e209e6aeec4454c7e3f00517c76c5974e67bb11ef0ee1d2dc8222aeb9f9f74",
+      "contentSize": "2901 B"
+    },
+    {
+      "@id": "series_claims.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "series_claims.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "b448a5498c3a96d9c072ace55c3a7071e5860ca4d2cd4a8e12b4a528bb7d84d8",
+      "contentSize": "1220 B"
     }
   ],
   "recordSet": [

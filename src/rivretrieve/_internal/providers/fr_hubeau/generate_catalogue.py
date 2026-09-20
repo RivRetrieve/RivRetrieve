@@ -1179,6 +1179,8 @@ def validate_generated_catalogue(
 def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
+    from rivretrieve._internal.providers.fr_hubeau.config import config as source_config
     from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
     output_path = Path(out_dir)
@@ -1193,6 +1195,8 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
         catalogue.acquisition_provenance,
         tuple(FRANCE_ORIGIN_DECLARATIONS.values()),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_mappings=SERIES_MAPPINGS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

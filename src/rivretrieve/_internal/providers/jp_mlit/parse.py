@@ -1,4 +1,4 @@
-"""jp_mlit parse : Payload × ProviderConfig → WithIssues[Rows].
+"""jp_mlit native observations and source-series evidence.
 
 Contributed by: Thiago von Däniken
 """
@@ -7,15 +7,17 @@ import csv
 import re
 from calendar import monthrange
 from datetime import datetime, timedelta
+from math import isfinite
 
 import polars as pl
 
-from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.jp_mlit.config import JpMlitSourceCoordinates
+from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
+from rivretrieve._internal.providers.jp_mlit.config import SERIES_MAPPINGS, JpMlitSourceCoordinates
 from rivretrieve._internal.providers.jp_mlit.fetch import JpMlitPayloadCoordinates, _page
+from rivretrieve._internal.source_series import ParsedSeries
 
 _TITLES = {2: "時刻水位月表検索結果", 3: "日水位年表検索結果", 6: "時刻流量月表検索結果", 7: "日流量年表検索結果"}
 _LEGENDS = {
@@ -28,7 +30,7 @@ _FLAG_CODES = {"*": "source_tentative", "$": "source_missing", "#": "source_clos
 
 
 def _empty() -> Rows:
-    return pl.DataFrame(schema=RowsSchema.polars_schema)
+    return pl.DataFrame(schema=NATIVE_SCHEMA)
 
 
 def _issue(code: str, station: str, product: str, label: str) -> Issue:
@@ -67,7 +69,7 @@ def _aggregate(issues: list[Issue]) -> tuple[Issue, ...]:
     )
 
 
-def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
     coordinates = payload.source_coordinates.value
     if not isinstance(coordinates, JpMlitPayloadCoordinates):
         raise FatalContractError("jp_mlit payload has invalid request coordinates")
@@ -87,31 +89,31 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     try:
         text = payload.content.decode("shift_jis", errors="strict")
     except UnicodeDecodeError as error:
-        raise FatalContractError("jp_mlit DAT is not strict Shift-JIS") from error
+        raise UnsupportedSourceStructureError("jp_mlit DAT is not strict Shift-JIS") from error
     lines = text.splitlines()
     if len(lines) < 10 or lines[0].strip() != _TITLES[coordinates.kind]:
-        raise FatalContractError("jp_mlit DAT title differs from requested KIND")
+        raise UnsupportedSourceStructureError("jp_mlit DAT title differs from requested KIND")
     expected_labels = ("水系名", "河川名", "観測所名", "観測所記号")
     for line, label in zip(lines[1:5], expected_labels, strict=True):
         cells = next(csv.reader([line]))
         if len(cells) != 2 or cells[0] != label or not cells[1].strip():
-            raise FatalContractError("jp_mlit DAT station or source identity header is malformed")
+            raise UnsupportedSourceStructureError("jp_mlit DAT station or source identity header is malformed")
         if label == "観測所記号" and cells[1] != station_id:
-            raise FatalContractError("jp_mlit DAT station identity differs from request")
+            raise UnsupportedSourceStructureError("jp_mlit DAT station identity differs from request")
     if _LEGENDS[coordinates.kind] not in lines:
-        raise FatalContractError("jp_mlit DAT flag legend differs from KIND contract")
+        raise UnsupportedSourceStructureError("jp_mlit DAT flag legend differs from KIND contract")
     header_index = next(
         (index for index, line in enumerate(lines) if line.startswith(",1時,") or line.startswith(",1日,")), None
     )
     if header_index is None:
-        raise FatalContractError("jp_mlit DAT has no exact value/flag header")
+        raise UnsupportedSourceStructureError("jp_mlit DAT has no exact value/flag header")
     header = next(csv.reader([lines[header_index]]))
     count = 24 if coordinates.kind in (2, 6) else 31
     expected_header = [""] + [
         cell for index in range(1, count + 1) for cell in (f"{index}{'時' if count == 24 else '日'}", "")
     ]
     if header != expected_header:
-        raise FatalContractError("jp_mlit DAT value/flag header is malformed")
+        raise UnsupportedSourceStructureError("jp_mlit DAT value/flag header is malformed")
     if coordinates.kind in (2, 6):
         return _hourly(lines[header_index + 1 :], station_id, product_id, count)
     return _daily(lines[header_index + 1 :], station_id, product_id, count)
@@ -130,16 +132,20 @@ def _cell(
     raw = value.strip()
     flag = flag_value.strip()
     if flag not in ("", "*", "$", "#", "-"):
-        raise FatalContractError(f"jp_mlit unknown native flag {flag!r} at {label}")
+        raise UnsupportedSourceStructureError(f"jp_mlit unknown native flag {flag!r} at {label}")
     if flag in ("$", "#", "-"):
         issues.append(_issue(_FLAG_CODES[flag], station, product, label))
         return
     if not raw:
-        raise FatalContractError(f"jp_mlit usable cell is blank at {label}")
+        raise UnsupportedSourceStructureError(f"jp_mlit usable cell is blank at {label}")
     try:
         number = float(raw)
-    except ValueError as error:
-        raise FatalContractError(f"jp_mlit usable cell is nonnumeric at {label}") from error
+    except (ValueError, OverflowError) as error:
+        raise UnsupportedSourceStructureError(
+            f"jp_mlit usable cell is nonnumeric or unrepresentable at {label}"
+        ) from error
+    if not isfinite(number):
+        raise UnsupportedSourceStructureError(f"jp_mlit usable cell must be finite at {label}")
     if flag == "*":
         issues.append(_issue(_FLAG_CODES[flag], station, product, label))
     rows.append({"station_id": station, "product_id": product, "time": time, "value": number, "time_zone": "unknown"})
@@ -153,11 +159,11 @@ def _hourly(lines: list[str], station: str, product: str, count: int) -> WithIss
             continue
         cells = next(csv.reader([line]))
         if len(cells) != 1 + 2 * count:
-            raise FatalContractError("jp_mlit hourly row does not contain exact value/flag pairs")
+            raise UnsupportedSourceStructureError("jp_mlit hourly row does not contain exact value/flag pairs")
         try:
             day = datetime.strptime(cells[0].strip(), "%Y/%m/%d")
         except ValueError as error:
-            raise FatalContractError("jp_mlit hourly row has invalid source date") from error
+            raise UnsupportedSourceStructureError("jp_mlit hourly row has invalid source date") from error
         for hour in range(1, 25):
             time = day + timedelta(days=1) if hour == 24 else day.replace(hour=hour)
             _cell(
@@ -170,8 +176,7 @@ def _hourly(lines: list[str], station: str, product: str, count: int) -> WithIss
                 issues,
                 time,
             )
-    frame = pl.DataFrame(rows, schema=RowsSchema.polars_schema)
-    validate_catalogue(frame, RowsSchema, on_issue="raise")
+    frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA)
     return WithIssues(frame, _aggregate(issues))
 
 
@@ -184,35 +189,48 @@ def _daily(lines: list[str], station: str, product: str, count: int) -> WithIssu
             continue
         if match := re.fullmatch(r"(\d{4})年", line.strip()):
             if year is not None:
-                raise FatalContractError("jp_mlit daily DAT contains multiple year markers")
+                raise UnsupportedSourceStructureError("jp_mlit daily DAT contains multiple year markers")
             year = int(match.group(1))
             continue
         if year is None:
-            raise FatalContractError("jp_mlit daily DAT has data before its year marker")
+            raise UnsupportedSourceStructureError("jp_mlit daily DAT has data before its year marker")
         cells = next(csv.reader([line]))
         if len(cells) > 1 + 2 * count or (len(cells) - 1) % 2:
-            raise FatalContractError("jp_mlit daily row does not contain exact value/flag pairs")
+            raise UnsupportedSourceStructureError("jp_mlit daily row does not contain exact value/flag pairs")
         match = re.fullmatch(r"(\d{1,2})月", cells[0].strip())
         if match is None:
-            raise FatalContractError("jp_mlit daily row has invalid month label")
+            raise UnsupportedSourceStructureError("jp_mlit daily row has invalid month label")
         month = int(match.group(1))
         try:
             expected_days = monthrange(year, month)[1]
         except ValueError as error:
-            raise FatalContractError("jp_mlit daily row has invalid month label") from error
+            raise UnsupportedSourceStructureError("jp_mlit daily row has invalid month label") from error
         if len(cells) != 1 + 2 * expected_days:
-            raise FatalContractError("jp_mlit daily row does not contain the exact calendar-day pairs")
+            raise UnsupportedSourceStructureError("jp_mlit daily row does not contain the exact calendar-day pairs")
         for day in range(1, expected_days + 1):
             raw, flag = cells[2 * day - 1], cells[2 * day]
             try:
                 time = datetime(year, month, day)
             except ValueError as error:
                 if raw.strip() or flag.strip():
-                    raise FatalContractError("jp_mlit invalid calendar day contains an observation") from error
+                    raise UnsupportedSourceStructureError(
+                        "jp_mlit invalid calendar day contains an observation"
+                    ) from error
                 continue
             _cell(raw, flag, station, product, f"{year}年{month}月{day}日", rows, issues, time)
     if year is None:
-        raise FatalContractError("jp_mlit daily DAT has no year marker")
-    frame = pl.DataFrame(rows, schema=RowsSchema.polars_schema)
-    validate_catalogue(frame, RowsSchema, on_issue="raise")
+        raise UnsupportedSourceStructureError("jp_mlit daily DAT has no year marker")
+    frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA)
     return WithIssues(frame, _aggregate(issues))
+
+
+def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+    if (
+        isinstance(payload.source_coordinates.value, JpMlitPayloadCoordinates)
+        and payload.source_coordinates.value.role == "html"
+    ):
+        _parse_native(payload, provider_config)
+        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
+    return parse_mapped_series(
+        payload, provider_config, provider="jp_mlit", mappings=SERIES_MAPPINGS, native_parse=_parse_native
+    )

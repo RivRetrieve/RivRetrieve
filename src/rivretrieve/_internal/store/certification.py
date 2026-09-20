@@ -21,6 +21,7 @@ import pyarrow.parquet as pq
 from polars.testing import assert_frame_equal
 
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store.compiler import (
     NativeStoreRows,
     ObservationBatchStream,
@@ -59,6 +60,7 @@ class NativeStoreMaterialization:
     rows: NativeStoreRows | pl.DataFrame
     observed_source_columns: tuple[SourceColumn, ...]
     source_units: tuple[SourceUnitCount, ...]
+    series: tuple[SourceSeries, ...] = ()
 
 
 # Compatibility with the descriptive name used in the layout discussion.
@@ -102,6 +104,8 @@ def certify_store(
         raise CertificationError("non-streaming certification accepts exactly one publisher artifact")
     _check_artifact(artifact, destination, request.publisher_artifact)
     decoded = decode(artifact)
+    if decoded.series:
+        request = replace(request, series=decoded.series)
     _check_source(decoded, request)
 
     stage = destination.with_name(f".{destination.name}.staging-{uuid4().hex}")

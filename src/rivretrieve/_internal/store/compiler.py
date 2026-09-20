@@ -18,6 +18,14 @@ import polars as pl
 import pyarrow.parquet as pq
 
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.source_series import (
+    InventoryCompleteness,
+    InventorySnapshot,
+    SeriesScope,
+    SourceSeries,
+    stable_id,
+    validate_series_rows,
+)
 from rivretrieve._internal.store.validation import (
     Disposition,
     PublisherArtifact,
@@ -31,7 +39,17 @@ from rivretrieve._internal.store.validation import (
 
 NativeStoreRows = NewType("NativeStoreRows", pl.DataFrame)
 _PRODUCT_ID = re.compile(r"[^/=]+")
-_ENGINE_INPUT_COLUMNS = ("product", "station_id", "time", "time_zone", "value", "value_state")
+_ENGINE_INPUT_COLUMNS = (
+    "product",
+    "station_id",
+    "time",
+    "time_zone",
+    "value",
+    "value_state",
+    "series_id",
+    "facts_id",
+    "source_unit",
+)
 _ENGINE_PHYSICAL_COLUMNS = _ENGINE_INPUT_COLUMNS[1:]
 
 
@@ -52,6 +70,7 @@ class StoreCompileRequest:
     source_columns: tuple[SourceColumn, ...]
     source_column_dispositions: tuple[SourceColumnDisposition, ...]
     publisher_artifacts: tuple[PublisherArtifact, ...] = ()
+    series: tuple[SourceSeries, ...] = ()
 
     def __post_init__(self) -> None:
         if self.publisher_artifacts and self.publisher_artifacts[0] != self.publisher_artifact:
@@ -71,7 +90,7 @@ CompileStoreRequest = StoreCompileRequest
 
 
 def source_schema_fingerprint(columns: tuple[SourceColumn, ...]) -> SourceSchemaFingerprint:
-    """Return the revision-2 fingerprint of an ordered publisher schema."""
+    """Return the revision-5 fingerprint of an ordered publisher schema."""
     encoded_columns = [{"name": column.name, "type": column.type} for column in columns]
     canonical = json.dumps(encoded_columns, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return SourceSchemaFingerprint(f"sha256:{hashlib.sha256(canonical).hexdigest()}")
@@ -87,6 +106,7 @@ def compile_store(request: StoreCompileRequest, rows: NativeStoreRows | pl.DataF
     root = Path(request.destination)
     _check_request(request, root)
     native_columns = _check_rows(frame, request.source_columns, request.source_column_dispositions)
+    validate_series_rows(frame.rename({"product": "product_id"}), request.series)
 
     root.mkdir(parents=False)
     counts: dict[str, int] = {}
@@ -104,11 +124,11 @@ def compile_store(request: StoreCompileRequest, rows: NativeStoreRows | pl.DataF
                 physical = _physical_partition(partition, native_columns, request.source_columns)
                 _write_partition(physical, directory / "part-0.parquet")
                 counts[identifier] = physical.height
-        _write_manifest(root, request, counts)
+        _write_manifest(root, request, counts, request.series)
         return validate_store(request.destination, request.provider_id)
     except BaseException:
-        # RR2 never publishes a plausible partial writer result. Removing this newly
-        # created destination is local cleanup, not RR3's atomic replacement policy.
+        # The layout writer never leaves a plausible partial store.
+        # Removing a newly created destination does not alter existing evidence.
         _remove_new_store(root)
         raise
 
@@ -136,7 +156,7 @@ def _check_rows(
     if missing_engine:
         raise ValueError(f"store rows lack engine fields: {missing_engine!r}")
     if frame.is_empty():
-        raise ValueError("revision-2 stores cannot contain zero rows")
+        raise ValueError("revision-5 stores cannot contain zero rows")
     if frame.columns[: len(_ENGINE_INPUT_COLUMNS)] != list(_ENGINE_INPUT_COLUMNS):
         raise ValueError(f"store row engine fields must be first and ordered as {_ENGINE_INPUT_COLUMNS!r}")
 
@@ -164,14 +184,26 @@ def _check_rows(
         "time_zone": pl.String,
         "value": pl.Float64,
         "value_state": pl.String,
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "source_unit": pl.String,
     }
     wrong_types = {
         name: (schema[name], expected) for name, expected in expected_types.items() if schema[name] != expected
     }
     if wrong_types:
-        raise TypeError(f"store row engine field types are not revision-2 types: {wrong_types!r}")
+        raise TypeError(f"store row engine field types are not revision-5 types: {wrong_types!r}")
 
-    required_non_null = ("product", "station_id", "time", "time_zone", "value_state")
+    required_non_null = (
+        "product",
+        "station_id",
+        "time",
+        "time_zone",
+        "value_state",
+        "series_id",
+        "facts_id",
+        "source_unit",
+    )
     for name in required_non_null:
         if frame.get_column(name).null_count():
             raise ValueError(f"store rows contain null {name!r}")
@@ -179,7 +211,7 @@ def _check_rows(
         raise ValueError("store station identifiers must be non-empty")
     for product in frame.get_column("product").unique().to_list():
         if not _PRODUCT_ID.fullmatch(product):
-            raise ValueError(f"product id cannot form a revision-2 partition: {product!r}")
+            raise ValueError(f"product id cannot form a revision-5 partition: {product!r}")
     valid_states = {state.value for state in ValueState}
     states = set(frame.get_column("value_state").unique().to_list())
     if not states <= valid_states:
@@ -219,7 +251,9 @@ def _write_partition(frame: pl.DataFrame, path: Path) -> None:
     frame.write_parquet(path, compression="zstd", statistics=True)
 
 
-def _write_manifest(root: Path, request: StoreCompileRequest, counts: dict[str, int]) -> None:
+def _write_manifest(
+    root: Path, request: StoreCompileRequest, counts: dict[str, int], series: tuple[SourceSeries, ...]
+) -> None:
     columns = [{"name": column.name, "type": column.type} for column in request.source_columns]
     dispositions: list[dict[str, str]] = []
     for item in request.source_column_dispositions:
@@ -231,7 +265,7 @@ def _write_manifest(root: Path, request: StoreCompileRequest, counts: dict[str, 
         dispositions.append(record)
     built_at = request.built_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     manifest = {
-        "format_version": 2,
+        "format_version": 5,
         "provider_id": str(request.provider_id),
         "compiler_version": request.compiler_version,
         "built_at": built_at,
@@ -251,6 +285,29 @@ def _write_manifest(root: Path, request: StoreCompileRequest, counts: dict[str, 
         },
         "source_column_dispositions": dispositions,
         "partition_row_counts": counts,
+        "series": [item.model_dump(mode="json") for item in series],
+        "inventories": [
+            InventorySnapshot(
+                snapshot_id=stable_id(
+                    str(request.provider_id), *(str(item.sha256) for item in request.all_publisher_artifacts)
+                ),
+                scope=SeriesScope(
+                    provider_ids=(str(request.provider_id),),
+                    station_ids=tuple(sorted({item.station_id for item in series})),
+                    product_ids=tuple(sorted({item.product_id for item in series})),
+                ),
+                members=tuple(item.series_id for item in series),
+                member_facts=tuple((item.series_id, tuple(fact.facts_id for fact in item.facts)) for item in series),
+                completeness=InventoryCompleteness.COMPLETE,
+                access="compiled publisher artifact supported physical cells",
+                origin="compiled",
+                acquired_at=None,
+                evidence=tuple(str(item.sha256) for item in request.all_publisher_artifacts),
+            ).model_dump(mode="json")
+        ],
+        "outcomes": [],
+        "issues": [],
+        "source_calls": [],
     }
     (root / "manifest.json").write_text(
         json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n",
@@ -288,6 +345,7 @@ class NativeObservationBatch:
     rows: NativeStoreRows | pl.DataFrame
     source_units: tuple[object, ...]
     source_contributions: tuple[object, ...]
+    series: tuple[SourceSeries, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -331,6 +389,7 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
     native_columns: tuple[str, ...] | None = None
     batch_schema: pl.Schema | None = None
     emitted_total = 0
+    definitions = {item.series_id: item for item in request.series}
     last_partition_identifier: str | None = None
     unit_database = sqlite3.connect(root / ".source-units.sqlite3")
     unit_database.execute(
@@ -340,7 +399,12 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
         for batch_number, batch in enumerate(stream.batches, start=1):
             if not isinstance(batch, NativeObservationBatch):
                 raise TypeError("observation batch iterator yielded an invalid batch")
+            for definition in batch.series:
+                if definition.series_id in definitions and definitions[definition.series_id] != definition:
+                    raise ValueError("compiled batch contradicts an established source-series definition")
+                definitions[definition.series_id] = definition
             frame = pl.DataFrame(batch.rows)
+            validate_series_rows(frame.rename({"product": "product_id"}), tuple(definitions.values()))
             if frame.is_empty():
                 raise ValueError(f"observation batch {batch_number} is empty")
             batch_native = _check_rows(frame, request.source_columns, request.source_column_dispositions)
@@ -392,7 +456,7 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
                     counts[identifier] = counts.get(identifier, 0) + physical.height
                     row_groups.setdefault(identifier, []).append(physical.height)
         if emitted_total == 0:
-            raise ValueError("revision-2 stores cannot contain zero rows")
+            raise ValueError("revision-5 stores cannot contain zero rows")
         unit_database.commit()
         publisher_records, expected_rows, contributed_rows, source_unit_total = unit_database.execute(
             "SELECT COALESCE(SUM(publisher_records),0), COALESCE(SUM(expected_rows),0), "
@@ -435,7 +499,7 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
                 "source-unit emitted contributions differ from materialized rows: "
                 f"expected={contributed_rows}; actual={emitted_total}"
             )
-        _write_manifest(root, request, counts)
+        _write_manifest(root, request, counts, tuple(definitions.values()))
         validate_store(request.destination, request.provider_id)
         return StreamingCompileEvidence(
             MappingProxyType(dict(counts)),

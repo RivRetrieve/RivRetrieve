@@ -23,6 +23,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import SeriesMapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,3 +74,13 @@ def config() -> ProviderConfig:
 
 def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
+
+
+# Explicit source access and physical mapping; not a completeness assertion.
+
+SERIES_MAPPINGS = {
+    "stage_hourly": SeriesMapping("jp_mlit/KIND/2", "stage", "m", "m", "hourly", None, None, None),
+    "stage_daily": SeriesMapping("jp_mlit/KIND/3", "stage", "m", "m", "daily", None, None, None),
+    "discharge_hourly": SeriesMapping("jp_mlit/KIND/6", "discharge", "m3/s", "m3/s", "hourly", None, None, None),
+    "discharge_daily": SeriesMapping("jp_mlit/KIND/7", "discharge", "m3/s", "m3/s", "daily", None, None, None),
+}

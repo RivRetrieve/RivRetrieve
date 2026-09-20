@@ -25,6 +25,7 @@ RATIFIED_RUNTIME_ROLES = {
     "module.py",
     "origins.py",
     "parse.py",
+    "series.py",  # Source identity and independently established physical facts.
 }
 CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
 OBSERVATION_ADAPTER_ROLES = {
@@ -42,7 +43,12 @@ CONTRIBUTORS = {
 }
 
 
-MAINTAINER_ROLES = {"generate_catalogue.py", "capture.py", "inventory.py"}
+MAINTAINER_ROLES = {
+    "generate_catalogue.py",
+    "capture.py",
+    "inventory.py",
+    "catalogue_series.py",  # Build-time source-description evidence; never runtime discovery.
+}
 
 
 def _runtime_provider_files() -> list[Path]:

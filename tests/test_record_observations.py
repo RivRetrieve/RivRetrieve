@@ -71,7 +71,7 @@ def test_credentialed_recording_keeps_the_header_name_and_never_the_value(tmp_pa
     recording = read_recording(written)
     assert recording.content == _EMPTY_SERIES
     assert recording.request.parameters is not None
-    assert recording.request.parameters["ReferenceTime"] == "1900-01-01T00:00:00Z/1900-01-07T00:00:00Z"
+    assert recording.request.parameters["ReferenceTime"] == "1900-01-01T00:00:00Z/1900-01-07T23:59:59.999999Z"
 
 
 def test_recording_main_resolves_declared_exchange_below_recorder(tmp_path, monkeypatch):
@@ -251,6 +251,9 @@ def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_rec
         "no_nve",
         "--product",
         "stage_daily_mean",
+        # The protocol-only station is deliberately outside catalogue inventory.
+        "--variant",
+        "1",
         "--start",
         "1900-01-03",
         "--end",
@@ -297,6 +300,8 @@ def test_recording_main_retains_not_found_response_without_error_exit(tmp_path, 
                 "12.210.0",
                 "--product",
                 "water_temperature_daily_mean",
+                "--variant",
+                "1",
                 "--start",
                 "2025-07-10",
                 "--end",
@@ -314,3 +319,77 @@ def test_recording_main_retains_not_found_response_without_error_exit(tmp_path, 
     assert retained.status_code == 404
     assert retained.content == recording.content
     assert _SECRET not in written.read_text()
+
+
+def test_recorder_routes_catalogue_owned_versions_through_real_provider_fetch(tmp_path):
+    """The recorder must compose source inventory before the versioned fetch stage."""
+    sent = []
+
+    def sender(request, timeout_seconds):
+        sent.append(request)
+        return _EMPTY_SERIES, 200, "application/json"
+
+    paths = record_observations(
+        "no_nve",
+        ("1.200.0",),
+        ("stage_daily_mean",),
+        "1900-01-03T00:00:00",
+        "1900-01-05T00:00:00",
+        tmp_path,
+        "catalogue_version",
+        transport=HttpClient(sender=sender),
+    )
+    assert len(sent) == 1, "Missing catalogue source inventory suppresses the actual versioned request"
+    assert sent[0].params["VersionNumber"] == 1
+    assert len(paths) == 1
+    captured = read_recording(paths[0])
+    assert captured.request.parameters["VersionNumber"] == 1
+    assert captured.content == _EMPTY_SERIES
+    assert captured.status_code == 200
+
+
+def test_recorder_explicit_unknown_version_is_sent_without_catalogue_fallback(tmp_path):
+    sent = []
+    body = b"source reports no such version"
+
+    def sender(request, timeout_seconds):
+        sent.append(request)
+        return body, 404, "text/plain"
+
+    (written,) = record_observations(
+        "no_nve",
+        ("1.200.0",),
+        ("stage_daily_mean",),
+        "1900-01-03",
+        "1900-01-05",
+        tmp_path,
+        "explicit_version",
+        transport=HttpClient(sender=sender),
+        variants=("99999",),
+    )
+    assert len(sent) == 1
+    assert sent[0].params["VersionNumber"] == 99999
+    captured = read_recording(written)
+    assert captured.request.parameters["VersionNumber"] == 99999
+    assert captured.status_code == 404
+    assert captured.content == body
+
+
+def test_recorder_without_established_or_explicit_version_never_invents_default(tmp_path):
+    def forbidden_sender(request, timeout_seconds):
+        pytest.fail("A missing source inventory cannot authorize any default version request")
+
+    assert (
+        record_observations(
+            "no_nve",
+            ("0.protocol",),
+            ("stage_daily_mean",),
+            "1900-01-03",
+            "1900-01-05",
+            tmp_path,
+            "no_version",
+            transport=HttpClient(sender=forbidden_sender),
+        )
+        == ()
+    )
+    assert tuple(tmp_path.glob("*.recording.json")) == ()

@@ -142,7 +142,18 @@ def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(tmp_
     )
 
     assert result.data.height == 3
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert result.provenance.publisher_artifact_checksums == (
         "sha256:4b9a400cd83f06856e4c16c7912573bf1d9d83e74a13a832742b7c62e1fa8119",
     )

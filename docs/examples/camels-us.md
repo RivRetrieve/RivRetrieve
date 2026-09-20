@@ -23,7 +23,9 @@ It reads catalogue facts first, then requests the inclusive 2025 calendar window
 ```python
 import rivretrieve as rr
 
-selection = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+selection = rr.find(
+    provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"
+)
 selection = rr.pick(selection, station=["01013500", "01022500", "01030500"])
 print(rr.as_frame(selection))
 

@@ -789,6 +789,9 @@ def test_native_build_without_reverification_input_is_byte_identical_to_committe
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     ):
         assert (tmp_path / artifact_name).read_bytes() == (_CATALOGUE_PATH / artifact_name).read_bytes()
 

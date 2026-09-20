@@ -19,7 +19,6 @@ from rivretrieve._internal.engine import (
     WindowEndpoint,
     _make_fetch_window,
 )
-from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.cz_chmi.config import config
@@ -75,8 +74,17 @@ def test_parse_official_annual_recordings(
     replay = ReplayTransport([recording])
     rendered = MappingProxyType({product: (RenderedWindow("2023", None),) for product in products})
     fetched = fetch((_STATION,), products, rendered, _window(), config(), replay)
-    rows = parse(fetched.value[0], config()).value
-    assert rows.columns == ["station_id", "product_id", "time", "value", "time_zone"]
+    rows = parse(fetched.value[0], config()).rows
+    assert rows.columns == [
+        "station_id",
+        "product_id",
+        "time",
+        "value",
+        "time_zone",
+        "series_id",
+        "facts_id",
+        "source_unit",
+    ]
     for product, count in zip(products, counts, strict=True):
         series = rows.filter(pl.col("product_id") == product).sort("time")
         assert series.height == count
@@ -96,7 +104,7 @@ def test_official_recording_literals_and_shared_conversion() -> None:
             ReplayTransport([_DQ]),
         ).value[0],
         config(),
-    ).value
+    ).rows
     hourly = parse(
         fetch(
             (_STATION,),
@@ -107,7 +115,7 @@ def test_official_recording_literals_and_shared_conversion() -> None:
             ReplayTransport([_HQ]),
         ).value[0],
         config(),
-    ).value
+    ).rows
     assert daily.group_by("product_id").len().sort("product_id")["len"].to_list() == [365, 365, 365]
     assert hourly.group_by("product_id").len().sort("product_id")["len"].to_list() == [8760, 8760]
     assert daily.filter(pl.col("product_id") == "stage_daily_mean").sort("time")["value"][[0, -1]].to_list() == [
@@ -178,7 +186,18 @@ def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_
         hourly.request.url,
     ]
     assert len({entry.origin.url for entry in included.receipts.entries}) == 2
-    assert included.canonical_rows.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert included.canonical_rows.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
 
     omitted = drive(
         request,
@@ -203,7 +222,7 @@ def test_parse_preserves_source_null_as_missing_value() -> None:
     document["tsList"][0]["tsData"]["data"]["values"][0][1] = None
     from dataclasses import replace
 
-    parsed = parse(replace(fetched, content=json.dumps(document).encode()), config()).value
+    parsed = parse(replace(fetched, content=json.dumps(document).encode()), config()).rows
     assert parsed["value"][0] is None
 
 
@@ -220,14 +239,18 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality() -> None:
     ).value[0]
     from dataclasses import replace
 
-    with pytest.raises(FatalContractError, match="UTC Z suffix"):
-        parse(replace(fetched, content=content), config())
-    assert "quality" not in parse(fetched, config()).value.columns
+    unsupported = parse(replace(fetched, content=content), config())
+    assert unsupported.rows.is_empty()
+    assert unsupported.outcomes[0].status == "unsupported"
+    assert "UTC Z suffix" in unsupported.outcomes[0].reason
+    assert "quality" not in parse(fetched, config()).rows.columns
 
 
 def test_public_selection_routes_to_czech_live_engine(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([_HQ]))
-    selection = rr.find(provider="cz_chmi", station=_STATION, product="discharge_hourly_mean")
+    selection = rr.find(
+        provider="cz_chmi", station=_STATION, quantity="discharge", frequency="hourly", statistic="mean"
+    )
     assert rr.as_frame(selection).select("provider_id", "station_id", "product_id").row(0) == (
         "cz_chmi",
         _STATION,

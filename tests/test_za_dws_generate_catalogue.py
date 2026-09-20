@@ -724,7 +724,7 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
-def test_canonical_cli_writes_only_four_native_built_artifacts(tmp_path: Path) -> None:
+def test_canonical_cli_writes_versioned_native_built_artifacts(tmp_path: Path) -> None:
     assert generator.main(["--native", str(_NATIVE_TABLE), "--out", str(tmp_path)]) == 0
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
@@ -738,6 +738,9 @@ def test_canonical_cli_writes_only_four_native_built_artifacts(tmp_path: Path) -
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
 
 
@@ -770,6 +773,9 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
     for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

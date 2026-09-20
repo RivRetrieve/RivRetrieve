@@ -21,6 +21,7 @@ from rivretrieve._internal.catalogue_origins import (
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactError, load_packaged_catalogue_artifact
 from rivretrieve._internal.catalogues.native import read_native_table
+from rivretrieve._internal.engine import CanonicalRowsSchema
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.private_source_verification import (
@@ -453,43 +454,33 @@ def test_committed_poland_private_statement_is_redacted_forwarded_evidence() -> 
     assert statement.exact_text is None
 
 
-def test_packaged_poland_provenance_propagates_without_frame_changes() -> None:
+def test_packaged_poland_provenance_propagates_with_source_series_context() -> None:
     artifact = load_packaged_catalogue_artifact(declaration.catalogue, on_issue="raise")
     assert artifact.acquisition_provenance is not None
     assert len(artifact.acquisition_provenance.header.source_records) == 2
     result = CatalogueReader(artifact, ProviderId("pl_imgw")).read_stations(on_issue="raise")
-    selection = rr.find(provider="pl_imgw", station="149180010", product="discharge_daily_mean")
+    selection = rr.find(
+        provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily", statistic="mean"
+    )
     assert result.provenance.acquisition_provenance is artifact.acquisition_provenance
     assert len(selection.acquisition_provenance) == 1
     assert_evidence_equal(selection.acquisition_provenance[0], artifact.acquisition_provenance)
-    assert rr.as_frame(selection).columns == [
-        "provider_id",
-        "station_id",
-        "product_id",
-        "latitude",
-        "longitude",
-        "crs",
-        "observed_property",
-        "frequency",
-        "statistic",
-        "period_type",
-        "period_anchor",
-        "unit",
-        "native_id",
-        "availability",
-        "availability_reason",
-        "published_record_start_date",
-        "published_record_end_date",
-        "last_catalogue_check",
-    ]
-    assert rr.as_frame(selection)["crs"].item() == "unknown"
+    frame = rr.as_frame(selection)
+    assert frame["series_id"].to_list() == [selection.series[0].series_id]
+    assert frame["quantity"].to_list() == ["discharge"]
+    assert frame["source_unit"].to_list() == ["m3/s"]
+    assert frame["frequency"].to_list() == ["daily"]
+    assert frame["statistic"].to_list() == ["mean"]
+    assert next(location for location in selection.locations if location.station_id == "149180010").crs == "unknown"
 
 
-def test_poland_observation_result_propagates_two_sources_with_five_columns() -> None:
-    selection = rr.find(provider="pl_imgw", station="149180010", product="discharge_daily_mean")
+def test_poland_observation_result_propagates_two_sources_and_series_context() -> None:
+    selection = rr.find(
+        provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily", statistic="mean"
+    )
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-02", on_issue="ignore")
 
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.schema == CanonicalRowsSchema.polars_schema
     assert result.provenance.acquisition_provenance is not None
     assert [source.source_id for source in result.provenance.acquisition_provenance.header.source_records] == [
         "sr.pl.imgw",
@@ -498,7 +489,15 @@ def test_poland_observation_result_propagates_two_sources_with_five_columns() ->
 
 
 def test_enrolled_poland_refuses_missing_provenance(tmp_path: Path) -> None:
-    for name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
+    for name in (
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
+    ):
         shutil.copy2(CATALOGUE / name, tmp_path / name)
     with pytest.raises(CorruptCatalogArtifactError, match="pl_imgw acquisition provenance is required"):
         load_packaged_catalogue_artifact(tmp_path, on_issue="raise")

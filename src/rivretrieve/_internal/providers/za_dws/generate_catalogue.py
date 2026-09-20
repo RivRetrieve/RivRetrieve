@@ -373,8 +373,11 @@ def build_provider_info(
 
 
 def write_catalogue(catalogue: GeneratedZaDwsCatalogue, out_dir: Path | str) -> None:
+    from functools import partial
+
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_descriptions import generic_source_descriptions
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -391,6 +394,7 @@ def write_catalogue(catalogue: GeneratedZaDwsCatalogue, out_dir: Path | str) -> 
         ).build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_describer=partial(generic_source_descriptions, config=None),
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

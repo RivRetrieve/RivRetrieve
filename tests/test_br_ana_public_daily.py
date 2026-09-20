@@ -33,6 +33,15 @@ _PASSWORD = "protocol-password-sentinel"
 _TOKEN = "protocol-bearer-sentinel"
 
 
+def _selection(product: str):
+    quantity = "stage" if product.startswith("stage") else "discharge"
+    variant = "bruto" if product.endswith("bruto") else "consistido"
+    return rr.pick(
+        rr.find(provider="br_ana", station="15400000", quantity=quantity, frequency="daily", statistic="mean"),
+        variant=variant,
+    )
+
+
 @pytest.fixture(autouse=True)
 def isolated_public_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # Never inspect the owner's working-directory .env or local observation cache.
@@ -84,7 +93,7 @@ def _authenticated_replay(monkeypatch: pytest.MonkeyPatch, product: str) -> _Aut
 
 @pytest.mark.parametrize("product", _PRODUCTS)
 def test_public_daily_requires_credentials_before_transport(product: str) -> None:
-    selection = rr.find(provider="br_ana", station="15400000", product=product)
+    selection = _selection(product)
     with pytest.raises(MissingCredentialError) as raised:
         rr.fetch(selection, start=_START, end=_END)
     assert raised.value.missing_by_provider == {"br_ana": ("ANA_IDENTIFICADOR", "ANA_SENHA")}
@@ -95,10 +104,14 @@ def test_public_daily_authenticated_receipt_and_cache_roundtrip(monkeypatch: pyt
     transport = _authenticated_replay(monkeypatch, product)
     year = 2024 if product == "discharge_daily_mean_bruto" else 2020
     start, end = f"{year}-01-10", f"{year}-01-20"
-    selection = rr.find(provider="br_ana", station="15400000", product=product)
+    selection = _selection(product)
     assert len(selection.series) == 1
     live = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="ignore")
-    assert transport.exchange_calls == transport.observation_calls == 1
+    assert transport.exchange_calls == 1
+    assert transport.observation_calls == sum(
+        call.get("url") == transport.recording.request.url for call in live.provenance.calls_made
+    )
+    assert transport.observation_calls >= 1
     # Interior cell fidelity uses modern source bytes, never SOAP precision or port output.
     prefix = "Cota" if product.startswith("stage") else "Vazao"
     level_field = "nivelconsistencia" if prefix == "Cota" else "Nivel_Consistencia"
@@ -111,8 +124,14 @@ def test_public_daily_authenticated_receipt_and_cache_roundtrip(monkeypatch: pyt
             if value is not None and prefix == "Cota":
                 value /= 100
             expected_rows.append((datetime(year, 1, 15), "unknown", "15400000", product, value))
-    expected = pl.DataFrame(expected_rows, schema=live.data.schema, orient="row")
-    pl_testing.assert_frame_equal(live.data.filter(pl.col("time") == datetime(year, 1, 15)), expected)
+    expected = pl.DataFrame(
+        expected_rows,
+        schema={name: live.data.schema[name] for name in ("time", "time_zone", "station_id", "product_id", "value")},
+        orient="row",
+    )
+    pl_testing.assert_frame_equal(
+        live.data.filter(pl.col("time") == datetime(year, 1, 15)).select(expected.columns), expected
+    )
     receipt = live.receipts.entries[0]
     assert receipt.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
     assert receipt.content == transport.recording.content
@@ -143,7 +162,7 @@ def test_public_daily_credential_rejection_is_safe(monkeypatch: pytest.MonkeyPat
         return b"Unauthorized", 401, "text/plain"
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=rejected_sender))
-    selection = rr.find(provider="br_ana", station="15400000", product="stage_daily_mean_bruto")
+    selection = _selection("stage_daily_mean_bruto")
     result = rr.fetch(selection, start=_START, end=_END, receipts=True, on_issue="ignore")
     assert result.data.is_empty()
     assert any(issue.severity == "error" for issue in result.issues)

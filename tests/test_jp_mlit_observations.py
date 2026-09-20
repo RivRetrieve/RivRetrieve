@@ -134,8 +134,17 @@ def test_exact_official_boundaries(
     index: int, count: int, first: datetime, last: datetime, first_value: float, last_value: float
 ) -> None:
     result = parse(_fetched()[index], config())
-    rows = result.value.sort("time")
-    assert rows.columns == ["station_id", "product_id", "time", "value", "time_zone"]
+    rows = result.rows.sort("time")
+    assert rows.columns == [
+        "station_id",
+        "product_id",
+        "time",
+        "value",
+        "time_zone",
+        "series_id",
+        "facts_id",
+        "source_unit",
+    ]
     assert rows.height == count
     assert rows["time"][[0, -1]].to_list() == [first, last]
     assert rows["value"][[0, -1]].to_list() == pytest.approx([first_value, last_value])
@@ -149,20 +158,22 @@ def test_exact_official_boundaries(
 
 def test_html_parse_validates_and_returns_no_rows() -> None:
     for payload in _fetched()[::2]:
-        assert parse(payload, config()).value.is_empty()
+        assert parse(payload, config()).rows.is_empty()
 
 
 def test_flags_control_observation_status_without_numeric_threshold() -> None:
     payload = _fetched()[1]
     negative = replace(payload, content=payload.content.replace(b"321.52", b"-9999.00", 1))
-    assert parse(negative, config()).value["value"][0] == -9999.0
+    assert parse(negative, config()).rows["value"][0] == -9999.0
     tentative = replace(payload, content=payload.content.replace(b"321.52, ", b"321.52,*", 1))
     parsed = parse(tentative, config())
-    assert parsed.value["value"][0] == 321.52
+    assert parsed.rows["value"][0] == 321.52
     assert parsed.issues[0].code == "source_tentative"
     unknown = replace(payload, content=payload.content.replace(b"321.52, ", b"321.52,?", 1))
-    with pytest.raises(FatalContractError, match="unknown native flag"):
-        parse(unknown, config())
+    unsupported = parse(unknown, config())
+    assert unsupported.rows.is_empty()
+    assert unsupported.outcomes[0].status == "unsupported"
+    assert "unknown native flag" in unsupported.outcomes[0].reason
 
 
 @pytest.mark.parametrize(
@@ -172,15 +183,17 @@ def test_native_non_observation_flags_are_distinct_and_dropped(flag: str, code: 
     payload = _fetched()[1]
     changed = replace(payload, content=payload.content.replace(b"321.52, ", f"321.52,{flag}".encode(), 1))
     result = parse(changed, config())
-    assert result.value.height == 743
+    assert result.rows.height == 743
     assert result.issues[0].code == code
 
 
 def test_nonnumeric_usable_cell_fails_loud() -> None:
     payload = _fetched()[1]
     changed = replace(payload, content=payload.content.replace(b"321.52, ", b"unknown, ", 1))
-    with pytest.raises(FatalContractError, match="nonnumeric"):
-        parse(changed, config())
+    unsupported = parse(changed, config())
+    assert unsupported.rows.is_empty()
+    assert unsupported.outcomes[0].status == "unsupported"
+    assert "nonnumeric" in unsupported.outcomes[0].reason
 
 
 def _request() -> ObservationRequest:
@@ -204,7 +217,18 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts() ->
         transport=ReplayTransport(_PATHS),
     )
     assert result.canonical_rows.group_by("product_id").len().sort("product_id")["len"].to_list() == [27, 143, 27, 648]
-    assert result.canonical_rows.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.canonical_rows.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert len(result.receipts.entries) == 8
     assert [entry.content for entry in result.receipts.entries] == [read_recording(path).content for path in _PATHS]
     request_parameters = [entry.origin.request_parameters for entry in result.receipts.entries]

@@ -14,7 +14,7 @@ import polars as pl
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.terms import verified_catalogue_terms
-from rivretrieve._internal.driver import ProviderStages, drive, drive_store
+from rivretrieve._internal.driver import ProviderStages, _finite_selector_assessments, drive, drive_store
 from rivretrieve._internal.engine import CanonicalRowsSchema, ProductWindowDeclarations, ProviderConfig, RequestedWindow
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.issues import (
@@ -34,6 +34,16 @@ from rivretrieve._internal.primitives import CacheMode, OnIssue, ProductId, Prov
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
+from rivretrieve._internal.source_series import (
+    InventorySnapshot,
+    OutcomeStatus,
+    RestrictionKind,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceSeries,
+    stable_id,
+)
 from rivretrieve._internal.store import StoreRoot
 
 if TYPE_CHECKING:
@@ -143,6 +153,9 @@ class _ProviderHandle:
         transport: Transport | None = None,
         cache: CacheMode = "bypass",
         store: StoreRoot | None = None,
+        scope: SeriesScope | None = None,
+        known_series: tuple[SourceSeries, ...] = (),
+        inventories: tuple[InventorySnapshot, ...] = (),
     ) -> ObservationResult:
         if self._stages is None and self._store_config is None:
             if self._module is not None:
@@ -166,6 +179,9 @@ class _ProviderHandle:
                 transport=transport,
                 cache=cache,
                 store=store,
+                scope=scope,
+                known_series=known_series,
+                inventories=inventories,
             )
         elif self._store_config is not None and self._store_root is not None:
             if cache == "refresh":
@@ -174,7 +190,13 @@ class _ProviderHandle:
                     f'rivretrieve.download("{self.provider_id}"). No transfer was started.'
                 )
             result = self._drive_store(
-                request, self._store_config, self._store_root if store is None else store, receipts=receipts
+                request,
+                self._store_config,
+                self._store_root if store is None else store,
+                receipts=receipts,
+                scope=scope,
+                known_series=known_series,
+                inventories=inventories,
             )
         else:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
@@ -191,6 +213,9 @@ class _ProviderHandle:
         transport: Transport | None = None,
         cache: CacheMode = "bypass",
         store: StoreRoot | None = None,
+        scope: SeriesScope | None = None,
+        known_series: tuple[SourceSeries, ...] = (),
+        inventories: tuple[InventorySnapshot, ...] = (),
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -200,6 +225,9 @@ class _ProviderHandle:
                 start=request.start,
                 end=request.end,
             ),
+            scope=scope,
+            known_series=known_series,
+            inventories=inventories,
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
@@ -229,13 +257,11 @@ class _ProviderHandle:
             store=store,
         )
         return ObservationResult(
-            data=assembled.canonical_rows.select(
-                "time",
-                "time_zone",
-                "station_id",
-                "product_id",
-                "value",
-            ),
+            data=assembled.canonical_rows,
+            source_series=assembled.source_series,
+            inventories=assembled.inventories,
+            outcomes=assembled.outcomes,
+            scope=assembled.scope,
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),
             receipts=assembled.receipts,
@@ -248,12 +274,18 @@ class _ProviderHandle:
         store: StoreRoot,
         *,
         receipts: ReceiptMode = ReceiptMode.OMIT,
+        scope: SeriesScope | None = None,
+        known_series: tuple[SourceSeries, ...] = (),
+        inventories: tuple[InventorySnapshot, ...] = (),
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
             stations=request.stations,
             products=tuple(ProductId(product_id) for product_id in request.products),
             window=RequestedWindow(start=request.start, end=request.end),
+            scope=scope,
+            known_series=known_series,
+            inventories=inventories,
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
@@ -271,10 +303,83 @@ class _ProviderHandle:
                 },
                 provider_id=self.provider_id,
             )
+            requested_scope = scope or SeriesScope(
+                provider_ids=(str(self.provider_id),), station_ids=request.stations, product_ids=request.products
+            )
+            window = SeriesWindow(
+                start=datetime.fromisoformat(request.start.isoformat()),
+                end=datetime.fromisoformat(request.end.isoformat()),
+            )
+            outcomes: list[RetrievalOutcome] = []
+            assessments: list[tuple[SeriesScope, SeriesWindow]] = []
+            issues = [
+                issue,
+                *_unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation),
+            ]
+            for station in request.stations:
+                for product in request.products:
+                    assessments.append(
+                        (
+                            requested_scope.model_copy(
+                                update={
+                                    "provider_ids": (str(self.provider_id),),
+                                    "station_ids": (station,),
+                                    "product_ids": (product,),
+                                }
+                            ),
+                            window,
+                        )
+                    )
+                    members = tuple(
+                        definition
+                        for definition in known_series
+                        if definition.station_id == station
+                        and definition.product_id == product
+                        and requested_scope.matches(definition)
+                    )
+                    # Explicit missing members are accounted for by the shared
+                    # finite-selector assessment, not an anonymous duplicate.
+                    targets = members or ((None,) if requested_scope.restriction is RestrictionKind.ALL else ())
+                    for definition in targets:
+                        series_id = definition.series_id if definition is not None else None
+                        outcomes.append(
+                            RetrievalOutcome(
+                                outcome_id=stable_id(
+                                    str(self.provider_id),
+                                    station,
+                                    product,
+                                    series_id,
+                                    window.model_dump_json(),
+                                    requested_at.isoformat(),
+                                    issue.code,
+                                ),
+                                series_id=series_id,
+                                station_id=station,
+                                product_id=product,
+                                window=window,
+                                status=OutcomeStatus.UNRESOLVED,
+                                facts_ids=tuple(
+                                    facts.facts_id for facts in definition.facts if requested_scope.matches_facts(facts)
+                                )
+                                if definition is not None
+                                else (),
+                                reason=issue.message,
+                            )
+                        )
+            _finite_selector_assessments(
+                self.provider_id,
+                assessments,
+                {definition.series_id: definition for definition in known_series},
+                [],  # No compiled inventory was acquired from a missing store.
+                outcomes,
+                issues,
+            )
             return ObservationResult(
-                data=pl.DataFrame(schema=CanonicalRowsSchema.polars_schema).select(
-                    "time", "time_zone", "station_id", "product_id", "value"
-                ),
+                data=pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
+                source_series=known_series,
+                inventories=inventories,
+                outcomes=tuple(outcomes),
+                scope=requested_scope,
                 provenance=ObservationProvenance(
                     source="local",
                     provider_id=self.provider_id,
@@ -290,10 +395,7 @@ class _ProviderHandle:
                         "end": request.end.isoformat(),
                     },
                 ),
-                issues=(
-                    issue,
-                    *_unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation),
-                ),
+                issues=tuple(issues),
                 receipts=Receipts(provider_id=self.provider_id, entries=()),
             )
         assembled = drive_store(
@@ -319,7 +421,11 @@ class _ProviderHandle:
         )
         provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
         return ObservationResult(
-            data=assembled.canonical_rows.select("time", "time_zone", "station_id", "product_id", "value"),
+            data=assembled.canonical_rows,
+            source_series=assembled.source_series,
+            inventories=assembled.inventories,
+            outcomes=assembled.outcomes,
+            scope=assembled.scope,
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),
             receipts=assembled.receipts,

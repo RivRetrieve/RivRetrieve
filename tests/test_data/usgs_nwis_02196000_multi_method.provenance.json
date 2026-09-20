@@ -1,0 +1,24 @@
+{
+  "sha256": "92c43227ececed5373bc92abc4cbb19035dfc4b0ec7db736f2b4e443d8bf1275",
+  "bytes": 1702244,
+  "method": "GET",
+  "url": "https://waterservices.usgs.gov/nwis/dv/",
+  "request_parameters": {
+    "format": "json",
+    "sites": "02196000",
+    "startDT": "1979-12-30",
+    "endDT": "2026-01-02",
+    "parameterCd": "00060",
+    "statCd": "00003"
+  },
+  "status_code": {
+    "state": "not_established"
+  },
+  "retrieved_at": {
+    "state": "not_established"
+  },
+  "content_type": {
+    "state": "not_established"
+  },
+  "note": "Exact original publisher body. Transport receipt metadata was not retained. queryInfo.requestDT is publisher metadata, not client retrieval time."
+}

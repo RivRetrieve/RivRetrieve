@@ -339,6 +339,7 @@ class GeneratedNoNveCatalogue:
     station_products: StationProductCatalog
     acquisition_provenance: AcquisitionProvenance
     public_artifact: PackagedCatalogArtifact
+    source_native: pl.DataFrame
 
 
 def read_capture_record(path: Path | str) -> StationCatalogueCapture:
@@ -658,7 +659,9 @@ def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> G
 
     provenance = build_acquisition_provenance()
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, provenance)
-    return GeneratedNoNveCatalogue(provider_info, products, stations, station_products, provenance, artifact)
+    return GeneratedNoNveCatalogue(
+        provider_info, products, stations, station_products, provenance, artifact, native_table.data
+    )
 
 
 def _validate_native_table(table: NativeTable) -> None:
@@ -796,8 +799,12 @@ def validate_generated_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> None:
+    from functools import partial
+
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.no_nve.catalogue_series import describe_catalogue
+    from rivretrieve._internal.providers.no_nve.config import config as source_config
     from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS
 
     output = Path(out_dir)
@@ -813,6 +820,8 @@ def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> 
         catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_describer=partial(describe_catalogue, native=catalogue.source_native),
     )
     for name, content in metadata.items():
         (output / name).write_bytes(content)

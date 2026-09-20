@@ -28,7 +28,6 @@ from rivretrieve._internal.engine import (
     WindowEndpoint,
     WindowRenderingVocabulary,
 )
-from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.br_ana.config import config, window_declarations
@@ -137,8 +136,15 @@ def test_midmonth_exact_replay_preserves_modern_interior_values(product: str, mo
             if value is not None and prefix == "Cota":
                 value /= 100
             rows.append((datetime.fromisoformat(f"{month}-{day}"), "unknown", "15400000", product, value))
-    expected = pl.DataFrame(rows, schema=result.canonical_rows.schema, orient="row")
-    pl_testing.assert_frame_equal(result.canonical_rows, expected)
+    expected = pl.DataFrame(
+        rows,
+        schema={
+            name: result.canonical_rows.schema[name]
+            for name in ("time", "time_zone", "station_id", "product_id", "value")
+        },
+        orient="row",
+    )
+    pl_testing.assert_frame_equal(result.canonical_rows.select(expected.columns), expected)
     assert result.receipts.entries[0].content == recording.content
     assert result.receipts.entries[0].origin.request_parameters == recording.request.parameters
 
@@ -147,7 +153,7 @@ def test_midmonth_exact_replay_preserves_modern_interior_values(product: str, mo
 def test_absent_variant_is_not_replaced_by_bruto(product: str) -> None:
     result = _run(product, "2024-01-10", "2024-01-20", ("2024-01",))
     assert result.canonical_rows.is_empty()
-    assert any(issue.code == "missing_data" for issue in result.issues)
+    assert any(issue.code == "source.unresolved_inventory" for issue in result.issues)
 
 
 @pytest.mark.parametrize("product", ("stage_daily_mean_bruto", "discharge_daily_mean_bruto"))
@@ -166,8 +172,10 @@ def test_repeated_exact_variant_preserves_multiplicity(product: str) -> None:
     document = json.loads(payload.content)
     selected = next(row for row in document["items"] if row["Mediadiaria"] == "1")
     document["items"].append(selected)
-    original = parse(payload, config()).value
-    repeated = parse(replace(payload, content=json.dumps(document).encode()), config()).value
+    original = parse(payload, config()).rows.filter(pl.col("product_id") == product)
+    repeated = parse(replace(payload, content=json.dumps(document).encode()), config()).rows.filter(
+        pl.col("product_id") == product
+    )
     pl_testing.assert_frame_equal(repeated, pl.concat([original, original]).sort("time", maintain_order=True))
 
 
@@ -189,8 +197,9 @@ def test_adversarial_modified_recording_rejects_invalid_identity_or_value(field:
     document = json.loads(payload.content)
     selected = next(row for row in document["items"] if row["Mediadiaria"] == "1")
     selected[field] = bad
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    result = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert any(outcome.status.value == "unsupported" for outcome in result.outcomes)
+    assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
 @pytest.mark.parametrize(("field", "bad"), [("Cota_30", "1"), ("Cota_30_Status", "1")])
@@ -199,8 +208,9 @@ def test_adversarial_nonempty_slot_outside_calendar_month_is_rejected(field: str
     document = json.loads(payload.content)
     selected = next(row for row in document["items"] if row["Mediadiaria"] == "1")
     selected[field] = bad
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    result = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert any(outcome.status.value == "unsupported" for outcome in result.outcomes)
+    assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
 @pytest.mark.parametrize("blank", [None, ""])
@@ -209,7 +219,7 @@ def test_adversarial_published_blank_is_null_not_zero(blank: object) -> None:
     document = json.loads(payload.content)
     selected = next(row for row in document["items"] if row["Mediadiaria"] == "1")
     selected["Cota_15"] = blank
-    result = parse(replace(payload, content=json.dumps(document).encode()), config()).value
+    result = parse(replace(payload, content=json.dumps(document).encode()), config()).rows
     assert result.filter(pl.col("time") == datetime(2024, 1, 15)).item(0, "value") is None
 
 
@@ -219,8 +229,9 @@ def test_adversarial_missing_daily_fields_fail_loud(field: str) -> None:
     document = json.loads(payload.content)
     selected = next(row for row in document["items"] if row["Mediadiaria"] == "1")
     del selected[field]
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    result = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert any(outcome.status.value == "unsupported" for outcome in result.outcomes)
+    assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
 def test_daily_status_does_not_select_or_discard_a_published_value() -> None:
@@ -229,9 +240,9 @@ def test_daily_status_does_not_select_or_discard_a_published_value() -> None:
     document = json.loads(payload.content)
     selected = next(row for row in document["items"] if row["Mediadiaria"] == "1")
     selected["Cota_15_Status"] = "3"
-    original = parse(payload, config()).value
+    original = parse(payload, config()).rows
     changed = parse(replace(payload, content=json.dumps(document).encode()), config())
-    pl_testing.assert_frame_equal(original, changed.value)
+    pl_testing.assert_frame_equal(original, changed.rows)
     assert any(issue.details is not None and issue.details.get("source_status") == "3" for issue in changed.issues)
 
 
@@ -289,7 +300,11 @@ def test_independent_daily_boundary_probe(product: str, month: str, first: str, 
 )
 def test_real_leap_day_slots_are_native_labels_not_march_rollover(product: str, values: list[float]) -> None:
     # Parse seam deliberately: a padded public Feb29 request would require an unrecorded March request.
-    rows = parse(_payload(product, "2024-02"), config()).value
+    rows = (
+        parse(_payload(product, "2024-02"), config())
+        .rows.filter(pl.col("product_id") == product)
+        .select("station_id", "product_id", "time", "value", "time_zone")
+    )
     actual = rows.filter(pl.col("time") >= datetime(2024, 2, 28))
     expected = pl.DataFrame(
         {
@@ -322,15 +337,26 @@ def test_real_year_transition_preserves_each_variant_without_fallback(product: s
                 if value is not None and prefix == "Cota":
                     value /= 100
                 rows.append((datetime.fromisoformat(f"{month}-{day:02}"), "unknown", "15400000", product, value))
-    expected = pl.DataFrame(rows, schema=result.canonical_rows.schema, orient="row")
-    pl_testing.assert_frame_equal(result.canonical_rows, expected)
+    expected = pl.DataFrame(
+        rows,
+        schema={
+            name: result.canonical_rows.schema[name]
+            for name in ("time", "time_zone", "station_id", "product_id", "value")
+        },
+        orient="row",
+    )
+    pl_testing.assert_frame_equal(result.canonical_rows.select(expected.columns), expected)
     assert len(result.receipts.entries) == 2
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
 def test_real_nonleap_february_has_no_march_rollover(product: str) -> None:
     payload = _payload(product, "2023-02")
-    rows = parse(payload, config()).value
+    rows = (
+        parse(payload, config())
+        .rows.filter(pl.col("product_id") == product)
+        .select("station_id", "product_id", "time", "value", "time_zone")
+    )
     prefix = "Cota" if product.startswith("stage") else "Vazao"
     level_field = "nivelconsistencia" if prefix == "Cota" else "Nivel_Consistencia"
     level = "1" if product.endswith("bruto") else "2"

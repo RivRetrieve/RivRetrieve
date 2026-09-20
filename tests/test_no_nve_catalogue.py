@@ -13,6 +13,7 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
+from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.catalogues.native import NativeTable, read_native_table
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.no_nve import generate_catalogue
@@ -151,12 +152,15 @@ def test_build_is_network_free_and_byte_identical(tmp_path: Path, monkeypatch: p
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     ):
         assert (output / name).read_bytes() == (_CATALOGUE / name).read_bytes()
 
 
 def test_public_discovery_selects_a_real_norwegian_edge() -> None:
-    selection = rr.find(provider="no_nve", station="1.200.0", product="stage_daily_mean")
+    selection = rr.find(provider="no_nve", station="1.200.0", quantity="stage", frequency="daily", statistic="mean")
     assert len(selection.series) == 1
     assert (selection.series[0].provider_id, selection.series[0].station_id, selection.series[0].product_id) == (
         "no_nve",
@@ -201,9 +205,10 @@ def test_brazil_certified_candidates_are_selectable_without_inferred_availabilit
         "stage_daily_mean_consistido",
         "stage_instantaneous",
     ]
-    assert {series.availability for series in selection.series} == {"available", "unknown"}
-    observed = tuple(series for series in selection.series if series.availability == "available")
-    assert {(series.station_id, series.product_id) for series in observed} == {
+    artifact = load_packaged_catalogue_artifact(Path("src/rivretrieve/_internal/providers/br_ana/catalogue"))
+    assert set(artifact.station_products["availability"]) == {"available", "unknown"}
+    observed = artifact.station_products.filter(pl.col("availability") == "available")
+    assert set(observed.select("station_id", "product_id").iter_rows()) == {
         ("15400000", "discharge_instantaneous"),
         ("15400000", "stage_instantaneous"),
         ("15400000", "discharge_daily_mean_bruto"),

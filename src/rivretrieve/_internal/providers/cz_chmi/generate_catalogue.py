@@ -319,6 +319,8 @@ def validate_generated_catalogue(
 def write_catalogue(catalogue: GeneratedCzChmiCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.cz_chmi.config import SERIES_MAPPINGS
+    from rivretrieve._internal.providers.cz_chmi.config import config as source_config
     from rivretrieve._internal.providers.cz_chmi.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -333,6 +335,8 @@ def write_catalogue(catalogue: GeneratedCzChmiCatalogue, out_dir: Path | str) ->
         build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_mappings=SERIES_MAPPINGS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
