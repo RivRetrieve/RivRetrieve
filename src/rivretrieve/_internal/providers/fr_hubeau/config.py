@@ -10,7 +10,6 @@ from rivretrieve._internal.engine import (
     Daily,
     DailyLabelTime,
     DayDefinition,
-    Instant,
     ProductConfig,
     ProductWindowDeclarations,
     ProviderConfig,
@@ -38,10 +37,10 @@ _CONFIG = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={
         ProductId("discharge_instantaneous"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "Q")), Unit.L_S, Instant()
+            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "Q")), Unit.L_S, UnknownTemporalSupport()
         ),
         ProductId("stage_instantaneous"): ProductConfig(
-            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "H")), Unit.MM, Instant()
+            SourceCoordinates(FrHubeauSourceCoordinates("hydroportail", "H")), Unit.MM, UnknownTemporalSupport()
         ),
         ProductId("discharge_daily_mean"): ProductConfig(
             SourceCoordinates(FrHubeauSourceCoordinates("daily", "QmnJ")),
@@ -93,13 +92,12 @@ SERIES_MAPPINGS = {
         "discharge",
         "l",
         "l/s",
-        "irregular",
-        "instantaneous",
+        None,
+        None,
         "raw",
         "+00:00",
         evidence=(
             "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
-            "tests/test_data/fr_hubeau_openapi_v2.json: hydrometrie/observations_tr instantaneous discharge",
         ),
         source_unit_definition=SourceUnitCodeDefinition(
             provider_id="fr_hubeau",
@@ -121,13 +119,12 @@ SERIES_MAPPINGS = {
         "stage",
         "mm",
         "mm",
-        "irregular",
-        "instantaneous",
+        None,
+        None,
         "raw",
         "+00:00",
         evidence=(
             "tests/test_data/fr_hydroportail_H_padded.recording.json: station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z",
-            "tests/test_data/fr_hubeau_openapi_v2.json: hydrometrie/observations_tr instantaneous height",
         ),
     ),
     "discharge_daily_mean": SeriesMapping(
@@ -139,9 +136,11 @@ SERIES_MAPPINGS = {
         "mean",
         None,
         None,
+        temporal_support="interval",
         label_time="00:00",
         evidence=(
-            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition and result unit",
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
             "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
         ),
     ),
@@ -156,7 +155,8 @@ SERIES_MAPPINGS = {
         None,
         label_time="00:00",
         evidence=(
-            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition and result unit",
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
             "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
         ),
     ),
@@ -171,14 +171,15 @@ SERIES_MAPPINGS = {
         None,
         label_time="00:00",
         evidence=(
-            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition and result unit",
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
             "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight",
         ),
     ),
     "water_temperature_reported": SeriesMapping(
         "fr_hubeau/temperature/resultat",
         "temperature",
-        "degC",
+        "°C",
         "degC",
         None,
         None,
