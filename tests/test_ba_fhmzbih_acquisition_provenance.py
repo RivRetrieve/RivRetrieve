@@ -91,8 +91,14 @@ def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
 def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path) -> None:
     verify_provenance_recordings(_provenance(), Path.cwd())
     evidence = Path("tests/test_data/ba_fhmzbih_terms_absence.html")
+    for source in _provenance().source_records:
+        for entry in source.evidence:
+            if entry.recording is not None:
+                capture = Path(entry.recording.repository_path)
+                target_capture = tmp_path / capture
+                target_capture.parent.mkdir(parents=True, exist_ok=True)
+                target_capture.write_bytes(capture.read_bytes())
     target = tmp_path / evidence
-    target.parent.mkdir(parents=True)
     target.write_bytes(evidence.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="ba_fhmzbih_terms_absence digest mismatch"):
         verify_provenance_recordings(_provenance(), tmp_path)
@@ -100,7 +106,18 @@ def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path) ->
     shutil.copy2("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet", native)
     native.write_bytes(native.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
-        main(["--native", str(native), "--workbook-access-ledger", str(_LEDGER), "--out", str(tmp_path / "out")])
+        main(
+            [
+                "--native",
+                str(native),
+                "--workbook-access-ledger",
+                str(_LEDGER),
+                "--series-recording",
+                "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+                "--out",
+                str(tmp_path / "out"),
+            ]
+        )
 
 
 def test_bosnia_row_scoped_fact_rejects_a_detached_locator_in_real_loader(tmp_path: Path) -> None:

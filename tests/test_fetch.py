@@ -5,6 +5,7 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 import polars as pl
 import polars.testing as pl_testing
@@ -13,6 +14,7 @@ import pytest
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
 from rivretrieve._internal.engine import (
     FetchWindow,
     Instant,
@@ -21,7 +23,6 @@ from rivretrieve._internal.engine import (
     ProductWindowDeclarations,
     ProviderConfig,
     RenderedWindow,
-    Rows,
     RowsSchema,
     SourceCallOrigin,
     SourceCoordinates,
@@ -38,6 +39,17 @@ from rivretrieve._internal.issues import InvalidObservationRequestError, Issue, 
 from rivretrieve._internal.observations import ObservationDataSchema, Receipts
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.registry import _registry
+from rivretrieve._internal.source_series import (
+    OutcomeStatus,
+    ParsedSeries,
+    PhysicalFacts,
+    RetrievalOutcome,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+    known,
+    stable_id,
+)
 
 VALUES = {
     ("ca_eccc", "station-1", "level"): 10.0,
@@ -45,6 +57,47 @@ VALUES = {
     ("usgs_nwis", "station-1", "level"): 30.0,
     ("usgs_nwis", "station-2", "level_hourly"): 40.0,
 }
+
+
+def _test_definition(provider_id: str, station_id: str, product_id: str) -> SourceSeries:
+    """Authored routing-contract definition, not provider scientific evidence."""
+    quantity, unit = ("discharge", "m3/s") if product_id == "flow" else ("stage", "m")
+    return SourceSeries(
+        series_id=stable_id(provider_id, station_id, "test-route", product_id),
+        provider_id=provider_id,
+        station_id=station_id,
+        product_id=product_id,
+        identity=SourceIdentity(
+            namespace="test-route", published_id=product_id, origin="mapping", evidence=("authored-routing-contract",)
+        ),
+        facts=(
+            PhysicalFacts(
+                facts_id="test-facts-" + product_id,
+                quantity=known(quantity, "authored-routing-contract"),
+                source_unit=known(unit, "authored-routing-contract"),
+                normalized_unit=unit,
+            ),
+        ),
+    )
+
+
+def _expected_frame(data, *, provider_id="usgs_nwis"):
+    frame = pl.DataFrame(data)
+    definitions = [
+        _test_definition(provider_id, station, product)
+        for station, product in frame.select("station_id", "product_id").iter_rows()
+    ]
+    return (
+        frame.with_columns(
+            pl.Series("series_id", [item.series_id for item in definitions]),
+            pl.Series("facts_id", [item.facts[0].facts_id for item in definitions]),
+            pl.Series("quantity", [item.facts[0].quantity.value for item in definitions]),
+            pl.Series("source_unit", [item.facts[0].source_unit.value for item in definitions]),
+            pl.Series("unit", [item.facts[0].normalized_unit for item in definitions]),
+        )
+        .select(ObservationDataSchema.polars_schema.names())
+        .cast(ObservationDataSchema.polars_schema)
+    )
 
 
 class _RecordingStages:
@@ -101,6 +154,9 @@ class _RecordingStages:
         fetch_window: FetchWindow,
         config: ProviderConfig,
         transport: object,
+        *,
+        scope=None,
+        known_series=(),
     ) -> WithIssues[tuple[Payload, ...]]:
         del rendered_windows
         self.calls.append((stations, tuple(str(product) for product in products)))
@@ -123,6 +179,8 @@ class _RecordingStages:
                 query=UnknownOriginFact(),
             ),
             prerequisite_calls=(),
+            scope=scope,
+            known_series=known_series,
         )
         return WithIssues(
             value=(payload,),
@@ -130,20 +188,38 @@ class _RecordingStages:
         )
 
     @staticmethod
-    def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+    def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         del config
-        parsed_provider_id, station_id, product_id = payload.content.decode().split("|")
+        provider_id, station_id, product_id = payload.content.decode().split("|")
+        definition = _test_definition(provider_id, station_id, product_id)
+        facts = definition.facts[0]
         rows = pl.DataFrame(
             {
                 "station_id": [station_id],
                 "product_id": [product_id],
-                "time": [datetime(2026, 1, 1, 12, 0)],
-                "value": [VALUES[(parsed_provider_id, station_id, product_id)]],
+                "series_id": [definition.series_id],
+                "facts_id": [facts.facts_id],
+                "source_unit": [facts.source_unit.value],
+                "time": [datetime(2026, 1, 1, 12)],
+                "value": [VALUES[(provider_id, station_id, product_id)]],
                 "time_zone": ["+00:00"],
             },
             schema=RowsSchema.polars_schema,
         )
-        return WithIssues(value=rows, issues=())
+        window = SeriesWindow(
+            start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+            end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        )
+        outcome = RetrievalOutcome(
+            outcome_id=definition.series_id,
+            series_id=definition.series_id,
+            station_id=station_id,
+            product_id=product_id,
+            window=window,
+            status=OutcomeStatus.SUCCESS,
+            facts_ids=(facts.facts_id,),
+        )
+        return ParsedSeries(rows=rows, series=(definition,), inventories=(), outcomes=(outcome,))
 
 
 @dataclass(frozen=True)
@@ -161,8 +237,15 @@ def recording_stages(
     stages = {provider_id: _RecordingStages(provider_id) for provider_id in ("ca_eccc", "usgs_nwis")}
     for provider_id, provider_stages in stages.items():
         artifact = stub_packaged_catalogue_artifact_rich(provider_id)
+        descriptions = []
+        for product_id in artifact.products["product_id"].to_list():
+            definition = _test_definition(provider_id, "station-1", product_id)
+            descriptions.append(
+                SourceDescription(product_id=product_id, identity=definition.identity, facts=definition.facts)
+            )
         artifact = replace(
             artifact,
+            source_descriptions=SourceDescriptions(provider_id=provider_id, descriptions=tuple(descriptions)),
             provider_info={
                 **artifact.provider_info,
                 "license": f"https://licenses.test/{provider_id}",
@@ -189,29 +272,20 @@ def _keys(selection: object) -> tuple[tuple[str, str, str], ...]:
     return tuple((series.provider_id, series.station_id, series.product_id) for series in selection.series)
 
 
-def test_fetch_rejects_reason_carrying_empty_selection_before_lookup_or_fetch(
+def test_fetch_rejects_proven_empty_scope_before_lookup_or_fetch(
     monkeypatch: pytest.MonkeyPatch,
     recording_stages: _RegisteredRecorders,
 ) -> None:
     provider_lookups = _record_provider_lookups(monkeypatch)
-    empty = rr.find(provider="usgs_nwis", station="station-2", product="level_max")
-
+    selected = rr.find(provider="usgs_nwis", station="station-1", variant="level")
+    empty = rr.pick(selected, station="station-2", on_issue="ignore")
     with pytest.raises(discovery.EmptySelectionError) as raised:
         rr.fetch(empty, start="2026-01-01", end="2026-01-01")
-
     assert raised.value.reason is empty.empty_reason
-    assert str(raised.value) == (
-        "fetch() cannot retrieve an empty selection: code='no_catalogue_edge', "
-        "provider_ids=('usgs_nwis',), station_ids=('station-2',), "
-        "product_ids=('level_max',), published_products=('level_hourly',)"
-    )
+    assert empty.empty_reason.code == "no_match"
     assert provider_lookups == []
-    assert recording_stages.ca_eccc.calls == []
-    assert recording_stages.usgs_nwis.calls == []
-    assert rr.fetch_by_provider(empty, start="2026-01-01", end="2026-01-01") == {}
-    assert provider_lookups == []
-    assert recording_stages.ca_eccc.calls == []
-    assert recording_stages.usgs_nwis.calls == []
+    assert recording_stages.ca_eccc.calls == recording_stages.usgs_nwis.calls == []
+    assert rr.fetch_by_provider(empty, start="2026-01-01", end="2026-01-01", on_issue="ignore") == {}
 
 
 def test_fetch_rejects_mixed_provider_selection_before_lookup_or_fetch(
@@ -219,7 +293,7 @@ def test_fetch_rejects_mixed_provider_selection_before_lookup_or_fetch(
     recording_stages: _RegisteredRecorders,
 ) -> None:
     provider_lookups = _record_provider_lookups(monkeypatch)
-    mixed = rr.find(product="level")
+    mixed = rr.find(variant="level")
     assert _keys(mixed) == (
         ("ca_eccc", "station-1", "level"),
         ("usgs_nwis", "station-1", "level"),
@@ -242,7 +316,10 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        product=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     assert _keys(sparse) == (
         ("usgs_nwis", "station-1", "level"),
@@ -255,7 +332,7 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
         (("station-1",), ("level",)),
         (("station-2",), ("level_hourly",)),
     ]
-    expected = pl.DataFrame(
+    expected = _expected_frame(
         {
             "time": [datetime(2026, 1, 1, 12, 0), datetime(2026, 1, 1, 12, 0)],
             "time_zone": ["+00:00", "+00:00"],
@@ -263,7 +340,7 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
             "product_id": ["level", "level_hourly"],
             "value": [30.0, 40.0],
         },
-        schema=ObservationDataSchema.polars_schema,
+        provider_id="usgs_nwis",
     )
     pl_testing.assert_frame_equal(result.data, expected, check_exact=True)
     assert result.provenance.source == "recording://usgs_nwis"
@@ -279,23 +356,34 @@ def test_fetch_routes_only_selected_sparse_series(recording_stages: _RegisteredR
     assert result.provenance.license == expected_terms["license"]
     assert result.provenance.citation == expected_terms["citation"]
     assert result.provenance.request == {
+        "scope": result.scope.model_dump(mode="json"),
         "series": [
-            {"station_id": "station-1", "product_id": "level"},
-            {"station_id": "station-2", "product_id": "level_hourly"},
+            {
+                "station_id": "station-1",
+                "product_id": "level",
+                "series_id": _test_definition("usgs_nwis", "station-1", "level").series_id,
+            },
+            {
+                "station_id": "station-2",
+                "product_id": "level_hourly",
+                "series_id": _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+            },
         ],
         "start": "2026-01-01T00:00:00",
         "end": "2026-01-01T23:59:59.999999",
     }
     assert result.issues == ()
     assert result.receipts == Receipts(provider_id=ProviderId("usgs_nwis"), entries=())
-    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
+    assert {"data", "provenance", "issues", "receipts", "source_series", "scope", "inventories", "outcomes"}.issubset(
+        type(result).model_fields
+    )
 
 
 def test_fetch_by_provider_returns_one_singular_result_per_provider(
     recording_stages: _RegisteredRecorders,
 ) -> None:
     results = rr.fetch_by_provider(
-        rr.find(product="level"),
+        rr.find(variant="level"),
         start="2026-01-01",
         end="2026-01-01",
     )
@@ -303,7 +391,7 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
     assert recording_stages.ca_eccc.calls == [(("station-1",), ("level",))]
     assert recording_stages.usgs_nwis.calls == [(("station-1",), ("level",))]
     expected_by_provider = {
-        "ca_eccc": pl.DataFrame(
+        "ca_eccc": _expected_frame(
             {
                 "time": [datetime(2026, 1, 1, 12, 0)],
                 "time_zone": ["+00:00"],
@@ -311,9 +399,9 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
                 "product_id": ["level"],
                 "value": [10.0],
             },
-            schema=ObservationDataSchema.polars_schema,
+            provider_id="ca_eccc",
         ),
-        "usgs_nwis": pl.DataFrame(
+        "usgs_nwis": _expected_frame(
             {
                 "time": [datetime(2026, 1, 1, 12, 0)],
                 "time_zone": ["+00:00"],
@@ -321,7 +409,7 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
                 "product_id": ["level"],
                 "value": [30.0],
             },
-            schema=ObservationDataSchema.polars_schema,
+            provider_id="usgs_nwis",
         ),
     }
     for provider_id, result in results.items():
@@ -339,20 +427,30 @@ def test_fetch_by_provider_returns_one_singular_result_per_provider(
         assert result.provenance.license == expected_terms["license"]
         assert result.provenance.citation == expected_terms["citation"]
         assert result.provenance.request == {
-            "series": [{"station_id": "station-1", "product_id": "level"}],
+            "scope": result.scope.model_dump(mode="json"),
+            "series": [
+                {
+                    "station_id": "station-1",
+                    "product_id": "level",
+                    "series_id": _test_definition(provider_id, "station-1", "level").series_id,
+                }
+            ],
             "start": "2026-01-01T00:00:00",
             "end": "2026-01-01T23:59:59.999999",
         }
         assert result.issues == ()
         assert result.receipts == Receipts(provider_id=ProviderId(provider_id), entries=())
-        assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
-        assert tuple(result.data.columns) == (
-            "time",
-            "time_zone",
-            "station_id",
-            "product_id",
-            "value",
-        )
+        assert {
+            "data",
+            "provenance",
+            "issues",
+            "receipts",
+            "source_series",
+            "scope",
+            "inventories",
+            "outcomes",
+        }.issubset(type(result).model_fields)
+        assert result.data.columns == ObservationDataSchema.polars_schema.names()
         assert "provider_id" not in result.data.columns
 
 
@@ -362,7 +460,10 @@ def test_fetch_receipts_true_retains_every_selected_series_parse_input_and_origi
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        product=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
 
     result = rr.fetch(sparse, start="2026-01-01", end="2026-01-01", receipts=True)
@@ -402,7 +503,7 @@ def test_fetch_by_provider_receipts_true_retains_provider_scoped_parse_inputs_an
     recording_stages: _RegisteredRecorders,
 ) -> None:
     results = rr.fetch_by_provider(
-        rr.find(product="level"),
+        rr.find(variant="level"),
         start="2026-01-01",
         end="2026-01-01",
         receipts=True,
@@ -451,7 +552,10 @@ def test_fetch_default_warns_once_per_actionable_merged_issue(
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        product=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     first_issue = Issue(
         severity="warning",
@@ -488,7 +592,10 @@ def test_fetch_on_issue_ignore_returns_all_merged_issues_without_warnings(
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        product=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     first_issue = Issue(
         severity="warning",
@@ -527,7 +634,10 @@ def test_fetch_on_issue_raise_fetches_all_series_then_raises_for_merged_issues(
     sparse = rr.pick(
         rr.find(provider="usgs_nwis"),
         station=["station-1", "station-2"],
-        product=["level", "level_hourly"],
+        series_id=[
+            _test_definition("usgs_nwis", "station-1", "level").series_id,
+            _test_definition("usgs_nwis", "station-2", "level_hourly").series_id,
+        ],
     )
     first_issue = Issue(
         severity="warning",
@@ -592,7 +702,7 @@ def test_fetch_by_provider_applies_issue_policy_once_to_each_completed_provider_
 
     with warnings.catch_warnings(record=True) as captured_warnings:
         results = rr.fetch_by_provider(
-            rr.find(product="level"),
+            rr.find(variant="level"),
             start="2026-01-01",
             end="2026-01-01",
             on_issue="ignore",
@@ -641,7 +751,7 @@ def test_fetch_functions_require_rivretrieve_selection_and_expose_request_contro
 def test_fetch_refuses_zone_carrying_endpoint_before_stage_fetch(
     recording_stages: _RegisteredRecorders,
 ) -> None:
-    selection = rr.find(provider="usgs_nwis", station="station-1", product="level")
+    selection = rr.find(provider="usgs_nwis", station="station-1", variant="level")
 
     with pytest.raises(InvalidObservationRequestError) as raised:
         rr.fetch(
@@ -669,7 +779,7 @@ def test_shared_observation_order_is_identical_across_provider_parse_orders(prov
         rows.sort(key=lambda row: (row["time"], row["product_id"], row["station_id"]))
     else:
         rows.sort(key=lambda row: (row["product_id"], row["station_id"], row["time"]))
-    frame = pl.DataFrame(rows, schema=ObservationDataSchema.polars_schema)
+    frame = _expected_frame(rows, provider_id="usgs_nwis")
 
     ordered = discovery._canonical_observation_order(frame)
 
@@ -684,7 +794,7 @@ def test_shared_observation_order_is_identical_across_provider_parse_orders(prov
 def test_fetch_defaults_end_to_the_callers_local_calendar_day(
     recording_stages: _RegisteredRecorders,
 ) -> None:
-    selection = rr.find(provider="usgs_nwis", station="station-1", product="level")
+    selection = rr.find(provider="usgs_nwis", station="station-1", variant="level")
 
     result = rr.fetch(selection, start="2026-01-01", on_issue="ignore")
 
@@ -699,7 +809,7 @@ def test_fetch_defaults_end_to_the_callers_local_calendar_day(
 def test_fetch_without_start_raises_the_domain_error_before_fetch(
     recording_stages: _RegisteredRecorders,
 ) -> None:
-    selection = rr.find(provider="usgs_nwis", station="station-1", product="level")
+    selection = rr.find(provider="usgs_nwis", station="station-1", variant="level")
 
     with pytest.raises(InvalidObservationRequestError, match="start is required"):
         rr.fetch(selection, end="2026-01-01")
@@ -707,7 +817,10 @@ def test_fetch_without_start_raises_the_domain_error_before_fetch(
     assert recording_stages.usgs_nwis.calls == []
 
 
-def test_providers_declares_credentials_without_exposing_values(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_providers_declares_credentials_without_exposing_values(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "secret-sentinel")
     monkeypatch.delenv("ANA_IDENTIFICADOR", raising=False)
     monkeypatch.delenv("ANA_SENHA", raising=False)
@@ -730,7 +843,7 @@ def test_providers_declares_credentials_without_exposing_values(monkeypatch: pyt
 def test_future_end_is_preserved_with_one_info_issue(
     recording_stages: _RegisteredRecorders,
 ) -> None:
-    selection = rr.find(provider="usgs_nwis", station="station-1", product="level")
+    selection = rr.find(provider="usgs_nwis", station="station-1", variant="level")
     future = date.today() + timedelta(days=365)
 
     result = rr.fetch(
@@ -770,7 +883,7 @@ def test_fetch_by_provider_on_issue_raise_attempts_every_series_and_carries_all_
 
     with pytest.raises(IssuePolicyError) as raised:
         rr.fetch_by_provider(
-            rr.find(product="level"),
+            rr.find(variant="level"),
             start="2026-01-01",
             end="2026-01-01",
             on_issue="raise",
@@ -779,3 +892,42 @@ def test_fetch_by_provider_on_issue_raise_attempts_every_series_and_carries_all_
     assert raised.value.issues == (ca_issue, us_issue)
     assert recording_stages.ca_eccc.calls == [(("station-1",), ("level",))]
     assert recording_stages.usgs_nwis.calls == [(("station-1",), ("level",))]
+
+
+def test_local_variants_remain_explicit_across_sparse_source_coordinates(recording_stages):
+    selection = rr.pick(
+        rr.find(provider="usgs_nwis"),
+        station=["station-1", "station-2"],
+        variant=["level", "level_hourly"],
+    )
+    result = rr.fetch(selection, start="2026-01-01", end="2026-01-01", on_issue="ignore")
+    assert recording_stages.usgs_nwis.calls == [
+        (("station-1",), ("level",)),
+        (("station-2",), ("level_hourly",)),
+    ]
+    assert len(result.provenance.calls_made) == 2
+    unresolved = [item for item in result.outcomes if item.requested_selector is not None]
+    assert [
+        (item.station_id, item.product_id, item.requested_selector.kind, item.requested_selector.value)
+        for item in unresolved
+    ] == [
+        ("station-1", "level", "variant", "level_hourly"),
+        ("station-2", "level_hourly", "variant", "level"),
+    ]
+    assert all(item.status is OutcomeStatus.UNRESOLVED for item in unresolved)
+    assert all(
+        item.series_id is None and item.facts_ids == () and item.calls == () and item.retrieved_at is None
+        for item in unresolved
+    )
+    assert len(result.issues) == 2
+    assert all(item.code == "source.inventory_unresolved" for item in result.issues)
+    expected = _expected_frame(
+        {
+            "time": [datetime(2026, 1, 1, 12), datetime(2026, 1, 1, 12)],
+            "time_zone": ["+00:00", "+00:00"],
+            "station_id": ["station-1", "station-2"],
+            "product_id": ["level", "level_hourly"],
+            "value": [30.0, 40.0],
+        }
+    )
+    pl_testing.assert_frame_equal(result.data, expected, check_exact=True)

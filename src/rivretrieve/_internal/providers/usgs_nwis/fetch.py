@@ -20,6 +20,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _BASE_URL = "https://waterservices.usgs.gov/nwis/"
@@ -32,6 +33,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     resolved_products: list[tuple[ProductId, SourceCoordinates, UsgsNwisSourceCoordinates, str, str]] = []
     for product_id in products:
@@ -57,6 +61,8 @@ def fetch(
                     product_id,
                     fetch_window,
                     response,
+                    scope,
+                    known_series,
                 )
             )
 
@@ -107,6 +113,8 @@ def _payload(
     product_id: ProductId,
     fetch_window: FetchWindow,
     response: TransportResponse,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> Payload:
     return Payload(
         source_coordinates=source_coordinates,
@@ -123,4 +131,6 @@ def _payload(
             query=UnknownOriginFact(),
         ),
         prerequisite_calls=response.prerequisite_calls,
+        scope=scope,
+        known_series=known_series,
     )

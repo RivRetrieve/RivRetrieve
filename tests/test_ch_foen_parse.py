@@ -2,8 +2,6 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from rivretrieve._internal.engine import (
     Payload,
     SourceCallOrigin,
@@ -43,27 +41,36 @@ def payload(path):
     )
 
 
-def test_rest_parser_maps_all_three_products_utc_and_drops_null_without_quality_inference():
+def test_rest_parser_maps_all_three_products_utc_without_quality_inference():
     result = parse(payload("ch_foen_2135_rest_2026-09-01.recording.json"), config())
-    assert result.value.columns == ["station_id", "product_id", "time", "value", "time_zone"]
-    counts = result.value.group_by("product_id").len().sort("product_id")
+    assert result.rows.columns == [
+        "station_id",
+        "product_id",
+        "time",
+        "value",
+        "time_zone",
+        "series_id",
+        "facts_id",
+        "source_unit",
+    ]
+    counts = result.rows.group_by("product_id").len().sort("product_id")
     assert dict(counts.iter_rows()) == {
         "discharge_reported": 145,
         "stage_reported": 145,
         "water_temperature_reported": 145,
     }
-    assert set(result.value["time_zone"]) == {"+00:00"}
+    assert set(result.rows["time_zone"]) == {"+00:00"}
     assert all("quality" not in issue.code for issue in result.issues)
 
 
 def test_flux_parser_maps_all_products_and_keeps_exclusive_stop_out():
     result = parse(payload("ch_foen_2135_flux_2020-01-01.recording.json"), config())
-    assert dict(result.value.group_by("product_id").len().iter_rows()) == {
+    assert dict(result.rows.group_by("product_id").len().iter_rows()) == {
         "discharge_reported": 6,
         "stage_reported": 6,
         "water_temperature_reported": 6,
     }
-    assert result.value["time"].max() == datetime(2020, 1, 1, 0, 50)
+    assert result.rows["time"].max() == datetime(2020, 1, 1, 0, 50)
 
 
 def test_parser_does_not_relabel_flow_ls_as_m3s():
@@ -77,11 +84,12 @@ def test_parser_does_not_relabel_flow_ls_as_m3s():
         p.origin,
         (),
     )
-    with pytest.raises(Exception, match="no declared field"):
-        parse(p, config())
+    result = parse(p, config())
+    assert result.rows["source_unit"].to_list() == ["l/s"]
+    assert result.rows["value"].to_list() == [1000.0]
 
 
-def test_stage_uses_same_unit_height_fallback_but_refuses_two_returned_alternatives():
+def test_stage_preserves_distinct_height_fields_without_fallback_or_coalescing():
     base = payload("ch_foen_2135_rest_2026-09-01.recording.json")
     fallback = {"payload": {"timestamp": [0], "2135|height": [501.0]}}
     value = Payload(
@@ -92,7 +100,7 @@ def test_stage_uses_same_unit_height_fallback_but_refuses_two_returned_alternati
         base.origin,
         (),
     )
-    assert parse(value, config()).value["value"].to_list() == [501.0]
+    assert parse(value, config()).rows["value"].to_list() == [501.0]
     ambiguous = {"payload": {"timestamp": [0], "2135|height_abs": [1.0], "2135|height": [501.0]}}
     value = Payload(
         base.source_coordinates,
@@ -102,5 +110,6 @@ def test_stage_uses_same_unit_height_fallback_but_refuses_two_returned_alternati
         base.origin,
         (),
     )
-    with pytest.raises(Exception, match="multiple alternatives"):
-        parse(value, config())
+    result = parse(value, config())
+    assert result.rows["value"].sort().to_list() == [1.0, 501.0]
+    assert result.rows["series_id"].n_unique() == 2

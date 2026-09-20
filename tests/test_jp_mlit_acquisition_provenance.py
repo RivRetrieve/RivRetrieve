@@ -25,32 +25,19 @@ def test_japan_provenance_is_shared_by_catalogue_result_and_selection() -> None:
     selection = rr.find(
         provider="jp_mlit",
         station="301011281104010",
-        product="discharge_daily_mean",
+        quantity="discharge",
+        frequency="daily",
     )
 
     assert result.provenance.acquisition_provenance is artifact.acquisition_provenance
     assert len(selection.acquisition_provenance) == 1
     assert_evidence_equal(selection.acquisition_provenance[0], artifact.acquisition_provenance)
-    assert rr.as_frame(selection).columns == [
-        "provider_id",
-        "station_id",
-        "product_id",
-        "latitude",
-        "longitude",
-        "crs",
-        "observed_property",
-        "frequency",
-        "statistic",
-        "period_type",
-        "period_anchor",
-        "unit",
-        "native_id",
-        "availability",
-        "availability_reason",
-        "published_record_start_date",
-        "published_record_end_date",
-        "last_catalogue_check",
-    ]
+    frame = rr.as_frame(selection)
+    assert frame["series_id"].to_list() == [selection.series[0].series_id]
+    assert frame["source_unit"].to_list() == ["m3/s"]
+    assert frame["frequency"].to_list() == ["daily"]
+    assert frame["statistic"].to_list() == [None]
+    assert frame["inventory_status"].to_list() == [["incomplete"]]
 
 
 def test_japan_source_and_fact_groups_are_externally_observable() -> None:
@@ -100,6 +87,9 @@ def test_packaged_catalogue_rejects_mismatched_provenance_provider(tmp_path: Pat
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     ):
         shutil.copy2(declaration.catalogue / name, tmp_path / name)
     payload = json.loads((tmp_path / "provenance.json").read_text())
@@ -114,7 +104,15 @@ def test_packaged_catalogue_rejects_mismatched_provenance_provider(tmp_path: Pat
 
 
 def _copy_japan_catalogue(destination: Path, *, include_provenance: bool = True) -> None:
-    names = ["provider.json", "products.parquet", "stations.parquet", "station_products.parquet"]
+    names = [
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
+    ]
     if include_provenance:
         names.extend(
             (
@@ -124,6 +122,9 @@ def _copy_japan_catalogue(destination: Path, *, include_provenance: bool = True)
                 "provenance_bindings.parquet",
                 "provenance_binding_facts.parquet",
                 "provenance_external_inputs.parquet",
+                "format.json",
+                "source_series.json",
+                "series_claims.parquet",
             )
         )
     for name in names:
@@ -188,6 +189,18 @@ def test_withheld_required_japan_fact_removes_affected_rows_and_edges(tmp_path: 
     )
     (tmp_path / "provenance.json").write_text(json.dumps(payload))
 
+    with pytest.raises(CorruptCatalogArtifactError, match="absent catalogue coordinates"):
+        load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
+    # A coherent rebuild must also withdraw source descriptions for removed products.
+    (tmp_path / "source_series.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "provider_id": "jp_mlit",
+                "descriptions": [],
+            }
+        )
+    )
     artifact = load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
 
     assert artifact.products.is_empty()

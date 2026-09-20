@@ -1,4 +1,4 @@
-"""Public Bosnia/France selection : certified edge → engine stages → five canonical columns."""
+"""Public Bosnia/France selection : physical selection → engine stages → identified observations."""
 
 from pathlib import Path
 
@@ -10,13 +10,33 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 DATA = Path(__file__).parent / "test_data"
 
+PHYSICAL_FILTERS = {
+    "stage_reported": {"quantity": "stage"},
+    "water_temperature_reported": {"quantity": "temperature"},
+    "discharge_daily_mean": {"quantity": "discharge", "frequency": "daily", "statistic": "mean"},
+    "discharge_daily_max": {"quantity": "discharge", "frequency": "daily", "statistic": "max"},
+    "stage_instantaneous": {"quantity": "stage", "statistic": "instantaneous"},
+    "discharge_instantaneous": {"quantity": "discharge", "statistic": "instantaneous"},
+}
+
 
 def _public(monkeypatch, provider, station, product, start, end, recordings):
     replay = ReplayTransport(tuple(read_recording(DATA / name) for name in recordings))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider=provider, station=station, product=product)
+    selection = rr.find(provider=provider, station=station, **PHYSICAL_FILTERS[product])
     result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert result.receipts.entries
     return result
 
@@ -88,17 +108,19 @@ def test_bosnia_public_selection_exposes_all_acquired_pairs_including_unknown():
     ba = rr.as_frame(selection)
     assert ba.height == 180
     assert ba["station_id"].n_unique() == 60
-    assert sum(series.availability == "available" for series in selection.series) == 132
-    assert sum(series.availability == "unknown" for series in selection.series) == 48
-    unknown = rr.find(provider="ba_fhmzbih", station="2101-B", product="water_temperature_reported")
+    # Discovery retains incomplete inventory instead of claiming source availability.
+    assert all(inventory.completeness == "incomplete" for inventory in selection.inventories)
+    unknown = rr.find(provider="ba_fhmzbih", station="2101-B", quantity="temperature")
     assert len(unknown.series) == 1
-    assert unknown.series[0].availability == "unknown"
+    assert all(inventory.completeness == "incomplete" for inventory in unknown.inventories)
 
 
 def test_france_sparse_catalogue_does_not_invent_cross_products():
     fr = rr.as_frame(rr.find(provider="fr_hubeau"))
     assert fr.height == 33_139
-    assert rr.as_frame(rr.find(provider="fr_hubeau", station="01001336", product="stage_instantaneous")).is_empty()
+    assert rr.as_frame(
+        rr.find(provider="fr_hubeau", station="01001336", quantity="stage", statistic="instantaneous")
+    ).is_empty()
 
 
 def test_france_station_discharge_uses_series_unit_not_display_preference(monkeypatch):
@@ -141,7 +163,7 @@ def test_france_valid_station_discharge_capture_can_clip_to_empty(monkeypatch):
     ],
 )
 def test_france_unknown_pairs_remain_selectable(station, product):
-    selection = rr.find(provider="fr_hubeau", station=station, product=product)
+    selection = rr.find(provider="fr_hubeau", station=station, **PHYSICAL_FILTERS[product])
     assert len(selection.series) == 1
-    assert selection.series[0].availability == "unknown"
+    assert all(inventory.completeness == "incomplete" for inventory in selection.inventories)
     assert not selection.acquisition_provenance[0].header.withheld_facts

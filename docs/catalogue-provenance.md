@@ -74,16 +74,17 @@ pinned by `tests/test_provider_row_withholding.py`.
 
 `ORIGIN_GATE_ENROLLED_PROVIDERS` in `catalogue_origins.py` is the executable certification boundary.
 Every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS` has complete audited catalogue origin declarations.
-`no_nve` is enrolled after gaining a committed attested native table and complete origin declarations.
-`br_ana` is enrolled after an attested inventory union and explicit Fluviometrica projection.
-All acquired source rows remain in its native table. It publishes two adopted telemetry products
-and four explicitly selected Bruto/Consistido daily-mean products. Each certified river gauge
-is a candidate; availability remains unknown unless exact source-variant observations establish
-bounded positive evidence. Request windows never become published record bounds.
+All thirteen providers are enrolled: ten live providers, Canada and Poland with bulk
+stores, and South Africa with catalogue-only access. Certification concerns catalogue
+origins; it does not activate observation retrieval.
 
-Brazil's former `--fixture`, `--live`, and `--withhold-uncertified` catalogue routes refuse
-with a migration message. Materialize retained credential-free recordings first, then build
-from the attested native table. See [Brazil maintenance](provider_ports/br_ana.md).
+Brazil retains all acquired source rows in its native table. Its six internal access routes describe two telemetry quantities and two daily-mean
+physical products. The daily routes retain separate source-series identities. Both
+Bruto (raw) and Consistido (quality-checked by ANA) daily series are included without
+preference. Each certified river gauge is a candidate; availability remains unknown
+unless exact source-variant observations establish bounded positive evidence. Request
+windows never become published record bounds. Build from the attested native table;
+see [Brazil maintenance](provider_ports/br_ana.md) for source acquisition evidence.
 
 Commit `provider.json`, `products.parquet`, `stations.parquet`, `station_products.parquet`,
 `provenance.json`, all five `provenance_*.parquet` relations, and the generated Croissant descriptor. Test fixtures must not republish
@@ -108,7 +109,7 @@ the runtime does not select an unrelated contributor's words to fill a scalar. F
 per-source statements remain available in acquisition provenance and in the descriptor.
 
 Run the reference `mlcroissant` validator through the test suite for all thirteen outputs,
-including Brazil's inventory and source-variant product descriptor. The validator is a development
+including Brazil's inventory and separately identified source series. The validator is a development
 dependency; reading a descriptor from an installed wheel must not import it. Catalogue
 version and publication date come from the recorded catalogue date, and acquisition dates
 remain source facts. No build clock enters the descriptor.
@@ -119,28 +120,19 @@ Observation fixtures record real source interactions. The [recording implementat
 replays exact requests. Constructed payloads and retired implementations do not establish
 source evidence. See [verification](architecture.md#evidence-and-verification) for the testing contracts.
 
-## Public metadata migration: schema version 3
+## Public catalogue evidence
 
-The [versioned evidence profile](catalogue-evidence.md#profile-3) documents the explicit
-metadata migration. The descriptor is now bounded: it describes exact relational
-files rather than repeating the national acquisition graph as JSON-LD nodes.
-Resolving an individual fact or pair is an explicit offline relation traversal.
+The [versioned evidence profile](catalogue-evidence.md#profile-3) describes the exact
+relational files and offline traversal of individual facts. The descriptor does not
+repeat the national acquisition graph as JSON-LD nodes.
 
-The nested Python `acquisition_provenance` value is now `CatalogueEvidence`:
+The Python `acquisition_provenance` value carries `CatalogueEvidence`:
 
 - A selection carries a tuple in selected-provider order.
-- An observation/catalogue provenance carries one value, or genuine `None`.
+- Observation/catalogue provenance carries one value, or genuine `None`.
 - `evidence.header` holds provider/native identity, source statements and withholding.
 - `evidence.facts`, `.acquisitions`, `.bindings`, `.binding_facts`, and
   `.external_inputs` are typed Polars tables.
 
-Old `.fact_bindings` and `.source_records[*].acquisitions` tuple access is not an
-alias or an implicit full-graph projection. Use the profile's exact keys and joins.
-Python model dumps retain Polars carriers; explicitly requested JSON dumps use the
-normalized column-oriented representation. This changes metadata representation,
-not the discovery/fetch signatures, returned observations or evidence conclusions.
-
-The reader explicitly supports old schema-v2 catalogue files by validating and
-normalizing them. The returned metadata type is the same for both file versions.
-Unknown versions fail rather than falling back. V2 parsing and transitional generator
-builds still pay the old object cost; v3 runtime reading does not reconstruct v2.
+Python model dumps retain Polars carriers. Explicit JSON dumps use the normalized
+column-oriented representation. Discovery does not expand or serialize the full graph.

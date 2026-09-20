@@ -20,7 +20,10 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
 from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import PRODUCT_DEFINITIONS
 from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
+from rivretrieve._internal.recordings import read_recording
 
+# Decoded historical native-table subsets, not HTTP response recordings.
+# Exact equality with the committed snapshot is tested below.
 SERIES_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_series.json")
 EXPANDED_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_expanded.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
@@ -975,9 +978,10 @@ def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
     assert (
-        hashlib.sha256(provider_bytes).hexdigest() == "c0a4074f979ac2670695b08c325a55b9be548591a18db53ae7011fd054b02f59"
+        hashlib.sha256(provider_bytes).hexdigest() == "69fce539d44cae99e42bfd8e51e60b49f2e0d5e0c71a253ce7068e45eb685d38"
     )
-    assert _frame_content_sha256(products) == "0bb5ae6f406f5258119a9c0d198a8db1a5e77a211d0d693186bb18d01cacbccc"
+    assert products["period_anchor"].unique().to_list() == ["unknown"]
+    assert _frame_content_sha256(products) == "31d4d14c535aff2a04be0deb7e738c575ac4f736956db6dbfb2279f3e267aa59"
     assert _frame_content_sha256(stations) == "27b3dfc6d71445798eda982d6f9d11de4839be1f6adbb30faed8052cefdc26c7"
     assert _frame_content_sha256(station_products) == (
         "a8ac1cc876ef1b2aac04fc09141eb9b0e5e59df3c767f7bddfdcb27fc59152d8"
@@ -1005,3 +1009,34 @@ def test_native_build_is_network_free_and_byte_deterministic(
     for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (first / artifact_name).read_bytes() == (second / artifact_name).read_bytes()
         assert (first / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
+
+
+def test_live_rdb_recordings_preserve_source_strings_and_native_alignment() -> None:
+    data = Path("tests/test_data")
+    series_recording = read_recording(data / "usgs_nwis_02339495_site_series.recording.json")
+    expanded_recording = read_recording(data / "usgs_nwis_02339495_site_expanded.recording.json")
+    series = generator.parse_series_rdb(series_recording.content.decode("utf-8"))
+    expanded = generator.parse_expanded_rdb(expanded_recording.content.decode("utf-8"))
+    assert len(series) == 21
+    assert len(expanded) == 1
+    instantaneous = next(row for row in series if row["ts_id"] == "2761")
+    assert instantaneous["stat_cd"] == ""
+    assert instantaneous["loc_web_ds"] == "[(2)]"
+    assert expanded[0]["station_nm"] == "OSELIGEE CREEK NEAR LANETT AL"
+    assert expanded[0]["alt_va"] == ""
+    assert expanded[0]["drain_area_va"] == "86.4"
+
+    refreshed = generator.refresh_native_table(
+        series,
+        expanded,
+        retrieved_at=RetrievedAt(expanded_recording.retrieved_at),
+        input_kind=generator.NativeInputKind.FIXTURE,
+    )
+    ordered = sorted(series, key=lambda row: tuple(row[name] for name in SERIES_HEADER))
+    expected_row: dict[str, object] = dict(expanded[0])
+    expected_row.update({name: [row[name] for row in ordered] for name in SERIES_ONLY_FIELDS})
+    expected_row["retrieved_at"] = expanded_recording.retrieved_at
+    pl_testing.assert_frame_equal(
+        refreshed.value.data, pl.DataFrame([expected_row], schema=NATIVE_SCHEMA), check_exact=True
+    )
+    assert refreshed.issues == ()

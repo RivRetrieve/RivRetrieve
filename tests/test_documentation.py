@@ -10,6 +10,7 @@ import polars as pl
 from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
+from rivretrieve._internal.observations import ObservationDataSchema
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,57 +35,38 @@ def test_readme_uses_current_public_api():
     assert "fetch" in calls
 
 
-def test_readme_january_example_with_authored_partial_window_response(monkeypatch, capsys):
+def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
     import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import read_recording
-    from rivretrieve._internal.transport import HttpMethod, TransportRequest, TransportResponse
+    from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
     recording = read_recording(
         ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
     )
-
-    class PartialWindowTransport:
-        """Test response uses unchanged publisher bytes, not a January recording."""
-
-        calls = 0
-
-        def send(self, request: TransportRequest) -> TransportResponse:
-            assert request.method == HttpMethod.GET
-            assert request.url == "https://waterservices.usgs.gov/nwis/dv/"
-            assert request.params == {
-                "format": "json",
-                "sites": "07374000",
-                "startDT": "2022-12-30",
-                "endDT": "2023-02-02",
-                "parameterCd": "00060",
-                "statCd": "00003",
-            }
-            assert request.body is None
-            self.calls += 1
-            return recording.to_transport_response()
-
-    # Authored partial-window response: do not change the fixture's request identity
-    # or claim these five publisher days prove full-January retrieval or availability.
-    transport = PartialWindowTransport()
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    replay = ReplayTransport((recording,))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     scope = {}
     for block in python_blocks(ROOT / "README.md"):
         exec(compile(block, "README.md", "exec"), scope)
     result = scope["result"]
     expected = pl.DataFrame(
         {
-            "time": [datetime(2023, 1, day) for day in (1, 2, 3)],
-            "time_zone": ["unknown"] * 3,
-            "station_id": ["07374000"] * 3,
-            "product_id": ["discharge_daily_mean"] * 3,
-            "value": [373000.0 * 0.028316846592] * 3,
+            "time": [datetime(2023, 1, 1)],
+            "time_zone": ["unknown"],
+            "station_id": ["07374000"],
+            "product_id": ["discharge_daily_mean"],
+            "value": [373000.0 * 0.028316846592],
         }
     )
-    assert_frame_equal(result.data, expected)
+    assert_frame_equal(result.data.select(expected.columns), expected)
+    assert result.data.columns == list(ObservationDataSchema.polars_schema)
+    assert result.source_series
+    assert result.data["series_id"].n_unique() == 1
+    assert result.data["unit"].to_list() == ["m3/s"]
     assert not result.issues
     assert not result.receipts.entries
-    assert transport.calls == 1
-    assert capsys.readouterr().out == f"{result.data}\n{result.issues}\n"
+    assert capsys.readouterr().out == (
+        "[('07374000', 10562.183778816001)]\n()\n['bruto', 'consistido']\n['consistido']\n"
+    )
 
 
 def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
@@ -96,7 +78,7 @@ def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
     )
     replay = ReplayTransport((recording,))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+    gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
     gauge = rr.pick(gauges, station="07374000")
     # Only this shorter public window matches the committed publisher recording.
     result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")
@@ -109,7 +91,11 @@ def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
             "value": [373000.0 * 0.028316846592],
         }
     )
-    assert_frame_equal(result.data, expected)
+    assert_frame_equal(result.data.select(expected.columns), expected)
+    assert result.data.columns == list(ObservationDataSchema.polars_schema)
+    assert result.source_series
+    assert result.data["series_id"].n_unique() == 1
+    assert result.data["unit"].to_list() == ["m3/s"]
     assert not result.issues
     assert not result.receipts.entries
 

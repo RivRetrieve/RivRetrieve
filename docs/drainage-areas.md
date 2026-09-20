@@ -8,7 +8,7 @@ span providers. It does not retrieve observations or require credentials.
 import json
 import rivretrieve as rr
 
-gauges = rr.find(provider="ca_eccc", product="discharge_daily_mean")
+gauges = rr.find(provider="ca_eccc", quantity="discharge", frequency="daily", statistic="mean")
 gauge = rr.pick(gauges, station="02GA010")
 areas = rr.drainage_areas(gauge)
 ```

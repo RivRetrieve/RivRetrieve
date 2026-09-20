@@ -119,7 +119,7 @@
     "publisher_count; HTTP 200; available; publisher_count. Availability only, not numerical values or continuous history.",
     "publisher_count; HTTP 200; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
     "publisher_count; HTTP 200; history_check_failed; replacement_window_failure_prior_empty_claim_unverified. Availability only, not numerical values or continuous history.",
-    "HydroPortail station-own instantaneous Q/H publication from PHyC; not a shared-site series or original-producer assertion",
+    "HydroPortail station-own Q/H publication from PHyC; response titles establish instantaneous quantities; not a shared-site series or original-producer assertion",
     "HydroPortail publication; official publication does not establish all historical measurement authorship",
     "PHyC platform operation; official publication does not establish all historical measurement authorship",
     "historical_check; HTTP 200; empty_in_both_history_windows; two_exact_windows_empty. Availability only, not numerical values or continuous history.",

@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import fields
 from datetime import UTC, datetime
-from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast, get_type_hints
 
@@ -46,7 +45,6 @@ from rivretrieve._internal.transport import (
     TransportResponse,
 )
 
-FIXTURE_PATH = Path("tests/test_data/usgs_nwis_07374000_dv_00060_2023-01-01.json")
 RETRIEVED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
 
 Action = TransportResponse | TransportFailure
@@ -393,8 +391,9 @@ def test_successful_malformed_body_stays_opaque_until_parse(
     assert len(fetched.value) == 1
     assert fetched.value[0].content == b"not-json"
     assert fetched.issues == ()
-    with pytest.raises(FatalContractError, match="not valid JSON"):
-        parse(fetched.value[0], provider_config)
+    parsed = parse(fetched.value[0], provider_config)
+    assert parsed.outcomes[0].status == "unsupported"
+    assert parsed.issues
 
 
 def test_usgs_fetch_uses_engine_rendered_dates_without_reading_fetch_window_endpoints(

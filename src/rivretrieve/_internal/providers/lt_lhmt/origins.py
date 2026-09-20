@@ -61,6 +61,8 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         "source.station.native_location",
         "source.station.crs_documentation",
         "source.station_product.availability_not_published",
+        "source.product.historical_daily_mean_semantics",
+        "source.product.historical_time_zone",
         "source.observation.native_value",
         "source.observation.native_quality",
     )
@@ -101,7 +103,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                         acquisition_id="terms_capture_2026_08_21",
                         method="http_request",
                         instant_type="retrieval",
-                        description="Meteo LT API data-use conditions HTML recording",
+                        description="Meteo LT API documentation and data-use conditions HTML recording",
                         requested_from=(recording.source_url,),
                         retrieved_at_start=recording.retrieved_at,
                         recording_ids=(recording.recording_id,),
@@ -118,7 +120,13 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 ),
                 evidence=(
                     EvidenceReference(
-                        evidence_id="lt_lhmt_terms", description="Meteo LT API data-use conditions", recording=recording
+                        evidence_id="lt_lhmt_terms",
+                        description=(
+                            "Meteo LT API documentation and data-use conditions: historical observations "
+                            "waterLevel (cm) and waterDischarge (m3/s), Vidurkis per parą; "
+                            "observationDateUtc (UTC laiko juosta); coordinates (WGS 84)"
+                        ),
+                        recording=recording,
                     ),
                 ),
                 statements=(
@@ -146,9 +154,15 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             ),
             FactBinding(
                 fact_group="catalogue_external",
-                facts=external[:-2],
+                facts=(external[0], external[2], external[3], external[5]),
                 source_id="lt_lhmt",
                 acquisition_id="catalogue_capture_2026_08_01",
+            ),
+            FactBinding(
+                fact_group="api_documented_semantics",
+                facts=(external[1], external[4], external[6], external[7]),
+                source_id="lt_lhmt",
+                acquisition_id="terms_capture_2026_08_21",
             ),
             FactBinding(
                 fact_group="observation_external",
@@ -196,6 +210,8 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
             external_inputs=(
                 ExternalFactReference(source_id="lt_lhmt", fact="source.provider.service"),
                 ExternalFactReference(source_id="lt_lhmt", fact="source.product.native_fields"),
+                ExternalFactReference(source_id="lt_lhmt", fact="source.product.historical_daily_mean_semantics"),
+                ExternalFactReference(source_id="lt_lhmt", fact="source.product.historical_time_zone"),
                 ExternalFactReference(source_id="lt_lhmt", fact="source.station.native_identity"),
                 ExternalFactReference(source_id="lt_lhmt", fact="source.station.native_location"),
                 ExternalFactReference(source_id="lt_lhmt", fact="source.station.crs_documentation"),

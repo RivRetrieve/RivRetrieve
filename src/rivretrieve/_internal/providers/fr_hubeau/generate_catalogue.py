@@ -37,6 +37,7 @@ from rivretrieve._internal.catalogues.native import (
     stamp_native_table,
     write_native_table,
 )
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -670,37 +671,20 @@ class GeneratedFrHubeauCatalogue:
 @dataclass(frozen=True)
 class ProductDefinition:
     product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    canonical_unit: str
     api_type: str
     grandeur_code: str | None
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    # --- obs_tr (real-time, ~1 month lookback) --------------------------------
+    # Hub Eau catalogue access coordinates; observations use station HydroPortail.
+    # The exact temporal meaning of the HydroPortail selector is unestablished.
     ProductDefinition(
         product_id="discharge_instantaneous",
-        observed_property="discharge",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
-        canonical_unit="m3/s",
         api_type="obs_tr",
         grandeur_code="Q",
     ),
     ProductDefinition(
         product_id="stage_instantaneous",
-        observed_property="stage",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
-        canonical_unit="m",
         api_type="obs_tr",
         grandeur_code="H",
     ),
@@ -710,46 +694,22 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     # done by the parser on the grandeur_hydro_elab field in each response row.
     ProductDefinition(
         product_id="discharge_daily_mean",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
         api_type="obs_elab",
         grandeur_code="QmnJ",
     ),
     ProductDefinition(
         product_id="discharge_daily_max",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="max",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
         api_type="obs_elab",
         grandeur_code="QIXnJ",
     ),
     ProductDefinition(
         product_id="stage_daily_max",
-        observed_property="stage",
-        frequency="daily",
-        statistic="max",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m",
         api_type="obs_elab",
         grandeur_code="HIXnJ",
     ),
     # --- temperature/chronique (historical archive) ---------------------------
     ProductDefinition(
         product_id="water_temperature_reported",
-        observed_property="water_temperature",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        canonical_unit="degC",
         api_type="temperature",
         grandeur_code=None,
     ),
@@ -1059,18 +1019,12 @@ def _raise_catalogue_issue(code: str, message: str) -> Never:
 
 
 def build_products() -> ProductCatalog:
+    from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
+
     rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": d.product_id,
-            "observed_property": d.observed_property,
-            "frequency": d.frequency,
-            "statistic": d.statistic,
-            "period_type": d.period_type,
-            "period_anchor": d.period_anchor,
-            "unit": d.canonical_unit,
-            "native_id": d.grandeur_code or d.api_type,
-        }
+        product_row(
+            PROVIDER_ID, d.product_id, d.grandeur_code or d.api_type, SERIES_MAPPINGS[d.product_id].physical_facts()
+        )
         for d in PRODUCT_DEFINITIONS
     ]
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -1145,8 +1099,8 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: 365-day window decomposition with paginated obs_elab, observations_tr, "
-            "and temperature/chronique requests; partial failures reported as recoverable issues"
+            "true: station HydroPortail queries and paginated obs_elab and temperature/chronique requests; "
+            "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
@@ -1179,6 +1133,8 @@ def validate_generated_catalogue(
 def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
+    from rivretrieve._internal.providers.fr_hubeau.config import config as source_config
     from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
     output_path = Path(out_dir)
@@ -1193,6 +1149,8 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
         catalogue.acquisition_provenance,
         tuple(FRANCE_ORIGIN_DECLARATIONS.values()),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_mappings=SERIES_MAPPINGS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

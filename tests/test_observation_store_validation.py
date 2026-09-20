@@ -25,7 +25,7 @@ from rivretrieve._internal.store import (
     validate_store,
 )
 
-FIXTURES = Path(__file__).parent / "test_data" / "observation_store_conformance"
+FIXTURES = Path(__file__).parent / "test_data" / "source_series_store_conformance"
 PROVIDER_ID = ProviderId("fixture_bulk")
 EXPECTED = {
     "invalid_manifest_required_field": (StoreRefusalKind.MALFORMED, "manifest.required:built_at"),
@@ -151,7 +151,7 @@ def test_discovered_fixture_inventory_exercises_the_production_seam() -> None:
         assert isinstance(result, ValidatedStore)
         assert result.root == StoreRoot(resolved)
         assert isinstance(result.manifest, StoreManifest)
-        assert result.manifest.format_version == 2
+        assert result.manifest.format_version == 5
         assert result.manifest.built_at.utcoffset() is not None
         assert result.manifest.publisher_artifact.url.startswith("https://")
         expected_keys = {PartitionIdentifier(key) for key in _manifest(path)["partition_row_counts"]}
@@ -219,7 +219,7 @@ def test_missing_manifest_and_duplicate_json_member_are_refused(tmp_path: Path) 
 
     duplicate = _copy_fixture(tmp_path / "duplicate")
     text = (duplicate / "manifest.json").read_text(encoding="utf-8")
-    text = text.replace('  "format_version": 2,', '  "format_version": 2,\n  "format_version": 2,', 1)
+    text = text.replace('  "format_version": 5,', '  "format_version": 5,\n  "format_version": 5,', 1)
     (duplicate / "manifest.json").write_text(text, encoding="utf-8")
     _assert_refusal(duplicate, "manifest.json:duplicate:format_version")
 
@@ -275,7 +275,7 @@ def test_arbitrary_parquet_basename_and_native_columns_are_accepted(tmp_path: Pa
     assert isinstance(result, ValidatedStore)
     assert next(iter(result.partition_files.values())).name == renamed.name
     frame = pl.read_parquet(renamed)
-    assert frame.columns[5:] == ["native_unit", "source_quality", "source_note"]
+    assert frame.columns[8:] == ["native_unit", "source_quality", "source_note"]
 
 
 def test_missing_retained_native_column_is_refused(tmp_path: Path) -> None:
@@ -415,7 +415,7 @@ def test_unknown_revision_precedes_the_single_parquet_open_boundary(
     _assert_refusal(store, "unsupported format revision 99", StoreRefusalKind.INCOMPATIBLE)
     assert opened == []
 
-    manifest["format_version"] = 2
+    manifest["format_version"] = 5
     _write_manifest(store, manifest)
     _assert_refusal(store, "partition.parquet:product=level/year=2024")
     assert opened == expected_paths

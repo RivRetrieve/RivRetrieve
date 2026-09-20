@@ -5,9 +5,10 @@ Python interface.
 
 ## River data and where to find them
 
-RivRetrieve connects you to river data from over 67,000 gauging stations across 12 national agencies,
-through one Python interface. The map below shows where those providers are, with darker shading
-indicating more gauges.
+RivRetrieve helps you find gauges, choose the physical observations you need, and retrieve them
+without learning a different Python interface for each agency. The map shows providers with
+observation access, with darker shading indicating more gauges. RivRetrieve retrieves observations
+from twelve providers: ten live services and two bulk sources.
 
 ![Countries with supported providers, shaded by gauge count on a logarithmic scale; counts are listed in the provider table below.](docs/assets/coverage-map.png)
 
@@ -22,22 +23,24 @@ Some providers require credentials. See the [usage guide](docs/usage.md#supplied
 for how to supply them.
 
 <details>
-<summary>All 12 providers</summary>
+<summary>Providers and access</summary>
 
 | Country | Agency | Provider | Stations | Access |
 |---|---|---|---:|---|
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
-| Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Open |
+| Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
 | France | Hub'Eau / HydroPortail | `fr_hubeau` | 7,323 | Open |
 | Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
 | Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | Open |
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
-| Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Open |
+| Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 246 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | Open |
+
+Station counts describe packaged catalogues, not guaranteed current data availability.
 
 </details>
 
@@ -59,36 +62,84 @@ For optional station maps, install the `map` extra: `uv add "rivretrieve[map]"`.
 
 ## Quick start
 
+The packaged catalogue contains station locations and known source-series facts.
+Searching it does not contact the agencies. The following example then contacts USGS to retrieve
+one day of daily mean streamflow, without credentials.
+
 ```python
 import rivretrieve as rr
 
-# Find a gauge and choose daily mean streamflow.
-gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
-gauge = rr.pick(gauges, station="07374000")
+# Find daily mean streamflow and choose a gauge.
+daily_gauges = rr.find(
+    provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"
+)
 
-# Download observations for January 2023.
-result = rr.fetch(gauge, start="2023-01-01", end="2023-01-31")
+chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
 
-print(result.data)
+result = rr.fetch(chosen_gauges, start="2023-01-01", end="2023-01-01")
+
+# Inspect two columns as a short list of rows.
+print(result.data.select("station_id", "value").rows())
+
+# Output:
+# [('07374000', 10562.183778816001)]
+
 print(result.issues)
+
+# Output:
+# ()
 ```
 
-Find, select, retrieve. The same Python interface works across providers, returning consistent columns
-and units. This example downloads daily mean streamflow from a USGS gauge without credentials.
+The displayed values come from a recorded USGS response. Live source responses can change.
+The empty tuple means this retrieval reported no issues.
 
-`result.data` is a Polars frame with `time`, `time_zone`, `station_id`, `product_id` and `value`.
+`result.data` is a Polars table of observations. Use `rr.series(result)` to inspect the returned
+source series and their outcomes.
 Discharge values use m³/s. Read timestamps together with their zone column. Inspect `result.issues`
 even when rows come back. A successful call does not establish continuous records or scientific
 comparability. Downloading observations requires internet access.
 
-Next: the [usage guide](docs/usage.md) covers selections, time windows, issues, credentials and
-caching, and the [CAMELS-US example](docs/examples/camels-us.md) retrieves streamflow for several
-gauges at once.
+### When an agency publishes different versions
+
+Brazil's ANA publishes Bruto (raw) and Consistido (quality-checked) daily records.
+ANA performs that checking, not RivRetrieve. Both are available; you choose whether to request
+both or just one. You can inspect and select them without credentials or network access:
+
+```python
+brazil = rr.find(
+    provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"
+)
+
+print(sorted(rr.series(brazil)["variant"].to_list()))
+
+# Output:
+# ['bruto', 'consistido']
+
+consistido = rr.pick(brazil, variant="consistido")
+
+print(rr.series(consistido)["variant"].to_list())
+
+# Output:
+# ['consistido']
+```
+
+Fetching `brazil` requests both daily mean water-level series by default. Fetching `consistido`
+requests only the quality-checked series. Not every period has observations for both.
+The [usage guide](docs/usage.md#when-an-agency-publishes-more-than-one-version) shows the downloads
+and explains how to supply ANA credentials.
+
+Next: the [usage guide](docs/usage.md) builds on the same example and covers selections, time windows,
+issues, credentials and caching. The [CAMELS-US example](docs/examples/camels-us.md) retrieves
+streamflow for several gauges at once.
 
 ## What RivRetrieve does and does not do
 
+- **Choose the observations you need.** Search for discharge or narrow to daily means. A source
+  appears in a daily-mean search only when its values are known to be daily means. Two matching
+  records can still differ in ways that matter for your study.
 - **No quality control or gap filling.** RivRetrieve does not assess scientific quality.
-  It converts units and formats, and reports retrieval and parsing issues.
+  It converts units and formats, and reports retrieval and parsing issues. Provider-specific
+  observation quality flags are not added to harmonised output.
 - **No aggregation.** RivRetrieve does not aggregate data (e.g., from hourly to daily). Data are
   returned at the time step the provider publishes: daily data are available only where the
   provider already publishes daily values.
