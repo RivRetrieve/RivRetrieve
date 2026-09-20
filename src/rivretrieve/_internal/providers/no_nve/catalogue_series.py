@@ -41,6 +41,7 @@ def describe_catalogue(artifact: PackagedCatalogArtifact, *, native: pl.DataFram
                 updates = {
                     name: getattr(facts, name).model_copy(update={"evidence": (ref,)})
                     for name in ("quantity", "source_unit", "frequency", "statistic")
+                    if getattr(facts, name).evidence
                 }
                 descriptions[key] = SourceDescription(
                     product_id=item.product_id,

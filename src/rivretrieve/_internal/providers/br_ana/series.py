@@ -33,12 +33,12 @@ def describe_series(
     namespace = "ANA.Hidro.NivelConsistencia" if daily else "ANA.telemetry.field"
     identity = stable_id("br_ana", station, namespace, field, native_id)
     definition = PhysicalFacts(
-        facts_id=stable_id(identity, source_unit, "daily_mean" if daily else "instantaneous"),
+        facts_id=stable_id(identity, source_unit, "daily_mean" if daily else "measurement_time"),
         quantity=known(quantity, evidence),
         source_unit=known(source_unit, evidence),
         normalized_unit=source_unit,
-        frequency=known("daily", evidence) if daily else known("irregular", evidence),
-        statistic=known("mean" if daily else "instantaneous", evidence),
+        frequency=known("daily", evidence) if daily else EvidenceFact(),
+        statistic=known("mean", evidence) if daily else EvidenceFact(),
         timestamp_anchor=EvidenceFact() if daily else known("measurement_time", evidence),
         clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
         label_time="00:00" if daily else None,

@@ -76,7 +76,7 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
 
 
 def build_products(daily: ConventionalDailyEvidence | None = None) -> ProductCatalog:
-    """Documented source variants → canonical instantaneous and daily mean products."""
+    """Project established adopted-field and daily-mean facts at access-route grain."""
     rows = []
     for product, definition in config().products.items():
         coordinates = definition.coordinates.value
@@ -99,10 +99,10 @@ def build_products(daily: ConventionalDailyEvidence | None = None) -> ProductCat
                 "provider_id": PROVIDER_ID,
                 "product_id": product,
                 "observed_property": "stage" if stage else "discharge",
-                "frequency": "daily" if daily_product else "irregular",
-                "statistic": "mean" if daily_product else "instantaneous",
-                "period_type": "daily" if daily_product else "instant",
-                "period_anchor": "unknown" if daily_product else "instant",
+                "frequency": "daily" if daily_product else "unknown",
+                "statistic": "mean" if daily_product else "unknown",
+                "period_type": "daily" if daily_product else "unknown",
+                "period_anchor": "unknown",
                 "unit": "m" if stage else "m3/s",
                 "native_id": native_id,
             }

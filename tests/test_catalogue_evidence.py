@@ -560,5 +560,16 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
         )
     if provider in {"cz_chmi", "lt_lhmt"}:
         restored = _assert_semantic_lineage_repair_and_restore_original(restored)
+    if provider == "no_nve":
+        model = restored.model_dump(mode="json")
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "canonical_products")
+        assert binding["transformation"]["name"] == (
+            "NVE parameter-resolution-unit access vocabulary; raw cadence and version-dependent method, "
+            "temporal support and anchor remain unknown at product grain"
+        )
+        # Verify this corrected projection wording, then compare all unchanged
+        # source assertions and ordering against the historical evidence oracle.
+        binding["transformation"]["name"] = "NVE parameter-resolution-unit vocabulary to canonical products"
+        restored = AcquisitionProvenance.model_validate(model)
     ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
     assert sha256(ordered.encode()).hexdigest() == oracle["providers"][provider]["ordered_model_sha256"]

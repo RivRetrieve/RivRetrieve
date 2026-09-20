@@ -272,60 +272,23 @@ class ProductDefinition:
     product_id: str
     observed_property: str
     frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
     canonical_unit: str
     parameter_id: int
     resolution_time: int
 
 
+# Product IDs route source requests. Method belongs to each published version;
+# neither resolution nor an access name establishes temporal support or anchor.
 PRODUCT_DEFINITIONS = (
-    ProductDefinition("stage_daily_mean", "stage", "daily", "mean", "interval", "provider_defined", "m", 1000, 1440),
-    ProductDefinition("stage_hourly_mean", "stage", "hourly", "mean", "interval", "provider_defined", "m", 1000, 60),
-    ProductDefinition("stage_instantaneous", "stage", "irregular", "instantaneous", "instant", "instant", "m", 1000, 0),
-    ProductDefinition(
-        "discharge_daily_mean", "discharge", "daily", "mean", "interval", "provider_defined", "m3/s", 1001, 1440
-    ),
-    ProductDefinition(
-        "discharge_hourly_mean", "discharge", "hourly", "mean", "interval", "provider_defined", "m3/s", 1001, 60
-    ),
-    ProductDefinition(
-        "discharge_instantaneous", "discharge", "irregular", "instantaneous", "instant", "instant", "m3/s", 1001, 0
-    ),
-    ProductDefinition(
-        "water_temperature_daily_mean",
-        "water_temperature",
-        "daily",
-        "mean",
-        "interval",
-        "provider_defined",
-        "degC",
-        1003,
-        1440,
-    ),
-    ProductDefinition(
-        "water_temperature_hourly_mean",
-        "water_temperature",
-        "hourly",
-        "mean",
-        "interval",
-        "provider_defined",
-        "degC",
-        1003,
-        60,
-    ),
-    ProductDefinition(
-        "water_temperature_instantaneous",
-        "water_temperature",
-        "irregular",
-        "instantaneous",
-        "instant",
-        "instant",
-        "degC",
-        1003,
-        0,
-    ),
+    ProductDefinition("stage_daily_mean", "stage", "daily", "m", 1000, 1440),
+    ProductDefinition("stage_hourly_mean", "stage", "hourly", "m", 1000, 60),
+    ProductDefinition("stage_instantaneous", "stage", "unknown", "m", 1000, 0),
+    ProductDefinition("discharge_daily_mean", "discharge", "daily", "m3/s", 1001, 1440),
+    ProductDefinition("discharge_hourly_mean", "discharge", "hourly", "m3/s", 1001, 60),
+    ProductDefinition("discharge_instantaneous", "discharge", "unknown", "m3/s", 1001, 0),
+    ProductDefinition("water_temperature_daily_mean", "water_temperature", "daily", "degC", 1003, 1440),
+    ProductDefinition("water_temperature_hourly_mean", "water_temperature", "hourly", "degC", 1003, 60),
+    ProductDefinition("water_temperature_instantaneous", "water_temperature", "unknown", "degC", 1003, 0),
 )
 EXPECTED_PRODUCT_IDS = frozenset(item.product_id for item in PRODUCT_DEFINITIONS)
 _PARAM_RES_TO_PRODUCT = {(item.parameter_id, item.resolution_time): item.product_id for item in PRODUCT_DEFINITIONS}
@@ -691,9 +654,9 @@ def build_products() -> ProductCatalog:
                 "product_id": item.product_id,
                 "observed_property": item.observed_property,
                 "frequency": item.frequency,
-                "statistic": item.statistic,
-                "period_type": item.period_type,
-                "period_anchor": item.period_anchor,
+                "statistic": "unknown",
+                "period_type": "unknown",
+                "period_anchor": "unknown",
                 "unit": item.canonical_unit,
                 "native_id": f"{item.parameter_id}:{item.resolution_time}",
             }

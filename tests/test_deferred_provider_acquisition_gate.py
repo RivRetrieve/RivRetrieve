@@ -94,7 +94,9 @@ def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence()
     candidate = artifact.station_products.filter(
         (pl.col("availability") == "unknown") & (pl.col("product_id") == "stage_instantaneous")
     ).row(0, named=True)
-    selection = rr.find(provider="br_ana", station=candidate["station_id"], quantity="stage", statistic="instantaneous")
+    selection = rr.find(
+        provider="br_ana", station=candidate["station_id"], quantity="stage", timestamp_anchor="measurement_time"
+    )
     assert selection.empty_reason is None
     assert len(selection.acquisition_provenance) == 1
     assert selection.acquisition_provenance[0].header.withheld_facts

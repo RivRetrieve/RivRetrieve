@@ -18,7 +18,7 @@ _DATA = Path(__file__).parent / "test_data"
 @pytest.mark.parametrize("parameter,quantity", [(1000, "stage"), (1001, "discharge"), (1003, "temperature")])
 @pytest.mark.parametrize(
     "resolution,frequency,statistic",
-    [(0, "irregular", "instantaneous"), (60, "hourly", "mean"), (1440, "daily", "mean")],
+    [(0, None, "instantaneous"), (60, "hourly", "mean"), (1440, "daily", "mean")],
 )
 def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cache(
     monkeypatch, tmp_path, parameter, quantity, resolution, frequency, statistic
@@ -47,6 +47,7 @@ def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cac
 
     result = fetch("bypass")
     raw = json.loads(observation.content)["data"][0]
+    assert all(f.frequency.value == frequency for item in result.source_series for f in item.facts)
     expected = pl.DataFrame(
         {"value": [item["value"] for item in raw["observations"] if item["time"].startswith("2025-07-10")]}
     )
