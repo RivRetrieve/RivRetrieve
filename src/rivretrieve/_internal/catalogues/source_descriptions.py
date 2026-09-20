@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import SeriesMapping
 from rivretrieve._internal.source_series import (
     ClippingAxis,
@@ -60,7 +61,25 @@ def generic_source_descriptions(
         product = row["product_id"]
         declared = config.products.get(product) if config is not None else None
         mapping = mappings.get(product) if mappings is not None else None
+        if mappings is not None and mapping is None:
+            raise FatalContractError(f"Product {product!r} has no explicit source mapping")
         if mapping is not None:
+            # Independent publisher definitions can resolve an old unknown, but an
+            # explicit withholding must be repaired at its acquisition boundary.
+            declared_facts = {
+                "product.observed_property": mapping.quantity,
+                "product.unit": mapping.source_unit,
+                "product.frequency": mapping.frequency,
+                "product.statistic": mapping.statistic,
+                "product.period_type": mapping.temporal_support,
+                "product.period_anchor": mapping.timestamp_anchor,
+                "product.native_id": mapping.published_id,
+            }
+            contradicted = {name for name, value in declared_facts.items() if value is not None and name in withheld}
+            if contradicted:
+                raise FatalContractError(
+                    f"Source mapping {product!r} reinstates withheld facts: {sorted(contradicted)}"
+                )
             result.append(
                 SourceDescription(
                     product_id=product,
@@ -77,11 +96,9 @@ def generic_source_descriptions(
         frequency = fact(row["frequency"], "product.frequency")
         daily = frequency.value == "daily"
         day = EvidenceFact()
-        anchor = EvidenceFact()
         label = None
         if declared is not None and isinstance(declared.semantics, Daily):
             label = declared.semantics.label_time.value
-            anchor = known(label, f"mapping:{provider}:{product}:label_time")
             value = declared.semantics.day_definition.value
             if value != "unknown":
                 day = known(value, f"mapping:{provider}:{product}:day_definition")
@@ -101,7 +118,6 @@ def generic_source_descriptions(
             statistic=fact(row["statistic"], "product.statistic"),
             temporal_support=fact(row["period_type"], "product.period_type"),
             day_definition=day,
-            timestamp_anchor=anchor,
             time_zone=known(zone, f"mapping:{provider}:time_zone") if zone != "unknown" else EvidenceFact(),
             clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
             label_time=label,
