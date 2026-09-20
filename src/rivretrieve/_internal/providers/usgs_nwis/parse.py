@@ -299,7 +299,11 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                     try:
                         for entry in observations:
                             stamp, zone = _parse_timestamp(entry["dateTime"], product.semantics)
-                            raw = entry.get("value")
+                            if "value" not in entry:
+                                raise ValueError("Observation entry is missing mandatory value")
+                            raw = entry["value"]
+                            if isinstance(raw, bool):
+                                raise ValueError("Boolean observation value is not a numeric measurement")
                             number = None if raw is None else float(raw)
                             if number == variable.get("noDataValue", -999999.0):
                                 number = None

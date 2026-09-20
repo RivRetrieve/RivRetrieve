@@ -630,3 +630,130 @@ def test_repeated_physical_fact_segment_keeps_all_definitions_and_owns_only_its_
     assert len(parsed.outcomes) == 2
     assert all(len(o.facts_ids) == 1 for o in parsed.outcomes)
     assert len({o.outcome_id for o in parsed.outcomes}) == 2
+
+
+@pytest.mark.parametrize("invalid", ["missing", "boolean"])
+@pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+def test_authored_missing_or_boolean_value_is_unsupported_not_null_or_number(monkeypatch, tmp_path, invalid, policy):
+    """Authored recorded-body derivative; not evidence of a new publisher response."""
+    import json
+    from contextlib import nullcontext
+    from copy import deepcopy
+
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    from rivretrieve._internal.issues import IssuePolicyError
+    from rivretrieve._internal.recordings import read_recording
+    from rivretrieve._internal.transport import TransportResponse
+
+    recording = read_recording(
+        Path(__file__).with_name("test_data") / "usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
+    )
+    document = json.loads(recording.content)
+    blocks = document["value"]["timeSeries"][0]["values"]
+    valid = deepcopy(blocks[0])
+    valid["method"][0]["methodID"] = 0
+    blocks.append(valid)
+    entry = next(entry for entry in blocks[0]["value"] if entry["dateTime"].startswith("2023-01-01T"))
+    if invalid == "missing":
+        del entry["value"]
+    else:
+        entry["value"] = True
+    content = json.dumps(document).encode()
+    calls = []
+
+    class AuthoredTransport:
+        def send(self, request):
+            assert request.url == recording.request.url
+            assert dict(request.params) == dict(recording.request.parameters)
+            calls.append(request)
+            return TransportResponse(
+                content, 200, recording.retrieved_at, recording.content_type, request.url, request.params
+            )
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(discovery, "HttpClient", AuthoredTransport)
+    selection = rr.find(
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    context = (
+        pytest.raises(IssuePolicyError)
+        if policy == "raise"
+        else pytest.warns(RuntimeWarning)
+        if policy == "warn"
+        else nullcontext()
+    )
+    with context as caught:
+        result = rr.fetch(
+            selection, start="2023-01-01", end="2023-01-01", cache="reuse", receipts=True, on_issue=policy
+        )
+    if policy == "raise":
+        assert caught.value.issues
+    else:
+        assert result.data.height == 1
+        assert {
+            s.identity.published_id for s in result.source_series if s.series_id in result.data["series_id"].to_list()
+        } == {"0"}
+        unsupported = [o for o in result.outcomes if o.status == "unsupported"]
+        assert len(unsupported) == 1
+        assert unsupported[0].series_id is not None
+        assert unsupported[0].facts_ids
+        assert not any(
+            o.status in ("success", "empty") and o.series_id == unsupported[0].series_id for o in result.outcomes
+        )
+        assert result.receipts.entries[0].content == content
+    # Reuse cannot turn the malformed method into positive or null coverage.
+    again = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="ignore")
+    assert len(calls) == 2
+    assert again.data.height == 1
+    assert any(o.status == "unsupported" for o in again.outcomes)
+
+
+@pytest.mark.parametrize("native_null", [None, "-999999"])
+def test_authored_explicit_null_or_published_sentinel_keeps_successful_null_coverage(
+    monkeypatch, tmp_path, native_null
+):
+    """Positive control distinguishes a published null/sentinel from malformed absence."""
+    import json
+
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    from rivretrieve._internal.recordings import read_recording
+    from rivretrieve._internal.transport import TransportResponse
+
+    recording = read_recording(
+        Path(__file__).with_name("test_data") / "usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
+    )
+    document = json.loads(recording.content)
+    entry = next(
+        entry
+        for entry in document["value"]["timeSeries"][0]["values"][0]["value"]
+        if entry["dateTime"].startswith("2023-01-01T")
+    )
+    entry["value"] = native_null
+    content = json.dumps(document).encode()
+    calls = []
+
+    class AuthoredTransport:
+        def send(self, request):
+            assert request.url == recording.request.url
+            assert dict(request.params) == dict(recording.request.parameters)
+            calls.append(request)
+            return TransportResponse(
+                content, 200, recording.retrieved_at, recording.content_type, request.url, request.params
+            )
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(discovery, "HttpClient", AuthoredTransport)
+    selection = rr.find(
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    first = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", receipts=True, on_issue="raise")
+    assert first.data.height == 1
+    assert first.data["value"].null_count() == 1
+    assert first.outcomes[0].status == "success"
+    assert first.receipts.entries[0].content == content
+    cached = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="raise")
+    assert len(calls) == 1
+    assert cached.data.height == 1
+    assert cached.data["value"].null_count() == 1

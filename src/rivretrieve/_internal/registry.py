@@ -14,7 +14,7 @@ import polars as pl
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.terms import verified_catalogue_terms
-from rivretrieve._internal.driver import ProviderStages, drive, drive_store
+from rivretrieve._internal.driver import ProviderStages, _finite_selector_assessments, drive, drive_store
 from rivretrieve._internal.engine import CanonicalRowsSchema, ProductWindowDeclarations, ProviderConfig, RequestedWindow
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.issues import (
@@ -37,6 +37,7 @@ from rivretrieve._internal.results import CatalogResult
 from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
+    RestrictionKind,
     RetrievalOutcome,
     SeriesScope,
     SeriesWindow,
@@ -302,14 +303,33 @@ class _ProviderHandle:
                 },
                 provider_id=self.provider_id,
             )
-            requested_scope = scope or SeriesScope()
+            requested_scope = scope or SeriesScope(
+                provider_ids=(str(self.provider_id),), station_ids=request.stations, product_ids=request.products
+            )
             window = SeriesWindow(
                 start=datetime.fromisoformat(request.start.isoformat()),
                 end=datetime.fromisoformat(request.end.isoformat()),
             )
-            outcomes = []
+            outcomes: list[RetrievalOutcome] = []
+            assessments: list[tuple[SeriesScope, SeriesWindow]] = []
+            issues = [
+                issue,
+                *_unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation),
+            ]
             for station in request.stations:
                 for product in request.products:
+                    assessments.append(
+                        (
+                            requested_scope.model_copy(
+                                update={
+                                    "provider_ids": (str(self.provider_id),),
+                                    "station_ids": (station,),
+                                    "product_ids": (product,),
+                                }
+                            ),
+                            window,
+                        )
+                    )
                     members = tuple(
                         definition
                         for definition in known_series
@@ -317,7 +337,10 @@ class _ProviderHandle:
                         and definition.product_id == product
                         and requested_scope.matches(definition)
                     )
-                    for definition in members or (None,):
+                    # Explicit missing members are accounted for by the shared
+                    # finite-selector assessment, not an anonymous duplicate.
+                    targets = members or ((None,) if requested_scope.restriction is RestrictionKind.ALL else ())
+                    for definition in targets:
                         series_id = definition.series_id if definition is not None else None
                         outcomes.append(
                             RetrievalOutcome(
@@ -343,6 +366,14 @@ class _ProviderHandle:
                                 reason=issue.message,
                             )
                         )
+            _finite_selector_assessments(
+                self.provider_id,
+                assessments,
+                {definition.series_id: definition for definition in known_series},
+                [],  # No compiled inventory was acquired from a missing store.
+                outcomes,
+                issues,
+            )
             return ObservationResult(
                 data=pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
                 source_series=known_series,
@@ -364,10 +395,7 @@ class _ProviderHandle:
                         "end": request.end.isoformat(),
                     },
                 ),
-                issues=(
-                    issue,
-                    *_unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation),
-                ),
+                issues=tuple(issues),
                 receipts=Receipts(provider_id=self.provider_id, entries=()),
             )
         assembled = drive_store(

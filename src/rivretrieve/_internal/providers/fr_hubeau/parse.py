@@ -70,7 +70,7 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
                     "fr_hubeau daily response contains an unexpected grandeur_hydro_elab"
                 )
             timestamp = _naive(row.get("date_obs_elab"))
-            value = _value(row.get("resultat_obs_elab"))
+            value = _value(row, "resultat_obs_elab")
             zone = "unknown"
         elif coordinates.family == "temperature":
             if row.get("code_station") != station:
@@ -82,14 +82,14 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             if not isinstance(date, str) or not isinstance(clock, str):
                 raise UnsupportedSourceStructureError("fr_hubeau temperature timestamp fields must be strings")
             timestamp = _naive(f"{date}T{clock}")
-            value = _value(row.get("resultat"))
+            value = _value(row, "resultat")
             zone = "unknown"
         else:
             raw_time = row.get("t")
             if not isinstance(raw_time, str) or not raw_time.endswith("Z"):
                 raise UnsupportedSourceStructureError("fr_hubeau HydroPortail timestamp must end in Z")
             timestamp = _naive(raw_time[:-1])
-            value = _value(row.get("v"))
+            value = _value(row, "v")
             zone = "+00:00"
         rows.append(
             {"station_id": station, "product_id": product, "time": timestamp, "value": value, "time_zone": zone}
@@ -110,7 +110,10 @@ def _naive(value: object) -> datetime:
     return parsed
 
 
-def _value(value: object) -> float | None:
+def _value(row: dict[str, object], field: str) -> float | None:
+    if field not in row:
+        raise UnsupportedSourceStructureError(f"fr_hubeau observation is missing its {field} measurement")
+    value = row[field]
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int | float):

@@ -277,3 +277,128 @@ def test_response_discovered_global_ids_are_settled_across_station_results(monke
     assert result.data.height == 2
     assert set(result.data["series_id"]) == set(identifiers)
     assert not any(item.requested_selector is not None for item in result.outcomes)
+
+
+@pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypatch, tmp_path, policy):
+    import warnings
+
+    recordings = tuple(
+        read_recording(
+            Path(__file__).parent
+            / f"test_data/no_nve_109.42.0_1001_1440_version-{version}_engine_2024-01-02.recording.json"
+        )
+        for version in (1, 2, 3)
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
+    calls = _counted_replay(monkeypatch, recordings)
+    broad = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean")
+    result = rr.fetch(broad, start="2024-01-02", end="2024-01-02", receipts=True, on_issue="ignore")
+    assert len(calls) == 3
+    inventory_warning = next(item for item in result.issues if item.code == "source.inventory_unresolved")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("A result view must not make a source request")
+
+    monkeypatch.setattr(ReplayTransport, "send", forbidden)
+    monkeypatch.setattr(discovery, "HttpClient", forbidden)
+    with warnings.catch_warnings(record=True) as emitted:
+        warnings.simplefilter("always")
+        narrowed = rr.pick(result, variant="2", on_issue=policy)
+    assert not emitted
+    assert narrowed.data.height == 1
+    assert narrowed.issues == result.issues
+    assert narrowed.inventories == result.inventories
+    assert narrowed.outcomes == result.outcomes
+    assert narrowed.provenance == result.provenance
+    assert narrowed.receipts == result.receipts
+    restored = rr.from_bundle(rr.to_bundle(narrowed))
+    assert restored.issues == result.issues
+    assert restored.inventories == result.inventories
+    assert restored.outcomes == result.outcomes
+    with pytest.raises(IssuePolicyError):
+        rr.pick(result, on_issue="raise")
+    with pytest.warns(RuntimeWarning):
+        rr.pick(result, on_issue="warn")
+    with pytest.raises(IssuePolicyError) as unresolved:
+        rr.pick(result, variant=("2", "not-established"), on_issue="raise")
+    assert inventory_warning in unresolved.value.issues
+    with pytest.warns(RuntimeWarning):
+        rr.pick(result, variant=("2", "not-established"), on_issue="warn")
+    assert len(calls) == 3
+
+    with warnings.catch_warnings(record=True) as positive_warnings:
+        warnings.simplefilter("always")
+        rr.pick(result, variant=("2", "3"), on_issue=policy)
+        null_view = rr.pick(result, variant="1", on_issue=policy)
+        assert null_view.data["value"].null_count() == 1
+        rr.pick(result, series_id=tuple(narrowed.data["series_id"].unique()), on_issue=policy)
+    assert not positive_warnings
+
+
+def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch, tmp_path):
+    """Use real Swiss acquisition/parsing with authored ALL-inventory diagnostics."""
+    import warnings
+
+    from rivretrieve._internal.engine import WithIssues
+    from rivretrieve._internal.issues import Issue
+    from rivretrieve._internal.providers.ch_foen.declaration import declaration
+    from rivretrieve._internal.source_series import SeriesScope
+
+    recording = read_recording(Path(__file__).parent / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+    calls = _counted_replay(monkeypatch, (recording,))
+    original = declaration.observations.stages.fetch
+
+    def acquire(stations, products, rendered_windows, fetch_window, config, transport, *, scope=None, known_series=()):
+        acquired = original(
+            stations,
+            products,
+            rendered_windows,
+            fetch_window,
+            config,
+            transport,
+            scope=scope,
+            known_series=known_series,
+        )
+        diagnostics = tuple(
+            Issue(
+                severity="warning",
+                code="source.inventory_unresolved",
+                message="Controlled inventory-completeness diagnostic",
+                details={
+                    "station_id": station,
+                    "product_id": product,
+                    "inventory_scope": SeriesScope(
+                        provider_ids=("ch_foen",), station_ids=(station,), product_ids=(product,)
+                    ).model_dump(mode="json"),
+                },
+            )
+            for station in stations
+            for product in products
+        )
+        return WithIssues(acquired.value, (*acquired.issues, *diagnostics))
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(declaration.observations.stages, "fetch", staticmethod(acquire))
+    result = rr.fetch(
+        rr.find(provider="ch_foen", station="2251"),
+        start="2026-09-19T00:00:00",
+        end="2026-09-19T03:00:00",
+        on_issue="ignore",
+    )
+    target = next(item.series_id for item in result.source_series if item.variant == "height_abs")
+    assert result.data["series_id"].n_unique() == 2
+    count = len(calls)
+    with warnings.catch_warnings(record=True) as emitted:
+        warnings.simplefilter("always")
+        narrowed = rr.pick(result, series_id=target, on_issue="raise")
+    assert not emitted
+    assert narrowed.data.height == 4
+    assert narrowed.outcomes == result.outcomes
+    assert narrowed.issues == result.issues
+    rr.pick(result, series_id=tuple(result.data["series_id"].unique()), on_issue="raise")
+    with pytest.raises(IssuePolicyError) as unresolved:
+        rr.pick(result, series_id="unresolved-global-id", on_issue="raise")
+    assert any(item.code == "source.inventory_unresolved" for item in unresolved.value.issues)
+    assert len(calls) == count

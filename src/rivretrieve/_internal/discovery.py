@@ -26,7 +26,7 @@ from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.selection import _station_keys as _selection_station_keys
-from rivretrieve._internal.source_series import SourceSeries
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
@@ -247,7 +247,7 @@ def pick(
 def _issue_applies_to_view(issue: Issue, result: ObservationResult) -> bool:
     """Report only view-relevant findings while retaining original acquisition history."""
     from rivretrieve._internal.selection import _intersect_scope, _selection_scope
-    from rivretrieve._internal.source_series import RequestedSelector, ScopeState, SeriesScope
+    from rivretrieve._internal.source_series import RequestedSelector, RestrictionKind, ScopeState, SeriesScope
 
     scope = result.view_scope or result.scope
     if scope.state is ScopeState.EMPTY:
@@ -272,6 +272,30 @@ def _issue_applies_to_view(issue: Issue, result: ObservationResult) -> bool:
         scope = _intersect_scope(scope, SeriesScope.model_validate(recorded_scope))
     if scope.state is ScopeState.EMPTY:
         return False
+    inventory_scope = details.get("inventory_scope")
+    if (
+        issue.code == "source.inventory_unresolved"
+        and inventory_scope is not None
+        and all(details.get(field) is None for field in ("series_id", "requested_selector", "outcome_id"))
+    ):
+        acquired = SeriesScope.model_validate(inventory_scope)
+        if acquired.restriction is RestrictionKind.ALL:
+            scope = _intersect_scope(scope, acquired)
+            if scope.state is ScopeState.EMPTY:
+                return False
+            if scope.series_ids:
+                definitions = {item.series_id: item for item in result.source_series}
+                coordinates = acquired.model_copy(update={"predicates": ()})
+                local_ids = tuple(
+                    identifier
+                    for identifier in scope.series_ids
+                    if identifier not in definitions or coordinates.matches(definitions[identifier])
+                )
+                if not local_ids:
+                    return False
+                scope = scope.model_copy(update={"series_ids": local_ids})
+            if _finite_view_members_represented(scope, result):
+                return False
     identity_scope = scope.model_copy(update={"predicates": ()})
 
     def could_match(definition: SourceSeries) -> bool:
@@ -292,6 +316,35 @@ def _issue_applies_to_view(issue: Issue, result: ObservationResult) -> bool:
         return any(could_match(definitions[identifier]) for identifier in scope.series_ids)
     # A finding with no narrower source attribution remains relevant to the request.
     return True
+
+
+def _finite_view_members_represented(scope: SeriesScope, result: ObservationResult) -> bool:
+    """Positive per-member retrieval evidence does not assert exhaustive inventory."""
+    from rivretrieve._internal.source_series import OutcomeStatus, RestrictionKind, ScopeState
+
+    if scope.state is ScopeState.EMPTY or scope.restriction is not RestrictionKind.EXPLICIT:
+        return False
+    members = tuple(
+        scope.model_copy(update={field: (value,)})
+        for field in ("variants", "series_ids")
+        for value in getattr(scope, field)
+    )
+    if not members:
+        return False
+    definitions = {item.series_id: item for item in result.source_series}
+
+    def represented(member: SeriesScope) -> bool:
+        for outcome in result.outcomes:
+            if outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                continue
+            definition = definitions.get(outcome.series_id) if outcome.series_id is not None else None
+            if definition is None or not member.matches(definition):
+                continue
+            if any(facts.facts_id in outcome.facts_ids and member.matches_facts(facts) for facts in definition.facts):
+                return True
+        return False
+
+    return all(represented(member) for member in members)
 
 
 def series(value: _Selection | ObservationResult) -> pl.DataFrame:

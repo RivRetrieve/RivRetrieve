@@ -87,7 +87,20 @@ def fetch(
                         severity="warning",
                         code="source.inventory_unresolved",
                         message="HydAPI enumeration uses the acquired catalogue version inventory; current or historical completeness remains unresolved",
-                        details={"station_id": station, "product_id": product, "versions": sorted(versions)},
+                        details={
+                            "station_id": station,
+                            "product_id": product,
+                            "versions": sorted(versions),
+                            "inventory_scope": (scope or SeriesScope())
+                            .model_copy(
+                                update={
+                                    "provider_ids": ("no_nve",),
+                                    "station_ids": (station,),
+                                    "product_ids": (str(product),),
+                                }
+                            )
+                            .model_dump(mode="json"),
+                        },
                         provider_id=ProviderId("no_nve"),
                     )
                 )
