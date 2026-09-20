@@ -213,3 +213,14 @@ def test_iv_meaning_cites_retained_primary_definition_not_typical_cadence():
         assert provenance["url"] in facts.statistic.evidence
         assert provenance["url"] in facts.temporal_support.evidence
         assert facts.frequency.value is None
+
+
+def test_daily_midnight_labels_are_not_evidence_of_a_physical_timestamp_anchor():
+    parsed = parse(_payload(read_recording(DV).content, "discharge_daily_mean"), config())
+    assert parsed.rows.height == 3
+    for series in parsed.series:
+        facts = series.facts[0]
+        assert facts.timestamp_anchor.value is None
+        assert facts.timestamp_anchor.state == "not_established"
+        assert facts.label_time == "00:00"
+        assert facts.clipping_axis == "calendar_date"

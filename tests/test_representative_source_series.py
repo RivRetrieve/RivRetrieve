@@ -179,7 +179,7 @@ def test_nve_all_known_versions_are_requested_separately_with_null_series_preser
 
     config = nve_config()
     product = ProductId("discharge_daily_mean")
-    recordings = []
+    recordings = [read_recording("tests/test_data/no_nve_109.42.0_1001_series.recording.json")]
     known = []
     for version in (1, 2, 3):
         path = f"tests/test_data/no_nve_109.42.0_1001_1440_version-{version}_2024-01-01_2024-01-03.recording.json"
@@ -206,7 +206,8 @@ def test_nve_all_known_versions_are_requested_separately_with_null_series_preser
         [20.30248, 26.9778],
     ]
     assert all(item.outcomes[0].status.value == "success" for item in parsed)
-    assert any(issue.code == "source.inventory_unresolved" for issue in acquired.issues)
+    assert acquired.inventories[0].completeness == "complete"
+    assert not acquired.issues
 
 
 def test_swiss_stage_reference_is_not_inferred_from_field_name():

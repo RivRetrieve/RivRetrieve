@@ -183,3 +183,23 @@ def test_public_cache_reuse_needs_no_new_exchange_or_observation(monkeypatch: py
     assert live.receipts.entries == cached.receipts.entries == ()
     assert cached.provenance.served_intervals
     assert transport.exchange_calls == transport.observation_calls == 1
+
+
+def test_unrestricted_telemetry_keeps_incomplete_inventory_and_reacquires(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = _authenticated_replay(monkeypatch)
+    selection = rr.find(provider="br_ana", station="15400000", quantity="stage", statistic="instantaneous")
+    first = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
+    assert first.data.height == 5
+    assert all(snapshot.completeness.value == "incomplete" for snapshot in first.inventories)
+    assert any("Cota_Sensor" in (snapshot.reason or "") for snapshot in first.inventories)
+    calls = transport.observation_calls
+    repeated = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
+    assert transport.observation_calls > calls
+    pl_testing.assert_frame_equal(first.data, repeated.data)
+    assert all(entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for entry in repeated.receipts.entries)
+    restricted = rr.pick(selection, variant="Cota_Adotada")
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
+    cached = rr.fetch(restricted, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
+    pl_testing.assert_frame_equal(cached.data, first.data)
+    assert all(entry.authorship is ReceiptAuthorship.STORE_EXCERPT for entry in cached.receipts.entries)
+    assert cached.provenance.served_intervals

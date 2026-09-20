@@ -15,7 +15,7 @@ def describe_catalogue(artifact: PackagedCatalogArtifact, *, config: ProviderCon
         return SourceDescriptions(provider_id=provider, descriptions=())
     generic = generic_source_descriptions(artifact, config)
     from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates
-    from rivretrieve._internal.providers.br_ana.parse import describe_series
+    from rivretrieve._internal.providers.br_ana.series import describe_series
 
     if config is None:
         raise ValueError("ANA descriptions require explicit native source coordinates")
@@ -36,6 +36,7 @@ def describe_catalogue(artifact: PackagedCatalogArtifact, *, config: ProviderCon
             update={
                 name: getattr(facts, name).model_copy(update={"evidence": (ref,)})
                 for name in ("quantity", "source_unit", "frequency", "statistic", "timestamp_anchor")
+                if getattr(facts, name).evidence
             }
         )
         descriptions.append(

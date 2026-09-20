@@ -5,6 +5,7 @@ from typing import Literal
 from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates
 from rivretrieve._internal.source_series import (
     ClippingAxis,
+    EvidenceFact,
     PhysicalFacts,
     SourceIdentity,
     SourceSeries,
@@ -38,7 +39,7 @@ def describe_series(
         normalized_unit=source_unit,
         frequency=known("daily", evidence) if daily else known("irregular", evidence),
         statistic=known("mean" if daily else "instantaneous", evidence),
-        timestamp_anchor=known("00:00", evidence) if daily else known("measurement_time", evidence),
+        timestamp_anchor=EvidenceFact() if daily else known("measurement_time", evidence),
         clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
         label_time="00:00" if daily else None,
     )

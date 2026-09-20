@@ -397,3 +397,13 @@ def test_real_null_daily_status_does_not_discard_published_value() -> None:
         issue.code == "source_status" and issue.details is not None and issue.details["source_status"] is None
         for issue in result.issues
     )
+
+
+def test_daily_label_is_not_an_established_interval_anchor() -> None:
+    parsed = parse(_payload("stage_daily_mean_bruto", "2020-01"), config())
+    assert {item.variant for item in parsed.series} == {"bruto", "consistido"}
+    for series in parsed.series:
+        facts = series.facts[0]
+        assert facts.label_time == "00:00"
+        assert facts.timestamp_anchor.value is None
+        assert facts.timestamp_anchor.evidence == ()
