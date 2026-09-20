@@ -231,7 +231,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             )
         )
         manifest = {
-            "format_version": 6,
+            "format_version": 7,
             "provider_id": str(provider_id),
             "built_at": datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z"),
             "coverage": [_coverage_json(item) for item in held],

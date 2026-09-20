@@ -67,7 +67,7 @@ selection_path.write_bytes(rr.to_bundle(chosen_gauges))
 restored_gauges = rr.from_bundle(selection_path.read_bytes())
 ```
 
-Bundle version `1` preserves intent, identities, physical evidence and inventory state. Import validates
+Bundle version `2` preserves intent, identities, physical evidence and inventory state. Import validates
 the bundle without rebuilding identities from today's catalogue. Bare frame imports through
 `from_frame` are refused. For custom Polars filtering, inspect a frame and pass selected identifiers
 back to `pick`; a frame is not a lossless selection export.
@@ -302,7 +302,7 @@ successful coverage. RivRetrieve records retrieval times but leaves freshness ju
 Set `RIVRETRIEVE_CACHE_DIR` to choose a cache location. Without an override, RivRetrieve uses
 the platform's user cache directory. `cache_status` inspects local state without network access
 and refuses malformed or unsupported stores. Current compiled stores use revision `5`; live
-accumulated stores use revision `6`. Incompatible old files remain intact until explicit cleanup
+accumulated stores use revision `7`. Incompatible old files remain intact until explicit cleanup
 or rebuild; old collapsed observations are not assigned invented identities. `clear_cache(provider)` deletes that provider's store and pending recovery
 inputs, including preserved downloads. It returns a removal summary and leaves other providers
 alone. See [architecture](architecture.md#storage-and-reuse) for storage details.

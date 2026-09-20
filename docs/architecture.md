@@ -160,7 +160,7 @@ They share a reader and format family but preserve different information.
 | Live `cache="refresh"` | Replacement answer for the successfully retrieved requested interval | Fetch and parse again, convert, update storage, assemble |
 | Bulk | Certified compiled publisher observations | Read store, convert, assemble without provider fetch or parse |
 
-Accumulated stores use format revision `6`.
+Accumulated stores use format revision `7`.
 Their coverage records which closed intervals were successfully retrieved and when, including successful empty answers.
 Coverage is per concrete series and interval, separate from inventory knowledge. All-series reuse
 requires a complete inventory for the recorded scope and vintage, plus coverage of every required
@@ -182,7 +182,7 @@ The artifact is deleted after successful publication.
 Its URLs, checksums, and source vintage survive in the manifest, but its identity cannot reconstruct unavailable publisher bytes.
 Readers refuse unsupported manifest revisions before opening observation files.
 Packaged catalogue format revision `2`, source-series definition schema `1` and export bundle
-version `1` are explicit contracts.
+version `2` are explicit contracts.
 Old collapsed rows, triple-only frame imports and incompatible stores are refused, not assigned
 invented identities. Rebuild or refetch explicitly; refusal leaves old files intact.
 `cache_status` inspects local state, and `clear_cache` is the explicit destructive boundary.

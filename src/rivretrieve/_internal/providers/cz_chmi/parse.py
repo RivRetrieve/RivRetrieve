@@ -63,14 +63,19 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
         raise FatalContractError("cz_chmi payload request coordinates differ from its product tags")
 
     found: set[str] = set()
+    malformed_identity = False
     records: list[dict[str, object]] = []
     for raw_series in series:
         if not isinstance(raw_series, dict):
             raise UnsupportedSourceStructureError("cz_chmi time-series entry must be an object")
         ts_con_id = raw_series.get("tsConID")
+        if not isinstance(ts_con_id, str):
+            # An unassignable source entry must not discard identified siblings.
+            malformed_identity = True
+            continue
         if ts_con_id not in requested:
             continue
-        if not isinstance(ts_con_id, str) or ts_con_id in found:
+        if ts_con_id in found:
             raise UnsupportedSourceStructureError("cz_chmi requested time series must occur exactly once")
         found.add(ts_con_id)
         product_id = requested[ts_con_id]
@@ -106,7 +111,10 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             )
     missing = sorted(set(requested) - found)
     if missing:
-        raise UnsupportedSourceStructureError(f"cz_chmi payload is missing requested time series: {', '.join(missing)}")
+        detail = "; tsConID identity must be a string" if malformed_identity else ""
+        raise UnsupportedSourceStructureError(
+            f"cz_chmi payload is missing requested time series: {', '.join(missing)}{detail}"
+        )
     rows = pl.DataFrame(records, schema=NATIVE_SCHEMA)
     return WithIssues(value=rows, issues=())
 
@@ -134,9 +142,14 @@ def _utc_wall_clock(value: object, series: str, row_number: int) -> datetime:
     if not isinstance(value, str) or not value.endswith("Z"):
         raise UnsupportedSourceStructureError(f"cz_chmi {series} row {row_number} timestamp must have a UTC Z suffix")
     try:
-        return datetime.fromisoformat(value[:-1])
+        wall_clock = datetime.fromisoformat(value[:-1])
     except ValueError as error:
         raise UnsupportedSourceStructureError(f"cz_chmi {series} row {row_number} timestamp is invalid") from error
+    if wall_clock.tzinfo is not None:
+        raise UnsupportedSourceStructureError(
+            f"cz_chmi {series} row {row_number} timestamp has an offset before its UTC Z suffix"
+        )
+    return wall_clock
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
