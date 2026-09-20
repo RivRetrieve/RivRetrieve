@@ -93,7 +93,7 @@ def test_two_sources_one_reader(tmp_path: Path, monkeypatch) -> None:
         stations="02GA010", products="discharge_daily_mean", start="2020-01-01", end="2020-12-31", on_issue="ignore"
     )
     pl = registry.get("pl_imgw").observations(
-        stations="151140030", products="discharge_daily_mean", start="2023-01-01", end="2023-12-31", on_issue="ignore"
+        stations="151140030", products="discharge_daily", start="2023-01-01", end="2023-12-31", on_issue="ignore"
     )
 
     assert calls == ["ca_eccc", "pl_imgw"]

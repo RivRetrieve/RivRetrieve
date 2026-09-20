@@ -11,6 +11,7 @@ from rivretrieve._internal.acquisition_provenance import (
     EvidenceReference,
     ExternalFactReference,
     FactBinding,
+    MaterialIdentity,
     NativeTableIdentity,
     RecordingReference,
     SemanticDigest,
@@ -132,18 +133,42 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         retrieved_at_start=datetime.fromisoformat("2026-08-02T18:47:00Z"),
         retrieved_at_end=datetime.fromisoformat("2026-08-02T18:47:09Z"),
     )
-    runtime = AcquisitionRecord(
-        acquisition_id="observation_request",
-        method="runtime_http_request",
-        instant_type="runtime",
-        description="Exact DWS Verified Hydrology HyData.aspx request and response retained at runtime",
-        requested_from=("https://www.dws.gov.za/hydrology/Verified/HyData.aspx",),
+    definitions = tuple(
+        AcquisitionRecord(
+            acquisition_id=f"{kind}_field_definitions_repository_recovery",
+            method="repository_recovery",
+            instant_type="provenance_lower_bound",
+            description=(
+                f"Historical {kind} response fixture recovered unchanged from commit df1b17778fb1f5d8db8eb3a803822571dc1dde85; "
+                "commit attests live capture; instant is repository provenance lower bound, not HTTP capture. "
+                "Point response completeness is unestablished. Used for field definitions only."
+            ),
+            requested_from=(
+                f"https://github.com/RivRetrieve/RivRetrieve/blob/df1b17778fb1f5d8db8eb3a803822571dc1dde85/tests/test_data/za_dws_X3H001_{kind}_2020-01.txt",
+            ),
+            retrieved_at_start=datetime.fromisoformat("2026-06-11T09:28:43Z"),
+            material=MaterialIdentity(filename=filename, byte_count=size, sha256=digest),
+        )
+        for kind, filename, size, digest in (
+            (
+                "daily",
+                "X3H001_daily_2020-01.html",
+                2188,
+                "d7edcd596883840c36800535c9ad7eaa52fc3d920c837ad134b902c96fa31d20",
+            ),
+            (
+                "point",
+                "X3H001_point_2020-01.html",
+                5134,
+                "7b266fa724354709d1c3cb5602e0bf1b5bfa80e09bc5b272d4145d6153d88ae4",
+            ),
+        )
     )
     source = SourceRecord(
         source_id="za_dws",
         issuer="South African Department of Water and Sanitation",
         operator="DWS Verified Hydrology",
-        acquisitions=(catalogue, runtime),
+        acquisitions=(catalogue, *definitions),
         evidence=(
             EvidenceReference(
                 evidence_id="za_dws_verified_landing_terms_absence",
@@ -157,7 +182,11 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             ),
             EvidenceReference(
                 evidence_id="za_dws_observation_terms_absence",
-                description="Archived observation-shaped response examined without an applicable terms or citation statement",
+                description=(
+                    "Archived A2H023 Monthly response publishes Variable 100.00 Surface Water Level "
+                    "and monthly volumes in million cubic metres; no equivalence with D_AVG_FR, "
+                    "COR_FLOW or COR_LEVEL is established. No applicable terms or citation statement."
+                ),
                 recording=observation_terms,
             ),
         ),
@@ -185,22 +214,22 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             acquisition_id=catalogue.acquisition_id,
         ),
         FactBinding(
-            fact_group="product_identity",
-            facts=("source.product.dws_datatype_and_file_semantics",),
+            fact_group="daily_product_identity",
+            facts=("source.product.daily_field_definition",),
             source_id="za_dws",
-            acquisition_id=catalogue.acquisition_id,
+            acquisition_id=definitions[0].acquisition_id,
+        ),
+        FactBinding(
+            fact_group="point_product_identity",
+            facts=("source.product.point_field_definitions",),
+            source_id="za_dws",
+            acquisition_id=definitions[1].acquisition_id,
         ),
         FactBinding(
             fact_group="station_product_availability",
             facts=("source.station_product.availability_not_published",),
             source_id="za_dws",
             acquisition_id=catalogue.acquisition_id,
-        ),
-        FactBinding(
-            fact_group="observation_values",
-            facts=("source.observation.dws_fixed_format_values_quality_and_time",),
-            source_id="za_dws",
-            acquisition_id=runtime.acquisition_id,
         ),
     )
     facts = tuple(f for b in bindings for f in b.facts)
@@ -235,7 +264,8 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
                     "source.station.dws_station_code",
                     "source.station.dws_unsigned_dms",
                     "source.station.horizontal_crs_not_published",
-                    "source.product.dws_datatype_and_file_semantics",
+                    "source.product.daily_field_definition",
+                    "source.product.point_field_definitions",
                     "source.station_product.availability_not_published",
                 )
             ),

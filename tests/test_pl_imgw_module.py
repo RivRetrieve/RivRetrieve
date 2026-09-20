@@ -6,8 +6,8 @@ from rivretrieve._internal.results import CatalogResult
 from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 BULK_OBSERVATIONS = (
-    "true: the source publishes all-station yearly ZIP files; RivRetrieve's "
-    "catalogue-only provider exposes neither observation retrieval nor cache controls"
+    "true: explicit download compiles the publisher's monthly or annual ZIP archives "
+    "into a local native observation store; retrieval reads that store without network access"
 )
 
 
@@ -22,9 +22,9 @@ def test_pl_imgw_products_offline() -> None:
     result = catalogue_reader("pl_imgw").read_products()
     assert result.data.height == 3
     assert set(result.data["product_id"].to_list()) == {
-        "discharge_daily_mean",
-        "stage_daily_mean",
-        "water_temperature_daily_mean",
+        "discharge_daily",
+        "stage_daily",
+        "water_temperature_daily",
     }
 
 
@@ -65,3 +65,46 @@ def test_pl_imgw_generator_and_packaged_bulk_observations_match() -> None:
         "citation",
     )
     assert provider_info("pl_imgw").bulk_observations == BULK_OBSERVATIONS
+
+
+def test_provider_metadata_describes_explicit_compiled_store_access() -> None:
+    from datetime import date
+
+    from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_provider_info
+
+    text = str(build_provider_info(date(2026, 9, 20))["bulk_observations"])
+    assert "catalogue-only" not in text
+    assert "explicit" in text
+    assert "monthly" in text and "annual" in text
+
+
+def test_precise_mean_filter_does_not_admit_unestablished_imgw_statistics() -> None:
+    for quantity in ("discharge", "stage", "temperature"):
+        broad = rr.find(provider="pl_imgw", station="154210010", quantity=quantity)
+        descriptions = rr.series(broad)
+        assert descriptions.height == 1
+        assert descriptions["admission"].to_list() == ["supported"]
+        precise = rr.pick(broad, frequency="daily", statistic="mean", on_issue="ignore")
+        assert not precise.series
+        direct = rr.find(
+            provider="pl_imgw",
+            station="154210010",
+            quantity=quantity,
+            frequency="daily",
+            statistic="mean",
+            on_issue="ignore",
+        )
+        assert not direct.series
+        facts = broad.series[0].facts[0]
+        assert facts.statistic.value is None
+        assert facts.timestamp_anchor.value is None
+        assert facts.time_zone.value is None
+
+
+def test_catalogue_native_coordinates_use_publisher_field_codes() -> None:
+    products = catalogue_reader("pl_imgw").read_products().data
+    assert dict(products.select("product_id", "native_id").iter_rows()) == {
+        "discharge_daily": "COPRZP",
+        "stage_daily": "COSTAN",
+        "water_temperature_daily": "COPTMP",
+    }

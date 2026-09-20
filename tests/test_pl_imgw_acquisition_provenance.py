@@ -459,9 +459,7 @@ def test_packaged_poland_provenance_propagates_with_source_series_context() -> N
     assert artifact.acquisition_provenance is not None
     assert len(artifact.acquisition_provenance.header.source_records) == 2
     result = CatalogueReader(artifact, ProviderId("pl_imgw")).read_stations(on_issue="raise")
-    selection = rr.find(
-        provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily")
     assert result.provenance.acquisition_provenance is artifact.acquisition_provenance
     assert len(selection.acquisition_provenance) == 1
     assert_evidence_equal(selection.acquisition_provenance[0], artifact.acquisition_provenance)
@@ -470,14 +468,12 @@ def test_packaged_poland_provenance_propagates_with_source_series_context() -> N
     assert frame["quantity"].to_list() == ["discharge"]
     assert frame["source_unit"].to_list() == ["m3/s"]
     assert frame["frequency"].to_list() == ["daily"]
-    assert frame["statistic"].to_list() == ["mean"]
+    assert frame["statistic"].to_list() == [None]
     assert next(location for location in selection.locations if location.station_id == "149180010").crs == "unknown"
 
 
 def test_poland_observation_result_propagates_two_sources_and_series_context() -> None:
-    selection = rr.find(
-        provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily")
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-02", on_issue="ignore")
 
     assert result.data.schema == CanonicalRowsSchema.polars_schema
@@ -586,3 +582,14 @@ def test_poland_builder_rejects_an_arbitrary_structurally_valid_private_pin() ->
 
     with pytest.raises(FatalContractError, match="private verification record identity mismatch"):
         build_acquisition_provenance(fake)
+
+
+def test_archive_physics_lineage_uses_recorded_definitions_not_station_roster():
+    provenance = build_acquisition_provenance()
+    binding = next(
+        item for item in provenance.fact_bindings if "source.imgw.observation_archive_product_semantics" in item.facts
+    )
+    assert binding.acquisition_id == "imgw_archive_definitions_2026_09_20"
+    source = provenance.source_records[0]
+    records = {item.recording.recording_id for item in source.evidence if item.recording is not None}
+    assert {"pl_imgw_codz_format", "pl_imgw_yearbook_2025"}.issubset(records)

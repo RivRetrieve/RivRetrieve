@@ -67,7 +67,13 @@ from rivretrieve._internal.source_series import (
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
 from rivretrieve._internal.store.receipts import encode_store_excerpt
-from rivretrieve._internal.store.validation import AccumulatedStoreManifest, StoreManifest
+from rivretrieve._internal.store.validation import (
+    AccumulatedStoreManifest,
+    ObservationStoreRefusedError,
+    StoreManifest,
+    StoreRefusal,
+    StoreRefusalKind,
+)
 from rivretrieve._internal.transport import (
     AuthenticationCapability,
     HttpClient,
@@ -1530,6 +1536,16 @@ def drive_store(
     if not isinstance(status.manifest, StoreManifest):
         raise FatalContractError("Bulk retrieval requires a compiled store")
     manifest = status.manifest
+    retired_products = sorted({item.product_id for item in manifest.series} - set(config.products))
+    if retired_products:
+        raise ObservationStoreRefusedError(
+            StoreRefusal(
+                StoreRefusalKind.INCOMPATIBLE,
+                store,
+                request.provider_id,
+                f"compiled source products are no longer supported: {', '.join(retired_products)}",
+            )
+        )
     selected = tuple(item for item in manifest.series if scope.matches(item))
     matching_facts = tuple(
         dict.fromkeys(
