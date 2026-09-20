@@ -56,8 +56,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "c707b34bd7f135fd98b6c64eb4bbc8e8b24898cb5a806fb84f077da2532943b8",
-      "contentSize": "2509 B"
+      "sha256": "0ce7800ee5453927daa243b00df14954df16c65e9d4bfdf2859433fe110db6be",
+      "contentSize": "2500 B"
     },
     {
       "@id": "stations.parquet",

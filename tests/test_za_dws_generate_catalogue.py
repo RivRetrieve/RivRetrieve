@@ -565,7 +565,7 @@ def _expected_products() -> pl.DataFrame:
             "frequency": "daily",
             "statistic": "mean",
             "period_type": "interval",
-            "period_anchor": "provider_defined",
+            "period_anchor": "unknown",
             "unit": "m3/s",
             "native_id": "D AVG F/R",
         },
@@ -679,7 +679,7 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     generated = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
 
     provider_digest = "af62d231a82f2a60fa6355ceb690e15ce565eef0528036f678d4605b7c252f35"
-    products_digest = "4364721401cf97ab036fc3d1d43283fbb10738cb332592bb70e9e5af06c74a5c"
+    products_digest = "bbe6633d03088e2e8187ef355919deefd99110f006d047a41fa4181174aec7ad"
     stations_digest = "362736b7f95535b309118c51eb5c21e8f0d0b52b06858f295fc7b44ecff2c562"
     station_products_digest = "8b481dfdb358de66749239f622b567a4386423cd2849651735f1d54b1482a02f"
     assert _provider_content_sha256(provider_info) == provider_digest
