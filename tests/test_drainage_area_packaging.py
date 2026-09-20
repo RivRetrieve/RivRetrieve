@@ -65,12 +65,15 @@ def test_installed_drainage_areas_offline(distribution: str) -> None:
         # Reuse dependency directories without executing their editable-install .pth files.
         sites = tuple((environment / "lib").glob("python*/site-packages"))
         assert len(sites) == 1
-        dependency_paths = [
-            path
-            for path in sys.path
-            if Path(path).name == "site-packages" and Path(path).is_relative_to(Path(sys.prefix))
-        ]
+        dependency_paths = list(
+            dict.fromkeys(
+                str(Path(path).resolve())
+                for path in sys.path
+                if Path(path).is_absolute() and Path(path).name == "site-packages" and Path(path).is_dir()
+            )
+        )
         assert dependency_paths
+        assert all(not Path(path).is_relative_to(repository / "src") for path in dependency_paths)
         (sites[0] / "project_dependencies.pth").write_text("\n".join(dependency_paths) + "\n")
         # No inherited provider credentials, dotenv files, or Python import overrides.
         clean_environment = {"PATH": os.environ["PATH"], "HOME": str(execution)}
