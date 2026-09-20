@@ -277,11 +277,82 @@ def test_v3_parse_never_constructs_old_national_models(monkeypatch):
 # Brazil has new adopted-product acquisitions after this migration oracle.
 # Its current evidence still passes the all-provider lossless roundtrip above;
 # source-material and per-pair assertions live in test_br_ana_catalogue_telemetry.
+def _assert_usgs_definition_extension_and_restore_original(provenance):
+    """Prove the exact new publisher evidence, then compare every original assertion."""
+    model = provenance.model_dump(mode="json")
+    fact = "source.usgs.instantaneous_value_definition"
+    recording_id = "usgs_nwis_instantaneous_values_definition"
+    acquisition_id = "instantaneous_values_definition_capture_2026_09_19"
+    source_url = "https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/"
+    retrieved_at = "2026-09-19T20:58:46.743636Z"
+    digest = "1cec37f8cec8173f635d4afaba2d08814347d9cff672b25c29d427b004d0b3a2"
+    repository_path = "tests/test_data/usgs_nwis_instantaneous_values_definition.html"
+    source_bytes = (Path(__file__).parents[1] / repository_path).read_bytes()
+    assert sha256(source_bytes).hexdigest() == digest
+    assert b"most recent instantaneous value" in source_bytes
+    expected_acquisition = {
+        "acquisition_id": acquisition_id,
+        "method": "http_request",
+        "instant_type": "retrieval",
+        "description": "Publisher Instantaneous Values Service Details documentation calls the returned measurement an instantaneous value; it does not establish a concrete series sampling frequency.",
+        "requested_from": [source_url],
+        "retrieved_at_start": retrieved_at,
+        "retrieved_at_end": None,
+        "recording_ids": [recording_id],
+        "material": None,
+    }
+    expected_evidence = {
+        "evidence_id": "usgs_instantaneous_value_definition",
+        "description": 'Publisher service documentation: "most recent instantaneous value"; the service request URL is /nwis/iv/.',
+        "recording": {
+            "recording_id": recording_id,
+            "repository_path": repository_path,
+            "source_url": source_url,
+            "retrieved_at": retrieved_at,
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": digest,
+        },
+    }
+    expected_binding = {
+        "fact_group": "instantaneous_value_definition",
+        "facts": [fact],
+        "source_id": "usgs_nwis",
+        "acquisition_id": acquisition_id,
+    }
+    assert model["fact_universe"].count(fact) == 1
+    assert model["fact_universe"][0] == fact
+    source = next(item for item in model["source_records"] if item["source_id"] == "usgs_nwis")
+    assert [item for item in source["acquisitions"] if item["acquisition_id"] == acquisition_id] == [
+        expected_acquisition
+    ]
+    assert source["acquisitions"][-1] == expected_acquisition
+    assert [item for item in source["evidence"] if item["evidence_id"] == expected_evidence["evidence_id"]] == [
+        expected_evidence
+    ]
+    assert source["evidence"][0] == expected_evidence
+    assert [item for item in model["fact_bindings"] if item["fact_group"] == expected_binding["fact_group"]] == [
+        expected_binding
+    ]
+    assert model["fact_bindings"][0] == expected_binding
+    # Remove only the exact, separately verified additions. All other contents
+    # and their complete original order remain subject to the pinned v2 oracle.
+    model["fact_universe"].pop(0)
+    source["acquisitions"].pop()
+    source["evidence"].pop(0)
+    model["fact_bindings"].pop(0)
+    return AcquisitionProvenance.model_validate(model)
+
+
 @pytest.mark.parametrize("provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider != "br_ana"))
 def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
     assert oracle["revision"] == "6f0edf6a455735cb1f8c858a1a9f35d4245cf209"
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
     restored = _legacy(provider)
+    if provider == "usgs_nwis":
+        restored = _assert_usgs_definition_extension_and_restore_original(restored)
+        assert oracle["providers"][provider]["ordered_model_sha256"] == (
+            "28e9cc34f71f4fd3712c69cc205c30b8c70d55270cfc04f90e991a55121450a0"
+        )
     ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
     assert sha256(ordered.encode()).hexdigest() == oracle["providers"][provider]["ordered_model_sha256"]

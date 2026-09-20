@@ -2,6 +2,8 @@ from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
 
+import polars as pl
+
 from rivretrieve._internal.engine import (
     RenderedWindow,
     SourceQuery,
@@ -133,4 +135,24 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
         "source_path",
         "query",
         "station_products",
+        "series_ids",
     }
+    expected_fields = {
+        "discharge_reported": (("flow", "success"), ("flow_ls", "unresolved")),
+        "stage_reported": (("height", "success"), ("height_abs", "unresolved")),
+        "water_temperature_reported": (("temperature", "success"),),
+    }
+    for product, call in zip(PRODUCTS, result.provenance.calls_made, strict=True):
+        assert call["station_products"] == (("2135", product),)
+        definitions = {
+            definition.identity.published_id: definition
+            for definition in result.source_series
+            if definition.station_id == "2135" and definition.product_id == product
+        }
+        expected = tuple(definitions[field].series_id for field, _ in expected_fields[product])
+        assert call["series_ids"] == expected
+        for field, status in expected_fields[product]:
+            identifier = definitions[field].series_id
+            assert [outcome.status.value for outcome in result.outcomes if outcome.series_id == identifier] == [status]
+            rows = result.canonical_rows.filter(pl.col("series_id") == identifier)
+            assert rows.height == (6 if status == "success" else 0)
