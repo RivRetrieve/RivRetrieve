@@ -1473,10 +1473,24 @@ def drive(
                 failed_ids.difference_update(native.get_column("series_id").to_list())
                 if failed_ids:
                     retain_held_successes(tuple(sorted(failed_ids)))
+                identity_scope = pair_scope.model_copy(update={"predicates": ()})
+                requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
                 for original in parsed.outcomes:
-                    if original.series_id is not None and original.series_id not in selected_ids:
+                    # Failure facts describe the source limitation, not admitted observations.
+                    # Keep that context without relaxing physical filtering of successful rows.
+                    failed = original.status in (
+                        OutcomeStatus.FAILED,
+                        OutcomeStatus.UNSUPPORTED,
+                        OutcomeStatus.UNRESOLVED,
+                    )
+                    eligible_ids = requested_ids if failed else selected_ids
+                    if original.series_id is not None and original.series_id not in eligible_ids:
                         continue
-                    matching_outcome_facts = tuple(key for key in original.facts_ids if key in selected_facts)
+                    matching_outcome_facts = (
+                        original.facts_ids
+                        if failed
+                        else tuple(key for key in original.facts_ids if key in selected_facts)
+                    )
                     if original.facts_ids and not matching_outcome_facts:
                         continue
                     overlap_start = max(window.start, original.window.start)
