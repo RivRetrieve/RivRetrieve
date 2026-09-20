@@ -198,6 +198,7 @@ def test_complete_recorded_inventory_classifies_missing_member_without_fake_iden
 
 def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(monkeypatch, tmp_path):
     recording = read_recording(Path(__file__).parent / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     monkeypatch.chdir(tmp_path)
     calls = _counted_replay(monkeypatch, (recording,))
     broad = rr.find(provider="ch_foen", station="2251")
@@ -357,6 +358,7 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch,
     from rivretrieve._internal.source_series import SeriesScope
 
     recording = read_recording(Path(__file__).parent / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     calls = _counted_replay(monkeypatch, (recording,))
     original = declaration.observations.stages.fetch
 

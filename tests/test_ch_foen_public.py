@@ -14,6 +14,12 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 _RECORDING = read_recording(Path(__file__).parent / "test_data" / "ch_foen_2135_rest_engine_2026-09-01.recording.json")
 
 
+@pytest.fixture(autouse=True)
+def recording_clock(monkeypatch: pytest.MonkeyPatch):
+    """Replay recent REST access at its captured retrieval time, not today's age."""
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: _RECORDING.retrieved_at)
+
+
 def test_public_selection_uses_anonymous_rest_and_returns_identity_and_physical_context_with_raw_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ):

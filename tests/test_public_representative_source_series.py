@@ -15,6 +15,7 @@ _DATA = Path(__file__).parent / "test_data"
 
 def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(monkeypatch, tmp_path):
     recording = read_recording(_DATA / "ch_foen_2251_rest_engine_2026-09-19.recording.json")
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.find(provider="ch_foen", station="2251", quantity="discharge")
@@ -84,6 +85,7 @@ def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
 
 def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(monkeypatch, tmp_path):
     recording = read_recording(_DATA / "ch_foen_2251_rest_engine_2026-09-19.recording.json")
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.pick(rr.find(provider="ch_foen", station="2251", quantity="discharge"), variant="flow_ls")
@@ -137,6 +139,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
         start, end = "2020-01-10", "2020-01-20"
     elif provider == "ch_foen":
         recording = read_recording(_DATA / "ch_foen_2251_rest_engine_2026-09-19.recording.json")
+        monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
         monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
         selection = rr.pick(rr.find(provider=provider, station="2251", quantity="discharge"), variant="flow_ls")
         start, end = "2026-09-19T00:00:00", "2026-09-19T03:00:00"
