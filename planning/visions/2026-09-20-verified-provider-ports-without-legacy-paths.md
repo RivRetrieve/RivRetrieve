@@ -27,6 +27,7 @@ discharge = rr.find(quantity="discharge")
 daily = rr.pick(discharge, frequency="daily", statistic="mean")
 brazil = rr.pick(daily, provider="br_ana", station="15400000")
 rr.series(brazil)
+rr.as_frame(brazil)    # Selection inspection, not an observation frame.
 
 # All matching supported series, including Bruto and Consistido separately.
 result = rr.fetch(
@@ -36,7 +37,7 @@ result = rr.fetch(
     receipts=True,
 )
 rr.series(result)      # Also exposes response-discovered source identities.
-rr.as_frame(result)    # Retains observation identity and physical context.
+result.data           # Observation frame with identity and physical context.
 result.issues         # Retained source failures and unresolved limitations.
 
 # Optional explicit selection, never a library-selected winner.
