@@ -64,7 +64,9 @@ def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
     assert result.data["unit"].to_list() == ["m3/s"]
     assert not result.issues
     assert not result.receipts.entries
-    assert capsys.readouterr().out == "[('07374000', 10562.183778816001)]\n()\n"
+    assert capsys.readouterr().out == (
+        "[('07374000', 10562.183778816001)]\n()\n['bruto', 'consistido']\n['consistido']\n"
+    )
 
 
 def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):

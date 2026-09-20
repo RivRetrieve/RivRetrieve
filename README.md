@@ -94,12 +94,39 @@ The displayed values come from a recorded USGS response. Live source responses c
 The empty tuple means this retrieval reported no issues.
 
 `result.data` is a Polars table of observations. Use `rr.series(result)` to inspect the returned
-source series and their outcomes. A physical filter can match several separately published
-series, such as Brazil’s Bruto (raw) and Consistido (quality-checked by ANA) daily records.
-RivRetrieve makes both available and returns both unless you choose one.
+source series and their outcomes.
 Discharge values use m³/s. Read timestamps together with their zone column. Inspect `result.issues`
 even when rows come back. A successful call does not establish continuous records or scientific
 comparability. Downloading observations requires internet access.
+
+### When an agency publishes different versions
+
+Brazil's ANA publishes Bruto (raw) and Consistido (quality-checked) daily records.
+ANA performs that checking, not RivRetrieve. Both are available; you choose whether to request
+both or just one. You can inspect and select them without credentials or network access:
+
+```python
+brazil = rr.find(
+    provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"
+)
+
+print(sorted(rr.series(brazil)["variant"].to_list()))
+
+# Output:
+# ['bruto', 'consistido']
+
+consistido = rr.pick(brazil, variant="consistido")
+
+print(rr.series(consistido)["variant"].to_list())
+
+# Output:
+# ['consistido']
+```
+
+Fetching `brazil` requests both daily mean water-level series by default. Fetching `consistido`
+requests only the quality-checked series. Not every period has observations for both.
+The [usage guide](docs/usage.md#when-an-agency-publishes-more-than-one-version) shows the downloads
+and explains how to supply ANA credentials.
 
 Next: the [usage guide](docs/usage.md) builds on the same example and covers selections, time windows,
 issues, credentials and caching. The [CAMELS-US example](docs/examples/camels-us.md) retrieves

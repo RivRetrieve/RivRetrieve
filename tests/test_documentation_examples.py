@@ -131,6 +131,8 @@ def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path):
     assert scope["result"].data["station_id"].to_list() == ["07374000"]
     if page == "README.md":
         assert len(scope["_transport"].calls) == 1
+        assert set(scope["rr"].series(scope["brazil"])["variant"]) == {"bruto", "consistido"}
+        assert scope["rr"].series(scope["consistido"])["variant"].to_list() == ["consistido"]
     else:
         assert_usage_state(scope, tmp_path)
 
