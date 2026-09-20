@@ -1,6 +1,8 @@
 """Synthetic access-boundary cases; captured archive evidence lives in separate tests."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from importlib import import_module
 from io import BytesIO
 from types import SimpleNamespace
 from zipfile import ZipFile
@@ -24,15 +26,18 @@ CSV = b"_time,_value,_field,_measurement,loc\n2024-01-01T00:00:00Z,108.045,flow,
 
 @pytest.fixture(autouse=True)
 def fixed_clock_and_safe_credential(monkeypatch):
-    from rivretrieve._internal.providers.ch_foen import access
     from rivretrieve._internal.transport import CredentialHeader
 
-    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: NOW)
-    monkeypatch.setattr(
-        access,
-        "_SHARED_ARCHIVE_CREDENTIAL",
-        CredentialHeader("Authorization", "Token SOURCE-READONLY-SENTINEL", ("https://influx.konzept.space",)),
+    module = import_module("rivretrieve._internal.providers.ch_foen.declaration")
+    declaration = module.declaration
+    access = replace(
+        declaration.public_archive_access,
+        credential=CredentialHeader(
+            "Authorization", "Token SOURCE-READONLY-SENTINEL", ("https://influx.konzept.space",)
+        ),
     )
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: NOW)
+    monkeypatch.setattr(module, "declaration", replace(declaration, public_archive_access=access))
 
 
 def _intercept(monkeypatch, *, status=200, echo=False, fail=False, payload=CSV):
@@ -150,12 +155,12 @@ def test_public_success_keeps_receipt_and_bundle_without_credentials(monkeypatch
 
 
 def _archive_transport():
-    from rivretrieve._internal.providers.ch_foen.access import compose_transport
+    from rivretrieve._internal.providers.ch_foen.declaration import declaration
 
     window = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 2, 1))
     )
-    return compose_transport(HttpClient(), window, NOW)
+    return discovery._public_archive_transport(HttpClient(), declaration.public_archive_access, window, NOW)
 
 
 @pytest.mark.parametrize(
@@ -244,3 +249,78 @@ def test_raw_sentinel_in_ordinary_request_is_refused_and_sanitized(monkeypatch, 
     assert calls == []
     _assert_secret_free([credential], str(caught.value), repr(caught.value.request))
     assert caught.value.__cause__ is None
+
+
+@pytest.mark.parametrize("horizon", [timedelta(0), timedelta(days=-1), 32])
+def test_public_archive_declaration_rejects_invalid_recent_horizon(horizon):
+    from rivretrieve._internal.providers.registration import PublicArchiveAccess
+    from rivretrieve._internal.transport import CredentialHeader
+
+    with pytest.raises(ValueError, match="horizon must be positive"):
+        PublicArchiveAccess(
+            CredentialHeader("Authorization", "Token SENTINEL", ("https://archive.invalid",)),
+            "https://archive.invalid/query",
+            horizon,
+        )
+
+
+def test_public_archive_declaration_rejects_multiple_credential_origins():
+    from rivretrieve._internal.providers.registration import PublicArchiveAccess
+    from rivretrieve._internal.transport import CredentialHeader
+
+    with pytest.raises(TypeError, match="one origin-scoped credential"):
+        PublicArchiveAccess(
+            CredentialHeader(
+                "Authorization",
+                "Token SENTINEL",
+                (
+                    "https://archive.invalid",
+                    "https://other.invalid",
+                ),
+            ),
+            "https://archive.invalid/query",
+            timedelta(days=32),
+        )
+
+
+@pytest.mark.parametrize("invalid", ["catalogue_only", "caller_credentials"])
+def test_manifest_rejects_invalid_public_archive_access_combinations(invalid):
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.ch_foen.declaration import declaration
+    from rivretrieve._internal.providers.registration import CatalogueOnly, load_manifest
+
+    malformed = (
+        replace(declaration, observations=CatalogueOnly())
+        if invalid == "catalogue_only"
+        else replace(declaration, required_credentials=("PERSONAL_TOKEN",))
+    )
+    reason = (
+        "requires LiveStages" if invalid == "catalogue_only" else "cannot mix public archive and caller credentials"
+    )
+    with pytest.raises(FatalContractError, match=reason):
+        load_manifest(("ch_foen",), declaration_loader=lambda provider: malformed)
+
+
+def test_public_archive_declaration_rejects_endpoint_outside_credential_origin():
+    from rivretrieve._internal.providers.ch_foen.declaration import declaration
+
+    with pytest.raises(ValueError, match="endpoint must match its credential origin"):
+        replace(declaration.public_archive_access, endpoint="https://other.invalid/query")
+
+
+def test_existing_authentication_capability_is_checked_at_exact_archive_endpoint():
+    from rivretrieve._internal.providers.ch_foen.declaration import declaration
+
+    class EndpointAuthenticated:
+        def can_authenticate(self, url):
+            return url == ARCHIVE
+
+        def send(self, request):
+            raise AssertionError("composition must not send a request")
+
+    base = EndpointAuthenticated()
+    window = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2024, 2, 1)),
+    )
+    assert discovery._public_archive_transport(base, declaration.public_archive_access, window, NOW) is base
