@@ -46,21 +46,13 @@ time,time_zone,value,unit
 [('info', 'source_missing')]
 ```
 
-The request returned two values in m³/s on 2026-09-21. Bare dates include the whole
-first and last day. `cache="bypass"` requests the source without reading or writing
-the observation cache. Source corrections can change later answers.
+The two rows give discharge in m³/s for January 10 and 11. Both days have a value.
+The `source_missing` issue refers to other dates in the annual file that MLIT
+supplies, not to these two days. RivRetrieve returns only the requested dates.
 
-The informational issue describes 17 missing source slots, with first label
-`2020年4月30日` and last label `2020年7月1日`. Daily retrieval reads an annual
-source file, then keeps only rows in the requested period. Issues can describe
-that wider response: neither of these two January values is missing. Hourly
-retrieval similarly reads monthly source files. A short request can therefore
-transfer more observations than it returns.
-
-`unknown` means RivRetrieve has not established the time zone. The daily label
-does not establish a daily mean, so the selection does not use `statistic="mean"`.
-See [Usage](../usage.md) for general selection and result inspection.
-Run the remaining example in the same Python session.
+The time zone is `unknown`, so these timestamps should not be read as UTC or Japan
+Standard Time. See [Time](#time) for how the source labels are represented, and
+[Usage](../usage.md) for general selection and result inspection.
 
 ## Who measures, and who publishes
 
@@ -85,12 +77,12 @@ RivRetrieve reads the database's observation pages and their linked download fil
 
 ## What you can retrieve
 
-| Quantity filter | Frequency filter | MLIT KIND | Source and returned unit |
-|---|---|---|---|
-| `stage` | `hourly` | 2 | m |
-| `stage` | `daily` | 3 | m |
-| `discharge` | `hourly` | 6 | m³/s |
-| `discharge` | `daily` | 7 | m³/s |
+| Quantity filter | Frequency filter | Source and returned unit |
+|---|---|---|
+| `stage` | `hourly` | m |
+| `stage` | `daily` | m |
+| `discharge` | `hourly` | m³/s |
+| `discharge` | `daily` | m³/s |
 
 The catalogue lists these four candidates at each station. A station being listed
 does not guarantee data for every quantity or requested period. The source station
@@ -126,24 +118,24 @@ from equipment failure or communication problems. Formally verified data are
 registered later as definitive values (shown in black), and MLIT asks users to use
 those values.
 
-The hourly download legend defines all four flags below. The daily legend lists
-only `$` and `-`.
+MLIT marks provisional values and reasons for missing observations in its download
+files. RivRetrieve reads those markers using MLIT's stated meanings:
 
-| Source flag | Meaning | RivRetrieve result |
-|---|---|---|
-| `*` | 暫定値, provisional | Numeric value returned; `source_tentative` issue |
-| `$` | 欠測, missing | No observation row; `source_missing` issue |
-| `#` | 閉局, station closed | No observation row; `source_closed_station` issue |
-| `-` | 未登録, unregistered | No observation row; `source_unregistered` issue |
+- A number marked `*` (provisional) is returned, with a `source_tentative` issue.
+- A cell marked `$` (missing), `#` (station closed), or `-` (unregistered) produces
+  no observation row. RivRetrieve reports `source_missing`,
+  `source_closed_station`, or `source_unregistered`, respectively.
 
-An unflagged number does not establish that the observation has been formally
-verified. RivRetrieve summarizes affected source cells by issue type, with counts
-and first and last source labels. `result.issues` does not identify every affected
-row, and the observation table has no per-row provisional flag.
+The hourly files define all four markers; the daily files define only `$` and `-`.
+RivRetrieve does not attach these markers to individual observations or offer them
+as selectable variants. It summarizes each marker type in `result.issues`, with a
+count and the first and last affected source labels. Those summaries cannot reliably
+identify every provisional observation for filtering.
 
-The non-observation markers above produce absent rows, not null-valued rows.
-A failed request is a separate outcome. Inspect issues and series outcomes alongside
-the data, especially when a result is empty. See [Usage](../usage.md#issues).
+RivRetrieve makes no quality judgement of its own. A number without a marker does
+not establish that MLIT has formally verified it. Missing observations are absent
+rows, not rows containing null values; a failed request is reported separately.
+See [Usage](../usage.md#issues) for interpreting issues and empty results.
 
 ## Automated access and caching
 
@@ -166,10 +158,14 @@ requests; it does not create an exemption from MLIT's access guidance. MLIT also
 warns of slower responses during floods and directs real-time users to
 リアルタイム川の防災情報.
 
-Live retrieval defaults to `cache="bypass"`. To opt into reuse, first fix the
-selection to the one identified series shown by `rr.series(selection)`. This avoids
-asking the cache to establish whether further matching series exist in an
-incomplete source inventory.
+Daily retrieval downloads annual files, and hourly retrieval downloads monthly
+files, even for a short requested period. Issues can therefore refer to dates
+outside that period. In the first example, `source_missing` summarizes 17 missing
+dates in the annual file, from April 30 to July 1, 2020.
+
+Live retrieval defaults to `cache="bypass"`, which neither reads nor writes the
+observation cache. To reuse a download, select the specific series and use
+`cache="reuse"`, as below. Run this example in the same Python session as the first.
 
 ```python
 series_id = rr.series(selection)["series_id"].item()
@@ -196,9 +192,10 @@ Output:
 
 With an initially empty cache, the first `reuse` call retrieves and stores this
 series and period. The repeated covered request reads locally and retains the
-missing-data issue. The earlier `bypass` call did
-not populate the cache. Repeating the broader `selection` alone does not guarantee
-reuse because its source inventory is incomplete.
+missing-data issue. The earlier `bypass` call did not populate the cache.
+Selecting the specific series tells RivRetrieve exactly which record to reuse.
+Repeating the broader `selection` alone can require another source request because
+RivRetrieve has not established whether other matching series exist.
 
 If the complete request is not covered, `reuse` retrieves the full requested scope
 again, rather than downloading only missing dates. Saved values can differ from
