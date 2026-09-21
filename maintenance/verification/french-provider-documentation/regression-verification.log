@@ -1,0 +1,9 @@
+........................................................................ [ 51%]
+...................................................................      [100%]
+=============================== warnings summary ===============================
+tests/test_supporting_documentation.py::test_catalogue_evidence_markdown
+  /Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/effort-313-french-provider-documentation/.venv/lib/python3.13/site-packages/rdflib/plugins/parsers/jsonld.py:159: DeprecationWarning: ConjunctiveGraph is deprecated, use Dataset instead.
+    conj_sink = ConjunctiveGraph(store=sink.store, identifier=sink.identifier)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+139 passed, 1 warning in 223.67s (0:03:43)

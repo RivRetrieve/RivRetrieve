@@ -1,0 +1,71 @@
+{
+  "page": "docs/providers/fr_hubeau.md",
+  "sha256": "75929c7c80bc96ddf074665a478e40e8d8f33e411c9e77b860c2f97cb9cfa5b9",
+  "blocks": [
+    {
+      "index": 1,
+      "stdout": "time,time_zone,value,unit\n2024-01-01T00:00:00.000000,unknown,1.159,m3/s\n2024-01-02T00:00:00.000000,unknown,1.144,m3/s\n2024-01-03T00:00:00.000000,unknown,1.159,m3/s\n7\n()\n",
+      "matches": true
+    }
+  ],
+  "issues": [],
+  "rows": 7,
+  "series": [
+    {
+      "station_id": "Y251002001",
+      "variant": null,
+      "quantity": "discharge",
+      "source_unit": "l/s",
+      "unit": "m3/s"
+    }
+  ],
+  "recordings": [
+    "fr_hubeau-0.recording.json"
+  ]
+}
+{
+  "page": "docs/providers/fr_hydroportail.md",
+  "sha256": "6049d18299213e44b2bd47f1ddb76ce8d90ac0bdcba5eca7e5bcbabf1258f69b",
+  "blocks": [
+    {
+      "index": 1,
+      "stdout": "time,time_zone,value,unit\n2020-01-01T00:01:00.000000,+00:00,13.500,m3/s\n2020-01-01T00:20:00.000000,+00:00,13.300,m3/s\n2020-01-01T00:55:00.000000,+00:00,13.700,m3/s\n50\n[('info', 'provenance.license_not_established'), ('info', 'provenance.citation_not_established')]\n",
+      "matches": true
+    },
+    {
+      "index": 2,
+      "stdout": "['most_valid', 'pre_validated_and_validated', 'raw', 'validated']\n[('Y251002001', 'validated')]\n",
+      "matches": true
+    },
+    {
+      "index": 3,
+      "stdout": "[('Y251002001', 'most_valid')]\n",
+      "matches": true
+    }
+  ],
+  "issues": [
+    {
+      "severity": "info",
+      "code": "provenance.license_not_established",
+      "message": "RivRetrieve has not yet established the license for provider fr_hydroportail."
+    },
+    {
+      "severity": "info",
+      "code": "provenance.citation_not_established",
+      "message": "RivRetrieve has not yet established the citation for provider fr_hydroportail."
+    }
+  ],
+  "rows": 50,
+  "series": [
+    {
+      "station_id": "Y251002001",
+      "variant": "validated",
+      "quantity": "discharge",
+      "source_unit": "l",
+      "unit": "m3/s"
+    }
+  ],
+  "recordings": [
+    "fr_hydroportail-0.recording.json"
+  ]
+}
