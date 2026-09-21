@@ -309,22 +309,42 @@ def build_acquisition_provenance(
         "temperature_semantics_openapi_2026_09_02",
     )
     bind("observation_transport", ("source.observation.transport",), "fr_hubeau", "observation_transport")
-    for ids, acquisition in (
+    for partition, ids, acquisition in (
         (
+            "hydrometry",
             hydrometry_station_ids,
             native_capture.hydrometry.acquisition_id if native_capture else "hydrometry_catalogue_capture_2026_08_02",
         ),
         (
+            "temperature",
             temperature_station_ids,
             native_capture.temperature.acquisition_id if native_capture else "temperature_catalogue_capture_2026_08_02",
         ),
     ):
         bind(
             acquisition,
-            tuple(f"source.station.{station}.identity_location_crs" for station in ids),
+            (f"source.station_inventory.{partition}.identity_location_crs",)
+            + tuple(f"source.station.{station}.identity_location_crs" for station in ids),
             "fr_hubeau",
             acquisition,
         )
+    bindings.append(
+        FactBinding(
+            fact_group="canonical_station_identity_geometry",
+            facts=("station.station_id", "station.latitude", "station.longitude", "station.crs"),
+            source_id=None,
+            acquisition_id=None,
+            transformation=Transformation(
+                name="Hub’Eau native station fields with independently evidenced coordinate correction",
+                external_inputs=tuple(
+                    ExternalFactReference(
+                        source_id="fr_hubeau", fact=f"source.station_inventory.{partition}.identity_location_crs"
+                    )
+                    for partition in ("hydrometry", "temperature")
+                ),
+            ),
+        )
+    )
     for pair in availability.pairs:
         external = []
         for index, acquisition in enumerate(pair.acquisitions):

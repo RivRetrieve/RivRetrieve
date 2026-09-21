@@ -88,6 +88,16 @@
       "marker_value": null
     },
     {
+      "name": "Full station bookmarkCode from native public search",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Native station x/y with published GeoJSON coordinate semantics",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
       "name": "HydroPortail native publication to canonical catalogue; reuse licence and historical measurement authors unknown",
       "kind": "derived_value",
       "marker_value": null
@@ -103,9 +113,9 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "f5d6ef835823d3b641c7942080f50c27bb05c538339d884d78f1aa7d26b49faf",
-      "byte_count": 165942,
-      "row_count": 21392,
+      "sha256": "5976696aa6d63b07fbf7f144b032e27b7f55c35572b695808dfa6add8df433f6",
+      "byte_count": 165988,
+      "row_count": 21393,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
@@ -117,23 +127,23 @@
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "1fe175f96702396565ae97f8cc12045721339d613339e6ea1292807784a71f14",
-      "byte_count": 95125,
-      "row_count": 14954,
+      "sha256": "f22ca052400ec1c787300b31918660f0f85cf88401f2e9b1e3cc6e61471e051c",
+      "byte_count": 95179,
+      "row_count": 14956,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "3d09d5e5ee290a64039796fdb14a47dd7165ebf94854bd79c6cf56f070f5d15a",
-      "byte_count": 138536,
-      "row_count": 21392,
+      "sha256": "2810dd7017ca55e83200095a1a17593a9033d821358cb5159c35480baf42e10e",
+      "byte_count": 138559,
+      "row_count": 21393,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "2c7e501b93a5b604e2d12296fa9b1e41a2a541c2978280dd2246969d2f655e6d",
-      "byte_count": 76600,
-      "row_count": 14279,
+      "sha256": "b835ad79538fb12e8b2dde75ba5993c0e01a584f1732a133af565246b3966279",
+      "byte_count": 76627,
+      "row_count": 14282,
       "schema_version": 3
     }
   }

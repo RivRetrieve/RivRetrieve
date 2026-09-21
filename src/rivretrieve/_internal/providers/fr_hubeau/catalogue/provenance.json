@@ -109,6 +109,11 @@
   ],
   "transformations": [
     {
+      "name": "Hub’Eau native station fields with independently evidenced coordinate correction",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
       "name": "dated station-product availability conclusion",
       "kind": "derived_value",
       "marker_value": null
@@ -129,9 +134,9 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "bbcd4b94607834f595322a84bcdd6af527ecad86980b9466cae48c654b6ae2d9",
-      "byte_count": 419368,
-      "row_count": 68210,
+      "sha256": "36b11b4d6da96b3b4ecd3cd6ccae97a6be3ed9494c0606775ccde4c99ee2ab18",
+      "byte_count": 419594,
+      "row_count": 68212,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
@@ -143,23 +148,23 @@
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "a6de6452baa0ecd5bf969b9c18ef35d4496bbece7ec0c2922f2ce92389684599",
-      "byte_count": 291520,
-      "row_count": 40537,
+      "sha256": "5ff50175def325ab83b7f718924f9fa36ba4f1ebe7c8cf3fcee015daf553cf3a",
+      "byte_count": 291553,
+      "row_count": 40538,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "9970f6cbba94293d9000f6a7236b1cccbeea3641798523b6bae30e19a6e8e68c",
-      "byte_count": 436066,
-      "row_count": 68210,
+      "sha256": "7d71e5e1e2295742c85f780b9c5fa98572c61bec2ee9e6637cc789aaf193fda0",
+      "byte_count": 436089,
+      "row_count": 68212,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "04b548b61e21faa821f13f217113164fcf571b1cd8dbc50bb2aaa8ab19fa78e2",
-      "byte_count": 102255,
-      "row_count": 20300,
+      "sha256": "fca656315caacfb26085ce6d65671cfa466bc36734c6fd78e2919bc3945231ca",
+      "byte_count": 102228,
+      "row_count": 20302,
       "schema_version": 3
     }
   }

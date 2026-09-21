@@ -62,7 +62,8 @@ def build_acquisition_provenance(
     bindings = [
         FactBinding(
             fact_group="native_station_inventory",
-            facts=tuple(f"source.station.{s}.identity_location_crs" for s in native.data["bookmarkCode"]),
+            facts=("source.station_inventory.identity_location_crs",)
+            + tuple(f"source.station.{s}.identity_location_crs" for s in native.data["bookmarkCode"]),
             source_id=source,
             acquisition_id="public_station_search",
         )
@@ -146,6 +147,34 @@ def build_acquisition_provenance(
                 transformation=Transformation(name=pair.reason, external_inputs=tuple(external)),
             )
         )
+    inventory_fact = ExternalFactReference(source_id=source, fact="source.station_inventory.identity_location_crs")
+    bindings.extend(
+        (
+            FactBinding(
+                fact_group="canonical_station_identity",
+                facts=("station.station_id",),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="Full station bookmarkCode from native public search",
+                    external_inputs=(inventory_fact,),
+                ),
+            ),
+            FactBinding(
+                fact_group="canonical_station_geometry",
+                facts=("station.latitude", "station.longitude", "station.crs"),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name="Native station x/y with published GeoJSON coordinate semantics",
+                    external_inputs=(
+                        inventory_fact,
+                        ExternalFactReference(source_id=source, fact="source.documentation.chunk-8529.fdb00780.js"),
+                    ),
+                ),
+            ),
+        )
+    )
     provenance = AcquisitionProvenance(
         native_table=native_identity,
         schema_version=2,
