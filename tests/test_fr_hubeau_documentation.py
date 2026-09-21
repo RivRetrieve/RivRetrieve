@@ -15,7 +15,7 @@ import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "maintenance/verification/french-provider-documentation/2026-09-21"
+EVIDENCE = ROOT / "tests/test_data/french_provider_documentation"
 
 
 @pytest.mark.parametrize("provider,block_count", [("fr_hubeau", 1), ("fr_hydroportail", 3)])
@@ -40,6 +40,8 @@ def test_french_page_examples_and_displayed_outputs(monkeypatch, tmp_path, provi
             ("info", "provenance.citation_not_established"),
         ]
         assert namespace["rr"].series(namespace["result"])["variant"].to_list() == ["validated"]
+        assert namespace["rr"].series(namespace["most_valid_result"])["variant"].to_list() == ["most_valid"]
+        assert namespace["most_valid_result"].issues == namespace["result"].issues
 
 
 @pytest.mark.parametrize("provider", ["fr_hubeau", "fr_hydroportail"])

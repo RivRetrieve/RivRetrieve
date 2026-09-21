@@ -81,12 +81,15 @@ For station-own instantaneous discharge and stage, use the separate
 [HydroPortail provider](fr_hydroportail.md). The services retain separate station
 inventories, source identities and terms.
 
-| Data | Source field | Returned unit |
-|---|---|---|
-| Daily mean discharge | Hub'Eau `QmnJ` | m³/s |
-| Daily maximum discharge | Hub'Eau `QIXnJ` | m³/s |
-| Daily maximum stage | Hub'Eau `HIXnJ` | m |
-| Water temperature | Hub'Eau `resultat`, parameter `1301` | °C |
+| Quantity filter | Source field / `variant` | Published statistic | Source unit | Returned unit |
+|---|---|---|---|---|
+| `discharge` | `QmnJ` | Daily mean | l/s | m³/s |
+| `discharge` | `QIXnJ` | Daily maximum | l/s | m³/s |
+| `stage` | `HIXnJ` | Daily maximum | mm | m |
+| `temperature` | `resultat`, parameter `1301` | Not established | °C | °C |
+
+These source fields identify the published observations; there is no separate
+`variant` to choose for these Hub'Eau products.
 
 RivRetrieve converts discharge from litres per second to cubic metres per second, and stage from millimetres to metres.
 Temperature is already in °C. The daily maxima are maxima of instantaneous values,

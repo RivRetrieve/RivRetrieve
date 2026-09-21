@@ -1,5 +1,0 @@
-{'LiveStages': 11, 'BulkStore': 2, 'CatalogueOnly': 1}
-registered: 14
-observation access: 13
-fr_hubeau 7347
-fr_hydroportail 6409

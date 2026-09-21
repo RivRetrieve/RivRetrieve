@@ -81,10 +81,14 @@ monitoring network.
 
 ## What you can retrieve
 
-| Data | Source field | Returned unit |
-|---|---|---|
-| Instantaneous discharge | `Q` | m³/s |
-| Instantaneous stage | `H` | m |
+| Quantity filter | Source field / `variant` | Source unit | Returned unit |
+|---|---|---|---|
+| `discharge` | `Q`; four selectors below | l/s | m³/s |
+| `stage` | `H`; four selectors below | mm | m |
+
+Both quantities are instantaneous. Each source field supports the same four
+`variant` selectors: `raw`, `validated`, `pre_validated_and_validated`, and
+`most_valid`. Choose a selector as shown below.
 
 RivRetrieve converts discharge from litres per second to cubic metres per second,
 and stage from millimetres to metres. It does not calculate additional daily
@@ -136,44 +140,44 @@ Output:
 [('Y251002001', 'validated')]
 ```
 
-These are catalogue candidates, not a promise of observations in each selection.
-Fetching `selection` requests all four matching selectors and keeps their identities
-separate, even if they return identical values. Fetching `validated` requests only
-that selector. RivRetrieve applies no preference, substitution or fallback when a
-selection is empty or a request fails.
-
-To select HydroPortail's most-valid records instead:
+Use `pick` to choose a selector, then `fetch` to retrieve its observations.
+For example, request HydroPortail's most-valid selection:
 
 ```python
 most_valid = rr.pick(selection, variant="most_valid")
 
-print(rr.series(most_valid).select("station_id", "variant").rows())
+most_valid_result = rr.fetch(
+    most_valid, start="2020-01-01", end="2020-01-02", cache="bypass"
+)
+
+print(rr.series(most_valid_result).select("station_id", "variant").rows())
+print(most_valid_result.data.height)
+print([(issue.severity, issue.code) for issue in most_valid_result.issues])
 ```
 
 Output:
 
 ```text
 [('Y251002001', 'most_valid')]
+50
+[('info', 'provenance.license_not_established'), ('info', 'provenance.citation_not_established')]
 ```
 
-This only narrows the selection; it does not retrieve observations. `most_valid`
-is HydroPortail's source selection, not a RivRetrieve quality ranking. Its exact
-selection algorithm has not been established. The combined selector is not
-pre-validated-only. Corrected-only and pre-validated-only histories are not
-available through this public route.
+Fetching `selection` without `pick` requests all four selectors and keeps their
+records separate. Availability can differ by selector and period. An explicit
+choice requests only that selector; RivRetrieve does not substitute another one
+when no observations are returned.
 
-HydroPortail's [glossary](https://hydro.eaufrance.fr/glossaire) explains its processing
-statuses. Requested selectors and each observation's processing status are separate
-source facts. The selectors are not four interchangeable processing stages. They
-also do not mean the same thing as Swiss source-field variants or Brazilian
-consistency statuses. RivRetrieve does not add source quality flags to the returned
-table; [optional receipts](../usage.md#receipts-optional) retain source metadata.
+`most_valid` is HydroPortail's selection, not a RivRetrieve quality ranking.
+Its exact selection algorithm has not been established. The combined selector
+includes pre-validated and validated records. This public route does not provide
+corrected-only or pre-validated-only histories.
 
-An empty successful series differs from a failed request. A null observation
-remains a row, while an absent row supplies no value at that time. An empty response
-for one selector does not establish that another selector or another window is
-empty. Inspect [series outcomes and issues](../usage.md#series-inspection-and-result-views)
-alongside the data.
+A requested selector and an observation's processing status are separate source
+facts. HydroPortail's [glossary](https://hydro.eaufrance.fr/glossaire) explains its
+status vocabulary. See [Usage](../usage.md#series-inspection-and-result-views) to
+interpret series outcomes and issues, and [optional receipts](../usage.md#receipts-optional)
+to inspect the source metadata.
 
 ## Terms and citation
 
