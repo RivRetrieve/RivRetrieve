@@ -20,8 +20,12 @@ input was committed at `eb2b4fcb3a38875329225b7dbe5f949216c01599`.
 The immutable mixed historical ledger remains under
 `maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz`.
 Only HydroPortail historical acquisitions enter this provider's current
-availability lineage. Hub’Eau count-only claims become unchecked HydroPortail
-pairs, not positive or absent observations. Failed and empty bounded native
+availability lineage. The historical witnesses refer only to `raw`. Discovery
+also exposes `validated`, `pre_validated_and_validated`, and `most_valid` for each
+station-own Q/H product. Their historical availability remains unknown; publishing
+these selectors does not transfer raw witnesses to them. The combined selector is
+not pre-validated-only, and `most_valid` is a source selection, not a local ranking.
+Hub’Eau count-only claims become unchecked HydroPortail pairs, not positive or absent observations. Failed and empty bounded native
 requests retain their exact original request scope and acquisition instant.
 Retained historical material references keep their original archive names and
 availability limitations; this rebuild does not reacquire unavailable bodies.

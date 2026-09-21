@@ -3,7 +3,7 @@
 Contributed by: Thiago von Däniken
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from rivretrieve._internal.engine import (
@@ -21,12 +21,19 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.provider_series import SeriesMapping
-from rivretrieve._internal.source_series import SourceUnitCodeDefinition
+from rivretrieve._internal.source_series import SourceSeries, SourceUnitCodeDefinition, stable_id
+
+VARIANTS = ("raw", "validated", "pre_validated_and_validated", "most_valid")
 
 
 @dataclass(frozen=True, slots=True)
 class FrHydroportailSourceCoordinates:
     field: Literal["Q", "H"]
+    variant: str = "raw"
+
+    def __post_init__(self) -> None:
+        if self.field not in ("Q", "H") or self.variant not in VARIANTS:
+            raise ValueError("Unsupported HydroPortail station series selector")
 
 
 _CONFIG = ProviderConfig(
@@ -98,3 +105,33 @@ SERIES_MAPPINGS = {
         ),
     ),
 }
+
+
+def series_mapping(product: str, variant: str) -> SeriesMapping:
+    """Resolve a published selector without changing the physical quantity."""
+    if variant not in VARIANTS:
+        raise ValueError("Unsupported HydroPortail station series selector")
+    return replace(
+        SERIES_MAPPINGS[product],
+        published_id=variant,
+        identity_evidence=(
+            "tests/test_data/fr_hydroportail_variants/REPORT.md: "
+            "2026-09-21 station form and independent Q/H selector captures",
+            "https://hydro.eaufrance.fr/stationhydro/1232000101/series: "
+            f"hydro_series[statusData]={variant}; source-published station Q/H selector",
+        ),
+    )
+
+
+def source_series(station: str, product: str, variant: str) -> SourceSeries:
+    """Describe one station-own source selection, including empty histories."""
+    mapping = series_mapping(product, variant)
+    return SourceSeries(
+        series_id=stable_id("fr_hydroportail", station, mapping.namespace, variant),
+        provider_id="fr_hydroportail",
+        station_id=station,
+        product_id=product,
+        identity=mapping.identity(),
+        variant=variant,
+        facts=(mapping.physical_facts(),),
+    )

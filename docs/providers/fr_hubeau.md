@@ -134,11 +134,18 @@ instant or an interval, or what sampling or averaging period applies.
 
 ## Data status
 
-RivRetrieve currently retrieves only HydroPortail's raw instantaneous series.
-HydroPortail defines raw data as measurements without correction or review.
-Corrected, pre-validated and validated series are not available through RivRetrieve. HydroPortail's [glossary](https://hydro.eaufrance.fr/glossaire) explains
-these source statuses. An empty raw record does not establish that the other statuses
-are also empty.
+HydroPortail instantaneous discharge and stage expose four source selections:
+`raw`, `validated`, `pre_validated_and_validated`, and `most_valid`.
+Use `rr.pick(selection, variant="validated")` to request one selection. Without an
+explicit selection, retrieval requests all four and keeps their identities separate.
+`most_valid` is HydroPortail's selection, not a RivRetrieve ranking or fallback.
+The combined selector is not pre-validated-only. Corrected-only and
+pre-validated-only histories are not available through this public route.
+
+HydroPortail's [glossary](https://hydro.eaufrance.fr/glossaire) explains its processing
+statuses. Requested selectors and each observation's processing status are separate
+source facts. Receipts preserve the native metadata. An empty response for one
+selector does not establish that another selector or another window is empty.
 
 ## Terms and citation
 

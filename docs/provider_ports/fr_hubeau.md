@@ -1,7 +1,7 @@
 # French publication source evidence
 
 Current providers are `fr_hubeau` for Hub'Eau daily hydrometry and temperature,
-and `fr_hydroportail` for HydroPortail station-own raw Q/H. Each uses its own
+and `fr_hydroportail` for HydroPortail station-own Q/H source variants. Each uses its own
 source station inventory. See the [current native coverage account](../../maintenance/catalogue/fr_hydroportail/COVERAGE.md).
 
 The acquisition figures and combined catalogue account below are historical.
@@ -64,9 +64,10 @@ site-Q substitution are removed. Site discharge is a different series whose
 supplying station can change. Station IDs are never truncated to derive site IDs;
 site-level access and activation calendars remain outside this adapter.
 
-HydroPortail series declare UTC, H in mm, Q in l/s, and raw status. The actual
+HydroPortail series declare UTC, H in mm and Q in l/s. Supported selectors are
+`raw`, `validated`, `pre_validated_and_validated` and `most_valid`. The actual
 `series.unit` governs conversion, not the display preference `unitQ`. The parser
-checks station, metric, unit, UTC and requested raw-series identity before examining
+checks station, metric, unit, UTC and the exact requested selector before examining
 rows, including valid empty envelopes. Source null measurements stay null. Receipts
 preserve source status, quality, method and continuity fields byte-for-byte. The
 engine owns padding, clipping, unit conversion and source-issue handling.

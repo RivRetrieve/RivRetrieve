@@ -1,0 +1,28 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydro.eaufrance.fr/stationhydro/ajax/1232000101/series",
+    "parameters": {
+      "hydro_series[startAt]": "01/06/2026",
+      "hydro_series[endAt]": "02/06/2026",
+      "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
+      "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "Q",
+      "hydro_series[statusData]": "validated"
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": []
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-21T10:58:32.188911Z",
+    "content_base64": "ewogICAgICAgICJyYW5nZSI6IFsiMjAyNlx1MDAyRDA2XHUwMDJEMDFUMDBcdTAwM0EwMFx1MDAzQTAwWiIsICIyMDI2XHUwMDJEMDZcdTAwMkQwMlQyM1x1MDAzQTU5XHUwMDNBNTlaIl0sCiAgICAidGltZXpvbmUiOiAiVVRDIiwKICAgICJ1bml0SCI6ICJtIiwKICAgICJ1bml0USI6ICJtMyIsCiAgICAidW5pdFJSIjogIm1tIiwKICAgICAgICAic2VyaWVzIjp7CiAgICAgICAgImNvZGUiOiIxMjMyMDAwMTAxIiwKICAgICAgICAibWV0cmljIjoiUSIsCiAgICAgICAgInRpbWVTdGVwIjpudWxsLAogICAgICAgICJzdGF0dXNlcyI6InZhbGlkYXRlZCIsCiAgICAgICAgInJvbGxpbmciOmZhbHNlLAogICAgICAgICJ1bml0IjogImwiLAogICAgICAgICJ0aXRsZSI6IkRcdTAwZTliaXQgaW5zdGFudGFuXHUwMGU5IC0gRG9ublx1MDBlOWVzIHZhbGlkXHUwMGU5ZXMgZGUgbCdlbnRpdFx1MDBlOSAtIDEyMzIgMDAwMSAwMSAtIExhIHJpdmlcdTAwZThyZSBkZSBQZXRpdGUtUGxhaW5lIFx1MDBlMCBQb2ludGUtTm9pcmUgLSBkdSAwMVwvMDZcLzIwMjYgMDA6MDAgYXUgMDJcLzA2XC8yMDI2IDIzOjU5IChUVSkiLAogICAgICAgICJiYXNlRmlsZW5hbWUiOiAiMTIzMjAwMDEwMV9RIiwKICAgICAgICAiZGF0YSI6IFsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBdCiAgICB9LAogICAgImV2ZW50cyI6IFtdLAogICAgInRvbm5hZ2VzIjogW10sCiAgICAiY29ycmVjdGlvbkN1cnZlcyI6IFtdLAogICAgInRocmVzaG9sZHMiOiBbXSwKICAgICJzdGF0aXN0aWNzIjogeyJxMjUiOjE5NCwibWVkaWFuIjozMTMsInE3NSI6NTU3LCJtaW5pbXVtIjo4OSwibWF4aW11bSI6MzU4MDAsIm1lYW4iOjU2M319Cg==",
+    "sha256": "f70dc160c78a590c64a6a695905e2c7aedce6e772cdd3d44bfed681b61ce10db",
+    "prerequisite_calls": []
+  }
+}

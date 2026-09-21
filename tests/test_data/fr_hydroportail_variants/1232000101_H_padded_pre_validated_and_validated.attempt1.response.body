@@ -1,0 +1,23 @@
+{
+        "range": ["2026\u002D05\u002D30T00\u003A00\u003A00Z", "2026\u002D06\u002D04T23\u003A59\u003A59Z"],
+    "timezone": "UTC",
+    "unitH": "m",
+    "unitQ": "m3",
+    "unitRR": "mm",
+        "series":{
+        "code":"1232000101",
+        "metric":"H",
+        "timeStep":null,
+        "statuses":"pre_validated_and_validated",
+        "rolling":false,
+        "unit": "mm",
+        "title":"Hauteur instantan\u00e9e - Donn\u00e9es pr\u00e9-valid\u00e9es et valid\u00e9es de l'entit\u00e9 - 1232 0001 01 - La rivi\u00e8re de Petite-Plaine \u00e0 Pointe-Noire - du 30\/05\/2026 00:00 au 04\/06\/2026 23:59 (TU)",
+        "baseFilename": "1232000101_H",
+        "data": [
+                                ]
+    },
+    "events": [],
+    "tonnages": [],
+    "correctionCurves": [],
+    "thresholds": [],
+    "statistics": {}}
