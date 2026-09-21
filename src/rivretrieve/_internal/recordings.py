@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from html.parser import HTMLParser
 from pathlib import Path
 from types import MappingProxyType
 from typing import Self, TextIO, cast
@@ -769,6 +770,91 @@ def _has_opaque_magic(payload: bytes) -> bool:
     )
 
 
+class _HtmlEncodingDeclarations(HTMLParser):
+    """Read explicit ASCII-compatible HTML declarations for recording inspection.
+
+    This is deliberately narrower than browser recovery: ambiguous meta syntax and
+    unsupported labels cannot select a decoder. Comments and script text do not
+    declare an encoding. Inspect all declarations, not just the first one, so a
+    later conflict cannot silently change how the evidence is read.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.encoding: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "meta":
+            return
+        raw = self.get_starttag_text()
+        # HTMLParser recovers malformed attributes. Do not use that recovery to
+        # establish the decoder used by the secret-field safety check.
+        if (
+            raw is None
+            or re.fullmatch(
+                r"<meta(?:[\t\n\f\r ]+[A-Za-z_:][A-Za-z0-9_.:-]*"
+                r"(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?)*"
+                r"[\t\n\f\r ]*/?>",
+                raw,
+                re.I,
+            )
+            is None
+        ):
+            raise ValueError("malformed HTML encoding declaration")
+        values = dict(attrs)
+        if len(values) != len(attrs):
+            raise ValueError("ambiguous HTML meta attributes")
+        labels: list[str] = []
+        if "charset" in values:
+            labels.append(values["charset"] or "")
+        content = values.get("content") or ""
+        pragma = (values.get("http-equiv") or "").casefold()
+        if pragma == "content-type" or re.search(r"\bcharset\b", content, re.I):
+            match = re.fullmatch(
+                r"[\t\n\f\r ]*text/html[\t\n\f\r ]*;[\t\n\f\r ]*"
+                r"charset[\t\n\f\r ]*=[\t\n\f\r ]*([^;\s]+)[\t\n\f\r ]*",
+                content,
+                re.I,
+            )
+            if pragma != "content-type" or match is None:
+                raise ValueError("malformed HTML encoding declaration")
+            labels.append(match.group(1))
+        if labels and "&" in (raw or ""):
+            raise ValueError("escaped HTML encoding declaration is unsupported")
+        for label in labels:
+            # Explicit HTML labels only, not Python's codec registry (which also
+            # includes transforms and encodings unsafe for an ASCII meta scan).
+            encodings = {
+                "utf-8": "utf-8",
+                "utf8": "utf-8",
+                "unicode-1-1-utf-8": "utf-8",
+                "euc-jp": "euc-jp",
+                "x-euc-jp": "euc-jp",
+                "cseucpkdfmtjapanese": "euc-jp",
+            }
+            encoding = encodings.get(label.strip(" \t\n\f\r").lower())
+            if encoding is None:
+                raise ValueError("unsupported HTML encoding declaration")
+            if self.encoding is not None and self.encoding != encoding:
+                raise ValueError("conflicting HTML encoding declarations")
+            self.encoding = encoding
+
+    def handle_data(self, data: str) -> None:
+        if not self.cdata_elem and re.search(r"<meta\b", data, re.I):
+            raise ValueError("malformed HTML encoding declaration")
+
+
+def _html_declared_encoding(payload: bytes) -> str | None:
+    parser = _HtmlEncodingDeclarations()
+    # Latin-1 is a lossless byte view, not a guess at the document encoding.
+    # Both supported encodings preserve ASCII markup bytes.
+    parser.feed(payload.decode("latin-1"))
+    if not parser.cdata_elem and re.search(r"<meta\b", parser.rawdata, re.I):
+        raise ValueError("incomplete HTML encoding declaration")
+    parser.close()
+    return parser.encoding
+
+
 def _decode_text_payload(
     payload: bytes,
     *,
@@ -784,6 +870,8 @@ def _decode_text_payload(
             encoding = "utf-16"
         elif payload.startswith(b"\xef\xbb\xbf"):
             encoding = "utf-8-sig"
+        elif _media_type(content_type) == "text/html":
+            encoding = _html_declared_encoding(payload) or "utf-8"
         else:
             encoding = "utf-8"
     try:
