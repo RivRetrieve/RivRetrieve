@@ -1,0 +1,4419 @@
+[
+  {
+    "station_id": "4051000302",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "40510003",
+      "libelle_site": "La ravine Saint-Gilles [Bras Principal] à Saint-Paul [Le Verrou]",
+      "code_station": "4051000302",
+      "libelle_station": "La ravine Saint-Gilles [Bras Principal] à Saint-Paul [Le Verrou] - Verrou",
+      "type_station": "STD",
+      "coordonnee_x_station": 316939.0,
+      "coordonnee_y_station": 7671444.0,
+      "code_projection": 38,
+      "longitude_station": 55.238226885,
+      "latitude_station": -21.048767947,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "97415",
+      "libelle_commune": "SAINT-PAUL",
+      "code_departement": "974",
+      "code_region": "04",
+      "libelle_region": "LA REUNION",
+      "code_cours_eau": "40510140",
+      "libelle_cours_eau": "Ravine Saint-Gilles",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/40510140",
+      "descriptif_station": "Verrou",
+      "date_maj_station": "2020-06-23T00:00:00Z",
+      "date_ouverture_station": "1988-11-18T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "7 1",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "LA REUNION",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          55.238226884823646,
+          -21.048767947052237
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/4051000302/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:12:35.215465+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "A430000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "A4300002",
+      "libelle_site": "Le ruisseau du Pheny à Gérardmer",
+      "code_station": "A430000201",
+      "libelle_station": "Le ruisseau du Pheny à Gérardmer",
+      "type_station": "STD",
+      "coordonnee_x_station": 986820.0,
+      "coordonnee_y_station": 6780775.0,
+      "code_projection": 26,
+      "longitude_station": 6.852029607,
+      "latitude_station": 48.064377844,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "88196",
+      "libelle_commune": "GERARDMER",
+      "code_departement": "88",
+      "code_region": "44",
+      "libelle_region": "GRAND EST",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1976-08-26T00:00:00Z",
+      "date_fermeture_station": "1979-01-05T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "VOSGES",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.852029606731156,
+          48.064377843719946
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/A430000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:12:35.111899+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "E531022101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "E5310221",
+      "libelle_site": "La Liane à Boulogne-sur-Mer",
+      "code_station": "E531022101",
+      "libelle_station": "La Liane à Boulogne-sur-Mer - Barrage Marguet Amont barrage",
+      "type_station": "STD",
+      "coordonnee_x_station": 601025.0,
+      "coordonnee_y_station": 7070472.0,
+      "code_projection": 26,
+      "longitude_station": 1.6008422,
+      "latitude_station": 50.723064771,
+      "influence_locale_station": 0,
+      "commentaire_station": "Amont du barrage, aval de la Liane",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": null,
+      "libelle_commune": null,
+      "code_departement": null,
+      "code_region": null,
+      "libelle_region": null,
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": null,
+      "date_ouverture_station": "2019-09-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": null,
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.60084219997924,
+          50.72306477114078
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/E531022101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:10.525493+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "E531022102",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "E5310221",
+      "libelle_site": "La Liane à Boulogne-sur-Mer",
+      "code_station": "E531022102",
+      "libelle_station": "La Liane à Boulogne-sur-Mer - Barrage Marguet Mer",
+      "type_station": "STD",
+      "coordonnee_x_station": 601011.15,
+      "coordonnee_y_station": 7070502.18,
+      "code_projection": 26,
+      "longitude_station": 1.600638891,
+      "latitude_station": 50.723333334,
+      "influence_locale_station": 0,
+      "commentaire_station": "Aval barrage",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": null,
+      "libelle_commune": null,
+      "code_departement": null,
+      "code_region": null,
+      "libelle_region": null,
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": null,
+      "date_ouverture_station": "2019-09-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": null,
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.6006388907232616,
+          50.72333333375546
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/E531022102/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:30.055581+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "E635142501",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "E6351425",
+      "libelle_site": "La Somme à Péronne",
+      "code_station": "E635142501",
+      "libelle_station": "La Somme à Péronne",
+      "type_station": "STD",
+      "coordonnee_x_station": 692812.0,
+      "coordonnee_y_station": 6981932.0,
+      "code_projection": 26,
+      "longitude_station": 2.899962298,
+      "latitude_station": 49.935977182,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": 46.0,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "80620",
+      "libelle_commune": "PERONNE",
+      "code_departement": "80",
+      "code_region": "32",
+      "libelle_region": "HAUTS-DE-FRANCE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-02-15T00:00:00Z",
+      "date_ouverture_station": "1980-01-01T00:00:00Z",
+      "date_fermeture_station": "2006-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": [
+        "POH016"
+      ],
+      "date_debut_ref_alti_station": "2006-01-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2015-02-26T00:00:00Z",
+      "date_maj_ref_alti_station": "2015-02-26T00:00:00Z",
+      "libelle_departement": "SOMME",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.899962298329401,
+          49.93597718201795
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/E635142501/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:31.133340+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "E644000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "E6440001",
+      "libelle_site": "La Somme à Hangest-sur-Somme",
+      "code_station": "E644000101",
+      "libelle_station": "La Somme à Hangest-sur-Somme",
+      "type_station": "STD",
+      "coordonnee_x_station": 633070.0,
+      "coordonnee_y_station": 6987522.0,
+      "code_projection": 26,
+      "longitude_station": 2.067637902,
+      "latitude_station": 49.982681016,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": 11.9,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "80416",
+      "libelle_commune": "HANGEST-SUR-SOMME",
+      "code_departement": "80",
+      "code_region": "32",
+      "libelle_region": "HAUTS-DE-FRANCE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-02-15T00:00:00Z",
+      "date_ouverture_station": "1992-01-01T00:00:00Z",
+      "date_fermeture_station": "2005-11-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": [
+        "POH016"
+      ],
+      "date_debut_ref_alti_station": "1992-01-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2015-02-26T00:00:00Z",
+      "date_maj_ref_alti_station": "2015-02-26T00:00:00Z",
+      "libelle_departement": "SOMME",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.067637901836618,
+          49.98268101627185
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/E644000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:32.061218+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "F128000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "F1280001",
+      "libelle_site": "La Voire à Bétignicourt",
+      "code_station": "F128000101",
+      "libelle_station": "La Voire à Bétignicourt",
+      "type_station": "DEB",
+      "coordonnee_x_station": 807678.0003068,
+      "coordonnee_y_station": 6817184.0000421,
+      "code_projection": 26,
+      "longitude_station": 4.456137969,
+      "latitude_station": 48.445995388,
+      "influence_locale_station": 0,
+      "commentaire_station": "Station EPTB Seine Grands Lacs",
+      "altitude_ref_alti_station": 109.4,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "10044",
+      "libelle_commune": "BETIGNICOURT",
+      "code_departement": "10",
+      "code_region": "44",
+      "libelle_region": "GRAND EST",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-07-01T00:00:00Z",
+      "date_ouverture_station": "2017-01-13T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": "Possibilité de manœuvres sur le vannage aval venant mettre hors d'eau le radar mesurant la hauteur, ce qui empêche l'estimation du débit.",
+      "code_regime_station": 1,
+      "qualification_donnees_station": 12,
+      "code_finalite_station": "1 2 3",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": "2017-01-13T00:00:00Z",
+      "date_activation_ref_alti_station": "2020-07-01T00:00:00Z",
+      "date_maj_ref_alti_station": "2020-07-01T00:00:00Z",
+      "libelle_departement": "AUBE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          4.4561379690684895,
+          48.44599538757362
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/F128000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:33.096221+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "F465000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "F4650001",
+      "libelle_site": "L'Yvette à Lévis-Saint-Nom",
+      "code_station": "F465000101",
+      "libelle_station": "L'Yvette à Lévis-Saint-Nom",
+      "type_station": "STD",
+      "coordonnee_x_station": 623400.0,
+      "coordonnee_y_station": 6847084.0,
+      "code_projection": 26,
+      "longitude_station": 1.958742326,
+      "latitude_station": 48.719343199,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "78334",
+      "libelle_commune": "LEVIS-SAINT-NOM",
+      "code_departement": "78",
+      "code_region": "11",
+      "libelle_region": "ILE-DE-FRANCE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2022-04-19T00:00:00Z",
+      "date_ouverture_station": "1967-09-28T00:00:00Z",
+      "date_fermeture_station": "2009-01-07T00:00:00Z",
+      "commentaire_influence_locale_station": "Régime hydrologique influencé par la création de la ville nouvelle Saint-Quentin en Yveline",
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "1 2 7",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 2,
+      "code_sandre_reseau_station": [
+        "POH125",
+        "POH011",
+        "POH048",
+        "POH903"
+      ],
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "YVELINES",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.9587423257759926,
+          48.71934319918698
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/F465000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:34.352830+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "H130201001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "H1302010",
+      "libelle_site": "La Voire à Droyes [Gervilliers]",
+      "code_station": "H130201001",
+      "libelle_station": "La Voire à Droyes [Gervilliers]",
+      "type_station": "STD",
+      "coordonnee_x_station": 827446.0,
+      "coordonnee_y_station": 6823406.0,
+      "code_projection": 26,
+      "longitude_station": 4.725221843,
+      "latitude_station": 48.498375712,
+      "influence_locale_station": 1,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": 119.0,
+      "code_systeme_alti_site": 0,
+      "code_commune_station": "52180",
+      "libelle_commune": "DROYES",
+      "code_departement": "52",
+      "code_region": "44",
+      "libelle_region": "GRAND EST",
+      "code_cours_eau": "F12-0400",
+      "libelle_cours_eau": "La Voire",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/F12-0400",
+      "descriptif_station": null,
+      "date_maj_station": "2023-02-10T00:00:00Z",
+      "date_ouverture_station": "1987-07-29T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 2,
+      "code_sandre_reseau_station": [
+        "POH008",
+        "POH046",
+        "POH124",
+        "POH903",
+        "RIC064"
+      ],
+      "date_debut_ref_alti_station": "1987-07-29T00:00:00Z",
+      "date_activation_ref_alti_station": "2013-11-18T00:00:00Z",
+      "date_maj_ref_alti_station": "2021-10-19T00:00:00Z",
+      "libelle_departement": "HAUTE-MARNE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          4.725221842549195,
+          48.49837571219005
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/H130201001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:35.522306+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "H227000301",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "H2270003",
+      "libelle_site": "Le ru de Liesse à Saint-Ouen-l'Aumône",
+      "code_station": "H227000301",
+      "libelle_station": "Le ru de Liesse à Saint-Ouen-l'Aumône - Débit de liesse",
+      "type_station": "DEB",
+      "coordonnee_x_station": 636624.4685123,
+      "coordonnee_y_station": 6881990.9789174,
+      "code_projection": 26,
+      "longitude_station": 2.133284414,
+      "latitude_station": 49.034676831,
+      "influence_locale_station": null,
+      "commentaire_station": "Débit régulé par la vanne du bassin Blanche de castille. Maximum 4.5m3/s",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "95572",
+      "libelle_commune": "SAINT-OUEN-L'AUMONE",
+      "code_departement": "95",
+      "code_region": "11",
+      "libelle_region": "ILE-DE-FRANCE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": "Débit de liesse",
+      "date_maj_station": "2022-09-27T00:00:00Z",
+      "date_ouverture_station": "2019-01-16T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "3",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "VAL-D'OISE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.133284414248495,
+          49.034676831091815
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/H227000301/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:37.073504+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "H228000301",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "H2280003",
+      "libelle_site": "La Viosne à Pontoise",
+      "code_station": "H228000301",
+      "libelle_station": "La Viosne à Pontoise - Bassin des Patis",
+      "type_station": "STD",
+      "coordonnee_x_station": 632865.3205301,
+      "coordonnee_y_station": 6884108.934325,
+      "code_projection": 26,
+      "longitude_station": 2.081542405,
+      "latitude_station": 49.053337435,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "95500",
+      "libelle_commune": "PONTOISE",
+      "code_departement": "95",
+      "code_region": "11",
+      "libelle_region": "ILE-DE-FRANCE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": "Bassin des Patis",
+      "date_maj_station": "2022-09-12T00:00:00Z",
+      "date_ouverture_station": "2019-01-21T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": "Niveau régulé par le Bassin des Patis",
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "3",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "VAL-D'OISE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.081542405218248,
+          49.05333743510486
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/H228000301/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:37.891718+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "H508305002",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "H5083050",
+      "libelle_site": "La Blaise à Louvemont [Pont-Varin]",
+      "code_station": "H508305002",
+      "libelle_station": "La Blaise à Louvemont [Pont-Varin] - Station IIBRBS",
+      "type_station": "STD",
+      "coordonnee_x_station": 842576.0351288,
+      "coordonnee_y_station": 6825694.7380435,
+      "code_projection": 26,
+      "longitude_station": 4.930715525,
+      "latitude_station": 48.515808799,
+      "influence_locale_station": 0,
+      "commentaire_station": "Station abandonnée au profit de la station de Pont-Varin en 1987. Site historique repris par Seine Grands Lacs.",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "52294",
+      "libelle_commune": "LOUVEMONT",
+      "code_departement": "52",
+      "code_region": "44",
+      "libelle_region": "GRAND EST",
+      "code_cours_eau": "F53-0400",
+      "libelle_cours_eau": "La Blaise",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/F53-0400",
+      "descriptif_station": "Station IIBRBS",
+      "date_maj_station": "2022-05-31T00:00:00Z",
+      "date_ouverture_station": "1962-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "1 3",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "HAUTE-MARNE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          4.930715524841829,
+          48.51580879911644
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/H508305002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:38.710316+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "I696382001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "I6963820",
+      "libelle_site": "Le Grand Douet à Héauville",
+      "code_station": "I696382001",
+      "libelle_station": "Le Grand Douet à Héauville",
+      "type_station": "LIMNI",
+      "coordonnee_x_station": 350865.0,
+      "coordonnee_y_station": 6953173.0,
+      "code_projection": 26,
+      "longitude_station": -1.828493658,
+      "latitude_station": 49.581687709,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "50238",
+      "libelle_commune": "HEAUVILLE",
+      "code_departement": "50",
+      "code_region": "28",
+      "libelle_region": "NORMANDIE",
+      "code_cours_eau": "I6607800",
+      "libelle_cours_eau": "Le Grand Douet",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/I6607800",
+      "descriptif_station": null,
+      "date_maj_station": "2023-10-05T00:00:00Z",
+      "date_ouverture_station": "2001-09-01T00:00:00Z",
+      "date_fermeture_station": "2004-06-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 2,
+      "code_sandre_reseau_station": [
+        "POH047"
+      ],
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "MANCHE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          -1.8284936580336362,
+          49.58168770932557
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/I696382001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:39.508273+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "I696421001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "I6964210",
+      "libelle_site": "La Diélette à Tréauville [Diélette]",
+      "code_station": "I696421001",
+      "libelle_station": "La Diélette à Tréauville [Diélette]",
+      "type_station": "STD",
+      "coordonnee_x_station": 348699.0,
+      "coordonnee_y_station": 6949942.0,
+      "code_projection": 26,
+      "longitude_station": -1.855629595,
+      "latitude_station": 49.551513252,
+      "influence_locale_station": 1,
+      "commentaire_station": "Station fermée le 01/02/1983. Réouverte en 2001.",
+      "altitude_ref_alti_station": 5.0,
+      "code_systeme_alti_site": 2,
+      "code_commune_station": "50604",
+      "libelle_commune": "TREAUVILLE",
+      "code_departement": "50",
+      "code_region": "28",
+      "libelle_region": "NORMANDIE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2023-10-05T00:00:00Z",
+      "date_ouverture_station": "1977-12-01T00:00:00Z",
+      "date_fermeture_station": "2004-06-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 2,
+      "code_sandre_reseau_station": [
+        "POH047"
+      ],
+      "date_debut_ref_alti_station": "1977-12-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2013-11-18T00:00:00Z",
+      "date_maj_ref_alti_station": "2023-10-05T00:00:00Z",
+      "libelle_departement": "MANCHE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          -1.8556295954056332,
+          49.551513251749
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/I696421001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:40.656305+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "J363181002",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "J3631810",
+      "libelle_site": "L'Aulne à Cléden-Poher et à Kergloff et à Landeleau",
+      "code_station": "J363181002",
+      "libelle_station": "L'Aulne à Landeleau - Pont Triffen",
+      "type_station": "STD",
+      "coordonnee_x_station": 202636.0,
+      "coordonnee_y_station": 6812150.0,
+      "code_projection": 26,
+      "longitude_station": -3.704700142,
+      "latitude_station": 48.219544816,
+      "influence_locale_station": 1,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": 52.0,
+      "code_systeme_alti_site": 0,
+      "code_commune_station": "29102",
+      "libelle_commune": "LANDELEAU",
+      "code_departement": "29",
+      "code_region": "53",
+      "libelle_region": "BRETAGNE",
+      "code_cours_eau": "J3--0180",
+      "libelle_cours_eau": "l'Aulne",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/J3--0180",
+      "descriptif_station": "Pont Triffen",
+      "date_maj_station": "2021-03-01T00:00:00Z",
+      "date_ouverture_station": "1956-01-01T00:00:00Z",
+      "date_fermeture_station": "1965-08-07T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 2,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": "1952-12-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2013-11-18T00:00:00Z",
+      "date_maj_ref_alti_station": "2019-04-19T00:00:00Z",
+      "libelle_departement": "FINISTERE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          -3.704700141993768,
+          48.21954481586555
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/J363181002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:41.613492+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "K091001014",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "K0910010",
+      "libelle_site": "La Loire à Villerest",
+      "code_station": "K091001014",
+      "libelle_station": "La Loire à Villerest - Pont de Villerest - Q - Exploitation temps réel",
+      "type_station": "STD",
+      "coordonnee_x_station": 780974.0,
+      "coordonnee_y_station": 6544551.0,
+      "code_projection": 26,
+      "longitude_station": 4.046223009,
+      "latitude_station": 45.995864072,
+      "influence_locale_station": null,
+      "commentaire_station": "Données débit temps réel BRUT utilisé pour l'exploitation",
+      "altitude_ref_alti_station": 267.511,
+      "code_systeme_alti_site": 1,
+      "code_commune_station": "42332",
+      "libelle_commune": "VILLEREST",
+      "code_departement": "42",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "----0000",
+      "libelle_cours_eau": "la Loire",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/----0000",
+      "descriptif_station": "Pont de Villerest - Q - Exploitation temps réel",
+      "date_maj_station": "2024-08-07T00:00:00Z",
+      "date_ouverture_station": "2024-07-15T00:00:00Z",
+      "date_fermeture_station": "2024-07-15T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": "2024-07-15T00:00:00Z",
+      "date_activation_ref_alti_station": "2024-08-07T00:00:00Z",
+      "date_maj_ref_alti_station": "2024-08-07T00:00:00Z",
+      "libelle_departement": "LOIRE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          4.046223008636518,
+          45.99586407177271
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/K091001014/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:42.729167+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "K239000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "K2390002",
+      "libelle_site": "La Senouire à Domeyrat [Blannat]",
+      "code_station": "K239000201",
+      "libelle_station": "La Senouire à Domeyrat [Blannat]",
+      "type_station": "STD",
+      "coordonnee_x_station": 739070.0,
+      "coordonnee_y_station": 6462200.0,
+      "code_projection": 26,
+      "longitude_station": 3.498113585,
+      "latitude_station": 45.258035888,
+      "influence_locale_station": null,
+      "commentaire_station": "Mise en service prévue en 2025",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "43086",
+      "libelle_commune": "DOMEYRAT",
+      "code_departement": "43",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "K23-0300",
+      "libelle_cours_eau": "la Senouire",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/K23-0300",
+      "descriptif_station": null,
+      "date_maj_station": "2025-04-25T00:00:00Z",
+      "date_ouverture_station": "2025-04-25T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "HAUTE-LOIRE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          3.498113585097668,
+          45.258035887578394
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/K239000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:43.686539+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "K333000103",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "K3330001",
+      "libelle_site": "La Bouble à Louroux-de-Bouble",
+      "code_station": "K333000103",
+      "libelle_station": "La Bouble à Louroux-de-Bouble - A supprimer",
+      "type_station": "STD",
+      "coordonnee_x_station": 697144.0,
+      "coordonnee_y_station": 6570313.0,
+      "code_projection": 26,
+      "longitude_station": 2.962940722,
+      "latitude_station": 46.232672357,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "03152",
+      "libelle_commune": "LOUROUX-DE-BOUBLE",
+      "code_departement": "03",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "K33-0300",
+      "libelle_cours_eau": "la Bouble",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/K33-0300",
+      "descriptif_station": "A supprimer",
+      "date_maj_station": "2025-09-25T00:00:00Z",
+      "date_ouverture_station": "1970-11-05T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "ALLIER",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.9629407218008232,
+          46.23267235746221
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/K333000103/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:44.659560+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "O301552101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "O3015521",
+      "libelle_site": "Le Tarn au Pont-de-Montvert [Ancien]",
+      "code_station": "O301552101",
+      "libelle_station": "Le Tarn au Pont-de-Montvert [Ancien]",
+      "type_station": "STD",
+      "coordonnee_x_station": 757816.0,
+      "coordonnee_y_station": 6362579.0,
+      "code_projection": 26,
+      "longitude_station": 3.725431686,
+      "latitude_station": 44.359853703,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "48116",
+      "libelle_commune": "PONT DE MONTVERT - SUD MONT LOZERE",
+      "code_departement": "48",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1918-01-01T00:00:00Z",
+      "date_fermeture_station": "1948-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "LOZERE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          3.72543168615615,
+          44.359853702807825
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/O301552101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:45.762277+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "O301552102",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "O3015521",
+      "libelle_site": "Le Tarn au Pont-de-Montvert [Ancien]",
+      "code_station": "O301552102",
+      "libelle_station": "Le Tarn au Pont-de-Montvert [Ancien] - Corrigé",
+      "type_station": "STD",
+      "coordonnee_x_station": 757816.0,
+      "coordonnee_y_station": 6362579.0,
+      "code_projection": 26,
+      "longitude_station": 3.725431686,
+      "latitude_station": 44.359853703,
+      "influence_locale_station": 2,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "48116",
+      "libelle_commune": "PONT DE MONTVERT - SUD MONT LOZERE",
+      "code_departement": "48",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": "Corrigé",
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1947-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "0",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "LOZERE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          3.72543168615615,
+          44.359853702807825
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/O301552102/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:46.911097+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "O630252201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "O6302522",
+      "libelle_site": "Le Gers à Auch",
+      "code_station": "O630252201",
+      "libelle_station": "Le Gers à Auch - Ancien",
+      "type_station": "STD",
+      "coordonnee_x_station": 505325.0,
+      "coordonnee_y_station": 6285807.0,
+      "code_projection": 26,
+      "longitude_station": 0.587487395,
+      "latitude_station": 43.644539408,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "32013",
+      "libelle_commune": "AUCH",
+      "code_departement": "32",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": "Ancien",
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1913-01-01T00:00:00Z",
+      "date_fermeture_station": "1945-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "GERS",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          0.5874873954359733,
+          43.644539408253785
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/O630252201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:47.770160+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "O811352002",
+    "old_supported": false,
+    "hub_native": {
+      "code_site": "O8113520",
+      "libelle_site": "Le Célé à Figeac",
+      "code_station": "O811352002",
+      "libelle_station": "Le Célé à Figeac - Jean Jaurès",
+      "type_station": "STD",
+      "coordonnee_x_station": 622930.0930896,
+      "coordonnee_y_station": 6390277.8982982,
+      "code_projection": 26,
+      "longitude_station": 2.028731278,
+      "latitude_station": 44.60732538,
+      "influence_locale_station": null,
+      "commentaire_station": "Station mise en place en test en amont de la passe à poisson (rive gauche) dans le but de d'étudier la possibilité de remplacer la station de Figeac (O811352001) en basses eaux",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "46102",
+      "libelle_commune": "FIGEAC",
+      "code_departement": "46",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": "O8--0250",
+      "libelle_cours_eau": "Le Célé",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/O8--0250",
+      "descriptif_station": "Jean Jaurès",
+      "date_maj_station": "2026-08-10T00:00:00Z",
+      "date_ouverture_station": "2026-08-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 12,
+      "code_finalite_station": "1",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "LOT",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.0287312781394267,
+          44.60732538004788
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/O811352002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:48.635799+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "O945001002",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "O9450010",
+      "libelle_site": "La Garonne à Langon",
+      "code_station": "O945001002",
+      "libelle_station": "La Garonne à Langon - Airbus",
+      "type_station": "STD",
+      "coordonnee_x_station": 442905.0,
+      "coordonnee_y_station": 6389571.0,
+      "code_projection": 26,
+      "longitude_station": -0.238005473,
+      "latitude_station": 44.557767082,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": 0.2,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "33227",
+      "libelle_commune": "LANGON",
+      "code_departement": "33",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": "O---0000",
+      "libelle_cours_eau": "La Garonne",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/O---0000",
+      "descriptif_station": "Airbus",
+      "date_maj_station": "2025-09-04T00:00:00Z",
+      "date_ouverture_station": "2017-04-04T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "POH112",
+        "POH002",
+        "POH035",
+        "POH901"
+      ],
+      "date_debut_ref_alti_station": "2017-04-04T00:00:00Z",
+      "date_activation_ref_alti_station": "2018-03-21T00:00:00Z",
+      "date_maj_ref_alti_station": "2025-06-20T00:00:00Z",
+      "libelle_departement": "GIRONDE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          -0.23800547339357922,
+          44.557767082154896
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/O945001002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:11.443776+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P013000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P0130001",
+      "libelle_site": "Le Dognon à Thalamy",
+      "code_station": "P013000101",
+      "libelle_station": "Le Dognon à Thalamy",
+      "type_station": "STD",
+      "coordonnee_x_station": 657161.0,
+      "coordonnee_y_station": 6491679.0,
+      "code_projection": 26,
+      "longitude_station": 2.451223974,
+      "latitude_station": 45.523249248,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19266",
+      "libelle_commune": "THALAMY",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1951-02-07T00:00:00Z",
+      "date_fermeture_station": "1970-01-11T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.4512239744779456,
+          45.52324924821143
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P013000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:49.888078+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P111401001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P1114010",
+      "libelle_site": "La Luzège à Maussac",
+      "code_station": "P111401001",
+      "libelle_station": "La Luzège à Maussac",
+      "type_station": "STD",
+      "coordonnee_x_station": 633683.0,
+      "coordonnee_y_station": 6485851.0,
+      "code_projection": 26,
+      "longitude_station": 2.151287666,
+      "latitude_station": 45.468901249,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19130",
+      "libelle_commune": "MAUSSAC",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-01-19T00:00:00Z",
+      "date_ouverture_station": "1951-01-01T00:00:00Z",
+      "date_fermeture_station": "2005-01-10T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.1512876664348544,
+          45.46890124880289
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P111401001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:50.868982+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P114431001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P1144310",
+      "libelle_site": "La Soudeillette à Moustier-Ventadour",
+      "code_station": "P114431001",
+      "libelle_station": "La Soudeillette à Moustier-Ventadour",
+      "type_station": "STD",
+      "coordonnee_x_station": 631099.0,
+      "coordonnee_y_station": 6477245.0,
+      "code_projection": 26,
+      "longitude_station": 2.119448974,
+      "latitude_station": 45.391157702,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19145",
+      "libelle_commune": "MOUSTIER-VENTADOUR",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-01-19T00:00:00Z",
+      "date_ouverture_station": "1967-01-01T00:00:00Z",
+      "date_fermeture_station": "1990-09-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.1194489743802065,
+          45.39115770218524
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P114431001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:51.733174+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P118000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P1180001",
+      "libelle_site": "La Luzège à Soursac",
+      "code_station": "P118000101",
+      "libelle_station": "La Luzège à Soursac",
+      "type_station": "STD",
+      "coordonnee_x_station": 635865.0,
+      "coordonnee_y_station": 6466263.0,
+      "code_projection": 26,
+      "longitude_station": 2.181807883,
+      "latitude_station": 45.292738173,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19264",
+      "libelle_commune": "SOURSAC",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1918-01-01T00:00:00Z",
+      "date_fermeture_station": "1952-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.181807882813174,
+          45.29273817298126
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P118000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:52.672915+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P160000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P1600001",
+      "libelle_site": "La Dordogne à Monceaux-sur-Dordogne",
+      "code_station": "P160000101",
+      "libelle_station": "La Dordogne à Monceaux-sur-Dordogne",
+      "type_station": "STD",
+      "coordonnee_x_station": 615077.0,
+      "coordonnee_y_station": 6442532.0,
+      "code_projection": 26,
+      "longitude_station": 1.920774879,
+      "latitude_station": 45.076826746,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19140",
+      "libelle_commune": "MONCEAUX-SUR-DORDOGNE",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-01-19T00:00:00Z",
+      "date_ouverture_station": "1976-01-01T00:00:00Z",
+      "date_fermeture_station": "1990-04-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.9207748792380686,
+          45.07682674567163
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P160000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:53.881091+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P180000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P1800001",
+      "libelle_site": "La Cère à Sansac-de-Marmiesse",
+      "code_station": "P180000101",
+      "libelle_station": "La Cère à Sansac-de-Marmiesse",
+      "type_station": "STD",
+      "coordonnee_x_station": 646860.0,
+      "coordonnee_y_station": 6420635.0,
+      "code_projection": 26,
+      "longitude_station": 2.327028169,
+      "latitude_station": 44.88285939,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "15221",
+      "libelle_commune": "SANSAC-DE-MARMIESSE",
+      "code_departement": "15",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1938-01-01T00:00:00Z",
+      "date_fermeture_station": "1970-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CANTAL",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.3270281687012835,
+          44.88285938990811
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P180000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:54.729462+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P193000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P1930001",
+      "libelle_site": "Le ruisseau d'Escalmels à Calviac [Lamativie]",
+      "code_station": "P193000101",
+      "libelle_station": "Le ruisseau d'Escalmels à Calviac [Lamativie]",
+      "type_station": "STD",
+      "coordonnee_x_station": 624877.0,
+      "coordonnee_y_station": 6427330.0,
+      "code_projection": 26,
+      "longitude_station": 2.047633078,
+      "latitude_station": 44.941097845,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "46048",
+      "libelle_commune": "CALVIAC",
+      "code_departement": "46",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1934-01-01T00:00:00Z",
+      "date_fermeture_station": "1967-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "LOT",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          2.047633078159601,
+          44.941097845166155
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P193000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:55.729679+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P225000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P2250001",
+      "libelle_site": "L'Ouysse à Lacave [Moulin de Caugnaguet]",
+      "code_station": "P225000101",
+      "libelle_station": "L'Ouysse à Lacave [Moulin de Caugnaguet]",
+      "type_station": "STD",
+      "coordonnee_x_station": 586174.0,
+      "coordonnee_y_station": 6413190.0,
+      "code_projection": 26,
+      "longitude_station": 1.560336707,
+      "latitude_station": 44.808525847,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "46144",
+      "libelle_commune": "LACAVE",
+      "code_departement": "46",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1968-02-01T00:00:00Z",
+      "date_fermeture_station": "1991-11-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "LOT",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.5603367073577823,
+          44.80852584682945
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P225000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:56.789008+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P231502201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P2315022",
+      "libelle_site": "La Borrèze à Souillac",
+      "code_station": "P231502201",
+      "libelle_station": "La Borrèze à Souillac",
+      "type_station": "STD",
+      "coordonnee_x_station": 579631.0,
+      "coordonnee_y_station": 6422589.0,
+      "code_projection": 26,
+      "longitude_station": 1.47530614,
+      "latitude_station": 44.89202764,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "46309",
+      "libelle_commune": "SOUILLAC",
+      "code_departement": "46",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1968-01-09T00:00:00Z",
+      "date_fermeture_station": "1971-01-30T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "LOT",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.4753061400892762,
+          44.892027640312
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P231502201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:57.719816+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P306000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P3060001",
+      "libelle_site": "La Soudaine à Soudaine-Lavinadière",
+      "code_station": "P306000101",
+      "libelle_station": "La Soudaine à Soudaine-Lavinadière",
+      "type_station": "STD",
+      "coordonnee_x_station": 601593.0,
+      "coordonnee_y_station": 6495564.0,
+      "code_projection": 26,
+      "longitude_station": 1.738678894,
+      "latitude_station": 45.552495518,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19262",
+      "libelle_commune": "SOUDAINE-LAVINADIERE",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1971-11-01T00:00:00Z",
+      "date_fermeture_station": "2005-01-10T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.7386788936413513,
+          45.55249551755952
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P306000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:58.870778+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P352000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P3520001",
+      "libelle_site": "La Corrèze à Tulle [2]",
+      "code_station": "P352000101",
+      "libelle_station": "La Corrèze à Tulle [2]",
+      "type_station": "STD",
+      "coordonnee_x_station": 602218.0,
+      "coordonnee_y_station": 6463066.0,
+      "code_projection": 26,
+      "longitude_station": 1.7532646,
+      "latitude_station": 45.259992322,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19272",
+      "libelle_commune": "TULLE",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1957-01-01T00:00:00Z",
+      "date_fermeture_station": "1993-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.753264599826891,
+          45.25999232150033
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P352000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:12.626233+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P397000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P3970001",
+      "libelle_site": "Le Maumont Blanc à Ussac [La Mouillade]",
+      "code_station": "P397000101",
+      "libelle_station": "Le Maumont Blanc à Ussac [La Mouillade]",
+      "type_station": "STD",
+      "coordonnee_x_station": 581338.0,
+      "coordonnee_y_station": 6455493.0,
+      "code_projection": 26,
+      "longitude_station": 1.488948282,
+      "latitude_station": 45.188530531,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "19274",
+      "libelle_commune": "USSAC",
+      "code_departement": "19",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1965-01-01T00:00:00Z",
+      "date_fermeture_station": "1971-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CORREZE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.4889482824724005,
+          45.18853053080176
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P397000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:59.812500+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P407000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P4070001",
+      "libelle_site": "L'Elle à Terrasson-Lavilledieu",
+      "code_station": "P407000101",
+      "libelle_station": "L'Elle à Terrasson-Lavilledieu",
+      "type_station": "STD",
+      "coordonnee_x_station": 563955.0,
+      "coordonnee_y_station": 6450170.0,
+      "code_projection": 26,
+      "longitude_station": 1.269143728,
+      "latitude_station": 45.137398835,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "24547",
+      "libelle_commune": "TERRASSON-LAVILLEDIEU",
+      "code_departement": "24",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-01-19T00:00:00Z",
+      "date_ouverture_station": "1965-08-01T00:00:00Z",
+      "date_fermeture_station": "2005-01-06T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "DORDOGNE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          1.2691437276826476,
+          45.13739883518076
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P407000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:02.145851+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P500000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P5000001",
+      "libelle_site": "La Dordogne à Trémolat",
+      "code_station": "P500000101",
+      "libelle_station": "La Dordogne à Trémolat",
+      "type_station": "STD",
+      "coordonnee_x_station": 528386.0,
+      "coordonnee_y_station": 6420650.0,
+      "code_projection": 26,
+      "longitude_station": 0.827148866,
+      "latitude_station": 44.863773108,
+      "influence_locale_station": 4,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "24558",
+      "libelle_commune": "TREMOLAT",
+      "code_departement": "24",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1990-01-01T00:00:00Z",
+      "date_fermeture_station": "2005-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "DORDOGNE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          0.8271488658807449,
+          44.86377310801722
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P500000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:06.230584+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P542000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P5420001",
+      "libelle_site": "La Dordogne à Gardonne",
+      "code_station": "P542000101",
+      "libelle_station": "La Dordogne à Gardonne",
+      "type_station": "STD",
+      "coordonnee_x_station": 489297.0,
+      "coordonnee_y_station": 6419095.0,
+      "code_projection": 26,
+      "longitude_station": 0.333238629,
+      "latitude_station": 44.838996098,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "24194",
+      "libelle_commune": "GARDONNE",
+      "code_departement": "24",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "2001-06-15T00:00:00Z",
+      "date_fermeture_station": "2008-09-24T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "DORDOGNE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          0.3332386285176513,
+          44.838996097696906
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P542000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:11.332183+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P643000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P6430002",
+      "libelle_site": "Le Manoire à Saint-Laurent-sur-Manoire [Branchet]",
+      "code_station": "P643000201",
+      "libelle_station": "Le Manoire à Saint-Laurent-sur-Manoire [Branchet]",
+      "type_station": "STD",
+      "coordonnee_x_station": 525696.0,
+      "coordonnee_y_station": 6453485.0,
+      "code_projection": 26,
+      "longitude_station": 0.781430156,
+      "latitude_station": 45.158624028,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "24439",
+      "libelle_commune": "SAINT-LAURENT-SUR-MANOIRE",
+      "code_departement": "24",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-01-19T00:00:00Z",
+      "date_ouverture_station": "1967-01-01T00:00:00Z",
+      "date_fermeture_station": "2005-01-03T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "DORDOGNE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          0.7814301563826657,
+          45.15862402812004
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P643000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:14.733909+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "P723000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "P7230002",
+      "libelle_site": "Le Voultron à Blanzaguet-Saint-Cybard",
+      "code_station": "P723000201",
+      "libelle_station": "Le Voultron à Blanzaguet-Saint-Cybard",
+      "type_station": "STD",
+      "coordonnee_x_station": 491002.0,
+      "coordonnee_y_station": 6488693.0,
+      "code_projection": 26,
+      "longitude_station": 0.324971539,
+      "latitude_station": 45.465821011,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "16047",
+      "libelle_commune": "BLANZAGUET-SAINT-CYBARD",
+      "code_departement": "16",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-01-19T00:00:00Z",
+      "date_ouverture_station": "1971-10-01T00:00:00Z",
+      "date_fermeture_station": "1983-04-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "CHARENTE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          0.3249715388094887,
+          45.465821010648945
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/P723000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:17.400733+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "Q454000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "Q4540001",
+      "libelle_site": "Le Gave de Cauterets à Cauterets [La Raillère]",
+      "code_station": "Q454000101",
+      "libelle_station": "Le Gave de Cauterets à Cauterets [La Raillère] - La Raillère - Station EDF",
+      "type_station": "STD",
+      "coordonnee_x_station": 445705.0,
+      "coordonnee_y_station": 6202681.0,
+      "code_projection": 26,
+      "longitude_station": -0.110117834,
+      "latitude_station": 42.878492784,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "65138",
+      "libelle_commune": "CAUTERETS",
+      "code_departement": "65",
+      "code_region": "76",
+      "libelle_region": "OCCITANIE",
+      "code_cours_eau": "Q45-0400",
+      "libelle_cours_eau": "Gave de Cauterets",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/Q45-0400",
+      "descriptif_station": "La Raillère - Station EDF",
+      "date_maj_station": "2020-06-23T00:00:00Z",
+      "date_ouverture_station": "2000-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "HAUTES-PYRENEES",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          -0.11011783438614597,
+          42.878492784471305
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/Q454000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:21.020919+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "R614292401",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "R6142924",
+      "libelle_site": "La Boutonne à Saint-Jean-d'Angély",
+      "code_station": "R614292401",
+      "libelle_station": "La Boutonne à Saint-Jean-d'Angély - Pont Saint-Jacques",
+      "type_station": "DEB",
+      "coordonnee_x_station": 426839.0,
+      "coordonnee_y_station": 6543539.0,
+      "code_projection": 26,
+      "longitude_station": -0.526646815,
+      "latitude_station": 45.93664254,
+      "influence_locale_station": 2,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": 0.166,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "17347",
+      "libelle_commune": "SAINT-JEAN-D'ANGELY",
+      "code_departement": "17",
+      "code_region": "75",
+      "libelle_region": "NOUVELLE-AQUITAINE",
+      "code_cours_eau": "R6--0250",
+      "libelle_cours_eau": "La Boutonne",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/R6--0250",
+      "descriptif_station": "Pont Saint-Jacques",
+      "date_maj_station": "2024-12-13T00:00:00Z",
+      "date_ouverture_station": "2005-01-01T00:00:00Z",
+      "date_fermeture_station": "2024-12-13T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "0",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": [
+        "POH025",
+        "POH121",
+        "POH901",
+        "POH049"
+      ],
+      "date_debut_ref_alti_station": "2012-12-19T00:00:00Z",
+      "date_activation_ref_alti_station": "2023-11-27T00:00:00Z",
+      "date_maj_ref_alti_station": "2024-01-19T00:00:00Z",
+      "libelle_departement": "CHARENTE-MARITIME",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          -0.526646815320325,
+          45.93664253963374
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/R614292401/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:26.337130+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "U251201002",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "U2512010",
+      "libelle_site": "Le Doubs [Canal du Rhône au Rhin] à Besançon",
+      "code_station": "U251201002",
+      "libelle_station": "Le Doubs [Canal du Rhône au Rhin] à Besançon - Station secondaire - Passerelle ONAV",
+      "type_station": "STD",
+      "coordonnee_x_station": 929157.9408236,
+      "coordonnee_y_station": 6686602.7813896,
+      "code_projection": 26,
+      "longitude_station": 6.029982619,
+      "latitude_station": 47.240152889,
+      "influence_locale_station": 1,
+      "commentaire_station": "Bassin  versant incertain du point de vue géologique. Le 04/02/2008 : le producteur DIREN Rhone-Alpes/Bassin RMC est remplacé par DIREN Franche-Comté.  Station doublant la première (bulle à bulle) pour sécurisation de la donnée (chantier de 2024).  15/05/2024 : finalement radar considéré comme la même station que la précédente et donc ajout d'un nouveau capteur plutôt que nouvelle station",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "25056",
+      "libelle_commune": "BESANCON",
+      "code_departement": "25",
+      "code_region": "27",
+      "libelle_region": "BOURGOGNE-FRANCHE-COMTE",
+      "code_cours_eau": "U2--0200",
+      "libelle_cours_eau": "Le Doubs",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/U2--0200",
+      "descriptif_station": "Station secondaire - Passerelle ONAV",
+      "date_maj_station": "2024-10-24T00:00:00Z",
+      "date_ouverture_station": "2024-04-08T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "DOUBS",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.029982618634269,
+          47.240152888941836
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/U251201002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:28.342688+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "U251553401",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "U2515534",
+      "libelle_site": "Le ruisseau du Moulin à Besançon",
+      "code_station": "U251553401",
+      "libelle_station": "Le ruisseau du Moulin à Besançon",
+      "type_station": "STD",
+      "coordonnee_x_station": 928726.4437776,
+      "coordonnee_y_station": 6687519.0692229,
+      "code_projection": 26,
+      "longitude_station": 6.024746709,
+      "latitude_station": 47.248544697,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "25056",
+      "libelle_commune": "BESANCON",
+      "code_departement": "25",
+      "code_region": "27",
+      "libelle_region": "BOURGOGNE-FRANCHE-COMTE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2022-10-17T00:00:00Z",
+      "date_ouverture_station": "2022-10-17T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 12,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "DOUBS",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.024746709146904,
+          47.24854469720424
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/U251553401/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:30.615396+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "U403000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "U4030002",
+      "libelle_site": "La Reyssouze à Montrevel-en-Bresse [TEST INTEGRATION AQUASYS]",
+      "code_station": "U403000201",
+      "libelle_station": "La Reyssouze à Montrevel-en-Bresse [TEST INTEGRATION AQUASYS]",
+      "type_station": "STD",
+      "coordonnee_x_station": 863813.886039,
+      "coordonnee_y_station": 6584107.2268334,
+      "code_projection": 26,
+      "longitude_station": 5.129951572,
+      "latitude_station": 46.336996018,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "01266",
+      "libelle_commune": "MONTREVEL-EN-BRESSE",
+      "code_departement": "01",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2024-08-05T00:00:00Z",
+      "date_ouverture_station": "2022-06-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "0",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "AIN",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          5.1299515724505245,
+          46.33699601786429
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/U403000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:31.728178+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "V012000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "V0120002",
+      "libelle_site": "Le Giffre à Samoëns",
+      "code_station": "V012000201",
+      "libelle_station": "Le Giffre à Samoëns - Pont du Giffre - EDF",
+      "type_station": "STD",
+      "coordonnee_x_station": 987298.0,
+      "coordonnee_y_station": 6559700.0,
+      "code_projection": 26,
+      "longitude_station": 6.718719133,
+      "latitude_station": 46.076179604,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "74258",
+      "libelle_commune": "SAMOENS",
+      "code_departement": "74",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "V01-0400",
+      "libelle_cours_eau": "Le Giffre",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/V01-0400",
+      "descriptif_station": "Pont du Giffre - EDF",
+      "date_maj_station": "2020-06-26T00:00:00Z",
+      "date_ouverture_station": "1948-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "3 1",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "POH200"
+      ],
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "HAUTE-SAVOIE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.718719133275595,
+          46.07617960365771
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/V012000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:32.839783+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "V014000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "V0140002",
+      "libelle_site": "Le Giffre à Mieussy",
+      "code_station": "V014000201",
+      "libelle_station": "Le Giffre à Mieussy - Taninges-Pressy EDF",
+      "type_station": "STD",
+      "coordonnee_x_station": 974238.0,
+      "coordonnee_y_station": 6563328.0,
+      "code_projection": 26,
+      "longitude_station": 6.552017739,
+      "latitude_station": 46.11422724,
+      "influence_locale_station": 3,
+      "commentaire_station": "Les valeurs publiées représentent les débits réels du Giffre en aval du barrage de Taninges; ils sont constitués par les débits déversés et les restitutions permanentes à la prise de l'usine de Pressy, ainsi que les apports d'un faible bassin versant intermédiaire. Ces débits sont influencés par les turbinés à l'usine de Pressy ainsi que par les variations de la réserve de Taninges, volume utile : 0,271 hm3.",
+      "altitude_ref_alti_station": 0.597,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "74183",
+      "libelle_commune": "MIEUSSY",
+      "code_departement": "74",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "V01-0400",
+      "libelle_cours_eau": "Le Giffre",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/V01-0400",
+      "descriptif_station": "Taninges-Pressy EDF",
+      "date_maj_station": "2023-12-13T00:00:00Z",
+      "date_ouverture_station": "1942-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": "Barrage au niveau de Taninges en amont.",
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "POH200"
+      ],
+      "date_debut_ref_alti_station": "1948-01-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2019-11-23T00:00:00Z",
+      "date_maj_ref_alti_station": "2020-04-15T00:00:00Z",
+      "libelle_departement": "HAUTE-SAVOIE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.552017738984429,
+          46.11422723950409
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/V014000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:33.709395+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "V126402701",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "V1264027",
+      "libelle_site": "[Canal de Savières] à Chanaz",
+      "code_station": "V126402701",
+      "libelle_station": "[Canal de Savières] à Chanaz - Station partenaire CNR",
+      "type_station": "DEB",
+      "coordonnee_x_station": 917216.22,
+      "coordonnee_y_station": 6527428.63,
+      "code_projection": 26,
+      "longitude_station": 5.797688943,
+      "latitude_station": 45.81185407,
+      "influence_locale_station": null,
+      "commentaire_station": "Station gérée par la Compagnie Nationale du Rhône (CNR)",
+      "altitude_ref_alti_station": 228.08,
+      "code_systeme_alti_site": 2,
+      "code_commune_station": "73073",
+      "libelle_commune": "CHANAZ",
+      "code_departement": "73",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "00000000",
+      "libelle_cours_eau": null,
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/00000000",
+      "descriptif_station": "Station partenaire CNR",
+      "date_maj_station": "2025-09-23T00:00:00Z",
+      "date_ouverture_station": "1999-01-12T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 12,
+      "code_finalite_station": "2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "RIC051",
+        "RIC063",
+        "RIC301",
+        "POH201"
+      ],
+      "date_debut_ref_alti_station": "1999-01-12T00:00:00Z",
+      "date_activation_ref_alti_station": "2024-08-01T00:00:00Z",
+      "date_maj_ref_alti_station": "2024-11-25T00:00:00Z",
+      "libelle_departement": "SAVOIE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          5.797688942825743,
+          45.81185406964814
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/V126402701/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:34.518392+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "V131644002",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "V1316440",
+      "libelle_site": "L'Hyère à Chambéry [Charrière-Neuve]",
+      "code_station": "V131644002",
+      "libelle_station": "L'Hyère à Chambéry [Charrière-Neuve] - Pont d'Hyère",
+      "type_station": "STD",
+      "coordonnee_x_station": 926536.573448,
+      "coordonnee_y_station": 6501298.4506618,
+      "code_projection": 26,
+      "longitude_station": 5.905249159,
+      "latitude_station": 45.573679186,
+      "influence_locale_station": 1,
+      "commentaire_station": "Station créée suite à l'arrêt de la station V131644001 en raison de la destruction du seuil.",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "73065",
+      "libelle_commune": "CHAMBERY",
+      "code_departement": "73",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "V1310640",
+      "libelle_cours_eau": "L'Hyère",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/V1310640",
+      "descriptif_station": "Pont d'Hyère",
+      "date_maj_station": "2024-03-12T00:00:00Z",
+      "date_ouverture_station": "2022-12-15T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "POH020",
+        "POH900"
+      ],
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "SAVOIE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          5.905249159016839,
+          45.57367918561114
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/V131644002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:15:35.808667+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "V262401001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "V2624010",
+      "libelle_site": "La Valouse à Thoirette [Chalea]",
+      "code_station": "V262401001",
+      "libelle_station": "La Valouse à Thoirette [Chalea]",
+      "type_station": "STD",
+      "coordonnee_x_station": 893811.0,
+      "coordonnee_y_station": 6577862.0,
+      "code_projection": 26,
+      "longitude_station": 5.51715033,
+      "latitude_station": 46.272836199,
+      "influence_locale_station": 1,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": 287.0,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "39530",
+      "libelle_commune": "THOIRETTE-COISIA",
+      "code_departement": "39",
+      "code_region": "27",
+      "libelle_region": "BOURGOGNE-FRANCHE-COMTE",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-05-12T00:00:00Z",
+      "date_ouverture_station": "1956-11-01T00:00:00Z",
+      "date_fermeture_station": "1998-12-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 1,
+      "code_sandre_reseau_station": [
+        "600000184"
+      ],
+      "date_debut_ref_alti_station": "1956-11-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2013-11-18T00:00:00Z",
+      "date_maj_ref_alti_station": "2013-11-18T00:00:00Z",
+      "libelle_departement": "JURA",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          5.51715033028698,
+          46.2728361985274
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/V262401001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:39.294533+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "V353000301",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "V3530003",
+      "libelle_site": "L'Ay à Satillieu",
+      "code_station": "V353000301",
+      "libelle_station": "L'Ay à Satillieu - La Bergère",
+      "type_station": "DEB",
+      "coordonnee_x_station": 827349.1857489,
+      "coordonnee_y_station": 6451632.0372335,
+      "code_projection": 26,
+      "longitude_station": 4.620636092,
+      "latitude_station": 45.152221694,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "07309",
+      "libelle_commune": "SATILLIEU",
+      "code_departement": "07",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "V3530500",
+      "libelle_cours_eau": "L'Ay",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/V3530500",
+      "descriptif_station": "La Bergère",
+      "date_maj_station": "2024-04-18T00:00:00Z",
+      "date_ouverture_station": "2014-07-09T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 7",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "ARDECHE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          4.620636092036197,
+          45.152221694209835
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/V353000301/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:40.891651+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "V456000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "V4560001",
+      "libelle_site": "La dérivation de Donzère-Mondragon à Donzère [pont double SNCF]",
+      "code_station": "V456000101",
+      "libelle_station": "La dérivation de Donzère-Mondragon à Donzère [pont double SNCF]",
+      "type_station": "H",
+      "coordonnee_x_station": 836073.0,
+      "coordonnee_y_station": 6369693.0,
+      "code_projection": 26,
+      "longitude_station": 4.709055094,
+      "latitude_station": 44.413026306,
+      "influence_locale_station": 2,
+      "commentaire_station": "Point de contrôle aval de la station de Viviers situé au double pont SNCF, au PK 174,500 du canal d’amenée de Donzère-Mondragon. Ce point de mesure est également dénommé \"Bollène SNCF\".",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "26116",
+      "libelle_commune": "DONZERE",
+      "code_departement": "26",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-05-20T00:00:00Z",
+      "date_ouverture_station": "1992-10-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 0,
+      "code_sandre_reseau_station": [
+        "POH201"
+      ],
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "DROME",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          4.709055093638433,
+          44.413026305891165
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/V456000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:42.892432+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "W107403002",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "W1074030",
+      "libelle_site": "L'Arc à Aiguebelle",
+      "code_station": "W107403002",
+      "libelle_station": "L'Arc à Aiguebelle - Barrage usine Aquabella",
+      "type_station": "DEB",
+      "coordonnee_x_station": 958122.0,
+      "coordonnee_y_station": 6499262.0,
+      "code_projection": 26,
+      "longitude_station": 6.308781833,
+      "latitude_station": 45.544167178,
+      "influence_locale_station": 3,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "73002",
+      "libelle_commune": "AIGUEBELLE",
+      "code_departement": "73",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "W10-0400",
+      "libelle_cours_eau": "L'Arc",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/W10-0400",
+      "descriptif_station": "Barrage usine Aquabella",
+      "date_maj_station": "2025-06-04T00:00:00Z",
+      "date_ouverture_station": "2021-10-08T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "SAVOIE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.30878183271084,
+          45.54416717827278
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/W107403002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:44.517455+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "W111001003",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "W1110010",
+      "libelle_site": "L'Isère à Montmélian",
+      "code_station": "W111001003",
+      "libelle_station": "L'Isère à Montmélian - SH Chavort",
+      "type_station": "DEB",
+      "coordonnee_x_station": 938592.0,
+      "coordonnee_y_station": 6493151.0,
+      "code_projection": 26,
+      "longitude_station": 6.055663585,
+      "latitude_station": 45.496269504,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "73171",
+      "libelle_commune": "MONTMELIAN",
+      "code_departement": "73",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "W---0000",
+      "libelle_cours_eau": "L'Isère",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/W---0000",
+      "descriptif_station": "SH Chavort",
+      "date_maj_station": "2025-06-04T00:00:00Z",
+      "date_ouverture_station": "2018-04-24T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "3",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "SAVOIE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.055663584596943,
+          45.496269504353236
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/W111001003/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:45.719028+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "W275000301",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "W2750003",
+      "libelle_site": "L'Eau d'Olle à Allemond [La Pernière]",
+      "code_station": "W275000301",
+      "libelle_station": "L'Eau d'Olle à Allemond [La Pernière] - EDF",
+      "type_station": "STD",
+      "coordonnee_x_station": 937378.0,
+      "coordonnee_y_station": 6451345.0,
+      "code_projection": 26,
+      "longitude_station": 6.019666027,
+      "latitude_station": 45.120531364,
+      "influence_locale_station": 0,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "38005",
+      "libelle_commune": "ALLEMOND",
+      "code_departement": "38",
+      "code_region": "84",
+      "libelle_region": "AUVERGNE-RHONE-ALPES",
+      "code_cours_eau": "W2750500",
+      "libelle_cours_eau": "L'Eau d'Olle",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/W2750500",
+      "descriptif_station": "EDF",
+      "date_maj_station": "2025-01-29T00:00:00Z",
+      "date_ouverture_station": "2020-03-12T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "POH200"
+      ],
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "ISERE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.0196660272946625,
+          45.12053136366022
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/W275000301/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:46.627941+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "X023000202",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "X0230002",
+      "libelle_site": "Le Guil à Château-Ville-Vieille [Pont de la Chapelue - EDF]",
+      "code_station": "X023000202",
+      "libelle_station": "Le Guil à Château-Ville-Vieille [Pont de la Chapelue - EDF]",
+      "type_station": "STD",
+      "coordonnee_x_station": 997784.850774,
+      "coordonnee_y_station": 6409353.4166332,
+      "code_projection": 26,
+      "longitude_station": 6.761617629,
+      "latitude_station": 44.719456702,
+      "influence_locale_station": null,
+      "commentaire_station": "Les valeurs publiées représentent les débits réels du Guil au droit du pont de la Chapelue, en amont de la retenue de Maison du Roy. Station mise en service en 2004, rénovée en 2013.  Rivière non aménagée. Contrôle hydraulique : naturel, blocs rocheux.  Données produites par EDF-DTG",
+      "altitude_ref_alti_station": 1209.705,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "05038",
+      "libelle_commune": "CHATEAU-VILLE-VIEILLE",
+      "code_departement": "05",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "X02-0400",
+      "libelle_cours_eau": "Le Guil",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/X02-0400",
+      "descriptif_station": null,
+      "date_maj_station": "2025-05-06T00:00:00Z",
+      "date_ouverture_station": "2004-07-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "RIC055",
+        "RIC305"
+      ],
+      "date_debut_ref_alti_station": "2004-07-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2025-02-03T00:00:00Z",
+      "date_maj_ref_alti_station": "2025-05-06T00:00:00Z",
+      "libelle_departement": "HAUTES-ALPES",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.76161762931826,
+          44.71945670233986
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/X023000202/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:47.999625+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "X105000302",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "X1050003",
+      "libelle_site": "La Méouge à Châteauneuf-de-Chabre [Pommet - EDF]",
+      "code_station": "X105000302",
+      "libelle_station": "La Méouge à Châteauneuf-de-Chabre [Pommet - EDF]",
+      "type_station": "STD",
+      "coordonnee_x_station": 876315.0,
+      "coordonnee_y_station": 1925548.0,
+      "code_projection": 5,
+      "longitude_station": 5.795952118,
+      "latitude_station": 44.276385528,
+      "influence_locale_station": 0,
+      "commentaire_station": "es valeurs publiées représentent les débits naturels de la Méouge.  FAITS IMPORTANTS : Station créée en 1959 et exploitée jusqu'en 1967 par E.D.F - R.E.H Alpes Sud. (résultats partiels en 1959 et 1960). Rééquipement de la station et exploitation par la D.T.G en Août 1978. Archivage des données depuis 1982 seulement. En mars 1991, la station est emportée par une crue. Celle-ci est remise en service en décembre 1991, 60m en amont du site précédent. En décembre 2003, la station est à nouveau endommagée par une crue, le référentiel de l'échelle change.  Rivière non aménagée, contrôle hydraulique réalisé par des blocs rocheux.  Données produites par EDF-DTG.",
+      "altitude_ref_alti_station": 543.37,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "05034",
+      "libelle_commune": "CHATEAUNEUF-DE-CHABRE",
+      "code_departement": "05",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "X1050500",
+      "libelle_cours_eau": "La Méouge",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/X1050500",
+      "descriptif_station": null,
+      "date_maj_station": "2025-05-06T00:00:00Z",
+      "date_ouverture_station": "1982-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "RIC055",
+        "RIC305"
+      ],
+      "date_debut_ref_alti_station": "2003-12-03T00:00:00Z",
+      "date_activation_ref_alti_station": "2025-02-05T00:00:00Z",
+      "date_maj_ref_alti_station": "2025-04-04T00:00:00Z",
+      "libelle_departement": "HAUTES-ALPES",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          5.795952117526681,
+          44.27638552811723
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/X105000302/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:49.423150+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "X200064001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "X2000640",
+      "libelle_site": "Le Verdon à Colmars [EDF]",
+      "code_station": "X200064001",
+      "libelle_station": "Le Verdon à Colmars [EDF]",
+      "type_station": "STD",
+      "coordonnee_x_station": 988993.0,
+      "coordonnee_y_station": 6350956.0,
+      "code_projection": 26,
+      "longitude_station": 6.616951981,
+      "latitude_station": 44.198034989,
+      "influence_locale_station": 1,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "04061",
+      "libelle_commune": "COLMARS",
+      "code_departement": "04",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "X2--0200",
+      "libelle_cours_eau": "Le Verdon",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/X2--0200",
+      "descriptif_station": null,
+      "date_maj_station": "2025-02-11T00:00:00Z",
+      "date_ouverture_station": "1900-12-12T00:00:00Z",
+      "date_fermeture_station": "1994-01-01T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 1,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "ALPES-DE-HAUTE-PROVENCE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.6169519813632816,
+          44.19803498891903
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/X200064001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:50.421751+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "X200064002",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "X2000640",
+      "libelle_site": "Le Verdon à Colmars [EDF]",
+      "code_station": "X200064002",
+      "libelle_station": "Le Verdon à Colmars [EDF] - Pont Sainte-Anne - Piscine municipale",
+      "type_station": "STD",
+      "coordonnee_x_station": 989776.0027834,
+      "coordonnee_y_station": 6349230.0779694,
+      "code_projection": 26,
+      "longitude_station": 6.625746892,
+      "latitude_station": 44.182193469,
+      "influence_locale_station": null,
+      "commentaire_station": "Pont Piscine municipale, rue Sainte-Anne. Echelle sous le pont. 44°10'57.6\"N 6°37'36.0\"E 44.182657, 6.626672",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "04061",
+      "libelle_commune": "COLMARS",
+      "code_departement": "04",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "X2--0200",
+      "libelle_cours_eau": "Le Verdon",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/X2--0200",
+      "descriptif_station": "Pont Sainte-Anne - Piscine municipale",
+      "date_maj_station": "2025-02-11T00:00:00Z",
+      "date_ouverture_station": "2020-01-01T00:00:00Z",
+      "date_fermeture_station": "2021-06-29T00:00:00Z",
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "ALPES-DE-HAUTE-PROVENCE",
+      "en_service": false,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.625746891710203,
+          44.18219346862226
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/X200064002/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:51.316301+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "X200064003",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "X2000640",
+      "libelle_site": "Le Verdon à Colmars [EDF]",
+      "code_station": "X200064003",
+      "libelle_station": "Le Verdon à Colmars [EDF]",
+      "type_station": "STD",
+      "coordonnee_x_station": 989850.0,
+      "coordonnee_y_station": 6349286.0,
+      "code_projection": 26,
+      "longitude_station": 6.626703576,
+      "latitude_station": 44.182665705,
+      "influence_locale_station": 1,
+      "commentaire_station": "Les valeurs publiées représentent les débits naturels du Verdon à Colmars.  Données produites par EDF-DTG.",
+      "altitude_ref_alti_station": 1240.22,
+      "code_systeme_alti_site": 3,
+      "code_commune_station": "04061",
+      "libelle_commune": "COLMARS",
+      "code_departement": "04",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "X2--0200",
+      "libelle_cours_eau": "Le Verdon",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/X2--0200",
+      "descriptif_station": null,
+      "date_maj_station": "2025-05-06T00:00:00Z",
+      "date_ouverture_station": "1951-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": [
+        "RIC055",
+        "RIC305"
+      ],
+      "date_debut_ref_alti_station": "2025-02-11T00:00:00Z",
+      "date_activation_ref_alti_station": "2025-02-11T00:00:00Z",
+      "date_maj_ref_alti_station": "2025-02-11T00:00:00Z",
+      "libelle_departement": "ALPES-DE-HAUTE-PROVENCE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          6.626703575982828,
+          44.182665705416944
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/X200064003/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:52.249000+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "X312000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "X3120001",
+      "libelle_site": "L'Eze à Pertuis",
+      "code_station": "X312000101",
+      "libelle_station": "L'Eze à Pertuis - SMAVD",
+      "type_station": "STD",
+      "coordonnee_x_station": 902449.1444604,
+      "coordonnee_y_station": 6292323.2960496,
+      "code_projection": 26,
+      "longitude_station": 5.511357602,
+      "latitude_station": 43.700964427,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "84089",
+      "libelle_commune": "PERTUIS",
+      "code_departement": "84",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "X31-0400",
+      "libelle_cours_eau": "L'Eze",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/X31-0400",
+      "descriptif_station": "SMAVD",
+      "date_maj_station": "2026-04-29T00:00:00Z",
+      "date_ouverture_station": "2026-04-29T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "VAUCLUSE",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          5.511357601540226,
+          43.7009644266017
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/X312000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:52.991555+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "Y561621602",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "Y5616216",
+      "libelle_site": "Le Loup à Roquefort-les-Pins [Pont RD 6]",
+      "code_station": "Y561621602",
+      "libelle_station": "Le Loup à Roquefort-les-Pins [Pont RD 6]",
+      "type_station": "STD",
+      "coordonnee_x_station": 1028256.263592,
+      "coordonnee_y_station": 6295903.5834203,
+      "code_projection": 26,
+      "longitude_station": 7.072033107,
+      "latitude_station": 43.685974439,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "06105",
+      "libelle_commune": "ROQUEFORT-LES-PINS",
+      "code_departement": "06",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "Y5610500",
+      "libelle_cours_eau": "Le Loup",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/Y5610500",
+      "descriptif_station": null,
+      "date_maj_station": "2023-07-05T00:00:00Z",
+      "date_ouverture_station": "2020-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "ALPES-MARITIMES",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          7.0720331074965515,
+          43.68597443939044
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/Y561621602/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:54.129108+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "Y561621603",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "Y5616216",
+      "libelle_site": "Le Loup à Roquefort-les-Pins [Pont RD 6]",
+      "code_station": "Y561621603",
+      "libelle_station": "Le Loup à Roquefort-les-Pins [Pont RD 6]",
+      "type_station": "DEB",
+      "coordonnee_x_station": 1028256.263592,
+      "coordonnee_y_station": 6295903.5834203,
+      "code_projection": 26,
+      "longitude_station": 7.072033107,
+      "latitude_station": 43.685974439,
+      "influence_locale_station": null,
+      "commentaire_station": null,
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": "06105",
+      "libelle_commune": "ROQUEFORT-LES-PINS",
+      "code_departement": "06",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": "Y5610500",
+      "libelle_cours_eau": "Le Loup",
+      "uri_cours_eau": "http://id.eaufrance.fr/CEA/Y5610500",
+      "descriptif_station": null,
+      "date_maj_station": "2023-07-05T00:00:00Z",
+      "date_ouverture_station": "2020-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": "1 2",
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": "ALPES-MARITIMES",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          7.0720331074965515,
+          43.68597443939044
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/Y561621603/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:55.464604+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "Y644202001",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "Y6442020",
+      "libelle_site": "Le Var à Carros [Pont de la Manda]",
+      "code_station": "Y644202001",
+      "libelle_station": "Le Var à Carros [Pont de la Manda]",
+      "type_station": "STD",
+      "coordonnee_x_station": 1038405.0,
+      "coordonnee_y_station": 6305144.0,
+      "code_projection": 26,
+      "longitude_station": 7.203791548,
+      "latitude_station": 43.764225796,
+      "influence_locale_station": 3,
+      "commentaire_station": "Station hors service le 01/12/1985, puis remise en service le 11/04/2006. Lit très mobile, la relation H/Q est très instable et peu fiable, même depuis l’arasement du seuil aval et la destruction de la micro centrale qui influait fortement la station en toutes eaux.",
+      "altitude_ref_alti_station": 59.0,
+      "code_systeme_alti_site": 2,
+      "code_commune_station": "06033",
+      "libelle_commune": "CARROS",
+      "code_departement": "06",
+      "code_region": "93",
+      "libelle_region": "PROVENCE-ALPES-COTE D'AZUR",
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": "2021-11-23T00:00:00Z",
+      "date_ouverture_station": "1975-01-01T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 12,
+      "code_finalite_station": "2 6",
+      "type_contexte_loi_stat_station": 1,
+      "type_loi_station": 1,
+      "code_sandre_reseau_station": [
+        "POH019",
+        "POH040",
+        "POH101",
+        "POH900"
+      ],
+      "date_debut_ref_alti_station": "1975-01-01T00:00:00Z",
+      "date_activation_ref_alti_station": "2013-11-18T00:00:00Z",
+      "date_maj_ref_alti_station": "2016-07-29T00:00:00Z",
+      "libelle_departement": "ALPES-MARITIMES",
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          7.203791548193948,
+          43.76422579601659
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/Y644202001/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:16:56.999721+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "Y880000101",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "Y8800001",
+      "libelle_site": "Le ruisseau de Codi à Sorbollano [EDF - Codi]",
+      "code_station": "Y880000101",
+      "libelle_station": "Le ruisseau de Codi à Sorbollano [EDF - Codi]",
+      "type_station": "STD",
+      "coordonnee_x_station": 1209367.0,
+      "coordonnee_y_station": 6091152.0,
+      "code_projection": 26,
+      "longitude_station": 9.114812619,
+      "latitude_station": 41.743812357,
+      "influence_locale_station": null,
+      "commentaire_station": "Les valeurs publiées représentent les débits naturels du Codi. Station mise en service en septembre 1997. Données produites par EDF-DTG.",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": null,
+      "libelle_commune": null,
+      "code_departement": null,
+      "code_region": null,
+      "libelle_region": null,
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": null,
+      "date_ouverture_station": "1997-09-16T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 16,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": null,
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          9.114812619266893,
+          41.74381235699786
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/Y880000101/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:13.481996+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  },
+  {
+    "station_id": "Y971000201",
+    "old_supported": true,
+    "hub_native": {
+      "code_site": "Y9710002",
+      "libelle_site": "Le ruisseau de Palavesani à Porto-Vecchio",
+      "code_station": "Y971000201",
+      "libelle_station": "Le ruisseau de Palavesani à Porto-Vecchio",
+      "type_station": "STD",
+      "coordonnee_x_station": 1216316.0,
+      "coordonnee_y_station": 6082514.0,
+      "code_projection": 26,
+      "longitude_station": 9.189781975,
+      "latitude_station": 41.661609911,
+      "influence_locale_station": null,
+      "commentaire_station": "Station hydrométrique mise en place le 24/06/2021 par l'Unité Hydro-Climatologie de l'OEHC. Station située à l'amont du barrage d'U Spidali",
+      "altitude_ref_alti_station": null,
+      "code_systeme_alti_site": null,
+      "code_commune_station": null,
+      "libelle_commune": null,
+      "code_departement": null,
+      "code_region": null,
+      "libelle_region": null,
+      "code_cours_eau": null,
+      "libelle_cours_eau": null,
+      "uri_cours_eau": null,
+      "descriptif_station": null,
+      "date_maj_station": null,
+      "date_ouverture_station": "2021-06-24T00:00:00Z",
+      "date_fermeture_station": null,
+      "commentaire_influence_locale_station": null,
+      "code_regime_station": 1,
+      "qualification_donnees_station": 20,
+      "code_finalite_station": null,
+      "type_contexte_loi_stat_station": null,
+      "type_loi_station": null,
+      "code_sandre_reseau_station": null,
+      "date_debut_ref_alti_station": null,
+      "date_activation_ref_alti_station": null,
+      "date_maj_ref_alti_station": null,
+      "libelle_departement": null,
+      "en_service": true,
+      "geometry": {
+        "type": "Point",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "coordinates": [
+          9.18978197456336,
+          41.66160991090982
+        ]
+      }
+    },
+    "native_identity_response": {
+      "url": "https://hydro.eaufrance.fr/stationhydro/Y971000201/fiche",
+      "params": null,
+      "status": 404,
+      "retrieved_at": "2026-09-21T09:14:14.757430+00:00",
+      "content_type": "text/html; charset=UTF-8",
+      "bytes": 67160,
+      "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+    }
+  }
+]
