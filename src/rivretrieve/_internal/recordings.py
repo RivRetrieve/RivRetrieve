@@ -786,6 +786,18 @@ class _HtmlEncodingDeclarations(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag != "meta":
             return
+        values = dict(attrs)
+        content = values.get("content") or ""
+        pragma = (values.get("http-equiv") or "").casefold()
+        has_content_pragma = any(
+            name == "http-equiv" and (value or "").casefold() == "content-type" for name, value in attrs
+        )
+        content_declaration = "name" not in values and any(
+            name == "content" and re.match(r"[\t\n\f\r ]*text/html[\t\n\f\r ]*;.*\bcharset\b", value or "", re.I | re.S)
+            for name, value in attrs
+        )
+        if "charset" not in values and not has_content_pragma and not content_declaration:
+            return
         raw = self.get_starttag_text()
         # HTMLParser recovers malformed attributes. Do not use that recovery to
         # establish the decoder used by the secret-field safety check.
@@ -801,15 +813,16 @@ class _HtmlEncodingDeclarations(HTMLParser):
             is None
         ):
             raise ValueError("malformed HTML encoding declaration")
-        values = dict(attrs)
-        if len(values) != len(attrs):
+        encoding_attributes = {"charset"}
+        if has_content_pragma or content_declaration:
+            encoding_attributes.update({"content", "http-equiv"})
+        declaration_names = [name for name, _ in attrs if name in encoding_attributes]
+        if len(set(declaration_names)) != len(declaration_names):
             raise ValueError("ambiguous HTML meta attributes")
         labels: list[str] = []
         if "charset" in values:
             labels.append(values["charset"] or "")
-        content = values.get("content") or ""
-        pragma = (values.get("http-equiv") or "").casefold()
-        if pragma == "content-type" or re.search(r"\bcharset\b", content, re.I):
+        if pragma == "content-type" or content_declaration:
             match = re.fullmatch(
                 r"[\t\n\f\r ]*text/html[\t\n\f\r ]*;[\t\n\f\r ]*"
                 r"charset[\t\n\f\r ]*=[\t\n\f\r ]*([^;\s]+)[\t\n\f\r ]*",
@@ -819,8 +832,16 @@ class _HtmlEncodingDeclarations(HTMLParser):
             if pragma != "content-type" or match is None:
                 raise ValueError("malformed HTML encoding declaration")
             labels.append(match.group(1))
-        if labels and "&" in (raw or ""):
-            raise ValueError("escaped HTML encoding declaration is unsupported")
+        # Tokenize raw attributes rather than searching the whole tag: HTMLParser
+        # expands references in attribute values, even with convert_charrefs=False.
+        # Escapes in unrelated metadata do not affect encoding evidence.
+        for attribute in re.finditer(
+            r"[\t\n\f\r ]+([A-Za-z_:][A-Za-z0-9_.:-]*)"
+            r"(?:[\t\n\f\r ]*=[\t\n\f\r ]*(\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?",
+            raw,
+        ):
+            if attribute.group(1).lower() in declaration_names and "&" in (attribute.group(2) or ""):
+                raise ValueError("escaped HTML encoding declaration is unsupported")
         for label in labels:
             # Explicit HTML labels only, not Python's codec registry (which also
             # includes transforms and encodings unsafe for an ASCII meta scan).

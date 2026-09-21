@@ -100,6 +100,8 @@ def test_declared_html_still_rejects_sensitive_fields(declaration: str, field: s
         '<meta charset="euc_jp">',
         '<meta charset="euc-jp" charset="utf-8">',
         '<meta charset="euc-jp" CHARSET="euc-jp">',
+        '<meta http-equiv="Content-Type" http-equiv="refresh" content="value">',
+        '<meta content="text/html; charset=euc-jp" content="value">',
         '<meta charset="euc-jp"><meta charset="utf-8">',
         '<meta charset="utf-8" http-equiv="Content-Type" content="text/html; charset=EUC-JP">',
         '<meta http-equiv="Content-Type" content="text/html; charset=EUC-JP; charset=utf-8">',
@@ -188,3 +190,34 @@ def test_read_and_replay_revalidate_html_safety_even_with_correct_digest(tmp_pat
         read_recording(path)
     with pytest.raises(InvalidRecordingError, match="invalid response"):
         ReplayTransport([path])
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        '<meta name="description" content="The charset is UTF-8">',
+        '<meta name="description" content="text/html; charset=unknown">',
+        '<meta content="The charset is UTF-8">',
+        '<meta name="description" content="river &amp; gauge">',
+    ],
+)
+def test_non_declaration_metadata_does_not_select_or_reject_encoding(metadata: str) -> None:
+    for declaration, encoding in [("", "utf-8"), (_MLIT_META, "euc-jp")]:
+        content = (metadata + declaration + "水位").encode(encoding)
+        assert _capture(content).content == content
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        '<meta charset=euc-jp data-note="river &amp; gauge">',
+        '<meta data-note="river &amp; gauge" charset=euc-jp>',
+        '<meta data-note="charset=&amp;" charset=euc-jp>',
+        '<meta http-equiv="Content-Type" content="text/html; charset=EUC-JP" data-note="river &amp; gauge">',
+    ],
+)
+def test_unrelated_escaped_attributes_do_not_invalidate_declaration(declaration: str) -> None:
+    content = (declaration + "水位").encode("euc-jp")
+    assert _capture(content).content == content
+    with pytest.raises(ValueError, match="secret-bearing"):
+        _capture(content + b'<input name="password">')
