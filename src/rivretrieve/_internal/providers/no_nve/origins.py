@@ -239,7 +239,7 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
             source_id=None,
             acquisition_id=None,
             transformation=Transformation(
-                name="NVE parameter-resolution-unit vocabulary to canonical products",
+                name="NVE parameter-resolution-unit access vocabulary; raw cadence and version-dependent method, temporal support and anchor remain unknown at product grain",
                 external_inputs=(ExternalFactReference(source_id=source_id, fact=_PRODUCT_FACT),),
             ),
         ),

@@ -7,6 +7,7 @@ exercise engine refresh and empty-answer behavior without claiming new source ev
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -25,15 +26,14 @@ from rivretrieve._internal.engine import (
     Payload,
     ProviderConfig,
     RequestedWindow,
-    Rows,
     WindowEndpoint,
-    WithIssues,
 )
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptAuthorship, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.recordings import ReplayTransport
+from rivretrieve._internal.source_series import OutcomeStatus, ParsedSeries
 from rivretrieve._internal.store import ObservationStoreRefusedError, StoreReader, StoreRoot
 from rivretrieve._internal.transport import (
     Transport,
@@ -75,10 +75,15 @@ class ParseOutputControl:
     def __init__(self, limit: int) -> None:
         self.limit = limit
 
-    def parse(self, payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+    def parse(self, payload: Payload, config: ProviderConfig) -> ParsedSeries:
         parsed = _STAGES.parse(payload, config)
-        return WithIssues(
-            parsed.value.filter(pl.col("time").dt.date() == datetime(2020, 7, 1).date()).head(self.limit), parsed.issues
+        return replace(
+            parsed,
+            rows=parsed.rows.filter(pl.col("time").dt.date() == datetime(2020, 7, 1).date()).head(self.limit),
+            outcomes=tuple(
+                item.model_copy(update={"outcome_id": item.outcome_id + f"/test-limit-{self.limit}"})
+                for item in parsed.outcomes
+            ),
         )
 
 
@@ -117,13 +122,15 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = CountedReplay(_DAILY)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
-    selection = rr.pick(rr.find(provider="usgs_nwis", product="discharge_daily_mean"), station="07374000")
+    selection = rr.pick(
+        rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"), station="07374000"
+    )
     first = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", receipts=True)
     assert len(transport.calls) == 1
     second = rr.fetch(selection, start="2023-01-01T12:00", end="2023-01-01T13:00", cache="reuse", receipts=True)
     assert len(transport.calls) == 1
     assert_frame_equal(first.data, second.data)
-    assert second.provenance.calls_made == ()
+    assert second.provenance.calls_made == first.provenance.calls_made
     assert len(second.provenance.served_intervals) == 1
     assert second.receipts.entries[0].authorship is ReceiptAuthorship.STORE_EXCERPT
     assert first.receipts.entries[0].authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
@@ -147,37 +154,37 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     assert not rr.cache_status("usgs_nwis").exists
 
 
-def test_only_remainder_is_parsed_into_mixed_result_and_receipts(tmp_path: Path) -> None:
+def test_incomplete_coverage_reacquires_whole_scope_without_stale_rows(tmp_path: Path) -> None:
     transport = CountedReplay(_INSTANT)
     store = tmp_path / "store"
     first = _drive(store, transport, end=datetime(2020, 7, 1, 11, 59, 59, 999999))
-    mixed = _drive(store, transport)
+    acquired = _drive(store, transport)
     assert len(transport.calls) == 2
     expected = _drive(store, transport, cache="bypass")
-    assert_frame_equal(mixed.canonical_rows.sort("time"), expected.canonical_rows.sort("time"))
-    assert mixed.provenance.served_intervals[0].interval.end == datetime(2020, 7, 1, 11, 59, 59, 999999)
-    assert len(mixed.provenance.calls_made) == 1
-    assert [entry.authorship for entry in mixed.receipts.entries] == [
-        ReceiptAuthorship.STORE_EXCERPT,
-        ReceiptAuthorship.PUBLISHER_PAYLOAD,
-    ]
-    assert mixed.receipts.entries[1].content == first.receipts.entries[0].content
-    coverage = StoreReader().status(StoreRoot(store), _PROVIDER).coverage
-    assert [item.interval.start for item in coverage] == [datetime(2020, 7, 1), datetime(2020, 7, 1, 12)]
+    assert_frame_equal(acquired.canonical_rows.sort("time"), expected.canonical_rows.sort("time"))
+    assert acquired.provenance.served_intervals == ()
+    assert [entry.authorship for entry in acquired.receipts.entries] == [ReceiptAuthorship.PUBLISHER_PAYLOAD]
+    assert acquired.receipts.entries[0].content == first.receipts.entries[0].content
     repeated = _drive(store, transport)
     assert len(transport.calls) == 3
     assert_frame_equal(repeated.canonical_rows.sort("time"), expected.canonical_rows.sort("time"))
 
 
-def test_failed_remainder_returns_held_rows_and_preserves_store(tmp_path: Path) -> None:
+def test_failed_reacquisition_retains_held_success_with_original_vintage(tmp_path: Path) -> None:
     store = tmp_path / "store"
     held = _drive(store, CountedReplay(_INSTANT), end=datetime(2020, 7, 1, 11, 59, 59, 999999))
-    before = _bytes(store)
+    before = {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")}
     partial = _drive(store, RefusedTransport())
     assert_frame_equal(partial.canonical_rows, held.canonical_rows)
+    assert partial.provenance.served_intervals
+    assert partial.provenance.served_intervals[0].retrieved_at == held.provenance.retrieved_at
     assert len(partial.issues) == 1
     assert partial.issues[0].severity == "error"
-    assert _bytes(store) == before
+    assert {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")} == before
+    assert any(
+        item.status is OutcomeStatus.FAILED
+        for item in StoreReader().status(StoreRoot(store), _PROVIDER).manifest.outcomes
+    )
 
 
 @pytest.mark.parametrize("remaining", [8, 0])
@@ -195,28 +202,20 @@ def test_refresh_replaces_with_fewer_parse_rows_and_empty_answers_are_covered(tm
 
 
 def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path) -> None:
-    from dataclasses import replace
-
-    from rivretrieve._internal.store.accumulation import accumulate
+    class LaterReplay(CountedReplay):
+        def send(self, request):
+            response = super().send(request)
+            return replace(response, retrieved_at=response.retrieved_at + timedelta(days=1))
 
     store = StoreRoot(tmp_path / "store")
     _drive(store, CountedReplay(_INSTANT), end=datetime(2020, 7, 1, 11, 59, 59, 999999))
-    _drive(store, CountedReplay(_INSTANT))
+    _drive(store, LaterReplay(_INSTANT), start=datetime(2020, 7, 1, 12), cache="refresh")
     status = StoreReader().status(store, _PROVIDER)
-    second = replace(status.coverage[1], retrieved_at=status.coverage[1].retrieved_at + timedelta(days=1))
-    from rivretrieve._internal.store import StoreQuery
-
-    rows = (
-        StoreReader()
-        .query(StoreQuery(store, _PROVIDER, ("09380000",), (_PRODUCT,), second.interval.start, second.interval.end))
-        .rows
-    )
-    accumulate(store, _PROVIDER, rows, second)
     result = _drive(store, RefusedTransport())
-    assert tuple(item.retrieved_at for item in result.provenance.served_intervals) == (
-        status.coverage[0].retrieved_at,
-        second.retrieved_at,
+    assert tuple(item.retrieved_at for item in result.provenance.served_intervals) == tuple(
+        item.retrieved_at for item in status.coverage
     )
+    assert len(result.provenance.served_intervals) == 2
     assert "freshness" not in result.provenance.model_dump_json()
 
 
@@ -244,21 +243,17 @@ def test_interrupted_publication_refuses_before_source_call(tmp_path: Path) -> N
     assert not store.exists()
 
 
-def test_failed_second_gap_does_not_publish_part_of_a_failed_series(tmp_path: Path) -> None:
+def test_failed_refresh_does_not_replace_held_concrete_values(tmp_path: Path) -> None:
     store = tmp_path / "store"
-    _drive(store, CountedReplay(_INSTANT), start=datetime(2020, 7, 1, 12), end=datetime(2020, 7, 1, 13, 59, 59, 999999))
-    before = _bytes(store)
-
-    class FailSecondGap(CountedReplay):
-        def send(self, request: TransportRequest) -> TransportResponse:
-            if self.calls:
-                return RefusedTransport().send(request)
-            return super().send(request)
-
-    result = _drive(store, FailSecondGap(_INSTANT))
-    assert result.canonical_rows.height > 8
+    held = _drive(store, CountedReplay(_INSTANT))
+    before = {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")}
+    result = _drive(store, RefusedTransport(), cache="refresh")
+    assert result.canonical_rows.is_empty()
     assert len(result.issues) == 1
-    assert _bytes(store) == before
+    assert {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")} == before
+    reused = _drive(store, RefusedTransport())
+    assert_frame_equal(reused.canonical_rows, held.canonical_rows)
+    assert any(item.status is OutcomeStatus.FAILED for item in reused.outcomes)
 
 
 @pytest.mark.parametrize("defect", ["zone", "product"])
@@ -266,16 +261,17 @@ def test_invalid_parse_rows_even_in_padding_do_not_modify_store(tmp_path: Path, 
     from rivretrieve._internal.issues import FatalContractError
 
     class InvalidParseRows(ParseOutputControl):
-        def parse(self, payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+        def parse(self, payload: Payload, config: ProviderConfig) -> ParsedSeries:
             parsed = _STAGES.parse(payload, config)
             field, value = ("time_zone", "not a zone") if defect == "zone" else ("product_id", "undeclared")
-            return WithIssues(
-                parsed.value.with_columns(
+            return replace(
+                parsed,
+                rows=parsed.rows.with_columns(
                     pl.when(pl.col("time") < datetime(2020, 7, 1))
                     .then(pl.lit(value))
                     .otherwise(pl.col(field))
                     .alias(field)
-                )
+                ),
             )
 
     store = tmp_path / "store"
@@ -297,11 +293,15 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: OneSeriesFails(_DAILY))
-    selection = rr.pick(rr.find(provider="usgs_nwis", product="discharge_daily_mean"), station=["07374000", "09380000"])
+    selection = rr.pick(
+        rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"),
+        station=["07374000", "09380000"],
+    )
     with pytest.raises(IssuePolicyError):
         rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="raise")
     status = rr.cache_status("usgs_nwis")
-    assert tuple(item.station_id for item in status.coverage) == ("07374000",)
+    definitions = {item.series_id: item for item in status.manifest.series}
+    assert tuple(definitions[item.series_id].station_id for item in status.coverage) == ("07374000",)
 
 
 def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_coverage(tmp_path: Path) -> None:
@@ -309,11 +309,15 @@ def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_cover
     from rivretrieve._internal.issues import Issue
 
     class ParseIssueControl(ParseOutputControl):
-        def parse(self, payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+        def parse(self, payload: Payload, config: ProviderConfig) -> ParsedSeries:
             parsed = _STAGES.parse(payload, config)
-            return WithIssues(
-                parsed.value,
-                (
+            return replace(
+                parsed,
+                outcomes=tuple(
+                    item.model_copy(update={"status": OutcomeStatus.FAILED, "reason": "Authored source failure"})
+                    for item in parsed.outcomes
+                ),
+                issues=(
                     *parsed.issues,
                     Issue(
                         severity="error",
@@ -330,4 +334,23 @@ def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_cover
     assert not result.canonical_rows.is_empty()
     assert len(transport.calls) == 1
     assert any(issue.code == "contract_test.parse_error" for issue in result.issues)
-    assert not store.exists()
+    manifest = StoreReader().status(StoreRoot(store), _PROVIDER).manifest
+    assert not manifest.coverage
+    assert any(item.status is OutcomeStatus.FAILED for item in manifest.outcomes)
+
+
+def test_unsupported_refetch_retains_covered_native_success_with_its_vintage(tmp_path):
+    from rivretrieve._internal.recordings import read_recording
+
+    store = tmp_path / "store"
+    held = _drive(store, CountedReplay(_INSTANT), end=datetime(2020, 7, 1, 11, 59, 59, 999999))
+    recording = read_recording(_INSTANT)
+    document = json.loads(recording.content)
+    # Authored corrupt numeric cell exercises the real parser boundary; it is not agency evidence.
+    document["value"]["timeSeries"][0]["values"][0]["value"][0]["value"] = "not-a-number"
+    malformed = replace(recording, content=json.dumps(document).encode())
+    result = _drive(store, ReplayTransport((malformed,)))
+    assert_frame_equal(result.canonical_rows, held.canonical_rows)
+    assert any(item.status is OutcomeStatus.UNSUPPORTED for item in result.outcomes)
+    assert result.provenance.served_intervals
+    assert result.provenance.served_intervals[0].retrieved_at == held.provenance.retrieved_at

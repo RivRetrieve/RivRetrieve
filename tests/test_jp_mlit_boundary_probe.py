@@ -55,7 +55,7 @@ def _runner(product: ProductId):
             config(),
             replay,
         ).value
-        return pl.concat([parse(payload, config()).value for payload in payloads])
+        return pl.concat([parse(payload, config()).rows for payload in payloads])
 
     return run
 

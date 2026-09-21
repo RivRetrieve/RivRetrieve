@@ -656,6 +656,27 @@ def normalize_provenance(
     row_locator_requirements: tuple[RowLocatorRequirement, ...] = (),
 ) -> CatalogueEvidence:
     """normalize provenance : AcquisitionProvenance × CanonicalRowKeys → CatalogueEvidence (pure build boundary)."""
+    header, frames = _normalize_provenance_relations(
+        provenance,
+        stations=stations,
+        station_products=station_products,
+        row_locator_requirements=row_locator_requirements,
+    )
+    # The construction scope has returned: raw rows and temporary lookup indexes
+    # no longer overlap the complete scientific evidence-closure validation.
+    result = CatalogueEvidence(header=header, **frames)
+    validate_catalogue_locators(result, stations=stations, station_products=station_products)
+    return result
+
+
+def _normalize_provenance_relations(
+    provenance: AcquisitionProvenance,
+    *,
+    stations: pl.DataFrame,
+    station_products: pl.DataFrame,
+    row_locator_requirements: tuple[RowLocatorRequirement, ...],
+) -> tuple[EvidenceHeader, dict[str, pl.DataFrame]]:
+    """Build the header and bulk relations within one bounded temporary scope."""
     names = {name: i for i, name in enumerate(provenance.fact_universe)}
     locators = {}
     requirements = list(row_locator_requirements)
@@ -748,6 +769,4 @@ def normalize_provenance(
         row_locator_requirements=tuple(requirements),
         files=evidence_file_identities(frames, encoded),
     )
-    result = CatalogueEvidence(header=header, **frames)
-    validate_catalogue_locators(result, stations=stations, station_products=station_products)
-    return result
+    return header, frames

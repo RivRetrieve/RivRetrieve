@@ -102,7 +102,7 @@
       "marker_value": null
     },
     {
-      "name": "NVE parameter-resolution-unit vocabulary to canonical products",
+      "name": "NVE parameter-resolution-unit access vocabulary; raw cadence and version-dependent method, temporal support and anchor remain unknown at product grain",
       "kind": "derived_value",
       "marker_value": null
     },

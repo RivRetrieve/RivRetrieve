@@ -1,0 +1,12 @@
+{
+  "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations",
+  "params": {
+    "size": 10000,
+    "format": "json"
+  },
+  "status": 200,
+  "retrieved_at": "2026-09-21T09:11:52.123123+00:00",
+  "content_type": "application/json",
+  "bytes": 10137697,
+  "sha256": "d68d4f6551cdf0dd57c980686144f2438756ca6d850d69a05ef5cf86e054c81e"
+}

@@ -509,7 +509,7 @@ def with_observation_products(
                 ExternalFactReference(source_id=daily_source_id, fact=daily_doc_fact),
                 *correspondence_inputs,
             ),
-            "Documented adopted instantaneous fields; when supplied, Hidro daily means Mediadiaria=1 with Bruto=1 and Consistido=2 as separate products, ordinal daily labels, unknown day definition and zone",
+            "Documented adopted fields with measurement-time labels but unestablished cadence, statistic and temporal support; when supplied, Hidro daily means Mediadiaria=1 with Bruto=1 and Consistido=2 as separate products, ordinal daily labels, unknown day definition and zone",
         ),
         (
             "observation_candidate_relations",
@@ -583,13 +583,3 @@ def with_observation_products(
         fact_bindings=tuple(bindings),
         withheld_facts=withheld,
     )
-
-
-def with_adopted_telemetry(
-    inventory: AcquisitionProvenance,
-    capture: InventoryCapture,
-    candidates: pl.DataFrame,
-    telemetry: AdoptedTelemetryEvidence,
-) -> AcquisitionProvenance:
-    """Compatibility entry point for the telemetry-only catalogue builder."""
-    return with_observation_products(inventory, capture, candidates, telemetry)

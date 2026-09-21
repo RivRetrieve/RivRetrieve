@@ -23,7 +23,7 @@ from jsonschema import Draft202012Validator, FormatChecker, SchemaError
 from polars.testing import assert_frame_equal
 
 ROOT = Path(__file__).parents[1]
-FIXTURES = ROOT / "tests/test_data/observation_store_conformance"
+FIXTURES = ROOT / "tests/test_data/source_series_store_conformance"
 SCHEMA_PATH = ROOT / "src/rivretrieve/_internal/store/manifest.schema.json"
 PARTITION_PATTERN = re.compile(r"^product=(?P<product>[^/=]+)/year=(?P<year>[0-9]{4})/(?P<basename>[^/]+\.parquet)$")
 PHYSICAL_SCHEMA = pl.Schema(
@@ -33,10 +33,16 @@ PHYSICAL_SCHEMA = pl.Schema(
         "time_zone": pl.String,
         "value": pl.Float64,
         "value_state": pl.String,
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "source_unit": pl.String,
         "native_unit": pl.String,
         "source_quality": pl.String,
         "source_note": pl.String,
     }
+)
+NATIVE_PHYSICAL_SCHEMA = pl.Schema(
+    {name: dtype for name, dtype in PHYSICAL_SCHEMA.items() if name not in {"series_id", "facts_id", "source_unit"}}
 )
 FINGERPRINT = "sha256:fec7d282faad87c744bd83241c5be29a15b7a7254760b7a9aed0f4e27ba3ecca"
 VALID_NAMES = {
@@ -219,8 +225,8 @@ def inspect_store(path: Path, case_universe: tuple[Case, ...]) -> list[str]:
     universe = set(case_universe)
     for identifier, files in partitions.items():
         frame = pl.read_parquet(files[0])
-        required_schema = list(PHYSICAL_SCHEMA.items())[:5]
-        if list(frame.schema.items())[:5] != required_schema:
+        required_schema = list(PHYSICAL_SCHEMA.items())[:8]
+        if list(frame.schema.items())[:8] != required_schema:
             return [f"partition.schema:{identifier}"]
         for column in ["native_unit", "source_quality", "source_note"]:
             if column in frame.schema and frame.schema[column] != PHYSICAL_SCHEMA[column]:
@@ -281,6 +287,9 @@ def _future_row() -> pl.DataFrame:
                 "Europe/Vienna",
                 152.4,
                 "published_value",
+                _load_json(FIXTURES / "valid_future_austria/manifest.json")["series"][0]["series_id"],
+                _load_json(FIXTURES / "valid_future_austria/manifest.json")["series"][0]["facts"][0]["facts_id"],
+                "cm",
                 "cm",
                 "checked",
                 "future-source-only text",
@@ -295,7 +304,7 @@ def test_manifest_schema_is_valid_draft_2020_12() -> None:
     schema = _load_json(SCHEMA_PATH)
     Draft202012Validator.check_schema(schema)
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-    assert schema["$id"] == "https://rivretrieve.org/schemas/observation-store-manifest-2.json"
+    assert schema["$id"] == "https://rivretrieve.org/schemas/observation-store-manifest-5.json"
     assert schema["required"] == [
         "format_version",
         "provider_id",
@@ -305,12 +314,17 @@ def test_manifest_schema_is_valid_draft_2020_12() -> None:
         "source_schema",
         "source_column_dispositions",
         "partition_row_counts",
+        "series",
+        "inventories",
+        "outcomes",
+        "issues",
+        "source_calls",
     ]
     assert schema["oneOf"] == [
         {"required": ["publisher_artifact"], "not": {"required": ["publisher_artifacts"]}},
         {"required": ["publisher_artifacts"], "not": {"required": ["publisher_artifact"]}},
     ]
-    assert schema["properties"]["format_version"]["const"] == 2
+    assert schema["properties"]["format_version"]["const"] == 5
     assert schema["properties"]["built_at"]["pattern"] == (
         r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$"
     )
@@ -532,7 +546,7 @@ def _repair(name: str, store: Path) -> None:
     elif name == "invalid_manifest_type":
         manifest["compiler_version"] = valid_manifest["compiler_version"]
     elif name == "invalid_manifest_version":
-        manifest["format_version"] = 2
+        manifest["format_version"] = 5
     elif name == "invalid_manifest_checksum":
         manifest["publisher_artifact"]["sha256"] = valid_manifest["publisher_artifact"]["sha256"]
     elif name == "invalid_manifest_fingerprint":
@@ -582,10 +596,10 @@ def test_pinned_partition_pruning() -> None:
                 2024,
             )
         ],
-        schema=PHYSICAL_SCHEMA | pl.Schema({"product": pl.String, "year": pl.Int64}),
+        schema=NATIVE_PHYSICAL_SCHEMA | pl.Schema({"product": pl.String, "year": pl.Int64}),
         orient="row",
     )
-    assert_frame_equal(actual, expected)
+    assert_frame_equal(actual.select(expected.columns), expected)
     assert actual.schema["product"] == pl.String
     assert actual.schema["year"] == pl.Int64
 
@@ -598,10 +612,10 @@ def test_partition_pruning_control_selects_a_known_other_partition() -> None:
     ).collect()
     expected = pl.DataFrame(
         [("ca-001", datetime(2024, 1, 1), "America/Toronto", 1.25, "published_value", "m", "A", None, "level", 2024)],
-        schema=PHYSICAL_SCHEMA | pl.Schema({"product": pl.String, "year": pl.Int64}),
+        schema=NATIVE_PHYSICAL_SCHEMA | pl.Schema({"product": pl.String, "year": pl.Int64}),
         orient="row",
     )
-    assert_frame_equal(actual, expected)
+    assert_frame_equal(actual.select(expected.columns), expected)
     assert scan.filter(pl.col("product") == "temperature").collect().is_empty()
 
 
@@ -622,7 +636,7 @@ def test_imgw_hydrological_archive_spans_adjacent_calendar_partitions() -> None:
                     "codz_2024 November-December side",
                 )
             ],
-            schema=PHYSICAL_SCHEMA,
+            schema=NATIVE_PHYSICAL_SCHEMA,
             orient="row",
         ),
         pl.DataFrame(
@@ -638,12 +652,12 @@ def test_imgw_hydrological_archive_spans_adjacent_calendar_partitions() -> None:
                     "codz_2024 January-October side",
                 )
             ],
-            schema=PHYSICAL_SCHEMA,
+            schema=NATIVE_PHYSICAL_SCHEMA,
             orient="row",
         ),
     ]
     for actual, wanted in zip(frames, expected, strict=True):
-        assert_frame_equal(actual, wanted)
+        assert_frame_equal(actual.select(wanted.columns), wanted)
     manifest = _load_json(store / "manifest.json")
     assert manifest["publisher_artifact"]["url"] == "https://example.invalid/imgw/codz_2024.zip"
     assert [frame["time"][0].year for frame in frames] == [2023, 2024]
@@ -755,7 +769,10 @@ def test_native_physics_time_zones_and_source_columns_survive() -> None:
             "future-source-only text",
         ),
     ]
-    assert_frame_equal(actual, pl.DataFrame(expected_rows, schema=PHYSICAL_SCHEMA, orient="row"))
+    assert_frame_equal(
+        actual.select(NATIVE_PHYSICAL_SCHEMA.names()),
+        pl.DataFrame(expected_rows, schema=NATIVE_PHYSICAL_SCHEMA, orient="row"),
+    )
     assert actual.schema["time"] == pl.Datetime("us")
     assert set(actual["native_unit"]) == {"m3/s", "m", "cm"}
     # Pin this shared source-column disposition record exactly: each record has `source_column`, a `disposition` drawn from exactly `retained`, `reconstructible`, and `deliberately_discarded`, `reconstruction_rule` containing the reconstruction rule and required when and only when the disposition is `reconstructible`, and `rationale` required when and only when the disposition is `deliberately_discarded`; completeness means every source column of the declared source schema appears exactly once.
@@ -779,7 +796,7 @@ def test_store_accepts_additional_provider_native_column(tmp_path: Path) -> None
 def test_store_accepts_only_required_physical_columns(tmp_path: Path) -> None:
     store = _copy_fixture("valid_future_austria", tmp_path)
     part = _part(store)
-    required_names = ["station_id", "time", "time_zone", "value", "value_state"]
+    required_names = ["station_id", "time", "time_zone", "value", "value_state", "series_id", "facts_id", "source_unit"]
     pl.read_parquet(part).select(required_names).write_parquet(part, compression="zstd", statistics=True)
     manifest = _load_json(store / "manifest.json")
     source_names = {"station_id", "time", "time_zone", "value"}

@@ -2,15 +2,20 @@ from pathlib import Path
 
 import pytest
 
-from rivretrieve._internal.store import CertificationError, DecodedPublisherArtifact, SourceUnitCount, certify_compile
+from rivretrieve._internal.store import (
+    NativeStoreMaterialization,
+    SourceUnitCount,
+    StoreCertificationError,
+    certify_store,
+)
 from tests.store.certification_support import artifact_and_request, rows
 
 
 def test_truncated_earlier_member_prevents_later_valid_prefix_being_published(tmp_path: Path) -> None:
     artifact, request = artifact_and_request(tmp_path)
 
-    def decode(_artifact: Path) -> DecodedPublisherArtifact:
-        return DecodedPublisherArtifact(
+    def decode(_artifact: Path) -> NativeStoreMaterialization:
+        return NativeStoreMaterialization(
             rows(year=1998),
             request.source_columns,
             (
@@ -19,8 +24,8 @@ def test_truncated_earlier_member_prevents_later_valid_prefix_being_published(tm
             ),
         )
 
-    with pytest.raises(CertificationError, match="source-unit emitted rows differ"):
-        certify_compile(request, artifact, decode)
+    with pytest.raises(StoreCertificationError, match="source-unit emitted rows differ"):
+        certify_store(request, artifact, decode)
 
     assert not Path(request.destination).exists()
     assert artifact.exists()

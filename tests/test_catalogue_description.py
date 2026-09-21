@@ -40,7 +40,7 @@ def test_recorded_usgs_fetch_carries_exact_verified_source_words(monkeypatch: py
     replay = ReplayTransport((recording,))
     monkeypatch.setattr(discovery, "_credentialed_transport", lambda provider_id, values: replay)
     result = rr.fetch(
-        rr.find(provider="usgs_nwis", station="09380000", product="discharge_instantaneous"),
+        rr.find(provider="usgs_nwis", station="09380000", quantity="discharge", temporal_support="instantaneous"),
         start="2020-07-01T00:00:00",
         end="2020-07-01T23:00:00",
         on_issue="ignore",
@@ -86,6 +86,7 @@ def test_provider_terms_do_not_promote_an_explicit_absence_or_unbound_statement(
 def test_south_africa_remains_catalogue_only() -> None:
     from rivretrieve._internal.issues import ObservationsUnavailableError
 
-    selection = rr.from_frame(rr.as_frame(rr.find(provider="za_dws")).head(1))
+    candidates = rr.find(provider="za_dws")
+    selection = rr.find(provider="za_dws", station=candidates.known_series[0].station_id)
     with pytest.raises(ObservationsUnavailableError, match="no observations registered"):
         rr.fetch(selection, start="2020-01-01", end="2020-01-02", on_issue="ignore")

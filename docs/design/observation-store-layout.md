@@ -6,23 +6,26 @@ This document is the normative observation-store format contract. `MUST`, `MUST 
 `REQUIRED`, `SHOULD`, and `MAY` have their RFC 2119 meanings. The machine-readable
 manifest schema is `src/rivretrieve/_internal/store/manifest.schema.json`; the valid and
 intentionally invalid conformance stores are rooted at
-`tests/test_data/observation_store_conformance/`. Those artifacts must implement this
-contract. Their paths are citations only: this document remains meaningful and mergeable
-when the concurrent artifacts are not present.
+`tests/test_data/observation_store_conformance/`. Supported stores must implement this
+contract. Refusal fixtures also include unsupported formats. Runtime validation checks
+the typed source-series records and their references.
 
-The revision-2 contract below applies to stores produced by compiling a publisher
-artifact. The accumulated-store revision-4 section specifies live-provider parse output
+The revision-5 contract below applies to stores produced by compiling a publisher
+artifact. The accumulated-store revision-7 section specifies live-provider parse output
 and names its separately addressable manifest schema.
 
 This contract specifies data at rest. It does not specify or implement a store reader,
-a compiler, a provider port, a migration, or download behaviour.
+a compiler, a provider port, or download behaviour.
 
 ## Physical layout
 
-Pin this shared contract exactly: hive-partitioned Parquet; partition keys `product` and `year`; on-disk directory form `product=<product_id>/year=<YYYY>/`; one Parquet file per partition; rows sorted by `station_id`; and canonical partition identifier `product=<product_id>/year=<YYYY>` used as the key of the manifest's per-partition row counts.
+Stores use Hive-partitioned Parquet with partition keys `product` and `year`.
+Directories have the form `product=<product_id>/year=<YYYY>/`, with one Parquet file
+per partition and rows sorted by `station_id`. The canonical partition identifier
+`product=<product_id>/year=<YYYY>` keys the manifest's per-partition row counts.
 
 The store root contains one manifest named `manifest.json` and the partition tree. A
-`product_id` is the canonical RivRetrieve product identifier and `YYYY` is the four-digit
+`product_id` is the internal RivRetrieve product route and `YYYY` is the four-digit
 year of the row's native source wall-clock timestamp. A partition directory contains
 exactly one file with the `.parquet` suffix; the file's basename is not part of the
 format contract. The Parquet basename is deliberately unspecified and MUST NOT be fixed
@@ -38,16 +41,19 @@ the exact names shown:
 | `time_zone` | The source-published zone, or the canonical `unknown` token only where the source establishes none. |
 | `value` | The source value in its native unit, nullable only as allowed by `value_state`. |
 | `value_state` | One of the three stored-row tokens specified below. |
+| `series_id` | Concrete source-series identity declared in the manifest. |
+| `facts_id` | Physical-fact segment declared for that series. |
+| `source_unit` | Exact source-unit value established by that fact segment. |
 
 The partition path supplies `product` and `year`; they need not be duplicated as physical
 Parquet columns. A reader MUST treat the Hive partition values as columns. Additional
 provider-native columns are permitted and are governed by source-column disposition.
-The required physical names are exactly `station_id`, `time`, `time_zone`, `value`, and
-`value_state`; `source_time` and `native_value` are not format column names.
+The required physical names are exactly `station_id`, `time`, `time_zone`, `value`,
+`value_state`, `series_id`, `facts_id`, and `source_unit`; `source_time` and `native_value` are not format column names.
 
-Revision `2` fixes the physical encoding of the engine-facing columns: they MUST be the
-first five fields of the Parquet schema, in the order shown in the table above;
-`station_id`, `time_zone`, and `value_state` MUST be UTF-8 string fields; `time` MUST be a
+Revision `5` fixes the physical encoding of the engine-facing columns: they MUST be the
+first eight fields of the Parquet schema, in the order shown in the table above;
+`station_id`, `time_zone`, `value_state`, `series_id`, `facts_id`, and `source_unit` MUST be UTF-8 string fields; `time` MUST be a
 microsecond-precision timestamp without a time zone; and `value` MUST be a 64-bit binary
 floating-point field. Additional provider-native columns follow that prefix.
 Rows MUST be nondecreasing by `station_id` under bytewise UTF-8 ordering. Ordering among
@@ -58,9 +64,9 @@ duplicates.
 
 ## Value states
 
-Pin this shared value-state encoding exactly: stored rows carry a `value_state` column whose exact token set is `published_null`, `published_blank`, and `published_value`; no record is represented by row absence within a declared station-product-day case universe.
+Stored rows carry a `value_state` column whose exact token set is `published_null`, `published_blank`, and `published_value`; no record is represented by row absence within a declared source-series/fact/day case universe.
 
-The declared station-product-day case universe is the explicit set of cases supplied to
+The declared source-series/fact/day case universe is the explicit set of cases supplied to
 conformance or certified compilation. It MUST NOT be inferred from a store's minimum and
 maximum dates, and it MUST NOT be expanded by fabricating placeholder rows. Within that
 universe, these are the only legal combinations:
@@ -80,7 +86,7 @@ before parsing or typing can collapse it.
 
 ## Source-column disposition and preservation
 
-Pin this shared source-column disposition record exactly: each record has `source_column`, a `disposition` drawn from exactly `retained`, `reconstructible`, and `deliberately_discarded`, `reconstruction_rule` containing the reconstruction rule and required when and only when the disposition is `reconstructible`, and `rationale` required when and only when the disposition is `deliberately_discarded`; completeness means every source column of the declared source schema appears exactly once.
+Each record has `source_column`, a `disposition` drawn from exactly `retained`, `reconstructible`, and `deliberately_discarded`, `reconstruction_rule` containing the reconstruction rule and required when and only when the disposition is `reconstructible`, and `rationale` required when and only when the disposition is `deliberately_discarded`; completeness means every source column of the declared source schema appears exactly once.
 
 `source_column` values MUST be unique within the disposition list. A `retained` record
 MUST contain neither `reconstruction_rule` nor `rationale`. A `reconstructible` record
@@ -100,8 +106,8 @@ closure mechanically.
 
 Provider-native columns retain the source's vocabulary and values. When a native name
 collides with an engine-facing column or cannot be represented faithfully as a Parquet
-field name, revision `2` compilation MUST refuse the source schema, as decided under
-**Milestone 2 decisions**; it MUST NOT silently rename, overwrite, or drop the column.
+field name, revision `5` compilation MUST refuse the source schema. It MUST NOT silently
+rename, overwrite, or drop the column.
 
 ## Bounded certified compilation
 
@@ -132,7 +138,7 @@ property spelling. It MUST require exactly one value for each semantic field bel
 
 | Semantic field | Canonical form and meaning |
 |---|---|
-| Format version | The positive integer format revision. This contract is revision `2`; an implementation recognises only revisions it explicitly supports. |
+| Format version | The positive integer format revision. This contract is revision `5`; an implementation recognises only revisions it explicitly supports. |
 | Provider identity | The exact non-empty provider id whose declared bulk configuration and unit conversion may read the store. Validation MUST refuse a different requested provider before reading rows. |
 | Compiler version | A non-empty PEP 440 version string identifying the RivRetrieve compiler that produced the store. |
 | UTC build time | An RFC 3339 UTC instant in `YYYY-MM-DDTHH:MM:SS.ffffffZ` form, recording completion of the staged build before publication. |
@@ -140,13 +146,14 @@ property spelling. It MUST require exactly one value for each semantic field bel
 | Publisher-artifact URLs | Each absolute `https` URL actually used to retrieve an artifact, retained in deterministic download order without semantic rewriting. A single-artifact store uses `publisher_artifact`; a multi-artifact store uses `publisher_artifacts`. |
 | Publisher-artifact checksums | For every URL, `sha256:` followed by exactly 64 lowercase hexadecimal digits for those complete artifact bytes. |
 | Source-schema fingerprint | `sha256:` followed by exactly 64 lowercase hexadecimal digits for the compiler's deterministic canonical encoding of the declared ordered source schema, including source column names and source data types. |
-| Per-partition row counts | A JSON object whose keys are canonical partition identifiers and whose values are non-negative JSON integers equal to the Parquet row counts. |
+| Per-partition row counts | A JSON object whose keys are canonical partition identifiers and whose values are positive JSON integers equal to the Parquet row counts. |
 | Source-column dispositions | The complete list of disposition records specified above. |
+| Series and evidence | Required `series`, `inventories`, `outcomes`, `issues`, and `source_calls` arrays, described below. |
 
 The source-schema fingerprint MUST cover both the ordered source column names and the
 source data types; hashing column names alone is nonconforming.
 
-Revision `2` fixes that canonical encoding: the ordered `columns` list is serialised as
+Revision `5` fixes that canonical encoding: the ordered `columns` list is serialised as
 JSON with object keys sorted, no insignificant whitespace, and non-ASCII characters left
 unescaped, then encoded as UTF-8 and hashed with SHA-256; the manifest records the digest
 with the `sha256:` prefix. A reader MUST recompute the fingerprint under this encoding and
@@ -167,6 +174,31 @@ artifact and intermediates are deleted only after certified compilation succeeds
 only URL, publisher-dated vintage, checksum, and schema fingerprint survive in
 the manifest.
 
+## Source identity and evidence
+
+Both manifest kinds MUST contain `series`, `inventories`, `outcomes`, `issues`, and
+`source_calls`. These records are validated with the domain models in
+`src/rivretrieve/_internal/source_series.py`, the issue model and source-call decoder.
+
+- `series` holds concrete identities with provider, station and internal product route,
+  source namespace and published identifier, optional variant, and physical-fact segments.
+  Each fact carries its evidence state. `known`, `source_silent`, and `not_established`
+  remain distinct; an unknown fact is not filled from another series.
+- `inventories` records membership within a declared scope, access path, evidence and
+  completeness (`complete`, `incomplete`, or `unresolved`). Optional windows and acquisition
+  facts bound the claim. An inventory is not a record of successful retrieval.
+- `outcomes` records requested windows and `success`, `empty`, `failed`, `unsupported`,
+  `unresolved`, or `no_match` results. A successful outcome identifies a concrete series
+  and its physical facts. Other outcomes retain a reason; a requested selector can remain
+  recorded without inventing a source identity.
+- `issues` retains issue identity, severity and reason. `source_calls` retains source-call
+  provenance, not publisher payload bytes or request headers.
+
+Every physical row MUST reference a declared series and one of its fact segments.
+Its station and partition product MUST agree with the series. Its source unit MUST
+match that segment, and the segment MUST support the declared physical conversion.
+Distinct published identities MUST remain distinct even when their physical facts match.
+
 ## Compatibility and refusal
 
 A reader MUST validate the manifest before reading any partition. It MUST refuse an
@@ -174,7 +206,7 @@ unknown format version, missing or mistyped required field, noncanonical checksu
 fingerprint, duplicate or incomplete disposition, illegal disposition condition,
 noncanonical partition key, path/key disagreement, row/count disagreement, illegal
 value/state combination, extra partition, or missing partition. Refusal means no partial
-interpretation, no migration in place, and no download. The error MUST identify the
+interpretation, no in-place repair and no download. The error MUST identify the
 store as incompatible or malformed and name the explicit rebuild operation. Compiler
 version identifies the writer; it does not grant compatibility. Source vintage is
 reported as a dated fact and MUST NOT be converted into stale/fresh status.
@@ -220,88 +252,72 @@ stored as `published_blank`; source nulls, where the declared CSV schema disting
 them, use `published_null`; absent station-product-day records remain absent rows. Native
 quality and otherwise unused CSV columns remain retained unless their disposition
 explicitly proves reconstruction or argues a discard. Queries prune year and product
-directories and then station ranges, replacing the legacy eager read of one whole-nation
-flat Parquet file. Monthly archive boundaries do not change the annual physical partition
+directories and then station ranges. Monthly archive boundaries do not change the annual physical partition
 contract: their rows are compiled into the one file for that product/year partition.
 
-### Expected future Austria provider
-
-Austria is a named future bulk-provider case, not a provider port in this work. The
-tracked decisions establish no publisher artifact format or native schema for it, so this
-document does not invent either. An Austria compiler must be able to declare canonical
-product identity, derive the native wall-clock year, supply `station_id`, preserve every
-source column through the disposition closure, and emit the same product/year partitions.
-It then inherits the same directory, station, and conservative-time pruning. This is a
-contract test for a future port, not evidence that an unknown source shape has already
-been certified.
-
-This comparison records constraints established by current provider evidence; it does
-not certify that unknown future source shapes fit. The lack of an established Austria
-source schema remains a future validation obligation and does not license a format
-change in this milestone.
-
-## Milestone 2 decisions
+## Compilation and accumulated storage
 
 ### IMGW partition finalisation
 
-Revision `2` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
+Revision `5` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
 every archive contribution and the final row count for each calendar `product`/`year` partition. The
 second pass streams contributing rows into the single file for that partition. A compiler MUST NOT
 finalise a partition file or its manifest count while an unread adjacent archive can still contribute.
-This decision does not change revision `2` partitioning.
+The partition remains a calendar product/year partition.
 
-### Accumulated-store format revision 4 (normative)
+### Accumulated-store format revision 7
 
-Revision `2` remains reserved for compiled publisher artifacts. Revision `3` remains
-unassigned and unsupported. Revision `4` is an accumulated store of live-provider parse
-output. Its normative manifest schema is `manifest.schema.json#accumulated`; the root
-schema continues to describe revision `2`. Readers MUST select a recognised revision
-before opening any Parquet file and MUST refuse unknown revisions without migration,
-naming the store path and `clear_cache` for an accumulated store.
+Compiled stores use revision `5`. Accumulated live-provider parse output uses revision
+`7`, described by `manifest.schema.json#accumulated`. Readers MUST check the revision
+before opening any Parquet file. Unsupported revisions are refused with the store path
+and an explicit operation: `download` for a compiled store or `clear_cache` for an
+accumulated store.
 
-The revision-4 manifest MUST contain exactly `format_version`, `provider_id`, `built_at`,
-`coverage`, and `partition_row_counts`. `built_at` is the UTC instant of the write, with
-six fractional digits and `Z`. Coverage is a nonempty list of records containing exactly
-`station_id`, `product_id`, `start`, `end`, and `retrieved_at`. Endpoints are closed,
-naive native wall-clock timestamps at microsecond precision. Retrieval instants are UTC
-with six fractional digits and `Z`. Each start MUST be no later than its end; coverage
-for one station-product MUST be nonoverlapping. Coverage records successful requested
-intervals, excluding fetch padding. Daily intervals are expanded to the full native date
-axis used by convert. Empty source answers MUST still record coverage. Coverage makes no
-freshness, expiry, or age claim. Adjacent records MAY retain separate retrieval instants.
+The accumulated manifest contains exactly `format_version`, `provider_id`, `built_at`,
+`coverage`, `partition_row_counts`, `series`, `inventories`, `outcomes`, `issues`, and
+`source_calls`. `built_at` is the UTC write instant with six fractional digits and `Z`.
+Coverage and partition counts MAY be empty: inventory and unsuccessful outcomes can be
+stored even when no successful interval or observation row exists.
 
-Partitions retain revision 2's `product=<id>/year=<native-year>` layout, one Parquet file
-per partition, station-id ordering, and exact five-column physical prefix. No provider
-native columns follow that prefix: parse output has already discarded those fields.
-`published_value` denotes a non-null native value and `published_null` a null value;
-`published_blank` is forbidden. Product is reconstructed from the partition. Values MUST
-remain in source units and times MUST remain naive native wall-clock timestamps. Rows
-MUST fall within a coverage record for their station and product. Duplicate source rows
-are retained. The count inventory MAY be empty when all covered answers have no rows.
+Each coverage record contains exactly `series_id`, `start`, `end`, `retrieved_at`,
+`outcome_id`, and `facts_ids`. Endpoints are closed, naive native wall-clock timestamps;
+the writer uses microsecond precision. `retrieved_at` is a UTC instant with six fractional
+digits and `Z`, or null when not established. `facts_ids` is a nonempty, unique list.
+Coverage MUST cite a `success` or `empty` outcome for the same series and retrieval
+instant, whose window contains the covered interval and whose facts include the covered
+facts. Coverage MUST NOT overlap for the same series and any shared fact segment.
 
-Reuse subtracts covered intervals on the microsecond axis and requests only remaining
-intervals (with the engine's usual fetch padding). Only rows within those intervals are
-written or merged; padding cannot overwrite held data. Refresh removes all rows and
-coverage in the requested interval before inserting the successful current answer,
-including an empty answer. Both modes preserve rows and coverage outside that interval.
-Failed series MUST NOT modify their held coverage or rows. If any missing interval for
-a series fails, none of that series's new intervals are written. All successful series
-are written after native-row and conversion contracts pass, before issue-policy raising.
+Coverage records successful requested intervals, not fetch padding. Calendar-date
+clipping expands daily intervals to the full native date axis used by convert. A
+successful empty source answer still records coverage. Coverage makes no freshness,
+expiry, or age claim.
 
-There is one writer per provider store. Writes stage a complete candidate beside the
-store, validate it, then replace its directory; partition files are never modified in
-place. A failed stage leaves the previous store intact. A process interruption between
-directory renames may leave a sibling backup requiring manual recovery; it MUST NOT be
-silently deleted. A subsequent reuse or refresh MUST refuse before source access when
-a sibling backup exists; explicit `clear_cache` removes these pending and backup
-namespaces as well as the canonical store. Concurrent readers/writers and automatic recovery are not guaranteed.
-Publisher payload bytes are never stored. A held receipt is a store excerpt re-encoded
-from physical rows, with served coverage and retrieval instants in provenance.
+Partitions use `product=<id>/year=<native-year>`, one Parquet file per partition,
+station-id ordering, and the eight-column physical prefix specified above. No
+provider-native columns follow that prefix. `published_value` denotes a non-null native
+value and `published_null` a null value; `published_blank` is forbidden. Every row MUST
+fall within coverage for its series and facts. Duplicate rows remain distinct.
 
-### Provider-native column collisions
+Reuse checks both acquired inventory evidence and successful coverage for the requested
+source identities and physical facts. Coverage checks use the microsecond axis. If the
+requested scope is fully covered, held rows are served without source access. Otherwise
+the driver reacquires the full requested scope and interval for that station and internal
+product route, with fetch padding; it does not request only uncovered dates. Successful
+replacements affect only their concrete
+series, physical facts and requested interval. Padding cannot overwrite held rows.
+Refresh replaces those rows and coverage with the successful current answer, including
+an empty answer. Failed refreshes preserve held rows and successful coverage; their
+outcomes and issues can still be recorded. Inventory evidence remains separate from
+successful coverage. Matching facts never allow one source identity to cover another.
 
-No exact provider-native collision with an engine-facing name, and no unfaithful Parquet field name, is
-evidenced by the committed revision-`1` schemas. If a future schema presents either condition, revision
-`1` compilation MUST refuse it. It MUST NOT silently rename, overwrite, or drop the column. A namespaced
-native struct MAY be considered only in a later coordinated revision of the format, schema, and
-conformance stores.
+A provider store has one writer, guarded by a sibling write-lock directory. Writes stage
+a complete candidate beside the store, validate it, then replace its directory. Partition
+files are not modified in place. A failed stage leaves the previous store intact.
+An interruption between renames can leave a sibling backup requiring manual recovery.
+A subsequent reuse or refresh refuses before source access when a backup exists.
+Explicit `clear_cache` deletes the canonical store and pending and backup namespaces;
+it does not remove an active write lock. Concurrent reader/writer access and automatic
+recovery are not guaranteed.
+
+Publisher payload bytes are not stored. A held receipt is a store excerpt encoded from
+selected physical rows, with served coverage and retrieval instants in provenance.

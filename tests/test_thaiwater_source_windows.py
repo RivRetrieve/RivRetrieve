@@ -51,7 +51,7 @@ def test_public_365_date_request_splits_the_padded_source_window(
     replay = CountedReplay()
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="th_thaiwater", station="1373273", product="stage_reported")
+    selection = rr.find(provider="th_thaiwater", station="1373273", quantity="stage")
     result = rr.fetch(selection, start=_START, end=_END, cache=cache, receipts=True, on_issue="ignore")
     bounds = [(str(call.params["start_date"]), str(call.params["end_date"])) for call in replay.calls if call.params]
     assert bounds == [("2025-09-09", "2026-09-08"), ("2026-09-09", "2026-09-12")]
@@ -69,7 +69,11 @@ def test_each_product_has_an_independently_authored_public_multi_window_boundary
     # The author read neither provider code nor implementation outputs. Nulls are source rows.
     def run(product: ProductId, replay: ReplayTransport):
         monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-        selection = rr.find(provider="th_thaiwater", station="1373273", product=str(product))
+        selection = rr.find(
+            provider="th_thaiwater",
+            station="1373273",
+            quantity={"stage_reported": "stage", "discharge_reported": "discharge"}[product],
+        )
         return rr.fetch(selection, start=_START, end=_END, on_issue="ignore").data
 
     probes = tuple(
@@ -96,7 +100,9 @@ def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_cover
     replay = CountedReplay()
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="th_thaiwater", station="1373273")
+    discovered = rr.find(provider="th_thaiwater", station="1373273")
+    # Explicit source IDs freeze this test scope; incomplete all-series inventory cannot be reused.
+    selection = rr.pick(discovered, series_id=[series.series_id for series in discovered.series])
     first = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
     assert len(replay.calls) == 4  # Two genuine source requests for each product, not public coalescing.
     repeated = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
@@ -108,11 +114,12 @@ def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_cover
     import polars as pl
 
     assert_frame_equal(first.data.filter(pl.col("time").dt.date() == date(2025, 9, 11)), early.data)
-    assert repeated.provenance.calls_made == ()
+    # Reuse retains original source-call provenance without making another request.
+    assert repeated.provenance.calls_made == first.provenance.calls_made
     assert all(entry.authorship is ReceiptAuthorship.STORE_EXCERPT for entry in repeated.receipts.entries)
     status = rr.cache_status("th_thaiwater")
     assert len(status.coverage) == 2
-    assert {item.product_id for item in status.coverage} == set(_PRODUCTS)
+    assert {item.series_id for item in status.coverage} == {series.series_id for series in selection.series}
     assert {item.interval for item in status.coverage} == {
         RequestedInterval(datetime(2025, 9, 11), datetime(2026, 9, 10, 23, 59, 59, 999999))
     }

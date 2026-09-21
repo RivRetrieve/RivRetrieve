@@ -17,8 +17,10 @@ from rivretrieve._internal.engine import RenderedWindow, UnknownTemporalSupport,
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.ba_fhmzbih.declaration import declaration as ba_declaration
 from rivretrieve._internal.providers.fr_hubeau.declaration import declaration as fr_declaration
+from rivretrieve._internal.providers.fr_hydroportail.declaration import declaration as hydroportail_declaration
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.source_series import SeriesScope
 from tests.test_fr_hydroportail_station import STATION_DISCHARGE_PROBE
 
 DATA = Path(__file__).parent / "test_data"
@@ -29,7 +31,11 @@ assert isinstance(fr_declaration.observations, LiveStages)
 def _probe(provider, station, product, start, stop, paths, expected):
     pid = ProviderId(provider)
     product_id = ProductId(product)
-    observations = (ba_declaration if provider == "ba_fhmzbih" else fr_declaration).observations
+    observations = {
+        "ba_fhmzbih": ba_declaration,
+        "fr_hubeau": fr_declaration,
+        "fr_hydroportail": hydroportail_declaration,
+    }[provider].observations
     assert isinstance(observations, LiveStages)
     stages = observations.stages
     recordings = tuple(read_recording(DATA / path) for path in paths)
@@ -40,15 +46,20 @@ def _probe(provider, station, product, start, stop, paths, expected):
             WindowEndpoint.from_datetime(datetime.fromisoformat(stop)),
         )
         rendered = () if provider == "ba_fhmzbih" else (RenderedWindow(start, stop),)
-        if provider == "fr_hubeau" and product in {"discharge_instantaneous", "stage_instantaneous"}:
+        if provider == "fr_hydroportail":
             rendered = (
                 RenderedWindow(
                     datetime.fromisoformat(start).strftime("%d/%m/%Y"),
                     datetime.fromisoformat(stop).strftime("%d/%m/%Y"),
                 ),
             )
-        fetched = stages.fetch((station,), (product_id,), {product_id: rendered}, window, stages.config, replay)
-        return pl.concat([stages.parse(payload, stages.config).value for payload in fetched.value])
+        kwargs = (
+            {"scope": SeriesScope(restriction="explicit", variants=("raw",))} if provider == "fr_hydroportail" else {}
+        )
+        fetched = stages.fetch(
+            (station,), (product_id,), {product_id: rendered}, window, stages.config, replay, **kwargs
+        )
+        return pl.concat([stages.parse(payload, stages.config).rows for payload in fetched.value])
 
     return BoundaryProbe(
         pid,
@@ -131,7 +142,7 @@ PROBES = (
         (37, "2008-07-09T11:00:00", "2008-07-10T23:00:00", "unknown"),
     ),
     _probe(
-        "fr_hubeau",
+        "fr_hydroportail",
         "Y251002001",
         "stage_instantaneous",
         "2020-01-01",

@@ -21,7 +21,9 @@ def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.M
     selection = rr.find(
         provider="usgs_nwis",
         station="07374000",
-        product="discharge_daily_mean",
+        quantity="discharge",
+        frequency="daily",
+        statistic="mean",
     )
     result = rr.fetch(
         selection,

@@ -1,0 +1,15 @@
+{
+  "request_method": "GET",
+  "source_url": "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js",
+  "request_parameters": {},
+  "http_status": 200,
+  "retrieved_at": "2026-09-19T23:13:23.045059+00:00",
+  "content_type": "text/javascript",
+  "byte_size": 32555,
+  "sha256": "ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823",
+  "response_file": "fr_hydroportail_unit_definition_5621.4ab47ec9.js",
+  "authorship": "Exact public publisher JavaScript translation bundle; not an observation recording",
+  "discovery": "Pinned tests/test_data/fr_hydroportail_legal.html and retained station metadata HTML reference this script URL",
+  "interpretation_authorship": "RivRetrieve analysis, not a publisher sentence",
+  "interpretation": "HydroPortail Q-scoped unit code l is labelled l/s by common.unit.q.l; this is not a global litre-volume-to-rate alias."
+}

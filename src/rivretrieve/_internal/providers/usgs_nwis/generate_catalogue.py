@@ -297,6 +297,7 @@ class GeneratedUsgsNwisCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    source_native: pl.DataFrame
 
 
 @dataclass(frozen=True)
@@ -325,7 +326,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         param_code="00060",
         stat_code="00003",
@@ -335,10 +336,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="discharge_instantaneous",
         observed_property="discharge",
-        frequency="irregular",
+        frequency="unknown",
         statistic="instantaneous",
         period_type="instant",
-        period_anchor="instant",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         param_code="00060",
         stat_code=None,
@@ -351,7 +352,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code="00003",
@@ -364,7 +365,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="max",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code="00001",
@@ -377,7 +378,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="min",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code="00002",
@@ -387,10 +388,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="stage_instantaneous",
         observed_property="stage",
-        frequency="irregular",
+        frequency="unknown",
         statistic="instantaneous",
         period_type="instant",
-        period_anchor="instant",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code=None,
@@ -696,6 +697,7 @@ def build_catalogue(
         products=products,
         stations=stations,
         station_products=station_products,
+        source_native=native_table.data,
     )
 
 
@@ -878,8 +880,12 @@ def validate_generated_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) -> None:
+    from functools import partial
+
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import catalogue_claims, describe_catalogue
+    from rivretrieve._internal.providers.usgs_nwis.config import config as source_config
     from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -896,6 +902,11 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
         ).build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_describer=partial(describe_catalogue, config=source_config()),
+        catalogue_claims=catalogue_claims(
+            catalogue.source_native, {item.series_key: item.product_id for item in PRODUCT_DEFINITIONS}
+        ),
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

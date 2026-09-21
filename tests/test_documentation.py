@@ -10,6 +10,7 @@ import polars as pl
 from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
+from rivretrieve._internal.observations import ObservationDataSchema
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,10 +57,16 @@ def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
             "value": [373000.0 * 0.028316846592],
         }
     )
-    assert_frame_equal(result.data, expected)
+    assert_frame_equal(result.data.select(expected.columns), expected)
+    assert result.data.columns == list(ObservationDataSchema.polars_schema)
+    assert result.source_series
+    assert result.data["series_id"].n_unique() == 1
+    assert result.data["unit"].to_list() == ["m3/s"]
     assert not result.issues
     assert not result.receipts.entries
-    assert capsys.readouterr().out == "[('07374000', 10562.183778816001)]\n()\n"
+    assert capsys.readouterr().out == (
+        "[('07374000', 10562.183778816001)]\n()\n['bruto', 'consistido']\n['consistido']\n"
+    )
 
 
 def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
@@ -71,7 +78,7 @@ def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
     )
     replay = ReplayTransport((recording,))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+    gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
     gauge = rr.pick(gauges, station="07374000")
     # Only this shorter public window matches the committed publisher recording.
     result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")
@@ -84,7 +91,11 @@ def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
             "value": [373000.0 * 0.028316846592],
         }
     )
-    assert_frame_equal(result.data, expected)
+    assert_frame_equal(result.data.select(expected.columns), expected)
+    assert result.data.columns == list(ObservationDataSchema.polars_schema)
+    assert result.source_series
+    assert result.data["series_id"].n_unique() == 1
+    assert result.data["unit"].to_list() == ["m3/s"]
     assert not result.issues
     assert not result.receipts.entries
 

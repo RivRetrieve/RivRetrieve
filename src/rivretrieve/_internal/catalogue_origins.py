@@ -230,6 +230,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("ch_foen"),
         ProviderId("cz_chmi"),
         ProviderId("fr_hubeau"),
+        ProviderId("fr_hydroportail"),
         ProviderId("jp_mlit"),
         ProviderId("lt_lhmt"),
         ProviderId("no_nve"),
@@ -239,7 +240,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("za_dws"),
     }
 )
-"""The thirteen providers with complete audited catalogue origin declarations."""
+"""Providers with explicit catalogue origin declarations."""
 
 
 def validate_catalogue_origins(
