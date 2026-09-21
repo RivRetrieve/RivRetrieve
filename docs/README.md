@@ -36,7 +36,8 @@ Whatever the provider, RivRetrieve gives you the same things:
 A page for each provider, describing its network, what it measures and how to cite it, is being
 written:
 
-- [France: Hub'Eau (`fr_hubeau`) and HydroPortail (`fr_hydroportail`)](providers/fr_hubeau.md)
+- [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
+- [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
 - [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
 
 ## How it works
@@ -75,7 +76,7 @@ catalogue discovery only.
 - [ca_eccc](provider_ports/ca_eccc.md)
 - [ch_foen](provider_ports/ch_foen.md)
 - [cz_chmi](provider_ports/cz_chmi.md)
-- [fr_hubeau](provider_ports/fr_hubeau.md)
+- [fr_hubeau and fr_hydroportail](provider_ports/fr_hubeau.md)
 - [jp_mlit](provider_ports/jp_mlit.md)
 - [lt_lhmt](provider_ports/lt_lhmt.md)
 - [no_nve](provider_ports/no_nve.md)
