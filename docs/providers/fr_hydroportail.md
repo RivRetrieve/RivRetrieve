@@ -173,9 +173,9 @@ Its exact selection algorithm has not been established. The combined selector
 includes pre-validated and validated records. This public route does not provide
 corrected-only or pre-validated-only histories.
 
-A requested selector and an observation's processing status are separate source
-facts. HydroPortail's [glossary](https://hydro.eaufrance.fr/glossaire) explains its
-status vocabulary. See [Usage](../usage.md#series-inspection-and-result-views) to
+The selector chooses which records HydroPortail returns. Individual observations
+can also carry processing-status metadata supplied by HydroPortail. Its
+[glossary](https://hydro.eaufrance.fr/glossaire) explains the status vocabulary. See [Usage](../usage.md#series-inspection-and-result-views) to
 interpret series outcomes and issues, and [optional receipts](../usage.md#receipts-optional)
 to inspect the source metadata.
 
