@@ -6,10 +6,11 @@ from pathlib import Path
 from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     EXPECTED_PRODUCT_IDS,
+    NativeInventoryCapture,
     build_catalogue,
     decode_availability,
 )
-from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS, NativeInventoryCapture
+from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
 def test_catalogue_admits_full_evidenced_native_inventory() -> None:

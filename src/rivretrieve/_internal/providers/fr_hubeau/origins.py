@@ -7,8 +7,6 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict
-
 from rivretrieve._internal import catalogue_origins
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
@@ -27,7 +25,7 @@ from rivretrieve._internal.acquisition_provenance import (
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 if TYPE_CHECKING:
-    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import FranceAvailability
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import FranceAvailability, NativeInventoryCapture
 
 CODE_PROJECTION_31_AXIS_TRANSPOSITION = MappingProxyType(
     {"latitude": "longitude_station", "longitude": "latitude_station"}
@@ -157,16 +155,6 @@ _PUBLICATION_DOCUMENTS = (
         "0fac4526c51ea72921747e23726024359991c25fb5781b32bc368c9cc9ded509",
     ),
 )
-
-
-class NativeInventoryCapture(BaseModel):
-    """Resolved identities of the two source-owned station acquisitions."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    native_table: NativeTableIdentity
-    hydrometry: AcquisitionRecord
-    temperature: AcquisitionRecord
-    evidence: tuple[EvidenceReference, ...]
 
 
 def build_acquisition_provenance(

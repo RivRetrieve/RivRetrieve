@@ -127,7 +127,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     if provider == "fr_hubeau":
         ledger = ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
-        from rivretrieve._internal.providers.fr_hubeau.origins import NativeInventoryCapture
+        from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture
 
         capture = NativeInventoryCapture.model_validate_json(
             (ROOT / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json").read_bytes()

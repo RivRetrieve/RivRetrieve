@@ -26,7 +26,18 @@ requests retain their exact original request scope and acquisition instant.
 Retained historical material references keep their original archive names and
 availability limitations; this rebuild does not reacquire unavailable bodies.
 
-`evidence/` holds publisher bytes and acquisition sidecars. SHA-256, byte counts,
+`evidence/` holds build-critical publisher bytes and acquisition sidecars.
+The 66 missing identity-page bodies and ten bounded observation-probe bodies are
+stored losslessly in `evidence/supporting-captures.tar.xz`, under their original
+`missing-CODE.body` and `gap-*.body` member names. Their readable `.receipt.json`
+sidecars remain beside the archive. A locator such as
+`evidence/supporting-captures.tar.xz!missing-4051000302.body` names those exact bytes.
+
+Verbose derived comparisons are retained in `evidence/reconciliation.tar.xz`.
+They can also be regenerated from the unchanged source captures. Archive hashes,
+byte sizes and source revision are recorded in
+[the archive manifest](../../verification/french-publication-services/evidence-archives.json).
+ SHA-256, byte counts,
 UTC retrieval instants, HTTP statuses and exact query parameters describe actual
 captures. GeoJSON coordinate order is established by native module 71324 in
 `chunk-8529.fdb00780.js.body`; station x/y is used directly, without site-coordinate
@@ -51,8 +62,24 @@ site types. Preserve and review new query/body receipts, regional consistency
 checks, test-filter differences and full-ID reconciliation before adopting a new
 snapshot. Do not pin population counts as source completeness invariants.
 
-`reconcile.py` recomputes the dated comparison using this folder's HydroPortail
-captures and the independent current Hub’Eau inputs under
-`maintenance/catalogue/fr_hubeau/inventory/`. It writes derived comparison reports,
-not canonical source metadata. `remaining_missing.py` can acquire individually
-missing identity pages while retaining failures separately.
+Recompute the dated comparison into a separate output directory:
+
+```sh
+uv run python maintenance/catalogue/fr_hydroportail/scripts/reconcile.py \
+  --out .worktrees/evidence/france-reconciliation
+```
+
+The three verbose reports reproduce the archived bytes exactly. The script reads
+this folder's HydroPortail captures and the independent Hub’Eau inputs under
+`maintenance/catalogue/fr_hubeau/inventory/`. It does not overwrite retained evidence.
+
+Acquire missing identity pages from that generated gap list into a new directory:
+
+```sh
+uv run python maintenance/catalogue/fr_hydroportail/scripts/remaining_missing.py \
+  --gaps .worktrees/evidence/france-reconciliation/unmatched-stations.json \
+  --out .worktrees/evidence/france-identity-refresh
+```
+
+Each HTTP result retains its own body and receipt. Source failures are recorded
+separately; a failed acquisition is not an empty observation record.

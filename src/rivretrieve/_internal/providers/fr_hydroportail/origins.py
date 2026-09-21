@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
-from urllib.parse import urlencode  # noqa: TID251 -- URL rendering, no transport
 
 from rivretrieve._internal import catalogue_origins as origins
 from rivretrieve._internal.acquisition_provenance import (
@@ -42,6 +41,7 @@ def build_acquisition_provenance(
     receipt: dict,
     documents: tuple[EvidenceReference, ...],
     native_identity: NativeTableIdentity,
+    requested_from: str,
 ) -> AcquisitionProvenance:
     source = "fr_hydroportail"
     acquisitions = [
@@ -50,7 +50,7 @@ def build_acquisition_provenance(
             method="http_request",
             instant_type="retrieval",
             description="Anonymous public native station search: explicit active, closed, all published site types and test entities. Not an unrestricted PHyC census or observation availability assertion.",
-            requested_from=(receipt["url"] + "?" + urlencode(receipt["params"]),),
+            requested_from=(requested_from,),
             retrieved_at_start=datetime.fromisoformat(receipt["retrieved_at"]),
             material=MaterialIdentity(
                 filename="maintenance/catalogue/fr_hydroportail/evidence/national-tests.body",

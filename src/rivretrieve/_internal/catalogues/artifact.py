@@ -34,6 +34,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import OnIssue
+from rivretrieve._internal.publication_identity import publication_identity_fields
 
 REQUIRED_ARTIFACT_FILES = (
     "provider.json",
@@ -207,12 +208,14 @@ def _validate_format(path: Path, provider_id: object) -> None:
     except (OSError, ValueError) as exc:
         raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator") from exc
     expected: dict[str, object] = {"catalogue_format_version": 2}
-    if provider_id == "fr_hubeau":
-        if not isinstance(document, dict) or document.get("publication_service") != "hubeau":
-            raise CorruptCatalogArtifactError(
-                "Unsupported fr_hubeau publication service identity; combined catalogues cannot be reinterpreted"
-            )
-        expected["publication_service"] = "hubeau"
+    identity = publication_identity_fields((str(provider_id),))
+    if identity and (
+        not isinstance(document, dict) or any(document.get(field) != value for field, value in identity.items())
+    ):
+        raise CorruptCatalogArtifactError(
+            f"Unsupported {provider_id} publication service identity; combined catalogues cannot be reinterpreted"
+        )
+    expected.update(identity)
     if document != expected or type(document.get("catalogue_format_version")) is not int:
         raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator")
 

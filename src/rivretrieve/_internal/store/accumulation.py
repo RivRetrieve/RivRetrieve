@@ -14,6 +14,7 @@ import polars as pl
 from rivretrieve._internal.coverage import CoverageInterval, remainder
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.publication_identity import publication_identity_fields
 from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
@@ -242,8 +243,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             "issues": [json.loads(item) for item in issues],
             "source_calls": [json.loads(item) for item in calls],
         }
-        if provider_id == "fr_hubeau":
-            manifest["publication_service"] = "hubeau"
+        manifest.update(publication_identity_fields((provider_id,)))
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         candidate = validate_store(StoreRoot(stage), provider_id).manifest
         assert isinstance(candidate, AccumulatedStoreManifest)

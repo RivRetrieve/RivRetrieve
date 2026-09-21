@@ -26,6 +26,7 @@ from rivretrieve._internal.observations import (
     StoreExcerptReceipt,
 )
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.publication_identity import publication_identity_fields
 from rivretrieve._internal.selection import StationLocation, _EmptyReason, _Selection
 from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
 
@@ -104,19 +105,17 @@ def _write_entry(archive: ZipFile, name: str, content: bytes) -> None:
     archive.writestr(entry, content)
 
 
-def _includes_hubeau(manifest: dict) -> bool:
-    """Check identity metadata, including empty selections and mixed scopes."""
-    return (
-        "fr_hubeau" in manifest.get("scope", {}).get("provider_ids", ())
-        or any(item.get("provider_id") == "fr_hubeau" for item in manifest.get("series", ()))
-        or manifest.get("receipt_provider") == "fr_hubeau"
-        or manifest.get("provenance", {}).get("provider_id") == "fr_hubeau"
-        or any(item.get("provider_id") == "fr_hubeau" for item in manifest.get("locations", ()))
-        or any("fr_hubeau" in item.get("scope", {}).get("provider_ids", ()) for item in manifest.get("inventories", ()))
-        or any(
-            item.get("header", {}).get("provider_id") == "fr_hubeau" for item in manifest.get("catalogue_evidence", ())
-        )
-    )
+def _publication_identity(manifest: dict) -> dict[str, str]:
+    """Resolve provider identity from data and retained acquisition context."""
+    providers = set(manifest.get("scope", {}).get("provider_ids", ()))
+    providers.update(item.get("provider_id") for item in manifest.get("series", ()))
+    providers.add(manifest.get("receipt_provider"))
+    providers.add(manifest.get("provenance", {}).get("provider_id"))
+    providers.update(item.get("provider_id") for item in manifest.get("locations", ()))
+    for item in manifest.get("inventories", ()):
+        providers.update(item.get("scope", {}).get("provider_ids", ()))
+    providers.update(item.get("header", {}).get("provider_id") for item in manifest.get("catalogue_evidence", ()))
+    return publication_identity_fields(provider for provider in providers if isinstance(provider, str))
 
 
 def encode_bundle(value: _Selection | ObservationResult) -> bytes:
@@ -187,8 +186,7 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
                     )
                 receipts.append(item)
             manifest["receipts"] = receipts
-        if _includes_hubeau(manifest):
-            manifest["publication_service"] = "hubeau"
+        manifest.update(_publication_identity(manifest))
         _write_entry(archive, "manifest.json", _json(manifest))
     return destination.getvalue()
 
@@ -220,10 +218,10 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
             if kind == "selection"
             else {"view_scope", "outcomes", "provenance", "provenance_values", "receipt_provider", "receipts"}
         )
-        if _includes_hubeau(manifest):
-            if manifest.get("publication_service") != "hubeau":
-                raise ValueError("Unsupported French publication_service identity; export/refetch explicitly")
-            fields.add("publication_service")
+        identity = _publication_identity(manifest)
+        if any(manifest.get(field) != expected for field, expected in identity.items()):
+            raise ValueError("Unsupported publication_service identity; export/refetch explicitly")
+        fields.update(identity)
         if set(manifest) != fields:
             raise ValueError("Bundle manifest does not match its declared format schema")
         definitions = tuple(SourceSeries.model_validate(item) for item in manifest["series"])

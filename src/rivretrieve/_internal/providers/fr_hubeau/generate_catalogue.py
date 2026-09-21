@@ -17,10 +17,14 @@ from typing import Literal, Never, cast
 from urllib.parse import parse_qsl, urlsplit  # noqa: TID251 -- structural parsing only
 
 import polars as pl
+from pydantic import BaseModel, ConfigDict
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
+    AcquisitionRecord,
+    EvidenceReference,
     MaterialIdentity,
+    NativeTableIdentity,
     verify_provenance_recordings,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -54,12 +58,22 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SEMANTIC_SHA256,
     NATIVE_TABLE_SHA256,
-    NativeInventoryCapture,
     Projection31BoundsError,
     Projection31PreconditionError,
     build_acquisition_provenance,
     hydrometry_coordinates,
 )
+
+
+class NativeInventoryCapture(BaseModel):
+    """Resolved identities of the two source-owned station acquisitions."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    native_table: NativeTableIdentity
+    hydrometry: AcquisitionRecord
+    temperature: AcquisitionRecord
+    evidence: tuple[EvidenceReference, ...]
+
 
 Product = Literal[
     "discharge_instantaneous",

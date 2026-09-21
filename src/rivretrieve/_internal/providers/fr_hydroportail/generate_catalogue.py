@@ -12,6 +12,7 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlencode  # noqa: TID251 -- catalogue build URL composition, no transport
 
 import polars as pl
 
@@ -253,7 +254,9 @@ def build_catalogue(
         "license": None,
         "citation": None,
     }
-    provenance = build_acquisition_provenance(native, pairs, receipt, documents, native_identity)
+    provenance = build_acquisition_provenance(
+        native, pairs, receipt, documents, native_identity, receipt["url"] + "?" + urlencode(receipt["params"])
+    )
     artifact = packaged_catalogue_artifact_from_components(
         provider, products, stations, station_products, acquisition_provenance=provenance, on_issue="raise"
     )

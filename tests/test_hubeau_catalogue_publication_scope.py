@@ -33,8 +33,8 @@ def test_refreshed_native_build_retains_unknown_pairs_without_observation_claims
     import polars as pl
 
     from rivretrieve._internal.catalogues.native import read_native_table
-    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import build_catalogue
-    from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS, NativeInventoryCapture
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture, build_catalogue
+    from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
     from tests.test_fr_hubeau_generate_catalogue import CURRENT_NATIVE_PATH, _availability
 
     manifest = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"

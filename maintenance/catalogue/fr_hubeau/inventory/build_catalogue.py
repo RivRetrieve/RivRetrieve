@@ -20,13 +20,14 @@ from rivretrieve._internal.acquisition_provenance import (
 )
 from rivretrieve._internal.catalogues.native import RetrievedAt, write_native_table
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
+    NativeInventoryCapture,
     build_catalogue,
     decode_availability,
     native_table_content_digest,
     refresh_native_table,
     write_catalogue,
 )
-from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS, NativeInventoryCapture
+from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
 def rebuild(root: Path, revision: str) -> None:

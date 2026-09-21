@@ -1,14 +1,14 @@
 # Native French publication inventory research
 
-Acquired 2026-09-21 through the repository HttpClient using `uv run python acquire.py NAME URL PARAMS_JSON`. No production files were changed. Raw `.body` files and `.receipt.json` sidecars retain exact parameters, UTC retrieval instant, status, media type, length and SHA-256. No credentials or observation census were used.
+Acquired 2026-09-21 through the repository HttpClient using `uv run python acquire.py NAME URL PARAMS_JSON`. No production files were changed. Build-critical raw `.body` files and readable `.receipt.json` sidecars retain exact parameters, UTC retrieval instant, status, media type, length and SHA-256. Repeated HTTP404 bodies are lossless members of `evidence/supporting-captures.tar.xz`; verbose comparisons are in `evidence/reconciliation.tar.xz`. See README.md for exact member locations and regeneration. No credentials or observation census were used.
 
 ## Builder inputs
 
 - `national-tests.body`: HydroPortail-native test-inclusive public inventory. 9,271 sites, 6,409 nested stations. Use full `bookmarkCode`; site relationships come from nesting, never station-code truncation.
 - `national-tests.receipt.json`: governing query. GET `/rechercher/ajax/entites-hydrometriques` with active=1, closed=1, test=1 and every site type published in `search-form.body`, including PONCTUEL. The current site-type values are opaque UUIDs; discover their published values from the form, do not assume UUID stability.
-- `hubeau-stations-valid.body`: current complete hydrometry reference response, size=10000, count=6475, next=null. The unsuccessful size=20000 request is retained separately, with its explicit validation message.
-- `hubeau-temperature.body`: independent HubEau temperature reference response, count=872, next=null.
-- `reconcile.py`: rerunnable offline full-ID reconciliation. Outputs `summary.json`, `unmatched-stations.json` and `metadata-comparison.json`.
+- `../fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz`: losslessly retained complete hydrometry response, size=10000, count=6475, next=null. Its adjacent receipt records the original HTTP body identity.
+- `../fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz`: independent HubEau temperature response, count=872, next=null, with its original HTTP receipt.
+- `scripts/reconcile.py --out PATH`: rerunnable offline full-ID reconciliation. It writes `summary.json` and the three verbose reports to the explicit output directory. The retained verbose versions are members of `evidence/reconciliation.tar.xz`.
 
 ## Coverage and limits
 

@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.publication_identity import publication_identity_fields
 from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
@@ -609,10 +610,11 @@ def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
 def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     raw = _read_raw_manifest(store, provider_id)
     _check_revision(raw, store, provider_id)
-    # The former French identity included two publication services. Even a
-    # daily-only store must establish the current service before any value read.
-    if raw.get("provider_id") == "fr_hubeau" and raw.get("publication_service") != "hubeau":
-        _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, "publication_service:expected hubeau")
+    stored_provider = raw.get("provider_id")
+    identity = publication_identity_fields((stored_provider,)) if isinstance(stored_provider, str) else {}
+    for field, expected in identity.items():
+        if raw.get(field) != expected:
+            _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"{field}:expected {expected}")
     _validate_manifest_schema(raw, store, provider_id)
     if raw["provider_id"] != str(provider_id):
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
