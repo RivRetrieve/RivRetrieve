@@ -50,7 +50,10 @@ initially raised `KeyError` before the shared parser could enforce its contract.
 - Ruff lint, format check and `uv run ty check src`: passed.
 - Existing raw witness suite: 31 passed, 2 existing openpyxl warnings.
 - Independent live public path: 10 public fetches and 16 successful source calls passed for unrestricted and individual Q/H selectors. Only existing informational licence/citation unknown notices returned.
-- Full test suite: running when the implementation PR was opened. Final results will be recorded before delivery.
+- Fresh parallel full suite: 4,036 passed, 1 existing private-evidence skip, 5 failures in 854.03 seconds. The failures were one outdated wheel source-series count and four offline builds missing `uv-build` in the relocated cache. The full original stdout is preserved in repository-local `.worktrees/evidence/hydroportail-implementation-validation/full-suite-initial.txt`; this report records its exact command and summary.
+- The wheel count now checks all 12,818 station/quantity pairs times four variants and their exact selector set. No production code changed.
+- A real `uv build --force-pep517 --wheel` populated the repository-owned cache. Offline packaging commands remain unchanged; their focused rerun is recorded below.
+- A clean complete suite on the final target remains the root delivery audit gate.
 
 The first in-progress full-suite run imported an earlier raw-only boundary test
 before its explicit raw selection was added. The isolated current boundary probe
@@ -76,3 +79,29 @@ provenance. Actual before/after outputs are adjacent `raw-cells.*.txt` and
 
 Independent review focused validation: 102 tests passed (variant, fatal-contract
 and catalogue suites). Production remained unchanged during evidence compaction.
+
+## Full-suite diagnosis and packaging rerun
+
+Command: `uv run --extra map --with pytest-xdist --with geopandas --with matplotlib pytest -n4 -q`.
+Result: 4,036 passed, 1 skipped, 5 failed, 79 warnings in 854.03 seconds.
+The skip is the existing Thaiwater controlled-private-body acceptance test.
+Failures: `test_wheel_carries_every_manifest_catalogue` had the old raw-only
+series count; both `test_distribution_keeps_only_runtime_catalogues` cases and
+both `test_distributions_exclude_local_files` cases lacked the offline build
+backend in the fresh repository-owned cache. No source/provider failure occurred.
+
+After the test-only count correction and an online build to populate the cache:
+
+```sh
+uv run --extra map --with pytest-xdist --with geopandas --with matplotlib pytest -n4 -q \
+  tests/test_packaging_carries_catalogues.py \
+  tests/test_packaging_excludes_catalogue_build_inputs.py
+```
+
+Result: **6 passed in 43.32 seconds**, including all five formerly failing
+cases and packaging controls. Their offline build commands are unchanged.
+Ruff lint/format, `uv run ty check src`, and the actual wheel build pass.
+No production code changed after the independent full-diff acceptance of
+`c2a5795ef77b17d267769f8a6b421e682e353b9e`. The final test-only delta is reviewed
+separately. The root delivery audit will run the clean complete suite on the
+final target; this report does not describe the historical failed run as passing.
