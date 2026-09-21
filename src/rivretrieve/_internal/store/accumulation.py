@@ -242,6 +242,8 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             "issues": [json.loads(item) for item in issues],
             "source_calls": [json.loads(item) for item in calls],
         }
+        if provider_id == "fr_hubeau":
+            manifest["publication_service"] = "hubeau"
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         candidate = validate_store(StoreRoot(stage), provider_id).manifest
         assert isinstance(candidate, AccumulatedStoreManifest)

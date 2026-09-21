@@ -32,36 +32,8 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     if not isinstance(document, dict):
         raise UnsupportedSourceStructureError("fr_hubeau payload must be a JSON object")
     root = cast("dict[str, object]", document)
-    if coordinates.family == "hydroportail":
-        series_value = root.get("series")
-        if not isinstance(series_value, dict):
-            raise UnsupportedSourceStructureError("fr_hubeau HydroPortail payload has no series object")
-        series = cast("dict[str, object]", series_value)
-        if series.get("code") != station:
-            raise UnsupportedSourceStructureError(
-                "fr_hubeau HydroPortail response contains an unexpected station identity"
-            )
-        if series.get("metric") != coordinates.field:
-            raise UnsupportedSourceStructureError("fr_hubeau HydroPortail response contains an unexpected metric")
-        title = series.get("title")
-        expected_title = "Hauteur instantanée" if coordinates.field == "H" else "Débit instantané"
-        if not isinstance(title, str) or title.partition(" - ")[0] != expected_title:
-            raise UnsupportedSourceStructureError(
-                "fr_hubeau HydroPortail title does not establish the requested instantaneous quantity"
-            )
-        expected_unit = "mm" if coordinates.field == "H" else "l"
-        if series.get("unit") != expected_unit or root.get("timezone") != "UTC":
-            raise UnsupportedSourceStructureError(
-                "fr_hubeau HydroPortail unit or timezone differs from the evidenced source contract"
-            )
-        if series.get("statuses") != "raw":
-            raise UnsupportedSourceStructureError(
-                "fr_hubeau HydroPortail response does not contain the requested raw series"
-            )
-        raw_rows = series.get("data")
-    else:
-        next_url_from_response(payload.content)
-        raw_rows = root.get("data")
+    next_url_from_response(payload.content)
+    raw_rows = root.get("data")
     if not isinstance(raw_rows, list):
         raise UnsupportedSourceStructureError("fr_hubeau payload has no observation data list")
     rows: list[dict[str, object]] = []
@@ -101,13 +73,6 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             timestamp = _naive(f"{date}T{clock}")
             value = _value(row, "resultat")
             zone = "unknown"
-        else:
-            raw_time = row.get("t")
-            if not isinstance(raw_time, str) or not raw_time.endswith("Z"):
-                raise UnsupportedSourceStructureError("fr_hubeau HydroPortail timestamp must end in Z")
-            timestamp = _naive(raw_time[:-1])
-            value = _value(row, "v")
-            zone = "+00:00"
         rows.append(
             {"station_id": station, "product_id": product, "time": timestamp, "value": value, "time_zone": zone}
         )

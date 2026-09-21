@@ -74,11 +74,10 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
     "fr_hubeau": [
         "discharge_daily_max",
         "discharge_daily_mean",
-        "discharge_instantaneous",
         "stage_daily_max",
-        "stage_instantaneous",
         "water_temperature_reported",
     ],
+    "fr_hydroportail": ["discharge_instantaneous", "stage_instantaneous"],
     "jp_mlit": [
         "discharge_daily",
         "discharge_hourly",
@@ -157,6 +156,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",

@@ -60,8 +60,8 @@ Poland's coordinate reference system has a different reason for being unavailabl
 ```
 
 These excerpts show the property shape, not complete Croissant documents. The packaged
-descriptors provide the complete examples and the literal evidence URLs. France's baseline station and station-product rows have acquisition bindings;
-unknown availability remains explicit rather than being encoded as missing acquisition. Brazil's certified inventory and six internal access routes retain unknown availability where no
+descriptors provide the complete examples and the literal evidence URLs. Each French service retains its own station acquisition bindings.
+Unchecked station-product pairs remain selectable with unknown availability. Brazil's certified inventory and six internal access routes retain unknown availability where no
 exact station/variant observations were acquired. Unestablished CRS, citation and published
 record bounds remain explicit absences rather than inferred facts.
 
@@ -92,7 +92,7 @@ Every provider ships one descriptor beside its four catalogue tables:
 |---|---|
 | [ba_fhmzbih](../src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/croissant.json), [ch_foen](../src/rivretrieve/_internal/providers/ch_foen/catalogue/croissant.json), [cz_chmi](../src/rivretrieve/_internal/providers/cz_chmi/catalogue/croissant.json), [jp_mlit](../src/rivretrieve/_internal/providers/jp_mlit/catalogue/croissant.json), [no_nve](../src/rivretrieve/_internal/providers/no_nve/catalogue/croissant.json), [th_thaiwater](../src/rivretrieve/_internal/providers/th_thaiwater/catalogue/croissant.json), [za_dws](../src/rivretrieve/_internal/providers/za_dws/catalogue/croissant.json) | Evidenced not-published coordinate reference systems. |
 | [pl_imgw](../src/rivretrieve/_internal/providers/pl_imgw/catalogue/croissant.json) | Withheld coordinate reference system; coordinates trace to the recovered GRDC CSV, while station identity also uses IMGW roster membership. |
-| [fr_hubeau](../src/rivretrieve/_internal/providers/fr_hubeau/catalogue/croissant.json) | Complete baseline acquisition bindings with available and unknown availability. |
+| [fr_hubeau](../src/rivretrieve/_internal/providers/fr_hubeau/catalogue/croissant.json), [fr_hydroportail](../src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/croissant.json) | Independent source inventories with available and unknown source-specific pairs. |
 | [br_ana](../src/rivretrieve/_internal/providers/br_ana/catalogue/croissant.json) | Certified river-gauge candidates with exact source-variant availability evidence and explicit unestablished CRS and record bounds. |
 | [ca_eccc](../src/rivretrieve/_internal/providers/ca_eccc/catalogue/croissant.json), [lt_lhmt](../src/rivretrieve/_internal/providers/lt_lhmt/catalogue/croissant.json), [usgs_nwis](../src/rivretrieve/_internal/providers/usgs_nwis/catalogue/croissant.json) | Source lineage and verbatim credit alongside explicit absences where recorded. |
 

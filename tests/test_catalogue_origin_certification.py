@@ -127,7 +127,57 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
     if provider == "fr_hubeau":
         ledger = ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
-        build = partial(build, availability=availability)
+        from rivretrieve._internal.providers.fr_hubeau.origins import NativeInventoryCapture
+
+        capture = NativeInventoryCapture.model_validate_json(
+            (ROOT / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json").read_bytes()
+        )
+        build = partial(build, availability=availability, native_capture=capture)
+    if provider == "fr_hydroportail":
+        from rivretrieve._internal.acquisition_provenance import (
+            EvidenceReference,
+            NativeTableIdentity,
+            RecordingReference,
+        )
+
+        evidence = ROOT / "maintenance/catalogue/fr_hydroportail/evidence"
+        receipt = json.loads((evidence / "national-tests.receipt.json").read_bytes())
+        documents = []
+        for name, description in (
+            ("about", "HydroPortail publication and PHyC platform"),
+            ("legal", "HydroPortail public access and operator; reuse licence not established"),
+            ("chunk-8529.fdb00780.js", "Module 71324 emits station x/y directly as GeoJSON longitude/latitude"),
+        ):
+            record = json.loads((evidence / f"{name}.receipt.json").read_bytes())
+            documents.append(
+                EvidenceReference(
+                    evidence_id=name,
+                    description=description,
+                    recording=RecordingReference(
+                        recording_id=name,
+                        repository_path=(evidence / f"{name}.body").relative_to(ROOT).as_posix(),
+                        source_url=record["url"],
+                        retrieved_at=datetime.fromisoformat(record["retrieved_at"]),
+                        media_type=record["content_type"],
+                        sha256=record["sha256"],
+                    ),
+                )
+            )
+        material = native_path.read_bytes()
+        identity = NativeTableIdentity(
+            repository_path=native_path.relative_to(ROOT).as_posix(),
+            revision="eb2b4fcb3a38875329225b7dbe5f949216c01599",
+            sha256=hashlib.sha256(material).hexdigest(),
+            byte_size=len(material),
+        )
+        historical = decode_availability(
+            lzma.decompress(
+                (ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes()
+            )
+        )
+        build = partial(
+            build, historical=historical, receipt=receipt, documents=tuple(documents), native_identity=identity
+        )
     if provider == "th_thaiwater":
         build = partial(
             build, availability_evidence=GraphAvailabilityEvidence(THAI_AVAILABILITY_EVIDENCE_PATH.read_bytes())
@@ -161,6 +211,7 @@ ADAPTERS = {
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
@@ -274,6 +325,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
                 "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=1011000101&format=geojson"
             ),
         },
+        (ProviderId("fr_hydroportail"), "stations"): {
+            "provider_id": authored("fr_hydroportail"),
+            "station_id": field("bookmarkCode"),
+            "latitude": field("y"),
+            "longitude": field("x"),
+            "crs": documented("https://hydro.eaufrance.fr/build/8529.fdb00780.js"),
+        },
         (ProviderId("fr_hubeau"), "temperature/station"): {
             "provider_id": authored("fr_hubeau"),
             "station_id": field("code_station"),
@@ -351,7 +409,7 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
     assert {
         (adapter.provider_id, case.identity): case.declarations for adapter, case in CASES
     } == _expected_declarations()
-    assert len(CASES) == 14
+    assert len(CASES) == 15
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
 
@@ -518,8 +576,10 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),
     (ProviderId("ch_foen"), "stations"): (246, "unknown"),
     (ProviderId("cz_chmi"), "stations"): (831, "unknown"),
-    (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_454, "EPSG:4326"),
-    (ProviderId("fr_hubeau"), "temperature/station"): (869, "EPSG:4326"),
+    # Native publication inventories acquired 2026-09-21.
+    (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_475, "EPSG:4326"),
+    (ProviderId("fr_hubeau"), "temperature/station"): (872, "EPSG:4326"),
+    (ProviderId("fr_hydroportail"), "stations"): (6_409, "EPSG:4326"),
     (ProviderId("jp_mlit"), "stations"): (1_023, "unknown"),
     (ProviderId("lt_lhmt"), "stations"): (97, "EPSG:4326"),
     (ProviderId("no_nve"), "stations"): (4_902, "unknown"),
@@ -708,6 +768,21 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     elif adapter.provider_id == "fr_hubeau":
         arguments.extend(
             (
+                "--availability-ledger",
+                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                "--native-capture",
+                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
+            )
+        )
+    elif adapter.provider_id == "fr_hydroportail":
+        arguments.extend(
+            (
+                "--native-revision",
+                "eb2b4fcb3a38875329225b7dbe5f949216c01599",
+                "--repository-root",
+                str(ROOT),
+                "--evidence",
+                str(ROOT / "maintenance/catalogue/fr_hydroportail/evidence"),
                 "--availability-ledger",
                 str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
             )

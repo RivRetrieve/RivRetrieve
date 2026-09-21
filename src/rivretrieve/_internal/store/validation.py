@@ -609,6 +609,10 @@ def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
 def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     raw = _read_raw_manifest(store, provider_id)
     _check_revision(raw, store, provider_id)
+    # The former French identity included two publication services. Even a
+    # daily-only store must establish the current service before any value read.
+    if raw.get("provider_id") == "fr_hubeau" and raw.get("publication_service") != "hubeau":
+        _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, "publication_service:expected hubeau")
     _validate_manifest_schema(raw, store, provider_id)
     if raw["provider_id"] != str(provider_id):
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")

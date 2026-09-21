@@ -78,11 +78,12 @@ class MeasurementReplay(ReplayTransport):
 @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
 def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    _, station, predicates, start, end, filenames, field, count = case
+    route, station, predicates, start, end, filenames, field, count = case
+    provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
     recordings = tuple(read_recording(DATA / filename) for filename in filenames)
     replay = MeasurementReplay(recordings, field, mutation)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="fr_hubeau", station=station, **predicates)
+    selection = rr.find(provider=provider, station=station, **predicates)
     assert len(selection.series) == 1
     result = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="ignore")
     if mutation in ("missing", "true", "false"):
@@ -92,7 +93,7 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_pat
         assert all(outcome.series_id == selection.series[0].series_id for outcome in result.outcomes)
         assert all(outcome.reason for outcome in result.outcomes)
         assert any(issue.code == "unsupported_source_structure" for issue in result.issues)
-        assert rr.cache_status("fr_hubeau").coverage == ()
+        assert rr.cache_status(provider).coverage == ()
     else:
         assert result.data.height == count
         assert all(outcome.status in ("success", "empty") for outcome in result.outcomes)

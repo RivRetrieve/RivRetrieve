@@ -93,12 +93,12 @@ def test_instantaneous_physical_support_projects_to_existing_product_vocabulary(
     from dataclasses import replace
 
     from rivretrieve._internal.catalogues.products import product_row
-    from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
+    from rivretrieve._internal.providers.fr_hydroportail.config import SERIES_MAPPINGS
 
     # The retained HydroPortail title establishes instantaneous, the same physical
     # predicate used by USGS. Product tables use their existing distinct enum.
     mapping = replace(SERIES_MAPPINGS["discharge_instantaneous"], temporal_support="instantaneous")
-    row = product_row("fr_hubeau", "discharge_instantaneous", "Q", mapping.physical_facts())
+    row = product_row("fr_hydroportail", "discharge_instantaneous", "Q", mapping.physical_facts())
     assert row["period_type"] == "instant"
     assert mapping.physical_facts().temporal_support.value == "instantaneous"
 
@@ -106,10 +106,10 @@ def test_instantaneous_physical_support_projects_to_existing_product_vocabulary(
 def test_generic_product_instant_maps_to_physical_instantaneous():
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
     from rivretrieve._internal.catalogues.source_descriptions import build_source_descriptions
-    from rivretrieve._internal.providers.fr_hubeau.config import config
+    from rivretrieve._internal.providers.fr_hydroportail.config import config
 
     artifact = load_packaged_catalogue_artifact(
-        Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue"
+        Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue"
     )
     descriptions = build_source_descriptions(artifact, config())
     selected = [

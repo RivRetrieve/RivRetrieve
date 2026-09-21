@@ -50,6 +50,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
@@ -95,7 +96,8 @@ def load_packaged_catalogue_artifact(
 ) -> PackagedCatalogArtifact:
     artifact_path = Path(path)
     _ensure_artifact_path(artifact_path)
-    _validate_format(artifact_path)
+    provider_info = _read_provider_json(artifact_path / "provider.json")
+    _validate_format(artifact_path, provider_info.get("provider_id"))
     if not (artifact_path / "series_claims.parquet").is_file():
         raise CorruptCatalogArtifactError("Catalogue format requires series_claims.parquet; rebuild catalogue")
     try:
@@ -103,7 +105,6 @@ def load_packaged_catalogue_artifact(
     except (OSError, ValueError) as exc:
         raise CorruptCatalogArtifactError("Invalid source-series descriptions; rebuild catalogue") from exc
 
-    provider_info = _read_provider_json(artifact_path / "provider.json")
     claims = _read_parquet(artifact_path / "series_claims.parquet")
     products = _read_parquet(artifact_path / "products.parquet")
     stations = _read_parquet(artifact_path / "stations.parquet")
@@ -200,12 +201,19 @@ def packaged_catalogue_artifact_from_components(
     )
 
 
-def _validate_format(path: Path) -> None:
+def _validate_format(path: Path, provider_id: object) -> None:
     try:
         document = json.loads((path / "format.json").read_bytes())
     except (OSError, ValueError) as exc:
         raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator") from exc
-    if document != {"catalogue_format_version": 2} or type(document.get("catalogue_format_version")) is not int:
+    expected: dict[str, object] = {"catalogue_format_version": 2}
+    if provider_id == "fr_hubeau":
+        if not isinstance(document, dict) or document.get("publication_service") != "hubeau":
+            raise CorruptCatalogArtifactError(
+                "Unsupported fr_hubeau publication service identity; combined catalogues cannot be reinterpreted"
+            )
+        expected["publication_service"] = "hubeau"
+    if document != expected or type(document.get("catalogue_format_version")) is not int:
         raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator")
 
 

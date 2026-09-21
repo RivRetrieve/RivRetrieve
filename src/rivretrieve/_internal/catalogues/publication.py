@@ -69,7 +69,10 @@ def build_catalogue_metadata(
     if source_descriptions.provider_id != evidence.header.provider_id:
         raise ValueError("Source descriptions provider does not match catalogue evidence")
     metadata["source_series.json"] = (source_descriptions.model_dump_json() + "\n").encode()
-    metadata["format.json"] = b'{"catalogue_format_version":2}\n'
+    format_identity: dict[str, object] = {"catalogue_format_version": 2}
+    if evidence.header.provider_id == "fr_hubeau":
+        format_identity["publication_service"] = "hubeau"
+    metadata["format.json"] = (json.dumps(format_identity, separators=(",", ":")) + "\n").encode()
     claims = (
         catalogue_claims
         if catalogue_claims is not None

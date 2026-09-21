@@ -292,8 +292,13 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             for statement in provenance.header.source_records[0].statements
             if statement.kind == kind
         )
-    for provider in ("ch_foen", "ca_eccc", "pl_imgw", "fr_hubeau", "th_thaiwater"):
+    for provider in ("ch_foen", "ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
         assert "license" not in _descriptor(provider) and "citation" not in _descriptor(provider)
+    hubeau = _descriptor("fr_hubeau")
+    hubeau_provenance, _, _ = _inputs("fr_hubeau")
+    for statement in hubeau_provenance.header.source_records[0].statements:
+        if statement.kind in {"license", "citation"}:
+            assert hubeau[statement.kind] == statement.exact_text
     bosnia = _descriptor("ba_fhmzbih")
     provenance, _, _ = _inputs("ba_fhmzbih")
     assert bosnia["subjectOf"]["url"] == "provenance.json"

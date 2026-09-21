@@ -56,8 +56,8 @@ def _bound_definition():
     from rivretrieve._internal.source_series import SourceIdentity, SourceSeries, SourceUnitCodeDefinition
 
     definition = SourceUnitCodeDefinition(
-        provider_id="fr_hubeau",
-        namespace="fr_hubeau/hydroportail/Q",
+        provider_id="fr_hydroportail",
+        namespace="fr_hydroportail/Q",
         code="l",
         unit="l/s",
         evidence=("https://hydro.eaufrance.fr/build/5621.4ab47ec9.js#common.unit.q.l",),
@@ -71,12 +71,10 @@ def _bound_definition():
     )
     return SourceSeries(
         series_id="bound-series",
-        provider_id="fr_hubeau",
+        provider_id="fr_hydroportail",
         station_id="a",
         product_id="level",
-        identity=SourceIdentity(
-            namespace="fr_hubeau/hydroportail/Q", origin="mapping", evidence=("controlled native cells",)
-        ),
+        identity=SourceIdentity(namespace="fr_hydroportail/Q", origin="mapping", evidence=("controlled native cells",)),
         facts=(facts,),
     )
 
@@ -112,9 +110,9 @@ def test_bound_code_preserves_native_values_and_context_through_store_conversion
     rows = replacement.rows.with_columns(pl.lit("l").alias("source_unit"), pl.lit("bound-facts").alias("facts_id"))
     replacement = replace(replacement, rows=rows)
     store = StoreRoot(tmp_path / "store")
-    accumulate(store, ProviderId("fr_hubeau"), StoreUpdate((definition,), (), (outcome,), (replacement,)))
+    accumulate(store, ProviderId("fr_hydroportail"), StoreUpdate((definition,), (), (outcome,), (replacement,)))
     read = StoreReader().query(
-        StoreQuery(store, ProviderId("fr_hubeau"), ("a",), ("level",), outcome.window.start, outcome.window.end)
+        StoreQuery(store, ProviderId("fr_hydroportail"), ("a",), ("level",), outcome.window.start, outcome.window.end)
     )
     assert read.rows["source_unit"].item() == "l"
     assert read.rows["value"].item() == 12.0
@@ -129,7 +127,7 @@ def test_bound_code_preserves_native_values_and_context_through_store_conversion
     assert converted.value["unit"].item() == "m3/s"
     assert converted.value["source_unit"].item() == "l"
     selection = _Selection(
-        scope=SeriesScope(provider_ids=("fr_hubeau",), station_ids=("a",)), known_series=(definition,)
+        scope=SeriesScope(provider_ids=("fr_hydroportail",), station_ids=("a",)), known_series=(definition,)
     )
     restored = rr.from_bundle(rr.to_bundle(selection))
     assert restored.known_series == selection.known_series
@@ -150,7 +148,7 @@ def test_binding_code_and_imported_context_are_checked_at_model_boundaries():
     raw["source_unit_definition"]["code"] = "other-code"
     with pytest.raises(ValueError, match="code"):
         PhysicalFacts.model_validate(raw)
-    selection = _Selection(scope=SeriesScope(provider_ids=("fr_hubeau",)), known_series=(definition,))
+    selection = _Selection(scope=SeriesScope(provider_ids=("fr_hydroportail",)), known_series=(definition,))
     altered = BytesIO()
     with ZipFile(BytesIO(rr.to_bundle(selection))) as source, ZipFile(altered, "w") as target:
         for name in source.namelist():

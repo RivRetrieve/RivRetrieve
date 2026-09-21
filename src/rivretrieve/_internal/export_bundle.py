@@ -104,6 +104,21 @@ def _write_entry(archive: ZipFile, name: str, content: bytes) -> None:
     archive.writestr(entry, content)
 
 
+def _includes_hubeau(manifest: dict) -> bool:
+    """Check identity metadata, including empty selections and mixed scopes."""
+    return (
+        "fr_hubeau" in manifest.get("scope", {}).get("provider_ids", ())
+        or any(item.get("provider_id") == "fr_hubeau" for item in manifest.get("series", ()))
+        or manifest.get("receipt_provider") == "fr_hubeau"
+        or manifest.get("provenance", {}).get("provider_id") == "fr_hubeau"
+        or any(item.get("provider_id") == "fr_hubeau" for item in manifest.get("locations", ()))
+        or any("fr_hubeau" in item.get("scope", {}).get("provider_ids", ()) for item in manifest.get("inventories", ()))
+        or any(
+            item.get("header", {}).get("provider_id") == "fr_hubeau" for item in manifest.get("catalogue_evidence", ())
+        )
+    )
+
+
 def encode_bundle(value: _Selection | ObservationResult) -> bytes:
     """Encode exact metadata and receipt bytes; observation arrays retain their Parquet schema."""
     if not isinstance(value, (_Selection, ObservationResult)):
@@ -172,6 +187,8 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
                     )
                 receipts.append(item)
             manifest["receipts"] = receipts
+        if _includes_hubeau(manifest):
+            manifest["publication_service"] = "hubeau"
         _write_entry(archive, "manifest.json", _json(manifest))
     return destination.getvalue()
 
@@ -203,6 +220,10 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
             if kind == "selection"
             else {"view_scope", "outcomes", "provenance", "provenance_values", "receipt_provider", "receipts"}
         )
+        if _includes_hubeau(manifest):
+            if manifest.get("publication_service") != "hubeau":
+                raise ValueError("Unsupported French publication_service identity; export/refetch explicitly")
+            fields.add("publication_service")
         if set(manifest) != fields:
             raise ValueError("Bundle manifest does not match its declared format schema")
         definitions = tuple(SourceSeries.model_validate(item) for item in manifest["series"])

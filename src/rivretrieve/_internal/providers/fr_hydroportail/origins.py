@@ -1,0 +1,175 @@
+"""HydroPortail-native field origins and acquisition lineage."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+from urllib.parse import urlencode  # noqa: TID251 -- URL rendering, no transport
+
+from rivretrieve._internal import catalogue_origins as origins
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    AcquisitionRecord,
+    EvidenceReference,
+    ExternalFactReference,
+    FactBinding,
+    MaterialIdentity,
+    NativeTableIdentity,
+    SourceRecord,
+    Transformation,
+    complete_transformed_fact_universe,
+)
+from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.catalogues.native import NativeTable
+    from rivretrieve._internal.providers.fr_hydroportail.generate_catalogue import StationProductAvailability
+
+SEARCH_URL = "https://hydro.eaufrance.fr/rechercher/ajax/entites-hydrometriques"
+COORDINATE_EVIDENCE = "https://hydro.eaufrance.fr/build/8529.fdb00780.js"
+STATION_CATALOGUE_ORIGINS = {
+    "provider_id": origins.Authored(origins.AuthoredValue("fr_hydroportail")),
+    "station_id": origins.Field(origins.NativeColumn("bookmarkCode")),
+    "latitude": origins.Field(origins.NativeColumn("y")),
+    "longitude": origins.Field(origins.NativeColumn("x")),
+    "crs": origins.Documented(origins.DocumentedValue("EPSG:4326"), origins.Evidence(COORDINATE_EVIDENCE)),
+}
+
+
+def build_acquisition_provenance(
+    native: NativeTable,
+    pairs: tuple[StationProductAvailability, ...],
+    receipt: dict,
+    documents: tuple[EvidenceReference, ...],
+    native_identity: NativeTableIdentity,
+) -> AcquisitionProvenance:
+    source = "fr_hydroportail"
+    acquisitions = [
+        AcquisitionRecord(
+            acquisition_id="public_station_search",
+            method="http_request",
+            instant_type="retrieval",
+            description="Anonymous public native station search: explicit active, closed, all published site types and test entities. Not an unrestricted PHyC census or observation availability assertion.",
+            requested_from=(receipt["url"] + "?" + urlencode(receipt["params"]),),
+            retrieved_at_start=datetime.fromisoformat(receipt["retrieved_at"]),
+            material=MaterialIdentity(
+                filename="maintenance/catalogue/fr_hydroportail/evidence/national-tests.body",
+                byte_count=receipt["bytes"],
+                sha256=receipt["sha256"],
+            ),
+        )
+    ]
+    bindings = [
+        FactBinding(
+            fact_group="native_station_inventory",
+            facts=tuple(f"source.station.{s}.identity_location_crs" for s in native.data["bookmarkCode"]),
+            source_id=source,
+            acquisition_id="public_station_search",
+        )
+    ]
+    for document in documents:
+        recording = document.recording
+        acquisitions.append(
+            AcquisitionRecord(
+                acquisition_id=document.evidence_id,
+                method="http_request",
+                instant_type="retrieval",
+                description=document.description,
+                requested_from=(recording.source_url,),
+                retrieved_at_start=recording.retrieved_at,
+                recording_ids=(recording.recording_id,),
+            )
+        )
+        bindings.append(
+            FactBinding(
+                fact_group=document.evidence_id,
+                facts=(f"source.documentation.{document.evidence_id}",),
+                source_id=source,
+                acquisition_id=document.evidence_id,
+            )
+        )
+    bindings.append(
+        FactBinding(
+            fact_group="native_publication",
+            facts=("source.provider.platform",),
+            source_id=source,
+            acquisition_id="about",
+        )
+    )
+    acquisitions.append(
+        AcquisitionRecord(
+            acquisition_id="raw_station_series",
+            method="runtime_http_request",
+            instant_type="runtime",
+            description="HydroPortail station-own raw Q/H publication; original measurement authorship unknown",
+            requested_from=("https://hydro.eaufrance.fr/stationhydro/ajax/{station}/series",),
+        )
+    )
+    bindings.append(
+        FactBinding(
+            fact_group="raw_station_series",
+            facts=("source.observation.raw_station_series",),
+            source_id=source,
+            acquisition_id="raw_station_series",
+        )
+    )
+    for pair in pairs:
+        external = []
+        for index, acquisition in enumerate(pair.acquisitions):
+            identifier = f"history_{pair.station_id}_{pair.product_id}_{index}"
+            fact = f"source.availability.{pair.station_id}.{pair.product_id}.{index}"
+            acquisitions.append(
+                AcquisitionRecord(
+                    acquisition_id=identifier,
+                    method="http_request",
+                    instant_type="retrieval",
+                    description=f"HydroPortail raw station history; HTTP {acquisition.http_status}; {pair.status}. Exact bounded request, not continuous availability.",
+                    requested_from=acquisition.requested_from,
+                    retrieved_at_start=acquisition.retrieved_at_start,
+                    material=acquisition.material,
+                )
+            )
+            bindings.append(
+                FactBinding(fact_group=identifier, facts=(fact,), source_id=source, acquisition_id=identifier)
+            )
+            external.append(ExternalFactReference(source_id=source, fact=fact))
+        if not external:
+            external.append(
+                ExternalFactReference(source_id=source, fact=f"source.station.{pair.station_id}.identity_location_crs")
+            )
+        bindings.append(
+            FactBinding(
+                fact_group=f"availability:{pair.station_id}:{pair.product_id}",
+                facts=(f"station_product:{pair.station_id}:{pair.product_id}.availability",),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(name=pair.reason, external_inputs=tuple(external)),
+            )
+        )
+    provenance = AcquisitionProvenance(
+        native_table=native_identity,
+        schema_version=2,
+        provider_id=source,
+        source_records=(
+            SourceRecord(
+                source_id=source,
+                issuer="Service Central Vigicrues",
+                operator="HydroPortail / PHyC",
+                acquisitions=tuple(acquisitions),
+                evidence=documents,
+            ),
+        ),
+        fact_bindings=tuple(bindings),
+        fact_universe=tuple(f for b in bindings for f in b.facts),
+    )
+    return complete_transformed_fact_universe(
+        provenance,
+        CATALOGUE_FACT_UNIVERSE,
+        transformation=Transformation(
+            name="HydroPortail native publication to canonical catalogue; reuse licence and historical measurement authors unknown",
+            external_inputs=(
+                ExternalFactReference(source_id=source, fact="source.provider.platform"),
+                ExternalFactReference(source_id=source, fact="source.documentation.chunk-8529.fdb00780.js"),
+            ),
+        ),
+    )

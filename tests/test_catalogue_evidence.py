@@ -27,8 +27,8 @@ from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
 
-def _legacy(provider):
-    path = ROOT / provider / "catalogue"
+def _legacy(provider, path=None):
+    path = ROOT / provider / "catalogue" if path is None else path
     content = (path / "provenance.json").read_bytes()
     import json
 
@@ -718,12 +718,19 @@ def _assert_bulk_source_history_preserved(provider, provenance):
     return original
 
 
-@pytest.mark.parametrize("provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider != "br_ana"))
+@pytest.mark.parametrize(
+    "provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider not in {"br_ana", "fr_hydroportail"})
+)
 def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
     assert oracle["revision"] == "6f0edf6a455735cb1f8c858a1a9f35d4245cf209"
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
-    restored = _legacy(provider)
+    # The French oracle names the historical combined publication. Its exact
+    # authenticated evidence remains readable for research, never as a current catalogue.
+    restored = _legacy(
+        provider,
+        Path(__file__).parent / "test_data/french_combined_catalogue" if provider == "fr_hubeau" else None,
+    )
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(restored)
     if provider == "ch_foen":

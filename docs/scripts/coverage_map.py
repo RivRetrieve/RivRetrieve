@@ -31,6 +31,7 @@ PROVIDER_COUNTRY = {
     "ch_foen": "CHE",
     "cz_chmi": "CZE",
     "fr_hubeau": "FRA",
+    "fr_hydroportail": "FRA",
     "jp_mlit": "JPN",
     "lt_lhmt": "LTU",
     "no_nve": "NOR",
@@ -91,7 +92,7 @@ def draw(world, stations: pl.DataFrame, out: Path) -> None:
     bar.ax.set_xticklabels([f"{tick:,}" for tick in ticks])
     bar.ax.minorticks_off()
     bar.ax.tick_params(labelsize=8, length=2)
-    bar.set_label("Gauging stations · logarithmic scale", fontsize=9)
+    bar.set_label("Provider-station records · logarithmic scale", fontsize=9)
     bar.outline.set_visible(False)
     fig.savefig(out, dpi=200, facecolor=BACKGROUND)
     plt.close(fig)
@@ -117,7 +118,9 @@ def main() -> None:
     )
     counts = country_counts(stations)
     print(stations.group_by("provider_id").len().sort("provider_id"))
-    print(f"{sum(counts.values()):,} unique stations; {len(supported)} providers; {len(counts)} countries")
+    print(
+        f"{sum(counts.values()):,} unique provider-station records; {len(supported)} providers; {len(counts)} countries"
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     draw(gpd.read_file(args.world), stations, args.out)
 

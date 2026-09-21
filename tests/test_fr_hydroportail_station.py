@@ -19,9 +19,9 @@ from rivretrieve._internal.engine import (
     _make_fetch_window,
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.fr_hubeau.config import config
-from rivretrieve._internal.providers.fr_hubeau.fetch import fetch
-from rivretrieve._internal.providers.fr_hubeau.parse import parse
+from rivretrieve._internal.providers.fr_hydroportail.config import config
+from rivretrieve._internal.providers.fr_hydroportail.fetch import fetch
+from rivretrieve._internal.providers.fr_hydroportail.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 DATA = Path(__file__).parent / "test_data"
@@ -141,14 +141,16 @@ def test_empty_envelope_requires_identity_metadata_before_iteration():
 def _run_station_discharge_boundary(replay):
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(discovery, "HttpClient", lambda: replay)
-        selection = rr.find(provider="fr_hubeau", station="1232000101", quantity="discharge", statistic="instantaneous")
+        selection = rr.find(
+            provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"
+        )
         return rr.fetch(selection, start="2026-06-01", end="2026-06-02", on_issue="raise").data
 
 
 # Three literals supplied by the independent source-only author, not this parser.
 # Exact source material and authorship are recorded in the adjacent provenance document.
 STATION_DISCHARGE_PROBE = BoundaryProbe(
-    ProviderId("fr_hubeau"),
+    ProviderId("fr_hydroportail"),
     PRODUCT,
     (read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json"),),
     {

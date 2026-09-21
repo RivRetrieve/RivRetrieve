@@ -183,7 +183,9 @@ Its URLs, checksums, and source vintage survive in the manifest, but its identit
 Readers refuse unsupported manifest revisions before opening observation files.
 Packaged catalogue format revision `2`, source-series definition schema `1` and export bundle
 version `2` are explicit contracts.
-Readers validate these formats before use. Refusal leaves unsupported files intact.
+Readers validate these formats before use. Hub’Eau catalogues, live stores and export
+bundles also declare their publication service. Readers refuse superseded combined
+French artifacts without reinterpreting their source identity. Refusal leaves unsupported files intact.
 `cache_status` inspects local state, and `clear_cache` is the explicit destructive boundary.
 
 ### Provenance and receipts

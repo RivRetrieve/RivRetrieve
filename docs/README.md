@@ -15,7 +15,7 @@ comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
 
 ## Providers
 
-RivRetrieve supports observation retrieval from 12 national agencies. The
+RivRetrieve supports observation retrieval from national publication services. The
 [README](../README.md#river-data-and-where-to-find-them) lists them with their station counts.
 
 The data belong to those agencies, and they document their own networks far better than we could.
@@ -36,7 +36,7 @@ Whatever the provider, RivRetrieve gives you the same things:
 A page for each provider, describing its network, what it measures and how to cite it, is being
 written:
 
-- [France: Hub'Eau and HydroPortail](providers/fr_hubeau.md)
+- [France: Hub'Eau (`fr_hubeau`) and HydroPortail (`fr_hydroportail`)](providers/fr_hubeau.md)
 - [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
 
 ## How it works
@@ -58,7 +58,7 @@ written:
 
 Provider port notes retain source research and acquisition history. Use the
 [API reference](reference.md#shipped-software-capabilities) for current software access:
-ten live providers, Canada and Poland through bulk stores, and South Africa for
+eleven live providers, Canada and Poland through bulk stores, and South Africa for
 catalogue discovery only.
 
 - [Evidenced inventory account](provider_ports/evidenced_coverage.md). Its recorded limitations

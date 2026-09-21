@@ -17,13 +17,15 @@ from rivretrieve._internal.store.validation import ObservationStoreRefusedError
 DATA = Path(__file__).parent / "test_data"
 OLD_STORE = DATA / "boundary_stores/fr_hubeau_retired_facts"
 OLD_BUNDLE = DATA / "bundles/fr_hubeau_retired_facts_v1.bundle"
-RECORDING = DATA / "fr_hydroportail_station_Q_padded.recording.json"
+RECORDING = DATA / "fr_hubeau_1011000101_QmnJ_padded.recording.json"
 
 
 def _selection():
-    selection = rr.find(provider="fr_hubeau", station="1232000101", quantity="discharge", statistic="instantaneous")
+    selection = rr.find(
+        provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
+    )
     assert selection.series
-    assert all(facts.frequency.value is None for series in selection.series for facts in series.facts)
+    assert all(facts.frequency.value == "daily" for series in selection.series for facts in series.facts)
     return rr.pick(selection, series_id=[series.series_id for series in selection.series])
 
 
@@ -69,7 +71,7 @@ def test_public_fetch_refuses_actual_old_facts_cache_without_deleting_it(monkeyp
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: NoNetwork(()))
     with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 6"):
-        rr.fetch(_selection(), start="2026-06-01", end="2026-06-02", cache=mode, on_issue=policy)
+        rr.fetch(_selection(), start="2025-01-03", end="2025-01-03", cache=mode, on_issue=policy)
     assert not requests
     assert _snapshot(path) == before
 
@@ -87,13 +89,13 @@ def test_explicit_bypass_and_cleanup_refetch_produce_only_current_facts(monkeypa
     recording = read_recording(RECORDING)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = _selection()
-    bypassed = rr.fetch(selection, start="2026-06-01", end="2026-06-02", cache="bypass", on_issue="ignore")
-    assert bypassed.data.height == 282
-    assert all(facts.frequency.value is None for series in bypassed.source_series for facts in series.facts)
+    bypassed = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="bypass", on_issue="ignore")
+    assert bypassed.data.height == 1
+    assert all(facts.frequency.value == "daily" for series in bypassed.source_series for facts in series.facts)
     assert _snapshot(path) == before
     rr.clear_cache("fr_hubeau")
-    refreshed = rr.fetch(selection, start="2026-06-01", end="2026-06-02", cache="refresh", on_issue="ignore")
-    assert all(facts.frequency.value is None for series in refreshed.source_series for facts in series.facts)
+    refreshed = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="refresh", on_issue="ignore")
+    assert all(facts.frequency.value == "daily" for series in refreshed.source_series for facts in series.facts)
     assert json.loads((path / "manifest.json").read_text())["format_version"] == 7
     exported = rr.to_bundle(refreshed)
     with ZipFile(BytesIO(exported)) as archive:

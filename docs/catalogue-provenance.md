@@ -51,7 +51,8 @@ from Git history rather than maintained alongside these inputs.
 
 - [Bosnia workbook evidence](../maintenance/catalogue/ba_fhmzbih/README.md)
 - [Brazil inventory evidence](../maintenance/catalogue/br_ana/README.md)
-- [France availability evidence](../maintenance/catalogue/fr_hubeau/README.md)
+- [Hub'Eau and historical French availability evidence](../maintenance/catalogue/fr_hubeau/README.md)
+- [HydroPortail native acquisition and coverage](../maintenance/catalogue/fr_hydroportail/COVERAGE.md)
 - [Thailand availability evidence](../maintenance/catalogue/th_thaiwater/README.md)
 
 These inputs remain repository-only and are excluded from distributions. Public

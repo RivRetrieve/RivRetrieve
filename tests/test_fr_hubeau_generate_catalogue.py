@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import lzma
 from collections import Counter
@@ -51,7 +50,10 @@ _OPENAPI_EVIDENCE = _TEST_DATA_DIR / "fr_hubeau_openapi_v2.json"
 _HYDRO_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 32, 58, tzinfo=UTC))
 _TEMP_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 33, 34, tzinfo=UTC))
 _PINNED_NATIVE_DIGEST = "f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322"
-NATIVE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+NATIVE_PATH = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet"
+CURRENT_NATIVE_PATH = (
+    Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+)
 
 
 def _availability():
@@ -133,7 +135,7 @@ def test_native_build_enforces_each_endpoint_origin_declaration(
     ],
     ids=["hydrometry", "temperature"],
 )
-def test_native_build_enforces_each_partition_census(
+def test_native_build_rejects_unattested_partition_changes(
     endpoint: str,
     partition: str,
     remaining: int,
@@ -149,7 +151,7 @@ def test_native_build_enforces_each_partition_census(
 
     with pytest.raises(FatalContractError) as raised:
         build_catalogue(shortened, FRANCE_ORIGIN_DECLARATIONS, _availability())
-    assert str(raised.value) == (f"fr_hubeau native {partition} partition has {remaining} rows; expected {expected}")
+    assert str(raised.value) == "Hub’Eau native content does not match its acquisition identity"
 
 
 def test_generate_catalogue_station_count() -> None:
@@ -158,12 +160,12 @@ def test_generate_catalogue_station_count() -> None:
 
 def test_generate_catalogue_product_count() -> None:
     cat = _catalogue()
-    assert cat.products.height == 6
+    assert cat.products.height == 4
 
 
 def test_generate_catalogue_station_products_cross() -> None:
     cat = _catalogue()
-    assert cat.station_products.height == 33139
+    assert cat.station_products.height == 20231
 
 
 def test_generate_catalogue_hydro_station_fields() -> None:
@@ -189,10 +191,8 @@ def test_generate_catalogue_hydro_station_products() -> None:
     hydro_sp = cat.station_products.filter(pl.col("station_id") == "1011000101")
     hydro_products = set(hydro_sp["product_id"].to_list())
     assert hydro_products == {
-        "discharge_instantaneous",
         "discharge_daily_mean",
         "discharge_daily_max",
-        "stage_instantaneous",
         "stage_daily_max",
     }
 
@@ -718,21 +718,8 @@ def test_native_cross_endpoint_collision_is_an_issue() -> None:
     _assert_issue(_refresh(hydro, temperature), f"fr_hubeau station {station_id} occurs in both station endpoints")
 
 
-def test_native_hydrometry_station_count_is_exact() -> None:
-    hydro, temperature = _sample_payloads()
-    _assert_issue(
-        _refresh(hydro, temperature),
-        "fr_hubeau hydrometry response contains 2 stations; expected 6454",
-    )
-
-
-def test_native_temperature_station_count_is_exact() -> None:
-    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
-    _, temperature = _sample_payloads()
-    _assert_issue(
-        _refresh(hydro, temperature),
-        "fr_hubeau temperature response contains 2 stations; expected 869",
-    )
+def test_native_population_is_not_frozen_to_historical_snapshot() -> None:
+    assert _refresh(*_sample_payloads()).issues == ()
 
 
 def test_capture_boundaries_and_documentation_evidence() -> None:
@@ -952,7 +939,7 @@ def test_fixture_native_cli_is_offline_and_prints_only_digest(
     def fail_live(*args: object, **kwargs: object) -> object:
         pytest.fail("fixture-native CLI called the live reader")
 
-    monkeypatch.setattr(generator, "_read_live_stations", fail_live)
+    monkeypatch.setattr("socket.create_connection", fail_live)
     native_path = tmp_path / "native.parquet"
     exit_code = generator.main(
         [
@@ -977,7 +964,7 @@ def test_fixture_native_cli_is_offline_and_prints_only_digest(
 def test_fixture_native_cli_rejects_census_error_without_writing(tmp_path: Path) -> None:
     hydro = _full_payload(_HYDRO_FULL_FIXTURE)
     hydro["data"] = hydro["data"][:5]
-    hydro["count"] = 5
+    hydro["count"] = 6454
     hydro_path = tmp_path / "truncated-hydrometry.json"
     hydro_path.write_text(json.dumps(hydro))
     native_path = tmp_path / "native.parquet"
@@ -999,7 +986,7 @@ def test_fixture_native_cli_rejects_census_error_without_writing(tmp_path: Path)
         )
 
     assert [issue.message for issue in raised.value.issues] == [
-        "fr_hubeau hydrometry response contains 5 stations; expected 6454"
+        "fr_hubeau hydrometry response count 6454 does not match 5 rows"
     ]
     assert not native_path.exists()
 
@@ -1081,7 +1068,7 @@ def test_complete_native_table_is_source_faithful() -> None:
     assert transposed["latitude_station"] == transposed["coordonnee_x_station"] == 4.099322
     assert transposed["longitude_station"] == transposed["coordonnee_y_station"] == 49.989435
 
-    committed = read_native_table(Path(generator.__file__).parent / "catalogue" / "native.parquet")
+    committed = read_native_table(NATIVE_PATH)
     pl_testing.assert_frame_equal(committed.data, frame, check_exact=True)
     assert native_table_content_digest(committed) == _PINNED_NATIVE_DIGEST
     assert native_table_content_digest(rematerialized.value) == _PINNED_NATIVE_DIGEST
@@ -1099,7 +1086,7 @@ def test_fixture_wrapper_matches_direct_refresh() -> None:
     pl_testing.assert_frame_equal(wrapped.value.data, direct.value.data, check_exact=True)
 
 
-def test_native_dates_flow_to_station_rows_and_provider_maximum() -> None:
+def test_native_dates_cannot_change_without_new_acquisition() -> None:
     native = read_native_table(NATIVE_PATH)
     hydro_first = native.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations")["code_station"][0]
     changed = NativeTable(
@@ -1113,57 +1100,13 @@ def test_native_dates_flow_to_station_rows_and_provider_maximum() -> None:
         )
     )
     availability = _availability()
-    catalogue = build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS, availability)
-    hydro_dates = catalogue.station_products.filter(pl.col("station_id") == hydro_first)[
-        "last_catalogue_check"
-    ].unique()
-    temperature_id = changed.data.filter(pl.col("source_endpoint") == "temperature/station")["code_station"][0]
-    temperature_dates = catalogue.station_products.filter(pl.col("station_id") == temperature_id)[
-        "last_catalogue_check"
-    ].unique()
-    assert set(hydro_dates.to_list()) == {
-        max(a.retrieved_at_start for a in pair.acquisitions).date()
-        for pair in availability.pairs
-        if pair.code_station == hydro_first
-    }
-    assert set(temperature_dates.to_list()) == {
-        max(a.retrieved_at_start for a in pair.acquisitions).date()
-        for pair in availability.pairs
-        if pair.code_station == temperature_id
-    }
-    assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
+    with pytest.raises(FatalContractError, match="native content does not match its acquisition identity"):
+        build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS, availability)
 
 
-def _canonical_value(value: object) -> object:
-    if isinstance(value, datetime):
-        return value.isoformat().replace("+00:00", "Z")
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    if isinstance(value, tuple | list):
-        return [_canonical_value(member) for member in value]
-    if isinstance(value, dict):
-        return {key: _canonical_value(member) for key, member in value.items()}
-    return value
-
-
-def _frame_digest(frame: pl.DataFrame) -> str:
-    payload = {
-        "columns": frame.columns,
-        "rows": [[_canonical_value(value) for value in row] for row in frame.iter_rows()],
-    }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
-    return hashlib.sha256(encoded).hexdigest()
-
-
-_PINNED_PROVIDER_JSON_SHA256 = "4fb60ccedf7275da40e69a0ff21646eb618e0b6f46d9cdbaf3211178dd25f821"
-_PINNED_PRODUCTS_FRAME_SHA256 = "178e63d0afefd0381c63439d1bcd998f219858bb479da1438796ed261cdd72dc"
-_PINNED_STATIONS_FRAME_SHA256 = "0958c6dfe6fa44d0a66e105c51b7d3ae3ac675337fe0fa07f98e02017726c1c1"
-_PINNED_STATION_PRODUCTS_FRAME_SHA256 = "3126fc84b22ba46a6b52a450e18d6014c56c5987340d1bca45ab983331e10bcd"
-
-
-def test_committed_catalogue_matches_independent_projection_and_content_pins() -> None:
-    native = read_native_table(NATIVE_PATH).data
-    catalogue_dir = NATIVE_PATH.parent
+def test_committed_catalogue_matches_independent_source_projection() -> None:
+    native = read_native_table(CURRENT_NATIVE_PATH).data
+    catalogue_dir = CURRENT_NATIVE_PATH.parent
     committed_products = pl.read_parquet(catalogue_dir / "products.parquet")
     committed_stations = pl.read_parquet(catalogue_dir / "stations.parquet")
     committed_station_products = pl.read_parquet(catalogue_dir / "station_products.parquet")
@@ -1204,18 +1147,6 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
     # Physical labels follow the retained API definitions, not a second generator declaration.
     expected_products = pl.DataFrame(
         [
-            (
-                "fr_hubeau",
-                "discharge_instantaneous",
-                "discharge",
-                "unknown",
-                "instantaneous",
-                "instant",
-                "unknown",
-                "m3/s",
-                "Q",
-            ),
-            ("fr_hubeau", "stage_instantaneous", "stage", "unknown", "instantaneous", "instant", "unknown", "m", "H"),
             ("fr_hubeau", "discharge_daily_mean", "discharge", "daily", "mean", "interval", "unknown", "m3/s", "QmnJ"),
             ("fr_hubeau", "discharge_daily_max", "discharge", "daily", "max", "unknown", "unknown", "m3/s", "QIXnJ"),
             ("fr_hubeau", "stage_daily_max", "stage", "daily", "max", "unknown", "unknown", "m", "HIXnJ"),
@@ -1243,32 +1174,11 @@ def test_committed_catalogue_matches_independent_projection_and_content_pins() -
         (row[0], d.product_id) for row in temperature.select("code_station").iter_rows() for d in TEMP_PRODUCT_DEFS
     )
     assert set(committed_station_products.select("station_id", "product_id").iter_rows()) == expected_pairs
-    assert dict(committed_station_products.group_by("availability").len().iter_rows()) == {
-        "available": 20966,
-        "unknown": 12173,
-    }
-    assert committed_station_products["published_record_start_date"].null_count() == 33139
-    assert committed_station_products["published_record_end_date"].null_count() == 33139
-
-    expected_provider = {
-        "provider_id": "fr_hubeau",
-        "name": "Hub’Eau / HydroPortail — French hydrometry and water temperature",
-        "live_stations": False,
-        "live_products": False,
-        "live_station_products": False,
-        "bulk_observations": (
-            "true: station HydroPortail queries and paginated obs_elab and temperature/chronique requests; "
-            "partial failures reported as recoverable issues"
-        ),
-        "catalogue_version": "2026-08-02",
-        "license": None,
-        "citation": None,
-    }
-    assert committed_provider == expected_provider
-    assert hashlib.sha256((catalogue_dir / "provider.json").read_bytes()).hexdigest() == _PINNED_PROVIDER_JSON_SHA256
-    assert _frame_digest(committed_products) == _PINNED_PRODUCTS_FRAME_SHA256
-    assert _frame_digest(committed_stations) == _PINNED_STATIONS_FRAME_SHA256
-    assert _frame_digest(committed_station_products) == _PINNED_STATION_PRODUCTS_FRAME_SHA256
+    projected = generator.hubeau_availability(_availability(), expected_pairs, NativeTable(native))
+    pl_testing.assert_frame_equal(committed_station_products, generator.build_station_products(projected))
+    assert committed_station_products["published_record_start_date"].null_count() == len(expected_pairs)
+    assert committed_station_products["published_record_end_date"].null_count() == len(expected_pairs)
+    assert committed_provider == generator.build_provider_info(native["retrieved_at"].max().date())
 
 
 def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
@@ -1280,16 +1190,17 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         calls.append("forbidden")
         raise AssertionError("native build reached a network or refresh entry point")
 
-    monkeypatch.setattr(generator.urllib.request, "urlopen", forbidden)
-    monkeypatch.setattr(generator, "_read_live_stations", forbidden)
+    monkeypatch.setattr("socket.create_connection", forbidden)
     monkeypatch.setattr(generator, "refresh_native_table", forbidden)
     monkeypatch.setattr(generator, "refresh_native_table_from_fixtures", forbidden)
-    native_before = NATIVE_PATH.read_bytes()
+    native_before = CURRENT_NATIVE_PATH.read_bytes()
     assert (
         generator.main(
             [
                 "--native",
-                str(NATIVE_PATH),
+                str(CURRENT_NATIVE_PATH),
+                "--native-capture",
+                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
                 "--availability-ledger",
                 str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",
@@ -1299,7 +1210,7 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         == 0
     )
     assert calls == []
-    assert NATIVE_PATH.read_bytes() == native_before
+    assert CURRENT_NATIVE_PATH.read_bytes() == native_before
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
         "provider.json",
@@ -1332,4 +1243,4 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "series_claims.parquet",
         "croissant.json",
     ):
-        assert (tmp_path / artifact).read_bytes() == (NATIVE_PATH.parent / artifact).read_bytes()
+        assert (tmp_path / artifact).read_bytes() == (CURRENT_NATIVE_PATH.parent / artifact).read_bytes()

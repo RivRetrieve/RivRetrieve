@@ -68,7 +68,7 @@ def test_public_authenticated_flux_normal_padding_cache_and_receipts(monkeypatch
             "2026-09-03",
         ),
         (
-            "fr_hubeau",
+            "fr_hydroportail",
             "1232000101",
             "discharge",
             "raw",
@@ -99,7 +99,7 @@ def test_named_source_selection_cache_and_bundle(
 
 
 def test_published_instantaneous_support_has_one_cross_provider_predicate():
-    for provider, station in (("fr_hubeau", "1232000101"), ("usgs_nwis", "07374000")):
+    for provider, station in (("fr_hydroportail", "1232000101"), ("usgs_nwis", "07374000")):
         selected = rr.find(provider=provider, station=station, quantity="discharge", temporal_support="instantaneous")
         assert selected.series
         assert all(

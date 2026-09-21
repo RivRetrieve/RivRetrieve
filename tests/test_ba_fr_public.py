@@ -24,7 +24,7 @@ def _public(monkeypatch, provider, station, product, start, end, recordings):
     replay = ReplayTransport(tuple(read_recording(DATA / name) for name in recordings))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider=provider, station=station, **PHYSICAL_FILTERS[product])
-    result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
+    result = rr.fetch(selection, start=start, end=end, cache="bypass", receipts=True, on_issue="ignore")
     assert result.data.columns == [
         "time",
         "time_zone",
@@ -96,7 +96,8 @@ def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(monkeyp
         ),
     )
     for station, product, start, end, recordings, count in cases:
-        result = _public(monkeypatch, "fr_hubeau", station, product, start, end, recordings)
+        provider = "fr_hydroportail" if "instantaneous" in product else "fr_hubeau"
+        result = _public(monkeypatch, provider, station, product, start, end, recordings)
         assert result.data.height == count
         contents = b"".join(entry.content for entry in result.receipts.entries)
         if "instantaneous" in product and station == "Y251002001":
@@ -117,7 +118,21 @@ def test_bosnia_public_selection_exposes_all_acquired_pairs_including_unknown():
 
 def test_france_sparse_catalogue_does_not_invent_cross_products():
     fr = rr.as_frame(rr.find(provider="fr_hubeau"))
-    assert fr.height == 33_139
+    assert {series.product_id for series in rr.find(provider="fr_hubeau").series} == {
+        "discharge_daily_mean",
+        "discharge_daily_max",
+        "stage_daily_max",
+        "water_temperature_reported",
+    }
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.fr_hubeau.declaration import declaration
+
+    artifact = load_packaged_catalogue_artifact(declaration.catalogue)
+    assert fr.height == artifact.station_products.height
+    assert {series.product_id for series in rr.find(provider="fr_hydroportail").series} == {
+        "discharge_instantaneous",
+        "stage_instantaneous",
+    }
     assert rr.as_frame(
         rr.find(provider="fr_hubeau", station="01001336", quantity="stage", statistic="instantaneous")
     ).is_empty()
@@ -126,7 +141,7 @@ def test_france_sparse_catalogue_does_not_invent_cross_products():
 def test_france_station_discharge_uses_series_unit_not_display_preference(monkeypatch):
     result = _public(
         monkeypatch,
-        "fr_hubeau",
+        "fr_hydroportail",
         "1232000101",
         "discharge_instantaneous",
         "2026-06-01",
@@ -143,7 +158,7 @@ def test_france_station_discharge_uses_series_unit_not_display_preference(monkey
 def test_france_valid_station_discharge_capture_can_clip_to_empty(monkeypatch):
     result = _public(
         monkeypatch,
-        "fr_hubeau",
+        "fr_hydroportail",
         "1232000101",
         "discharge_instantaneous",
         "2026-06-03",
@@ -163,7 +178,8 @@ def test_france_valid_station_discharge_capture_can_clip_to_empty(monkeypatch):
     ],
 )
 def test_france_unknown_pairs_remain_selectable(station, product):
-    selection = rr.find(provider="fr_hubeau", station=station, **PHYSICAL_FILTERS[product])
+    provider = "fr_hydroportail" if "instantaneous" in product else "fr_hubeau"
+    selection = rr.find(provider=provider, station=station, **PHYSICAL_FILTERS[product])
     assert len(selection.series) == 1
     assert all(inventory.completeness == "incomplete" for inventory in selection.inventories)
     assert not selection.acquisition_provenance[0].header.withheld_facts
