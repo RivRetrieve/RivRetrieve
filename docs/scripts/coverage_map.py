@@ -1,4 +1,4 @@
-"""coverage_map : CatalogueStationIdentities × Admin0Boundaries → CountShadedPNG.
+"""coverage_map : CatalogueStationIdentities × Admin0Boundaries → CoverageStatusPNG.
 
 Reproduce from the checkout catalogue and Natural Earth 1:50m Admin 0 Countries:
 
@@ -10,6 +10,8 @@ saved copy of that ZIP. Match ADM0_A3, not sovereign ownership of dependencies.
 Counts are unique provider/station identities for observation-capable providers;
 they do not assert continuous observations or complete national network coverage.
 No station coordinates or station CRS assumptions enter this figure.
+Planned countries are fetchers in the legacy kratzert/RivRetrieve-Python repository,
+merged or in open pull requests, that have no provider here yet.
 """
 
 from __future__ import annotations
@@ -39,9 +41,32 @@ PROVIDER_COUNTRY = {
     "th_thaiwater": "THA",
     "usgs_nwis": "USA",
 }
+PLANNED_COUNTRY = {
+    "ARG": "Argentina",
+    "AUS": "Australia",
+    "BEL": "Belgium (Flanders, Wallonia)",
+    "CHL": "Chile",
+    "DEU": "Germany (Berlin)",
+    "DNK": "Denmark",
+    "ESP": "Spain",
+    "EST": "Estonia",
+    "FIN": "Finland",
+    "GBR": "United Kingdom (EA, NRFA, SEPA)",
+    "GRC": "Greece",
+    "IRL": "Ireland (OPW)",
+    "ITA": "Italy (Tuscany)",
+    "KOR": "South Korea",
+    "NLD": "Netherlands",
+    "PRT": "Portugal",
+    "SVN": "Slovenia",
+    "SWE": "Sweden",
+    "TWN": "Taiwan",
+    "ZAF": "South Africa",
+}
 ROBINSON = "ESRI:54030"
-BACKGROUND = "#FBFCFD"
 LAND = "#E3E8EC"
+IMPLEMENTED = "#127B8C"
+PLANNED = "#F29E38"
 
 
 def country_counts(stations: pl.DataFrame) -> dict[str, int]:
@@ -58,10 +83,9 @@ def country_counts(stations: pl.DataFrame) -> dict[str, int]:
 
 
 def draw(world, stations: pl.DataFrame, out: Path) -> None:
-    """Render country counts without using station geometry."""
+    """Render implemented and planned countries on a transparent sea, without station geometry."""
     import matplotlib.pyplot as plt
-    from matplotlib.cm import ScalarMappable
-    from matplotlib.colors import LogNorm
+    from matplotlib.patches import Patch
 
     counts = country_counts(stations)
     missing = counts.keys() - set(world["ADM0_A3"])
@@ -70,31 +94,24 @@ def draw(world, stations: pl.DataFrame, out: Path) -> None:
     land = world.loc[world["ADM0_A3"] != "ATA"].copy()
     land["gauges"] = land["ADM0_A3"].map(counts)
     land = land.to_crs(ROBINSON)
-    lower, upper = min(50, min(counts.values())), max(30000, max(counts.values()))
-    norm = LogNorm(vmin=lower, vmax=upper)
-    fig, ax = plt.subplots(figsize=(14, 7), facecolor=BACKGROUND)
-    ax.set_facecolor(BACKGROUND)
-    land.plot(ax=ax, color=LAND, linewidth=0)
-    land.loc[land["gauges"].notna()].plot(
-        ax=ax,
-        column="gauges",
-        cmap="GnBu",
-        norm=norm,
-        edgecolor=BACKGROUND,
-        linewidth=0.25,
-    )
+    planned = land.loc[land["ADM0_A3"].isin(PLANNED_COUNTRY.keys() - counts.keys())]
+    plt.rcParams["hatch.linewidth"] = 0.9
+    fig, ax = plt.subplots(figsize=(14, 7))
+    land.plot(ax=ax, color=LAND, edgecolor="white", linewidth=0.25)
+    land.loc[land["gauges"].notna()].plot(ax=ax, color=IMPLEMENTED, edgecolor="white", linewidth=0.25)
+    if not planned.empty:
+        planned.plot(ax=ax, facecolor="none", edgecolor=PLANNED, hatch="////", linewidth=0.5)
     ax.set_axis_off()
     ax.margins(0.01)
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0.12)
-    legend = fig.add_axes((0.32, 0.065, 0.36, 0.018))
-    ticks = sorted({lower, 100, 500, 1000, 5000, upper})
-    bar = fig.colorbar(ScalarMappable(norm=norm, cmap="GnBu"), cax=legend, orientation="horizontal", ticks=ticks)
-    bar.ax.set_xticklabels([f"{tick:,}" for tick in ticks])
-    bar.ax.minorticks_off()
-    bar.ax.tick_params(labelsize=8, length=2)
-    bar.set_label("Provider-station records · logarithmic scale", fontsize=9)
-    bar.outline.set_visible(False)
-    fig.savefig(out, dpi=200, facecolor=BACKGROUND)
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0.08)
+    handles = [
+        Patch(facecolor=IMPLEMENTED, edgecolor="none", label="Implemented"),
+        Patch(facecolor="none", edgecolor=PLANNED, hatch="////", label="Coming soon"),
+    ]
+    fig.legend(
+        handles=handles, loc="lower center", ncol=2, frameon=False, fontsize=11, handlelength=2.2, handleheight=1.2
+    )
+    fig.savefig(out, dpi=200, transparent=True)
     plt.close(fig)
 
 

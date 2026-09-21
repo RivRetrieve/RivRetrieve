@@ -1,21 +1,29 @@
 # RivRetrieve
 
-Find and download river data from national agencies around the world, through one consistent
-Python interface.
+RivRetrieve is an open-source Python package for finding and downloading river observations
+(discharge, stage and water temperature) directly from national and regional agencies around
+the world, through one consistent interface. RivRetrieve also ships a searchable
+catalogue of gauging stations, harmonises identifiers, units and columns across agencies, and
+records the source of every retrieval, so that results can be traced back to the original
+provider. The vision of RivRetrieve is to become a community platform for the world's
+openly published river data, one that grows as new agencies are added.
 
 ## River data and where to find them
 
-RivRetrieve helps you find gauges, choose the physical observations you need, and retrieve them
-without learning a different Python interface for each agency. The map shows providers with
-observation access, with darker shading indicating more provider-station records. RivRetrieve retrieves observations
-from thirteen providers: eleven live services and two bulk sources.
+From floods to droughts: understanding and modelling rivers is a central environmental concern. For that, we need data. Preferably open data. Many countries measure their rivers at thousands of stations, but compiling that information is often hard. Different data portals, different languages, different formats. All of that adds up quickly for anyone interested in the data.
 
-![Countries with supported providers, shaded by gauge count on a logarithmic scale; counts are listed in the provider table below.](docs/assets/coverage-map.png)
+**The data exist, but accessing them is challenging.**
+
+RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
+without learning a different Python interface for each agency. The map below shows countries where
+providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
+from thirteen different providers in twelve countries.
+
+![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](docs/assets/coverage-map.png)
 
 *Boundaries: [Natural Earth](https://www.naturalearthdata.com/). Their depiction implies no position on territorial status.*
 
-RivRetrieve focuses on time series of streamflow (discharge), stage and water temperature.
-It harmonises identifiers, units and returned columns, and records the source of retrieved observations.
+RivRetrieve focuses on time series of discharge, stage and water temperature.
 It leaves source quality judgements and study suitability to the reader. Think of RivRetrieve as
 a bridge between the original provider and the user.
 
@@ -101,10 +109,10 @@ Discharge values use m³/s. Read timestamps together with their zone column. Ins
 even when rows come back. A successful call does not establish continuous records or scientific
 comparability. Downloading observations requires internet access.
 
-### When an agency publishes different versions
+### When an agency publishes different versions for the same variable
 
 Brazil's ANA publishes Bruto (raw) and Consistido (quality-checked) daily records.
-ANA performs that checking, not RivRetrieve. Both are available; you choose whether to request
+ANA performs that checking, not RivRetrieve. Both are available. You choose whether to request
 both or just one. You can inspect and select them without credentials or network access:
 
 ```python
@@ -145,7 +153,7 @@ streamflow for several gauges at once.
 - **No aggregation.** RivRetrieve does not aggregate data (e.g., from hourly to daily). Data are
   returned at the time step the provider publishes: daily data are available only where the
   provider already publishes daily values.
-- **No hosting.** RivRetrieve does not host the data. Downloads come from the providers' own
+- **No hosting.** RivRetrieve does not host or redistribute the data. Downloads come from the providers' own
   services.
 - **Fresh downloads depend on the providers.** Service outages or changes can prevent new
   downloads. Previously cached observations can remain available.
@@ -187,4 +195,6 @@ Importantly, this project would not exist without the open APIs of so many data 
 them for their data and for supporting the philosophy of open data.
 
 We also thank Henning Plessow at the Global Runoff Data Centre (GRDC) for the exchanges leading
-up to RivRetrieve’s first release.
+up to RivRetrieve’s first release. Their R package
+[hydrodownloadR](https://github.com/bafg-bund/hydrodownloadR) offers related access to station
+catalogues and daily time series from public national and regional APIs.
