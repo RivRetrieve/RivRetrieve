@@ -109,7 +109,18 @@ def draw(world, stations: pl.DataFrame, out: Path) -> None:
         Patch(facecolor="none", edgecolor=PLANNED, hatch="////", label="Coming soon"),
     ]
     fig.legend(
-        handles=handles, loc="lower center", ncol=2, frameon=False, fontsize=11, handlelength=2.2, handleheight=1.2
+        handles=handles,
+        loc="lower center",
+        ncol=2,
+        fontsize=11,
+        handlelength=2.2,
+        handleheight=1.2,
+        frameon=True,
+        facecolor="white",
+        edgecolor="none",
+        framealpha=1,
+        labelcolor="#1F2328",
+        borderpad=0.8,
     )
     fig.savefig(out, dpi=200, transparent=True)
     plt.close(fig)
