@@ -38,6 +38,7 @@ written:
 
 - [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
+- [Japan: MLIT](providers/jp_mlit.md)
 - [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
 
 ## How it works
