@@ -48,8 +48,31 @@ initially raised `KeyError` before the shared parser could enforce its contract.
 - Legacy artifact extended regression: passed.
 - Genuine recorded selector/public overlap cases: 18 passed.
 - Ruff lint, format check and `uv run ty check src`: passed.
-- Full test suite and independent live public-path verification: running when the implementation PR was opened. Final results will be recorded before delivery.
+- Existing raw witness suite: 31 passed, 2 existing openpyxl warnings.
+- Independent live public path: 10 public fetches and 16 successful source calls passed for unrestricted and individual Q/H selectors. Only existing informational licence/citation unknown notices returned.
+- Full test suite: running when the implementation PR was opened. Final results will be recorded before delivery.
 
 The first in-progress full-suite run imported an earlier raw-only boundary test
 before its explicit raw selection was added. The isolated current boundary probe
 passes. This is a stale collected test, not a source or production failure.
+
+## Compact evidence and additional checks
+
+All original source bodies and direct-window recordings are retained losslessly
+in `source-captures.tar.xz` (54 members). Test-consumed padded recordings remain
+plain files. Independent live provenance, receipts and frames are retained in
+`public-path.tar.xz` (57 members). Archive/member lengths and hashes are explicit
+in `evidence-archives.json`; the archive test passed both archives. The offline
+source verifier re-passed all 38 captures and 32 observation envelopes after
+repackaging. See `PUBLIC_PATH_REPORT.md` for live methodology and its two
+verifier-only preliminary interruptions.
+
+Additional existing regression expectations were updated after targeted failures:
+five measurement-cell tests now explicitly select their original raw witness, and
+one normalized-metadata test expects four inspection rows with all four selectors.
+Their unchanged checks retain native null/absent/invalid-cell semantics and raw
+provenance. Actual before/after outputs are adjacent `raw-cells.*.txt` and
+`metadata-rows.*.txt`. Post-update results: 5 passed and 1 passed respectively.
+
+Independent review focused validation: 102 tests passed (variant, fatal-contract
+and catalogue suites). Production remained unchanged during evidence compaction.

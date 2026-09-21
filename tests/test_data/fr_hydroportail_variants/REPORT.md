@@ -33,8 +33,18 @@ All observed raw points have `s=4`. Reviewed Y251002001 points have `s=16`; 1232
 
 Q code `l` remains scoped to Q and resolves to l/s: `unit-selector` pairs code=l with unit.q.l under Q; `unit-label` publishes common.unit.q.l=l/s. Both script hashes match existing unit evidence. H is mm. Form script links point to the fetched script versions.
 
-No positive corrected or pre-validated point witness, mixed-status precedence or selection algorithm was established. No absence of complete historical availability is inferred from empty windows. Invalid corrected/pre_validated selectors were not re-requested in this capture; only the four actual selectors were sent. No contradiction or additional in-scope capability was found. Public-engine verification awaits the implementation and is separate from these direct Transport captures.
+No positive corrected or pre-validated point witness, mixed-status precedence or selection algorithm was established. No absence of complete historical availability is inferred from empty windows. Invalid corrected/pre_validated selectors were not re-requested in this capture; only the four actual selectors were sent. No contradiction or additional in-scope capability was found. Independent public-engine verification passed separately; see PUBLIC_PATH_REPORT.md.
 
 ## Verification
 
 `verify.py` passed: 38 exact response and request hashes, all 32 v2 recording byte matches and source envelopes, four form selectors, and complete-array equality assertions. `capture.py` uses existing HttpClient/TransportRequest and RecordingEnvelope/write_recording interfaces. Script and source form evidence remain alongside the observation recordings for audit.
+
+## Lossless evidence packaging
+
+`source-captures.tar.xz` holds all original response bodies and the 16 direct-window
+recording envelopes. The 16 padded recordings consumed by public-path tests stay
+individually inspectable. Request bytes, exchange receipts and `manifest.json`
+remain beside them. `evidence-archives.json` records archive and original-member
+lengths and SHA-256 hashes. `verify.py` reads retained files or archive members
+without extracting or changing them. No original response or recording bytes
+were discarded.
