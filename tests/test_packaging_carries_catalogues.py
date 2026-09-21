@@ -120,7 +120,8 @@ assert len(france.series) == 20_297
 assert {{series.product_id for series in france.series}} == {{"discharge_daily_mean", "discharge_daily_max", "stage_daily_max", "water_temperature_reported"}}
 assert not france.acquisition_provenance[0].header.withheld_facts
 hydroportail = rivretrieve.find(provider="fr_hydroportail")
-assert len(hydroportail.series) == 12_818
+assert len(hydroportail.series) == 12_818 * 4
+assert {{series.variant for series in hydroportail.series}} == {{"raw", "validated", "pre_validated_and_validated", "most_valid"}}
 assert {{series.product_id for series in hydroportail.series}} == {{"discharge_instantaneous", "stage_instantaneous"}}
 assert {{series.provider_id for series in hydroportail.series}} == {{"fr_hydroportail"}}
 bosnia = rivretrieve.find(provider="ba_fhmzbih")

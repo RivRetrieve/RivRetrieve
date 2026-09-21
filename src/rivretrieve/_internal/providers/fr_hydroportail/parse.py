@@ -4,6 +4,7 @@ Contributed by: Thiago von Däniken
 """
 
 import json
+from dataclasses import replace
 from datetime import datetime
 from math import isfinite
 from typing import cast
@@ -13,7 +14,11 @@ import polars as pl
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
-from rivretrieve._internal.providers.fr_hydroportail.config import SERIES_MAPPINGS, FrHydroportailSourceCoordinates
+from rivretrieve._internal.providers.fr_hydroportail.config import (
+    SERIES_MAPPINGS,
+    FrHydroportailSourceCoordinates,
+    series_mapping,
+)
 from rivretrieve._internal.source_series import ParsedSeries
 
 
@@ -50,8 +55,8 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
         raise UnsupportedSourceStructureError(
             "fr_hydroportail unit or timezone differs from the evidenced source contract"
         )
-    if series.get("statuses") != "raw":
-        raise UnsupportedSourceStructureError("fr_hydroportail response does not contain the requested raw series")
+    if series.get("statuses") != coordinates.variant:
+        raise UnsupportedSourceStructureError("fr_hydroportail response does not contain the requested source selector")
     raw_rows = series.get("data")
     if not isinstance(raw_rows, list):
         raise UnsupportedSourceStructureError("fr_hydroportail payload has no observation data list")
@@ -105,6 +110,17 @@ def _value(row: dict[str, object], field: str) -> float | None:
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
-    return parse_mapped_series(
-        payload, provider_config, provider="fr_hydroportail", mappings=SERIES_MAPPINGS, native_parse=_parse_native
+    coordinates = payload.source_coordinates.value
+    if not isinstance(coordinates, FrHydroportailSourceCoordinates):
+        raise FatalContractError("fr_hydroportail payload has invalid source coordinates")
+    parsed = parse_mapped_series(
+        payload,
+        provider_config,
+        provider="fr_hydroportail",
+        mappings={product: series_mapping(product, coordinates.variant) for product in SERIES_MAPPINGS},
+        native_parse=_parse_native,
+    )
+    return replace(
+        parsed,
+        series=tuple(item.model_copy(update={"variant": coordinates.variant}) for item in parsed.series),
     )

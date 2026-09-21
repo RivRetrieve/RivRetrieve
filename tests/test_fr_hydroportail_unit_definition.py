@@ -40,7 +40,14 @@ def test_public_hydroportail_q_preserves_raw_code_and_uses_cited_rate_definition
     selection = rr.find(
         provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"
     )
-    result = rr.fetch(selection, start="2026-06-01", end="2026-06-02", cache="bypass", receipts=True, on_issue="raise")
+    result = rr.fetch(
+        rr.pick(selection, variant="raw"),
+        start="2026-06-01",
+        end="2026-06-02",
+        cache="bypass",
+        receipts=True,
+        on_issue="raise",
+    )
     rows = result.data.sort("time")
     assert rows.height == 282
     assert rows["source_unit"].unique().to_list() == ["l"]

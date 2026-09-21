@@ -249,7 +249,7 @@ def build_catalogue(
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": "true: station-own raw Q/H queries; independent source failures retained",
+        "bulk_observations": "true: station-own Q/H source variants; independent source failures retained",
         "catalogue_version": acquired.date().isoformat(),
         "license": None,
         "citation": None,
@@ -266,7 +266,8 @@ def build_catalogue(
 def write_catalogue(catalogue: GeneratedHydroportailCatalogue, out: Path) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.fr_hydroportail.config import SERIES_MAPPINGS, config
+    from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+    from rivretrieve._internal.providers.fr_hydroportail.config import VARIANTS, series_mapping
 
     out.mkdir(parents=True, exist_ok=True)
     artifact = catalogue.public_artifact
@@ -277,8 +278,20 @@ def write_catalogue(catalogue: GeneratedHydroportailCatalogue, out: Path) -> Non
         catalogue.acquisition_provenance,
         (catalogue.origins,),
         {name: (out / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
-        source_config=config(),
-        source_mappings=SERIES_MAPPINGS,
+        source_descriptions=SourceDescriptions(
+            provider_id=PROVIDER_ID,
+            descriptions=tuple(
+                SourceDescription(
+                    product_id=product,
+                    native_coordinate="Q" if product == "discharge_instantaneous" else "H",
+                    identity=series_mapping(product, variant).identity(),
+                    variant=variant,
+                    facts=(series_mapping(product, variant).physical_facts(),),
+                )
+                for product in PRODUCTS
+                for variant in VARIANTS
+            ),
+        ),
     )
     for name, content in metadata.items():
         (out / name).write_bytes(content)

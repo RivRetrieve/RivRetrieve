@@ -84,6 +84,8 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_pat
     replay = MeasurementReplay(recordings, field, mutation)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider=provider, station=station, **predicates)
+    if provider == "fr_hydroportail":
+        selection = rr.pick(selection, variant="raw")
     assert len(selection.series) == 1
     result = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="ignore")
     if mutation in ("missing", "true", "false"):

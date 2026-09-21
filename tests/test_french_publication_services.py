@@ -31,9 +31,9 @@ def test_public_discovery_keeps_overlapping_station_identity_separate():
     assert {item.provider_id for item in hubeau.series} == {"fr_hubeau"}
     assert {item.provider_id for item in hydroportail.series} == {"fr_hydroportail"}
     assert len(hubeau.series) == 3
-    assert len(hydroportail.series) == 2
+    assert len(hydroportail.series) == 8
     assert {item.series_id for item in hubeau.series}.isdisjoint(item.series_id for item in hydroportail.series)
-    assert rr.series(rr.pick(hydroportail, quantity="discharge")).height == 1
+    assert rr.series(rr.pick(hydroportail, quantity="discharge")).height == 4
     assert rr.series(rr.find(provider="fr_hubeau", statistic="instantaneous")).is_empty()
     assert rr.series(rr.find(provider="fr_hydroportail", frequency="daily")).is_empty()
 
@@ -73,6 +73,8 @@ def test_public_fetch_receipts_and_exports_preserve_service(
     recording = read_recording(Path(__file__).parent / "test_data" / recording_name)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.find(provider=provider, station=station, **predicates)
+    if provider == "fr_hydroportail":
+        selection = rr.pick(selection, variant="raw")
     result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="raise")
     assert result.provenance.provider_id == provider
     assert result.data.height > 0
@@ -105,7 +107,7 @@ def test_hydroportail_failure_preserves_independent_raw_series(monkeypatch):
             return replay.send(request)
 
     monkeypatch.setattr(discovery, "HttpClient", SourceFailure)
-    selection = rr.find(provider="fr_hydroportail", station="1232000101")
+    selection = rr.pick(rr.find(provider="fr_hydroportail", station="1232000101"), variant="raw")
     result = rr.fetch(selection, start="2026-06-01", end="2026-06-02", receipts=True, on_issue="ignore")
     assert result.data.height == 282
     assert set(result.data["product_id"]) == {"discharge_instantaneous"}

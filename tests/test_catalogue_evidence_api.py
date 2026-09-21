@@ -34,7 +34,9 @@ def test_real_selection_exposes_normalized_metadata_without_legacy_aliases():
         & (pl.col("locator_role") == "availability")
     )
     assert locator.height == 1
-    assert rr.as_frame(selection)["station_id"].to_list() == ["1232000101"]
+    frame = rr.as_frame(selection)
+    assert frame["station_id"].to_list() == ["1232000101"] * 4
+    assert set(frame["variant"]) == {"raw", "validated", "pre_validated_and_validated", "most_valid"}
 
 
 def test_recorded_public_fetch_normalized_provenance_serialization(monkeypatch: pytest.MonkeyPatch):

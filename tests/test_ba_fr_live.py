@@ -20,6 +20,7 @@ from rivretrieve._internal.providers.fr_hubeau.declaration import declaration as
 from rivretrieve._internal.providers.fr_hydroportail.declaration import declaration as hydroportail_declaration
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.source_series import SeriesScope
 from tests.test_fr_hydroportail_station import STATION_DISCHARGE_PROBE
 
 DATA = Path(__file__).parent / "test_data"
@@ -52,7 +53,12 @@ def _probe(provider, station, product, start, stop, paths, expected):
                     datetime.fromisoformat(stop).strftime("%d/%m/%Y"),
                 ),
             )
-        fetched = stages.fetch((station,), (product_id,), {product_id: rendered}, window, stages.config, replay)
+        kwargs = (
+            {"scope": SeriesScope(restriction="explicit", variants=("raw",))} if provider == "fr_hydroportail" else {}
+        )
+        fetched = stages.fetch(
+            (station,), (product_id,), {product_id: rendered}, window, stages.config, replay, **kwargs
+        )
         return pl.concat([stages.parse(payload, stages.config).rows for payload in fetched.value])
 
     return BoundaryProbe(

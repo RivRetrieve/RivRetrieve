@@ -23,6 +23,7 @@ from rivretrieve._internal.providers.fr_hydroportail.config import config
 from rivretrieve._internal.providers.fr_hydroportail.fetch import fetch
 from rivretrieve._internal.providers.fr_hydroportail.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.source_series import SeriesScope
 
 DATA = Path(__file__).parent / "test_data"
 PRODUCT = ProductId("discharge_instantaneous")
@@ -65,6 +66,7 @@ def test_station_own_discharge_fetch_replays_exact_non_sample_station():
         _window("2026-05-30", "2026-06-04T23:59:59"),
         config(),
         ReplayTransport((recording,)),
+        scope=SeriesScope(restriction="explicit", variants=("raw",)),
     )
     (payload,) = fetched.value
     assert payload.content == recording.content
@@ -144,7 +146,7 @@ def _run_station_discharge_boundary(replay):
         selection = rr.find(
             provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"
         )
-        return rr.fetch(selection, start="2026-06-01", end="2026-06-02", on_issue="raise").data
+        return rr.fetch(rr.pick(selection, variant="raw"), start="2026-06-01", end="2026-06-02", on_issue="raise").data
 
 
 # Three literals supplied by the independent source-only author, not this parser.

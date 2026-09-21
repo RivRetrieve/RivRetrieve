@@ -24,6 +24,8 @@ def _public(monkeypatch, provider, station, product, start, end, recordings):
     replay = ReplayTransport(tuple(read_recording(DATA / name) for name in recordings))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider=provider, station=station, **PHYSICAL_FILTERS[product])
+    if provider == "fr_hydroportail":
+        selection = rr.pick(selection, variant="raw")
     result = rr.fetch(selection, start=start, end=end, cache="bypass", receipts=True, on_issue="ignore")
     assert result.data.columns == [
         "time",
@@ -180,6 +182,6 @@ def test_france_valid_station_discharge_capture_can_clip_to_empty(monkeypatch):
 def test_france_unknown_pairs_remain_selectable(station, product):
     provider = "fr_hydroportail" if "instantaneous" in product else "fr_hubeau"
     selection = rr.find(provider=provider, station=station, **PHYSICAL_FILTERS[product])
-    assert len(selection.series) == 1
+    assert len(selection.series) == (4 if provider == "fr_hydroportail" else 1)
     assert all(inventory.completeness == "incomplete" for inventory in selection.inventories)
     assert not selection.acquisition_provenance[0].header.withheld_facts

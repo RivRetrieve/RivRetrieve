@@ -143,3 +143,56 @@ def test_source_capture_receipt_tamper_refused(tmp_path):
     path.write_text(json.dumps(receipt))
     with pytest.raises(ValueError, match="identity mismatch"):
         read_inventory(EVIDENCE / "national-tests.body", path)
+
+
+@pytest.mark.parametrize("quantity", ["discharge", "stage"])
+def test_packaged_catalogue_exposes_independent_source_variants(quantity):
+    import rivretrieve as rr
+    from rivretrieve._internal.source_series import stable_id
+
+    selection = rr.find(provider="fr_hydroportail", station="Y251002001", quantity=quantity, statistic="instantaneous")
+    expected = {"raw", "validated", "pre_validated_and_validated", "most_valid"}
+    assert set(rr.series(selection)["variant"]) == expected
+    namespace = "fr_hydroportail/Q" if quantity == "discharge" else "fr_hydroportail/H"
+    for variant in expected:
+        selected = rr.pick(selection, variant=variant)
+        assert len(selected.series) == 1
+        source = selected.series[0]
+        assert source.identity.published_id == variant
+        assert source.series_id == stable_id("fr_hydroportail", "Y251002001", namespace, variant)
+    assert len({item.series_id for item in selection.series}) == 4
+
+
+def test_catalogue_availability_witnesses_remain_raw_scoped():
+    import lzma
+
+    import polars as pl
+
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
+
+    root = EVIDENCE.parents[3]
+    packaged = root / "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue"
+    pairs = pl.read_parquet(packaged / "station_products.parquet")
+    ledger = decode_availability(
+        lzma.decompress((EVIDENCE.parents[1] / "fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
+    )
+    witnessed = {(p.code_station, p.product_id) for p in ledger.pairs if p.basis == "historical_positive_witness"}
+    available = pairs.filter(pl.col("availability") == "available")
+    assert set(available.select("station_id", "product_id").iter_rows()) == witnessed
+    assert all("raw" in reason for reason in pairs["availability_reason"])
+    assert set(pairs["availability"]) == {"available", "unknown"}
+
+    import rivretrieve as rr
+
+    for station, product in sorted(witnessed)[:2]:
+        selection = rr.find(
+            provider="fr_hydroportail",
+            station=station,
+            quantity="discharge" if product.startswith("discharge") else "stage",
+        )
+        for variant in ("validated", "pre_validated_and_validated", "most_valid"):
+            selected = rr.pick(selection, variant=variant)
+            assert len(selected.series) == 1
+            # Catalogue membership does not establish bounded observation coverage.
+            assert all(inventory.window is None for inventory in selected.inventories)
+            assert all(inventory.completeness == "incomplete" for inventory in selected.inventories)

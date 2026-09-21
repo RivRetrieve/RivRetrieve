@@ -1,0 +1,39 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_unknown_payload_product_is_fatal_contract_error _____________
+
+    def test_unknown_payload_product_is_fatal_contract_error():
+        payload = replace(_empty_payload(), station_products=(("J783301020", ProductId("unknown")),))
+        with pytest.raises(FatalContractError):
+>           parse(payload, config())
+
+tests/test_fr_hydroportail_contracts.py:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/rivretrieve/_internal/providers/fr_hydroportail/parse.py:116: in parse
+    mappings={product: series_mapping(product, coordinates.variant) for _, product in payload.station_products},
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+product = 'unknown', variant = 'raw'
+
+    def series_mapping(product: str, variant: str) -> SeriesMapping:
+        """Resolve a published selector without changing the physical quantity."""
+        if variant not in VARIANTS:
+            raise ValueError("Unsupported HydroPortail station series selector")
+        return replace(
+>           SERIES_MAPPINGS[product],
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+            published_id=variant,
+            identity_evidence=(
+                "tests/test_data/fr_hydroportail_variants/REPORT.md: "
+                "2026-09-21 station form and independent Q/H selector captures",
+                "https://hydro.eaufrance.fr/stationhydro/1232000101/series: "
+                f"hydro_series[statusData]={variant}; source-published station Q/H selector",
+            ),
+        )
+E       KeyError: 'unknown'
+
+src/rivretrieve/_internal/providers/fr_hydroportail/config.py:115: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_fr_hydroportail_contracts.py::test_unknown_payload_product_is_fatal_contract_error
+1 failed in 0.05s
