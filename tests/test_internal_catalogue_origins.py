@@ -308,7 +308,7 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
     assert Documented(DocumentedValue(value), Evidence(value)) != NotPublished(Evidence(value))
 
 
-def test_origin_gate_enrols_exactly_the_thirteen_in_scope_providers() -> None:
+def test_origin_gate_enrols_exactly_the_registered_providers() -> None:
     expected = frozenset(
         {
             ProviderId("ba_fhmzbih"),
@@ -317,6 +317,7 @@ def test_origin_gate_enrols_exactly_the_thirteen_in_scope_providers() -> None:
             ProviderId("ch_foen"),
             ProviderId("cz_chmi"),
             ProviderId("fr_hubeau"),
+            ProviderId("fr_hydroportail"),
             ProviderId("jp_mlit"),
             ProviderId("lt_lhmt"),
             ProviderId("no_nve"),
@@ -778,3 +779,21 @@ def test_committed_swiss_origins_pass_validation() -> None:
         )
         == []
     )
+
+
+def test_hydroportail_native_station_origins_pass_gate():
+    from rivretrieve._internal.providers.fr_hydroportail.generate_catalogue import build_stations
+    from rivretrieve._internal.providers.fr_hydroportail.origins import STATION_CATALOGUE_ORIGINS
+
+    assert {
+        "provider_id": Authored(AuthoredValue("fr_hydroportail")),
+        "station_id": Field(NativeColumn("bookmarkCode")),
+        "latitude": Field(NativeColumn("y")),
+        "longitude": Field(NativeColumn("x")),
+        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://hydro.eaufrance.fr/build/8529.fdb00780.js")),
+    } == STATION_CATALOGUE_ORIGINS
+    native = read_native_table(Path("src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet"))
+    stations = build_stations(native)
+    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
+    assert validate_catalogue_origins(ProviderId("fr_hydroportail"), STATION_CATALOGUE_ORIGINS, native, stations) == []
+    enforce_catalogue_origins(ProviderId("fr_hydroportail"), STATION_CATALOGUE_ORIGINS, native, stations)

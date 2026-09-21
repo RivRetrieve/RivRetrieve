@@ -40,4 +40,7 @@ def test_french_page_station_count():
     page = (ROOT / "docs/providers/fr_hubeau.md").read_text()
     catalogue = ROOT / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue"
     station_count = pl.read_parquet(catalogue / "stations.parquet").height
-    assert f"| Stations in the catalogue | {station_count:,} locations;" in page
+    assert f"| Stations in the catalogue | Hub'Eau: {station_count:,} (" in page
+    hydroportail = ROOT / "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue"
+    hydroportail_count = pl.read_parquet(hydroportail / "stations.parquet").height
+    assert f"HydroPortail: {hydroportail_count:,}." in page

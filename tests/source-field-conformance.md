@@ -1,6 +1,6 @@
 # Swiss, Bosnian and French source-series conformance
 
-Scope: the supported `ch_foen`, `ba_fhmzbih` and `fr_hubeau` observation routes.
+Scope: the supported `ch_foen`, `ba_fhmzbih`, `fr_hubeau` and `fr_hydroportail` observation routes.
 This account describes source evidence and executable conformance. It does not
 assert national or historical inventory completeness.
 

@@ -140,7 +140,9 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (738, 0, 0),
         "cz_chmi": (4_155, 0, 0),
-        "fr_hubeau": (33_139, 0, 0),
+        # Native inventories acquired 2026-09-21; these are snapshot checks.
+        "fr_hubeau": (20_297, 0, 0),
+        "fr_hydroportail": (12_818, 0, 0),
         "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
         "no_nve": (44_118, 0, 0),
@@ -166,6 +168,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",

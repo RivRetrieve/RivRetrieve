@@ -36,108 +36,106 @@
     {
       "@type": "sc:Organization",
       "name": "Hub’Eau"
-    },
-    {
-      "@type": "sc:Organization",
-      "name": "Service Central Vigicrues"
     }
   ],
+  "license": "La réutilisation des Jeux de données est régie par la licence ouverte Etalab, https://www.etalab.gouv.fr/licence-ouverte-open-licence. Les Jeux de données sont donc librement et gratuitement utilisables et réutilisables, y compris dans un but commercial.",
+  "citation": "L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.",
   "distribution": [
     {
       "@id": "provider.json",
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "4fb60ccedf7275da40e69a0ff21646eb618e0b6f46d9cdbaf3211178dd25f821",
-      "contentSize": "414 B"
+      "sha256": "f2be6870cac7d4c025464fd6ce61039cb691fbf951bee8cac34268a0e4adc7ca",
+      "contentSize": "366 B"
     },
     {
       "@id": "products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "696cad162b82d230767b2c24643bcd132ac94e30de81cbf8cdfd8ec9bfb9a4d0",
-      "contentSize": "3769 B"
+      "sha256": "6d5efc322df1000be7e8d673bf91bcdac048149bb728c84113a87e11e1e37546",
+      "contentSize": "3692 B"
     },
     {
       "@id": "stations.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "160731f5e0800a1c962adf390ca099b781547abca95a3abd6f0f592ce6fe1bdf",
-      "contentSize": "133127 B"
+      "sha256": "ef3fa5ae060651fb7468f04251d9890e9d1e42627c7cd2a80d023bcc89a5012d",
+      "contentSize": "133534 B"
     },
     {
       "@id": "station_products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "233d6bbb784c34fd94006c15b233fa2bd3eb6a54bbd7b93ba296f7aa0c88183e",
-      "contentSize": "64916 B"
+      "sha256": "9d31c57acbd081f298b052dfd6dc5121240459265f1a353fed5199625208e3cf",
+      "contentSize": "61068 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "64c741591213ed0f7c12e4acdb5be4db15fbec0ea84587a95fdebe39cfd22ebd",
-      "contentSize": "9862 B"
+      "sha256": "c243a289911ebc5495ad87acdd2ee766f52392ebc424ceed44f9a152dd1b42d7",
+      "contentSize": "8267 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "26da31ccc317cad97fe815ac9e0c0f3b4d24fba21617c07ddf84a6c78bb4b53b",
-      "contentSize": "650519 B"
+      "sha256": "36b11b4d6da96b3b4ecd3cd6ccae97a6be3ed9494c0606775ccde4c99ee2ab18",
+      "contentSize": "419594 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "4004252066ec15585235d98684d9062dbf2151d1c4b0ee4c3c0a378eeeba642a",
-      "contentSize": "1931871 B"
+      "sha256": "3511a6d2db677041eb150d64fd008f32dbb92756c6df3a2ef56491e70a468c51",
+      "contentSize": "1149463 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "448db1af91e9cf6de85c0335c0389a3e953816d62569f0aca991862e3b322feb",
-      "contentSize": "502572 B"
+      "sha256": "5ff50175def325ab83b7f718924f9fa36ba4f1ebe7c8cf3fcee015daf553cf3a",
+      "contentSize": "291553 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "439b7fa77aef152effca0dded4a93fed0f17e9d772da1bda39434234c6fb2411",
-      "contentSize": "710732 B"
+      "sha256": "7d71e5e1e2295742c85f780b9c5fa98572c61bec2ee9e6637cc789aaf193fda0",
+      "contentSize": "436089 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "517e66e48025dacb57bc460080b6282a98d3515b3be9af09e5ec0c484e8ea928",
-      "contentSize": "180137 B"
+      "sha256": "fca656315caacfb26085ce6d65671cfa466bc36734c6fd78e2919bc3945231ca",
+      "contentSize": "102228 B"
     },
     {
       "@id": "format.json",
       "@type": "cr:FileObject",
       "contentUrl": "format.json",
       "encodingFormat": "application/json",
-      "sha256": "c4bab2060a5568dbe61d84e8f505c3c2ae0f09484afb2f3146b6c1e87f67b00f",
-      "contentSize": "31 B"
+      "sha256": "e04e74946a53a45cb2d839b1b498d3430d8bab773badff6392a37c99463c5626",
+      "contentSize": "62 B"
     },
     {
       "@id": "source_series.json",
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "f08455ab6b11a1c9c019abe3f5701703061308353014d81f0f4cbff678ace70e",
-      "contentSize": "15839 B"
+      "sha256": "718c2733bb0b4c443fe07443956a819f9e797a3a68563f22e03946983fb583b3",
+      "contentSize": "10648 B"
     },
     {
       "@id": "series_claims.parquet",
@@ -1354,15 +1352,15 @@
     "name": "Issuing sources, exact statements and evidence declarations",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
   },
-  "version": "2026-08-02",
-  "datePublished": "2026-08-02",
+  "version": "2026-09-21",
+  "datePublished": "2026-09-21",
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
     "name": "Committed native catalogue build input",
-    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/5dc8e480e426babe109c0467c5e0c374f92239c3/src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "sha256": "4ff9439d0abd7f479d17b2c608d923d7834ea3df084ed08a3af9cec1d35ab687",
-    "contentSize": "1049930 B",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/4222cfa3226c9aaa0b7e12da596886ab7a68aa1f/src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    "sha256": "5853f30b5b5423af85585d7a7a9f5724f6186a26c8fbdd1c2231068427c4a13c",
+    "contentSize": "1054283 B",
     "creator": {
       "@type": "sc:Organization",
       "name": "RivRetrieve"

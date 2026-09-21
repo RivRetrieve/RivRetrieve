@@ -63,7 +63,7 @@ def test_reference_observation_result_fields(reference):
 def test_reference_all_provider_access_kinds(reference):
     table = reference.split("## Shipped software capabilities", 1)[1].split("### Packaged access coordinates", 1)[0]
     rows = [line for line in table.splitlines() if line.startswith("| `")]
-    assert len(rows) == 13
-    assert sum("| live |" in row for row in rows) == 10
+    assert len(rows) == 14
+    assert sum("| live |" in row for row in rows) == 11
     assert sum("| bulk store |" in row for row in rows) == 2
     assert sum("| catalogue-only |" in row for row in rows) == 1

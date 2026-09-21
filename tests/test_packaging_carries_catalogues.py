@@ -31,6 +31,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "ch_foen",
     "cz_chmi",
     "fr_hubeau",
+    "fr_hydroportail",
     "jp_mlit",
     "lt_lhmt",
     "no_nve",
@@ -114,8 +115,14 @@ for provider_id in provider_ids:
     assert not any(name.endswith((".eml", ".xlsx")) for name in packaged_names)
 
 france = rivretrieve.find(provider="fr_hubeau")
-assert len(france.series) == 33_139
+# Native inventory snapshots acquired 2026-09-21, not enduring national totals.
+assert len(france.series) == 20_297
+assert {{series.product_id for series in france.series}} == {{"discharge_daily_mean", "discharge_daily_max", "stage_daily_max", "water_temperature_reported"}}
 assert not france.acquisition_provenance[0].header.withheld_facts
+hydroportail = rivretrieve.find(provider="fr_hydroportail")
+assert len(hydroportail.series) == 12_818
+assert {{series.product_id for series in hydroportail.series}} == {{"discharge_instantaneous", "stage_instantaneous"}}
+assert {{series.provider_id for series in hydroportail.series}} == {{"fr_hydroportail"}}
 bosnia = rivretrieve.find(provider="ba_fhmzbih")
 assert len(bosnia.series) == 180
 assert len({{series.station_id for series in bosnia.series}}) == 60
@@ -158,7 +165,9 @@ assert groups == ()
 _CLOSURE_ORACLES = {
     "fr_hubeau": {
         "original_sha256": "172427cd2a859594a3da9c2f81d078aa456bcb9c48559207bdaa971ac35b61f0",
-        "cases": [
+        "cases": [],
+        # Preserved against immutable pre-split evidence below, not new identities.
+        "historical_cases": [
             {
                 "names": ["station_product:01001336:water_temperature_reported.availability"],
                 "pair": {
@@ -186,8 +195,12 @@ _CLOSURE_ORACLES = {
             "license": "La réutilisation des Jeux de données est régie par la licence ouverte Etalab, https://www.etalab.gouv.fr/licence-ouverte-open-licence. Les Jeux de données sont donc librement et gratuitement utilisables et réutilisables, y compris dans un but commercial.",
             "citation": "L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.",
         },
-        "descriptor_terms": {},
+        "descriptor_terms": {
+            "license": "La réutilisation des Jeux de données est régie par la licence ouverte Etalab, https://www.etalab.gouv.fr/licence-ouverte-open-licence. Les Jeux de données sont donc librement et gratuitement utilisables et réutilisables, y compris dans un but commercial.",
+            "citation": "L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.",
+        },
     },
+    "fr_hydroportail": {"cases": [], "terms": {}, "descriptor_terms": {}},
     "ba_fhmzbih": {
         "original_sha256": "55984ba0622e71eea47074dfbaae0fbb31b5cc077b513a8b1f7f946ce3069307",
         "cases": [
@@ -454,7 +467,12 @@ for provider, oracle in closure_oracles.items():
                     assert {"Global Runoff Data Centre", "Institute of Meteorology and Water Management – National Research Institute"} <= issuers
     assert verified_catalogue_terms(evidence) == oracle["terms"]
     assert {kind: descriptor[kind] for kind in ("license", "citation") if kind in descriptor} == oracle["descriptor_terms"]
-print("Installed socket-denied evidence proof: all five relations x five providers; historical closures and adopted products; keys/FKs/header; Poland roles/corroboration; Brazil manual material; exact terms")
+    if provider == "fr_hydroportail":
+        assert {source.source_id for source in header.source_records} == {"fr_hydroportail"}
+        search = extracted["acquisitions"].filter(pl.col("acquisition_id") == "public_station_search")
+        assert search.height == 1
+        assert all(url.startswith("https://hydro.eaufrance.fr/") for url in search["requested_from"][0])
+print("Installed socket-denied evidence proof: normalized relations; current service identities; historical closures and adopted products; keys/FKs/header; exact terms")
 
 brazil_catalogue = provider_root.joinpath("br_ana", "catalogue")
 brazil = parse_catalogue_evidence(EvidenceHeader.model_validate_json(brazil_catalogue.joinpath("provenance.json").read_bytes()),
@@ -464,3 +482,30 @@ assert "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3" in jso
 assert "withheld" not in json.dumps(products)
 assert set(rivretrieve.products(provider="br_ana")) == {"discharge_daily_mean_bruto", "discharge_daily_mean_consistido", "discharge_instantaneous", "stage_daily_mean_bruto", "stage_daily_mean_consistido", "stage_instantaneous"}
 """
+
+
+def test_historical_french_closure_oracles_against_immutable_combined_evidence():
+    import hashlib
+    import tarfile
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
+    from rivretrieve._internal.catalogues.evidence_graph import CanonicalPair, FactSelection, resolve_evidence
+
+    archive_path = Path(__file__).parent / "test_data/french_combined_artifacts.tar.xz"
+    with tarfile.open(archive_path) as archive:
+        bundle = archive.extractfile("combined-station-selection.bundle").read()
+        attestation = json.load(archive.extractfile("attestation.json"))
+    assert hashlib.sha256(bundle).hexdigest() == attestation["files"]["combined-station-selection.bundle"]["sha256"]
+    with ZipFile(BytesIO(bundle)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    evidence = CatalogueEvidence.model_validate_json(json.dumps(manifest["catalogue_evidence"][0]))
+    for case in _CLOSURE_ORACLES["fr_hubeau"]["historical_cases"]:
+        pair = CanonicalPair(**case["pair"])
+        resolved = resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair)
+        semantic = {key: value for key, value in resolved.items() if key != "@context"}
+        assert (
+            hashlib.sha256(json.dumps(semantic, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            == case["sha256"]
+        )

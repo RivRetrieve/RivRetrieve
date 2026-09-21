@@ -7,8 +7,8 @@ Python interface.
 
 RivRetrieve helps you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map shows providers with
-observation access, with darker shading indicating more gauges. RivRetrieve retrieves observations
-from twelve providers: ten live services and two bulk sources.
+observation access, with darker shading indicating more provider-station records. RivRetrieve retrieves observations
+from thirteen providers: eleven live services and two bulk sources.
 
 ![Countries with supported providers, shaded by gauge count on a logarithmic scale; counts are listed in the provider table below.](docs/assets/coverage-map.png)
 
@@ -31,7 +31,8 @@ for how to supply them.
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
-| France | Hub'Eau / HydroPortail | `fr_hubeau` | 7,323 | Open |
+| France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
+| France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
 | Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
 | Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | Open |
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
@@ -41,6 +42,7 @@ for how to supply them.
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | Open |
 
 Station counts describe packaged catalogues, not guaranteed current data availability.
+A station can appear under both French services; their series remain separate.
 
 </details>
 

@@ -1199,7 +1199,9 @@ def test_observation_result_carries_shared_acquisition_provenance(
     ]
 
 
-@pytest.mark.parametrize("provider_id", ("usgs_nwis", "za_dws", "ca_eccc", "ch_foen", "fr_hubeau", "pl_imgw", "br_ana"))
+@pytest.mark.parametrize(
+    "provider_id", ("usgs_nwis", "za_dws", "ca_eccc", "ch_foen", "fr_hubeau", "fr_hydroportail", "pl_imgw", "br_ana")
+)
 def test_registry_terms_come_from_verified_acquisition_statements(
     source_terms_catalogue_artifact: Callable[[str], PackagedCatalogArtifact],
     provider_id: str,
@@ -1222,7 +1224,7 @@ def test_registry_terms_come_from_verified_acquisition_statements(
     assert result.provenance.citation == expected.get("citation")
     assert {issue.code for issue in result.issues} == (
         {"provenance.license_not_established", "provenance.citation_not_established"}
-        if provider_id in ("za_dws", "pl_imgw")
+        if provider_id in ("za_dws", "pl_imgw", "fr_hydroportail")
         else {"provenance.citation_not_established"}
         if provider_id == "br_ana"
         else set()

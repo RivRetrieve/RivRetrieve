@@ -1,4 +1,11 @@
-# fr_hubeau provider port
+# French publication source evidence
+
+Current providers are `fr_hubeau` for Hub'Eau daily hydrometry and temperature,
+and `fr_hydroportail` for HydroPortail station-own raw Q/H. Each uses its own
+source station inventory. See the [current native coverage account](../../maintenance/catalogue/fr_hydroportail/COVERAGE.md).
+
+The acquisition figures and combined catalogue account below are historical.
+They preserve the scope of the original evidence, not current provider membership.
 
 The live adapter uses `fetch.py`, `parse.py`, and `config.py`. The original adapter
 was contributed by Thiago von Däniken.

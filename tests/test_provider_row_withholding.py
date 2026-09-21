@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 import rivretrieve as rr
@@ -17,6 +18,7 @@ _CERTIFIED_PROVIDER_IDS = (
     "ch_foen",
     "cz_chmi",
     "fr_hubeau",
+    "fr_hydroportail",
     "lt_lhmt",
     "th_thaiwater",
     "usgs_nwis",
@@ -45,8 +47,18 @@ def test_bosnia_loader_admits_acquired_baseline_without_withholding() -> None:
 
 def test_france_loader_admits_all_evidenced_baseline_pairs() -> None:
     artifact = load_packaged_catalogue_artifact(france.catalogue)
-    assert artifact.stations.height == 7_323
-    assert artifact.station_products.height == 33_139
+    native = pl.read_parquet(france.catalogue / "native.parquet")
+    assert set(artifact.stations["station_id"]) == set(native["code_station"])
+    expected = {
+        (row["code_station"], product)
+        for row in native.select("code_station", "source_endpoint").iter_rows(named=True)
+        for product in (
+            ("water_temperature_reported",)
+            if row["source_endpoint"] == "temperature/station"
+            else ("discharge_daily_mean", "discharge_daily_max", "stage_daily_max")
+        )
+    }
+    assert set(artifact.station_products.select("station_id", "product_id").iter_rows()) == expected
     assert artifact.acquisition_provenance is not None
     assert not artifact.acquisition_provenance.header.withheld_facts
 

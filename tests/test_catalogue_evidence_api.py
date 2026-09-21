@@ -17,12 +17,14 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_real_selection_exposes_normalized_metadata_without_legacy_aliases():
-    selection = rr.find(provider="fr_hubeau", station="1232000101", quantity="discharge", statistic="instantaneous")
+    selection = rr.find(
+        provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"
+    )
     assert type(selection.acquisition_provenance) is tuple
     evidence = selection.acquisition_provenance[0]
     assert type(evidence) is CatalogueEvidence
     assert evidence.header.schema_version == 3
-    assert evidence.header.provider_id == "fr_hubeau"
+    assert evidence.header.provider_id == "fr_hydroportail"
     assert not hasattr(evidence, "fact_bindings")
     assert not hasattr(evidence.header.source_records[0], "acquisitions")
     assert len(repr(evidence)) < 300

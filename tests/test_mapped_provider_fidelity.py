@@ -128,7 +128,7 @@ def test_all_mapped_builtin_facts_have_publisher_evidence_and_content_identity()
 
     from rivretrieve._internal.source_series import stable_id
 
-    for provider in ("jp_mlit", "cz_chmi", "lt_lhmt", "th_thaiwater", "fr_hubeau", "ba_fhmzbih"):
+    for provider in ("jp_mlit", "cz_chmi", "lt_lhmt", "th_thaiwater", "fr_hubeau", "fr_hydroportail", "ba_fhmzbih"):
         mappings = import_module(f"rivretrieve._internal.providers.{provider}.config").SERIES_MAPPINGS
         for mapping in mappings.values():
             assert mapping.evidence

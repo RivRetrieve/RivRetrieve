@@ -34,6 +34,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import OnIssue
+from rivretrieve._internal.publication_identity import publication_identity_fields
 
 REQUIRED_ARTIFACT_FILES = (
     "provider.json",
@@ -50,6 +51,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
@@ -95,7 +97,8 @@ def load_packaged_catalogue_artifact(
 ) -> PackagedCatalogArtifact:
     artifact_path = Path(path)
     _ensure_artifact_path(artifact_path)
-    _validate_format(artifact_path)
+    provider_info = _read_provider_json(artifact_path / "provider.json")
+    _validate_format(artifact_path, provider_info.get("provider_id"))
     if not (artifact_path / "series_claims.parquet").is_file():
         raise CorruptCatalogArtifactError("Catalogue format requires series_claims.parquet; rebuild catalogue")
     try:
@@ -103,7 +106,6 @@ def load_packaged_catalogue_artifact(
     except (OSError, ValueError) as exc:
         raise CorruptCatalogArtifactError("Invalid source-series descriptions; rebuild catalogue") from exc
 
-    provider_info = _read_provider_json(artifact_path / "provider.json")
     claims = _read_parquet(artifact_path / "series_claims.parquet")
     products = _read_parquet(artifact_path / "products.parquet")
     stations = _read_parquet(artifact_path / "stations.parquet")
@@ -200,12 +202,21 @@ def packaged_catalogue_artifact_from_components(
     )
 
 
-def _validate_format(path: Path) -> None:
+def _validate_format(path: Path, provider_id: object) -> None:
     try:
         document = json.loads((path / "format.json").read_bytes())
     except (OSError, ValueError) as exc:
         raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator") from exc
-    if document != {"catalogue_format_version": 2} or type(document.get("catalogue_format_version")) is not int:
+    expected: dict[str, object] = {"catalogue_format_version": 2}
+    identity = publication_identity_fields((str(provider_id),))
+    if identity and (
+        not isinstance(document, dict) or any(document.get(field) != value for field, value in identity.items())
+    ):
+        raise CorruptCatalogArtifactError(
+            f"Unsupported {provider_id} publication service identity; combined catalogues cannot be reinterpreted"
+        )
+    expected.update(identity)
+    if document != expected or type(document.get("catalogue_format_version")) is not int:
         raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator")
 
 

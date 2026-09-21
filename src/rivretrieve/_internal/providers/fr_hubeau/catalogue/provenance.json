@@ -3,12 +3,12 @@
   "provider_id": "fr_hubeau",
   "native_table": {
     "repository_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "revision": "5dc8e480e426babe109c0467c5e0c374f92239c3",
-    "sha256": "4ff9439d0abd7f479d17b2c608d923d7834ea3df084ed08a3af9cec1d35ab687",
-    "byte_size": 1049930,
+    "revision": "4222cfa3226c9aaa0b7e12da596886ab7a68aa1f",
+    "sha256": "5853f30b5b5423af85585d7a7a9f5724f6186a26c8fbdd1c2231068427c4a13c",
+    "byte_size": 1054283,
     "semantic_digest": {
       "name": "fr_hubeau.native_table_content_sha256",
-      "sha256": "f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322"
+      "sha256": "c227aed5e74d4e3de7da20e7e8f0405b2cf6f8ce5b68542303fd180fdfbbed9f"
     }
   },
   "source_records": [
@@ -42,6 +42,30 @@
           }
         },
         {
+          "evidence_id": "hydrometry_catalogue_capture_2026_09_21",
+          "description": "Lossless XZ storage of publisher application/json response; HTTP body hash and size in retained receipt.",
+          "recording": {
+            "recording_id": "hydrometry_catalogue_capture_2026_09_21",
+            "repository_path": "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
+            "source_url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=10000&format=json",
+            "retrieved_at": "2026-09-21T09:11:52.123123Z",
+            "media_type": "application/x-xz",
+            "sha256": "e6825839f3aa678db1a7f391c0a4bec0b2591a1783d1ca125853453c5ed03b46"
+          }
+        },
+        {
+          "evidence_id": "temperature_catalogue_capture_2026_09_21",
+          "description": "Lossless XZ storage of publisher application/json response; HTTP body hash and size in retained receipt.",
+          "recording": {
+            "recording_id": "temperature_catalogue_capture_2026_09_21",
+            "repository_path": "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
+            "source_url": "https://hubeau.eaufrance.fr/api/v1/temperature/station?size=10000&format=json",
+            "retrieved_at": "2026-09-21T09:13:53.072109Z",
+            "media_type": "application/x-xz",
+            "sha256": "ace000b47398d9a1d42ab05269e24eecdf251155f41d3bd22d19e717d04e4ba0"
+          }
+        },
+        {
           "evidence_id": "fr_hubeau_hydrometrie",
           "description": "Hydrometry distribution and network roles",
           "recording": {
@@ -70,67 +94,25 @@
           "verification_status": "verified_public_recording"
         }
       ]
-    },
-    {
-      "source_id": "fr_hydroportail",
-      "issuer": "Service Central Vigicrues",
-      "operator": "HydroPortail / PHyC",
-      "evidence": [
-        {
-          "evidence_id": "fr_hydroportail_legal",
-          "description": "HydroPortail publication",
-          "recording": {
-            "recording_id": "fr_hydroportail_legal",
-            "repository_path": "tests/test_data/fr_hydroportail_legal.html",
-            "source_url": "https://hydro.eaufrance.fr/edito/mentions-legales",
-            "retrieved_at": "2026-09-13T17:56:59.417284Z",
-            "media_type": "text/html; charset=UTF-8",
-            "sha256": "ef51f384ce7541ed4c152bde1a3763cde18bddfb9ffeddfa80f527930c317eb4"
-          }
-        },
-        {
-          "evidence_id": "fr_hydroportail_about",
-          "description": "PHyC platform operation",
-          "recording": {
-            "recording_id": "fr_hydroportail_about",
-            "repository_path": "tests/test_data/fr_hydroportail_about.html",
-            "source_url": "https://hydro.eaufrance.fr/edito/a-propos-dhydroportail",
-            "retrieved_at": "2026-09-13T17:56:59.341556Z",
-            "media_type": "text/html; charset=UTF-8",
-            "sha256": "c9371602ebcd4bb20332195975ce02eacf454002742fbea6b0eafd4b566711cf"
-          }
-        }
-      ],
-      "statements": []
     }
   ],
   "descriptions": [
-    "Seven complete Hub’Eau hydrometry referential pages, 6,454 rows; station identity and location, not historical measurement authorship",
-    "Complete Hub’Eau temperature station response, 869 rows; station identity and location, not historical measurement authorship",
+    "Complete hydrometry station response: count=6475, next=null. Publisher application/json HTTP body SHA256=d68d4f6551cdf0dd57c980686144f2438756ca6d850d69a05ef5cf86e054c81e, bytes=10137697; retained recording uses lossless XZ compression. Identity/location only, not observation history.",
+    "Complete temperature station response: count=872, next=null. Publisher application/json HTTP body SHA256=3616649c79ad3b2debf4a07956cd6ad98952652e804424aa2ba82d299f7cfc6b, bytes=1386836; retained recording uses lossless XZ compression. Identity/location only, not observation history.",
     "Official temperature API contract without stated temporal support",
     "Hub’Eau general conditions; naming a publisher does not resolve requested dataset-author credit",
     "Official Hub’Eau publication of station daily hydrometry and reported temperature; original measurement authorship remains unestablished",
     "Hydrometry distribution and network roles; official publication does not establish all historical measurement authorship",
     "publisher_count; HTTP 206; available; publisher_count. Availability only, not numerical values or continuous history.",
-    "publisher_count; HTTP 200; recent_window_empty_history_unchecked; publisher_count. Availability only, not numerical values or continuous history.",
-    "publisher_count; HTTP 200; empty_in_both_history_windows; two_exact_windows_empty. Availability only, not numerical values or continuous history.",
     "publisher_count; HTTP 200; empty_no_data_published; publisher_count. Availability only, not numerical values or continuous history.",
-    "publisher_count; HTTP 200; available; historical_positive_witness. Availability only, not numerical values or continuous history.",
-    "publisher_count; HTTP 200; available; publisher_count. Availability only, not numerical values or continuous history.",
-    "publisher_count; HTTP 200; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
-    "publisher_count; HTTP 200; history_check_failed; replacement_window_failure_prior_empty_claim_unverified. Availability only, not numerical values or continuous history.",
-    "HydroPortail station-own Q/H publication from PHyC; response titles establish instantaneous quantities; not a shared-site series or original-producer assertion",
-    "HydroPortail publication; official publication does not establish all historical measurement authorship",
-    "PHyC platform operation; official publication does not establish all historical measurement authorship",
-    "historical_check; HTTP 200; empty_in_both_history_windows; two_exact_windows_empty. Availability only, not numerical values or continuous history.",
-    "historical_check; HTTP 200; available; historical_positive_witness. Availability only, not numerical values or continuous history.",
-    "historical_check; HTTP 404; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
-    "historical_check; HTTP 500; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
-    "historical_check; HTTP 503; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
-    "historical_check; HTTP 500; history_check_failed; replacement_window_failure_prior_empty_claim_unverified. Availability only, not numerical values or continuous history.",
-    "historical_check; HTTP 200; history_check_failed; replacement_window_failure_prior_empty_claim_unverified. Availability only, not numerical values or continuous history."
+    "publisher_count; HTTP 200; available; publisher_count. Availability only, not numerical values or continuous history."
   ],
   "transformations": [
+    {
+      "name": "Hub’Eau native station fields with independently evidenced coordinate correction",
+      "kind": "derived_value",
+      "marker_value": null
+    },
     {
       "name": "dated station-product availability conclusion",
       "kind": "derived_value",
@@ -152,37 +134,37 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "26da31ccc317cad97fe815ac9e0c0f3b4d24fba21617c07ddf84a6c78bb4b53b",
-      "byte_count": 650519,
-      "row_count": 109029,
+      "sha256": "36b11b4d6da96b3b4ecd3cd6ccae97a6be3ed9494c0606775ccde4c99ee2ab18",
+      "byte_count": 419594,
+      "row_count": 68212,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
       "path": "provenance_acquisitions.parquet",
-      "sha256": "4004252066ec15585235d98684d9062dbf2151d1c4b0ee4c3c0a378eeeba642a",
-      "byte_count": 1931871,
-      "row_count": 35397,
+      "sha256": "3511a6d2db677041eb150d64fd008f32dbb92756c6df3a2ef56491e70a468c51",
+      "byte_count": 1149463,
+      "row_count": 20237,
       "schema_version": 3
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "448db1af91e9cf6de85c0335c0389a3e953816d62569f0aca991862e3b322feb",
-      "byte_count": 502572,
-      "row_count": 68539,
+      "sha256": "5ff50175def325ab83b7f718924f9fa36ba4f1ebe7c8cf3fcee015daf553cf3a",
+      "byte_count": 291553,
+      "row_count": 40538,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "439b7fa77aef152effca0dded4a93fed0f17e9d772da1bda39434234c6fb2411",
-      "byte_count": 710732,
-      "row_count": 109029,
+      "sha256": "7d71e5e1e2295742c85f780b9c5fa98572c61bec2ee9e6637cc789aaf193fda0",
+      "byte_count": 436089,
+      "row_count": 68212,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "517e66e48025dacb57bc460080b6282a98d3515b3be9af09e5ec0c484e8ea928",
-      "byte_count": 180137,
-      "row_count": 35391,
+      "sha256": "fca656315caacfb26085ce6d65671cfa466bc36734c6fd78e2919bc3945231ca",
+      "byte_count": 102228,
+      "row_count": 20302,
       "schema_version": 3
     }
   }

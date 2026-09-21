@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| Provider | `fr_hubeau` |
+| Providers | `fr_hubeau` (Hub'Eau), `fr_hydroportail` (HydroPortail) |
 | Country | Hydrometry: metropolitan and overseas France; temperature: metropolitan France |
 | Published by | Hub'Eau (`hubeau.eaufrance.fr`) and HydroPortail (`hydro.eaufrance.fr`) |
 | Variables | Discharge, stage, water temperature |
-| Stations in the catalogue | 7,323 locations; availability depends on quantity and period |
+| Stations in the catalogue | Hub'Eau: 7,347 (6,475 hydrometry and 872 temperature); HydroPortail: 6,409. Availability depends on quantity and period |
 | Credentials | None |
 | Licence stated by Hub'Eau | Licence ouverte Etalab |
 | Agency documentation | [Hub'Eau hydrometry API](https://hubeau.eaufrance.fr/page/api-hydrometrie), [Hub'Eau river temperature API](https://hubeau.eaufrance.fr/page/api-temperature-continu), [HydroPortail help](https://hydro.eaufrance.fr/aide/accueil) |
@@ -80,6 +80,11 @@ Neither service's name identifies the original producer of every measurement. Th
 matters when citing a dataset (see [Terms and citation](#terms-and-citation)).
 
 ## What you can retrieve
+
+Select `provider="fr_hubeau"` for Hub'Eau daily hydrometry and temperature.
+Select `provider="fr_hydroportail"` for HydroPortail station-own instantaneous records.
+The two services retain separate station inventories, source identities and terms.
+
 
 | Data | Source field | Returned unit |
 |---|---|---|

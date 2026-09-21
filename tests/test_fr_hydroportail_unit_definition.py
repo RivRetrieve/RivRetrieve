@@ -37,7 +37,9 @@ def test_public_hydroportail_q_preserves_raw_code_and_uses_cited_rate_definition
     assert recording.sha256 == "aa99bc0a91dd45c928ce64d6fd68dff875abcb1e47cf348b11354980413e3f8f"
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
-    selection = rr.find(provider="fr_hubeau", station="1232000101", quantity="discharge", statistic="instantaneous")
+    selection = rr.find(
+        provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"
+    )
     result = rr.fetch(selection, start="2026-06-01", end="2026-06-02", cache="bypass", receipts=True, on_issue="raise")
     rows = result.data.sort("time")
     assert rows.height == 282
@@ -50,11 +52,11 @@ def test_public_hydroportail_q_preserves_raw_code_and_uses_cited_rate_definition
     assert result.receipts.entries[0].content == recording.content
     assert result.provenance.calls_made[0]["request_parameters"] == dict(recording.request.parameters)
     for series in result.source_series:
-        assert series.identity.namespace == "fr_hubeau/hydroportail/Q"
+        assert series.identity.namespace == "fr_hydroportail/Q"
         for facts in series.facts:
             definition = facts.source_unit_definition
             assert definition is not None
-            assert definition.provider_id == series.provider_id == "fr_hubeau"
+            assert definition.provider_id == series.provider_id == "fr_hydroportail"
             assert definition.namespace == series.identity.namespace
             assert definition.code == facts.source_unit.value == "l"
             assert definition.unit == facts.normalized_unit == "l/s"

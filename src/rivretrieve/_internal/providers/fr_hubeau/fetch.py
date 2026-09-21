@@ -25,7 +25,6 @@ from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequ
 
 _DAILY_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab"
 _TEMPERATURE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/chronique"
-_HYDROPORTAIL_ROOT = "https://hydro.eaufrance.fr"
 
 
 def fetch(
@@ -74,21 +73,6 @@ def fetch(
                     },
                     {"Accept": "application/json"},
                 )
-            else:
-                start = window.start
-                stop = window.stop
-                request = TransportRequest(
-                    HttpMethod.GET,
-                    f"{_HYDROPORTAIL_ROOT}/stationhydro/ajax/{station}/series",
-                    {
-                        "hydro_series[startAt]": start,
-                        "hydro_series[endAt]": stop,
-                        "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
-                        "hydro_series[simpleAndInterpolatedAndHourlyVariable]": coordinates.field,
-                        "hydro_series[statusData]": "raw",
-                    },
-                    {"Accept": "application/json"},
-                )
             while True:
                 response = transport.send(request)
                 payloads.append(
@@ -103,8 +87,6 @@ def fetch(
                         known_series=known_series,
                     )
                 )
-                if coordinates.family == "hydroportail":
-                    break
                 try:
                     next_url = next_url_from_response(response.content)
                 except UnsupportedSourceStructureError:

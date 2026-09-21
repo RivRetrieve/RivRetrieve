@@ -157,15 +157,15 @@ def test_bosnia_catalogue_retains_source_discharge_claim_without_workbook_id_ali
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
 def test_hydroportail_title_establishes_statistic_not_frequency(quantity):
-    selected = rr.find(provider="fr_hubeau", station="1232000101", quantity=quantity, statistic="instantaneous")
+    selected = rr.find(provider="fr_hydroportail", station="1232000101", quantity=quantity, statistic="instantaneous")
     assert selected.series
     assert all(item.facts[0].statistic.value == "instantaneous" for item in selected.series)
     assert all(item.facts[0].frequency.value is None for item in selected.series)
 
 
 def test_hydroportail_contradictory_temporal_title_is_unsupported():
-    from rivretrieve._internal.providers.fr_hubeau.config import config
-    from rivretrieve._internal.providers.fr_hubeau.parse import parse
+    from rivretrieve._internal.providers.fr_hydroportail.config import config
+    from rivretrieve._internal.providers.fr_hydroportail.parse import parse
     from tests.test_fr_hydroportail_station import _empty_payload
 
     payload = _empty_payload()
@@ -288,13 +288,16 @@ def test_bosnia_missing_source_route_preserves_independent_station(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("provider", ["ba_fhmzbih", "fr_hubeau"])
+@pytest.mark.parametrize("provider", ["ba_fhmzbih", "fr_hubeau", "fr_hydroportail"])
 def test_mapped_products_preserve_exact_optional_physical_facts(provider):
     from importlib import import_module
 
-    builder = import_module(f"rivretrieve._internal.providers.{provider}.generate_catalogue")
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+
+    declaration = import_module(f"rivretrieve._internal.providers.{provider}.declaration").declaration
+    products = load_packaged_catalogue_artifact(declaration.catalogue).products
     mappings = import_module(f"rivretrieve._internal.providers.{provider}.config").SERIES_MAPPINGS
-    for row in builder.build_products().iter_rows(named=True):
+    for row in products.iter_rows(named=True):
         facts = mappings[row["product_id"]].physical_facts()
         assert row["period_type"] == (
             {"instantaneous": "instant"}.get(facts.temporal_support.value, facts.temporal_support.value) or "unknown"
