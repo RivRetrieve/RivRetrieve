@@ -97,6 +97,7 @@ class _ProviderHandle:
     _store_root: StoreRoot | None = None
     _bulk_operations: BulkStore | None = None
     required_credentials: tuple[str, ...] = ()
+    optional_credentials: tuple[str, ...] = ()
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
     credential_exchange: CredentialExchangeBinding | None = None
     public_archive_access: PublicArchiveAccess | None = None
@@ -476,6 +477,7 @@ class ProviderRegistry:
         observation_store: StoreRoot | None = None,
         bulk_operations: BulkStore | None = None,
         required_credentials: tuple[str, ...] = (),
+        optional_credentials: tuple[str, ...] = (),
         credential_headers: tuple[CredentialHeaderBinding, ...] = (),
         credential_exchange: CredentialExchangeBinding | None = None,
         public_archive_access: PublicArchiveAccess | None = None,
@@ -525,6 +527,7 @@ class ProviderRegistry:
             _store_root=observation_store,
             _bulk_operations=bulk_operations,
             required_credentials=required_credentials,
+            optional_credentials=optional_credentials,
             credential_headers=credential_headers,
             credential_exchange=credential_exchange,
             public_archive_access=public_archive_access,

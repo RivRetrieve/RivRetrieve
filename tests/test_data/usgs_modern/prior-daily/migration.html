@@ -1,0 +1,2593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migrating to Modernized USGS Water APIs</title>
+<meta name="description" content="Map your waterservices.usgs.gov queries onto the equivalent api.waterdata.usgs.gov OGC API endpoints and response fields.">
+<link rel="canonical" href="https://api.waterdata.usgs.gov/docs/ogcapi/migration/">
+
+<meta property="og:title" content="Migrating to Modernized USGS Water APIs">
+<meta property="og:description" content="Map your waterservices.usgs.gov queries onto the equivalent api.waterdata.usgs.gov OGC API endpoints and response fields.">
+<meta property="og:url" content="https://api.waterdata.usgs.gov/docs/ogcapi/migration/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Water Data APIs">
+<meta property="og:image" content="https://api.waterdata.usgs.gov/assets/img/featured-background.jpg">
+<meta property="og:image:alt" content="Isometric illustration of a laptop, cloud upload icons, and network hardware on a dark blue background">
+<meta property="og:image:width" content="2560">
+<meta property="og:image:height" content="1261">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Migrating to Modernized USGS Water APIs">
+<meta name="twitter:description" content="Map your waterservices.usgs.gov queries onto the equivalent api.waterdata.usgs.gov OGC API endpoints and response fields.">
+<link rel="alternate" type="text/markdown" href="https://api.waterdata.usgs.gov/docs/ogcapi/migration/index.html.md">
+<link rel="describedby" type="text/markdown" href="https://api.waterdata.usgs.gov/llms.txt">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","name":"Migrating to Modernized USGS Water APIs","headline":"Migrating to Modernized USGS Water APIs","description":"Map your waterservices.usgs.gov queries onto the equivalent api.waterdata.usgs.gov OGC API endpoints and response fields.","url":"https://api.waterdata.usgs.gov/docs/ogcapi/migration/","inLanguage":"en-US","publisher":{"@type":"GovernmentOrganization","name":"U.S. Geological Survey","alternateName":"USGS","url":"https://usgs.gov"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Water Data APIs","item":"https://api.waterdata.usgs.gov/"},{"@type":"ListItem","position":2,"name":"OGC APIs","item":"https://api.waterdata.usgs.gov/docs/ogcapi/"},{"@type":"ListItem","position":3,"name":"Migrating to Modernized USGS Water APIs","item":"https://api.waterdata.usgs.gov/docs/ogcapi/migration/"}]}</script>
+
+
+
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/img/favicon_device_specific/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon_device_specific/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/img/favicon_device_specific/favicon-16x16.png">
+<link rel="manifest" href="/assets/img/favicon_device_specific/site.webmanifest">
+<link rel="shortcut icon" href="/assets/img/favicon_device_specific/favicon.ico">
+<link rel="mask-icon" href="/assets/img/favicon_device_specific/safari-pinned-tab.svg" color="#007150">
+
+<link rel="preload" as="font" type="font/woff2" crossorigin="" href="/assets/fonts/source-sans-pro/sourcesanspro-regular-webfont.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin="" href="/assets/fonts/source-sans-pro/sourcesanspro-bold-webfont.woff2">
+
+<meta name="msapplication-TileColor" content="#2b5797">
+<meta name="msapplication-config" content="/assets/img/favicon_device_specific/browserconfig.xml">
+<meta name="theme-color" content="#ffffff">
+
+<script src="/assets/uswds-init.min.js"></script>
+
+<link rel="stylesheet" href="/assets/main.css">
+<!-- Google Tag Manager -->
+  <!-- Below: WDFN Analytics Tag -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-TTF8M2Z');</script>
+ <!-- Below: USGS Analytics Tag -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-TKQR8KP');</script>
+  <!-- End Google Tag Manager -->
+</head>
+
+  <body id="api-tutorials" >
+    <!-- Below: WDFN Analytics Tag -->
+<noscript><iframe sandbox src="https://www.googletagmanager.com/ns.html?id=GTM-TTF8M2Z" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- Below: USGS Analytics Tag -->
+<noscript><iframe sandbox src="https://www.googletagmanager.com/ns.html?id=GTM-TKQR8KP" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<a class="usa-skipnav" href="#main-content">Skip to main content</a>
+
+<section
+  class="usa-banner"
+  aria-label="Official website of the United States government"
+>
+  <div class="usa-accordion">
+    <header class="usa-banner__header">
+      <div class="usa-banner__inner">
+        <div class="grid-col-auto">
+          <img
+            aria-hidden="true"
+            class="usa-banner__header-flag"
+            src="/assets/img/us_flag_small.png"
+            alt=""
+          />
+        </div>
+        <div class="grid-col-fill tablet:grid-col-auto" aria-hidden="true">
+          <p class="usa-banner__header-text">
+            An official website of the United States government
+          </p>
+          <p class="usa-banner__header-action">Here’s how you know</p>
+        </div>
+        <button
+          type="button"
+          class="usa-accordion__button usa-banner__button"
+          aria-expanded="false"
+          aria-controls="gov-banner-default"
+        >
+          <span class="usa-banner__button-text">Here’s how you know</span>
+        </button>
+      </div>
+    </header>
+    <div
+      class="usa-banner__content usa-accordion__content"
+      id="gov-banner-default"
+    >
+      <div class="grid-row grid-gap-lg">
+        <div class="usa-banner__guidance tablet:grid-col-6">
+          <img
+            class="usa-banner__icon usa-media-block__img"
+            src="/assets/img/icon-dot-gov.svg"
+            role="img"
+            alt=""
+            aria-hidden="true"
+          />
+          <div class="usa-media-block__body">
+            <p>
+              <strong>Official websites use .gov</strong><br />A
+              <strong>.gov</strong> website belongs to an official government
+              organization in the United States.
+            </p>
+          </div>
+        </div>
+        <div class="usa-banner__guidance tablet:grid-col-6">
+          <img
+            class="usa-banner__icon usa-media-block__img"
+            src="/assets/img/icon-https.svg"
+            role="img"
+            alt=""
+            aria-hidden="true"
+          />
+          <div class="usa-media-block__body">
+            <p>
+              <strong>Secure .gov websites use HTTPS</strong><br />A
+              <strong>lock</strong> (
+              <span class="icon-lock"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="52"
+                  height="64"
+                  viewBox="0 0 52 64"
+                  class="usa-banner__lock-image"
+                  role="img"
+                  aria-labelledby="banner-lock-description-default"
+                  focusable="false"
+                >
+                  <title id="banner-lock-title-default">Lock</title>
+                  <desc id="banner-lock-description-default">Locked padlock icon</desc>
+                  <path
+                    fill="#000000"
+                    fill-rule="evenodd"
+                    d="M26 0c10.493 0 19 8.507 19 19v9h3a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V32a4 4 0 0 1 4-4h3v-9C7 8.507 15.507 0 26 0zm0 8c-5.979 0-10.843 4.77-10.996 10.712L15 19v9h22v-9c0-6.075-4.925-11-11-11z"
+                  />
+                </svg> </span
+              >) or <strong>https://</strong> means you’ve safely connected to
+              the .gov website. Share sensitive information only on official,
+              secure websites.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="usa-overlay"></div>
+<header class="usa-header usa-header--extended usgs-header" role="banner">
+  <div class="usgs-header-container">
+    <div class="usa-navbar">
+      <div class="usa-logo" id="extended-logo">
+        <a href="https://www.usgs.gov">
+          <img alt="USGS Home" src="/assets/img/USGS_logo.svg" />
+        </a>
+      </div>
+      <button type="button" class="usa-menu-btn">Menu</button>
+    </div>
+  </div>
+
+  <nav aria-label="Primary navigation" role="navigation" class="usa-nav">
+    <div class="usa-nav__inner">
+      <button class="usa-nav__close">
+        <img src="/assets/img/usa-icons/close.svg" role="img" alt="Close" />
+      </button>
+      <ul class="usa-nav__primary usa-accordion">
+        
+        <li class="usa-nav__primary-item">
+          
+          <a href="/" class="usa-nav__link ">
+            <span>Water Data APIs</span>
+          </a>
+          
+        </li>
+        
+        <li class="usa-nav__primary-item">
+          
+          <a href="/docs/" class="usa-nav__link ">
+            <span>Documentation</span>
+          </a>
+          
+        </li>
+        
+        <li class="usa-nav__primary-item">
+          
+          <a href="https://waterdata.usgs.gov/" class="usa-nav__link ">
+            <span>Water Data Home</span>
+          </a>
+          
+        </li>
+        
+        <li class="usa-nav__primary-item">
+          
+          
+          <button type="button"
+            class="usa-accordion__button usa-nav__link "
+            aria-expanded="false" aria-controls="nav-connect">
+            <span>Connect</span>
+          </button>
+          <ul id="nav-connect" class="usa-nav__submenu">
+            
+            <li class="usa-nav__submenu-item">
+              <a href="https://www.instagram.com/usgs_water/">USGS Water Resources Instagram</a>
+            </li>
+            
+            <li class="usa-nav__submenu-item">
+              <a href="https://www.facebook.com/USGSWater/">USGS Water Resources Facebook</a>
+            </li>
+            
+            <li class="usa-nav__submenu-item">
+              <a href="https://waterdata.usgs.gov/questions-comments/?referrerUrl=https://api.waterdata.usgs.gov">Questions or Comments</a>
+            </li>
+            
+            <li class="usa-nav__submenu-item">
+              <a href="https://waterdata.usgs.gov/blog/">Water Data for the Nation Blog</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li class="usa-nav__primary-item">
+          
+          <a href="/signup/" class="usa-nav__link ">
+            <span>Get an API Key</span>
+          </a>
+          
+        </li>
+        
+      </ul>
+      <div class="usa-nav__secondary">
+        
+      </div>
+    </div>
+  </nav>
+</header>
+
+<section data-nosnippet="" id="info-site-alert" aria-label="Informational site alert"
+  class="usa-site-alert usa-site-alert--info">
+  <div class="usa-alert usa-alert--info">
+    <div class="usa-alert__body">
+      
+      <ul class="usa-alert__text usa-list">
+        How are we doing? We want to hear from you. Take our quick <a class='usa-link' href='https://usgswaterresources.gov1.qualtrics.com/jfe/form/SV_8dm8zHyBQ639KGq'>survey</a> to tell us what you think.
+      </ul>
+      
+    </div>
+  </div>
+</section>
+
+    <div class="grid-row">
+      <div class="tablet:grid-col-2 margin-bottom-4 tablet:margin-bottom-0">
+        <nav aria-label="Side Navigation">
+          
+          <ul class="usa-sidenav">
+              
+              
+                
+                
+                
+                
+                  
+                
+                
+                
+                
+                
+              
+                
+              
+              
+              
+                
+                
+                
+              
+              
+            
+            <li class="usa-sidenav__item">
+              <a  href="/docs/">Home</a>
+              <ul class="usa-sidenav__sublist">
+                
+                
+              </ul>
+            </li>
+            
+            <li class="usa-sidenav__item">
+              <a  href="/docs/ogcapi/">OGC APIs</a>
+              <ul class="usa-sidenav__sublist">
+                  
+                
+                <li class="usa-sidenav__item">
+                  <a  href="/docs/ogcapi/keys/">Using API Keys with USGS water data APIs</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="/docs/ogcapi/efficiency/">Making efficient queries</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="/docs/ogcapi/complex-queries/">Making more complex queries using CQL2</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="/docs/ogcapi/gis/">Access USGS water data with QGIS</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  class="usa-current" href="/docs/ogcapi/migration/">Migrating to modernized APIs</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="/docs/ogcapi/versioning/">API Versioning</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="/docs/ogcapi/metrics/">Metrics</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="/status/">Status</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="https://api.waterdata.usgs.gov/ogcapi/v0/openapi">SwaggerUI Documentation</a>
+                </li>
+                <li class="usa-sidenav__item">
+                  <a  href="/download/">Download data</a>
+                </li>
+              </ul>
+            </li>
+            
+            <li class="usa-sidenav__item">
+              <a  href="/docs/stac/">STAC</a>
+              <ul class="usa-sidenav__sublist">
+                
+                
+              </ul>
+            </li>
+            
+            <li class="usa-sidenav__item">
+              <a  href="https://api.waterdata.usgs.gov/samples-data/docs">USGS Water Quality API</a>
+              <ul class="usa-sidenav__sublist">
+                
+                
+              </ul>
+            </li>
+            
+            <li class="usa-sidenav__item">
+              <a  href="https://www.waterqualitydata.us/beta/webservices_documentation/">Water Quality Portal APIs</a>
+              <ul class="usa-sidenav__sublist">
+                
+                
+              </ul>
+            </li>
+            
+            <li class="usa-sidenav__item">
+              <a  href="/docs/nims/">National Imagery Management System (NIMS)</a>
+              <ul class="usa-sidenav__sublist">
+                
+                
+              </ul>
+            </li>
+            
+            <li class="usa-sidenav__item">
+              <a  href="https://waterservices.usgs.gov/docs/">Legacy Water Services</a>
+              <ul class="usa-sidenav__sublist">
+                
+                
+              </ul>
+            </li>
+            
+            <li class="usa-sidenav__item">
+              <a  href="/signup/">Get an API Key</a>
+              <ul class="usa-sidenav__sublist">
+                
+                
+              </ul>
+            </li>
+          </ul>
+        </nav>
+      </div>
+      <main id="main-content" class="grid-col-12 tablet:grid-col-9 desktop:grid-col-8 margin-top-2 padding-left-3">
+        <h1 id="migrating-to-modernized-apis" tabindex="-1">Migrating to modernized APIs</h1>
+<p><strong>Page contents</strong>:</p>
+<ul class="usa-list">
+<li><a href="#migrating-from-%2Fiv-to-%2Fcontinuous">Migrating from /iv to /continuous</a>
+<ul>
+<li><a href="#from-waterservices-json">From WaterServices JSON</a></li>
+<li><a href="#from-waterservices-rdb">From WaterServices RDB</a></li>
+<li><a href="#from-waterservices-waterml2">From WaterServices WaterML2</a></li>
+</ul>
+</li>
+<li><a href="#migrating-from-%2Fdv-to-%2Fdaily">Migrating from /dv to /daily</a>
+<ul>
+<li><a href="#from-waterservices-json-1">From WaterServices JSON</a></li>
+<li><a href="#from-waterservices-rdb-1">From WaterServices RDB</a></li>
+<li><a href="#from-waterservices-waterml2-1">From WaterServices WaterML2</a></li>
+</ul>
+</li>
+<li><a href="#migrating-from-%2Fsite-to-%2Fmonitoring-locations">Migrating from /site to /monitoring-locations</a></li>
+<li><a href="#migrating-from-%2Fsite-to-%2Ftime-series-metadata">Migrating from /site to /time-series-metadata</a></li>
+<li><a href="#migrating-from-%2Fgwlevels-to-%2Ffield-measurements">Migrating from /gwlevels to /field-measurements</a></li>
+<li><a href="#migrating-from-%2Fmeasurements-to-%2Ffield-measurements">Migrating from /measurements to /field-measurements</a></li>
+<li><a href="#migrating-from-%2Fpeak-to-%2Fpeaks">Migrating from /peak to /peaks</a></li>
+<li><a href="#how-can-i-query-for-multiple-monitoring-locations%2C-parameter-codes%2C-time-series-ids%2C-or-other-parameters-at-once%3F">How can I query for multiple monitoring locations, parameter codes, time series IDs, or other parameters at once?</a></li>
+<li><a href="#how-can-i-download-all-the-data-for-a-huc%2C-basin%2C-county%2C-or-other-boundary-area%3F">How can I download all the data for a HUC, basin, county, or other boundary area?</a></li>
+</ul>
+<p>This guide provides resources from migrating from specific legacy APIs, hosted on <a href="http://waterservices.usgs.gov">waterservices.usgs.gov</a>, to their modernized replacements on <a href="http://api.waterdata.usgs.gov">api.waterdata.usgs.gov</a>. It will be continuously updated as additional modernized endpoints are released.</p>
+<p>Specifically, this guide will help you move from APIs listed in the left column to their replacement listed on the right:</p>
+<div class="usa-table-container--scrollable" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>If you were using...</th>
+<th>Then you should use...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Latest automated measurements from https​://waterservices.usgs.gov/nwis/iv/?</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous">https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous</a></td>
+</tr>
+<tr>
+<td>Historical automated measurements from https​://waterservices.usgs.gov/nwis/iv/?</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous">https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous</a></td>
+</tr>
+<tr>
+<td>https​://waterservices.usgs.gov/nwis/dv/?</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily">https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily</a></td>
+</tr>
+<tr>
+<td>Discharge and gage height readings from https​://waterdata.usgs.gov/measurements/</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/field-measurements">https://api.waterdata.usgs.gov/ogcapi/v0/collections/field-measurements</a></td>
+</tr>
+<tr>
+<td>Channel measurements from https​://waterdata.usgs.gov/measurements/</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/channel-measurements">https://api.waterdata.usgs.gov/ogcapi/v0/collections/channel-measurements</a></td>
+</tr>
+<tr>
+<td>https​://waterservices.usgs.gov/nwis/gwlevels/</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/field-measurements">https://api.waterdata.usgs.gov/ogcapi/v0/collections/field-measurements</a></td>
+</tr>
+<tr>
+<td>Monitoring location metadata from https​://waterservices.usgs.gov/nwis/site/?</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations">https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations</a></td>
+</tr>
+<tr>
+<td>Period of record information from https​://waterservices.usgs.gov/nwis/site/?</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-metadata">https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-metadata</a></td>
+</tr>
+<tr>
+<td>https​://waterdata.usgs.gov/nwis/peak</td>
+<td><a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/peaks">https://api.waterdata.usgs.gov/ogcapi/v0/collections/peaks</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>If you were using <a href="https://waterservices.usgs.gov/nwis/stats/">https://waterservices.usgs.gov/nwis/stats/</a> , you should look at <a href="https://api.waterdata.usgs.gov/statistics/v0/docs">the documentation for the statistics API</a>. If you were using <a href="https://waterdata.usgs.gov/nwis/qwdata">https://waterdata.usgs.gov/nwis/qwdata</a> , you should look at <a href="https://api.waterdata.usgs.gov/samples-data/docs">the documentation for the samples-data API</a>.</p>
+<p>The new APIs listed in the table are all hosted on <a href="https://api.waterdata.usgs.gov/ogcapi/">https://api.waterdata.usgs.gov/ogcapi/</a> and implement the OGC API - Features standard. You can find an overview walking through how these APIs are structured <a href="/docs/ogcapi/">at this link</a>.</p>
+<p>If you're going to make more than a few queries per hour, you'll need to provide an API key as part of your request. You can <a href="/signup">sign up for an API key here</a>, and <a href="/docs/ogcapi/keys">learn more about how to use API keys here</a>.</p>
+<p>This page walks through the new variable names used by the modernized APIs, listing where the variables returned by each WaterServices endpoint can now be accessed. When these variables have been intentionally discontinued, they are listed as &quot;no longer provided&quot;. Variables which may be provided in the future are instead listed as &quot;not currently available&quot;.</p>
+<p>The bottom of this page additionally provides advice on how to translate common query patterns to the modernized services.</p>
+<h2 id="migrating-from-%2Fiv-to-%2Fcontinuous" tabindex="-1">Migrating from /iv to /continuous</h2>
+<p>Continuous data are collected via automated sensors installed at a monitoring location. They are collected at a high frequency and often at a fixed 15-minute interval. Depending on the specific monitoring location, the data may be transmitted automatically via telemetry and be available on WDFN within minutes of collection, while other times the delivery of data may be delayed if the monitoring location does not have the capacity to automatically transmit data.</p>
+<p>These data were previously available from the <code>/iv</code> endpoint on WaterServices, and are now returned by the <code>/continuous</code> endpoint on the USGS Water Data APIs. To get just the most recent continuous value for each time series in the USGS network, use the <code>/latest-continuous</code> endpoint.</p>
+<p>Note that the <code>/continuous</code> endpoint only allows querying for three years of data at a time. For the best performance, break large queries up into multiple queries, one per year of data you're looking for.</p>
+<h3 id="from-waterservices-json" tabindex="-1">From WaterServices JSON</h3>
+<p>The top-level metadata in the JSON object (&quot;name&quot;, &quot;declaredType&quot;, &quot;scope&quot;, &quot;nil&quot;, &quot;globalScope&quot;, and &quot;typeSubstituted&quot;) will no longer be returned.</p>
+<p>The &quot;queryInfo&quot; block inside the top-level &quot;value&quot; key will no longer be returned. The &quot;requestDT&quot; has an equivalent in the &quot;timeStamp&quot; field of the <code>/continuous</code> response object. <a href="https://waterdata.usgs.gov/provisional-data-statement/">The provisional data statement may be accessed at this link</a>.</p>
+<p>The remaining &quot;timeSeries&quot; block contains one section per time series included in the response, each of which contains a &quot;sourceInfo&quot; block, a &quot;variable&quot; block, a &quot;values&quot; block, and a &quot;name&quot; block. The &quot;name&quot; block combines the &quot;agency_code&quot; and &quot;monitoring_location_number&quot; fields in the <code>/monitoring-locations</code> endpoint with the &quot;parameter_code&quot; and &quot;statistic_id&quot; fields in the <code>/continuous</code> endpoint. The other three blocks are represented in one of the below tables. Note that the <code>/continuous</code> endpoint returns one feature per observation, rather than grouping per timeseries, which may require refactoring existing workflows.</p>
+<p>The &quot;sourceInfo&quot; block is now provided by the <code>/monitoring-locations</code> endpoint. As such, the field names listed on the right side of the table below represent fields in the <code>/monitoring-locations</code> endpoint.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/iv</code> &quot;sourceInfo&quot; block</th>
+<th>Corresponding field in the <code>/monitoring-locations</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>siteName</td>
+<td>monitoring_location_name</td>
+</tr>
+<tr>
+<td>siteCode -&gt; value</td>
+<td>monitoring_location_number . Included in the monitoring_location_id field in <code>/continuous</code>.</td>
+</tr>
+<tr>
+<td>siteCode -&gt; agencyCode</td>
+<td>agency_code (&quot;network&quot; is no longer provided). Included in the monitoring_location_id field in <code>/continuous</code>.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; defaultTimeZone -&gt; zoneOffset</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; defaultTimeZone -&gt; zoneAbbreviation</td>
+<td>time_zone_abbreviation</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; daylightSavingsTimeZone -&gt; zoneOffset</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; daylightSavingsTimeZone -&gt; zoneAbbreviation</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; siteUsesDaylightSavingsTime</td>
+<td>uses_daylight_savings</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; srs</td>
+<td>All coordinates are in EPSG:4326, or use the CRS specified by the <code>crs</code> argument.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; latitude</td>
+<td>Provided as part of the &quot;geometry&quot; object.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; longitude</td>
+<td>Provided as part of the &quot;geometry&quot; object.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; localSiteXY</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>note</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>siteType</td>
+<td>site_type</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;siteTypeCd&quot;</td>
+<td>site_type_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;hucCd&quot;</td>
+<td>hydrologic_unit_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;stateCd&quot;</td>
+<td>state_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;countyCd&quot;</td>
+<td>county_code</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Certain portions of the &quot;variable&quot; block are now provided by the <code>/time-series-metadata</code> and <code>/statistic-codes</code> endpoints. These are specifically mentioned in the table below. The &quot;id&quot; field in the <code>time-series-metadata</code> endpoint corresponds to the &quot;time_series_id&quot; field in the <code>/continuous</code> endpoint, and can be used to join data from the two endpoints together.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/iv</code> &quot;variable&quot; block</th>
+<th>Corresponding field in the <code>/continuous</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>variableCode -&gt; value</td>
+<td>parameter_code</td>
+</tr>
+<tr>
+<td>variableCode -&gt; network</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; vocabulary</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; variableID</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; default</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableName</td>
+<td>parameter in <code>/time-series-metadata</code></td>
+</tr>
+<tr>
+<td>variableDescription</td>
+<td>parameter_description in <code>/time-series-metadata</code></td>
+</tr>
+<tr>
+<td>valueType</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>unit -&gt; unitCode</td>
+<td>unit_of_measure</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; value</td>
+<td>id in <code>/statistic-codes</code>.</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; name</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; optionCode</td>
+<td>statistic_id</td>
+</tr>
+<tr>
+<td>note</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>noDataValue</td>
+<td>No longer provided. Missing data is now represented with null values.</td>
+</tr>
+<tr>
+<td>variableProperty</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>oid</td>
+<td>No longer provided.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Fields in the &quot;values&quot; block are provided by the <code>/continuous</code> endpoint.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/iv</code> &quot;values&quot; block</th>
+<th>Corresponding field in the <code>/continuous</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>value -&gt; value</td>
+<td>value</td>
+</tr>
+<tr>
+<td>value -&gt; qualifiers</td>
+<td>approval_status</td>
+</tr>
+<tr>
+<td>value -&gt; dateTime</td>
+<td>time (now an ISO8601 YYYY-MM-DD date string)</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierCode</td>
+<td>Approval status (&quot;Approved&quot; and &quot;Provisional&quot;) are now called approval_status. Other qualifiers are called qualifier.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierDescription</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierID</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; network</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; vocabulary</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>qualityControlLevel</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>method -&gt; methodDescription</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>method -&gt; methodID</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>source</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>offset</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>sample</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>censorCode</td>
+<td>No longer provided.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="from-waterservices-rdb" tabindex="-1">From WaterServices RDB</h3>
+<p>Most of the header of the RDB file is no longer provided. <a href="https://waterdata.usgs.gov/provisional-data-statement/">The provisional data statement may be accessed at this link</a>.</p>
+<p>The monitoring location metadata at the top of the RDB file is now available from the <code>/monitoring-locations</code> endpoint:</p>
+<pre><code>#    USGS 01094400 NORTH NASHUA RIVER AT FITCHBURG, MA
+</code></pre>
+<p>This line contains three pieces of data:</p>
+<ul>
+<li>The first, &quot;USGS&quot;, is called &quot;agency_code&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+<li>The second, &quot;01094400&quot;, is called &quot;monitoring_location_number&quot; in the <code>/monitoring-locations</code> endpoint. These two combined are called &quot;monitoring_location_id&quot; in the <code>/continuous</code> endpoint, and &quot;id&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+<li>The third, &quot;NORTH NASHUA RIVER AT FITCHBURG, MA&quot;, is called &quot;monitoring_location_name&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+</ul>
+<p>Variable documentation lines are now available either through the <a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/schema">collection schema page</a> or the <a href="https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/continuous/getContinuousFeatures">OpenAPI documentation</a>.</p>
+<p>The next lines contain time series metadata now primarily available from the <code>/time_series_metadata</code> endpoint:</p>
+<pre><code># Data provided for site 01435000
+#    TS_ID       Parameter Description
+#    107389      00060     Discharge, cubic feet per second
+
+</code></pre>
+<p>This line contains three pieces of information:</p>
+<ul>
+<li>&quot;TS_ID&quot; is now called &quot;time_series_id&quot; in the <code>/continuous</code> endpoint and &quot;id&quot; in the <code>/time_series_metadata</code> endpoint.</li>
+<li>&quot;Parameter&quot; is now called &quot;parameter_code&quot; in both the <code>/continuous</code> and <code>/time_series_metadata</code> endpoints.</li>
+<li>&quot;Description&quot; is now called &quot;parameter_description&quot; in the <code>/time_series_metadata</code> endpoint.</li>
+</ul>
+<p>The remainder of the file generally contains a number of lines following the same general table structure:</p>
+<pre><code>agency_cd	site_no	datetime	tz_cd	107389_00060	107389_00060_cd
+</code></pre>
+<p>The first three of these columns are returned as fields in either the <code>/continuous</code> or <code>/monitoring-locations</code> endpoints:</p>
+<ul>
+<li>&quot;agency_cd&quot; is now called &quot;agency_code&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+<li>&quot;site_no&quot; is now called &quot;monitoring_location_number&quot; in the <code>/monitoring-locations</code> endpoint. The &quot;monitoring_location_id&quot; field in <code>/continuous</code> and the &quot;id&quot; field in <code>/monitoring-locations</code> is made by combining the agency code and monitoring location number.</li>
+<li>&quot;datetime&quot; is now called &quot;time&quot; in the <code>/continuous</code> endpoint.</li>
+<li>&quot;tz_cd&quot; is no longer provided. Time stamps now are in UTC and include time zone information.</li>
+</ul>
+<p>The remaining columns return metadata in their column names, which is now returned in distinct fields instead. Column names combined two pieces of metadata separated by underscores. Taking <code>107389_00060</code> as an example:</p>
+<ul>
+<li>&quot;107389&quot;, the monitoring location number, is now returned as a value in the &quot;monitoring_location_id&quot; field of the <code>/continuous</code> endpoint.</li>
+<li>&quot;00060&quot;, the parameter code, is now returned as a value in the &quot;parameter_code&quot; field of the <code>/continuous</code> endpoint.</li>
+</ul>
+<p>Values that were under columns named following this pattern are now called &quot;value&quot; in the <code>/continuous</code> endpoint.</p>
+<p>Values that were under columns ending in <code>_cd</code> have been split into two fields. Values of P and A, indicating whether the data is provisional or has been approved, are now returned in the &quot;approval_status&quot; field of the <code>/continuous</code> endpoint. Other values are now returned in the &quot;qualifier&quot; field of the <code>/continuous</code> endpoint.</p>
+<h3 id="from-waterservices-waterml2" tabindex="-1">From WaterServices WaterML2</h3>
+<p>The <code>ns1:queryInfo</code> block is no longer provided. The <code>ns2:note title=&quot;requestDT&quot;</code> field is now called &quot;timeStamp&quot;.</p>
+<p>We additionally no longer provide the references to XML and WaterML schemas used by the WaterML2 response object. These are not included in the table below.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Key in the <code>/iv</code> WaterML2 response</th>
+<th>New endpoint</th>
+<th>Corresponding field name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ns1:timeSeries name</td>
+<td><code>/monitoring-locations</code>, <code>/continuous</code>, <code>/time-series-metadata</code></td>
+<td>This name object combines the agency_code and monitoring_location_number from the <code>/monitoring-locations</code> endpoint with the parameter_code and statistic_id returned by both the <code>/continuous</code> and <code>/time-series-metadata</code> endpoints. The agency code and monitoring location number are also combined to form the monitoring_location_id in <code>/continuous</code> and <code>/time-series-metadata</code> and the id field in <code>/monitoring-locations</code>.</td>
+</tr>
+<tr>
+<td>ns1:siteName</td>
+<td><code>/monitoring-locations</code></td>
+<td>monitoring_location_name</td>
+</tr>
+<tr>
+<td>ns1:siteCode</td>
+<td><code>/monitoring-locations</code></td>
+<td>monitoring_location_number</td>
+</tr>
+<tr>
+<td>ns1:siteCode network</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:siteCode agencyCode</td>
+<td><code>/monitoring-locations</code></td>
+<td>agency_code. The agency code and monitoring location number are combined to form the monitoring_location_id in <code>/continuous</code> and <code>/time-series-metadata</code> and the id field in <code>/monitoring-locations</code>.</td>
+</tr>
+<tr>
+<td>ns1:timeZoneInfo siteUsesDaylightSavingsTime</td>
+<td><code>monitoring-locations</code></td>
+<td>uses_daylight_savings</td>
+</tr>
+<tr>
+<td>ns1:defaultTimeZone zoneOffset</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:defaultTimeZone zoneOffset zoneAbbreviation</td>
+<td><code>monitoring-locations</code></td>
+<td>time_zone_abbreviation</td>
+</tr>
+<tr>
+<td>ns1:daylightSavingsTimeZone zoneOffset</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:daylightSavingsTimeZone zoneOffset zoneAbbreviation</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:geogLocation srs</td>
+<td></td>
+<td>No longer provided. All coordinates returned use EPSG:4326 as their CRS, unless you specify an alternative CRS in your query.</td>
+</tr>
+<tr>
+<td>ns1:geogLocation latitude</td>
+<td><code>/continuous</code></td>
+<td>Provided as part of the geometry field.</td>
+</tr>
+<tr>
+<td>ns1:geogLocation longitude</td>
+<td><code>/continuous</code></td>
+<td>Provided as part of the geometry field.</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;siteTypeCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>site_type_code</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;hucCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>hydrologic_unit_code</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;stateCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>state_code</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;countyCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>county_code</td>
+</tr>
+<tr>
+<td>ns1:variable ns1:oid</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode network</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode vocabulary</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode default</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode variableID</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode</td>
+<td><code>/continuous</code>, <code>/time-series-metadata</code></td>
+<td>parameter_code</td>
+</tr>
+<tr>
+<td>ns1:variableName</td>
+<td><code>/time-series-metadata</code></td>
+<td>parameter</td>
+</tr>
+<tr>
+<td>ns1:variableDescription</td>
+<td><code>/time-series-metadata</code></td>
+<td>parameter_description</td>
+</tr>
+<tr>
+<td>ns1:valueType</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:unitCode</td>
+<td><code>/continuous</code>, <code>/time-series-metadata</code></td>
+<td>unit_of_measure</td>
+</tr>
+<tr>
+<td>ns1:option name=&quot;Statistic&quot; optionCode</td>
+<td><code>/continuous</code>, <code>/time-series-metadata</code></td>
+<td>statistic_id</td>
+</tr>
+<tr>
+<td>ns1:option</td>
+<td><code>/statistic-codes</code></td>
+<td>statistic_name</td>
+</tr>
+<tr>
+<td>ns1:noDataValue</td>
+<td></td>
+<td>No longer provided. Missing values are now represented as null values.</td>
+</tr>
+<tr>
+<td>ns1:value qualifiers</td>
+<td><code>/continuous</code></td>
+<td>Approval status (qualifiers &quot;P&quot; and &quot;A&quot;) are now called approval_status. All other qualifiers are now called qualifier.</td>
+</tr>
+<tr>
+<td>ns1:value dateTime</td>
+<td><code>/continuous</code></td>
+<td>time</td>
+</tr>
+<tr>
+<td>ns1:value</td>
+<td><code>/continuous</code></td>
+<td>value</td>
+</tr>
+<tr>
+<td>ns1:qualifier qualifierID</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:qualifier ns1:network</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:qualifier ns1:vocabulary=&quot;uv_rmk_cd&quot;</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:qualifierCode</td>
+<td><code>/continuous</code></td>
+<td>Approval status (qualifiers &quot;P&quot; and &quot;A&quot;) are now called approval_status. All other qualifiers are now called qualifier.</td>
+</tr>
+<tr>
+<td>ns1:qualifierDescription</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>ns1:method</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>ns1:method methodID</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>ns1:methodDescription</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="migrating-from-%2Fdv-to-%2Fdaily" tabindex="-1">Migrating from /dv to /daily</h2>
+<p>Daily data provide one data value to represent water conditions for the day. Throughout much of the history of the USGS, the primary water data available were daily data. These data were originally collected manually at the monitoring location each day, then transitioned to being recorded at the location. With improved availability of computer storage and automated transmission of data, the daily data published today are generally a summary statistic or single metric of the continuous data collected each day.</p>
+<p>These data were previously available from the <code>/dv</code> endpoint on WaterServices, and are now returned by the <code>/daily</code> endpoint on the USGS Water Data APIs. To get just the most recent daily value for each time series in the USGS network, use the <code>/latest-daily</code> endpoint.</p>
+<h3 id="from-waterservices-json-1" tabindex="-1">From WaterServices JSON</h3>
+<p>The top-level metadata in the JSON object (&quot;name&quot;, &quot;declaredType&quot;, &quot;scope&quot;, &quot;nil&quot;, &quot;globalScope&quot;, and &quot;typeSubstituted&quot;) will no longer be returned.</p>
+<p>The &quot;queryInfo&quot; block inside the top-level &quot;value&quot; key will no longer be returned. The &quot;requestDT&quot; has an equivalent in the &quot;timeStamp&quot; field of the <code>/daily</code> response object. <a href="https://waterdata.usgs.gov/provisional-data-statement/">The provisional data statement may be accessed at this link</a>.</p>
+<p>The remaining &quot;timeSeries&quot; block contains one section per time series included in the response, each of which contains a &quot;sourceInfo&quot; block, a &quot;variable&quot; block, a &quot;values&quot; block, and a &quot;name&quot; block. The &quot;name&quot; block combines the &quot;agency_code&quot; and &quot;monitoring_location_number&quot; fields in the <code>/monitoring-locations</code> endpoint with the &quot;parameter_code&quot; and &quot;statistic_id&quot; fields in the <code>/daily</code> endpoint. The other three blocks are represented in one of the below tables. Note that the <code>/daily</code> endpoint returns one feature per observation, rather than grouping per timeseries, which may require refactoring existing workflows.</p>
+<p>The &quot;sourceInfo&quot; block is now provided by the <code>/monitoring-locations</code> endpoint. As such, the field names listed on the right side of the table below represent fields in the <code>/monitoring-locations</code> endpoint.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/dv</code> &quot;sourceInfo&quot; block</th>
+<th>Corresponding field in the <code>/monitoring-locations</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>siteName</td>
+<td>monitoring_location_name</td>
+</tr>
+<tr>
+<td>siteCode -&gt; value</td>
+<td>monitoring_location_number . Included in the monitoring_location_id field in <code>/daily</code>.</td>
+</tr>
+<tr>
+<td>siteCode -&gt; agencyCode</td>
+<td>agency_code (&quot;network&quot; is no longer provided). Included in the monitoring_location_id field in <code>/daily</code>.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; defaultTimeZone -&gt; zoneOffset</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; defaultTimeZone -&gt; zoneAbbreviation</td>
+<td>time_zone_abbreviation</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; daylightSavingsTimeZone -&gt; zoneOffset</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; daylightSavingsTimeZone -&gt; zoneAbbreviation</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; siteUsesDaylightSavingsTime</td>
+<td>uses_daylight_savings</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; srs</td>
+<td>All coordinates are in EPSG:4326, or use the CRS specified by the <code>crs</code> argument.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; latitude</td>
+<td>Provided as part of the &quot;geometry&quot; object.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; longitude</td>
+<td>Provided as part of the &quot;geometry&quot; object.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; localSiteXY</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>note</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>siteType</td>
+<td>site_type</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;siteTypeCd&quot;</td>
+<td>site_type_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;hucCd&quot;</td>
+<td>hydrologic_unit_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;stateCd&quot;</td>
+<td>state_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; &quot;countyCd&quot;</td>
+<td>county_code</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Certain portions of the &quot;variable&quot; block are now provided by the <code>/time-series-metadata</code> and <code>/statistic-codes</code> endpoints. These are specifically mentioned in the table below. The &quot;id&quot; field in the <code>time-series-metadata</code> endpoint corresponds to the &quot;time_series_id&quot; field in the <code>/daily</code> endpoint, and can be used to join data from the two endpoints together.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/dv</code> &quot;variable&quot; block</th>
+<th>Corresponding field in the <code>/daily</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>variableCode -&gt; value</td>
+<td>parameter_code</td>
+</tr>
+<tr>
+<td>variableCode -&gt; network</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; vocabulary</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; variableID</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; default</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableName</td>
+<td>parameter in <code>/time-series-metadata</code></td>
+</tr>
+<tr>
+<td>variableDescription</td>
+<td>parameter_description in <code>/time-series-metadata</code></td>
+</tr>
+<tr>
+<td>valueType</td>
+<td>Not longer provided.</td>
+</tr>
+<tr>
+<td>unit -&gt; unitCode</td>
+<td>unit_of_measure</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; value</td>
+<td>id in <code>/statistic-codes</code>.</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; name</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; optionCode</td>
+<td>statistic_id</td>
+</tr>
+<tr>
+<td>note</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>noDataValue</td>
+<td>No longer provided. Missing data is now represented with null values.</td>
+</tr>
+<tr>
+<td>variableProperty</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>oid</td>
+<td>No longer provided.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Fields in the &quot;values&quot; block are provided by the <code>/daily</code> endpoint.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/dv</code> &quot;values&quot; block</th>
+<th>Corresponding field in the <code>/daily</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>value -&gt; value</td>
+<td>value</td>
+</tr>
+<tr>
+<td>value -&gt; qualifiers</td>
+<td>approval_status</td>
+</tr>
+<tr>
+<td>value -&gt; dateTime</td>
+<td>time (now an ISO8601 YYYY-MM-DD date string)</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierCode</td>
+<td>Approval status (&quot;Approved&quot; and &quot;Provisional&quot;) are now called approval_status. Other qualifiers are called qualifier.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierDescription</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierID</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; network</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; vocabulary</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>qualityControlLevel</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>method -&gt; methodDescription</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>method -&gt; methodID</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>source</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>offset</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>sample</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>censorCode</td>
+<td>No longer provided.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="from-waterservices-rdb-1" tabindex="-1">From WaterServices RDB</h3>
+<p>Most of the header of the RDB file is no longer provided. <a href="https://waterdata.usgs.gov/provisional-data-statement/">The provisional data statement may be accessed at this link</a>.</p>
+<p>The monitoring location metadata at the top of the RDB file is now available from the <code>/monitoring-locations</code> endpoint:</p>
+<pre><code>#    USGS 01094400 NORTH NASHUA RIVER AT FITCHBURG, MA
+</code></pre>
+<p>This line contains three pieces of data:</p>
+<ul>
+<li>The first, &quot;USGS&quot;, is called &quot;agency_code&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+<li>The second, &quot;01094400&quot;, is called &quot;monitoring_location_number&quot; in the <code>/monitoring-locations</code> endpoint. These two combined are called &quot;monitoring_location_id&quot; in the <code>/daily</code> endpoint, and &quot;id&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+<li>The third, &quot;NORTH NASHUA RIVER AT FITCHBURG, MA&quot;, is called &quot;monitoring_location_name&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+</ul>
+<p>Variable documentation lines are now available either through the <a href="https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily/schema">collection schema page</a> or the <a href="https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/daily/getDailyFeatures">OpenAPI documentation</a>.</p>
+<p>The next lines contain time series metadata now primarily available from the <code>/time_series_metadata</code> endpoint:</p>
+<pre><code># Data provided for site 01094400
+#    TS_ID       Parameter    Statistic  IV_TS_ID       Description
+#    64060       00060        00003      65937          Discharge, cubic feet per second (Mean)
+</code></pre>
+<p>This line contains five pieces of information:</p>
+<ul>
+<li>&quot;TS_ID&quot; is now called &quot;time_series_id&quot; in the <code>/daily</code> endpoint and &quot;id&quot; in the <code>/time_series_metadata</code> endpoint.</li>
+<li>&quot;Parameter&quot; is now called &quot;parameter_code&quot; in both the <code>/daily</code> and <code>/time_series_metadata</code> endpoints.</li>
+<li>&quot;Statistic&quot; is now called &quot;statistic_id&quot; in both the <code>/daily</code> and <code>/time_series_metadata</code> endpoints.</li>
+<li>&quot;IV_TS_ID&quot; is now called &quot;parent_time_series_id&quot; in the <code>/time-series-metadata</code> endpoint.</li>
+<li>&quot;Description&quot; is now called &quot;parameter_description&quot; in the <code>/time_series_metadata</code> endpoint.</li>
+</ul>
+<p>The remainder of the file generally contains a number of lines following the same general table structure:</p>
+<pre><code>agency_cd	site_no	datetime	64060_00060_00003	64060_00060_00003_cd
+</code></pre>
+<p>The first three of these columns are returned as fields in either the <code>/daily</code> or <code>/monitoring-locations</code> endpoints:</p>
+<ul>
+<li>&quot;agency_cd&quot; is now called &quot;agency_code&quot; in the <code>/monitoring-locations</code> endpoint.</li>
+<li>&quot;site_no&quot; is now called &quot;monitoring_location_number&quot; in the <code>/monitoring-locations</code> endpoint. The &quot;monitoring_location_id&quot; field in <code>/daily</code> and the &quot;id&quot; field in <code>/monitoring-locations</code> is made by combining the agency code and monitoring location number.</li>
+<li>&quot;datetime&quot; is now called &quot;time&quot; in the <code>/daily</code> endpoint.</li>
+</ul>
+<p>The remaining columns return metadata in their column names, which is now returned in distinct fields instead. Column names combined three pieces of metadata separated by underscores. Taking <code>64060_00060_00003</code> as an example:</p>
+<ul>
+<li>&quot;64060&quot;, the monitoring location number, is now returned as a value in the &quot;monitoring_location_id&quot; field of the <code>/daily</code> endpoint.</li>
+<li>&quot;00060&quot;, the parameter code, is now returned as a value in the &quot;parameter_code&quot; field of the <code>/daily</code> endpoint.</li>
+<li>&quot;00003&quot;, the statistic identifier, is now returned as a value in the &quot;statistic_id&quot; field of the <code>/daily</code> endpoint.</li>
+</ul>
+<p>Values that were under columns named following this pattern are now called &quot;value&quot; in the <code>/daily</code> endpoint.</p>
+<p>Values that were under columns ending in <code>_cd</code> have been split into two fields. Values of P and A, indicating whether the data is provisional or has been approved, are now returned in the &quot;approval_status&quot; field of the <code>/daily</code> endpoint. Other values are now returned in the &quot;qualifier&quot; field of the <code>/daily</code> endpoint.</p>
+<h3 id="from-waterservices-waterml2-1" tabindex="-1">From WaterServices WaterML2</h3>
+<p>The <code>ns1:queryInfo</code> block is no longer provided. The <code>ns2:note title=&quot;requestDT&quot;</code> field is now called &quot;timeStamp&quot;.</p>
+<p>We additionally no longer provide the references to XML and WaterML schemas used by the WaterML2 response object. These are not included in the table below.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Key in the <code>/dv</code> WaterML2 response</th>
+<th>New endpoint</th>
+<th>Corresponding field name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ns1:timeSeries name</td>
+<td><code>/monitoring-locations</code>, <code>/daily</code>, <code>/time-series-metadata</code></td>
+<td>This name object combines the agency_code and monitoring_location_number from the <code>/monitoring-locations</code> endpoint with the parameter_code and statistic_id returned by both the <code>/daily</code> and <code>/time-series-metadata</code> endpoints. The agency code and monitoring location number are also combined to form the monitoring_location_id in <code>/daily</code> and <code>/time-series-metadata</code> and the id field in <code>/monitoring-locations</code>.</td>
+</tr>
+<tr>
+<td>ns1:siteName</td>
+<td><code>/monitoring-locations</code></td>
+<td>monitoring_location_name</td>
+</tr>
+<tr>
+<td>ns1:siteCode</td>
+<td><code>/monitoring-locations</code></td>
+<td>monitoring_location_number</td>
+</tr>
+<tr>
+<td>ns1:siteCode network</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:siteCode agencyCode</td>
+<td><code>/monitoring-locations</code></td>
+<td>agency_code. The agency code and monitoring location number are combined to form the monitoring_location_id in <code>/daily</code> and <code>/time-series-metadata</code> and the id field in <code>/monitoring-locations</code>.</td>
+</tr>
+<tr>
+<td>ns1:timeZoneInfo siteUsesDaylightSavingsTime</td>
+<td><code>monitoring-locations</code></td>
+<td>uses_daylight_savings</td>
+</tr>
+<tr>
+<td>ns1:defaultTimeZone zoneOffset</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:defaultTimeZone zoneOffset zoneAbbreviation</td>
+<td><code>monitoring-locations</code></td>
+<td>time_zone_abbreviation</td>
+</tr>
+<tr>
+<td>ns1:daylightSavingsTimeZone zoneOffset</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:daylightSavingsTimeZone zoneOffset zoneAbbreviation</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:geogLocation srs</td>
+<td></td>
+<td>No longer provided. All coordinates returned use EPSG:4326 as their CRS, unless you specify an alternative CRS in your query.</td>
+</tr>
+<tr>
+<td>ns1:geogLocation latitude</td>
+<td><code>/daily</code></td>
+<td>Provided as part of the geometry field.</td>
+</tr>
+<tr>
+<td>ns1:geogLocation longitude</td>
+<td><code>/daily</code></td>
+<td>Provided as part of the geometry field.</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;siteTypeCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>site_type_code</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;hucCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>hydrologic_unit_code</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;stateCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>state_code</td>
+</tr>
+<tr>
+<td>ns1:siteProperty name=&quot;countyCd&quot;</td>
+<td><code>/monitoring-locations</code></td>
+<td>county_code</td>
+</tr>
+<tr>
+<td>ns1:variable ns1:oid</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode network</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode vocabulary</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode default</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode variableID</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:variableCode</td>
+<td><code>/daily</code>, <code>/time-series-metadata</code></td>
+<td>parameter_code</td>
+</tr>
+<tr>
+<td>ns1:variableName</td>
+<td><code>/time-series-metadata</code></td>
+<td>parameter</td>
+</tr>
+<tr>
+<td>ns1:variableDescription</td>
+<td><code>/time-series-metadata</code></td>
+<td>parameter_description</td>
+</tr>
+<tr>
+<td>ns1:valueType</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:unitCode</td>
+<td><code>/daily</code>, <code>/time-series-metadata</code></td>
+<td>unit_of_measure</td>
+</tr>
+<tr>
+<td>ns1:option name=&quot;Statistic&quot; optionCode</td>
+<td><code>/daily</code>, <code>/time-series-metadata</code></td>
+<td>statistic_id</td>
+</tr>
+<tr>
+<td>ns1:option</td>
+<td><code>/statistic-codes</code></td>
+<td>statistic_name</td>
+</tr>
+<tr>
+<td>ns1:noDataValue</td>
+<td></td>
+<td>No longer provided. Missing values are now represented as null values.</td>
+</tr>
+<tr>
+<td>ns1:value qualifiers</td>
+<td><code>/daily</code></td>
+<td>Approval status (qualifiers &quot;P&quot; and &quot;A&quot;) are now called approval_status. All other qualifiers are now called qualifier.</td>
+</tr>
+<tr>
+<td>ns1:value dateTime</td>
+<td><code>/daily</code></td>
+<td>time</td>
+</tr>
+<tr>
+<td>ns1:value</td>
+<td><code>/daily</code></td>
+<td>value</td>
+</tr>
+<tr>
+<td>ns1:qualifier qualifierID</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:qualifier ns1:network</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:qualifier ns1:vocabulary=&quot;uv_rmk_cd&quot;</td>
+<td></td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>ns1:qualifierCode</td>
+<td><code>/daily</code></td>
+<td>Approval status (qualifiers &quot;P&quot; and &quot;A&quot;) are now called approval_status. All other qualifiers are now called qualifier.</td>
+</tr>
+<tr>
+<td>ns1:qualifierDescription</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>ns1:method</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>ns1:method methodID</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>ns1:methodDescription</td>
+<td></td>
+<td>Not currently available.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="migrating-from-%2Fsite-to-%2Fmonitoring-locations" tabindex="-1">Migrating from <code>/site</code> to <code>/monitoring-locations</code></h2>
+<p>Requests to <code>/site</code> which either did not include &quot;seriesCatalogOutput&quot; or set &quot;seriesCatalogOutput=false&quot; can be entirely replaced by the <code>/monitoring-locations</code> service.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field name in the <code>/site</code> endpoint</th>
+<th>Field name in the <code>/monitoring-locations</code> endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>agency_cd</td>
+<td>agency_code</td>
+</tr>
+<tr>
+<td>site_no</td>
+<td>monitoring_location_number</td>
+</tr>
+<tr>
+<td>station_nm</td>
+<td>monitoring_location_name</td>
+</tr>
+<tr>
+<td>site_tp_cd</td>
+<td>site_type_code</td>
+</tr>
+<tr>
+<td>lat_va</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>long_va</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>dec_lat_va</td>
+<td>Provided as part of &quot;geometry&quot;</td>
+</tr>
+<tr>
+<td>dec_long_va</td>
+<td>Provided as part of &quot;geometry&quot;</td>
+</tr>
+<tr>
+<td>coord_meth_cd</td>
+<td>horizontal_position_method_code</td>
+</tr>
+<tr>
+<td>coord_acy_cd</td>
+<td>horizontal_positional_accuracy</td>
+</tr>
+<tr>
+<td>coord_datum_cd</td>
+<td>original_horizontal_datum</td>
+</tr>
+<tr>
+<td>dec_coord_datum_cd</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>district_cd</td>
+<td>district_code</td>
+</tr>
+<tr>
+<td>state_cd</td>
+<td>state_code</td>
+</tr>
+<tr>
+<td>county_cd</td>
+<td>county_code</td>
+</tr>
+<tr>
+<td>country_cd</td>
+<td>country_code</td>
+</tr>
+<tr>
+<td>land_net_ds</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>map_nm</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>map_scale_fc</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>alt_va</td>
+<td>altitude</td>
+</tr>
+<tr>
+<td>alt_meth_cd</td>
+<td>altitude_method_code</td>
+</tr>
+<tr>
+<td>alt_acy_va</td>
+<td>altitude_accuracy</td>
+</tr>
+<tr>
+<td>alt_datum_cd</td>
+<td>vertical_datum</td>
+</tr>
+<tr>
+<td>huc_cd</td>
+<td>hydrologic_unit_code</td>
+</tr>
+<tr>
+<td>basin_cd</td>
+<td>basin_code</td>
+</tr>
+<tr>
+<td>topo_cd</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>instruments_cd</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>construction_dt</td>
+<td>construction_date</td>
+</tr>
+<tr>
+<td>inventory_dt</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>drain_area_va</td>
+<td>drainage_area</td>
+</tr>
+<tr>
+<td>contrib_drain_area_va</td>
+<td>contributing_drainage_area</td>
+</tr>
+<tr>
+<td>tz_cd</td>
+<td>time_zone_abbreviation</td>
+</tr>
+<tr>
+<td>local_time_fg</td>
+<td>uses_daylight_savings</td>
+</tr>
+<tr>
+<td>reliability_cd</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>gw_file_cd</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>nat_aqfr_cd</td>
+<td>national_aquifer_code</td>
+</tr>
+<tr>
+<td>aqfr_cd</td>
+<td>aquifer_code</td>
+</tr>
+<tr>
+<td>aqfr_type_cd</td>
+<td>aquifer_type_code</td>
+</tr>
+<tr>
+<td>well_depth_va</td>
+<td>well_constructed_depth</td>
+</tr>
+<tr>
+<td>hole_depth_va</td>
+<td>hole_constructed_depth</td>
+</tr>
+<tr>
+<td>depth_src_cd</td>
+<td>depth_source_code</td>
+</tr>
+<tr>
+<td>project_no</td>
+<td>No longer provided.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="migrating-from-%2Fsite-to-%2Ftime-series-metadata" tabindex="-1">Migrating from <code>/site</code> to <code>/time-series-metadata</code></h2>
+<p>Requests to <code>/site</code> which set &quot;seriesCatalogOutput=true&quot; are only partially replaced by the <code>/monitoring-locations</code> endpoint. The fields which are now returned by the <code>/monitoring-locations</code> endpoint are listed below.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field name in the <code>/site</code> endpoint</th>
+<th>Field name in the <code>/monitoring-locations</code> endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>agency_cd</td>
+<td>agency_code</td>
+</tr>
+<tr>
+<td>site_no</td>
+<td>monitoring_location_number</td>
+</tr>
+<tr>
+<td>station_nm</td>
+<td>monitoring_location_name</td>
+</tr>
+<tr>
+<td>site_tp_cd</td>
+<td>site_type_code</td>
+</tr>
+<tr>
+<td>dec_lat_va</td>
+<td>Provided as part of &quot;geometry&quot;</td>
+</tr>
+<tr>
+<td>dec_long_va</td>
+<td>Provided as part of &quot;geometry&quot;</td>
+</tr>
+<tr>
+<td>coord_meth_cd</td>
+<td>horizontal_position_method_code</td>
+</tr>
+<tr>
+<td>coord_acy_cd</td>
+<td>horizontal_positional_accuracy</td>
+</tr>
+<tr>
+<td>coord_datum_cd</td>
+<td>original_horizontal_datum</td>
+</tr>
+<tr>
+<td>dec_coord_datum_cd</td>
+<td>Coordinates are now always in EPSG:4326 unless queries provide a &quot;crs&quot; argument.</td>
+</tr>
+<tr>
+<td>alt_va</td>
+<td>altitude</td>
+</tr>
+<tr>
+<td>alt_acy_va</td>
+<td>altitude_accuracy</td>
+</tr>
+<tr>
+<td>alt_datum_cd</td>
+<td>vertical_datum</td>
+</tr>
+<tr>
+<td>huc_cd</td>
+<td>hydrologic_unit_code</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Period of record information for water quality data is now provided by the USGS samples data API <code>/summary</code> endpoint. <a href="https://api.waterdata.usgs.gov/samples-data/docs#/summaries/read_summaries_samples_data_summary__monitoringLocationIdentifier__get">Documentation for that endpoint is available here</a>.</p>
+<p>Period of record information for site visits are not yet available from modernized services.</p>
+<p>Period of record information for time series data, including both instantaneous values and daily values, is available from the <code>/time-series-metadata</code> endpoint. You can find all time series for a given monitoring location by querying using the <code>monitoring_location_id</code> parameter.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field name in the <code>/site</code> endpoint</th>
+<th>Field name in the <code>/time-series-metadata</code> endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>data_type_cd</td>
+<td>No longer provided. Continuous measurements have a &quot;computation_identifier&quot; of &quot;Instantaneous&quot; and a &quot;computation_period_identifier&quot; of &quot;Points&quot;, while daily values have a &quot;computation_period_identifier&quot; of &quot;Daily&quot;.</td>
+</tr>
+<tr>
+<td>parm_cd</td>
+<td>parameter_code</td>
+</tr>
+<tr>
+<td>stat_cd</td>
+<td>statistic_id</td>
+</tr>
+<tr>
+<td>ts_id</td>
+<td>id</td>
+</tr>
+<tr>
+<td>loc_web_ds</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>medium_grp_cd</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>parm_grp_cd</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>srs_id</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>access_cd</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>begin_date</td>
+<td>start</td>
+</tr>
+<tr>
+<td>end_date</td>
+<td>end</td>
+</tr>
+<tr>
+<td>count_nu</td>
+<td>Not currently available.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="migrating-from-%2Fgwlevels-to-%2Ffield-measurements" tabindex="-1">Migrating from <code>/gwlevels</code> to <code>/field-measurements</code></h2>
+<p>The <code>/gwlevels</code> endpoint provided discrete measurements of groundwater levels manually collected by technicians during visits to a monitoring location. This data is now available from the <code>/field-measurements</code> endpoint, alongside field measurements of stream discharge and gage height. For continuous measurements of groundwater levels, see the forthcoming <code>/continuous</code> endpoint. For daily values of groundwater levels, see the <code>/daily</code> endpoint.</p>
+<h3 id="from-waterservices-json-2" tabindex="-1">From WaterServices JSON</h3>
+<p>The top-level metadata in the JSON object (&quot;name&quot;, &quot;declaredType&quot;, &quot;scope&quot;, &quot;nil&quot;, &quot;globalScope&quot;, and &quot;typeSubstituted&quot;) will no longer be returned.</p>
+<p>The &quot;queryInfo&quot; block inside the top-level &quot;value&quot; key will no longer be returned.</p>
+<p>The &quot;note&quot; block inside the top-level &quot;value&quot; key will no longer be returned. The &quot;requestDT&quot; has an equivalent in the &quot;timeStamp&quot; field of the <code>/field-measurements</code> response object. <a href="https://waterdata.usgs.gov/provisional-data-statement/">The provisional data statement may be accessed at this link</a>.</p>
+<p>The remaining &quot;timeSeries&quot; block contains one section per time series included in the response, each of which contains a &quot;sourceInfo&quot; block, a &quot;variable&quot; block, a &quot;values&quot; block, and a &quot;name&quot; block. The &quot;name&quot; block combines the &quot;agency_code&quot; and &quot;monitoring_location_number&quot; fields in the <code>/monitoring-locations</code> endpoint with the &quot;parameter_code&quot; field in the <code>/field-measurements</code> endpoint, followed by &quot;00000&quot;. The other three blocks are represented in one of the below tables. Note that the <code>/field-measurements</code> endpoint returns one feature per observation, rather than grouping per timeseries, which may require refactoring existing workflows.</p>
+<p>The &quot;sourceInfo&quot; block is now provided by the <code>/monitoring-locations</code> endpoint. As such, the field names listed on the right side of the table below represent fields in the <code>/monitoring-locations</code> endpoint.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/gwlevels</code> &quot;sourceInfo&quot; block</th>
+<th>Corresponding field in the <code>/monitoring-locations</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>siteName</td>
+<td>monitoring_location_name</td>
+</tr>
+<tr>
+<td>siteCode -&gt; value</td>
+<td>monitoring_location_number . Included in the monitoring_location_id field in <code>/field-measurements</code>.</td>
+</tr>
+<tr>
+<td>siteCode -&gt; network</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>siteCode -&gt; agencyCode</td>
+<td>agency_code (&quot;network&quot; is no longer provided). Included in the monitoring_location_id field in <code>/field-measurements</code>.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; defaultTimeZone -&gt; zoneOffset</td>
+<td>No longer provided. Measurement timestamps now include time zone information.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; defaultTimeZone -&gt; zoneAbbreviation</td>
+<td>time_zone_abbreviation</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; daylightSavingsTimeZone -&gt; zoneOffset</td>
+<td>No longer provided. Measurement timestamps now include time zone information.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; daylightSavingsTimeZone -&gt; zoneAbbreviation</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>timeZoneInfo -&gt; siteUsesDaylightSavingsTime</td>
+<td>uses_daylight_savings</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; srs</td>
+<td>All coordinates are in EPSG:4326, or use the CRS specified by the <code>crs</code> argument.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; latitude</td>
+<td>Provided as part of the &quot;geometry&quot; object.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; geogLocation -&gt; longitude</td>
+<td>Provided as part of the &quot;geometry&quot; object.</td>
+</tr>
+<tr>
+<td>geoLocation -&gt; localSiteXY</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>note</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>siteType</td>
+<td>site_type</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; siteTypeCd</td>
+<td>site_type_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; hucCd</td>
+<td>hydrologic_unit_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; stateCd</td>
+<td>state_code</td>
+</tr>
+<tr>
+<td>siteProperty -&gt; countyCd</td>
+<td>county_code</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Certain portions of the &quot;variable&quot; block are now provided by the <code>/parameter-codes</code> endpoint. These are specifically mentioned in the table below.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/gwlevels</code> &quot;variable&quot; block</th>
+<th>Corresponding field in the <code>/field-measurements</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>variableCode -&gt; value</td>
+<td>parameter_code (&quot;id&quot; in <code>/parameter-codes</code>)</td>
+</tr>
+<tr>
+<td>variableCode -&gt; network</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; vocabulary</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; variableID</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableCode -&gt; default</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>variableName</td>
+<td>parameter_name in <code>/parameter-codes</code></td>
+</tr>
+<tr>
+<td>variableDescription</td>
+<td>parameter_description in <code>/parameter-codes</code></td>
+</tr>
+<tr>
+<td>valueType</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>unit -&gt; unitCode</td>
+<td>unit_of_measure</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; value</td>
+<td>No longer provided (always 00000).</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; name</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>options -&gt; option -&gt; optionCode</td>
+<td>statistic_id</td>
+</tr>
+<tr>
+<td>note</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>noDataValue</td>
+<td>No longer provided. Missing data is now represented with null values.</td>
+</tr>
+<tr>
+<td>variableProperty</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>oid</td>
+<td>No longer provided.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Fields in the &quot;values&quot; block are provided by the <code>/field-measurements</code> endpoint.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in the <code>/gwlevels</code> &quot;values&quot; block</th>
+<th>Corresponding field in the <code>/field-measurements</code> response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>value -&gt; value</td>
+<td>value</td>
+</tr>
+<tr>
+<td>value -&gt; qualifiers</td>
+<td>Approval status (&quot;Approved&quot; and &quot;Provisional&quot;) are now called approval_status. Other qualifiers are called qualifier.</td>
+</tr>
+<tr>
+<td>value -&gt; dateTime</td>
+<td>time (now an ISO8601 datetime string)</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierCode</td>
+<td>No longer used; approval status and qualifiers now use full words.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierDescription</td>
+<td>Approval status (&quot;Approved&quot; and &quot;Provisional&quot;) are now called approval_status. Other qualifiers are called qualifier.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; qualifierID</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; network</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>qualifier -&gt; vocabulary</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>qualityControlLevel</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>method -&gt; methodDescription</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>method -&gt; methodID</td>
+<td>Not currently available.</td>
+</tr>
+<tr>
+<td>source</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>offset</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>sample</td>
+<td>No longer provided.</td>
+</tr>
+<tr>
+<td>censorCode</td>
+<td>No longer provided.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="migrating-from-%2Fmeasurements-to-%2Ffield-measurements" tabindex="-1">Migrating from <code>/measurements</code> to <code>/field-measurements</code></h2>
+<p>The <code>/measurements</code> webpage provided discrete measurements of discharge and gage height manually collected by technicians during visits to a monitoring location. This data is now available from the <code>/field-measurements</code> endpoint, alongside field measurements of groundwater levels. Channel metadata previously available from the &quot;expanded&quot; table are now served from the <code>/channel-measurements</code> endpoint.</p>
+<p>For continuous measurements of groundwater levels, see the <code>/continuous</code> endpoint. For daily values of groundwater levels, see the <code>/daily</code> endpoint.</p>
+<p>Each measurement taken during a field measurement is now published as a distinct record from the <code>/field-measurements</code> service. The new field_visit_id field can be used to identify multiple measurements taken within a single field visit, in order to identify corresponding discharge and gage height measurements.</p>
+<div class="usa-table-container" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in <code>/measurements</code> HTML table</th>
+<th>Field in <code>/measurements</code> tab separated file</th>
+<th>Field in <code>/field-measurements</code></th>
+<th>Field in <code>/channel-measurements</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Meas. Number</td>
+<td>measurement_nu</td>
+<td></td>
+<td>measurement_number</td>
+</tr>
+<tr>
+<td>Date Time</td>
+<td>measurement_dt</td>
+<td>time</td>
+<td>time</td>
+</tr>
+<tr>
+<td>Time Datum</td>
+<td>tz_cd</td>
+<td>No longer provided. The time field contains time zone information.</td>
+<td></td>
+</tr>
+<tr>
+<td>Measurement Used?</td>
+<td>q_meas_used_fg</td>
+<td>No longer provided. All published measurements have a value of &quot;yes&quot;.</td>
+<td></td>
+</tr>
+<tr>
+<td>Who</td>
+<td>party_nm</td>
+<td>No longer provided.</td>
+<td></td>
+</tr>
+<tr>
+<td>Measuring Agency</td>
+<td>site_visit_coll_agency_cd</td>
+<td>measuring_agency</td>
+<td></td>
+</tr>
+<tr>
+<td>Stream flow (ft³/s)</td>
+<td>discharge_va</td>
+<td>value</td>
+<td></td>
+</tr>
+<tr>
+<td>Gage Height (ft)</td>
+<td>gage_height_va</td>
+<td>value</td>
+<td></td>
+</tr>
+<tr>
+<td>GH Change (ft)</td>
+<td>gage_va_change</td>
+<td>Not currently provided.</td>
+<td></td>
+</tr>
+<tr>
+<td>Meas. Duration (hr)</td>
+<td>gage_va_time</td>
+<td>Not currently provided.</td>
+<td></td>
+</tr>
+<tr>
+<td>Meas. Rated</td>
+<td>measured_rating_diff</td>
+<td>measurement_rated</td>
+<td></td>
+</tr>
+<tr>
+<td>Control</td>
+<td>control_type_cd</td>
+<td>control_condition</td>
+<td></td>
+</tr>
+<tr>
+<td>Flow Adjust. Code</td>
+<td>discharge_cd</td>
+<td>Not currently provided.</td>
+<td></td>
+</tr>
+<tr>
+<td>Channel Number</td>
+<td>chan_nu</td>
+<td>No longer provided.</td>
+<td></td>
+</tr>
+<tr>
+<td>Channel Name</td>
+<td>chan_name</td>
+<td></td>
+<td>channel_name</td>
+</tr>
+<tr>
+<td>Meas. type</td>
+<td>meas_type</td>
+<td></td>
+<td>measurement_type</td>
+</tr>
+<tr>
+<td>Stream flow method</td>
+<td>streamflow_method</td>
+<td>observing_procedure</td>
+<td></td>
+</tr>
+<tr>
+<td>Velocity method</td>
+<td>velocity_method</td>
+<td>observing_procedure</td>
+<td></td>
+</tr>
+<tr>
+<td>Channel flow (ft3/s)</td>
+<td>chan_discharge</td>
+<td></td>
+<td>channel_flow</td>
+</tr>
+<tr>
+<td>Channel width</td>
+<td>chan_width</td>
+<td></td>
+<td>channel_width</td>
+</tr>
+<tr>
+<td>Channel area (ft2)</td>
+<td>chan_area</td>
+<td></td>
+<td>channel_area</td>
+</tr>
+<tr>
+<td>Channel vel. (ft/s)</td>
+<td>chan_velocity</td>
+<td></td>
+<td>channel_velocity</td>
+</tr>
+<tr>
+<td>Channel stability</td>
+<td>chan_stability</td>
+<td></td>
+<td>channel_stability</td>
+</tr>
+<tr>
+<td>Channel material</td>
+<td>chan_material</td>
+<td></td>
+<td>channel_material</td>
+</tr>
+<tr>
+<td>Channel evenness</td>
+<td>chan_evenness</td>
+<td></td>
+<td>channel_evenness</td>
+</tr>
+<tr>
+<td>Long. vel. desc.</td>
+<td>long_vel_desc</td>
+<td></td>
+<td>longitudinal_velocity_description</td>
+</tr>
+<tr>
+<td>Horiz. vel. desc.</td>
+<td>horz_vel_desc</td>
+<td></td>
+<td>horizontal_velocity_description</td>
+</tr>
+<tr>
+<td>Channel loc. code</td>
+<td>chan_loc_cd</td>
+<td></td>
+<td>channel_location_direction</td>
+</tr>
+<tr>
+<td>Channel loc. dist.(ft)</td>
+<td>chan_loc_dist</td>
+<td></td>
+<td>channel_location_distance</td>
+</tr>
+<tr>
+<td></td>
+<td>agency_cd</td>
+<td>Part of monitoring_location_id</td>
+<td>Part of monitoring_location_id</td>
+</tr>
+<tr>
+<td></td>
+<td>site_no</td>
+<td>Part of monitoring_location_id</td>
+<td>Part of monitoring_location_id</td>
+</tr>
+<tr>
+<td></td>
+<td>vert_vel_desc</td>
+<td></td>
+<td>vertical_velocity_description</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="migrating-from-%2Fpeak-to-%2Fpeaks" tabindex="-1">Migrating from <code>/peak</code> to <code>/peaks</code></h2>
+<p>The NWISWeb peaks page (at <a href="https%E2%80%8B://waterdata.usgs.gov/nwis/peak">https​://waterdata.usgs.gov/nwis/peak</a>) provided annual peak streamflow and gage height data for monitoring locations. This data is now available from the <code>/peaks</code> endpoint.</p>
+<p>In NWISWeb, peak discharge and gage height were returned as columns in the same row. In the new <code>/peaks</code> endpoint, each parameter (discharge and gage height) is returned as a separate feature, identified by its <code>parameter_code</code> (00060 for discharge, 00065 for gage height).</p>
+<div class="usa-table-container--scrollable" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>Field in <code>/peak</code> HTML table</th>
+<th>Field in <code>peak</code> tab-separated file</th>
+<th>Field in <code>/peaks</code> endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td>agency_cd</td>
+<td>Part of monitoring_location_id</td>
+</tr>
+<tr>
+<td></td>
+<td>site_no</td>
+<td>Part of monitoring_location_id</td>
+</tr>
+<tr>
+<td>Water Year</td>
+<td></td>
+<td>water_year</td>
+</tr>
+<tr>
+<td>Date</td>
+<td>peak_dt</td>
+<td>time</td>
+</tr>
+<tr>
+<td></td>
+<td>peak_tm</td>
+<td>time_of_day</td>
+</tr>
+<tr>
+<td>Stream-flow (cfs)</td>
+<td>peak_va</td>
+<td>value</td>
+</tr>
+<tr>
+<td>Peak Streamflow Qualification Codes</td>
+<td>peak_cd</td>
+<td>qualifier</td>
+</tr>
+<tr>
+<td>Gage Height (feet)</td>
+<td>gage_ht</td>
+<td>value</td>
+</tr>
+<tr>
+<td>Peak Gage-Height Qualification Codes</td>
+<td>gage_ht_cd</td>
+<td>qualifier</td>
+</tr>
+<tr>
+<td></td>
+<td>year_last_pk</td>
+<td>peak_since</td>
+</tr>
+<tr>
+<td></td>
+<td>ag_dt</td>
+<td>time</td>
+</tr>
+<tr>
+<td></td>
+<td>ag_tm</td>
+<td>time_of_day</td>
+</tr>
+<tr>
+<td></td>
+<td>ag_gage_ht</td>
+<td>value</td>
+</tr>
+<tr>
+<td></td>
+<td>ag_gage_ht_cd</td>
+<td>qualifier</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="qualifier-code-mapping" tabindex="-1">Qualifier code mapping</h3>
+<p>In NWISWeb, peak qualifiers were represented as short numeric or letter codes. In the new <code>/peaks</code> endpoint, these have been replaced with descriptive strings. The table below maps the old peak discharge qualification codes (peak_cd) to their new values:</p>
+<div class="usa-table-container--scrollable" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>peak_cd</th>
+<th>Description</th>
+<th>WDFN qualifier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Discharge is a Maximum Daily Average</td>
+<td>MAXDAILYMEAN</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Discharge is an Estimate</td>
+<td>ESTIMATED</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Discharge affected by Dam Failure</td>
+<td>DAMFAILURE</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Discharge less than indicated value, which is Minimum Recordable Discharge at this site</td>
+<td>LESSTHAN</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Discharge affected to unknown degree by Regulation or Diversion</td>
+<td>UNKNOWNREGULATION</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Discharge affected by Regulation or Diversion</td>
+<td>REGULATED</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Discharge is an Historic Peak</td>
+<td>HISTORIC</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Discharge actually greater than indicated value</td>
+<td>GREATERTHAN</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Discharge due to Snowmelt, Hurricane, Ice-Jam or Debris Dam breakup</td>
+<td>EVENT</td>
+</tr>
+<tr>
+<td>A</td>
+<td>Year of occurrence is unknown or not exact</td>
+<td>YEARUNKNOWN</td>
+</tr>
+<tr>
+<td>Bd</td>
+<td>Day of occurrence is unknown or not exact</td>
+<td>DAYUNKNOWN</td>
+</tr>
+<tr>
+<td>Bm</td>
+<td>Month of occurrence is unknown or not exact</td>
+<td>MONTHUNKNOWN</td>
+</tr>
+<tr>
+<td>C</td>
+<td>All or part of the record affected by Urbanization, Mining, Agricultural changes, Channelization, or other</td>
+<td>URBAN</td>
+</tr>
+<tr>
+<td>F</td>
+<td>Peak supplied by another agency</td>
+<td>OTHERAGENCY</td>
+</tr>
+<tr>
+<td>O</td>
+<td>Opportunistic value not from systematic data collection</td>
+<td>OPPORTUNISTIC</td>
+</tr>
+<tr>
+<td>R</td>
+<td>Revised</td>
+<td>REVISED</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The following table maps the old gage height qualification codes (gage_ht_cd) to their new values:</p>
+<div class="usa-table-container--scrollable" tabindex="0">
+<table class="usa-table usa-table--striped">
+<thead>
+<tr>
+<th>gage_ht_cd</th>
+<th>Description</th>
+<th>WDFN qualifier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Gage height affected by backwater</td>
+<td>BACKWATER</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Gage height not the maximum for the year</td>
+<td>NOTMAXGH</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Gage height at different site and(or) datum</td>
+<td>DIFFDATUM</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Gage height below minimum recordable elevation</td>
+<td>BLWMIN</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Gage height is an estimate</td>
+<td>ESTIMATED</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Gage datum changed during this year</td>
+<td>DATUMCHANGE</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Debris, mud, or hyper-concentrated flow</td>
+<td>DEBRIS</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Gage height tidally affected</td>
+<td>TIDE</td>
+</tr>
+<tr>
+<td>Bd</td>
+<td>Day of occurrence is unknown or not exact</td>
+<td>DAYUNKNOWN</td>
+</tr>
+<tr>
+<td>Bm</td>
+<td>Month of occurrence is unknown or not exact</td>
+<td>MONTHUNKNOWN</td>
+</tr>
+<tr>
+<td>F</td>
+<td>Peak supplied by another agency</td>
+<td>OTHERAGENCY</td>
+</tr>
+<tr>
+<td>R</td>
+<td>Revised</td>
+<td>REVISED</td>
+</tr>
+<tr>
+<td>N</td>
+<td>Max gage height not associated with peak discharge</td>
+<td>GHNOTASSCPKQ</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="how-can-i-download-all-the-data-for-a-huc%2C-basin%2C-county%2C-or-other-boundary-area%3F" tabindex="-1">How can I download all the data for a HUC, basin, county, or other boundary area?</h2>
+<p>The new data endpoints do not have set arguments that let you filter down to specific areas. Instead, make two distinct queries to the APIs:</p>
+<ul>
+<li>First, query the <code>/monitoring-locations</code> endpoint to get a list of monitoring locations which fall inside your desired query area.</li>
+<li>Then use that set of monitoring location IDs (&quot;id&quot; in the <code>/monitoring-locations</code> endpoint, &quot;monitoring_location_id&quot; in all other endpoints) to query your desired endpoint.</li>
+</ul>
+<p>The <code>/daily</code> endpoint additionally supports using the <code>bbox</code> argument to restrict your query only to sites in a specified spatial region.</p>
+
+      </main>
+    </div>
+    <footer class="usa-footer usa-footer--slim disclaimer-footer" role="contentinfo">
+  <div class="disclaimer-container">
+    <div class="disclaimer">Any use of trade, firm, or product names is for descriptive purposes only and does not imply endorsement by the U.S. Government. Although this information product, for the most part, is in the public domain, it also may contain copyrighted materials as noted in the text. Permission to reproduce copyrighted items must be secured from the copyright owner.</div>
+  </div>
+</footer>
+    <footer class="usa-footer usa-footer--slim" role="contentinfo">
+    <nav class="usgs-footer-container" aria-label="Footer Navigation">
+        <div class="usgs-footer-nav">
+            <a class="usgs-footer-link" href="https://www.doi.gov/privacy">DOI Privacy Policy</a> |
+            <a class="usgs-footer-link" href="https://www.usgs.gov/legal">Legal</a> |
+            <a class="usgs-footer-link" href="https://www.usgs.gov/accessibility">Accessibility</a> |
+            <a class="usgs-footer-link" href="https://www.usgs.gov/sitemap">Site Map</a> |
+            <a class="usgs-footer-link" href="https://answers.usgs.gov/">Contact USGS</a>
+            <div class="social-media-links">
+                <span>Follow</span>
+                <a href="https://twitter.com/usgs" title="USGS Twitter" target="_blank" rel="noopener">
+                    <svg class="usa-icon usa-icon--size-3" aria-label="USGS Twitter" role="img">
+                        <use href="/assets/img/sprite.svg#x"></use>
+                    </svg>
+                </a>
+                <a href="https://facebook.com/usgeologicalsurvey" title="USGS Facebook" target="_blank" rel="noopener">
+                    <svg class="usa-icon usa-icon--size-3" aria-label="USGS Facebook"  role="img">
+                        <use href="/assets/img/sprite.svg#facebook"></use>
+                    </svg>
+                </a>
+                <a href="https://github.com/DOI-USGS" title="USGS Github" target="_blank" rel="noopener">
+                    <svg class="usa-icon usa-icon--size-3" aria-label="USGS Github" role="img">
+                        <use href="/assets/img/sprite.svg#github"></use>
+                    </svg>
+                </a>
+                <a href="https://flickr.com/usgeologicalsurvey" title="USGS Flickr" target="_blank" rel="noopener">
+                    <svg class="usa-icon usa-icon--size-3" aria-label="USGS Flickr" role="img">
+                        <use href="/assets/img/sprite.svg#flickr"></use>
+                    </svg>
+                </a>
+                <a href="https://youtube.com/usgs" title="USGS You Tube" target="_blank" rel="noopener">
+                    <svg class="usa-icon usa-icon--size-3" aria-label="USGS You Tube" role="img">
+                        <use href="/assets/img/sprite.svg#youtube"></use>
+                    </svg>
+                </a>
+                <a href="https://instagram.com/usgs/" title="USGS Instagram" target="_blank" rel="noopener">
+                    <svg class="usa-icon usa-icon--size-3" aria-label="USGS Instagram" role="img">
+                        <use href="/assets/img/sprite.svg#instagram"></use>
+                    </svg>
+                </a>
+            </div>
+        </div>
+        <div class="usgs-footer-nav">
+            <a class="usgs-footer-link" href="https://www.doi.gov/">U.S. Department of the Interior</a> |
+            <a class="usgs-footer-link" href="https://www.doioig.gov/">DOI Inspector General</a> |
+            <a class="usgs-footer-link" href="https://www.whitehouse.gov/">White House</a> |
+            <a class="usgs-footer-link" href="https://www.whitehouse.gov/omb/management/egov/">E-gov</a> |
+            <a class="usgs-footer-link" href="https://www.doi.gov/pmb/eeo/no-fear-act">No Fear Act</a> |
+            <a class="usgs-footer-link" href="https://www.usgs.gov/foia">FOIA</a>
+        </div>
+    </nav>
+</footer>
+<script src="/assets/wdfnviz.umd.js"></script>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-TKQR8KP"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+  
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+  </body>
+</html>

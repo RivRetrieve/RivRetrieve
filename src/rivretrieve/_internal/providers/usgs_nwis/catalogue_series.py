@@ -1,8 +1,8 @@
-"""Preserve NWIS catalogue timeseries claims without equating them to response methods."""
+"""Build modern executable catalogue identities and retain independent legacy claims."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 import polars as pl
 
@@ -83,3 +83,69 @@ def describe_catalogue(artifact: PackagedCatalogArtifact, *, config: ProviderCon
             )
         result.append(item)
     return descriptions.model_copy(update={"descriptions": tuple(result)})
+
+
+def modern_source_descriptions(
+    features: Iterable[Mapping[str, object]],
+    monitoring_locations: Mapping[str, str],
+) -> SourceDescriptions:
+    """Match supported metadata records inside the retained native station scope."""
+    from rivretrieve._internal.catalogues.source_series import SourceDescription
+    from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
+    from rivretrieve._internal.providers.usgs_nwis.metadata import source_series
+
+    stations = {location: station for station, location in monitoring_locations.items()}
+    routes = {
+        ("00060", "Daily", "00003"): "discharge_daily_mean",
+        ("00065", "Daily", "00003"): "stage_daily_mean",
+        ("00065", "Daily", "00001"): "stage_daily_max",
+        ("00065", "Daily", "00002"): "stage_daily_min",
+        **{
+            (parameter, "Points", statistic): product
+            for parameter, product in (("00060", "discharge_instantaneous"), ("00065", "stage_instantaneous"))
+            for statistic in ("00011", None)
+        },
+    }
+    result = {}
+    for properties in features:
+        location = properties.get("monitoring_location_id")
+        if not isinstance(location, str):
+            raise ValueError("Missing or malformed monitoring_location_id")
+        station = stations.get(location)
+        if station is None:
+            continue
+        parameter = properties.get("parameter_code")
+        period = properties.get("computation_period_identifier")
+        statistic = properties.get("statistic_id")
+        if (
+            not isinstance(parameter, str)
+            or not isinstance(period, str)
+            or (statistic is not None and not isinstance(statistic, str))
+        ):
+            raise ValueError("Malformed modern metadata product coordinates")
+        product = routes.get((parameter, period, statistic))
+        if product is None:
+            continue
+        coordinates = UsgsNwisSourceCoordinates(
+            "daily" if period == "Daily" else "continuous",
+            parameter,
+            statistic if period == "Daily" else None,
+        )
+        series = source_series(
+            properties, station, product, coordinates, metadata=True, monitoring_location_id=location
+        )
+        description = SourceDescription(
+            product_id=product,
+            station_id=station,
+            series_id=series.series_id,
+            identity=series.identity,
+            variant=series.variant,
+            facts=series.facts,
+        )
+        if series.series_id in result:
+            raise ValueError(f"Duplicate modern metadata series {series.variant}")
+        result[series.series_id] = description
+    return SourceDescriptions(
+        provider_id="usgs_nwis",
+        descriptions=tuple(sorted(result.values(), key=lambda item: (item.station_id, item.product_id, item.variant))),
+    )

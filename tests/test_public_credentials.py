@@ -21,7 +21,7 @@ from rivretrieve._internal.providers.no_nve.declaration import declaration as no
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import RecordingTransport, ReplayTransport, read_recording
 from rivretrieve._internal.registry import _registry
-from rivretrieve._internal.transport import AuthenticatedTransport, TransportRequest, TransportResponse
+from rivretrieve._internal.transport import AuthenticatedTransport, HttpMethod, TransportRequest, TransportResponse
 
 _STATION = "109.42.0"
 _PRODUCT = "discharge_daily_mean"
@@ -866,3 +866,118 @@ def test_public_exchange_missing_both_credentials_prevents_network(
     with pytest.raises(MissingCredentialError) as raised:
         rr.fetch(selection, start="2024-01-02", end="2024-01-02")
     assert raised.value.missing_by_provider == {"no_nve": ("EXCHANGE_ID", "EXCHANGE_PASSWORD")}
+
+
+@pytest.mark.parametrize(
+    "environment,file_value,expected",
+    [
+        (None, None, None),
+        (None, "file-key", "file-key"),
+        ("environment-key", "file-key", "environment-key"),
+        ("", "file-key", None),
+    ],
+)
+def test_usgs_optional_key_resolution_and_origin_isolation(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    environment,
+    file_value,
+    expected,
+):
+    from rivretrieve._internal.providers.registration import register_manifest
+    from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
+    from rivretrieve._internal.transport import HttpClient
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(discovery, "_DEFAULT_PROVIDER_REGISTRATION_ENABLED", False)
+    monkeypatch.delenv("USGS_API_KEY", raising=False)
+    if environment is not None:
+        monkeypatch.setenv("USGS_API_KEY", environment)
+    if file_value is not None:
+        (tmp_path / ".env").write_text(f"USGS_API_KEY={file_value}\n")
+    artifact = stub_packaged_catalogue_artifact("credential_test")
+    artifact = replace(artifact, provider_info={**artifact.provider_info, "provider_id": "usgs_nwis"})
+    register_manifest(
+        _registry,
+        ("usgs_nwis",),
+        declaration_loader=lambda _: declaration,
+        artifact_loader=lambda _: artifact,
+    )
+    handle = _registry.get("usgs_nwis")
+    assert handle.required_credentials == ()
+    assert handle.optional_credentials == ("USGS_API_KEY",)
+    assert rr.providers().row(0, named=True) == {
+        "provider_id": "usgs_nwis",
+        "credentials": [],
+        "access": "open",
+    }
+    values = discovery._resolve_credentials(("usgs_nwis",), require_all=True)["usgs_nwis"]
+    assert values == ({} if expected is None else {"USGS_API_KEY": expected})
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request)
+        return b"{}", 200, "application/json"
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender))
+    transport = discovery._credentialed_transport("usgs_nwis", values)
+    for origin in (
+        "https://api.waterdata.usgs.gov",
+        "http://api.waterdata.usgs.gov",
+        "https://api.waterdata.usgs.gov:444",
+        "https://other.test",
+        "https://waterservices.usgs.gov",
+        "https://sub.api.waterdata.usgs.gov",
+    ):
+        transport.send(TransportRequest(method=HttpMethod.GET, url=f"{origin}/ogcapi/v1/collections/daily/items"))
+    assert calls[0].headers.get("X-Api-Key") == expected
+    assert all("X-Api-Key" not in call.headers for call in calls[1:])
+
+
+@pytest.mark.parametrize("credentials", [["TOKEN"], ("",), ("lowercase",), ("TOKEN", "TOKEN"), (1,)])
+def test_malformed_optional_credentials_are_refused(tmp_path, credentials):
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.registration import CatalogueOnly, ProviderDeclaration, load_manifest
+
+    declaration = ProviderDeclaration(tmp_path, CatalogueOnly(), optional_credentials=credentials)
+    with pytest.raises(FatalContractError, match="malformed optional credentials"):
+        load_manifest(("xx_test",), declaration_loader=lambda _: declaration)
+
+
+def test_required_and_optional_credentials_cannot_overlap(tmp_path):
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.registration import CatalogueOnly, ProviderDeclaration, load_manifest
+
+    declaration = ProviderDeclaration(
+        tmp_path,
+        CatalogueOnly(),
+        required_credentials=("TOKEN",),
+        optional_credentials=("TOKEN",),
+    )
+    with pytest.raises(FatalContractError, match="required and optional credentials overlap"):
+        load_manifest(("xx_test",), declaration_loader=lambda _: declaration)
+
+
+def test_optional_key_does_not_satisfy_or_block_required_credentials(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("REQUIRED_KEY", raising=False)
+    monkeypatch.setenv("OPTIONAL_KEY", "optional-value")
+    _registry.register(
+        "credential_test",
+        stub_packaged_catalogue_artifact("credential_test"),
+        required_credentials=("REQUIRED_KEY",),
+        optional_credentials=("OPTIONAL_KEY",),
+    )
+    with pytest.raises(MissingCredentialError) as raised:
+        discovery._resolve_credentials(("credential_test",), require_all=True)
+    assert raised.value.missing_by_provider == {"credential_test": ("REQUIRED_KEY",)}
+    monkeypatch.setenv("REQUIRED_KEY", "required-value")
+    monkeypatch.delenv("OPTIONAL_KEY")
+    assert discovery._resolve_credentials(("credential_test",), require_all=True) == {
+        "credential_test": {"REQUIRED_KEY": "required-value"},
+    }

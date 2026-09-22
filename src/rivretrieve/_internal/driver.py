@@ -540,7 +540,12 @@ def _reconcile_acquired_inventories(
                     continue
                 if not scope.matches_facts(fact) or admission(fact).status != "supported":
                     continue
-                if not any(item.series_id == key and fact in item.facts for item in observed):
+                observed_definition = any(item.series_id == key and fact in item.facts for item in observed)
+                acquired_empty = any(
+                    item.series_id == key and fact.facts_id in item.facts_ids and item.status is OutcomeStatus.EMPTY
+                    for item in acquired.outcomes
+                )
+                if not observed_definition and not acquired_empty:
                     reasons.append("A matching admitted member lacks a concrete response definition")
                 coverage = tuple(
                     RequestedInterval(outcome.window.start, outcome.window.end)
@@ -1198,6 +1203,8 @@ def drive(
                         receipt_entries.append(encode_store_excerpt(read))
                 continue
 
+            restored_held_ids: set[str] = set()
+
             def retain_held_successes(
                 target_ids: tuple[str, ...] = (),
                 *,
@@ -1205,13 +1212,16 @@ def drive(
                 held_interval: RequestedInterval = interval,
                 held_station: str = station,
                 held_product: ProductId = product,
+                restored_ids: set[str] = restored_held_ids,
             ) -> None:
                 if cache != "reuse" or manifest is None or store is None:
                     return
                 held_series = tuple(
                     item
                     for item in manifest.series
-                    if held_scope.matches(item) and (not target_ids or item.series_id in target_ids)
+                    if held_scope.matches(item)
+                    and item.series_id not in restored_ids
+                    and (not target_ids or item.series_id in target_ids)
                 )
                 ids = tuple(item.series_id for item in held_series)
                 fact_ids = tuple(
@@ -1237,6 +1247,7 @@ def drive(
                         facts_ids=fact_ids,
                     )
                 )
+                restored_ids.update(ids)
                 rows.append(held_read.rows)
                 _merge_definitions(definitions, held_series)
                 selected_snapshots = tuple(item for item in manifest.inventories if set(item.members).intersection(ids))
@@ -1328,6 +1339,52 @@ def drive(
                 fresh_inventories.extend(fetched.inventories)
                 outcomes.extend(fetched.outcomes)
                 fresh_outcomes.extend(fetched.outcomes)
+                # A fully exhausted source transaction can establish an empty answer
+                # for a known concrete member even when no page contains its rows.
+                for original in fetched.outcomes:
+                    if original.status is not OutcomeStatus.EMPTY:
+                        continue
+                    definition = next((item for item in fetched.series if item.series_id == original.series_id), None)
+                    if definition is None:
+                        raise FatalContractError("Acquired empty outcome lacks a concrete source definition")
+                    established = {fact.facts_id: fact for fact in definition.facts}
+                    if any(key not in established for key in original.facts_ids):
+                        raise FatalContractError("Acquired empty outcome references unknown physical facts")
+                    matching_facts = tuple(
+                        key
+                        for key in original.facts_ids
+                        if pair_scope.matches_facts(established[key])
+                        and admission(established[key]).status == "supported"
+                    )
+                    if not pair_scope.matches(definition) or not matching_facts:
+                        continue
+                    start, end = max(window.start, original.window.start), min(window.end, original.window.end)
+                    if start > end:
+                        continue
+                    empty_outcome = original.model_copy(
+                        update={
+                            "window": SeriesWindow(start=start, end=end),
+                            "facts_ids": matching_facts,
+                            "outcome_id": stable_id(
+                                original.outcome_id, start.isoformat(), end.isoformat(), *matching_facts
+                            ),
+                        }
+                    )
+                    outcomes.append(empty_outcome)
+                    fresh_outcomes.append(empty_outcome)
+                    pending.append(
+                        SuccessfulReplacement(
+                            CoverageInterval(
+                                definition.series_id,
+                                RequestedInterval(start, end),
+                                empty_outcome.retrieved_at,
+                                empty_outcome.outcome_id,
+                                matching_facts,
+                            ),
+                            pl.DataFrame(schema=RowsSchema.polars_schema),
+                            replaced_facts_ids=matching_facts,
+                        )
+                    )
                 cached_calls.extend(
                     {**_origin_call(origin), "station_products": ((station, str(product)),)} for origin in fetched.calls
                 )
@@ -1454,6 +1511,16 @@ def drive(
                 native = native.filter(
                     pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts)
                 )
+                if isinstance(fetched, SourceAcquisition):
+                    unsupported = tuple(
+                        item.series_id
+                        for item in fetched.outcomes
+                        if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
+                    )
+                    # Transaction-level contradictions can span individually valid pages.
+                    # Keep their receipts and diagnostics, not ambiguous numeric rows.
+                    if unsupported:
+                        native = native.filter(~pl.col("series_id").is_in(unsupported))
                 rows.append(native)
                 failed_ids = {
                     item.series_id
@@ -1461,6 +1528,12 @@ def drive(
                     if item.series_id is not None
                     and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
                 }
+                if isinstance(fetched, SourceAcquisition):
+                    failed_ids.update(
+                        item.series_id
+                        for item in fetched.outcomes
+                        if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
+                    )
                 if (
                     any(
                         item.series_id is None

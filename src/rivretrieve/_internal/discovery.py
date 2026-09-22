@@ -781,7 +781,8 @@ def _resolve_credentials(
     resolved: dict[str, dict[str, str]] = {}
     missing: dict[str, tuple[str, ...]] = {}
     for provider_id in provider_ids:
-        names = _registry.get(provider_id).required_credentials
+        handle = _registry.get(provider_id)
+        names = (*handle.required_credentials, *handle.optional_credentials)
         provider_values: dict[str, str] = {}
         for name in names:
             environment_value = os.environ.get(name)
@@ -795,7 +796,7 @@ def _resolve_credentials(
             if value is not None:
                 provider_values[name] = value
         resolved[provider_id] = provider_values
-        absent = tuple(name for name in names if name not in provider_values)
+        absent = tuple(name for name in handle.required_credentials if name not in provider_values)
         if absent:
             missing[provider_id] = absent
     if require_all and missing:
@@ -809,16 +810,20 @@ def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transpo
     handle = _registry.get(provider_id)
     exchange = handle.credential_exchange
     if exchange is not None:
+        headers = tuple(
+            CredentialHeader(binding.header, values[binding.variable], binding.origins)
+            for binding in exchange.credential_headers
+            if binding.variable in values
+        )
+        if not headers:
+            return base
         return CredentialExchangeTransport(
             base,
-            tuple(
-                CredentialHeader(binding.header, values[binding.variable], binding.origins)
-                for binding in exchange.credential_headers
-            ),
+            headers,
             exchange.spec,
             _SystemClock(),
         )
-    bindings = handle.credential_headers
+    bindings = tuple(binding for binding in handle.credential_headers if binding.variable in values)
     if not bindings:
         return base
     return AuthenticatedTransport(

@@ -1,7 +1,8 @@
 """live cache : RecordedSourceCalls × CacheMode × RequestedWindow → ObservationResult × StoreEffects.
 
-Source bytes come only from committed exact-request recordings. Parse-output controls
-exercise engine refresh and empty-answer behavior without claiming new source evidence.
+Full-window requests replay exact modern publisher captures. Explicitly authored
+half-window over-response and parse-output controls exercise cache behavior without
+claiming additional publisher requests or source evidence.
 """
 
 from __future__ import annotations
@@ -32,20 +33,23 @@ from rivretrieve._internal.observations import ObservationProvenance, ReceiptAut
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
-from rivretrieve._internal.recordings import ReplayTransport
 from rivretrieve._internal.source_series import OutcomeStatus, ParsedSeries
 from rivretrieve._internal.store import ObservationStoreRefusedError, StoreReader, StoreRoot
 from rivretrieve._internal.transport import (
+    HttpMethod,
     Transport,
     TransportFailure,
     TransportFailureReason,
     TransportRequest,
     TransportResponse,
 )
+from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
 
-_DATA = Path(__file__).parent / "test_data"
-_DAILY = _DATA / "usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-_INSTANT = _DATA / "usgs_nwis_09380000_iv_00060_2020-07-01.recording.json"
+_DAILY = "daily-07374000-discharge-mean"
+_INSTANT = "continuous-07374000-2010-discharge"
+_START = datetime(2010, 6, 1, 5)
+_END = datetime(2010, 6, 2, 4, 59, 59)
+_MIDPOINT = datetime(2010, 6, 1, 17)
 _PROVIDER = ProviderId("usgs_nwis")
 _PRODUCT = ProductId("discharge_instantaneous")
 assert isinstance(declaration.observations, LiveStages)
@@ -53,13 +57,39 @@ _STAGES = declaration.observations.stages
 
 
 class CountedReplay:
-    def __init__(self, recording: Path) -> None:
-        self.replay = ReplayTransport([recording])
+    """Exact full-window replay plus two explicit authored half-window over-responses.
+
+    The half-window requests reuse unchanged captured bytes to model a source
+    returning padding. They are engine controls, not new publisher recordings.
+    All non-window request coordinates must still match the exact capture.
+    """
+
+    def __init__(self, recording: str) -> None:
+        self.recording = recording
+        self.replay = ModernReplay(recording)
         self.calls: list[TransportRequest] = []
 
     def send(self, request: TransportRequest) -> TransportResponse:
         self.calls.append(request)
-        return self.replay.send(request)
+        if coordinates(request.url, request.params) == coordinates(MANIFEST[self.recording]["original_url"]):
+            return self.replay.send(request)
+        assert self.recording == _INSTANT
+        assert request.method is HttpMethod.GET
+        assert request.params is not None
+        assert request.params["datetime"] in {
+            "2010-05-30T05:00:00Z/2010-06-03T16:59:59.999999Z",
+            "2010-05-30T17:00:00Z/2010-06-04T04:59:59Z",
+        }
+        params = {**request.params, "datetime": "2010-05-30T05:00:00Z/2010-06-04T04:59:59Z"}
+        assert coordinates(request.url, params) == coordinates(MANIFEST[_INSTANT]["original_url"])
+        return TransportResponse(
+            body(_INSTANT),
+            200,
+            datetime.fromisoformat(MANIFEST[_INSTANT]["acquired_utc"]),
+            "application/json",
+            request.url,
+            request.params,
+        )
 
 
 class RefusedTransport:
@@ -79,7 +109,7 @@ class ParseOutputControl:
         parsed = _STAGES.parse(payload, config)
         return replace(
             parsed,
-            rows=parsed.rows.filter(pl.col("time").dt.date() == datetime(2020, 7, 1).date()).head(self.limit),
+            rows=parsed.rows.filter(pl.col("time").is_between(_START, _END)).head(self.limit),
             outcomes=tuple(
                 item.model_copy(update={"outcome_id": item.outcome_id + f"/test-limit-{self.limit}"})
                 for item in parsed.outcomes
@@ -91,15 +121,15 @@ def _drive(
     store: Path,
     transport: Transport,
     *,
-    start: datetime = datetime(2020, 7, 1),
-    end: datetime = datetime(2020, 7, 1, 23, 59, 59, 999999),
+    start: datetime = _START,
+    end: datetime = _END,
     cache: Literal["bypass", "reuse", "refresh"] = "reuse",
     control: ParseOutputControl | None = None,
 ) -> _AssemblyResult:
     return drive(
         ObservationRequest(
             _PROVIDER,
-            ("09380000",),
+            ("07374000",),
             (_PRODUCT,),
             RequestedWindow(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end)),
         ),
@@ -125,9 +155,9 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     selection = rr.pick(
         rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"), station="07374000"
     )
-    first = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", receipts=True)
+    first = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="reuse", receipts=True)
     assert len(transport.calls) == 1
-    second = rr.fetch(selection, start="2023-01-01T12:00", end="2023-01-01T13:00", cache="reuse", receipts=True)
+    second = rr.fetch(selection, start="2024-01-01T12:00", end="2024-01-07T13:00", cache="reuse", receipts=True)
     assert len(transport.calls) == 1
     assert_frame_equal(first.data, second.data)
     assert second.provenance.calls_made == first.provenance.calls_made
@@ -137,13 +167,13 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     status = rr.cache_status("usgs_nwis")
     assert status.bytes_on_disk > 0
     assert status.coverage[0].interval == RequestedInterval(
-        datetime(2023, 1, 1), datetime(2023, 1, 1, 23, 59, 59, 999999)
+        datetime(2024, 1, 1), datetime(2024, 1, 7, 23, 59, 59, 999999)
     )
     disk = pl.read_parquet(next(status.store.rglob("*.parquet")))
     assert disk["value"][0] != first.data["value"][0]
     assert disk.schema["time"] == pl.Datetime("us")
     before = _bytes(status.store)
-    bypass = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True)
+    bypass = rr.fetch(selection, start="2024-01-01", end="2024-01-07", receipts=True)
     assert len(transport.calls) == 2
     assert_frame_equal(first.data, bypass.data)
     assert _bytes(status.store) == before
@@ -157,7 +187,7 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
 def test_incomplete_coverage_reacquires_whole_scope_without_stale_rows(tmp_path: Path) -> None:
     transport = CountedReplay(_INSTANT)
     store = tmp_path / "store"
-    first = _drive(store, transport, end=datetime(2020, 7, 1, 11, 59, 59, 999999))
+    first = _drive(store, transport, end=_MIDPOINT - timedelta(microseconds=1))
     acquired = _drive(store, transport)
     assert len(transport.calls) == 2
     expected = _drive(store, transport, cache="bypass")
@@ -172,7 +202,7 @@ def test_incomplete_coverage_reacquires_whole_scope_without_stale_rows(tmp_path:
 
 def test_failed_reacquisition_retains_held_success_with_original_vintage(tmp_path: Path) -> None:
     store = tmp_path / "store"
-    held = _drive(store, CountedReplay(_INSTANT), end=datetime(2020, 7, 1, 11, 59, 59, 999999))
+    held = _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
     before = {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")}
     partial = _drive(store, RefusedTransport())
     assert_frame_equal(partial.canonical_rows, held.canonical_rows)
@@ -208,8 +238,8 @@ def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path) -> 
             return replace(response, retrieved_at=response.retrieved_at + timedelta(days=1))
 
     store = StoreRoot(tmp_path / "store")
-    _drive(store, CountedReplay(_INSTANT), end=datetime(2020, 7, 1, 11, 59, 59, 999999))
-    _drive(store, LaterReplay(_INSTANT), start=datetime(2020, 7, 1, 12), cache="refresh")
+    _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
+    _drive(store, LaterReplay(_INSTANT), start=_MIDPOINT, cache="refresh")
     status = StoreReader().status(store, _PROVIDER)
     result = _drive(store, RefusedTransport())
     assert tuple(item.retrieved_at for item in result.provenance.served_intervals) == tuple(
@@ -267,10 +297,7 @@ def test_invalid_parse_rows_even_in_padding_do_not_modify_store(tmp_path: Path, 
             return replace(
                 parsed,
                 rows=parsed.rows.with_columns(
-                    pl.when(pl.col("time") < datetime(2020, 7, 1))
-                    .then(pl.lit(value))
-                    .otherwise(pl.col(field))
-                    .alias(field)
+                    pl.when(pl.col("time") < _START).then(pl.lit(value)).otherwise(pl.col(field)).alias(field)
                 ),
             )
 
@@ -287,7 +314,7 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
 
     class OneSeriesFails(CountedReplay):
         def send(self, request: TransportRequest) -> TransportResponse:
-            if request.params is not None and request.params["sites"] == "09380000":
+            if request.params is not None and request.params["monitoring_location_id"] == "USGS-09380000":
                 return RefusedTransport().send(request)
             return super().send(request)
 
@@ -298,7 +325,7 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
         station=["07374000", "09380000"],
     )
     with pytest.raises(IssuePolicyError):
-        rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="raise")
+        rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="reuse", on_issue="raise")
     status = rr.cache_status("usgs_nwis")
     definitions = {item.series_id: item for item in status.manifest.series}
     assert tuple(definitions[item.series_id].station_id for item in status.coverage) == ("07374000",)
@@ -340,16 +367,18 @@ def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_cover
 
 
 def test_unsupported_refetch_retains_covered_native_success_with_its_vintage(tmp_path):
-    from rivretrieve._internal.recordings import read_recording
-
     store = tmp_path / "store"
-    held = _drive(store, CountedReplay(_INSTANT), end=datetime(2020, 7, 1, 11, 59, 59, 999999))
-    recording = read_recording(_INSTANT)
-    document = json.loads(recording.content)
+    held = _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
+    document = json.loads(body(_INSTANT))
     # Authored corrupt numeric cell exercises the real parser boundary; it is not agency evidence.
-    document["value"]["timeSeries"][0]["values"][0]["value"][0]["value"] = "not-a-number"
-    malformed = replace(recording, content=json.dumps(document).encode())
-    result = _drive(store, ReplayTransport((malformed,)))
+    document["features"][0]["properties"]["value"] = "not-a-number"
+    malformed = json.dumps(document).encode()
+
+    class AuthoredMalformed(CountedReplay):
+        def send(self, request):
+            return replace(super().send(request), content=malformed)
+
+    result = _drive(store, AuthoredMalformed(_INSTANT))
     assert_frame_equal(result.canonical_rows, held.canonical_rows)
     assert any(item.status is OutcomeStatus.UNSUPPORTED for item in result.outcomes)
     assert result.provenance.served_intervals

@@ -969,10 +969,12 @@ def test_fixture_refresh_frame_equals_matching_committed_subset() -> None:
 
 
 def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
-    provider_bytes = (CATALOGUE_PATH / "provider.json").read_bytes()
-    products = pl.read_parquet(CATALOGUE_PATH / "products.parquet")
-    stations = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
-    station_products = pl.read_parquet(CATALOGUE_PATH / "station_products.parquet")
+    provider_bytes = (Path("research/usgs-modern-coverage/legacy-catalogue") / "provider.json").read_bytes()
+    products = pl.read_parquet(Path("research/usgs-modern-coverage/legacy-catalogue") / "products.parquet")
+    stations = pl.read_parquet(Path("research/usgs-modern-coverage/legacy-catalogue") / "stations.parquet")
+    station_products = pl.read_parquet(
+        Path("research/usgs-modern-coverage/legacy-catalogue") / "station_products.parquet"
+    )
 
     assert products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
@@ -1003,12 +1005,23 @@ def test_native_build_is_network_free_and_byte_deterministic(
     first = tmp_path / "first"
     second = tmp_path / "second"
 
-    assert generator.main(["--native", str(NATIVE_PATH), "--out", str(first)]) == 0
-    assert generator.main(["--native", str(NATIVE_PATH), "--out", str(second)]) == 0
+    assert (
+        generator.main(
+            ["--native", str(NATIVE_PATH), "--modern-metadata", "research/usgs-modern-coverage", "--out", str(first)]
+        )
+        == 0
+    )
+    assert (
+        generator.main(
+            ["--native", str(NATIVE_PATH), "--modern-metadata", "research/usgs-modern-coverage", "--out", str(second)]
+        )
+        == 0
+    )
     assert calls == []
-    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
-        assert (first / artifact_name).read_bytes() == (second / artifact_name).read_bytes()
-        assert (first / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
+    for artifact in sorted(first.iterdir()):
+        artifact_name = artifact.name
+        assert artifact.read_bytes() == (second / artifact_name).read_bytes()
+        assert artifact.read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
 def test_live_rdb_recordings_preserve_source_strings_and_native_alignment() -> None:
@@ -1040,3 +1053,11 @@ def test_live_rdb_recordings_preserve_source_strings_and_native_alignment() -> N
         refreshed.value.data, pl.DataFrame([expected_row], schema=NATIVE_SCHEMA), check_exact=True
     )
     assert refreshed.issues == ()
+
+
+def test_legacy_native_build_cannot_publish_under_modern_identity(tmp_path: Path) -> None:
+    catalogue = generator.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+    output = tmp_path / "must-not-be-created"
+    with pytest.raises(FatalContractError, match="legacy native builds cannot be published"):
+        generator.write_catalogue(catalogue, output)
+    assert not output.exists()

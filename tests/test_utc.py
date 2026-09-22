@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -8,15 +9,9 @@ import pytest
 import rivretrieve
 import rivretrieve._internal.catalogues.artifact as artifact_module
 from rivretrieve._internal.catalogue_reader import CatalogueReader
-from rivretrieve._internal.conversion import convert
 from rivretrieve._internal.engine import (
-    Payload,
-    RequestedWindow,
     SourceCallOrigin,
-    SourceCoordinates,
     UnknownOriginFact,
-    WindowEndpoint,
-    _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.observations import (
@@ -27,9 +22,7 @@ from rivretrieve._internal.observations import (
     ReceiptEntry,
     Receipts,
 )
-from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.usgs_nwis.config import config as usgs_nwis_config
-from rivretrieve._internal.providers.usgs_nwis.parse import parse
+from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries, known
 
@@ -251,33 +244,54 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
     )
-    payload = Payload(
-        SourceCoordinates(object()),
-        (("07374000", ProductId("discharge_instantaneous")),),
-        _make_fetch_window(
-            WindowEndpoint.from_datetime(datetime(2023, 3, 12, 0, 0)),
-            WindowEndpoint.from_datetime(datetime(2023, 3, 12, 23, 59, 59, 999999)),
+    # Historical WaterServices evidence only. Decode this fixed recording into
+    # the UTC test carrier; no retired provider implementation is retained.
+    document = json.loads(fixture_bytes)
+    recorded_series = document["value"]["timeSeries"][0]
+    assert recorded_series["variable"]["unit"]["unitCode"] == "ft3/s"
+    readings = recorded_series["values"][0]["value"]
+    assert len(readings) == 92
+    definition = SourceSeries(
+        series_id="legacy-dst-recording",
+        provider_id="usgs_nwis",
+        station_id="07374000",
+        product_id="discharge_instantaneous",
+        identity=SourceIdentity(
+            namespace="test-legacy-dst",
+            published_id="recorded-discharge",
+            origin="response",
+            evidence=(str(RECORDING_PATH),),
         ),
-        fixture_bytes,
-        origin,
-        (),
-    )
-    parsed = parse(payload, usgs_nwis_config())
-    assert parsed.rows.height == 92
-    assert parsed.rows["time_zone"].to_list() == ["-06:00"] * 8 + ["-05:00"] * 84
-    native = ObservationResult(
-        data=convert(
-            parsed.rows,
-            usgs_nwis_config(),
-            RequestedWindow(
-                WindowEndpoint.from_datetime(datetime(2023, 3, 12)),
-                WindowEndpoint.from_datetime(datetime(2023, 3, 12, 23, 59, 59, 999999)),
+        facts=(
+            PhysicalFacts(
+                facts_id="legacy-dst-facts",
+                quantity=known("discharge", str(RECORDING_PATH)),
+                source_unit=known("ft3/s", str(RECORDING_PATH)),
+                normalized_unit="ft3/s",
             ),
-            series=parsed.series,
-        ).value,
-        source_series=parsed.series,
-        inventories=parsed.inventories,
-        outcomes=parsed.outcomes,
+        ),
+    )
+    data = pl.DataFrame(
+        [
+            {
+                "time": datetime.fromisoformat(reading["dateTime"]).replace(tzinfo=None),
+                "time_zone": reading["dateTime"][-6:],
+                "station_id": "07374000",
+                "product_id": "discharge_instantaneous",
+                "series_id": definition.series_id,
+                "facts_id": definition.facts[0].facts_id,
+                "quantity": "discharge",
+                "source_unit": "ft3/s",
+                "unit": "m3/s",
+                "value": float(reading["value"]) * 0.028316846592,
+            }
+            for reading in readings
+        ],
+        schema=ObservationDataSchema.polars_schema,
+    )
+    native = ObservationResult(
+        data=data,
+        source_series=(definition,),
         provenance=ObservationProvenance(source="live", provider_id=ProviderId("usgs_nwis")),
         issues=(),
         receipts=Receipts(
@@ -293,8 +307,8 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
             "time_zone": ["-06:00", "-05:00"],
             "station_id": ["07374000", "07374000"],
             "product_id": ["discharge_instantaneous", "discharge_instantaneous"],
-            "series_id": [parsed.series[0].series_id] * 2,
-            "facts_id": [parsed.series[0].facts[0].facts_id] * 2,
+            "series_id": [definition.series_id] * 2,
+            "facts_id": [definition.facts[0].facts_id] * 2,
             "quantity": ["discharge"] * 2,
             "source_unit": ["ft3/s"] * 2,
             "unit": ["m3/s"] * 2,
@@ -308,8 +322,8 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
             "time_zone": ["+00:00", "+00:00"],
             "station_id": ["07374000", "07374000"],
             "product_id": ["discharge_instantaneous", "discharge_instantaneous"],
-            "series_id": [parsed.series[0].series_id] * 2,
-            "facts_id": [parsed.series[0].facts[0].facts_id] * 2,
+            "series_id": [definition.series_id] * 2,
+            "facts_id": [definition.facts[0].facts_id] * 2,
             "quantity": ["discharge"] * 2,
             "source_unit": ["ft3/s"] * 2,
             "unit": ["m3/s"] * 2,

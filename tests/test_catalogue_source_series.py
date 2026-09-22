@@ -112,38 +112,25 @@ def test_physical_predicates_do_not_rewrite_acquired_catalogue_inventory():
     assert precise == broad
 
 
-def test_usgs_catalogue_claims_survive_public_discovery_and_bundle():
+def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_legacy_aliases():
     import rivretrieve as rr
 
     selection = rr.find(
         provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
     )
     restored = rr.from_bundle(rr.to_bundle(selection))
-    selected_routes = {series.product_id for series in restored.series}
-    # Retained catalogue snapshots can cover broader acquired station evidence.
-    claims = [
-        claim
-        for inventory in restored.inventories
-        for claim in inventory.catalogue_claims
-        if claim.product_id in selected_routes
-    ]
-    assert {(claim.identity.published_id, claim.identity.description) for claim in claims} == {
-        ("126801", ""),
-        ("126805", "[(2)]"),
+    assert restored.known_series == selection.known_series
+    assert {item.identity.published_id for item in restored.series} == {
+        "0df18b246e8f48ec8e6547a92070e94a",
+        "4d186669708e4dc18f84d271efb953a1",
     }
-    assert all(claim.identity.namespace == "NWIS.ts_id" for claim in claims)
-    assert all(
-        claim.provider_id == "usgs_nwis"
-        and claim.station_id == "02196000"
-        and claim.product_id == "discharge_daily_mean"
-        for claim in claims
-    )
-    assert all(
-        dict(claim.native_coordinates) == {"data_type_cd": "dv", "parm_cd": "00060", "stat_cd": "00003"}
-        for claim in claims
-    )
-    # Catalogue ts_id is not declared to be a response method identifier.
-    assert all(series.identity.published_id is None for series in restored.series)
+    assert all(item.identity.description is None for item in restored.series)
+    assert all(item.identity.namespace == "USGS.WaterData.time_series_id" for item in restored.series)
+    assert not any(inventory.catalogue_claims for inventory in restored.inventories)
+    legacy = pl.read_parquet("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
+    claims = legacy.filter((pl.col("station_id") == "02196000") & (pl.col("product_id") == "discharge_daily_mean"))
+    assert set(claims.select("published_id", "description").iter_rows()) == {("126801", ""), ("126805", "[(2)]")}
+    assert set(claims["namespace"]) == {"NWIS.ts_id"}
 
 
 def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary():
@@ -152,10 +139,15 @@ def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary():
     from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 
     artifact = load_packaged_catalogue_artifact(BASE / "usgs_nwis/catalogue")
-    claims = artifact.catalogue_claims.head(1).with_columns(
-        pl.lit(
-            [{"name": "", "value": "00060"}], dtype=pl.List(pl.Struct({"name": pl.String, "value": pl.String}))
-        ).alias("native_coordinates")
+    # Authored corruption of an independently retained historical claim carrier.
+    claims = (
+        pl.read_parquet("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
+        .head(1)
+        .with_columns(
+            pl.lit(
+                [{"name": "", "value": "00060"}], dtype=pl.List(pl.Struct({"name": pl.String, "value": pl.String}))
+            ).alias("native_coordinates")
+        )
     )
     with pytest.raises(CorruptCatalogArtifactError, match="coordinate names"):
         packaged_catalogue_artifact_from_components(
@@ -176,6 +168,12 @@ def test_changed_catalogue_claims_change_snapshot_identity_at_same_check_date():
     import polars as pl
 
     artifact = load_packaged_catalogue_artifact(BASE / "usgs_nwis/catalogue")
+    # Exercise generic independent-claim inventory identity using archived source bytes,
+    # not by attaching old numeric claims to modern publisher series IDs.
+    artifact = replace(
+        artifact,
+        catalogue_claims=pl.read_parquet("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet"),
+    )
     scope = SeriesScope(station_ids=("02196000",), product_ids=("discharge_daily_mean",))
     _, original = catalogue_series(artifact, scope=scope)
     changed = replace(artifact, catalogue_claims=artifact.catalogue_claims.filter(pl.col("published_id") != "126805"))
@@ -193,5 +191,5 @@ def test_usgs_instantaneous_support_does_not_establish_sampling_frequency():
     assert len(series) == 1
     assert artifact.products.filter(pl.col("product_id") == "discharge_instantaneous")["frequency"].item() == "unknown"
     assert series[0].facts[0].frequency.value is None
-    assert series[0].facts[0].frequency.state.value == "not_established"
+    assert series[0].facts[0].frequency.state.value == "source_silent"
     assert series[0].facts[0].temporal_support.value == "instantaneous"

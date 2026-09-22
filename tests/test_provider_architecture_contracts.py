@@ -7,6 +7,8 @@ import tomllib
 from importlib import import_module
 from pathlib import Path
 
+import pytest
+
 import rivretrieve as rr
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
@@ -92,8 +94,8 @@ def _direct_http_imports(path: Path) -> set[str]:
     imports = set()
     for node in ast.walk(_tree(path)):
         if isinstance(node, ast.Import):
-            imports.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imports.update(alias.name.split(".")[0] for alias in node.names if alias.name != "urllib.parse")
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.module != "urllib.parse":
             imports.add(node.module.split(".")[0])
     return imports & {"httpx", "requests", "urllib"}
 
@@ -556,3 +558,19 @@ def test_source_failure_isolation_exists_once_in_the_engine() -> None:
         "TransportFailure",
         "CredentialExchangeError",
     )
+
+
+@pytest.mark.parametrize(
+    ("statement", "expected"),
+    [
+        ("from urllib.parse import urlsplit, parse_qsl", set()),
+        ("import urllib.parse", set()),
+        ("from urllib.request import urlopen", {"urllib"}),
+        ("import urllib.request", {"urllib"}),
+        ("import urllib", {"urllib"}),
+    ],
+)
+def test_pure_url_parsing_does_not_grant_provider_network_access(tmp_path, statement, expected):
+    module = tmp_path / "provider.py"
+    module.write_text(statement)
+    assert _direct_http_imports(module) == expected

@@ -75,6 +75,8 @@ def _inputs(provider: str):
             for name in ("format.json", "source_series.json", "series_claims.parquet")
         },
     }
+    if provider == "usgs_nwis":
+        files["monitoring_locations.json"] = (directory / "monitoring_locations.json").read_bytes()
     return provenance, origins, files
 
 

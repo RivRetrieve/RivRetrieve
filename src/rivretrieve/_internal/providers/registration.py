@@ -142,6 +142,7 @@ class ProviderDeclaration:
     catalogue: Path
     observations: ProviderKind
     required_credentials: tuple[str, ...] = ()
+    optional_credentials: tuple[str, ...] = ()
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
     credential_exchange: CredentialExchangeBinding | None = None
     public_archive_access: PublicArchiveAccess | None = None
@@ -201,13 +202,18 @@ def load_manifest(
             raise FatalContractError(
                 f"Provider {provider_id} has unrecognised observation kind: {value.observations!r}"
             )
-        credentials = value.required_credentials
-        if (
-            not isinstance(credentials, tuple)
-            or any(not isinstance(name, str) or re.fullmatch(r"[A-Z][A-Z0-9_]*", name) is None for name in credentials)
-            or len(credentials) != len(set(credentials))
-        ):
-            raise FatalContractError(f"Provider {provider_id} has malformed required credentials: {credentials!r}")
+        for kind, credentials in (("required", value.required_credentials), ("optional", value.optional_credentials)):
+            if (
+                not isinstance(credentials, tuple)
+                or any(
+                    not isinstance(name, str) or re.fullmatch(r"[A-Z][A-Z0-9_]*", name) is None for name in credentials
+                )
+                or len(credentials) != len(set(credentials))
+            ):
+                raise FatalContractError(f"Provider {provider_id} has malformed {kind} credentials: {credentials!r}")
+        if set(value.required_credentials) & set(value.optional_credentials):
+            raise FatalContractError(f"Provider {provider_id} required and optional credentials overlap")
+        credentials = (*value.required_credentials, *value.optional_credentials)
         archive = value.public_archive_access
         if archive is not None:
             if not isinstance(archive, PublicArchiveAccess) or not isinstance(value.observations, LiveStages):
@@ -250,7 +256,7 @@ def load_manifest(
             bound_variables = tuple(binding.variable for binding in bindings)
             if set(bound_variables) != set(credentials) or len(bound_variables) != len(set(bound_variables)):
                 raise FatalContractError(
-                    f"Provider {provider_id} live credential bindings do not match required credentials"
+                    f"Provider {provider_id} live credential bindings do not match declared credentials"
                 )
             required_stage_members = ("config", "window_declarations", "observation_source", "fetch", "parse")
             missing_stage_members = tuple(
@@ -342,6 +348,7 @@ def register_manifest(
                 item.provider_id,
                 artifact,
                 required_credentials=declaration.required_credentials,
+                optional_credentials=declaration.optional_credentials,
                 credential_headers=declaration.credential_headers,
                 credential_exchange=declaration.credential_exchange,
                 public_archive_access=declaration.public_archive_access,
@@ -352,6 +359,7 @@ def register_manifest(
                 artifact,
                 engine_provider_module=kind.stages,
                 required_credentials=declaration.required_credentials,
+                optional_credentials=declaration.optional_credentials,
                 credential_headers=declaration.credential_headers,
                 credential_exchange=declaration.credential_exchange,
                 public_archive_access=declaration.public_archive_access,
@@ -364,6 +372,7 @@ def register_manifest(
                 observation_store=StoreRoot(root / item.provider_id / "store"),
                 bulk_operations=kind,
                 required_credentials=declaration.required_credentials,
+                optional_credentials=declaration.optional_credentials,
                 credential_headers=declaration.credential_headers,
                 credential_exchange=declaration.credential_exchange,
                 public_archive_access=declaration.public_archive_access,

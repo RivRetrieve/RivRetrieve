@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+import json
+from typing import TYPE_CHECKING, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.source_series import (
     CatalogueSeriesClaim,
     InventoryCompleteness,
@@ -52,6 +54,90 @@ class SourceDescriptions(BaseModel):
     claims_file: Literal["series_claims.parquet"] = "series_claims.parquet"
     provider_id: str
     descriptions: tuple[SourceDescription, ...]
+
+
+class _ReferencedSourceDescriptions(BaseModel):
+    """Disk representation that stores each identified physical-fact segment once."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    schema_version: Literal[2]
+    claims_file: Literal["series_claims.parquet"] = "series_claims.parquet"
+    provider_id: str
+    physical_facts: tuple[PhysicalFacts, ...]
+    descriptions: tuple[dict[str, object], ...]
+
+
+def encode_source_descriptions(value: SourceDescriptions, *, schema_version: Literal[1, 2] = 1) -> bytes:
+    """Encode without changing identity, facts, evidence, or the in-memory schema."""
+    if schema_version == 1:
+        return (value.model_dump_json() + "\n").encode()
+    if schema_version != 2:
+        raise FatalContractError("Unsupported source-description encoding revision")
+    facts_by_id: dict[str, PhysicalFacts] = {}
+    descriptions = []
+    for item in value.descriptions:
+        for facts in item.facts:
+            previous = facts_by_id.setdefault(facts.facts_id, facts)
+            if previous != facts:
+                raise FatalContractError(f"Conflicting physical facts for {facts.facts_id!r}")
+        fields = item.model_dump(mode="json", exclude={"facts"}, exclude_defaults=True)
+        fields["facts_ids"] = [facts.facts_id for facts in item.facts]
+        descriptions.append(fields)
+    encoded = _ReferencedSourceDescriptions(
+        schema_version=2,
+        provider_id=value.provider_id,
+        claims_file=value.claims_file,
+        physical_facts=tuple(facts_by_id.values()),
+        descriptions=tuple(descriptions),
+    )
+    return (encoded.model_dump_json(exclude_defaults=True) + "\n").encode()
+
+
+def decode_source_descriptions(content: bytes) -> SourceDescriptions:
+    """Read both disk revisions; resolve strict references to shared fact instances."""
+    try:
+        raw = json.loads(content)
+        if not isinstance(raw, dict):
+            raise ValueError("Source descriptions must be a JSON object")
+        revision = raw.get("schema_version", 1)
+        if type(revision) is not int:
+            raise ValueError("Source-description schema revision must be an integer")
+        if revision == 1:
+            return SourceDescriptions.model_validate(raw)
+        if revision != 2:
+            raise ValueError("Unsupported source-description encoding revision")
+        stored = _ReferencedSourceDescriptions.model_validate(raw)
+        facts_by_id = {facts.facts_id: facts for facts in stored.physical_facts}
+        if len(facts_by_id) != len(stored.physical_facts):
+            raise ValueError("Duplicate physical-fact identifiers")
+        used = set()
+        descriptions = []
+        for item in stored.descriptions:
+            fields = dict(item)
+            references = fields.pop("facts_ids", None)
+            if (
+                not isinstance(references, list)
+                or not references
+                or any(not isinstance(ref, str) or not ref for ref in references)
+            ):
+                raise ValueError("Source description requires nonempty physical-fact references")
+            references = cast("list[str]", references)
+            if len(references) != len(set(references)):
+                raise ValueError("Duplicate physical-fact references")
+            if "facts" in fields:
+                raise ValueError("Revision 2 descriptions must reference physical facts")
+            if any(ref not in facts_by_id for ref in references):
+                raise ValueError("Missing referenced physical facts")
+            fields["facts"] = tuple(facts_by_id[ref] for ref in references)
+            descriptions.append(SourceDescription.model_validate(fields))
+            used.update(references)
+        if used != facts_by_id.keys():
+            raise ValueError("Unreferenced physical facts")
+        return SourceDescriptions(
+            provider_id=stored.provider_id, claims_file=stored.claims_file, descriptions=tuple(descriptions)
+        )
+    except (ValueError, TypeError) as exc:
+        raise FatalContractError(f"Invalid source-series descriptions: {exc}") from exc
 
 
 def catalogue_series(
