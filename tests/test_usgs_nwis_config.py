@@ -32,12 +32,12 @@ from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 def test_config_declares_all_six_usgs_products() -> None:
     declared = config()
     expected = {
-        "discharge_daily_mean": ("dv", "00060", "00003", Unit.FT3_S, Daily),
-        "discharge_instantaneous": ("iv", "00060", None, Unit.FT3_S, Instant),
-        "stage_daily_mean": ("dv", "00065", "00003", Unit.FT, Daily),
-        "stage_daily_max": ("dv", "00065", "00001", Unit.FT, Daily),
-        "stage_daily_min": ("dv", "00065", "00002", Unit.FT, Daily),
-        "stage_instantaneous": ("iv", "00065", None, Unit.FT, Instant),
+        "discharge_daily_mean": ("daily", "00060", "00003", Unit.FT3_S, Daily),
+        "discharge_instantaneous": ("continuous", "00060", None, Unit.FT3_S, Instant),
+        "stage_daily_mean": ("daily", "00065", "00003", Unit.FT, Daily),
+        "stage_daily_max": ("daily", "00065", "00001", Unit.FT, Daily),
+        "stage_daily_min": ("daily", "00065", "00002", Unit.FT, Daily),
+        "stage_instantaneous": ("continuous", "00065", None, Unit.FT, Instant),
     }
 
     assert set(declared.products) == set(expected)
@@ -58,26 +58,35 @@ def test_config_declares_all_six_usgs_products() -> None:
     assert declared.cache is None
 
 
-def test_usgs_window_declarations_cover_every_configured_product_with_date_inclusive_rendering() -> None:
+def test_usgs_window_declarations_match_each_modern_collection() -> None:
     declarations = window_declarations()
-    expected = WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE)
-
+    daily = WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE)
+    continuous = WindowDeclaration(
+        WindowGranularity("capped-span"),
+        WindowRenderingVocabulary.ISO_INSTANT,
+        StopConvention.INCLUSIVE,
+        size=1100,
+    )
     assert set(declarations.products) == set(config().products)
-    assert all(declaration == expected and declaration.size is None for declaration in declarations.products.values())
+    for product_id, product in config().products.items():
+        coordinates = product.coordinates.value
+        expected = daily if coordinates.endpoint == "daily" else continuous
+        assert declarations.products[product_id] == expected
+        assert declarations.products[product_id].size == (None if coordinates.endpoint == "daily" else 1100)
     assert isinstance(declaration.observations, LiveStages)
     assert declaration.observations.stages.window_declarations is declarations
 
 
 def test_usgs_source_coordinates_are_named_immutable_and_slotted() -> None:
-    coordinates = UsgsNwisSourceCoordinates("dv", "00060", "00003")
+    coordinates = UsgsNwisSourceCoordinates("daily", "00060", "00003")
 
     assert isinstance(coordinates, UsgsNwisSourceCoordinates)
-    assert coordinates.endpoint == "dv"
+    assert coordinates.endpoint == "daily"
     assert coordinates.parameter_code == "00060"
     assert coordinates.statistic_code == "00003"
     attribute = "endpoint"
     with pytest.raises(FrozenInstanceError):
-        setattr(coordinates, attribute, "iv")
+        setattr(coordinates, attribute, "continuous")
     assert not hasattr(coordinates, "__dict__")
 
 
@@ -85,20 +94,20 @@ def test_usgs_source_coordinates_are_named_immutable_and_slotted() -> None:
     ("args", "exception"),
     [
         ((), TypeError),
-        (("dv",), TypeError),
-        (("dv", "00060"), TypeError),
+        (("daily",), TypeError),
+        (("daily", "00060"), TypeError),
         ((object(), "00060", None), TypeError),
-        (("DV", "00060", "00003"), ValueError),
+        (("DAILY", "00060", "00003"), ValueError),
         (("bad", "00060", "00003"), ValueError),
-        (("iv", object(), None), TypeError),
-        (("iv", "0060", None), ValueError),
-        (("iv", "000600", None), ValueError),
-        (("iv", "00A60", None), ValueError),
-        (("dv", "00060", object()), TypeError),
-        (("dv", "00060", None), ValueError),
-        (("dv", "00060", "003"), ValueError),
-        (("dv", "00060", "00A03"), ValueError),
-        (("iv", "00060", "00003"), ValueError),
+        (("continuous", object(), None), TypeError),
+        (("continuous", "0060", None), ValueError),
+        (("continuous", "000600", None), ValueError),
+        (("continuous", "00A60", None), ValueError),
+        (("daily", "00060", object()), TypeError),
+        (("daily", "00060", None), ValueError),
+        (("daily", "00060", "003"), ValueError),
+        (("daily", "00060", "00A03"), ValueError),
+        (("continuous", "00060", "00003"), ValueError),
     ],
 )
 def test_usgs_source_coordinates_reject_incomplete_or_invalid_values(
@@ -111,7 +120,7 @@ def test_usgs_source_coordinates_reject_incomplete_or_invalid_values(
 
 
 def test_product_and_provider_declarations_reject_incomplete_or_invalid_values() -> None:
-    coordinates = UsgsNwisSourceCoordinates("iv", "00060", None)
+    coordinates = UsgsNwisSourceCoordinates("continuous", "00060", None)
     source_coordinates = SourceCoordinates(coordinates)
     product = ProductConfig(
         coordinates=source_coordinates,

@@ -7,6 +7,7 @@ BUILTIN_PROVIDER_IDS = (
     "ch_foen",
     "cz_chmi",
     "fr_hubeau",
+    "fr_hydroportail",
     "jp_mlit",
     "lt_lhmt",
     "no_nve",

@@ -155,6 +155,19 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
     )
     size = declaration.size
     assert size is not None
+    if (
+        declaration.rendering is WindowRenderingVocabulary.ISO_INSTANT
+        and declaration.stop_convention is StopConvention.INCLUSIVE
+    ):
+        cursor = _datetime_from_endpoint(fetch_window, "start")
+        final = _datetime_from_endpoint(fetch_window, "end")
+        windows = []
+        tick = timedelta(microseconds=1)
+        while cursor <= final:
+            stop = min(cursor + timedelta(days=size) - tick, final)
+            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop)))
+            cursor = stop + tick
+        return tuple(windows)
     cursor = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
     final = _datetime_from_endpoint(fetch_window, "end").replace(hour=0, minute=0, second=0, microsecond=0)
     windows = []

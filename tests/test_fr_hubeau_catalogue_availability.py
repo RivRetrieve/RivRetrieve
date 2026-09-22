@@ -4,7 +4,12 @@ import lzma
 from pathlib import Path
 
 from rivretrieve._internal.catalogues.native import read_native_table
-from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import build_catalogue, decode_availability
+from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
+    EXPECTED_PRODUCT_IDS,
+    NativeInventoryCapture,
+    build_catalogue,
+    decode_availability,
+)
 from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
@@ -13,14 +18,15 @@ def test_catalogue_admits_full_evidenced_native_inventory() -> None:
     native = read_native_table(native_path)
     ledger_path = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
     availability = decode_availability(lzma.decompress(ledger_path.read_bytes()))
-    catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability)
+    capture = NativeInventoryCapture.model_validate_json((ledger_path.parent / "native_capture.json").read_bytes())
+    catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture)
     artifact = catalogue.public_artifact
-    assert artifact.stations.height == 7323
-    assert artifact.station_products.height == 33139
+    assert artifact.stations.height == 7347
+    assert artifact.station_products.height == 20297
     assert set(artifact.stations["station_id"]) == set(native.data["code_station"])
     assert dict(artifact.station_products.group_by("availability").len().iter_rows()) == {
-        "available": 20966,
-        "unknown": 12173,
+        "available": 15283,
+        "unknown": 5014,
     }
 
     catalogue_rows = {
@@ -35,6 +41,8 @@ def test_catalogue_admits_full_evidenced_native_inventory() -> None:
         for acquisition in source.acquisitions
     }
     for pair in availability.pairs:
+        if pair.product_id not in EXPECTED_PRODUCT_IDS:
+            continue
         row = catalogue_rows[pair.code_station, pair.product_id]
         assert row["last_catalogue_check"] == max(a.retrieved_at_start for a in pair.acquisitions).date()
         assert row["availability_reason"] == pair.reason

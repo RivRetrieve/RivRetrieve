@@ -1,0 +1,240 @@
+{
+  "format_version": 6,
+  "provider_id": "fr_hubeau",
+  "built_at": "2026-09-20T10:21:06.704894Z",
+  "coverage": [
+    {
+      "series_id": "f9329d6b1c709dc26dcb9ac54b49d39021821c6c08b6591ebd89a24487118945",
+      "start": "2026-06-01T00:00:00.000000",
+      "end": "2026-06-02T23:59:59.999999",
+      "retrieved_at": "2026-09-14T08:00:37.291189Z",
+      "outcome_id": "cc2218381fb3bc2a5f70a0c5bba3821376ff57af2cd6ef9a4491143ab1d86fe0",
+      "facts_ids": [
+        "770850a4b5a052de08ed1cf2698285689930d7bdbd1a6d53a7f680903242db9e"
+      ]
+    }
+  ],
+  "partition_row_counts": {
+    "product=discharge_instantaneous/year=2026": 282
+  },
+  "series": [
+    {
+      "series_id": "f9329d6b1c709dc26dcb9ac54b49d39021821c6c08b6591ebd89a24487118945",
+      "provider_id": "fr_hubeau",
+      "station_id": "1232000101",
+      "product_id": "discharge_instantaneous",
+      "identity": {
+        "namespace": "fr_hubeau/hydroportail/Q",
+        "published_id": "raw",
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "fr_hubeau/config.py and catalogue/products.parquet: discharge_instantaneous"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "770850a4b5a052de08ed1cf2698285689930d7bdbd1a6d53a7f680903242db9e",
+          "quantity": {
+            "value": "discharge",
+            "state": "known",
+            "evidence": [
+              "fr_hubeau/config.py and catalogue/products.parquet: discharge_instantaneous"
+            ]
+          },
+          "source_unit": {
+            "value": "l",
+            "state": "known",
+            "evidence": [
+              "fr_hubeau/config.py and catalogue/products.parquet: discharge_instantaneous",
+              "https://hydro.eaufrance.fr/build/4210.e6896d9b.js sha256:72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6 HydroPortail Q unit selector: code=l, label=unit.q.l",
+              "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js sha256:ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823 HydroPortail common.unit.q.l=l/s"
+            ]
+          },
+          "normalized_unit": "l/s",
+          "source_unit_definition": {
+            "provider_id": "fr_hubeau",
+            "namespace": "fr_hubeau/hydroportail/Q",
+            "code": "l",
+            "unit": "l/s",
+            "evidence": [
+              "https://hydro.eaufrance.fr/build/4210.e6896d9b.js sha256:72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6 HydroPortail Q unit selector: code=l, label=unit.q.l",
+              "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js sha256:ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823 HydroPortail common.unit.q.l=l/s"
+            ]
+          },
+          "frequency": {
+            "value": "irregular",
+            "state": "known",
+            "evidence": [
+              "fr_hubeau/config.py and catalogue/products.parquet: discharge_instantaneous"
+            ]
+          },
+          "statistic": {
+            "value": "instantaneous",
+            "state": "known",
+            "evidence": [
+              "fr_hubeau/config.py and catalogue/products.parquet: discharge_instantaneous"
+            ]
+          },
+          "temporal_support": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": "+00:00",
+            "state": "known",
+            "evidence": [
+              "fr_hubeau/config.py and catalogue/products.parquet: discharge_instantaneous"
+            ]
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    }
+  ],
+  "inventories": [
+    {
+      "snapshot_id": "9da6f6a715781fda1238b4b6143b95aaf9874b0cac9e63fce535e7d265f8e8f8",
+      "scope": {
+        "state": "active",
+        "provider_ids": [
+          "fr_hubeau"
+        ],
+        "station_ids": [
+          "1232000101"
+        ],
+        "product_ids": [
+          "discharge_instantaneous"
+        ],
+        "predicates": [
+          {
+            "field": "quantity",
+            "value": "discharge"
+          },
+          {
+            "field": "statistic",
+            "value": "instantaneous"
+          }
+        ],
+        "restriction": "explicit",
+        "variants": [],
+        "series_ids": [
+          "f9329d6b1c709dc26dcb9ac54b49d39021821c6c08b6591ebd89a24487118945"
+        ]
+      },
+      "members": [
+        "f9329d6b1c709dc26dcb9ac54b49d39021821c6c08b6591ebd89a24487118945"
+      ],
+      "member_facts": [
+        [
+          "f9329d6b1c709dc26dcb9ac54b49d39021821c6c08b6591ebd89a24487118945",
+          [
+            "770850a4b5a052de08ed1cf2698285689930d7bdbd1a6d53a7f680903242db9e"
+          ]
+        ]
+      ],
+      "completeness": "incomplete",
+      "access": "fr_hubeau supported source mapping",
+      "origin": "response",
+      "acquired_at": "2026-09-14T08:00:37.291189Z",
+      "catalogue_check_date": null,
+      "catalogue_claims": [],
+      "window": {
+        "start": "2026-05-30T00:00:00",
+        "end": "2026-06-04T23:59:59.999999"
+      },
+      "evidence": [
+        "fr_hubeau parsed payload"
+      ],
+      "reason": "Supported access does not establish exhaustive source-series inventory"
+    }
+  ],
+  "outcomes": [
+    {
+      "outcome_id": "cc2218381fb3bc2a5f70a0c5bba3821376ff57af2cd6ef9a4491143ab1d86fe0",
+      "series_id": "f9329d6b1c709dc26dcb9ac54b49d39021821c6c08b6591ebd89a24487118945",
+      "station_id": "1232000101",
+      "product_id": "discharge_instantaneous",
+      "window": {
+        "start": "2026-06-01T00:00:00",
+        "end": "2026-06-02T23:59:59.999999"
+      },
+      "status": "success",
+      "facts_ids": [
+        "770850a4b5a052de08ed1cf2698285689930d7bdbd1a6d53a7f680903242db9e"
+      ],
+      "reason": null,
+      "retrieved_at": "2026-09-14T08:00:37.291189Z",
+      "calls": [],
+      "requested_selector": null
+    }
+  ],
+  "issues": [],
+  "source_calls": [
+    {
+      "content_type": "application/json",
+      "query": {
+        "reason": "unknown",
+        "status": "unknown"
+      },
+      "request_parameters": {
+        "hydro_series[endAt]": "04/06/2026",
+        "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "Q",
+        "hydro_series[startAt]": "30/05/2026",
+        "hydro_series[statusData]": "raw",
+        "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable"
+      },
+      "retrieved_at": {
+        "__rivretrieve_value_type__": "datetime",
+        "value": "2026-09-14T08:00:37.291189+00:00"
+      },
+      "series_ids": {
+        "__rivretrieve_value_type__": "tuple",
+        "value": [
+          "f9329d6b1c709dc26dcb9ac54b49d39021821c6c08b6591ebd89a24487118945"
+        ]
+      },
+      "source_path": {
+        "reason": "unknown",
+        "status": "unknown"
+      },
+      "station_products": {
+        "__rivretrieve_value_type__": "tuple",
+        "value": [
+          {
+            "__rivretrieve_value_type__": "tuple",
+            "value": [
+              "1232000101",
+              "discharge_instantaneous"
+            ]
+          }
+        ]
+      },
+      "status_code": 200,
+      "url": "https://hydro.eaufrance.fr/stationhydro/ajax/1232000101/series"
+    }
+  ]
+}

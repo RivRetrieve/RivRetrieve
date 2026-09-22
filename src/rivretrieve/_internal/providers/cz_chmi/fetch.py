@@ -19,6 +19,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.cz_chmi.config import CzChmiSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest
 
 _BASE = "https://opendata.chmi.cz/hydrology/historical/data"
@@ -45,6 +46,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     groups: dict[tuple[str, str, str], list[tuple[ProductId, CzChmiSourceCoordinates]]] = {}
     for station_id in stations:
@@ -88,6 +92,8 @@ def fetch(
                     query=UnknownOriginFact(),
                 ),
                 prerequisite_calls=response.prerequisite_calls,
+                scope=scope,
+                known_series=known_series,
             )
         )
     return WithIssues(value=tuple(payloads), issues=())

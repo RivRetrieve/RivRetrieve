@@ -102,12 +102,15 @@ def test_distribution_keeps_only_runtime_catalogues(distribution: str, tmp_path:
         sites = tuple((environment / "lib").glob("python*/site-packages"))
         assert len(sites) == 1
         # Reuse installed dependencies, not the editable project's .pth files.
-        dependencies = [
-            path
-            for path in sys.path
-            if Path(path).name == "site-packages" and Path(path).is_relative_to(Path(sys.prefix))
-        ]
+        dependencies = list(
+            dict.fromkeys(
+                str(Path(path).resolve())
+                for path in sys.path
+                if Path(path).is_absolute() and Path(path).name == "site-packages" and Path(path).is_dir()
+            )
+        )
         assert dependencies
+        assert all(not Path(path).is_relative_to(repository / "src") for path in dependencies)
         (sites[0] / "dependencies.pth").write_text("\n".join(dependencies) + "\n")
         _run(
             [str(python), "-I", "-c", _VERIFICATION],

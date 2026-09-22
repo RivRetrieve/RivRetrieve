@@ -90,13 +90,14 @@ class _TextParser(HTMLParser):
 
 
 def test_publisher_crs_evidence_names_hydro_but_no_reference_system() -> None:
+    # The documentation fixture retains source text except the explicitly redacted archive credential.
     capture = CRS_EVIDENCE_PATH.read_bytes()
     parser = _TextParser()
     parser.feed(capture.decode("utf-8"))
     text = " ".join(" ".join(parser.parts).split()).casefold()
 
-    assert len(capture) == 15_737
-    assert hashlib.sha256(capture).hexdigest() == ("488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df")
+    assert len(capture) == 15_683
+    assert hashlib.sha256(capture).hexdigest() == ("b353852a474516acf404c1d8b775cc77c5cf3c97bd3055380fc4534bcba9111c")
     assert text
     assert "hydro" in text
     assert all(token.casefold() not in text for token in CRS_ABSENCE_TOKENS)

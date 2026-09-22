@@ -27,5 +27,7 @@
   "acquisition_dates": "Mixed; each exact instant and request retained in governing evidence and acquisition provenance. Not a simultaneous snapshot.",
   "availability_scope": "Evidence at acquisition, not guaranteed continuous or future measurements. Unknown remains selectable.",
   "instantaneous_discharge_entity": "selected station code, not shared site",
-  "verification_scope": "Public derived ledger consistency and separately required full private source-body verification."
+  "verification_scope": "Public derived ledger consistency and separately required full private source-body verification.",
+  "record_scope": "Historical combined catalogue measured before independent HubEau and HydroPortail providers; not current membership.",
+  "current_coverage": "maintenance/catalogue/fr_hydroportail/COVERAGE.md"
 }

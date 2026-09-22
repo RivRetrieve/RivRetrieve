@@ -22,6 +22,7 @@ from rivretrieve._internal.catalogues.evidence import (
 )
 from rivretrieve._internal.catalogues.evidence_encoding import parse_catalogue_evidence
 from rivretrieve._internal.catalogues.schemas import (
+    CATALOGUE_SERIES_CLAIMS_SCHEMA,
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
     STATION_CATALOG_SCHEMA,
@@ -30,8 +31,10 @@ from rivretrieve._internal.catalogues.schemas import (
     CatalogueSchema,
     validate_catalogue,
 )
+from rivretrieve._internal.catalogues.source_series import SourceDescriptions, decode_source_descriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import OnIssue
+from rivretrieve._internal.publication_identity import publication_identity_fields
 
 REQUIRED_ARTIFACT_FILES = (
     "provider.json",
@@ -48,6 +51,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
@@ -82,6 +86,8 @@ class PackagedCatalogArtifact:
     stations: pl.DataFrame
     station_products: pl.DataFrame
     acquisition_provenance: CatalogueEvidence | None = None
+    source_descriptions: SourceDescriptions | None = None
+    catalogue_claims: pl.DataFrame | None = None
 
 
 def load_packaged_catalogue_artifact(
@@ -91,8 +97,16 @@ def load_packaged_catalogue_artifact(
 ) -> PackagedCatalogArtifact:
     artifact_path = Path(path)
     _ensure_artifact_path(artifact_path)
-
     provider_info = _read_provider_json(artifact_path / "provider.json")
+    _validate_format(artifact_path, provider_info.get("provider_id"))
+    if not (artifact_path / "series_claims.parquet").is_file():
+        raise CorruptCatalogArtifactError("Catalogue format requires series_claims.parquet; rebuild catalogue")
+    try:
+        descriptions = decode_source_descriptions((artifact_path / "source_series.json").read_bytes())
+    except (OSError, ValueError, FatalContractError) as exc:
+        raise CorruptCatalogArtifactError("Invalid source-series descriptions; rebuild catalogue") from exc
+
+    claims = _read_parquet(artifact_path / "series_claims.parquet")
     products = _read_parquet(artifact_path / "products.parquet")
     stations = _read_parquet(artifact_path / "stations.parquet")
     station_products = _read_parquet(artifact_path / "station_products.parquet")
@@ -104,6 +118,8 @@ def load_packaged_catalogue_artifact(
         stations,
         station_products,
         acquisition_provenance=acquisition_provenance,
+        source_descriptions=descriptions,
+        catalogue_claims=claims,
         withheld_rows_already_applied=True,
         on_issue=on_issue,
     )
@@ -116,6 +132,8 @@ def packaged_catalogue_artifact_from_components(
     station_products: pl.DataFrame,
     *,
     acquisition_provenance: AcquisitionProvenance | CatalogueEvidence | None = None,
+    source_descriptions: SourceDescriptions | None = None,
+    catalogue_claims: pl.DataFrame | None = None,
     withheld_rows_already_applied: bool = False,
     on_issue: OnIssue = "warn",
 ) -> PackagedCatalogArtifact:
@@ -169,13 +187,37 @@ def packaged_catalogue_artifact_from_components(
     except (ValueError, FatalContractError, pl.exceptions.PolarsError) as exc:
         raise CorruptCatalogArtifactError(f"Catalogue evidence does not match canonical tables: {exc}") from exc
 
+    if source_descriptions is not None:
+        _validate_source_descriptions(source_descriptions, provider_id, products, stations, acquisition_provenance)
+    if catalogue_claims is not None:
+        _validate_catalogue_claims(catalogue_claims, provider_id, products, stations, acquisition_provenance)
     return PackagedCatalogArtifact(
         provider_info=provider_info_df.row(0, named=True),
         products=products,
         stations=stations,
         station_products=station_products,
         acquisition_provenance=acquisition_provenance,
+        source_descriptions=source_descriptions,
+        catalogue_claims=catalogue_claims,
     )
+
+
+def _validate_format(path: Path, provider_id: object) -> None:
+    try:
+        document = json.loads((path / "format.json").read_bytes())
+    except (OSError, ValueError) as exc:
+        raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator") from exc
+    expected: dict[str, object] = {"catalogue_format_version": 2}
+    identity = publication_identity_fields((str(provider_id),))
+    if identity and (
+        not isinstance(document, dict) or any(document.get(field) != value for field, value in identity.items())
+    ):
+        raise CorruptCatalogArtifactError(
+            f"Unsupported {provider_id} publication service identity; rebuild explicitly without reinterpreting source identities"
+        )
+    expected.update(identity)
+    if document != expected or type(document.get("catalogue_format_version")) is not int:
+        raise CorruptCatalogArtifactError("Unsupported catalogue format; rebuild with current generator")
 
 
 def _provenance_header(provenance: AcquisitionProvenance | CatalogueEvidence) -> AcquisitionProvenance | EvidenceHeader:
@@ -496,3 +538,92 @@ def _validate_station_product_references(
 
 def _unique_values(df: pl.DataFrame, column_name: str) -> set[object]:
     return set(df[column_name].drop_nulls().unique().to_list())
+
+
+def _validate_source_descriptions(
+    descriptions: SourceDescriptions,
+    provider_id: str,
+    products: pl.DataFrame,
+    stations: pl.DataFrame,
+    evidence: CatalogueEvidence | None,
+) -> None:
+    if descriptions.provider_id != provider_id:
+        raise CorruptCatalogArtifactError("Source descriptions provider does not match catalogue")
+    product_ids = set(products["product_id"])
+    station_ids = set(stations["station_id"])
+    declared_facts = set(evidence.facts["name"]) if evidence is not None else set()
+    keys = set()
+    for item in descriptions.descriptions:
+        if item.product_id not in product_ids or (item.station_id is not None and item.station_id not in station_ids):
+            raise CorruptCatalogArtifactError("Source description references absent catalogue coordinates")
+        if len(set(item.station_ids)) != len(item.station_ids) or set(item.station_ids) - station_ids:
+            raise CorruptCatalogArtifactError("Source description references invalid catalogue station scope")
+        if item.station_ids and item.station_id is not None:
+            raise CorruptCatalogArtifactError("Source description has conflicting station scopes")
+        if item.series_id is not None and item.station_id is None:
+            raise CorruptCatalogArtifactError("Concrete source-series ID requires station scope")
+        key = (
+            item.station_id,
+            item.station_ids,
+            item.product_id,
+            item.series_id,
+            item.identity_key,
+            item.identity.namespace,
+            item.identity.published_id,
+        )
+        if key in keys:
+            raise CorruptCatalogArtifactError("Duplicate catalogue source description")
+        keys.add(key)
+        refs = list(item.identity.evidence)
+        for facts in item.facts:
+            for name in type(facts).model_fields:
+                fact = getattr(facts, name)
+                if hasattr(fact, "evidence"):
+                    refs.extend(fact.evidence)
+        for ref in refs:
+            if ref.startswith("catalogue:"):
+                _, ref_provider, fact_name = ref.split(":", 2)
+                if ref_provider != provider_id or fact_name not in declared_facts:
+                    raise CorruptCatalogArtifactError(
+                        f"Source description references undeclared catalogue evidence: {ref}"
+                    )
+
+
+def _validate_catalogue_claims(
+    claims: pl.DataFrame,
+    provider_id: str,
+    products: pl.DataFrame,
+    stations: pl.DataFrame,
+    evidence: CatalogueEvidence | None,
+) -> None:
+    validate_catalogue(claims, CATALOGUE_SERIES_CLAIMS_SCHEMA, on_issue="raise")
+    if claims.is_empty():
+        return
+    if set(claims["provider_id"]) != {provider_id}:
+        raise CorruptCatalogArtifactError("Catalogue claim provider does not match artifact")
+    if set(claims["station_id"]) - set(stations["station_id"]) or set(claims["product_id"]) - set(
+        products["product_id"]
+    ):
+        raise CorruptCatalogArtifactError("Catalogue claims reference absent catalogue coordinates")
+    refs = set(claims["evidence"].explode())
+    declared = set(evidence.facts["name"]) if evidence is not None else set()
+    if any(
+        not isinstance(ref, str)
+        or not ref.startswith(f"catalogue:{provider_id}:")
+        or ref.split(":", 2)[2] not in declared
+        for ref in refs
+    ):
+        raise CorruptCatalogArtifactError("Catalogue claim evidence does not resolve to normalized catalogue facts")
+    if claims.filter(
+        (pl.col("namespace").str.len_chars() == 0)
+        | (pl.col("native_coordinates").list.len() == 0)
+        | (pl.col("evidence").list.len() == 0)
+    ).height:
+        raise CorruptCatalogArtifactError("Catalogue claims require identity, coordinates and evidence")
+
+    names = claims.select(pl.col("native_coordinates").list.eval(pl.element().struct.field("name")).alias("names"))
+    if names.filter(
+        pl.col("names").list.eval(pl.element().is_null() | (pl.element() == "")).list.any()
+        | (pl.col("names").list.n_unique() != pl.col("names").list.len())
+    ).height:
+        raise CorruptCatalogArtifactError("Catalogue claim coordinate names must be nonempty and unique")

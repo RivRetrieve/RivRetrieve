@@ -1,0 +1,52 @@
+Using CPython 3.13.8
+Creating virtual environment at: .venv
+   Building rivretrieve @ file:///Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/effort-311-hydroportail-variants
+warning: `build_system.requires = ["uv-build>=0.11.16,<0.12"]` does not contain the current uv version 0.12.1
+      Built rivretrieve @ file:///Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/effort-311-hydroportail-variants
+Installed 68 packages in 324ms
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_________ test_public_discovery_exposes_all_source_variants[discharge] _________
+
+quantity = 'discharge'
+
+    @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+    def test_public_discovery_exposes_all_source_variants(quantity):
+        selection = rr.find(provider="fr_hydroportail", station="Y251002001", quantity=quantity, statistic="instantaneous")
+>       assert set(rr.series(selection)["variant"].to_list()) == VARIANTS
+E       AssertionError: assert {None} == {'most_valid'..., 'validated'}
+E         
+E         Extra items in the left set:
+E         None
+E         Extra items in the right set:
+E         'raw'
+E         'pre_validated_and_validated'
+E         'most_valid'
+E         'validated'
+E         Use -v to get more diff
+
+tests/test_fr_hydroportail_variants.py:13: AssertionError
+___________ test_public_discovery_exposes_all_source_variants[stage] ___________
+
+quantity = 'stage'
+
+    @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+    def test_public_discovery_exposes_all_source_variants(quantity):
+        selection = rr.find(provider="fr_hydroportail", station="Y251002001", quantity=quantity, statistic="instantaneous")
+>       assert set(rr.series(selection)["variant"].to_list()) == VARIANTS
+E       AssertionError: assert {None} == {'most_valid'..., 'validated'}
+E         
+E         Extra items in the left set:
+E         None
+E         Extra items in the right set:
+E         'raw'
+E         'pre_validated_and_validated'
+E         'most_valid'
+E         'validated'
+E         Use -v to get more diff
+
+tests/test_fr_hydroportail_variants.py:13: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_fr_hydroportail_variants.py::test_public_discovery_exposes_all_source_variants[discharge]
+FAILED tests/test_fr_hydroportail_variants.py::test_public_discovery_exposes_all_source_variants[stage]
+2 failed in 4.50s

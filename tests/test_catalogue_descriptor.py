@@ -67,7 +67,16 @@ def _inputs(provider: str):
         if provider == "fr_hubeau"
         else (module.STATION_CATALOGUE_ORIGINS,)
     )
-    files = {**canonical, **evidence_files}
+    files = {
+        **canonical,
+        **evidence_files,
+        **{
+            name: (directory / name).read_bytes()
+            for name in ("format.json", "source_series.json", "series_claims.parquet")
+        },
+    }
+    if provider == "usgs_nwis":
+        files["monitoring_locations.json"] = (directory / "monitoring_locations.json").read_bytes()
     return provenance, origins, files
 
 
@@ -285,8 +294,13 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             for statement in provenance.header.source_records[0].statements
             if statement.kind == kind
         )
-    for provider in ("ch_foen", "ca_eccc", "pl_imgw", "fr_hubeau", "th_thaiwater"):
+    for provider in ("ch_foen", "ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
         assert "license" not in _descriptor(provider) and "citation" not in _descriptor(provider)
+    hubeau = _descriptor("fr_hubeau")
+    hubeau_provenance, _, _ = _inputs("fr_hubeau")
+    for statement in hubeau_provenance.header.source_records[0].statements:
+        if statement.kind in {"license", "citation"}:
+            assert hubeau[statement.kind] == statement.exact_text
     bosnia = _descriptor("ba_fhmzbih")
     provenance, _, _ = _inputs("ba_fhmzbih")
     assert bosnia["subjectOf"]["url"] == "provenance.json"
@@ -406,7 +420,7 @@ def test_reference_loader_extracts_all_five_evidence_relations(provider, monkeyp
 def test_descriptor_rejects_unexpected_file_authority():
     evidence, origins, files = _inputs("pl_imgw")
     for name in ("native.parquet", "../private.parquet", "https://example.org/input"):
-        with pytest.raises(FatalContractError, match="exactly the ten"):
+        with pytest.raises(FatalContractError, match="exactly the public"):
             build_catalogue_descriptor(evidence, origins, {**files, name: b"unexpected"})
 
 

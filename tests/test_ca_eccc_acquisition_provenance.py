@@ -193,7 +193,7 @@ def test_canada_rejects_transitive_runtime_lineage_for_a_packaged_product() -> N
     product["transformation"] = {
         "name": "invalid transitively runtime-derived product",
         "external_inputs": [
-            {"source_id": None, "fact": "observation.canonical_five_column_shape"},
+            {"source_id": None, "fact": "observation.identity_bearing_shape"},
         ],
     }
 

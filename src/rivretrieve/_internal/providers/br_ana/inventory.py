@@ -16,9 +16,14 @@ from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.native import RETRIEVED_AT_DTYPE, NativeTable
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates, config
+from rivretrieve._internal.providers.br_ana.series import describe_series
 from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope
+from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.transport import HttpMethod
 
 INVENTORY_URL = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/HidroInventarioEstacoes/v1"
@@ -289,3 +294,16 @@ def native_table_semantic_digest(table: NativeTable) -> str:
         raise FatalContractError("br_ana native table column order differs from inventory schema")
     data = table.data.with_columns(pl.col("retrieved_at").dt.strftime("%Y-%m-%dT%H:%M:%S%.6fZ"))
     return hashlib.sha256(data.write_json().encode("utf-8")).hexdigest()
+
+
+def source_inventory(artifact: PackagedCatalogArtifact) -> tuple[SourceSeries, ...]:
+    declarations = config()
+    result = []
+    for row in artifact.station_products.iter_rows(named=True):
+        product = ProductId(row["product_id"])
+        if product not in declarations.products or row["availability"] == "unavailable":
+            continue
+        source = declarations.products[product].coordinates.value
+        if isinstance(source, (BrAnaDailySourceCoordinates, BrAnaSourceCoordinates)):
+            result.append(describe_series(row["station_id"], product, source, origin="catalogue"))
+    return tuple(result)

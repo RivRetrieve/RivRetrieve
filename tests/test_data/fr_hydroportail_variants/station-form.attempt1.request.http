@@ -1,0 +1,7 @@
+GET /stationhydro/1232000101/series HTTP/1.1
+Host: hydro.eaufrance.fr
+User-Agent: RivRetrieve
+Accept-Encoding: gzip, deflate
+Accept: */*
+Connection: keep-alive
+

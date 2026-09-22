@@ -155,3 +155,19 @@ def test_six_product_packaged_artifact_rebuild_is_byte_identical(catalogue_input
     packaged = ROOT / "src/rivretrieve/_internal/providers/br_ana/catalogue"
     for path in tmp_path.iterdir():
         assert path.read_bytes() == (packaged / path.name).read_bytes(), path.name
+
+
+def test_daily_catalogue_labels_do_not_claim_interval_anchors(catalogue_inputs):
+    from rivretrieve._internal.providers.br_ana.catalogue_series import describe_catalogue
+    from rivretrieve._internal.providers.br_ana.config import config
+
+    descriptions = describe_catalogue(catalogue_inputs[-1].public_artifact, config=config())
+    for item in descriptions.descriptions:
+        facts = item.facts[0]
+        if item.product_id in DAILY_PRODUCTS:
+            assert facts.label_time == "00:00"
+            assert facts.timestamp_anchor.value is None
+            assert facts.timestamp_anchor.evidence == ()
+        else:
+            assert facts.timestamp_anchor.value == "measurement_time"
+            assert facts.timestamp_anchor.evidence

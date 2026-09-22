@@ -22,6 +22,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import SeriesMapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,3 +68,28 @@ def config() -> ProviderConfig:
 
 def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
+
+
+_GRAPH_EVIDENCE = (
+    "https://www.thaiwater.net/dist/js/app.chunk.js: waterlevel_graph station_type=tele_waterlevel components and unit translations",
+    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
+    "tests/test_data/th_thaiwater_official_evidence_manifest-2026-09-02.json",
+)
+
+SERIES_MAPPINGS = {
+    "discharge_reported": SeriesMapping(
+        "th_thaiwater/discharge",
+        "discharge",
+        "m3/s",
+        "m3/s",
+        evidence=(*_GRAPH_EVIDENCE, "graph_data.discharge: ปริมาณน้ำท่า (ม.3/วิ.) / m3/second"),
+    ),
+    "stage_reported": SeriesMapping(
+        "th_thaiwater/value",
+        "stage",
+        "m",
+        "m",
+        evidence=(*_GRAPH_EVIDENCE, "graph_data.value: ระดับน้ำ (ม.รทก) / Water Level (m MSL)"),
+        vertical_reference="above_sea_level",
+    ),
+}
