@@ -34,8 +34,9 @@ These are request labels, not inferred station time zones.
   original/final URL, UTC and verified SHA256. Includes explicit-v1 daily and
   metadata schemas, both sibling metadata responses, direct daily selections,
   ended-empty, the original bounded null probe and publisher migration HTML.
-- `prior-history/*` plus `historical-manifest.json`: 11 independently preserved
-  earlier bodies. SHA256/UTC/original URL are known; **final URL was not recorded**
+- `historical-manifest.json`: 11 independent earlier acquisition records. Five
+  bodies remain under `prior-history/`; six byte-identical documentation bodies
+  share the corresponding `new/` file without merging acquisition records. SHA256/UTC/original URL are known; **final URL was not recorded**
   and remains explicit null. Includes legacy and modern aligned 2010 bodies.
   Do not claim full redirect provenance or relabel their v0 requests as v1.
 - `metadata-index.json`: authored index into 53 selected records in the existing
@@ -94,8 +95,15 @@ and time-series-metadata v1 schemas and migration HTML. Use schemas plus actual
 records: qualifier arrays/null and value null can contradict declared scalar
 schema types. Metadata `id` joins observation `time_series_id`; observation
 feature IDs are unstable record-version identities, not series IDs.
-The new continuous collection request itself is v1; the independent old
-`prior-history/continuous-collection.body` request was v0 and stays labeled v0.
+The new continuous collection request itself is v1; the independent historical
+continuous-collection request was v0 and stays labeled v0, although both records
+reference the same byte-identical body.
+
+There are 53 acquisition records and 47 unique body files. Shared files cover
+OpenAPI, continuous collection/queryables, API-key documentation, the v1
+announcement and the retirement notice. Each acquisition keeps its original
+URL, timestamps, headers and provenance limits; sharing bytes does not make an
+unknown historical final URL known.
 
 ## Limits and integration
 

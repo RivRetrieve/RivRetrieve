@@ -16,9 +16,18 @@ def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest():
     hashes = dict(
         line.split("  ", 1)[::-1] for path in DATA.glob("*SHA256SUMS") for line in path.read_text().splitlines()
     )
-    assert len(hashes) == len(MANIFEST) + len(json.loads((DATA / "curated-manifest.json").read_text())) + len(
-        json.loads((DATA / "historical-manifest.json").read_text())
-    )
+    records = [
+        *MANIFEST.values(),
+        *json.loads((DATA / "curated-manifest.json").read_text()),
+        *json.loads((DATA / "historical-manifest.json").read_text()),
+    ]
+    assert len(records) == 53
+    assert len(hashes) == len({item["file"] for item in records}) == 47
+    assert set(hashes) == {item["file"] for item in records}
+    for item in records:
+        content = (DATA / item["file"]).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == item["sha256"] == hashes[item["file"]]
+        assert len(content) == item["bytes"]
     for name, digest in hashes.items():
         assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == digest
     for item in MANIFEST.values():
@@ -90,3 +99,22 @@ def test_present_null_publisher_recording_is_not_an_empty_answer():
     source = json.loads(original)
     assert {f["properties"]["approval_status"] for f in source["features"]} == {"Provisional"}
     assert all(f["properties"]["qualifier"] == ["DISCONTINUED"] for f in source["features"])
+
+
+def test_shared_documentation_bytes_keep_independent_historical_acquisitions():
+    historical = json.loads((DATA / "historical-manifest.json").read_text())
+    # This digest pins every pre-dedup acquisition field except its local body path.
+    acquisitions = [{key: value for key, value in item.items() if key != "file"} for item in historical]
+    assert (
+        hashlib.sha256(json.dumps(acquisitions, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        == "6e0150a7a866cc6ded0dddaeaadfaf2b739f035f144c81ef26e90411ee1b0e0f"
+    )
+    shared = [item for item in historical if item["file"].startswith("new/")]
+    assert len(shared) == 6
+    for item in shared:
+        current = next(record for record in MANIFEST.values() if record["file"] == item["file"])
+        assert item["sha256"] == current["sha256"]
+        assert item["acquired_utc"] != current["acquired_utc"]
+        assert item["final_url"] is None
+        assert item["provenance_completeness"] == "final_url_not_recorded"
+        assert item["source_recording"].startswith(".worktrees/usgs-modern-history-assessment/")
