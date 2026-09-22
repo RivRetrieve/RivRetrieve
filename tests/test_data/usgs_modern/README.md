@@ -1,13 +1,13 @@
-# USGS modern source recordings handoff
+# USGS Water Data source recordings
 
-Evidence-only curation directory, not a checkout. No production files, branches,
-issues, or national acquisitions were created or changed. Original research stays
-intact. The migration owner must copy needed evidence into its implementation PR;
-this ignored directory is not a durable runtime or test dependency.
+These committed files retain exact publisher responses and acquisition receipts
+used by the provider tests. Original legacy evidence remains independent.
+National metadata is retained separately in `research/usgs-modern-coverage`;
+this directory does not duplicate that acquisition.
 
 ## Recorded contract
 
-Agreed with `usgs-modern-implementation` before acquisition. GET explicit
+Recorded requests use GET on explicit
 `https://api.waterdata.usgs.gov/ogcapi/v1/collections/{daily,continuous}/items`.
 Parameters: `f=json`, native `monitoring_location_id`, `parameter_code`, daily
 `statistic_id`, `datetime`, `limit=10000`. Explicit picks add `time_series_id`.
@@ -30,7 +30,6 @@ These are request labels, not inferred station time zones.
 - `summary.json`: authored counts, ranges, identities, null/vocabulary summaries,
   coordinates and hashes. This is analysis, not a publisher response.
 - `*-completion.json`: authored per-job cursor exhaustion/count reports.
-- `jobs-*.json` and `capture.py`: exact acquisition plan and sequential recorder.
 - `prior-daily/*` plus `curated-manifest.json`: 14 untouched earlier captures with
   original/final URL, UTC and verified SHA256. Includes explicit-v1 daily and
   metadata schemas, both sibling metadata responses, direct daily selections,
@@ -86,9 +85,8 @@ The new continuous collection request itself is v1; the independent old
 
 ## Limits and integration
 
-All body hashes and lengths were checked. No source bodies were altered. No
-negative controls were authored; the migration owner must label generated
-contradictions/failures separately from publisher recordings. Strict replay must
+All body hashes and lengths were checked. No source bodies were altered. The files here are publisher recordings, not negative controls. Tests label
+authored contradictions and failures separately. Strict replay must
 match complete original coordinates, including padding and selected series.
 HTML/schema acquisitions are documentation, not observation replay responses.
 These finite checks do not prove national or complete historical parity. The
@@ -105,7 +103,7 @@ The new actual request User-Agent was `RivRetrieve-source-evidence`, with
 only permits engine User-Agent `RivRetrieve` and does not allow Accept-Encoding
 as ordinary execution metadata. Therefore these captures cannot truthfully be
 wrapped as standard v2 executed requests. Do not substitute invented engine
-headers. Use a fixture helper that matches exact original URL/query coordinates,
+headers. `tests/usgs_modern_recordings.py` matches exact original URL/query coordinates,
 checks the manifest SHA256, and returns original body/status/acquisition/content
 type without manufactured `executed_request` evidence. Preserve full manifests.
 Historical v1 envelopes deliberately lack request-execution metadata; selecting

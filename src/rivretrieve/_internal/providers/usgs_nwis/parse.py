@@ -90,7 +90,11 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
     )
     acquired = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
-    capture = hashlib.sha256(payload.content).hexdigest()
+    capture = stable_id(
+        hashlib.sha256(payload.content).hexdigest(),
+        acquired.isoformat() if acquired is not None else None,
+        window.model_dump_json(),
+    )
     definitions: dict[str, SourceSeries] = {}
     rows: dict[tuple[str, datetime], dict[str, object]] = {}
     failures: dict[str | None, list[str]] = {}

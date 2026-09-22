@@ -82,3 +82,26 @@ def test_referenced_physical_facts_remain_immutable():
     decoded = decode_source_descriptions(encode_source_descriptions(descriptions(), schema_version=2))
     with pytest.raises(ValidationError, match="frozen"):
         decoded.descriptions[0].facts[0].facts_id = "changed"
+
+
+@pytest.mark.parametrize("revision", [1, 2])
+def test_decoder_rejects_duplicate_json_keys(revision):
+    content = encode_source_descriptions(descriptions(), schema_version=revision)
+    ambiguous = content.replace(b'"provider_id":"test"', b'"provider_id":"test","provider_id":"other"', 1)
+    assert ambiguous != content
+    with pytest.raises(FatalContractError, match="Duplicate JSON object key"):
+        decode_source_descriptions(ambiguous)
+
+
+def test_artifact_loader_preserves_corrupt_catalogue_error_for_invalid_references(tmp_path):
+    from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactError, load_packaged_catalogue_artifact
+
+    raw = json.loads(encode_source_descriptions(descriptions(), schema_version=2))
+    raw["descriptions"][0]["facts_ids"] = ["missing"]
+    (tmp_path / "provider.json").write_text('{"provider_id":"test"}')
+    (tmp_path / "format.json").write_text('{"catalogue_format_version":2}')
+    for name in ("series_claims", "products", "stations", "station_products"):
+        (tmp_path / f"{name}.parquet").write_bytes(b"must not be interpreted")
+    (tmp_path / "source_series.json").write_text(json.dumps(raw))
+    with pytest.raises(CorruptCatalogArtifactError, match="Invalid source-series descriptions"):
+        load_packaged_catalogue_artifact(tmp_path)

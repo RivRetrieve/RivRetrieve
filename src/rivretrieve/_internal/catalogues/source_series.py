@@ -93,10 +93,19 @@ def encode_source_descriptions(value: SourceDescriptions, *, schema_version: Lit
     return (encoded.model_dump_json(exclude_defaults=True) + "\n").encode()
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
 def decode_source_descriptions(content: bytes) -> SourceDescriptions:
     """Read both disk revisions; resolve strict references to shared fact instances."""
     try:
-        raw = json.loads(content)
+        raw = json.loads(content, object_pairs_hook=_unique_json_object)
         if not isinstance(raw, dict):
             raise ValueError("Source descriptions must be a JSON object")
         revision = raw.get("schema_version", 1)

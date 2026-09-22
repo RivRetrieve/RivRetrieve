@@ -305,3 +305,16 @@ def test_unknown_internal_product_is_fatal_not_a_source_issue():
     invalid = replace(original, station_products=(("07374000", ProductId("undeclared")),))
     with pytest.raises(FatalContractError, match="absent from provider configuration"):
         parse(invalid, config())
+
+
+def test_retrieval_instant_is_part_of_outcome_identity_not_source_series_identity():
+    from datetime import timedelta
+
+    original = payload({"type": "FeatureCollection", "features": [feature()]})
+    later = replace(
+        original, origin=replace(original.origin, retrieved_at=original.origin.retrieved_at + timedelta(days=1))
+    )
+    first, second = parse(original, config()), parse(later, config())
+    assert first.series == second.series
+    assert first.outcomes[0].outcome_id != second.outcomes[0].outcome_id
+    assert second.outcomes[0].retrieved_at == later.origin.retrieved_at

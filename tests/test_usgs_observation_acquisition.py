@@ -583,3 +583,120 @@ def test_paginated_response_facts_replace_metadata_only_facts_and_cover_both_uni
     reused = run()
     pt.assert_frame_equal(reused.canonical_rows, result.canonical_rows)
     assert len(transport.requests) == 2
+
+
+@pytest.mark.parametrize("mode", ["reuse", "refresh", "bypass"])
+@pytest.mark.parametrize("late", ["transport", "malformed_json", "malformed_value", "bad_link"])
+def test_late_page_failure_never_overlaps_held_and_fresh_values(tmp_path, mode, late):
+    """Authored changed-value failure matrix; not publisher acquisition evidence."""
+    from dataclasses import replace
+    from functools import partial
+
+    import polars as pl
+    import polars.testing as pt
+
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.observations import ObservationProvenance, ReceiptAuthorship, ReceiptMode
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse_page
+    from rivretrieve._internal.store import StoreReader, StoreRoot
+
+    class Stages:
+        config = config()
+        window_declarations = window_declarations()
+        fetch = staticmethod(partial(fetch, monitoring_locations={STATION: LOCATION}))
+        parse = staticmethod(parse_page)
+
+    provider = ProviderId("usgs_nwis")
+    old_at, new_at = datetime(2026, 9, 22, tzinfo=UTC), datetime(2026, 9, 23, tzinfo=UTC)
+
+    class DatedTransport(Transport):
+        def send(self, request):
+            return replace(super().send(request), retrieved_at=new_at)
+
+    store = StoreRoot(tmp_path / "store")
+    known = (definition("alpha"),)
+    scope = SeriesScope(
+        provider_ids=(provider,),
+        station_ids=(STATION,),
+        product_ids=(PRODUCT,),
+        restriction=RestrictionKind.EXPLICIT,
+        variants=("alpha",),
+    )
+    seed_request = engine.ObservationRequest(
+        provider,
+        (STATION,),
+        (PRODUCT,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1, 23, 59, 59, 999999)),
+        ),
+        known_series=known,
+        scope=scope,
+    )
+    provenance = ObservationProvenance(source="authored-control", provider_id=provider)
+    seed = drive(
+        seed_request, Stages(), provenance=provenance, transport=Transport(page(feature())), store=store, cache="reuse"
+    )
+    before = StoreReader().status(store, provider).manifest
+    changed = feature()
+    changed["properties"]["value"] = "99.5"
+    outside = feature("alpha", "2000-01-03")
+    outside["properties"]["value"] = "20"
+    sibling = feature("beta", "2000-01-02")
+    following = "https://evil.example/items" if late == "bad_link" else next_url(datetime="1999-12-30/2000-01-05")
+    first = page(changed, outside, sibling, next_url=following)
+    invalid = feature("alpha", "2000-01-02")
+    invalid["properties"]["value"] = "not-a-number"
+    second = {"transport": "fail", "malformed_json": b"not JSON", "malformed_value": page(invalid), "bad_link": "fail"}[
+        late
+    ]
+    transport = DatedTransport(first, second)
+    request = replace(
+        seed_request,
+        window=engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 3, 23, 59, 59, 999999)),
+        ),
+        scope=SeriesScope(provider_ids=(provider,), station_ids=(STATION,), product_ids=(PRODUCT,)),
+    )
+    result = drive(
+        request,
+        Stages(),
+        provenance=provenance,
+        transport=transport,
+        store=store,
+        cache=mode,
+        receipts=ReceiptMode.INCLUDE,
+    )
+    alpha_id = definition("alpha").series_id
+    alpha = result.canonical_rows.filter(pl.col("series_id") == alpha_id).sort("time")
+    expected_first = 12.25 if mode == "reuse" else 99.5
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2000, 1, 1), datetime(2000, 1, 3)],
+            "value": [expected_first * 0.028316846592, 20 * 0.028316846592],
+        }
+    )
+    pt.assert_frame_equal(alpha.select("time", "value"), expected)
+    assert result.canonical_rows.filter(pl.col("series_id") == definition("beta").series_id).height == 1
+    expected_receipts = [first] if late in ("transport", "bad_link") else [first, second]
+    assert [
+        entry.content for entry in result.receipts.entries if entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
+    ] == expected_receipts
+    assert any(item.completeness is InventoryCompleteness.INCOMPLETE for item in result.inventories)
+    assert any(
+        item.series_id == alpha_id
+        and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNRESOLVED, OutcomeStatus.UNSUPPORTED)
+        for item in result.outcomes
+    )
+    assert any(issue.details.get("series_id") == alpha_id for issue in result.issues)
+    after = StoreReader().status(store, provider).manifest
+    assert after.coverage == before.coverage
+    assert all(item.retrieved_at == old_at for item in after.coverage)
+    if mode == "reuse":
+        assert result.provenance.served_intervals
+        assert all(item.retrieved_at == old_at for item in result.provenance.served_intervals)
+    else:
+        assert not result.provenance.served_intervals
+    assert seed.canonical_rows.height == 1

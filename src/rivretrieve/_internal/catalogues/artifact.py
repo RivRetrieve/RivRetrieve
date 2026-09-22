@@ -103,7 +103,7 @@ def load_packaged_catalogue_artifact(
         raise CorruptCatalogArtifactError("Catalogue format requires series_claims.parquet; rebuild catalogue")
     try:
         descriptions = decode_source_descriptions((artifact_path / "source_series.json").read_bytes())
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, FatalContractError) as exc:
         raise CorruptCatalogArtifactError("Invalid source-series descriptions; rebuild catalogue") from exc
 
     claims = _read_parquet(artifact_path / "series_claims.parquet")

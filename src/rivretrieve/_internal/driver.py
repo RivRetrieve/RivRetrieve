@@ -470,6 +470,26 @@ def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: Requested
     return rows.filter(pl.Series(keep, dtype=pl.Boolean))
 
 
+def _exclude_served_native(
+    rows: Rows, series: tuple[SourceSeries, ...], coverage: tuple[CoverageInterval, ...]
+) -> Rows:
+    """Keep held successful intervals authoritative during a failed reuse acquisition."""
+    if rows.is_empty() or not coverage:
+        return rows
+    daily_facts = tuple(
+        facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_DATE
+    )
+    daily = pl.col("facts_id").is_in(daily_facts)
+    keep = pl.lit(True)
+    for held in coverage:
+        inside = (
+            daily
+            & pl.col("time").dt.date().is_between(held.interval.start.date(), held.interval.end.date(), closed="both")
+        ) | (~daily & pl.col("time").is_between(held.interval.start, held.interval.end, closed="both"))
+        keep = keep & ~((pl.col("series_id") == held.series_id) & inside)
+    return rows.filter(keep)
+
+
 def _snapshot_matches(snapshot: InventorySnapshot, scope: SeriesScope, window: SeriesWindow) -> bool:
     held = snapshot.scope
     if snapshot.origin == "catalogue":
@@ -1339,6 +1359,18 @@ def drive(
                 fresh_inventories.extend(fetched.inventories)
                 outcomes.extend(fetched.outcomes)
                 fresh_outcomes.extend(fetched.outcomes)
+                # Transaction-level failures are known before any individual page is
+                # assembled. Restore held concrete successes first, so later partial
+                # page rows cannot overlap them. Inventory-only unknown failures do
+                # not override independently successful concrete requests.
+                failed_acquired_ids = tuple(
+                    item.series_id
+                    for item in fetched.outcomes
+                    if item.series_id is not None
+                    and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+                )
+                if failed_acquired_ids:
+                    retain_held_successes(failed_acquired_ids)
                 # A fully exhausted source transaction can establish an empty answer
                 # for a known concrete member even when no page contains its rows.
                 for original in fetched.outcomes:
@@ -1521,6 +1553,15 @@ def drive(
                     # Keep their receipts and diagnostics, not ambiguous numeric rows.
                     if unsupported:
                         native = native.filter(~pl.col("series_id").is_in(unsupported))
+                # Coverage/outcome evidence describes the current source page even
+                # when reuse serves held values instead of overlapping partial rows.
+                coverage_native = native
+                if restored_held_ids:
+                    native = _exclude_served_native(
+                        native,
+                        parsed.series,
+                        tuple(item for item in served if item.series_id in restored_held_ids),
+                    )
                 rows.append(native)
                 failed_ids = {
                     item.series_id
@@ -1573,7 +1614,7 @@ def drive(
                     observed_window = SeriesWindow(start=overlap_start, end=overlap_end)
                     observed_interval = RequestedInterval(overlap_start, overlap_end)
                     concrete = (
-                        native.filter(
+                        coverage_native.filter(
                             (pl.col("series_id") == original.series_id)
                             & pl.col("facts_id").is_in(original.facts_ids)
                             & pl.col("time").is_between(overlap_start, overlap_end, closed="both")
