@@ -71,3 +71,20 @@ The second full-suite run was diagnostic and was stopped after identifying activ
 legacy-replay failures while review repairs were in progress. It is also not
 counted as final validation. Final stable-head full-suite and independent review
 results are reported in the implementation PR.
+
+
+## Station identities and selectable series
+
+The catalogue retains all 26,258 station identities. Modern concrete series are
+available at 26,201 stations. The frozen legacy six-product availability table
+covered 26,200 stations: the approved 09385701 daily-discharge metadata gap loses
+one, while 02312719 and 11047350 gain supported products within the existing
+station scope. The exact five lost station/product pairs remain the approved
+five; 465 station/product pairs are gained.
+
+Of the 57 retained stations without modern concrete series, 56 had no supported
+baseline products. The remaining station is 09385701. All six null-statistic
+continuous cases remain present. `STATION-SELECTION-ACCOUNTING.json` is an
+authored enumeration joined to retained audit records, with input hashes. It is
+not a publisher response. The coverage-map regression checks the complete gap
+set and both station counts; no placeholder routes are added to inflate discovery.

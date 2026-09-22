@@ -170,7 +170,7 @@ def build_catalogue_descriptor(
     expected_files = (*REQUIRED_ARTIFACT_FILES, "provenance.json", *EVIDENCE_FILENAMES.values())
     if "format.json" in files or "source_series.json" in files:
         expected_files += ("format.json", "source_series.json", "series_claims.parquet")
-    if evidence.header.provider_id == "usgs_nwis" and "monitoring_locations.json" in files:
+    if "monitoring_locations.json" in files:
         expected_files += ("monitoring_locations.json",)
     if set(files) != set(expected_files):
         raise FatalContractError(

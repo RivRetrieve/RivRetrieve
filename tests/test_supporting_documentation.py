@@ -52,31 +52,33 @@ def test_catalogue_evidence_markdown():
 
 def test_architecture_markdown_exact_receipt(monkeypatch, tmp_path):
     import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
+    from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
 
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
+    name = "daily-07374000-discharge-mean"
+    replay = ModernReplay(name)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     result = execute("docs/architecture.md")["result"]
     expected = pl.DataFrame(
         {
-            "time": [datetime(2023, 1, 1)],
-            "time_zone": ["unknown"],
-            "station_id": ["07374000"],
-            "product_id": ["discharge_daily_mean"],
-            "unit": ["m3/s"],
-            "source_unit": ["ft3/s"],
-            "value": [373000 * 0.028316846592],
+            "time": [datetime(2024, 1, day) for day in range(1, 8)],
+            "time_zone": ["unknown"] * 7,
+            "station_id": ["07374000"] * 7,
+            "product_id": ["discharge_daily_mean"] * 7,
+            "unit": ["m3/s"] * 7,
+            "source_unit": ["ft^3/s"] * 7,
+            "value": [value * 0.028316846592 for value in (174000, 181000, 185000, 187000, 185000, 201000, 214000)],
         }
     )
     assert_frame_equal(result.data.select(expected.columns), expected)
     assert result.data["series_id"].n_unique() == 1
     assert result.source_series
     assert not result.issues
-    assert result.receipts.entries[0].content == recording.content
+    assert len(replay.calls) == 1
+    assert replay.calls[0].params["datetime"] == "2023-12-30/2024-01-09"
+    assert result.receipts.entries[0].content == body(name)
     assert result.receipts.entries[0].authorship.value == "publisher_payload"
+    assert result.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(MANIFEST[name]["acquired_utc"])
 
 
 @pytest.mark.parametrize("page", PAGES)

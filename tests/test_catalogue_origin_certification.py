@@ -756,6 +756,10 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         series_recording = ROOT / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"
         source_inputs_before = {path: path.read_bytes() for path in (ledger, series_recording)}
         arguments.extend(("--workbook-access-ledger", str(ledger), "--series-recording", str(series_recording)))
+    elif adapter.provider_id == "usgs_nwis":
+        metadata = ROOT / "research/usgs-modern-coverage"
+        source_inputs_before = {path: path.read_bytes() for path in metadata.glob("metadata-*") if path.is_file()}
+        arguments.extend(("--modern-metadata", str(metadata)))
     elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (
@@ -828,6 +832,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "series_claims.parquet",
         "croissant.json",
     }
+    if adapter.provider_id == "usgs_nwis":
+        expected_names.add("monitoring_locations.json")
     assert committed_names == rebuilt_names == expected_names
     for name in committed_names:
         committed = (catalogue_dir / name).read_bytes()
