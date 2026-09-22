@@ -1,0 +1,18 @@
+{
+  "provenance.json": "5dcbd1fc2d1f3830b01cc1fe25dd8cd8e1314561dd125726bee34ae8513bb99e",
+  "products.parquet": "ec36ef87b2d7dbd60250d92de76a7b830076195b429782c1a2457e77a0a4c1ab",
+  "native.parquet": "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701",
+  "provenance_acquisitions.parquet": "5c90cf5e819d3931c19dfd626ff87542711953b5e890a00551ec9860a0ae1d9d",
+  "station_products.parquet": "5de0cb38ac361cafec81fda284557774f1ef675f2b607d55fc44487ffa9b6da1",
+  "provenance_bindings.parquet": "fc0fe46866b1e9afcdcd57fd1f5eba8bdc83d98171ca19a0d72f2f37d07cde1f",
+  "source_series.json": "b7185684a181ee2caab1216572730bbb674a4dde6942935c641f3182d2f16955",
+  "series_claims.parquet": "b448a5498c3a96d9c072ace55c3a7071e5860ca4d2cd4a8e12b4a528bb7d84d8",
+  "croissant.json": "5ef62ebed7c18e346fba0c78a0c18186ce5797817f5d4d5d166973103f0fe012",
+  "provenance_external_inputs.parquet": "c1616841cf361b711e956ecf16fd91f45a94b57ecc58ae613051777f544438ce",
+  "stations.parquet": "7b13ba3eaed5ed206bd0924861e1ced4f7d9782aa2072d21cc1733bf82c02c1c",
+  "provider.json": "069550c25fb6eaefc64aceed9ff49594fe67dc38ab053ffe9a1d8c5627371ae4",
+  "provenance_facts.parquet": "67a4796ff11c629531dbaa8819d5306f89fbd6a37c5da681767a911705070181",
+  "provenance_binding_facts.parquet": "f5eb3270d60c34a901209dc019c8c29971aebb980a0abd83c9a22fe2d599e225",
+  "format.json": "e22e905095d009404bde5a63b87ff42f7bf02396c28db154730cf6829389a1eb",
+  "monitoring_locations.json": "0edd21d5400421f72033687b31e15d8bc323f6ee1b08c0569b996f93218747e5"
+}

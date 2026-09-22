@@ -40,6 +40,7 @@ written:
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
 - [Japan: MLIT](providers/jp_mlit.md)
 - [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
+- [United States — USGS](providers/usgs_nwis.md)
 
 ## How it works
 
