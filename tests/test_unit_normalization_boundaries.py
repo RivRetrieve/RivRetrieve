@@ -19,8 +19,8 @@ from rivretrieve._internal.source_series import EvidenceFact, PhysicalFacts, adm
 from rivretrieve._internal.store import ObservationStoreRefusedError, StoreRoot
 from rivretrieve._internal.store.accumulation import StoreUpdate, accumulate
 from tests.test_internal_conversion import _config, _product, _window
-from tests.test_source_series_bundle import _result
 from tests.test_source_series_store import _definition, _query, _success
+from tests.usgs_modern_recordings import ModernReplay
 
 
 @pytest.mark.parametrize(
@@ -76,7 +76,12 @@ def test_accumulation_rejects_copied_internal_normalization_contradiction(tmp_pa
 
 
 def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, tmp_path):
-    result, _recording = _result(monkeypatch, tmp_path)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023"))
+    selection = rr.find(
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True, cache="reuse")
     output = BytesIO()
     with ZipFile(BytesIO(rr.to_bundle(result))) as source, ZipFile(output, "w") as target:
         for name in source.namelist():
@@ -85,7 +90,7 @@ def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, 
                 manifest = json.loads(body)
                 for definition in manifest["series"]:
                     for fact in definition["facts"]:
-                        if fact["source_unit"]["value"] == "ft3/s":
+                        if fact["source_unit"]["value"] == "ft^3/s":
                             fact["normalized_unit"] = "m3/s"
                 body = json.dumps(manifest).encode()
             target.writestr(name, body)
@@ -99,15 +104,12 @@ def test_public_recorded_conversion_rejects_internal_scale_change_under_every_po
     monkeypatch, tmp_path, policy, answer_rows
 ):
     from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
+    from tests.usgs_modern_recordings import ModernReplay
 
     stages = declaration.observations.stages
     original = stages.parse
-    recording = read_recording(
-        Path(__file__).parent / "test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023"))
 
     def corrupt_parse(payload, config):
         parsed = original(payload, config)

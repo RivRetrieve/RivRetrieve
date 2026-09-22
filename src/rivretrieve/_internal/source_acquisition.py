@@ -24,7 +24,18 @@ def attempt_series_request(
     window: SeriesWindow,
 ) -> TransportResponse | FailedSourceRequest:
     """Retain a failed call for engine classification without discarding sibling responses."""
+    attempted = attempt_request(transport, request)
+    if isinstance(attempted, (TransportFailure, CredentialExchangeError)):
+        return FailedSourceRequest(uuid4().hex, series, window, request, attempted)
+    return attempted
+
+
+def attempt_request(
+    transport: Transport,
+    request: TransportRequest,
+) -> TransportResponse | TransportFailure | CredentialExchangeError:
+    """Retain supported source failure values even before a concrete identity is established."""
     try:
         return transport.send(request)
     except (TransportFailure, CredentialExchangeError) as failure:
-        return FailedSourceRequest(uuid4().hex, series, window, request, failure)
+        return failure

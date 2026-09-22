@@ -382,6 +382,9 @@
         },
         "publication_service": {
           "const": "hubeau"
+        },
+        "usgs_publication_service": {
+          "const": "usgs-waterdata-v1"
         }
       }
     }

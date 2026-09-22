@@ -1,0 +1,9 @@
+{
+  "name": "v1-openapi",
+  "initial_url": "https://api.waterdata.usgs.gov/ogcapi/v1/openapi?f=json",
+  "pages": [
+    "v1-openapi"
+  ],
+  "exhausted": true,
+  "total_features": 0
+}

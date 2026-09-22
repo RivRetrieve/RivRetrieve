@@ -208,45 +208,70 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
         rendered.start - timedelta(days=1)  # type: ignore[operator]
 
 
+def _window_decomposition_violations(module_source: str, path: object = "authored-control") -> list[str]:
+    violations: list[str] = []
+    tree = ast.parse(module_source)
+    for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
+        source = ast.get_source_segment(module_source, function) or ""
+        if "window" not in function.name.lower() and "FetchWindow" not in source:
+            continue
+        for node in ast.walk(function):
+            if (
+                isinstance(node, ast.BinOp)
+                and isinstance(node.op, (ast.Add, ast.Sub))
+                and not (
+                    isinstance(node.op, ast.Add)
+                    and (
+                        isinstance(node.left, ast.JoinedStr)
+                        or isinstance(node.left, ast.Constant)
+                        and isinstance(node.left.value, str)
+                    )
+                )
+            ):
+                violations.append(f"{path}:{function.name}:binary arithmetic")
+            if isinstance(node, ast.Call):
+                called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+                if called in {"timedelta", "monthrange", "relativedelta"}:
+                    violations.append(f"{path}:{function.name}:{called}")
+                if called == "replace" and any(
+                    keyword.arg in {"year", "month", "day", "hour", "minute", "second"} for keyword in node.keywords
+                ):
+                    violations.append(f"{path}:{function.name}:boundary replace")
+            if isinstance(node, (ast.For, ast.While)):
+                # Inspect operational identifiers, not publisher cursor vocabulary
+                # in string literals or comments inside a request loop.
+                loop_names = {item.id.lower() for item in ast.walk(node) if isinstance(item, ast.Name)}
+                if loop_names.intersection({"cursor", "window_start", "window_end", "next_date"}):
+                    violations.append(f"{path}:{function.name}:window cursor loop")
+    return violations
+
+
 def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic() -> None:
     providers = Path(__file__).parents[1] / "src" / "rivretrieve" / "_internal" / "providers"
-    violations: list[str] = []
-    for path in providers.glob("*/*.py"):
-        if path.name == "generate_catalogue.py":
-            continue
-        module_source = path.read_text()
-        tree = ast.parse(module_source)
-        for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
-            source = ast.get_source_segment(module_source, function) or ""
-            if "window" not in function.name.lower() and "FetchWindow" not in source:
-                continue
-            for node in ast.walk(function):
-                if (
-                    isinstance(node, ast.BinOp)
-                    and isinstance(node.op, (ast.Add, ast.Sub))
-                    and not (
-                        isinstance(node.op, ast.Add)
-                        and (
-                            isinstance(node.left, ast.JoinedStr)
-                            or isinstance(node.left, ast.Constant)
-                            and isinstance(node.left.value, str)
-                        )
-                    )
-                ):
-                    violations.append(f"{path}:{function.name}:binary arithmetic")
-                if isinstance(node, ast.Call):
-                    called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
-                    if called in {"timedelta", "monthrange", "relativedelta"}:
-                        violations.append(f"{path}:{function.name}:{called}")
-                    if called == "replace" and any(
-                        keyword.arg in {"year", "month", "day", "hour", "minute", "second"} for keyword in node.keywords
-                    ):
-                        violations.append(f"{path}:{function.name}:boundary replace")
-                if isinstance(node, (ast.For, ast.While)):
-                    loop_source = (ast.get_source_segment(module_source, node) or "").lower()
-                    if any(name in loop_source for name in ("cursor", "window_start", "window_end", "next_date")):
-                        violations.append(f"{path}:{function.name}:window cursor loop")
+    violations = [
+        violation
+        for path in providers.glob("*/*.py")
+        if path.name != "generate_catalogue.py"
+        for violation in _window_decomposition_violations(path.read_text(), path)
+    ]
     assert violations == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def window(fetch_window):\n    return fetch_window.start + timedelta(days=1)",
+        "def window(fetch_window):\n    return fetch_window.end.replace(hour=0)",
+        "def window(fetch_window):\n    while cursor < fetch_window.end:\n        cursor += step",
+    ],
+)
+def test_window_decomposition_guard_rejects_authored_boundary_arithmetic(source):
+    assert _window_decomposition_violations(source)
+
+
+def test_window_decomposition_guard_allows_publisher_pagination_vocabulary():
+    source = 'def fetch(fetch_window: FetchWindow):\n    for response in responses:\n        note("publisher cursor chains")\n        follow(response)'
+    assert _window_decomposition_violations(source) == []
 
 
 def test_obsolete_window_symbols_are_absent_from_tracked_source() -> None:

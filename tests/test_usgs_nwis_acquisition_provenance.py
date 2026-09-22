@@ -42,7 +42,16 @@ def test_usgs_cli_rejects_native_byte_substitution(tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
     native.write_bytes((declaration.catalogue / "native.parquet").read_bytes() + b"changed")
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
-        generate_catalogue.main(["--native", str(native), "--out", str(tmp_path / "out")])
+        generate_catalogue.main(
+            [
+                "--native",
+                str(native),
+                "--modern-metadata",
+                "research/usgs-modern-coverage",
+                "--out",
+                str(tmp_path / "out"),
+            ]
+        )
 
 
 def test_usgs_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,4 +60,13 @@ def test_usgs_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: py
 
     monkeypatch.setattr(generate_catalogue, "verify_provenance_recordings", reject)
     with pytest.raises(FatalContractError, match="recording verification invoked"):
-        generate_catalogue.main(["--native", str(declaration.catalogue / "native.parquet"), "--out", str(tmp_path)])
+        generate_catalogue.main(
+            [
+                "--native",
+                str(declaration.catalogue / "native.parquet"),
+                "--modern-metadata",
+                "research/usgs-modern-coverage",
+                "--out",
+                str(tmp_path),
+            ]
+        )

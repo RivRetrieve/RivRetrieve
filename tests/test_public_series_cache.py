@@ -1,6 +1,7 @@
 """Public recorded source-series retrieval and scoped cache reuse."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -10,14 +11,17 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal import discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
 
-RECORDING = Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json")
+RECORDING = "daily-07374000-discharge-mean"
+CURRENT = "0df18b246e8f48ec8e6547a92070e94a"
+ENDED = "4d186669708e4dc18f84d271efb953a1"
 
 
 def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    recording = read_recording(RECORDING)
-    replay = ReplayTransport((recording,))
+    content = body(RECORDING)
+    replay = ModernReplay(RECORDING)
     calls = []
 
     class Counting:
@@ -29,25 +33,39 @@ def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, 
     selection = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
     )
-    result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True, cache="reuse", on_issue="ignore")
-    assert len(calls) == 1
-    assert result.data["unit"].to_list() == ["m3/s"]
-    assert result.data["source_unit"].to_list() == ["ft3/s"]
-    assert result.data["value"].item() == pytest.approx(373000 * 0.028316846592)
-    assert result.receipts.entries[0].content == recording.content
-    assert all(
-        item.identity.published_id is not None
-        for item in result.source_series
-        if any(outcome.series_id == item.series_id for outcome in result.outcomes)
+    restored_selection = rr.from_bundle(rr.to_bundle(selection))
+    assert restored_selection.scope == selection.scope
+    assert restored_selection.known_series == selection.known_series
+    assert restored_selection.inventories == selection.inventories
+    pt.assert_frame_equal(rr.series(restored_selection), rr.series(selection))
+    result = rr.fetch(
+        restored_selection, start="2024-01-01", end="2024-01-07", receipts=True, cache="reuse", on_issue="raise"
     )
-    reused = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True, cache="reuse", on_issue="ignore")
+    expected_native = sorted(
+        float(f["properties"]["value"])
+        for f in json.loads(content)["features"]
+        if "2024-01-01" <= f["properties"]["time"] <= "2024-01-07"
+    )
+    assert len(calls) == 1
+    assert set(result.data["unit"]) == {"m3/s"}
+    assert set(result.data["source_unit"]) == {"ft^3/s"}
+    pt.assert_frame_equal(
+        result.data.select("value").sort("value"),
+        pl.DataFrame({"value": [v * 0.028316846592 for v in expected_native]}),
+    )
+    assert result.receipts.entries[0].content == content
+    assert all(
+        item.identity.published_id is not None and item.identity.namespace == "USGS.WaterData.time_series_id"
+        for item in result.source_series
+    )
+    reused = rr.fetch(selection, start="2024-01-01", end="2024-01-07", receipts=True, cache="reuse", on_issue="raise")
     assert len(calls) == 1
     pt.assert_frame_equal(result.data, reused.data)
     assert reused.provenance.served_intervals
     assert reused.outcomes
     native = pl.read_parquet(next(rr.cache_status("usgs_nwis").store.rglob("*.parquet")))
-    assert native["value"].to_list() == [373000.0]
-    assert native["source_unit"].to_list() == ["ft3/s"]
+    pt.assert_frame_equal(native.select("value").sort("value"), pl.DataFrame({"value": expected_native}))
+    assert set(native["source_unit"]) == {"ft^3/s"}
     bundle = tmp_path / "result.rrbundle"
     bundle.write_bytes(rr.to_bundle(result))
     restored = rr.from_bundle(bundle.read_bytes())
@@ -55,33 +73,50 @@ def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, 
     assert restored.source_series == result.source_series
     assert restored.inventories == result.inventories
     assert restored.outcomes == result.outcomes
-    assert restored.receipts.entries[0].content == recording.content
+    assert restored.receipts.entries[0].content == content
     standalone = tmp_path / "observations.parquet"
     result.data.write_parquet(standalone)
     pt.assert_frame_equal(pl.read_parquet(standalone), result.data)
 
 
-def test_unavailable_explicit_method_is_no_match_not_successful_empty(monkeypatch):
-    recording = read_recording(RECORDING)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
+def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empty(monkeypatch):
+    """Authored empty response for an unknown ID; not a recorded publisher availability claim."""
+    from rivretrieve._internal.transport import TransportResponse
+
+    calls = []
+
+    class AuthoredEmpty:
+        def send(self, request):
+            calls.append(request)
+            assert request.params["time_series_id"] == "authored-unknown-series"
+            return TransportResponse(
+                b'{"type":"FeatureCollection","features":[],"links":[]}',
+                200,
+                datetime.fromisoformat(MANIFEST[RECORDING]["acquired_utc"]),
+                "application/json",
+                request.url,
+                request.params,
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", AuthoredEmpty)
     selection = rr.pick(
         rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"),
-        variant="99999999",
+        variant="authored-unknown-series",
+        on_issue="ignore",
     )
-    result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", on_issue="ignore")
+    result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", on_issue="ignore")
+    assert len(calls) == 1
     assert result.data.is_empty()
-    assert any(item.status.value == "no_match" for item in result.outcomes)
+    assert any(item.status.value == "unresolved" for item in result.outcomes)
     assert not any(item.status.value in ("success", "empty") for item in result.outcomes)
-    assert any(item.code == "source.no_match" for item in result.issues)
+    assert any(item.code == "source.inventory_unresolved" for item in result.issues)
 
 
 def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(monkeypatch, tmp_path):
     import rivretrieve._internal.driver as driver
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    recording = read_recording(RECORDING)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
-    # Two actual catalogue stations retain independent source inventory evidence.
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(RECORDING))
     selection = rr.pick(
         rr.find(
             provider="usgs_nwis",
@@ -104,26 +139,88 @@ def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(mon
         return actual(store, provider, update)
 
     monkeypatch.setattr(driver, "accumulate", scoped)
-    result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="ignore")
-    assert result.data.height == 1
+    result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="reuse", on_issue="raise")
+    assert result.data.height == 7
     assert inspected
 
 
 def test_known_explicit_series_across_access_routes_reuse_independently(monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    recordings = (
-        read_recording(RECORDING),
-        read_recording(Path("tests/test_data/usgs_nwis_07374000_iv_00060_2023-01-01.recording.json")),
-    )
-    replay = ReplayTransport(recordings)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="usgs_nwis", station="07374000", quantity="discharge")
-    broad = rr.fetch(selection, start="2023-01-01T00:00", end="2023-01-01T00:15", cache="refresh", on_issue="ignore")
+    recordings = (RECORDING, "daily-07374000-stage-mean")
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(*recordings))
+    selection = rr.find(provider="usgs_nwis", station="07374000", frequency="daily", statistic="mean")
+    broad = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="refresh", on_issue="raise")
     assert broad.data["series_id"].n_unique() == 2
     explicit = rr.pick(selection, series_id=tuple(broad.data["series_id"].unique()), on_issue="ignore")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
-    reused = rr.fetch(explicit, start="2023-01-01T00:00", end="2023-01-01T00:15", cache="reuse", on_issue="raise")
+    reused = rr.fetch(explicit, start="2024-01-01", end="2024-01-07", cache="reuse", on_issue="raise")
     pt.assert_frame_equal(reused.data, broad.data)
+
+
+def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(monkeypatch, tmp_path):
+    from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    recordings = tuple(f"daily-02196000-2000-{name}" for name in ("all", "current", "ended"))
+    replay = ModernReplay(*recordings)
+    calls = []
+
+    class Counting:
+        def send(self, request):
+            calls.append(request)
+            return replay.send(request)
+
+    monkeypatch.setattr(discovery, "HttpClient", Counting)
+    selection = rr.find(
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    assert {s.variant for s in selection.series} == {CURRENT, ENDED}
+    explicit = rr.pick(selection, variant=CURRENT)
+    narrow = rr.fetch(explicit, start="2000-01-01", end="2000-01-07", cache="reuse", on_issue="raise")
+    assert narrow.data.height == 7
+    broad = rr.fetch(selection, start="2000-01-01", end="2000-01-07", cache="reuse", on_issue="raise")
+    assert len(calls) == 2
+    assert "time_series_id" not in calls[-1].params
+    assert broad.data.height == 14
+    assert broad.data["series_id"].n_unique() == 2
+    refreshed = rr.fetch(explicit, start="2000-01-01", end="2000-01-07", cache="refresh", on_issue="raise")
+    assert len(calls) == 3
+    pt.assert_frame_equal(refreshed.data, narrow.data)
+
+    class Failed:
+        def send(self, request):
+            raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
+
+    monkeypatch.setattr(discovery, "HttpClient", Failed)
+    failed = rr.fetch(explicit, start="2000-01-01", end="2000-01-07", cache="refresh", on_issue="ignore")
+    assert failed.issues
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
+    ended = rr.fetch(
+        rr.pick(selection, variant=ENDED), start="2000-01-01", end="2000-01-07", cache="reuse", on_issue="raise"
+    )
+    pt.assert_frame_equal(ended.data, rr.pick(broad, variant=ENDED).data)
+    restored = rr.fetch(explicit, start="2000-01-01", end="2000-01-07", cache="reuse", on_issue="ignore")
+    pt.assert_frame_equal(restored.data, narrow.data)
+
+
+def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_path):
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    name = "daily-02196000-ended-empty"
+    content = body(name)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(name))
+    selection = rr.pick(
+        rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"),
+        variant=ENDED,
+    )
+    result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="refresh", receipts=True, on_issue="raise")
+    assert result.data.is_empty()
+    assert {outcome.status.value for outcome in result.outcomes} == {"empty"}
+    assert result.receipts.entries[0].content == content
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
+    reused = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="reuse", on_issue="raise")
+    assert reused.data.is_empty()
+    assert {outcome.status.value for outcome in reused.outcomes} == {"empty"}
+    assert reused.provenance.served_intervals
 
 
 def test_nve_cached_explicit_subset_does_not_freeze_later_all_known_versions(monkeypatch, tmp_path):

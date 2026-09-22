@@ -1,21 +1,19 @@
 """Authored measurement-representability controls through actual USGS fetch/cache.
 
-Bodies are derivatives of a retained DV recording, not new publisher captures.
+Bodies are derivatives of a retained modern daily recording, not new publisher captures.
 The replay HTTP envelope is authored. Original recording bytes are unchanged.
 """
 
 import json
 from contextlib import nullcontext
-from copy import deepcopy
-from pathlib import Path
+from dataclasses import replace
 
 import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.issues import IssuePolicyError
-from rivretrieve._internal.recordings import read_recording
-from rivretrieve._internal.transport import TransportResponse
+from tests.usgs_modern_recordings import ModernReplay, body
 
 _MISSING = object()
 _RAW_NUMBER = "__authored_raw_json_number__"
@@ -28,23 +26,29 @@ def selection():
 
 @pytest.fixture(scope="module")
 def recording():
-    return read_recording(
-        Path(__file__).with_name("test_data") / "usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
+    return body("daily-07374000-docs-2023")
 
 
 def _install(monkeypatch, tmp_path, recording, value, *, numeric_token=None, sibling=True):
-    document = json.loads(recording.content)
-    blocks = document["value"]["timeSeries"][0]["values"]
-    healthy = deepcopy(blocks[0])
-    observation = {"dateTime": "2023-01-01T00:00:00.000"}
+    document = json.loads(recording)
+    affected = next(item for item in document["features"] if item["properties"]["time"] == "2023-01-01")
+    properties = affected["properties"]
+    properties.pop("value")
     if value is not _MISSING:
-        observation["value"] = _RAW_NUMBER if numeric_token else value
-    blocks[0]["value"] = [observation]
+        properties["value"] = _RAW_NUMBER if numeric_token else value
+    document["features"] = [affected]
     if sibling:
-        healthy["method"][0]["methodID"] = 0
-        healthy["value"] = [{"dateTime": "2023-01-01T00:00:00.000", "value": "42"}]
-        blocks.append(healthy)
+        healthy = {
+            **affected,
+            "id": "authored-independent-record",
+            "properties": {
+                **properties,
+                "time_series_id": "authored-independent-series",
+                "value": "42",
+            },
+        }
+        document["features"].append(healthy)
+    document["numberReturned"] = len(document["features"])
     content = json.dumps(document).encode()
     if numeric_token:
         encoded = json.dumps(_RAW_NUMBER).encode()
@@ -52,14 +56,14 @@ def _install(monkeypatch, tmp_path, recording, value, *, numeric_token=None, sib
         content = content.replace(encoded, numeric_token.encode())
     calls = []
 
-    class AuthoredTransport:
+    class AuthoredTransport(ModernReplay):
+        def __init__(self):
+            super().__init__("daily-07374000-docs-2023")
+
         def send(self, request):
-            assert request.url == recording.request.url
-            assert dict(request.params) == dict(recording.request.parameters)
+            response = super().send(request)
             calls.append(request)
-            return TransportResponse(
-                content, 200, recording.retrieved_at, recording.content_type, request.url, request.params
-            )
+            return replace(response, content=content)
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(discovery, "HttpClient", AuthoredTransport)
@@ -91,6 +95,7 @@ def _fetch(selection, policy):
         pytest.param({}, None, id="object"),
         pytest.param([], None, id="list"),
         pytest.param(_MISSING, None, id="missing"),
+        pytest.param(1.5, None, id="numeric-not-decimal-string"),
     ],
 )
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
@@ -123,7 +128,7 @@ def test_unrepresentable_measurement_is_isolated_and_cannot_authorize_coverage(
     assert any(receipt.content == content for receipt in again.receipts.entries)
     failed = [o for o in again.outcomes if o.status == "unsupported"]
     assert failed
-    healthy = next(s.series_id for s in again.source_series if s.identity.published_id == "0")
+    healthy = next(s.series_id for s in again.source_series if s.identity.published_id == "authored-independent-series")
     assert again.data["series_id"].to_list() == [healthy]
     manifest_paths = list((tmp_path / "cache").rglob("manifest.json"))
     assert len(manifest_paths) == 1
@@ -134,15 +139,13 @@ def test_unrepresentable_measurement_is_isolated_and_cannot_authorize_coverage(
 @pytest.mark.parametrize(
     "value,expected",
     [
-        pytest.param(0, 0.0, id="zero"),
-        pytest.param(-0.0, -0.0, id="signed-zero"),
-        pytest.param(42, 42.0, id="finite-int"),
-        pytest.param(1.5, 1.5, id="finite-float"),
+        pytest.param("0", 0.0, id="zero"),
+        pytest.param("-0.0", -0.0, id="signed-zero"),
+        pytest.param("42", 42.0, id="finite-int"),
         pytest.param("1.5", 1.5, id="finite-string"),
-        pytest.param(1.7e308, 1.7e308, id="large-finite-float"),
+        pytest.param("1.7e308", 1.7e308, id="large-finite-float"),
         pytest.param(None, None, id="explicit-null"),
-        pytest.param(-999999, None, id="numeric-declared-sentinel"),
-        pytest.param("-999999", None, id="string-declared-sentinel"),
+        pytest.param("-999999", -999999.0, id="negative-number-not-sentinel"),
     ],
 )
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])

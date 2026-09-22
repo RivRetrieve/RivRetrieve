@@ -20,7 +20,7 @@ from rivretrieve._internal.catalogues.descriptor import build_catalogue_descript
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence, normalize_provenance
 from rivretrieve._internal.catalogues.evidence_encoding import encode_catalogue_evidence
 from rivretrieve._internal.catalogues.schemas import CATALOGUE_SERIES_CLAIMS_SCHEMA
-from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+from rivretrieve._internal.catalogues.source_series import SourceDescriptions, encode_source_descriptions
 from rivretrieve._internal.publication_identity import publication_identity_fields
 
 
@@ -69,7 +69,7 @@ def build_catalogue_metadata(
             source_descriptions = build_source_descriptions(artifact, source_config, mappings=source_mappings)
     if source_descriptions.provider_id != evidence.header.provider_id:
         raise ValueError("Source descriptions provider does not match catalogue evidence")
-    metadata["source_series.json"] = (source_descriptions.model_dump_json() + "\n").encode()
+    metadata["source_series.json"] = encode_source_descriptions(source_descriptions)
     format_identity: dict[str, object] = {"catalogue_format_version": 2}
     format_identity.update(publication_identity_fields((evidence.header.provider_id,)))
     metadata["format.json"] = (json.dumps(format_identity, separators=(",", ":")) + "\n").encode()

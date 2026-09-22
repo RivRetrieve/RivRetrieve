@@ -62,46 +62,37 @@ selection = rr.find(
     frequency="daily",
     statistic="mean",
 )
-result = rr.fetch(
-    selection,
-    start="2023-01-01",
-    end="2023-01-01",
-    receipts=True,
-)
+result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", receipts=True)
 ```
 
-Running these calls contacts USGS. The trace below follows the saved source response
-for this request.
+`find` reads the packaged catalogue without contacting USGS. It exposes the
+publisher's opaque series ID before retrieval. `pick(selection, variant=...)`
+limits the request to that ID. An unrestricted selection also admits matching
+series discovered in the observation response.
 
-1. **Select physical scope.** `find` checks the provider and station, then matches established quantity,
-   frequency and statistic against packaged source-series facts.
-   The station identifier remains a string, including its leading zero.
-2. **Resolve the requested window.** The bare dates become `2023-01-01 00:00:00` through `2023-01-01 23:59:59.999999`.
-   These are source-calendar wall-clock bounds, not UTC instants.
-3. **Plan the fetch window.** The engine adds two days at each end.
-   USGS declares inclusive date parameters, so the engine renders `2022-12-30` through `2023-01-03`.
-4. **Fetch source bytes.** The USGS declaration selects the `dv` endpoint, parameter `00060`, and statistic `00003`.
-   Fetch sends `sites=07374000`, `startDT=2022-12-30`, and `endDT=2023-01-03`, with `format=json`.
-   The recording matches that complete request at `https://waterservices.usgs.gov/nwis/dv/`.
-5. **Parse native rows.** Parse checks returned station, parameter and statistic against the request.
-   It establishes unit conversion from response metadata and preserves published method identity.
-   Representable method blocks remain separate. Unsupported structures retain identified outcomes.
-   The recording publishes five daily values in `ft3/s`, with naive midnight labels.
-   Parse retains those labels and sets `time_zone` to `unknown` rather than deriving a zone from station metadata.
-6. **Convert and clip.** The shared convert stage multiplies discharge by `0.028316846592` to return m³/s.
-   It clips daily products by their calendar dates and removes the four extra days.
-   The retained source value is `373000 ft3/s` on `2023-01-01`.
-7. **Assemble the result.** The engine retains rows, provenance, issues, and the requested receipt.
-   The receipt contains the exact publisher bytes handed to parse, including the days removed by clipping.
+1. **Plan the window.** The engine pads the daily calendar request by two days,
+   rendering `2023-12-30/2024-01-09`.
+2. **Fetch source bytes.** USGS declares the modern v1 `daily` collection,
+   parameter `00060`, statistic `00003`, and the acquired monitoring-location
+   identity `USGS-07374000`. Fetch follows every publisher cursor and keeps
+   each original response page.
+3. **Parse native rows.** Parse checks returned station, parameter, statistic,
+   units and selected series against the request. Observation `time_series_id`
+   joins the metadata `id`; the feature record ID is not a series identity.
+   The recording publishes 11 date-only values in `ft^3/s`. These become
+   midnight labels with an unknown time zone, not inferred daily support bounds.
+4. **Convert and clip.** The engine multiplies discharge by `0.028316846592`
+   and returns seven values in m³/s. Daily clipping uses calendar dates.
+5. **Assemble the result.** Provenance records source calls. Requested receipts
+   retain exact publisher bytes, including the four days removed by clipping.
+   Exhausted finite observation windows establish cache coverage, not a complete
+   historical inventory.
 
-This is source-published daily mean discharge, not a mean calculated from instantaneous observations.
-The product declares a midnight label but an unknown day definition.
-A label alone does not establish which 24 hours the daily value represents.
-The recording was retrieved on `2026-09-02` and identifies the Mississippi River at Baton Rouge, Louisiana.
-
-The trace connects the [USGS declaration](../src/rivretrieve/_internal/providers/usgs_nwis/config.py),
-[fetch](../src/rivretrieve/_internal/providers/usgs_nwis/fetch.py), and
-[parse](../src/rivretrieve/_internal/providers/usgs_nwis/parse.py) to the shared driver and convert stage.
+This is a publisher-computed daily mean, not a mean calculated by RivRetrieve.
+The [recording and acquisition manifest](../tests/test_data/usgs_modern/README.md)
+retain the September 22, 2026 source evidence. Modern continuous observations
+retain their published UTC offsets. No station time zone is inferred.
+See [USGS discovery](usgs-discovery.md) for variants, unknown statistics and limits.
 
 ## Contracts between stages
 
@@ -181,11 +172,13 @@ Certified compilation writes a staged store and compares it with a second decodi
 The artifact is deleted after successful publication.
 Its URLs, checksums, and source vintage survive in the manifest, but its identity cannot reconstruct unavailable publisher bytes.
 Readers refuse unsupported manifest revisions before opening observation files.
-Packaged catalogue format revision `2`, source-series definition schema `1` and export bundle
+Packaged catalogue format revision `2`, source-series definition encodings `1` and `2`, and export bundle
 version `2` are explicit contracts.
+The second source-series encoding stores each physical-fact segment once and validates
+every series reference; the in-memory definitions are unchanged.
 Readers validate these formats before use. Hub’Eau catalogues, live stores and export
 bundles also declare their publication service. Readers refuse superseded combined
-French artifacts without reinterpreting their source identity. Refusal leaves unsupported files intact.
+French artifacts and legacy USGS artifacts without reinterpreting their source identity. Refusal leaves unsupported files intact.
 `cache_status` inspects local state, and `clear_cache` is the explicit destructive boundary.
 
 ### Provenance and receipts

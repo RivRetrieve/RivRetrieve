@@ -31,7 +31,7 @@ from rivretrieve._internal.catalogues.schemas import (
     CatalogueSchema,
     validate_catalogue,
 )
-from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+from rivretrieve._internal.catalogues.source_series import SourceDescriptions, decode_source_descriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import OnIssue
 from rivretrieve._internal.publication_identity import publication_identity_fields
@@ -102,8 +102,8 @@ def load_packaged_catalogue_artifact(
     if not (artifact_path / "series_claims.parquet").is_file():
         raise CorruptCatalogArtifactError("Catalogue format requires series_claims.parquet; rebuild catalogue")
     try:
-        descriptions = SourceDescriptions.model_validate_json((artifact_path / "source_series.json").read_bytes())
-    except (OSError, ValueError) as exc:
+        descriptions = decode_source_descriptions((artifact_path / "source_series.json").read_bytes())
+    except (OSError, ValueError, FatalContractError) as exc:
         raise CorruptCatalogArtifactError("Invalid source-series descriptions; rebuild catalogue") from exc
 
     claims = _read_parquet(artifact_path / "series_claims.parquet")
@@ -213,7 +213,7 @@ def _validate_format(path: Path, provider_id: object) -> None:
         not isinstance(document, dict) or any(document.get(field) != value for field, value in identity.items())
     ):
         raise CorruptCatalogArtifactError(
-            f"Unsupported {provider_id} publication service identity; combined catalogues cannot be reinterpreted"
+            f"Unsupported {provider_id} publication service identity; rebuild explicitly without reinterpreting source identities"
         )
     expected.update(identity)
     if document != expected or type(document.get("catalogue_format_version")) is not int:

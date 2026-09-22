@@ -1,7 +1,6 @@
-"""Real parser/driver checks for concrete interval accumulation."""
+"""Modern publisher rows with authored stage controls for shared driver contracts."""
 
 from datetime import datetime
-from pathlib import Path
 
 import polars.testing as pt
 import pytest
@@ -11,8 +10,8 @@ from rivretrieve._internal.engine import ObservationRequest, RequestedWindow, Wi
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
-from rivretrieve._internal.recordings import ReplayTransport
 from rivretrieve._internal.store import StoreRoot
+from tests.usgs_modern_recordings import ModernReplay
 
 
 def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path):
@@ -26,19 +25,19 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path):
         @staticmethod
         def fetch(*args, **kwargs):
             acquired = stages.fetch(*args, **kwargs)
-            return WithIssues(acquired.value + acquired.value, acquired.issues)
+            from dataclasses import replace
+
+            return replace(acquired, value=acquired.value + acquired.value)
 
     request = ObservationRequest(
         ProviderId("usgs_nwis"),
         ("07374000",),
         (ProductId("discharge_daily_mean"),),
         RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)), WindowEndpoint.from_datetime(datetime(2023, 1, 1))
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ReplayTransport(
-        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
-    )
+    replay = ModernReplay("daily-07374000-discharge-mean")
 
     def run():
         return drive(
@@ -51,9 +50,11 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path):
         )
 
     fresh = run()
-    assert fresh.canonical_rows.height == 2
+    assert fresh.canonical_rows.height == 14
+    calls = len(replay.calls)
     reused = run()
     pt.assert_frame_equal(reused.canonical_rows, fresh.canonical_rows)
+    assert len(replay.calls) == calls
 
 
 def test_partial_success_only_covers_its_reported_interval(tmp_path):
@@ -72,7 +73,7 @@ def test_partial_success_only_covers_its_reported_interval(tmp_path):
         @staticmethod
         def parse(payload, config):
             parsed = stages.parse(payload, config)
-            window = SeriesWindow(start=datetime(2023, 1, 1), end=datetime(2023, 1, 1, 12))
+            window = SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 1, 12))
             return replace(
                 parsed, outcomes=tuple(item.model_copy(update={"window": window}) for item in parsed.outcomes)
             )
@@ -82,12 +83,10 @@ def test_partial_success_only_covers_its_reported_interval(tmp_path):
         ("07374000",),
         (ProductId("discharge_daily_mean"),),
         RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)), WindowEndpoint.from_datetime(datetime(2023, 1, 1))
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ReplayTransport(
-        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
-    )
+    replay = ModernReplay("daily-07374000-discharge-mean")
     store = StoreRoot(tmp_path / "store")
     result = drive(
         request,
@@ -97,8 +96,8 @@ def test_partial_success_only_covers_its_reported_interval(tmp_path):
         cache="reuse",
         store=store,
     )
-    assert result.canonical_rows.height == 1
-    assert StoreReader().status(store, ProviderId("usgs_nwis")).coverage[0].interval.end == datetime(2023, 1, 1, 12)
+    assert result.canonical_rows.height == 7
+    assert StoreReader().status(store, ProviderId("usgs_nwis")).coverage[0].interval.end == datetime(2024, 1, 1, 12)
 
 
 def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, tmp_path):
@@ -112,7 +111,7 @@ def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, 
 
     def leaking(*args, **kwargs):
         result = original(*args, **kwargs)
-        return WithIssues(result.value.with_columns(pl.lit(datetime(2023, 1, 2)).alias("time")), result.issues)
+        return WithIssues(result.value.with_columns(pl.lit(datetime(2024, 1, 8)).alias("time")), result.issues)
 
     monkeypatch.setattr(driver, "convert", leaking)
     request = ObservationRequest(
@@ -120,12 +119,10 @@ def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, 
         ("07374000",),
         (ProductId("discharge_daily_mean"),),
         RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)), WindowEndpoint.from_datetime(datetime(2023, 1, 1))
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ReplayTransport(
-        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
-    )
+    replay = ModernReplay("daily-07374000-discharge-mean")
     with pytest.raises(FatalContractError, match="outside.*requested|outside.*Requested"):
         drive(
             request,
@@ -147,7 +144,42 @@ def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path):
     class RevisedStatistic:
         config = stages.config
         window_declarations = stages.window_declarations
-        fetch = staticmethod(stages.fetch)
+
+        @staticmethod
+        def fetch(*args, **kwargs):
+            acquired = stages.fetch(*args, **kwargs)
+            # Authored revision applies to the entire source answer, including
+            # modern fetch's fact-scoped inventory, not only its parsed rows.
+            return replace(
+                acquired,
+                series=tuple(
+                    item.model_copy(
+                        update={
+                            "facts": tuple(
+                                fact.model_copy(
+                                    update={
+                                        "facts_id": fact.facts_id + "/minimum",
+                                        "statistic": known("minimum", "authored source-fact revision"),
+                                    }
+                                )
+                                for fact in item.facts
+                            ),
+                        }
+                    )
+                    for item in acquired.series
+                ),
+                inventories=tuple(
+                    snapshot.model_copy(
+                        update={
+                            "member_facts": tuple(
+                                (member, tuple(key + "/minimum" for key in facts))
+                                for member, facts in snapshot.member_facts
+                            ),
+                        }
+                    )
+                    for snapshot in acquired.inventories
+                ),
+            )
 
         @staticmethod
         def parse(payload, config):
@@ -188,12 +220,10 @@ def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path):
         ("07374000",),
         (ProductId("discharge_daily_mean"),),
         RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)), WindowEndpoint.from_datetime(datetime(2023, 1, 1))
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ReplayTransport(
-        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
-    )
+    replay = ModernReplay("daily-07374000-discharge-mean")
 
     def run(req, provider, cache):
         return drive(
@@ -216,7 +246,9 @@ def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path):
             predicates=(PhysicalPredicate(field="statistic", value="mean"),),
         ),
     )
+    calls = len(replay.calls)
     result = run(precise, stages, "reuse")
+    assert len(replay.calls) == calls
     assert result.canonical_rows.is_empty()
     assert any(item.status.value == "no_match" for item in result.outcomes)
     assert not result.provenance.served_intervals
@@ -245,7 +277,7 @@ def test_explicit_failed_unknown_facts_do_not_satisfy_cache_reuse(tmp_path):
         restriction=RestrictionKind.EXPLICIT,
         series_ids=(definition.series_id,),
     )
-    window = SeriesWindow(start=datetime(2023, 1, 1), end=datetime(2023, 1, 2))
+    window = SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2))
     snapshot = InventorySnapshot(
         snapshot_id="unsupported",
         scope=scope,
@@ -306,7 +338,7 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_pa
             original = parsed.outcomes[0]
             first = original.model_copy(
                 update={
-                    "window": SeriesWindow(start=datetime(2023, 1, 1), end=datetime(2023, 1, 1, 12)),
+                    "window": SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 1, 12)),
                 }
             )
             if defect in ("failed_before_success", "duplicate_unsuccessful_id"):
@@ -327,7 +359,7 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_pa
                     else None,
                     "window": SeriesWindow(
                         start=datetime(
-                            2023,
+                            2024,
                             1,
                             1,
                             13
@@ -336,7 +368,7 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_pa
                             if defect == "touching_windows"
                             else 6,
                         ),
-                        end=datetime(2023, 1, 1, 18),
+                        end=datetime(2024, 1, 1, 18),
                     ),
                 }
             )
@@ -347,13 +379,11 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_pa
         ("07374000",),
         (ProductId("discharge_daily_mean"),),
         RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1, 23, 59, 59, 999999)),
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2024, 1, 7, 23, 59, 59, 999999)),
         ),
     )
-    replay = ReplayTransport(
-        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
-    )
+    replay = ModernReplay("daily-07374000-discharge-mean")
     with pytest.raises(FatalContractError, match="outcome|Outcome"):
         drive(
             request,
@@ -363,7 +393,9 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_pa
             cache="reuse",
             store=StoreRoot(tmp_path / "store"),
         )
-    assert parsed_counts == [5], "The five native rows in the original padded response must reach the provider parser"
+    assert parsed_counts == [11], (
+        "The eleven native rows in the original padded response must reach the provider parser"
+    )
     assert writes == [], "Invalid parse metadata must be refused before the durable write path"
     assert not (tmp_path / "store").exists()
 
@@ -426,14 +458,14 @@ def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(t
             if case == "disjoint_windows":
                 first = outcome.model_copy(
                     update={
-                        "window": SeriesWindow(start=datetime(2023, 1, 1), end=datetime(2023, 1, 1, 12)),
+                        "window": SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 1, 12)),
                     }
                 )
                 second = outcome.model_copy(
                     update={
                         "outcome_id": outcome.outcome_id + ":later",
                         "window": SeriesWindow(
-                            start=datetime(2023, 1, 1, 12, 0, 0, 1), end=datetime(2023, 1, 1, 23, 59, 59, 999999)
+                            start=datetime(2024, 1, 1, 12, 0, 0, 1), end=datetime(2024, 1, 7, 23, 59, 59, 999999)
                         ),
                     }
                 )
@@ -470,13 +502,11 @@ def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(t
         ("07374000",),
         (ProductId("discharge_daily_mean"),),
         RequestedWindow(
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
-            WindowEndpoint.from_datetime(datetime(2023, 1, 1, 23, 59, 59, 999999)),
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2024, 1, 7, 23, 59, 59, 999999)),
         ),
     )
-    replay = ReplayTransport(
-        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
-    )
+    replay = ModernReplay("daily-07374000-discharge-mean")
     store = StoreRoot(tmp_path / "store")
     result = drive(
         request,
@@ -487,8 +517,8 @@ def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(t
         store=store,
     )
     assert result.canonical_rows.height == (
-        1 if case in ("disjoint_windows", "unknown_failure", "unsuccessful_overlap") else 2
+        7 if case in ("disjoint_windows", "unknown_failure", "unsuccessful_overlap") else 14
     )
     assert store.exists()
     if case == "duplicate_rows":
-        pt.assert_frame_equal(result.canonical_rows.head(1), result.canonical_rows.tail(1))
+        pt.assert_frame_equal(result.canonical_rows.head(7), result.canonical_rows.tail(7))

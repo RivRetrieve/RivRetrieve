@@ -148,7 +148,8 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "no_nve": (44_118, 0, 0),
         "pl_imgw": (3_903, 0, 0),
         "th_thaiwater": (1_650, 0, 0),
-        "usgs_nwis": (157_548, 57_450, 57_450),
+        # Modern metadata UTC ranges do not establish calendar observation support.
+        "usgs_nwis": (157_548, 0, 0),
         "za_dws": (8_715, 0, 0),
     }
     expected_station_product_columns = (
@@ -211,3 +212,13 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
             provider_id
         ]
         assert "metadata" not in artifact.provider_info
+
+
+def test_usgs_legacy_calendar_period_claims_remain_independent_evidence() -> None:
+    root = Path(__file__).parents[1]
+    legacy = pl.read_parquet(root / "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet")
+    modern = pl.read_parquet(root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/station_products.parquet")
+    assert legacy.height == modern.height == 157_548
+    for column in ("published_record_start_date", "published_record_end_date"):
+        assert legacy[column].count() == 57_450
+        assert modern[column].count() == 0

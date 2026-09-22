@@ -17,10 +17,11 @@ import pytest
 from rivretrieve._internal.authentication import ExchangeSpec
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.test_br_ana_public_daily import _IDENTIFIER, _PASSWORD, _AuthenticatedReplay
+from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
 
 ROOT = Path(__file__).resolve().parents[1]
-RECORDING = ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-INSTANT_RECORDING = ROOT / "tests/test_data/usgs_nwis_07374000_iv_00060_2023-01-01.recording.json"
+DAILY_RECORDING = "daily-07374000-docs-2023"
+INSTANT_RECORDING = "continuous-07374000-docs-quarter-hour-2023"
 LITHUANIAN_RECORDINGS = [
     ROOT / f"tests/test_data/lt_lhmt_anyksciu-vms_daily_{month}.recording.json" for month in ("2022-12", "2023-01")
 ]
@@ -76,13 +77,15 @@ class NewcomerReplay(CountingReplay):
 
     def __init__(self):
         super().__init__(
-            read_recording(RECORDING),
-            read_recording(INSTANT_RECORDING),
             *(read_recording(path) for path in LITHUANIAN_RECORDINGS),
         )
+        self.usgs = ModernReplay(DAILY_RECORDING, INSTANT_RECORDING)
         self.ana = _AuthenticatedReplay("stage_daily_mean_bruto")
 
     def send(self, request):
+        if request.url.startswith("https://api.waterdata.usgs.gov/"):
+            self.calls.append(request)
+            return self.usgs.send(request)
         if request.url in (ExchangeSpec.ana().exchange_url, self.ana.recording.request.url):
             self.calls.append(request)
             return self.ana.send(request)
@@ -129,6 +132,9 @@ def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path):
     scope = execute_page(page, monkeypatch, tmp_path)
     assert scope["result"].data.height == 1
     assert scope["result"].data["station_id"].to_list() == ["07374000"]
+    assert scope["result"].data["source_unit"].to_list() == ["ft^3/s"]
+    assert scope["result"].source_series[0].variant == "c9d823a2491f4b639656a11b35a7625d"
+    assert scope["result"].source_series[0].identity.description is None
     if page == "README.md":
         assert len(scope["_transport"].calls) == 1
         assert set(scope["rr"].series(scope["brazil"])["variant"]) == {"bruto", "consistido"}
@@ -203,10 +209,10 @@ def assert_usage_state(scope, tmp_path):
     assert scope["restored_gauges"].known_series == scope["chosen_gauges"].known_series
     instantaneous = scope["instant_result"]
     assert not instantaneous.issues
-    assert instantaneous.data["time_zone"].to_list() == ["-06:00", "-06:00"]
+    assert instantaneous.data["time_zone"].to_list() == ["+00:00", "+00:00"]
     assert instantaneous.data["time"].to_list() == [datetime(2023, 1, 1), datetime(2023, 1, 1, 0, 15)]
     expected_utc = instantaneous.data.with_columns(
-        pl.Series("time", [datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 6, 15)]),
+        pl.Series("time", [datetime(2023, 1, 1), datetime(2023, 1, 1, 0, 15)]),
         pl.lit("+00:00").alias("time_zone"),
     )
     assert_frame_equal(scope["utc_result"].data, expected_utc)
@@ -219,7 +225,7 @@ def assert_usage_state(scope, tmp_path):
     assert next(count for block, count in calls if "cached_result =" in block) == 1
     assert next(count for block, count in calls if "receipt_result =" in block) == 1
     fresh = scope["receipt_result"]
-    assert fresh.receipts.entries[0].content == read_recording(RECORDING).content
+    assert fresh.receipts.entries[0].content == body(DAILY_RECORDING)
     assert fresh.receipts.entries[0].authorship.value == "publisher_payload"
     before = len(scope["_transport"].calls)
     cached = scope["rr"].fetch(
@@ -231,7 +237,7 @@ def assert_usage_state(scope, tmp_path):
     assert cached.receipts.entries[0].format_version == 7
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
     assert excerpt.height >= cached.data.height
-    assert fresh.provenance.retrieved_at == read_recording(RECORDING).retrieved_at
+    assert fresh.provenance.retrieved_at == datetime.fromisoformat(MANIFEST[DAILY_RECORDING]["acquired_utc"])
     assert not fresh.provenance.served_intervals
     assert cached.provenance.retrieved_at is None
     assert cached.provenance.calls_made
@@ -284,23 +290,33 @@ def issue_example():
     return next(block for block in blocks("docs/usage.md") if "checked_result =" in block)
 
 
-def scripted_recording(outcome):
-    """Authored responses keep exact request identity; they are not agency evidence."""
-    recording = read_recording(RECORDING)
-    if outcome == "empty":
-        document = json.loads(recording.content)
-        document["value"]["timeSeries"] = []
-        return replace(recording, content=json.dumps(document).encode())
-    if isinstance(outcome, int):
-        return replace(recording, status_code=outcome, content=b"Authored source failure", content_type="text/plain")
-    return recording
+class ScriptedModernReplay(ModernReplay):
+    """Authored response controls over exact modern request coordinates."""
+
+    def __init__(self, outcome):
+        super().__init__(DAILY_RECORDING)
+        self.outcome = outcome
+
+    def send(self, request):
+        response = super().send(request)
+        if self.outcome == "empty":
+            document = json.loads(response.content)
+            document["features"] = []
+            document["numberReturned"] = 0
+            document["links"] = [link for link in document["links"] if link["rel"] != "next"]
+            return replace(response, content=json.dumps(document).encode())
+        if isinstance(self.outcome, int):
+            return replace(
+                response, status_code=self.outcome, content=b"Authored source failure", content_type="text/plain"
+            )
+        return response
 
 
 def issue_scope(monkeypatch, tmp_path, outcome):
     import rivretrieve as rr
     import rivretrieve._internal.discovery as discovery
 
-    replay = CountingReplay(scripted_recording(outcome))
+    replay = ScriptedModernReplay(outcome)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
@@ -345,7 +361,7 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
     expression = compile(ast.Expression(call), "usage-policy-expression", "eval")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        if policy == "raise" and outcome != "success":
+        if policy == "raise" and isinstance(outcome, int):
             with pytest.raises(IssuePolicyError) as raised:
                 eval(expression, scope)
             issues = raised.value.issues
@@ -357,27 +373,37 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
             else:
                 assert_frame_equal(result.data, pl.DataFrame(schema=ObservationDataSchema.polars_schema))
     assert len(replay.calls) == 1
-    assert len(caught) == int(policy == "warn" and outcome != "success")
+    assert len(caught) == int(policy == "warn" and isinstance(outcome, int))
     assert all(issubclass(item.category, RuntimeWarning) for item in caught)
-    if outcome == "success":
+    if outcome in ("success", "empty"):
         assert not issues
+        if outcome == "empty":
+            assert result.provenance.calls_made
+            assert any(item.status == "empty" for item in result.outcomes)
     else:
         assert len(issues) == 1
         issue = issues[0]
         assert issue.severity == ("error" if outcome == 503 else "warning")
         assert issue.provider_id == "usgs_nwis"
         assert issue.details["station_id"] == "07374000"
-        if outcome == "empty":
-            assert issue.code == "unsupported_source_series"
-            assert "no concrete method identity" in issue.message
-            if policy != "raise":
-                assert result.provenance.calls_made
-                assert any(item.status == "unresolved" for item in result.outcomes)
-        else:
-            assert issue.details["status_code"] == outcome
-            assert f"HTTP {outcome}" in issue.message
-            if policy != "raise":
-                assert not result.provenance.calls_made
+        assert issue.details["status_code"] == outcome
+        assert f"HTTP {outcome}" in issue.message
+        if policy != "raise":
+            assert len(result.provenance.calls_made) == 1
+            call = result.provenance.calls_made[0]
+            assert call["station_id"] == "07374000"
+            assert call["product_id"] == "discharge_daily_mean"
+            assert call["status_code"] == outcome
+            assert coordinates(call["url"], call["request_parameters"]) == coordinates(
+                MANIFEST[DAILY_RECORDING]["original_url"]
+            )
+            assert issue.details["failure_reason"]
+            assert result.outcomes
+            assert all(item.status in ("failed", "unresolved") and item.reason for item in result.outcomes)
+            failed = [item for item in result.outcomes if item.status == "failed"]
+            assert {item.series_id for item in failed} == {call["series_id"]}
+            assert {item.series_id for item in result.outcomes} == {call["series_id"]}
+            assert not result.provenance.served_intervals
 
 
 def test_usage_selection_bundle_roundtrip(monkeypatch, tmp_path):

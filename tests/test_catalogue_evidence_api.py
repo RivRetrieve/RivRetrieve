@@ -11,7 +11,6 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.engine import CanonicalRowsSchema
 from rivretrieve._internal.observations import ObservationProvenance
-from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 ROOT = Path(__file__).parents[1]
 
@@ -40,13 +39,14 @@ def test_real_selection_exposes_normalized_metadata_without_legacy_aliases():
 
 
 def test_recorded_public_fetch_normalized_provenance_serialization(monkeypatch: pytest.MonkeyPatch):
-    recording = read_recording(ROOT / "tests/test_data/usgs_nwis_09380000_iv_00060_2020-07-01.recording.json")
-    replay = ReplayTransport((recording,))
+    from tests.usgs_modern_recordings import ModernReplay
+
+    replay = ModernReplay("continuous-07374000-2010-discharge")
     monkeypatch.setattr(discovery, "_credentialed_transport", lambda provider_id, values: replay)
     selection = rr.find(
-        provider="usgs_nwis", station="09380000", quantity="discharge", temporal_support="instantaneous"
+        provider="usgs_nwis", station="07374000", quantity="discharge", temporal_support="instantaneous"
     )
-    result = rr.fetch(selection, start="2020-07-01T00:00:00", end="2020-07-01T23:00:00", on_issue="ignore")
+    result = rr.fetch(selection, start="2010-06-01T05:00:00", end="2010-06-02T04:59:59", on_issue="ignore")
     evidence = result.provenance.acquisition_provenance
     assert type(evidence) is CatalogueEvidence
     assert evidence.header.provider_id == "usgs_nwis"

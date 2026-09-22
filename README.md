@@ -47,9 +47,10 @@ for how to supply them.
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 246 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
-| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | Open |
+| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,201 | Open |
 
-Station counts describe packaged catalogues, not guaranteed current data availability.
+Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
+The USGS catalogue retains 26,258 station identities; 26,201 have selectable modern series in this snapshot.
 A station can appear under both French services; their series remain separate.
 
 </details>
