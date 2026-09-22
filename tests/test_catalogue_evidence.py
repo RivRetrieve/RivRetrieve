@@ -277,6 +277,131 @@ def test_v3_parse_never_constructs_old_national_models(monkeypatch):
 # Brazil has new adopted-product acquisitions after this migration oracle.
 # Its current evidence still passes the all-provider lossless roundtrip above;
 # source-material and per-pair assertions live in test_br_ana_catalogue_telemetry.
+def _assert_usgs_modern_extension_and_restore_legacy(provenance):
+    """Check the complete modern delta before applying the immutable legacy oracle."""
+    import gzip
+
+    directory = Path(__file__).parents[1] / "research/usgs-modern-coverage"
+    legacy = _legacy("usgs_nwis", directory / "legacy-catalogue")
+    previous = legacy.model_dump(mode="json")
+    source = previous["source_records"][0]
+    recordings = []
+    receipts = sorted(directory.glob("metadata-*.receipt.json"))
+    assert len(receipts) == 14
+    for index, path in enumerate(receipts):
+        receipt = json.loads(path.read_text())
+        compressed = (directory / receipt["file"]).read_bytes()
+        original = gzip.decompress(compressed)
+        assert sha256(original).hexdigest() == receipt["sha256"]
+        assert len(original) == receipt["bytes"]
+        assert receipt["status"] == 200
+        assert receipt["retrieved_at"].endswith("+00:00")
+        recordings.append(
+            {
+                "recording_id": f"modern_metadata_{index}",
+                "repository_path": f"research/usgs-modern-coverage/{receipt['file']}",
+                "source_url": receipt["url"],
+                "retrieved_at": receipt["retrieved_at"][:-6] + "Z",
+                "media_type": "application/gzip",
+                "sha256": sha256(compressed).hexdigest(),
+            }
+        )
+    metadata_id = "modern_time_series_metadata_2026_09_22"
+    runtime_id = "modern_observation_request"
+    acquisitions = [
+        {
+            "acquisition_id": metadata_id,
+            "method": "http_campaign",
+            "instant_type": "retrieval_interval",
+            "description": "Complete unsorted v1 metadata pagination for parameters 00060 and 00065, including discontinued records; exact decompressed response hashes and request receipts retained alongside gzip recordings. Station scope remains the independently acquired native station table. UTC metadata ranges do not establish physical daily support.",
+            "requested_from": [item["source_url"] for item in recordings],
+            "retrieved_at_start": min(item["retrieved_at"] for item in recordings),
+            "retrieved_at_end": max(item["retrieved_at"] for item in recordings),
+            "recording_ids": [item["recording_id"] for item in recordings],
+            "material": None,
+        },
+        {
+            "acquisition_id": runtime_id,
+            "method": "runtime_http_request",
+            "instant_type": "runtime",
+            "description": "Exact modern Water Data v1 daily or continuous request and response retained at runtime; independent of historical WaterServices calls",
+            "requested_from": [
+                "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
+                "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items",
+            ],
+            "retrieved_at_start": None,
+            "retrieved_at_end": None,
+            "recording_ids": [],
+            "material": None,
+        },
+    ]
+    extended_source = {
+        **source,
+        "acquisitions": source["acquisitions"] + acquisitions,
+        "evidence": source["evidence"]
+        + [
+            {
+                "evidence_id": item["recording_id"],
+                "description": "Exact modern metadata response compressed losslessly",
+                "recording": item,
+            }
+            for item in recordings
+        ],
+    }
+    metadata_facts = [
+        "source.product.modern_parameter_statistic_computation_codes",
+        "source.station_product.modern_series_availability",
+        "source.series.modern_identity_description_and_utc_ranges",
+    ]
+    observation_facts = ["source.observation.modern_values_qualifiers_and_timestamps"]
+    canonical = previous["fact_bindings"][-1]
+    assert canonical["fact_group"] == "canonical_catalogue_carrier"
+    source_count = len(previous["fact_universe"]) - len(canonical["facts"])
+    assert previous["fact_universe"][source_count:] == canonical["facts"]
+    extended_canonical = {
+        **canonical,
+        "transformation": {
+            "name": "USGS native station facts and modern series metadata to canonical catalogue carriers",
+            "external_inputs": [
+                {"source_id": "usgs_nwis", "fact": fact}
+                for fact in [
+                    "source.provider.usgs_agency_identity",
+                    "source.station.nwis_identity_location_datum",
+                    *metadata_facts,
+                ]
+            ],
+        },
+    }
+    expected = {
+        **previous,
+        "source_records": [extended_source],
+        "fact_universe": previous["fact_universe"][:source_count]
+        + metadata_facts
+        + observation_facts
+        + canonical["facts"],
+        "fact_bindings": previous["fact_bindings"][:-1]
+        + [
+            {
+                "fact_group": "modern_series_metadata",
+                "facts": metadata_facts,
+                "source_id": "usgs_nwis",
+                "acquisition_id": metadata_id,
+            },
+            {
+                "fact_group": "modern_observation_values",
+                "facts": observation_facts,
+                "source_id": "usgs_nwis",
+                "acquisition_id": runtime_id,
+            },
+            extended_canonical,
+        ],
+    }
+    # Every legacy value and its order must survive in the current publication;
+    # only the explicitly checked modern delta and projection may differ.
+    assert provenance.model_dump(mode="json") == expected
+    return legacy
+
+
 def _assert_usgs_definition_extension_and_restore_original(provenance):
     """Prove the exact new publisher evidence, then compare every original assertion."""
     model = provenance.model_dump(mode="json")
@@ -738,6 +863,7 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     if provider in {"ca_eccc", "pl_imgw", "za_dws"}:
         restored = _assert_bulk_source_history_preserved(provider, restored)
     if provider == "usgs_nwis":
+        restored = _assert_usgs_modern_extension_and_restore_legacy(restored)
         restored = _assert_usgs_definition_extension_and_restore_original(restored)
         assert oracle["providers"][provider]["ordered_model_sha256"] == (
             "28e9cc34f71f4fd3712c69cc205c30b8c70d55270cfc04f90e991a55121450a0"
