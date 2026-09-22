@@ -1,0 +1,125 @@
+<title>NZ Council Hydrology Systems — RivRetrieve coverage map</title>
+<style>
+  :root{
+    --bg:#f7f9fb; --fg:#1a2430; --muted:#5b6b7b; --card:#ffffff; --line:#dbe3ea;
+    --hilltop:#2f9e44; --hilltop2:#8fce9f; --kiwis:#1c7ed6; --aquarius:#e8590c; --unknown:#868e96;
+    --island:#e9eff5;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1620; --fg:#e6edf3; --muted:#93a1b0; --card:#161f2b; --line:#26313f;
+           --island:#1b2532; --hilltop2:#3a6b48; }
+  }
+  :root[data-theme="light"]{ --bg:#f7f9fb; --fg:#1a2430; --muted:#5b6b7b; --card:#fff; --line:#dbe3ea; --island:#e9eff5; --hilltop2:#8fce9f; }
+  :root[data-theme="dark"]{ --bg:#0f1620; --fg:#e6edf3; --muted:#93a1b0; --card:#161f2b; --line:#26313f; --island:#1b2532; --hilltop2:#3a6b48; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:1.5rem;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 22px;font-size:.95rem}
+  .grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(280px,360px);gap:26px;align-items:start}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  svg{width:100%;height:auto;display:block}
+  .legend{display:flex;flex-direction:column;gap:10px;margin-top:2px}
+  .lg{display:flex;align-items:center;gap:10px;font-size:.9rem}
+  .dot{width:14px;height:14px;border-radius:50%;flex:0 0 auto;border:1px solid rgba(0,0,0,.15)}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);font-size:.92rem}
+  .stat:last-child{border-bottom:0}
+  .stat b{font-variant-numeric:tabular-nums}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:.85rem}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  .pill{display:inline-block;padding:1px 8px;border-radius:20px;font-size:.72rem;color:#fff;white-space:nowrap}
+  code{background:rgba(127,127,127,.14);padding:1px 5px;border-radius:5px;font-size:.82em}
+  .note{color:var(--muted);font-size:.82rem;margin-top:14px}
+  .region-label{font-size:11px;font-weight:600;fill:var(--fg)}
+  .region-sub{font-size:9px;fill:var(--muted)}
+</style>
+
+<div class="wrap">
+  <h1>New Zealand council hydrology systems</h1>
+  <p class="sub">Which of the 16 regional/unitary councils a RivRetrieve connector can reach, and how. Live-probed 2026-08-10. Circle size ≈ confirmed flow-gauge count.</p>
+
+  <div class="grid">
+    <div class="panel">
+      <svg viewBox="0 0 520 820" role="img" aria-label="Map of New Zealand councils by hydrology data system">
+        <!-- island backgrounds (schematic) -->
+        <path d="M300 40 C 360 55, 430 120, 445 190 C 460 260, 400 300, 370 340 C 340 380, 360 400, 320 405 C 250 412, 235 350, 250 300 C 210 270, 215 210, 245 190 C 250 120, 250 60, 300 40 Z" fill="var(--island)" opacity="0.85"/>
+        <path d="M300 420 C 350 430, 360 470, 330 520 C 320 580, 275 640, 235 690 C 195 735, 150 730, 150 680 C 150 610, 190 560, 195 520 C 200 470, 245 430, 300 420 Z" fill="var(--island)" opacity="0.85"/>
+
+        <!-- nodes: cx,cy,r,color,label,sub -->
+        <g font-family="inherit">
+          <!-- North Island -->
+          <g><circle cx="300" cy="80" r="9" fill="var(--hilltop2)" stroke="var(--hilltop)" stroke-dasharray="3 2"/><text class="region-label" x="315" y="79">Northland</text><text class="region-sub" x="315" y="91">Hilltop ◻︎</text></g>
+          <g><circle cx="316" cy="150" r="13" fill="var(--aquarius)"/><text class="region-label" x="334" y="149">Auckland</text><text class="region-sub" x="334" y="161">AQUARIUS</text></g>
+          <g><circle cx="308" cy="214" r="13" fill="var(--kiwis)"/><text class="region-label" x="326" y="213">Waikato</text><text class="region-sub" x="326" y="225">KiWIS</text></g>
+          <g><circle cx="392" cy="196" r="11" fill="var(--unknown)"/><text class="region-label" x="408" y="195">Bay of Plenty</text><text class="region-sub" x="408" y="207">unknown</text></g>
+          <g><circle cx="438" cy="243" r="9" fill="var(--hilltop)"/><text class="region-label" x="452" y="242" text-anchor="end" dx="-20">Gisborne 45</text></g>
+          <g><circle cx="246" cy="266" r="10" fill="var(--hilltop)"/><text class="region-label" x="230" y="265" text-anchor="end">Taranaki 71</text></g>
+          <g><circle cx="398" cy="296" r="9" fill="var(--hilltop2)" stroke="var(--hilltop)" stroke-dasharray="3 2"/><text class="region-label" x="412" y="295">Hawke's Bay ◻︎</text></g>
+          <g><circle cx="332" cy="322" r="11" fill="var(--hilltop)"/><text class="region-label" x="230" y="322" text-anchor="end">Horizons 101</text></g>
+          <g><circle cx="342" cy="386" r="12" fill="var(--hilltop)"/><text class="region-label" x="360" y="385">Wellington 138</text></g>
+
+          <!-- South Island -->
+          <g><circle cx="252" cy="432" r="12" fill="var(--hilltop)"/><text class="region-label" x="234" y="431" text-anchor="end">Tasman 107</text><text class="region-sub" x="234" y="443" text-anchor="end">+ Nelson</text></g>
+          <g><circle cx="300" cy="440" r="10" fill="var(--hilltop)"/><text class="region-label" x="316" y="439">Marlborough 53</text></g>
+          <g><circle cx="206" cy="532" r="7" fill="var(--hilltop)"/><text class="region-label" x="192" y="531" text-anchor="end">West Coast 19</text></g>
+          <g><circle cx="300" cy="560" r="9" fill="var(--hilltop2)" stroke="var(--hilltop)" stroke-dasharray="3 2"/><text class="region-label" x="316" y="559">Canterbury (ECan) ◻︎</text></g>
+          <g><circle cx="238" cy="662" r="10" fill="var(--hilltop)"/><text class="region-label" x="256" y="661">Otago 67</text></g>
+          <g><circle cx="182" cy="702" r="8" fill="var(--hilltop2)" stroke="var(--hilltop)" stroke-dasharray="3 2"/><text class="region-label" x="168" y="701" text-anchor="end">Southland ◻︎</text></g>
+        </g>
+      </svg>
+      <p class="note">◻︎ dashed = Hilltop council whose exact endpoint isn't confirmed from the US test network (Northland/Hawke's Bay timed out; ECan/Southland need the correct <code>.hts</code> path). Nelson's data is served through Tasman.</p>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="legend">
+          <div class="lg"><span class="dot" style="background:var(--hilltop)"></span> <b>Hilltop</b> — the <code>nz_hilltop</code> provider</div>
+          <div class="lg"><span class="dot" style="background:var(--hilltop2);border-color:var(--hilltop)"></span> Hilltop, endpoint unconfirmed from here</div>
+          <div class="lg"><span class="dot" style="background:var(--kiwis)"></span> <b>KiWIS</b> (KISTERS) — standard API, easy port</div>
+          <div class="lg"><span class="dot" style="background:var(--aquarius)"></span> <b>AQUARIUS</b> WebPortal — separate connector</div>
+          <div class="lg"><span class="dot" style="background:var(--unknown)"></span> Unknown / unreachable</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="stat"><span>Councils total</span><b>16</b></div>
+        <div class="stat"><span>Hilltop — confirmed live</span><b>8</b></div>
+        <div class="stat"><span>Hilltop — likely (endpoint TBD)</span><b>4</b></div>
+        <div class="stat"><span>Served via Tasman (Nelson)</span><b>1</b></div>
+        <div class="stat"><span>KiWIS (Waikato)</span><b>1</b></div>
+        <div class="stat"><span>AQUARIUS (Auckland)</span><b>1</b></div>
+        <div class="stat"><span>Unknown (Bay of Plenty)</span><b>1</b></div>
+        <div class="stat"><span>Flow gauges confirmed (8 councils)</span><b>601</b></div>
+        <div class="stat"><span>National estimate (all Hilltop)</span><b>~1,000+</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:26px">
+    <table>
+      <thead><tr><th>Council</th><th>System</th><th>Flow</th><th>Endpoint</th></tr></thead>
+      <tbody>
+        <tr><td>Greater Wellington</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>138</td><td><code>hilltop.gw.govt.nz/Data.hts</code></td></tr>
+        <tr><td>Tasman (+Nelson)</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>107</td><td><code>envdata.tasman.govt.nz/data.hts</code></td></tr>
+        <tr><td>Horizons</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>101</td><td><code>hilltopserver.horizons.govt.nz/boo.hts</code> (NZMG)</td></tr>
+        <tr><td>Taranaki</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>71</td><td><code>extranet.trc.govt.nz/getdata/boo.hts</code></td></tr>
+        <tr><td>Otago</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>67</td><td><code>gisdata.orc.govt.nz/hilltop/data.hts</code></td></tr>
+        <tr><td>Marlborough</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>53</td><td><code>hydro.marlborough.govt.nz/data.hts</code></td></tr>
+        <tr><td>Gisborne</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>45</td><td><code>hilltop.gdc.govt.nz/data.hts</code></td></tr>
+        <tr><td>West Coast</td><td><span class="pill" style="background:#2f9e44">Hilltop</span></td><td>19</td><td><code>hilltop.wcrc.govt.nz/data.hts</code></td></tr>
+        <tr><td>Canterbury (ECan)</td><td><span class="pill" style="background:#8fce9f;color:#123">Hilltop ◻︎</span></td><td>—</td><td><code>data.ecan.govt.nz</code> — named <code>.hts</code> collection</td></tr>
+        <tr><td>Hawke's Bay</td><td><span class="pill" style="background:#8fce9f;color:#123">Hilltop ◻︎</span></td><td>—</td><td><code>data.hbrc.govt.nz/EnviroData/Emar.hts</code> (timed out)</td></tr>
+        <tr><td>Northland</td><td><span class="pill" style="background:#8fce9f;color:#123">Hilltop ◻︎</span></td><td>—</td><td><code>hilltop.nrc.govt.nz/data.hts</code> (timed out)</td></tr>
+        <tr><td>Southland</td><td><span class="pill" style="background:#8fce9f;color:#123">Hilltop ◻︎</span></td><td>—</td><td><code>envdata.es.govt.nz</code> — path TBD</td></tr>
+        <tr><td>Nelson</td><td><span class="pill" style="background:#2f9e44">via Tasman</span></td><td>—</td><td>served through Tasman's Hilltop server</td></tr>
+        <tr><td>Waikato</td><td><span class="pill" style="background:#1c7ed6">KiWIS</span></td><td>—</td><td><code>riverlevelsandrainfall.waikatoregion.govt.nz</code> — standard KiWIS REST/JSON</td></tr>
+        <tr><td>Auckland</td><td><span class="pill" style="background:#e8590c">AQUARIUS</span></td><td>—</td><td><code>environmentauckland.org.nz</code> — <code>/Data/*</code>,<code>/Export/*</code></td></tr>
+        <tr><td>Bay of Plenty</td><td><span class="pill" style="background:#868e96">unknown</span></td><td>—</td><td>EDP portal (~1,700 sites) — system TBD</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Implementation: <b>Hilltop</b> covers ~12–13 councils with one client (per-council base URL + CRS). <b>Waikato</b> = a KiWIS connector (standard API; CSFS has a <code>_kiwis.py</code> helper — could be generic and cover other KiWIS agencies worldwide). <b>Auckland</b> = an AQUARIUS WebPortal connector. <b>Bay of Plenty</b> = investigate. Coordinates: Hilltop returns projected Easting/Northing (NZMG EPSG:27200 or NZTM EPSG:2193 per council) → reproject to WGS84 with pyproj.</p>
+  </div>
+</div>
