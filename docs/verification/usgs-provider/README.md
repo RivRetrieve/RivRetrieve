@@ -112,6 +112,10 @@ uv run pytest -q tests/test_receipts_publisher_payload.py tests/test_source_fail
 Results and any limits are recorded in `tests.log`, `failure-and-receipt-tests.log`
 and `checks.log`. The focused suite passed 58 tests (one rdflib deprecation
 warning); the failure/receipt suite passed four tests. Ruff lint, format checks,
-generated-reference check and whitespace check passed. Independent
-technical review and the user's editorial review of the actual candidate file
-remain separate gates. PR #266 must stay open for the user to approve and merge.
+generated-reference check and whitespace check passed.
+
+The user's editorial feedback on the introductory explanation is incorporated.
+The user then explicitly authorized: “Good you may proceed to completion without
+human gates”. This supersedes the earlier human-only gate for this delivery;
+the published vision is unchanged. The root agent coordinates final independent
+review and completion. This documentation owner has not approved or merged PR #266.

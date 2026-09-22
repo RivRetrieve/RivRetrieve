@@ -49,12 +49,12 @@ time,time_zone,value,unit
 ()
 ```
 
-The request returned seven daily values and no retrieval issues (the empty tuple
-`()`), which does not establish source approval. The preview shows the first three
-values in m³/s, rounded to three decimal places. These are USGS-published daily
-means; RivRetrieve does not calculate them from instantaneous observations.
-The midnight timestamps represent daily dates, with an unknown time zone and day
-definition. They do not establish which 24 hours each mean covers.
+The request returned seven daily means in m³/s and no retrieval issues. The
+preview shows the first three, rounded to three decimal places. USGS calculates
+these daily means. Its daily API labels each value with a date; RivRetrieve
+displays that date at midnight. The returned `time_zone` is `unknown` because
+RivRetrieve has not established the time convention used to define these daily
+periods.
 
 Both endpoint dates are included. `cache="bypass"` requests the source rather than
 cached observations. Source values can change, so later requests need not reproduce

@@ -5,4 +5,4 @@ tests/test_supporting_documentation.py::test_catalogue_evidence_markdown
     conj_sink = ConjunctiveGraph(store=sink.store, identifier=sink.identifier)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-58 passed, 1 warning in 67.82s (0:01:07)
+58 passed, 1 warning in 69.37s (0:01:09)
