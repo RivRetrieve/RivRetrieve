@@ -18,12 +18,13 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.fr_hubeau.config import FrHubeauSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _DAILY_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab"
 _TEMPERATURE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/chronique"
-_HYDROPORTAIL_ROOT = "https://hydro.eaufrance.fr"
 
 
 def fetch(
@@ -33,6 +34,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     payloads: list[Payload] = []
     for station in stations:
@@ -69,21 +73,6 @@ def fetch(
                     },
                     {"Accept": "application/json"},
                 )
-            else:
-                start = window.start
-                stop = window.stop
-                request = TransportRequest(
-                    HttpMethod.GET,
-                    f"{_HYDROPORTAIL_ROOT}/stationhydro/ajax/{station}/series",
-                    {
-                        "hydro_series[startAt]": start,
-                        "hydro_series[endAt]": stop,
-                        "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
-                        "hydro_series[simpleAndInterpolatedAndHourlyVariable]": coordinates.field,
-                        "hydro_series[statusData]": "raw",
-                    },
-                    {"Accept": "application/json"},
-                )
             while True:
                 response = transport.send(request)
                 payloads.append(
@@ -94,29 +83,33 @@ def fetch(
                         response.content,
                         _origin(response),
                         response.prerequisite_calls,
+                        scope=scope,
+                        known_series=known_series,
                     )
                 )
-                if coordinates.family == "hydroportail":
+                try:
+                    next_url = next_url_from_response(response.content)
+                except UnsupportedSourceStructureError:
+                    # Parse retains this page's unsupported outcome and exact bytes.
                     break
-                next_url = _next_url(response.content)
                 if next_url is None:
                     break
-                if not next_url.startswith("https://hubeau.eaufrance.fr/api/"):
-                    raise FatalContractError("fr_hubeau response next URL is outside Hub Eau")
                 request = TransportRequest(HttpMethod.GET, next_url, None, {"Accept": "application/json"})
     return WithIssues(tuple(payloads))
 
 
-def _next_url(content: bytes) -> str | None:
+def next_url_from_response(content: bytes) -> str | None:
     try:
         document = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FatalContractError("fr_hubeau payload content is not valid JSON") from error
+        raise UnsupportedSourceStructureError("fr_hubeau payload content is not valid JSON") from error
     if not isinstance(document, dict):
-        raise FatalContractError("fr_hubeau payload must be a JSON object")
+        raise UnsupportedSourceStructureError("fr_hubeau payload must be a JSON object")
     value = cast("dict[str, object]", document).get("next")
     if value is not None and not isinstance(value, str):
-        raise FatalContractError("fr_hubeau response next must be a URL or null")
+        raise UnsupportedSourceStructureError("fr_hubeau response next must be a URL or null")
+    if value is not None and not value.startswith("https://hubeau.eaufrance.fr/api/"):
+        raise UnsupportedSourceStructureError("fr_hubeau response next URL is outside Hub Eau")
     return value
 
 

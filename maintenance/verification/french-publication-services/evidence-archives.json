@@ -1,0 +1,44 @@
+{
+  "source_revision": "961b0e4140a2b8ec96f89cba66fac5b0b2edec76",
+  "archives": [
+    {
+      "path": "maintenance/catalogue/fr_hydroportail/evidence/supporting-captures.tar.xz",
+      "bytes": 6144,
+      "sha256": "8dc57269644b9b8cac9fd1646819487d9cb74a090ad27e825aff39dfb60082a6",
+      "original_bytes": 5104160,
+      "member_count": 76,
+      "member_identity": "Adjacent *.receipt.json sidecars"
+    },
+    {
+      "path": "maintenance/catalogue/fr_hydroportail/evidence/reconciliation.tar.xz",
+      "bytes": 163476,
+      "sha256": "895d26bbc52ee2d92158763bebfc17b1dd3f0358b3c02a43c2d35852a4d59002",
+      "original_bytes": 2592002,
+      "members": [
+        {
+          "name": "metadata-comparison.json",
+          "bytes": 2166219,
+          "sha256": "ebe5d084d468191979a8d3d9d955acad24c8cd0208b524a0f1cc4c3749f6341d"
+        },
+        {
+          "name": "unmatched-old-availability.json",
+          "bytes": 269127,
+          "sha256": "7f802b453c07d44480728f72d4184fca01b8d7240ceeba1501efc9daa2b703bb"
+        },
+        {
+          "name": "unmatched-stations.json",
+          "bytes": 156656,
+          "sha256": "0cac775f515de0585a5664f72622126ed2b27a276e3fb8a4e13b1ea272c4d806"
+        }
+      ]
+    },
+    {
+      "path": "maintenance/verification/french-publication-services/publisher-payloads.tar.xz",
+      "bytes": 8276,
+      "sha256": "8818e5217aad07ec0dc9a4f1b55bf67dac08a3c204cb3827686bd2a52e62e709",
+      "original_bytes": 773933,
+      "member_count": 10,
+      "member_identity": "Adjacent results.json receipts"
+    }
+  ]
+}

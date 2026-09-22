@@ -565,31 +565,31 @@ def _expected_products() -> pl.DataFrame:
             "frequency": "daily",
             "statistic": "mean",
             "period_type": "interval",
-            "period_anchor": "provider_defined",
+            "period_anchor": "unknown",
             "unit": "m3/s",
-            "native_id": "D_AVG_FR",
+            "native_id": "D AVG F/R",
         },
         {
             "provider_id": "za_dws",
             "product_id": "discharge_instantaneous",
             "observed_property": "discharge",
-            "frequency": "irregular",
-            "statistic": "instantaneous",
-            "period_type": "instant",
-            "period_anchor": "instant",
+            "frequency": "unknown",
+            "statistic": "unknown",
+            "period_type": "unknown",
+            "period_anchor": "unknown",
             "unit": "m3/s",
-            "native_id": "COR_FLOW",
+            "native_id": "COR.FLOW",
         },
         {
             "provider_id": "za_dws",
             "product_id": "stage_instantaneous",
             "observed_property": "stage",
-            "frequency": "irregular",
-            "statistic": "instantaneous",
-            "period_type": "instant",
-            "period_anchor": "instant",
+            "frequency": "unknown",
+            "statistic": "unknown",
+            "period_type": "unknown",
+            "period_anchor": "unknown",
             "unit": "m",
-            "native_id": "COR_LEVEL",
+            "native_id": "COR.LEVEL",
         },
     ]
     return pl.DataFrame(rows, schema=generator.PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -628,11 +628,7 @@ def _expected_provider_info(native: NativeTable) -> dict[str, object]:
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": (
-            "true: per (station, product) window requests; Point requests shared between "
-            "discharge_instantaneous and stage_instantaneous for the same station/window; "
-            "partial failures reported as recoverable issues"
-        ),
+        "bulk_observations": ("false: catalogue-only station discovery; observation retrieval is unavailable"),
         "catalogue_version": maximum.date().isoformat(),
         "license": None,
         "citation": None,
@@ -682,8 +678,8 @@ def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
     station_products = pl.read_parquet(CATALOGUE_PATH / "station_products.parquet")
     generated = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
 
-    provider_digest = "b951c0f0cf2eaff8f1ca09767fdfe96ff40178055a2e90f3ea3b11f6133d4206"
-    products_digest = "ac641caa1ed8b4a351b7060b7e5269328242279de0e5d96a56d9b1416184275f"
+    provider_digest = "af62d231a82f2a60fa6355ceb690e15ce565eef0528036f678d4605b7c252f35"
+    products_digest = "bbe6633d03088e2e8187ef355919deefd99110f006d047a41fa4181174aec7ad"
     stations_digest = "362736b7f95535b309118c51eb5c21e8f0d0b52b06858f295fc7b44ecff2c562"
     station_products_digest = "8b481dfdb358de66749239f622b567a4386423cd2849651735f1d54b1482a02f"
     assert _provider_content_sha256(provider_info) == provider_digest
@@ -724,7 +720,7 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
-def test_canonical_cli_writes_only_four_native_built_artifacts(tmp_path: Path) -> None:
+def test_canonical_cli_writes_versioned_native_built_artifacts(tmp_path: Path) -> None:
     assert generator.main(["--native", str(_NATIVE_TABLE), "--out", str(tmp_path)]) == 0
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
@@ -738,6 +734,9 @@ def test_canonical_cli_writes_only_four_native_built_artifacts(tmp_path: Path) -
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
 
 
@@ -770,6 +769,9 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
     for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

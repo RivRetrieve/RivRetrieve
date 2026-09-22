@@ -28,7 +28,9 @@ from rivretrieve._internal.catalogues.native import (
     stamp_native_table,
     write_native_table,
 )
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.schemas import (
+    CATALOGUE_SERIES_CLAIMS_SCHEMA,
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
     STATION_CATALOG_SCHEMA,
@@ -45,6 +47,7 @@ from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ba_fhmzbih.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SHA256,
+    SERIES_RECORDING_SHA256,
     WorkbookAccessLedger,
     build_acquisition_provenance,
 )
@@ -127,44 +130,20 @@ class GeneratedBaFhmzbihCatalogue:
 @dataclass(frozen=True)
 class ProductDefinition:
     product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    canonical_unit: str
     parameter_code: str
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="discharge_reported",
-        observed_property="discharge",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        canonical_unit="m3/s",
         parameter_code="Q",
     ),
     ProductDefinition(
         product_id="stage_reported",
-        observed_property="stage",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        canonical_unit="m",
         parameter_code="H",
     ),
     ProductDefinition(
         product_id="water_temperature_reported",
-        observed_property="water_temperature",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        canonical_unit="degC",
         parameter_code="WT",
     ),
 )
@@ -306,18 +285,10 @@ def build_catalogue(
 
 
 def build_products() -> ProductCatalog:
+    from rivretrieve._internal.providers.ba_fhmzbih.config import SERIES_MAPPINGS
+
     rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": d.product_id,
-            "observed_property": d.observed_property,
-            "frequency": d.frequency,
-            "statistic": d.statistic,
-            "period_type": d.period_type,
-            "period_anchor": d.period_anchor,
-            "unit": d.canonical_unit,
-            "native_id": d.parameter_code,
-        }
+        product_row(PROVIDER_ID, d.product_id, d.parameter_code, SERIES_MAPPINGS[d.product_id].physical_facts())
         for d in PRODUCT_DEFINITIONS
     ]
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -399,9 +370,54 @@ def validate_generated_catalogue(
     )
 
 
-def write_catalogue(catalogue: GeneratedBaFhmzbihCatalogue, out_dir: Path | str) -> None:
+def source_series_claims(payload: object, stations: StationCatalog, *, evidence: str) -> pl.DataFrame:
+    """Preserve layer-20 discharge identities without equating them to workbook names."""
+    if not isinstance(payload, list):
+        raise FatalContractError("Bosnia layer-20 source-series evidence must be an array")
+    selected = set(stations["station_id"].to_list())
+    rows = []
+    for raw_record in cast("list[object]", payload):
+        if not isinstance(raw_record, dict):
+            raise FatalContractError("Bosnia source-series claim must be an object")
+        record = cast("dict[str, object]", raw_record)
+        station = record.get("metadata_station_no")
+        if not isinstance(station, str):
+            raise FatalContractError("Bosnia source-series station identity must be a string")
+        if station not in selected:
+            continue
+        identifier = record.get("L1_ts_id")
+        name = record.get("L1_ts_name")
+        parameter = record.get("L1_stationparameter_no")
+        unit = record.get("L1_ts_unitsymbol")
+        if type(identifier) is not int or not isinstance(name, str) or parameter != "Q" or unit != "m³/s":
+            raise FatalContractError("Bosnia layer-20 discharge claim differs from the acquired identity contract")
+        rows.append(
+            {
+                "provider_id": PROVIDER_ID,
+                "station_id": station,
+                "product_id": "discharge_reported",
+                "namespace": "wiski.L1_ts_id",
+                "published_id": str(identifier),
+                "description": name,
+                "native_coordinates": [
+                    {"name": "L1_stationparameter_no", "value": parameter},
+                    {"name": "L1_ts_unitsymbol", "value": unit},
+                ],
+                "evidence": [evidence],
+            }
+        )
+    if {row["station_id"] for row in rows} != selected or len(rows) != len(selected):
+        raise FatalContractError("Bosnia layer-20 series claims must cover each catalogue station exactly once")
+    return pl.DataFrame(rows, schema=CATALOGUE_SERIES_CLAIMS_SCHEMA.polars_schema).sort("station_id")
+
+
+def write_catalogue(
+    catalogue: GeneratedBaFhmzbihCatalogue, out_dir: Path | str, catalogue_claims: pl.DataFrame
+) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.ba_fhmzbih.config import SERIES_MAPPINGS
+    from rivretrieve._internal.providers.ba_fhmzbih.config import config as source_config
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -416,6 +432,9 @@ def write_catalogue(catalogue: GeneratedBaFhmzbihCatalogue, out_dir: Path | str)
         catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_mappings=SERIES_MAPPINGS,
+        catalogue_claims=catalogue_claims,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -608,6 +627,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--native-input-kind", choices=RefreshInputKind)
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--workbook-access-ledger", type=Path, help="Reviewed workbook access JSON ledger.")
+    parser.add_argument("--series-recording", type=Path, help="Exact layer-20 recording with L1 source identities.")
     args = parser.parse_args(argv)
 
     if args.native_payload is not None and (args.native is not None or args.out is not None):
@@ -653,6 +673,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ba_fhmzbih native table content SHA-256: {digest}")
         return 0
 
+    if args.series_recording is None:
+        parser.error("--native requires --series-recording")
+    from rivretrieve._internal.recordings import read_recording
+
+    if hashlib.sha256(args.series_recording.read_bytes()).hexdigest() != SERIES_RECORDING_SHA256:
+        raise FatalContractError("Bosnia source-series recording differs from the governing acquisition")
+    series_recording = read_recording(args.series_recording)
+    if series_recording.request.url != METADATA_URL:
+        raise FatalContractError("Bosnia series recording must identify the layer-20 source")
     workbook_access = TypeAdapter(WorkbookAccessLedger).validate_json(args.workbook_access_ledger.read_bytes())
     verify_provenance_recordings(build_acquisition_provenance(workbook_access), Path(__file__).resolve().parents[5])
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
@@ -662,7 +691,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         STATION_CATALOGUE_ORIGINS,
         workbook_access,
     )
-    write_catalogue(catalogue, args.out)
+    claims = source_series_claims(
+        json.loads(series_recording.content),
+        catalogue.stations,
+        evidence="catalogue:ba_fhmzbih:source.series.layer20_discharge_identity",
+    )
+    write_catalogue(catalogue, args.out, claims)
     return 0
 
 

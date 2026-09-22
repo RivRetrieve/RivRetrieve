@@ -111,14 +111,14 @@
       "evidence": [
         {
           "evidence_id": "existenz_api_terms",
-          "description": "Intermediary API conditions and BAFU credit statement",
+          "description": "Intermediary API conditions and BAFU credit statement; retained fixture has published archive credential redacted",
           "recording": {
             "recording_id": "ch_foen_terms_existenz",
             "repository_path": "tests/test_data/ch_foen_terms_existenz.html",
             "source_url": "https://api.existenz.ch/",
             "retrieved_at": "2026-08-20T13:12:58Z",
             "media_type": "text/html; charset=UTF-8",
-            "sha256": "488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df"
+            "sha256": "b353852a474516acf404c1d8b775cc77c5cf3c97bd3055380fc4534bcba9111c"
           }
         }
       ],
@@ -147,11 +147,11 @@
     "BAFU hydrology terms and source-wording response",
     "Official update-cadence and distinct temporal-product evidence",
     "Recent REST and older Flux intermediary observation surfaces",
-    "Existenz API conditions and BAFU credit response"
+    "Existenz API conditions and BAFU credit response; published archive credential redacted in retained fixture"
   ],
   "transformations": [
     {
-      "name": "BAFU observations to RivRetrieve five-column result shape",
+      "name": "BAFU observations to identified RivRetrieve observations",
       "kind": "derived_value",
       "marker_value": null
     },
@@ -171,8 +171,8 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "8200c128fa73060614d4472f20beb95c3b6848b78d7c8233ea6ea26dce2cbd1d",
-      "byte_count": 2750,
+      "sha256": "4c5477b1754e0beb9a865a0b4855a149007d5e5a908c286bfab1b8b053dfcc86",
+      "byte_count": 2715,
       "row_count": 47,
       "schema_version": 3
     },

@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "1.46.0",
+      "Parameter": "1000",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2024-09-29T00:00:00Z/2024-10-03T23:59:59.999999Z",
+      "VersionNumber": 1
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-20T10:01:09.351988Z",
+    "content_base64": "eyJjdXJyZW50TGluayI6Imh0dHBzOi8vaHlkYXBpLm52ZS5uby9hcGkvdjEvT2JzZXJ2YXRpb25zP1N0YXRpb25JZD0xLjQ2LjAmUGFyYW1ldGVyPTEwMDAmUmVzb2x1dGlvblRpbWU9MTQ0MCZSZWZlcmVuY2VUaW1lPTIwMjQtMDktMjlUMDAlM0EwMCUzQTAwWiUyRjIwMjQtMTAtMDNUMjMlM0E1OSUzQTU5Ljk5OTk5OVomVmVyc2lvbk51bWJlcj0xIiwiYXBpVmVyc2lvbiI6IjEuMCIsImxpY2Vuc2UiOiJodHRwczovL2RhdGEubm9yZ2Uubm8vbmxvZC9lbiIsImNyZWF0ZWRBdCI6IjIwMjYtMDktMjBUMTA6MDE6MDkuMzgyMDg0OVoiLCJxdWVyeVRpbWUiOiIwMDowMDowMC4wMjEwMTA5IiwiaXRlbUNvdW50IjoxLCJkYXRhIjpbeyJzdGF0aW9uSWQiOiIxLjQ2LjAiLCJzdGF0aW9uTmFtZSI6Ik1qZXJtZW4iLCJwYXJhbWV0ZXIiOjEwMDAsInBhcmFtZXRlck5hbWUiOiJWYW5uc3RhbmQiLCJwYXJhbWV0ZXJOYW1lRW5nIjoiU3RhZ2UiLCJzZXJpZVZlcnNpb25ObyI6MSwibWV0aG9kIjoiTWVhbiIsInVuaXQiOiJtIiwib2JzZXJ2YXRpb25Db3VudCI6NSwib2JzZXJ2YXRpb25zIjpbeyJ0aW1lIjoiMjAyNC0wOS0yOVQxMTowMDowMFoiLCJ2YWx1ZSI6bnVsbCwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6MX0seyJ0aW1lIjoiMjAyNC0wOS0zMFQxMTowMDowMFoiLCJ2YWx1ZSI6bnVsbCwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6MX0seyJ0aW1lIjoiMjAyNC0xMC0wMVQxMTowMDowMFoiLCJ2YWx1ZSI6bnVsbCwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6MX0seyJ0aW1lIjoiMjAyNC0xMC0wMlQxMTowMDowMFoiLCJ2YWx1ZSI6bnVsbCwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6MX0seyJ0aW1lIjoiMjAyNC0xMC0wM1QxMTowMDowMFoiLCJ2YWx1ZSI6bnVsbCwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6MX1dfV19",
+    "sha256": "7e253d6570296f697cd88a099b8a58fb9b4977ea2eba31398c9975215a012d0e",
+    "prerequisite_calls": []
+  }
+}

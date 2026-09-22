@@ -1,0 +1,1174 @@
+[
+  {
+    "name": "Y251002001_Q_padded_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:07.479488+00:00",
+    "sha256": "df673eaa1335eb1151c7790cfe32378230ad38d0062d5b22d4b759237dcb4c21",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données brutes de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 1728,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 6700,
+      "t": "2019-12-30T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 12,
+      "m": 8,
+      "c": 0
+    },
+    "last": {
+      "v": 7520,
+      "t": "2020-01-04T23:55:00Z",
+      "md": null,
+      "s": 4,
+      "q": 12,
+      "m": 8,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_Q_padded_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:08.046217+00:00",
+    "sha256": "371d408d8c4044411eb9d8cbbf54fc547af9d70b877198bc4bc0feab6fcfeb12",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 169,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 6920,
+      "t": "2019-12-30T00:20:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 7140,
+      "t": "2020-01-04T23:10:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_Q_padded_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:09.155981+00:00",
+    "sha256": "cf9c020a060f691f1673c228f41c76219808641407fae86a8ad1898f094c4c0f",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données pré-validées et validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 169,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 6920,
+      "t": "2019-12-30T00:20:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 7140,
+      "t": "2020-01-04T23:10:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_Q_padded_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:10.234705+00:00",
+    "sha256": "421f74a9c32db4a8e16556c0ccd4526a93077932e3ba3fb07e7076a4c77768fe",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données les plus valides de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 169,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 6920,
+      "t": "2019-12-30T00:20:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 7140,
+      "t": "2020-01-04T23:10:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_padded_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:11.276441+00:00",
+    "sha256": "ced762c5fd6f096c0e9402a4d4b4ed3d7d97248573fda28e2da535a4cd26962a",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données brutes de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 1728,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 181,
+      "t": "2019-12-30T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "last": {
+      "v": 203,
+      "t": "2020-01-04T23:55:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_padded_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:12.089490+00:00",
+    "sha256": "31ca008e1e8ff742b0566da678e1549ec7ff41e8476236d33ad585794809f174",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 169,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 187,
+      "t": "2019-12-30T00:20:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 193,
+      "t": "2020-01-04T23:10:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_padded_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:13.091990+00:00",
+    "sha256": "4b07175d89ffae58ac6a61620675986b53aaaa4ad779bc35464dbbcd27e98a08",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données pré-validées et validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 169,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 187,
+      "t": "2019-12-30T00:20:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 193,
+      "t": "2020-01-04T23:10:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_padded_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:14.130215+00:00",
+    "sha256": "4a161babbe62871c8bf40b409163891593f18e58899a8ea89cb4bb56c004818a",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données les plus valides de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 30/12/2019 00:00 au 04/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 169,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 187,
+      "t": "2019-12-30T00:20:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 193,
+      "t": "2020-01-04T23:10:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_padded_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:15.615969+00:00",
+    "sha256": "aa99bc0a91dd45c928ce64d6fd68dff875abcb1e47cf348b11354980413e3f8f",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données brutes de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 611,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 1390,
+      "t": "2026-05-30T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "last": {
+      "v": 1230,
+      "t": "2026-06-02T18:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_padded_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:16.221975+00:00",
+    "sha256": "e71bee0a2b1ca40c1d2ee8d33f62b6ff5102add5a1c5dc5385c506cefc4685be",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_padded_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:17.395553+00:00",
+    "sha256": "fe4d23fbd970eaf2525996bc83a979a65a92d9e067ac95812512b84cf051c640",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données pré-validées et validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_padded_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:18.262548+00:00",
+    "sha256": "feb759d4937947d302d98d1d4a5abbba7836f8f056217e273656813e71256281",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données les plus valides de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 611,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 1390,
+      "t": "2026-05-30T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "last": {
+      "v": 1230,
+      "t": "2026-06-02T18:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_padded_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:19.269775+00:00",
+    "sha256": "398697efc310a48073defaf39ecf5a9a174115c2fa67fc8ba54dd09ff894cbd1",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données brutes de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 615,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 194,
+      "t": "2026-05-30T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "last": {
+      "v": -542,
+      "t": "2026-06-04T21:15:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_padded_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:20.155550+00:00",
+    "sha256": "6af8bfe93d16f646f324b1051781b0d3396b358dfd0d0542bae5a7f295d619a2",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_padded_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:21.264185+00:00",
+    "sha256": "0359be82f389b5e50ed1622cc1d88a6d61ac7c513cec25951e86af3dd9f14250",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données pré-validées et validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_padded_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:22.334927+00:00",
+    "sha256": "d4e3d40f6477c328dc563e7468c51e75e67657f8e58fbbfa121559ebe02953d7",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données les plus valides de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 30/05/2026 00:00 au 04/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 615,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 194,
+      "t": "2026-05-30T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "last": {
+      "v": -542,
+      "t": "2026-06-04T21:15:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_Q_direct_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:23.322857+00:00",
+    "sha256": "8aa76b2fed22a1514d49d158110b104bfdde09235a0df5ca0b6939de4c73e48f",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données brutes de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 576,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 13600,
+      "t": "2020-01-01T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 12,
+      "m": 8,
+      "c": 0
+    },
+    "last": {
+      "v": 8100,
+      "t": "2020-01-02T23:55:00Z",
+      "md": null,
+      "s": 4,
+      "q": 12,
+      "m": 8,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_Q_direct_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:24.268321+00:00",
+    "sha256": "365ac2c86d139f8fb6800d7e0c6e025c18b2c41f52a9f98831ac70c344ec95e8",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 50,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 13500,
+      "t": "2020-01-01T00:01:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 8460,
+      "t": "2020-01-02T21:55:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_Q_direct_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:25.358711+00:00",
+    "sha256": "22ff15fbcc04f39b1b51b4b475f94b1635cfb39e759ac53ac0dccf09c22a9975",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données pré-validées et validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 50,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 13500,
+      "t": "2020-01-01T00:01:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 8460,
+      "t": "2020-01-02T21:55:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_Q_direct_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:26.245810+00:00",
+    "sha256": "621b731fe9e3c1b8b1d0092bd0dc36245fd8cd895824cb617f265921815195c5",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données les plus valides de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_Q"
+    },
+    "timezone": "UTC",
+    "rows": 50,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 13500,
+      "t": "2020-01-01T00:01:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 8460,
+      "t": "2020-01-02T21:55:00Z",
+      "md": null,
+      "s": 16,
+      "q": 12,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_direct_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:27.329001+00:00",
+    "sha256": "24a58f6a3a2b3d097144b76fcc4d96b7550eddf19f4ad2146c686681f1858b0c",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données brutes de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 576,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 347,
+      "t": "2020-01-01T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "last": {
+      "v": 218,
+      "t": "2020-01-02T23:55:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_direct_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:28.392232+00:00",
+    "sha256": "86ef39a3271ea02db6a47a7c6a0c0446e02e4eac330135529ad0fbf996711682",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 50,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 345,
+      "t": "2020-01-01T00:01:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 227,
+      "t": "2020-01-02T21:55:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_direct_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:29.335495+00:00",
+    "sha256": "ff292983a7dc99f17ae8664f7b788b63dbce19693eda1fbcf504e24f179a2aa7",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données pré-validées et validées de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 50,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 345,
+      "t": "2020-01-01T00:01:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 227,
+      "t": "2020-01-02T21:55:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "Y251002001_H_direct_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:30.276159+00:00",
+    "sha256": "10a1ab28ab5afeddd26196bd193fdac6820eb1ecd4bd2b590b4aadc1e7189993",
+    "metadata": {
+      "code": "Y251002001",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données les plus valides de l'entité - Y251 0020 01 - L'Orb à Bédarieux - du 01/01/2020 00:00 au 02/01/2020 23:59 (TU)",
+      "baseFilename": "Y251002001_H"
+    },
+    "timezone": "UTC",
+    "rows": 50,
+    "statuses": [
+      "16"
+    ],
+    "first": {
+      "v": 345,
+      "t": "2020-01-01T00:01:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "last": {
+      "v": 227,
+      "t": "2020-01-02T21:55:00Z",
+      "md": null,
+      "s": 16,
+      "q": 20,
+      "m": 10,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_direct_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:31.445654+00:00",
+    "sha256": "ef96dbe7d61352e644e763615fe1ddd70aa9435ba7cde1b9ffa6225ab77978e1",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données brutes de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 282,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 1280,
+      "t": "2026-06-01T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "last": {
+      "v": 1230,
+      "t": "2026-06-02T18:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_direct_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:32.188911+00:00",
+    "sha256": "f70dc160c78a590c64a6a695905e2c7aedce6e772cdd3d44bfed681b61ce10db",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_direct_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:33.455991+00:00",
+    "sha256": "6ef1825e63cccd37cf0c6011f57a06c58d880ffb67454ebf0336f83b7b3977ef",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données pré-validées et validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_Q_direct_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:34.390241+00:00",
+    "sha256": "9b1c2d668ec10a4c12364bb7c39f5f78dd9200fb2dfbe3bd9bcd771753f51663",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "Q",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "l",
+      "title": "Débit instantané - Données les plus valides de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_Q"
+    },
+    "timezone": "UTC",
+    "rows": 282,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 1280,
+      "t": "2026-06-01T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "last": {
+      "v": 1230,
+      "t": "2026-06-02T18:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 8,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_direct_raw",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:35.504624+00:00",
+    "sha256": "b318db737f523c5ca3aba0cfe6b805df919b8907bc853e31cad401ac600f2c75",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "raw",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données brutes de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 282,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 175,
+      "t": "2026-06-01T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "last": {
+      "v": 166,
+      "t": "2026-06-02T18:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_direct_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:36.517813+00:00",
+    "sha256": "2fd55c90821f765edc8a4d8f9079c703820a71190cc7c5096dd93e8f4d18b777",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_direct_pre_validated_and_validated",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:37.419056+00:00",
+    "sha256": "29777dbc1aac5a6f9e259826e4bbe8fa4da68efd22b4e3814afdb41753f0bfa5",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "pre_validated_and_validated",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données pré-validées et validées de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 0,
+    "statuses": [],
+    "first": null,
+    "last": null,
+    "nulls": 0
+  },
+  {
+    "name": "1232000101_H_direct_most_valid",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:38.329153+00:00",
+    "sha256": "1862bafb7f865636a2cfe71ae62c83b104bd31ff51fb08b951a336dc7526afe9",
+    "metadata": {
+      "code": "1232000101",
+      "metric": "H",
+      "timeStep": null,
+      "statuses": "most_valid",
+      "rolling": false,
+      "unit": "mm",
+      "title": "Hauteur instantanée - Données les plus valides de l'entité - 1232 0001 01 - La rivière de Petite-Plaine à Pointe-Noire - du 01/06/2026 00:00 au 02/06/2026 23:59 (TU)",
+      "baseFilename": "1232000101_H"
+    },
+    "timezone": "UTC",
+    "rows": 282,
+    "statuses": [
+      "4"
+    ],
+    "first": {
+      "v": 175,
+      "t": "2026-06-01T00:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "last": {
+      "v": 166,
+      "t": "2026-06-02T18:00:00Z",
+      "md": null,
+      "s": 4,
+      "q": 16,
+      "m": 0,
+      "c": 0
+    },
+    "nulls": 0
+  },
+  {
+    "name": "station-form",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:39.468718+00:00",
+    "sha256": "26d3ba05c2da3d16fb3601b51f7fb3a1d0d2f83394567e49b7eaf10e18f13b21"
+  },
+  {
+    "name": "glossaire",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:39.892718+00:00",
+    "sha256": "e5a4c19910f3745dc39e06fe91195597d7cc6e724b7597cd4d85f348a2a4f8f9"
+  },
+  {
+    "name": "hydro-series",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:40.830141+00:00",
+    "sha256": "8f2409f44bffa3eb1d98771b8180648a516087e02103e3b7e3eb7be00c4d2217"
+  },
+  {
+    "name": "graph-measures",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:41.860979+00:00",
+    "sha256": "2ecf13fd89c9b3ca47d6a441a76bcee50afe5ee0c922e672edfc638efd2eab04"
+  },
+  {
+    "name": "unit-selector",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:42.839923+00:00",
+    "sha256": "72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6"
+  },
+  {
+    "name": "unit-label",
+    "status_code": 200,
+    "retrieved_at": "2026-09-21T10:58:43.851524+00:00",
+    "sha256": "ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823"
+  }
+]

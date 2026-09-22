@@ -1,4 +1,4 @@
-"""th_thaiwater parse : Payload × ProviderConfig → WithIssues[Rows].
+"""th_thaiwater native observations and source-series evidence.
 
 Contributed by: Thiago von Däniken
 """
@@ -7,19 +7,21 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from math import isfinite
 from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
+from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.th_thaiwater.config import ThThaiWaterSourceCoordinates
+from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
+from rivretrieve._internal.providers.th_thaiwater.config import SERIES_MAPPINGS, ThThaiWaterSourceCoordinates
 from rivretrieve._internal.providers.th_thaiwater.issue_codes import ThThaiWaterObservationIssueCodes
+from rivretrieve._internal.source_series import ParsedSeries
 
 
-def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
     if not payload.station_products:
         raise FatalContractError("th_thaiwater payload must contain at least one station-product pair")
     stations = {station for station, _ in payload.station_products}
@@ -31,9 +33,9 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     if document.get("result") == "NO":
         source_message = document.get("data")
         if not isinstance(source_message, str) or not source_message.strip():
-            raise FatalContractError("th_thaiwater source failure must carry a non-empty data message")
+            raise UnsupportedSourceStructureError("th_thaiwater source failure must carry a non-empty data message")
         return WithIssues(
-            value=pl.DataFrame(schema=RowsSchema.polars_schema),
+            value=pl.DataFrame(schema=NATIVE_SCHEMA),
             issues=(
                 Issue(
                     severity="error",
@@ -54,27 +56,36 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]
     rows: list[dict[str, object]] = []
     for index, raw_entry in enumerate(entries):
         if not isinstance(raw_entry, dict):
-            raise FatalContractError(f"th_thaiwater observation {index} must be a JSON object")
+            raise UnsupportedSourceStructureError(f"th_thaiwater observation {index} must be a JSON object")
         entry = cast("dict[str, object]", raw_entry)
         wall_clock = _time(entry, index)
         for station_id, product in payload.station_products:
             field = coordinates[product].native_field
             if field not in entry:
-                raise FatalContractError(f"th_thaiwater observation {index} is missing {field}")
+                raise UnsupportedSourceStructureError(f"th_thaiwater observation {index} is missing {field}")
             value = entry[field]
             if value is not None and (type(value) not in (int, float)):
-                raise FatalContractError(f"th_thaiwater observation {index} field {field} must be numeric or null")
+                raise UnsupportedSourceStructureError(
+                    f"th_thaiwater observation {index} field {field} must be numeric or null"
+                )
+            try:
+                number = None if value is None else float(cast("int | float", value))
+            except OverflowError as error:
+                raise UnsupportedSourceStructureError(
+                    f"th_thaiwater observation {index} field {field} is not representable as a finite number"
+                ) from error
+            if number is not None and not isfinite(number):
+                raise UnsupportedSourceStructureError(f"th_thaiwater observation {index} field {field} must be finite")
             rows.append(
                 {
                     "station_id": station_id,
                     "product_id": product,
                     "time": wall_clock,
-                    "value": None if value is None else float(cast("int | float", value)),
+                    "value": number,
                     "time_zone": "unknown",
                 }
             )
-    result = pl.DataFrame(rows, schema=RowsSchema.polars_schema)
-    validate_catalogue(result, RowsSchema, on_issue="raise")
+    result = pl.DataFrame(rows, schema=NATIVE_SCHEMA)
     return WithIssues(value=result, issues=())
 
 
@@ -92,31 +103,37 @@ def _document(content: bytes) -> dict[str, object]:
     try:
         value = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FatalContractError("th_thaiwater payload content is not valid JSON") from error
+        raise UnsupportedSourceStructureError("th_thaiwater payload content is not valid JSON") from error
     if not isinstance(value, dict):
-        raise FatalContractError("th_thaiwater payload content must be a JSON object")
+        raise UnsupportedSourceStructureError("th_thaiwater payload content must be a JSON object")
     return cast("dict[str, object]", value)
 
 
 def _entries(document: dict[str, object]) -> list[object]:
     if document.get("result") != "OK":
-        raise FatalContractError("th_thaiwater payload result must be 'OK'")
+        raise UnsupportedSourceStructureError("th_thaiwater payload result must be 'OK'")
     data = document.get("data")
     if not isinstance(data, dict):
-        raise FatalContractError("th_thaiwater payload data must be a JSON object")
+        raise UnsupportedSourceStructureError("th_thaiwater payload data must be a JSON object")
     entries = cast("dict[str, object]", data).get("graph_data")
     if not isinstance(entries, list):
-        raise FatalContractError("th_thaiwater payload data.graph_data must be a list")
+        raise UnsupportedSourceStructureError("th_thaiwater payload data.graph_data must be a list")
     return cast("list[object]", entries)
 
 
 def _time(entry: dict[str, object], index: int) -> datetime:
     value = entry.get("datetime")
     if not isinstance(value, str):
-        raise FatalContractError(f"th_thaiwater observation {index} datetime must be a string")
+        raise UnsupportedSourceStructureError(f"th_thaiwater observation {index} datetime must be a string")
     try:
         return datetime.strptime(value, "%Y-%m-%d %H:%M")
     except ValueError as error:
-        raise FatalContractError(
+        raise UnsupportedSourceStructureError(
             f"th_thaiwater observation {index} datetime must be a strict naive minute timestamp"
         ) from error
+
+
+def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+    return parse_mapped_series(
+        payload, provider_config, provider="th_thaiwater", mappings=SERIES_MAPPINGS, native_parse=_parse_native
+    )

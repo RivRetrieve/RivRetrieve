@@ -1,0 +1,15 @@
+['provider_id', 'station_id', 'product_id', 'series_id', 'facts_id', 'identity_namespace', 'published_id', 'description', 'identity_origin', 'variant', 'requested_variants', 'requested_series_ids', 'requested_selector_kind', 'requested_selector_value', 'physical_match', 'admission', 'admission_reason', 'source_unit', 'source_unit_state', 'source_unit_evidence', 'normalized_unit', 'identity_evidence', 'unit', 'quantity', 'frequency', 'statistic', 'temporal_support', 'day_definition', 'timestamp_anchor', 'time_zone', 'vertical_reference', 'vertical_datum', 'quantity_state', 'frequency_state', 'statistic_state', 'temporal_support_state', 'day_definition_state', 'timestamp_anchor_state', 'time_zone_state', 'vertical_reference_state', 'vertical_datum_state', 'quantity_evidence', 'frequency_evidence', 'statistic_evidence', 'temporal_support_evidence', 'day_definition_evidence', 'timestamp_anchor_evidence', 'time_zone_evidence', 'vertical_reference_evidence', 'vertical_datum_evidence', 'inventory_ids', 'inventory_scope', 'inventory_windows', 'outcome_windows', 'inventory_vintage', 'inventory_status', 'outcomes', 'outcome_reasons']
+17914 107484
+shape: (6, 6)
+┌───────────────┬───────────┬───────────┬─────────────┬──────┬───────┐
+│ variant       ┆ frequency ┆ statistic ┆ source_unit ┆ unit ┆ len   │
+│ ---           ┆ ---       ┆ ---       ┆ ---         ┆ ---  ┆ ---   │
+│ str           ┆ str       ┆ str       ┆ str         ┆ str  ┆ u32   │
+╞═══════════════╪═══════════╪═══════════╪═════════════╪══════╪═══════╡
+│ Cota_Adotada  ┆ null      ┆ null      ┆ cm          ┆ m    ┆ 17914 │
+│ Vazao_Adotada ┆ null      ┆ null      ┆ m3/s        ┆ m3/s ┆ 17914 │
+│ bruto         ┆ daily     ┆ mean      ┆ cm          ┆ m    ┆ 17914 │
+│ bruto         ┆ daily     ┆ mean      ┆ m3/s        ┆ m3/s ┆ 17914 │
+│ consistido    ┆ daily     ┆ mean      ┆ m3/s        ┆ m3/s ┆ 17914 │
+│ consistido    ┆ daily     ┆ mean      ┆ cm          ┆ m    ┆ 17914 │
+└───────────────┴───────────┴───────────┴─────────────┴──────┴───────┘

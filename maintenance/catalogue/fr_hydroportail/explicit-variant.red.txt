@@ -1,0 +1,74 @@
+FFF
+=================================== FAILURES ===================================
+_________ test_public_discovery_exposes_all_source_variants[discharge] _________
+
+quantity = 'discharge'
+
+    @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+    def test_public_discovery_exposes_all_source_variants(quantity):
+        selection = rr.find(provider="fr_hydroportail", station="Y251002001", quantity=quantity, statistic="instantaneous")
+>       assert set(rr.series(selection)["variant"].to_list()) == VARIANTS
+E       AssertionError: assert {None} == {'most_valid'..., 'validated'}
+E         
+E         Extra items in the left set:
+E         None
+E         Extra items in the right set:
+E         'raw'
+E         'pre_validated_and_validated'
+E         'validated'
+E         'most_valid'
+E         Use -v to get more diff
+
+tests/test_fr_hydroportail_variants.py:13: AssertionError
+___________ test_public_discovery_exposes_all_source_variants[stage] ___________
+
+quantity = 'stage'
+
+    @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+    def test_public_discovery_exposes_all_source_variants(quantity):
+        selection = rr.find(provider="fr_hydroportail", station="Y251002001", quantity=quantity, statistic="instantaneous")
+>       assert set(rr.series(selection)["variant"].to_list()) == VARIANTS
+E       AssertionError: assert {None} == {'most_valid'..., 'validated'}
+E         
+E         Extra items in the left set:
+E         None
+E         Extra items in the right set:
+E         'raw'
+E         'pre_validated_and_validated'
+E         'validated'
+E         'most_valid'
+E         Use -v to get more diff
+
+tests/test_fr_hydroportail_variants.py:13: AssertionError
+____ test_explicit_variant_requests_only_its_identity[most_valid-discharge] ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x11f3a7230>
+tmp_path = PosixPath('/private/var/folders/9m/29m0bx0j0rsdyqb0b6yns28w0000gn/T/pytest-of-nicolaslazaro/pytest-1911/test_explicit_variant_requests0')
+quantity = 'discharge', variant = 'most_valid'
+
+    @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+    @pytest.mark.parametrize("variant", sorted(VARIANTS))
+    def test_explicit_variant_requests_only_its_identity(monkeypatch, tmp_path, quantity, variant):
+        transport = SyntheticVariantTransport()
+        install(monkeypatch, tmp_path, transport)
+        selection = rr.pick(public_selection(quantity), variant=variant)
+        result = retrieve(selection)
+>       assert transport.calls == [variant]
+E       AssertionError: assert ['raw'] == ['most_valid']
+E         
+E         At index 0 diff: 'raw' != 'most_valid'
+E         Use -v to get more diff
+
+tests/test_fr_hydroportail_variants.py:88: AssertionError
+=============================== warnings summary ===============================
+tests/test_fr_hydroportail_variants.py::test_explicit_variant_requests_only_its_identity[most_valid-discharge]
+  /Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/effort-311-hydroportail-variants/src/rivretrieve/_internal/selection.py:381: RuntimeWarning: The acquired inventory cannot settle the explicit source restriction 'most_valid'.
+    apply_on_issue(result.issues, on_issue)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_fr_hydroportail_variants.py::test_public_discovery_exposes_all_source_variants[discharge]
+FAILED tests/test_fr_hydroportail_variants.py::test_public_discovery_exposes_all_source_variants[stage]
+FAILED tests/test_fr_hydroportail_variants.py::test_explicit_variant_requests_only_its_identity[most_valid-discharge]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 3 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+3 failed, 1 warning in 6.75s

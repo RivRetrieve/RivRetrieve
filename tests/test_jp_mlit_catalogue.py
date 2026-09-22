@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import ast
 import hashlib
-import io
 import json
 import math
 import re
+import urllib.request
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -55,7 +54,7 @@ PUBLISHED_ID_DIGEST = "9016935eea6c6c7b3c56ee280a1467f74b4d7b60f2fc10f17e1ed3baa
 TIMESTAMP_PAIR_DIGEST = "0f742e2f37bb9c6bfffb7e0d109f8025e5350e6416175c983e79bf8fb8b6fdd0"
 NATIVE_FRAME_DIGEST = "f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268602aec0"
 CANONICAL_CONTENT_DIGESTS = {
-    "products.parquet": "2a9dda9d6686fd13d4aeb972cfe7eeb9c9b17478b6344309956922e88c8b613a",
+    "products.parquet": "38aa480240734831a3fdb2e4b1a570c917054c8e6afd64a23eb5c2c6786195ad",
     "stations.parquet": "43f0369f650ec971fa49d507998f3e4e6104e4644a21204c43cef85e2227f1cb",
     "station_products.parquet": "7bdc3c07ac4e79fabcdf131bc7d2a2122bd254f488f227f533f942f3aac3948f",
     "provider.json": "104fe86853da0260c2556aff94253878cd51b60e5cacc8cdf5dee997e4d79fb9",
@@ -173,6 +172,8 @@ def test_provider_specific_products_have_correct_frequency() -> None:
     row = _products().filter(pl.col("product_id") == "stage_hourly")
     assert row["frequency"][0] == "hourly"
     assert row["statistic"][0] == "unknown"
+    assert _products()["period_type"].unique().to_list() == ["unknown"]
+    assert _products().filter(pl.col("product_id").str.ends_with("_daily"))["frequency"].to_list() == ["daily", "daily"]
 
 
 def test_product_native_ids_preserve_integer_kind_identity() -> None:
@@ -299,26 +300,6 @@ def test_module_docstring_contains_native_denotation() -> None:
     )
 
 
-def test_urlopen_call_sites_and_native_reachability() -> None:
-    tree = ast.parse(Path(generate_catalogue.__file__).read_text())
-    owners: list[str] = []
-    calls_by_function: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            calls_by_function[node.name] = {
-                call.func.id
-                for call in ast.walk(node)
-                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-            }
-            if any(
-                isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "urlopen"
-                for call in ast.walk(node)
-            ):
-                owners.append(node.name)
-    assert owners == ["_fetch_site_detail_response"]
-    assert "_fetch_site_detail_response" in calls_by_function["refresh_native_table_from_live"]
-
-
 CORE_TOKENS = [
     "station-id-type",
     "station-id-blank",
@@ -375,19 +356,12 @@ def test_refresh_contract_guard_message(token: str) -> None:
         )
 
 
-FATAL_FAMILIES = ["minimum", "uncarryable", "malformed"]
+FATAL_FAMILIES = ["uncarryable", "malformed"]
 
 
 @pytest.mark.parametrize("family", FATAL_FAMILIES)
-def test_fatal_message_family(family: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    if family == "minimum":
-        monkeypatch.setattr(
-            generate_catalogue, "_fetch_site_detail_response", lambda station_id: pytest.fail(station_id)
-        )
-        with pytest.raises(FatalContractError) as caught:
-            generate_catalogue.refresh_native_table_from_live(["100000000000001", "100000000000002"])
-        assert all(token in str(caught.value) for token in ("jp_mlit", "2", "minimum 500"))
-    elif family == "uncarryable":
+def test_fatal_message_family(family: str) -> None:
+    if family == "uncarryable":
         station_id = "100000000000001"
         with pytest.raises(FatalContractError) as caught:
             generate_catalogue.refresh_native_table(
@@ -409,57 +383,32 @@ ISSUE_CODES = [
     "refresh_response_rejected",
     "refresh_decode_failed",
     "invalid_station_coordinates",
-    "refresh_request_failed",
-    "refresh_http_failed",
 ]
 
 
 @pytest.mark.parametrize("code", ISSUE_CODES)
-def test_refresh_issue_code(code: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refresh_issue_code(code: str) -> None:
     station_id = "100000000000001"
-    if code in {"refresh_request_failed", "refresh_http_failed"}:
-        ids = [f"{index:015d}" for index in range(500)]
-        prior = _native_for(ids)
-        monkeypatch.setattr(generate_catalogue.time, "sleep", lambda value: None)
-
-        def fetch(requested: str) -> tuple[int, bytes]:
-            if requested == ids[0]:
-                if code == "refresh_request_failed":
-                    raise OSError("request boom")
-                raise generate_catalogue.urllib.error.HTTPError(
-                    f"{generate_catalogue.SITE_INFO_DETAIL_URL}?ID={requested}",
-                    503,
-                    "http boom",
-                    None,
-                    None,
-                )
-            return 200, _page(requested)
-
-        monkeypatch.setattr(generate_catalogue, "_fetch_site_detail_response", fetch)
-        outcome = generate_catalogue.refresh_native_table_from_live(ids, prior=prior)
-        issue = outcome.issues[0]
-        station_id = ids[0]
+    prior = _native_for([station_id])
+    if code == "station_not_published":
+        body = REJECTED_PATH.read_bytes().replace(b"307051287711040", station_id.encode())
+        prior_arg = prior
+    elif code == "refresh_response_rejected":
+        body = b"generic HTTP 200 body"
+        prior_arg = prior
+    elif code == "refresh_decode_failed":
+        body = generate_catalogue._SOURCE_MARKER + b"\xff"
+        prior_arg = prior
     else:
-        prior = _native_for([station_id])
-        if code == "station_not_published":
-            body = REJECTED_PATH.read_bytes().replace(b"307051287711040", station_id.encode())
-            prior_arg = prior
-        elif code == "refresh_response_rejected":
-            body = b"generic HTTP 200 body"
-            prior_arg = prior
-        elif code == "refresh_decode_failed":
-            body = generate_catalogue._SOURCE_MARKER + b"\xff"
-            prior_arg = prior
-        else:
-            body = _page(station_id, coordinate="not DMS")
-            prior_arg = prior
-        outcome = generate_catalogue.refresh_native_table(
-            {station_id: body},
-            station_ids=[station_id],
-            retrieved_at_by_station=_timestamps([station_id]),
-            prior=prior_arg,
-        )
-        issue = outcome.issues[0]
+        body = _page(station_id, coordinate="not DMS")
+        prior_arg = prior
+    outcome = generate_catalogue.refresh_native_table(
+        {station_id: body},
+        station_ids=[station_id],
+        retrieved_at_by_station=_timestamps([station_id]),
+        prior=prior_arg,
+    )
+    issue = outcome.issues[0]
     assert issue.code == code
     assert issue.provider_id == "jp_mlit" and issue.severity == "warning"
     assert station_id in issue.message and code in issue.message
@@ -646,7 +595,7 @@ def test_manifest_guard_message(token: str, tmp_path: Path) -> None:
 
 def test_supplied_capture_cli_is_atomic_and_offline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     station_catalogue, responses, manifest_path, output, _ = _write_synthetic_capture(tmp_path)
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", lambda *args, **kwargs: pytest.fail("network"))
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: pytest.fail("network"))
     assert (
         generate_catalogue.main(
             [
@@ -666,23 +615,9 @@ def test_supplied_capture_cli_is_atomic_and_offline(tmp_path: Path, monkeypatch:
     assert table.data.height == 1
 
 
-def test_rejected_response_transport_and_absence_issue(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    body = REJECTED_PATH.read_bytes()
-
-    class Response(io.BytesIO):
-        status = 200
-
-        def __enter__(self) -> Response:
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            return None
-
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", lambda request, timeout: Response(body))
-    status, fetched = generate_catalogue._fetch_site_detail_response("307051287711040")
-    assert status == 200 and fetched == body and generate_catalogue._SOURCE_MARKER not in body
+def test_recorded_rejection_retains_source_absence(capsys: pytest.CaptureFixture[str]) -> None:
+    fetched = REJECTED_PATH.read_bytes()
+    assert generate_catalogue._SOURCE_MARKER not in fetched
     outcome = generate_catalogue.refresh_native_table(
         {"307051287711040": fetched},
         station_ids=["307051287711040"],
@@ -959,8 +894,7 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
         calls.append("called")
         raise AssertionError((args, kwargs))
 
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", forbidden)
-    monkeypatch.setattr(generate_catalogue, "refresh_native_table_from_live", forbidden)
+    monkeypatch.setattr(urllib.request, "urlopen", forbidden)
     before = NATIVE_PATH.read_bytes()
     assert (
         generate_catalogue.main(
@@ -990,6 +924,9 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
     assert {item.name for item in tmp_path.iterdir()} == expected_names
     for name in expected_names:
@@ -1062,3 +999,8 @@ def test_native_build_removes_withheld_fact_before_writing(tmp_path: Path) -> No
             "reason": "no_acquisition_record_established",
         }
     ]
+
+
+def test_catalogue_builder_has_no_automated_collection_seam() -> None:
+    assert not hasattr(generate_catalogue, "refresh_native_table_from_live")
+    assert not hasattr(generate_catalogue, "_fetch_site_detail_response")

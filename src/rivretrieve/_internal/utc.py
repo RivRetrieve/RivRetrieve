@@ -23,7 +23,7 @@ def to_utc(result: ObservationResult) -> ObservationResult:
     -------
     ObservationResult
         New result with naive UTC time values and time_zone="+00:00" on every row.
-        Data keeps its five columns and timestamp dtype. Conversion uses Python
+        Data keeps its ten identity-bearing columns and timestamp dtype. Conversion uses Python
         datetime values with microsecond precision, so submicrosecond precision
         is not preserved. Provenance, issues and receipts are unchanged.
         The input is not modified.

@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "109.42.0",
+      "Parameter": "1001",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2023-12-31T00:00:00Z/2024-01-04T23:59:59.999999Z",
+      "VersionNumber": 99999
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 404,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-19T20:13:15.932833Z",
+    "content_base64": "eyJ0eXBlIjoiaHR0cHM6Ly90b29scy5pZXRmLm9yZy9odG1sL3JmYzcyMzEjc2VjdGlvbi02LjUuNCIsInRpdGxlIjoiTm90IEZvdW5kIiwic3RhdHVzIjo0MDQsInRyYWNlSWQiOiIwMC03MzhjNzhiMGQ0MTI3ZjQ3YmJiNmJjOWU1Nzc3YWQ2YS03MjJkOTRkYmFkODU0MjQ4LTAwIn0=",
+    "sha256": "9131277dd5a50bb56d763f4ff30a078c86776b913246752e1e1589a51ec4fcf2",
+    "prerequisite_calls": []
+  }
+}

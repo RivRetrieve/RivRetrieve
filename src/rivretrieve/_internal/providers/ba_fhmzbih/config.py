@@ -20,6 +20,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import SeriesMapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,3 +61,48 @@ def config() -> ProviderConfig:
 
 def window_declarations() -> ProductWindowDeclarations:
     return _WINDOWS
+
+
+# Explicit source access and physical mapping; not a completeness assertion.
+
+SERIES_MAPPINGS = {
+    "discharge_reported": SeriesMapping(
+        "ba_fhmzbih/Q",
+        "discharge",
+        "m³/s",
+        "m3/s",
+        None,
+        None,
+        "81 Web Kontinuirani",
+        None,
+        evidence=(
+            "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json: workbook #Station Parameter Name=Proticaj, #Unit Symbol=m³/s, #Timeseries Name=81 Web Kontinuirani",
+        ),
+    ),
+    "stage_reported": SeriesMapping(
+        "ba_fhmzbih/H",
+        "stage",
+        "cm",
+        "cm",
+        None,
+        None,
+        "81 Web Kontinuirani",
+        None,
+        evidence=(
+            "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json: workbook #Station Parameter Name=Vodostaj, #Unit Symbol=cm, #Timeseries Name=81 Web Kontinuirani",
+        ),
+    ),
+    "water_temperature_reported": SeriesMapping(
+        "ba_fhmzbih/WT",
+        "temperature",
+        "°C",
+        "degC",
+        None,
+        None,
+        "81 Web Kontinuirani",
+        None,
+        evidence=(
+            "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json: workbook #Station Parameter Name=Temperatura vode, #Unit Symbol=°C, #Timeseries Name=81 Web Kontinuirani",
+        ),
+    ),
+}

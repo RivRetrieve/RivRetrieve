@@ -23,6 +23,7 @@ from rivretrieve._internal.catalogues.native import (
     stamp_native_table,
     write_native_table,
 )
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -37,6 +38,8 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.cz_chmi.config import SERIES_MAPPINGS, CzChmiSourceCoordinates
+from rivretrieve._internal.providers.cz_chmi.config import config as source_config
 from rivretrieve._internal.providers.cz_chmi.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SHA256,
@@ -47,7 +50,6 @@ PROVIDER_ID = ProviderId("cz_chmi")
 PROVIDER_NAME = "Czech Hydrometeorological Institute (CHMI) Open Data"
 METADATA_URL = "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json"
 AVAILABILITY_REASON = "CHMI metadata catalogue does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 SOURCE_COLUMNS = (
     "objID",
     "DBC",
@@ -96,72 +98,6 @@ class GeneratedCzChmiCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
-
-
-@dataclass(frozen=True)
-class ProductDefinition:
-    product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    canonical_unit: str
-    ts_con_id: str
-
-
-PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    ProductDefinition(
-        product_id="discharge_daily_mean",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
-        ts_con_id="QD",
-    ),
-    ProductDefinition(
-        product_id="stage_daily_mean",
-        observed_property="stage",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m",
-        ts_con_id="HD",
-    ),
-    ProductDefinition(
-        product_id="water_temperature_daily_mean",
-        observed_property="water_temperature",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="degC",
-        ts_con_id="TD",
-    ),
-    ProductDefinition(
-        product_id="discharge_hourly_mean",
-        observed_property="discharge",
-        frequency="hourly",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="unknown",
-        canonical_unit="m3/s",
-        ts_con_id="QH",
-    ),
-    ProductDefinition(
-        product_id="stage_hourly_mean",
-        observed_property="stage",
-        frequency="hourly",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="unknown",
-        canonical_unit="m",
-        ts_con_id="HH",
-    ),
-)
 
 
 def refresh_native_table(
@@ -226,20 +162,19 @@ def build_catalogue(
 
 
 def build_products() -> ProductCatalog:
-    rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": defn.product_id,
-            "observed_property": defn.observed_property,
-            "frequency": defn.frequency,
-            "statistic": defn.statistic,
-            "period_type": defn.period_type,
-            "period_anchor": defn.period_anchor,
-            "unit": defn.canonical_unit,
-            "native_id": defn.ts_con_id,
-        }
-        for defn in PRODUCT_DEFINITIONS
-    ]
+    rows = []
+    for product_id, declared in source_config().products.items():
+        coordinates = declared.coordinates.value
+        if not isinstance(coordinates, CzChmiSourceCoordinates):
+            raise FatalContractError("cz_chmi product has invalid source coordinates")
+        rows.append(
+            product_row(
+                str(PROVIDER_ID),
+                str(product_id),
+                str(coordinates.ts_con_id),
+                SERIES_MAPPINGS[product_id].physical_facts(),
+            )
+        )
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
@@ -258,12 +193,12 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
             raise FatalContractError("cz_chmi station retrieval date has an invalid identifier")
         if not isinstance(retrieved_date, date):
             raise FatalContractError(f"cz_chmi station {station_id} retrieval date is invalid")
-        for defn in PRODUCT_DEFINITIONS:
+        for product_id in SERIES_MAPPINGS:
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
-                    "product_id": defn.product_id,
+                    "product_id": product_id,
                     "availability": "unknown",
                     "availability_reason": AVAILABILITY_REASON,
                     "published_record_start_date": None,
@@ -333,6 +268,8 @@ def write_catalogue(catalogue: GeneratedCzChmiCatalogue, out_dir: Path | str) ->
         build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_mappings=SERIES_MAPPINGS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

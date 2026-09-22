@@ -1,0 +1,181 @@
+{
+  "revision": "9c05cf933bd1ad04e2e77ae7733cd0caf757e487",
+  "artifacts": {
+    "croissant.json": {
+      "sha256": "ce04101afdd708389f777a9881a2711efc5a43d3cb3ac99986946deb2710123f",
+      "bytes": 43684
+    },
+    "format.json": {
+      "sha256": "c4bab2060a5568dbe61d84e8f505c3c2ae0f09484afb2f3146b6c1e87f67b00f",
+      "bytes": 31
+    },
+    "native.parquet": {
+      "sha256": "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701",
+      "bytes": 14093302
+    },
+    "products.parquet": {
+      "sha256": "ec36ef87b2d7dbd60250d92de76a7b830076195b429782c1a2457e77a0a4c1ab",
+      "bytes": 3625
+    },
+    "provenance.json": {
+      "sha256": "6fe11e9acb35727b7ff2e26992f3089e676c424325e8a9838cfc3a8908386ba6",
+      "bytes": 5602
+    },
+    "provenance_acquisitions.parquet": {
+      "sha256": "58493270d539b913ea5069b4fcd97e2cc2c614ac5891ba24f42ad111850befc4",
+      "bytes": 6733
+    },
+    "provenance_binding_facts.parquet": {
+      "sha256": "6ae8375b6d0e1f1b86b244081b503eeb05d7969014ea3e38fe7d9373feeec4a1",
+      "bytes": 1338
+    },
+    "provenance_bindings.parquet": {
+      "sha256": "003ca67a0a4875f93c783210b99c08af93ca84aa8834db199dc11a532a98b592",
+      "bytes": 2291
+    },
+    "provenance_external_inputs.parquet": {
+      "sha256": "e3b82265168307818de2cdde0ab00ed23cfebfb614578bfd993804c83c369391",
+      "bytes": 1515
+    },
+    "provenance_facts.parquet": {
+      "sha256": "aad0847c72567abde0bda2b520e94beb42f7fef620e163e5cb0583a2c6469296",
+      "bytes": 2595
+    },
+    "provider.json": {
+      "sha256": "69fce539d44cae99e42bfd8e51e60b49f2e0d5e0c71a253ce7068e45eb685d38",
+      "bytes": 396
+    },
+    "series_claims.parquet": {
+      "sha256": "13d965de274e4a5796cbeeb9e0451230d885c725af0491a503525b3e044db4d5",
+      "bytes": 441696
+    },
+    "source_series.json": {
+      "sha256": "d5b8efc9ffbd448ff25e17828c77c5799894aee47b61da98767a4bbea09010d3",
+      "bytes": 8566
+    },
+    "station_products.parquet": {
+      "sha256": "b7af0b314b01e6e3c1b2bf8a076f935e6802cc7c44bf423f8551cbf14634c92e",
+      "bytes": 468269
+    },
+    "stations.parquet": {
+      "sha256": "7b13ba3eaed5ed206bd0924861e1ced4f7d9782aa2072d21cc1733bf82c02c1c",
+      "bytes": 427815
+    }
+  },
+  "native_stations": 26258,
+  "native_series_claims": 2036546,
+  "vintage": [
+    "2026-08-02 01:14:11+00:00"
+  ],
+  "station_products": 157548,
+  "availability_counts": [
+    {
+      "availability": "unavailable",
+      "len": 99587
+    },
+    {
+      "availability": "available",
+      "len": 57961
+    }
+  ],
+  "source_acquisitions": [
+    {
+      "acquisition_key": 0,
+      "source_ordinal": 0,
+      "acquisition_ordinal": 0,
+      "acquisition_id": "national_site_campaign_2026_08_02",
+      "method": "http_campaign",
+      "instant_type": "retrieval",
+      "description_id": 0,
+      "requested_from": [
+        "https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=<51-code>&seriesCatalogOutput=true",
+        "https://waterservices.usgs.gov/nwis/site/?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd=<51-code>&siteOutput=expanded"
+      ],
+      "retrieved_at_start": "2026-08-02T01:14:11+00:00",
+      "retrieved_at_end": null,
+      "recording_ids": [],
+      "material_filename": null,
+      "material_sha256": null,
+      "material_byte_count": null
+    },
+    {
+      "acquisition_key": 1,
+      "source_ordinal": 0,
+      "acquisition_ordinal": 1,
+      "acquisition_id": "observation_request",
+      "method": "runtime_http_request",
+      "instant_type": "runtime",
+      "description_id": 1,
+      "requested_from": [
+        "https://waterservices.usgs.gov/nwis/dv/",
+        "https://waterservices.usgs.gov/nwis/iv/"
+      ],
+      "retrieved_at_start": null,
+      "retrieved_at_end": null,
+      "recording_ids": [],
+      "material_filename": null,
+      "material_sha256": null,
+      "material_byte_count": null
+    },
+    {
+      "acquisition_key": 2,
+      "source_ordinal": 0,
+      "acquisition_ordinal": 2,
+      "acquisition_id": "public_domain_capture_2026_08_20",
+      "method": "http_request",
+      "instant_type": "retrieval",
+      "description_id": 2,
+      "requested_from": [
+        "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+      ],
+      "retrieved_at_start": "2026-08-20T08:46:24+00:00",
+      "retrieved_at_end": null,
+      "recording_ids": [
+        "usgs_nwis_terms_licence"
+      ],
+      "material_filename": null,
+      "material_sha256": null,
+      "material_byte_count": null
+    },
+    {
+      "acquisition_key": 3,
+      "source_ordinal": 0,
+      "acquisition_ordinal": 3,
+      "acquisition_id": "citation_capture_2026_08_20",
+      "method": "http_request",
+      "instant_type": "retrieval",
+      "description_id": 3,
+      "requested_from": [
+        "https://waterdata.usgs.gov/citation/"
+      ],
+      "retrieved_at_start": "2026-08-20T15:56:47+00:00",
+      "retrieved_at_end": null,
+      "recording_ids": [
+        "usgs_nwis_terms_citation"
+      ],
+      "material_filename": null,
+      "material_sha256": null,
+      "material_byte_count": null
+    },
+    {
+      "acquisition_key": 4,
+      "source_ordinal": 0,
+      "acquisition_ordinal": 4,
+      "acquisition_id": "instantaneous_values_definition_capture_2026_09_19",
+      "method": "http_request",
+      "instant_type": "retrieval",
+      "description_id": 4,
+      "requested_from": [
+        "https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/"
+      ],
+      "retrieved_at_start": "2026-09-19T20:58:46.743636+00:00",
+      "retrieved_at_end": null,
+      "recording_ids": [
+        "usgs_nwis_instantaneous_values_definition"
+      ],
+      "material_filename": null,
+      "material_sha256": null,
+      "material_byte_count": null
+    }
+  ]
+}

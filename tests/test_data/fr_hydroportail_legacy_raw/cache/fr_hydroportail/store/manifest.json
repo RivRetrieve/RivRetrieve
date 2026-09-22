@@ -1,0 +1,238 @@
+{
+  "format_version": 7,
+  "provider_id": "fr_hydroportail",
+  "built_at": "2026-09-21T10:59:36.730060Z",
+  "coverage": [
+    {
+      "series_id": "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182",
+      "start": "2026-06-01T00:00:00.000000",
+      "end": "2026-06-02T23:59:59.999999",
+      "retrieved_at": "2026-09-14T08:00:37.291189Z",
+      "outcome_id": "cd6e3d68ac53ff37748f99a2923f078dde3f295653e94a75c5380ca5f08413d5",
+      "facts_ids": [
+        "189298b4c6dec234370939b19f1cae44c49e9d2d0a33e8691100656efc1198e8"
+      ]
+    }
+  ],
+  "partition_row_counts": {
+    "product=discharge_instantaneous/year=2026": 282
+  },
+  "series": [
+    {
+      "series_id": "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182",
+      "provider_id": "fr_hydroportail",
+      "station_id": "1232000101",
+      "product_id": "discharge_instantaneous",
+      "identity": {
+        "namespace": "fr_hydroportail/Q",
+        "published_id": "raw",
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=D\u00e9bit instantan\u00e9; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "189298b4c6dec234370939b19f1cae44c49e9d2d0a33e8691100656efc1198e8",
+          "quantity": {
+            "value": "discharge",
+            "state": "known",
+            "evidence": [
+              "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=D\u00e9bit instantan\u00e9; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+            ]
+          },
+          "source_unit": {
+            "value": "l",
+            "state": "known",
+            "evidence": [
+              "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=D\u00e9bit instantan\u00e9; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
+              "https://hydro.eaufrance.fr/build/4210.e6896d9b.js sha256:72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6 HydroPortail Q unit selector: code=l, label=unit.q.l",
+              "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js sha256:ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823 HydroPortail common.unit.q.l=l/s"
+            ]
+          },
+          "normalized_unit": "l/s",
+          "source_unit_definition": {
+            "provider_id": "fr_hydroportail",
+            "namespace": "fr_hydroportail/Q",
+            "code": "l",
+            "unit": "l/s",
+            "evidence": [
+              "https://hydro.eaufrance.fr/build/4210.e6896d9b.js sha256:72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6 HydroPortail Q unit selector: code=l, label=unit.q.l",
+              "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js sha256:ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823 HydroPortail common.unit.q.l=l/s"
+            ]
+          },
+          "frequency": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "statistic": {
+            "value": "instantaneous",
+            "state": "known",
+            "evidence": [
+              "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=D\u00e9bit instantan\u00e9; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+            ]
+          },
+          "temporal_support": {
+            "value": "instantaneous",
+            "state": "known",
+            "evidence": [
+              "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=D\u00e9bit instantan\u00e9; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+            ]
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": "+00:00",
+            "state": "known",
+            "evidence": [
+              "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=D\u00e9bit instantan\u00e9; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+            ]
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    }
+  ],
+  "inventories": [
+    {
+      "snapshot_id": "e404de445f791417884cbe98bb295d88f24067560c2224366701bc1f66c35945",
+      "scope": {
+        "state": "active",
+        "provider_ids": [
+          "fr_hydroportail"
+        ],
+        "station_ids": [
+          "1232000101"
+        ],
+        "product_ids": [
+          "discharge_instantaneous"
+        ],
+        "predicates": [
+          {
+            "field": "quantity",
+            "value": "discharge"
+          },
+          {
+            "field": "statistic",
+            "value": "instantaneous"
+          }
+        ],
+        "restriction": "all",
+        "variants": [],
+        "series_ids": []
+      },
+      "members": [
+        "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182"
+      ],
+      "member_facts": [
+        [
+          "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182",
+          [
+            "189298b4c6dec234370939b19f1cae44c49e9d2d0a33e8691100656efc1198e8"
+          ]
+        ]
+      ],
+      "completeness": "incomplete",
+      "access": "fr_hydroportail supported source mapping",
+      "origin": "response",
+      "acquired_at": "2026-09-14T08:00:37.291189Z",
+      "catalogue_check_date": null,
+      "catalogue_claims": [],
+      "window": {
+        "start": "2026-05-30T00:00:00",
+        "end": "2026-06-04T23:59:59.999999"
+      },
+      "evidence": [
+        "fr_hydroportail parsed payload"
+      ],
+      "reason": "Supported access does not establish exhaustive source-series inventory"
+    }
+  ],
+  "outcomes": [
+    {
+      "outcome_id": "cd6e3d68ac53ff37748f99a2923f078dde3f295653e94a75c5380ca5f08413d5",
+      "series_id": "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182",
+      "station_id": "1232000101",
+      "product_id": "discharge_instantaneous",
+      "window": {
+        "start": "2026-06-01T00:00:00",
+        "end": "2026-06-02T23:59:59.999999"
+      },
+      "status": "success",
+      "facts_ids": [
+        "189298b4c6dec234370939b19f1cae44c49e9d2d0a33e8691100656efc1198e8"
+      ],
+      "reason": null,
+      "retrieved_at": "2026-09-14T08:00:37.291189Z",
+      "calls": [],
+      "requested_selector": null
+    }
+  ],
+  "issues": [],
+  "source_calls": [
+    {
+      "content_type": "application/json",
+      "query": {
+        "reason": "unknown",
+        "status": "unknown"
+      },
+      "request_parameters": {
+        "hydro_series[endAt]": "04/06/2026",
+        "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "Q",
+        "hydro_series[startAt]": "30/05/2026",
+        "hydro_series[statusData]": "raw",
+        "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable"
+      },
+      "retrieved_at": {
+        "__rivretrieve_value_type__": "datetime",
+        "value": "2026-09-14T08:00:37.291189+00:00"
+      },
+      "series_ids": {
+        "__rivretrieve_value_type__": "tuple",
+        "value": [
+          "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182"
+        ]
+      },
+      "source_path": {
+        "reason": "unknown",
+        "status": "unknown"
+      },
+      "station_products": {
+        "__rivretrieve_value_type__": "tuple",
+        "value": [
+          {
+            "__rivretrieve_value_type__": "tuple",
+            "value": [
+              "1232000101",
+              "discharge_instantaneous"
+            ]
+          }
+        ]
+      },
+      "status_code": 200,
+      "url": "https://hydro.eaufrance.fr/stationhydro/ajax/1232000101/series"
+    }
+  ]
+}
