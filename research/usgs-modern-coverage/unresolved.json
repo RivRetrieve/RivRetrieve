@@ -1,0 +1,446 @@
+[
+  {
+    "station_id": "02246518",
+    "monitoring_location_id": "USGS-02246518",
+    "source_agency": "USGS",
+    "product_id": "discharge_instantaneous",
+    "parameter_code": "00060",
+    "computation_period_identifier": "Points",
+    "statistic_id": "00011",
+    "baseline_availability": "available",
+    "status": "unresolved",
+    "reason": "Points metadata and observations preserve null statistic_id / Unknown computation; precise instantaneous match unresolved, not missing observations",
+    "station_has_supported_parameter_metadata": true,
+    "baseline_period_start": "2015-09-30",
+    "baseline_period_end": "2026-08-01",
+    "legacy_claims": [
+      {
+        "ts_id": "169474",
+        "begin_date": "2015-09-30",
+        "end_date": "2026-08-01",
+        "loc_web_ds": ""
+      }
+    ],
+    "modern_series": [],
+    "unknown_statistic_series": [
+      {
+        "id": "ca5e9516761d41f0b7f6dbc38cd6bd50",
+        "begin": "2015-09-30T18:15:00+00:00",
+        "end": "2026-09-22T13:15:00+00:00",
+        "statistic_id": null,
+        "computation_identifier": "Unknown",
+        "unit_of_measure": "ft^3/s",
+        "evidence": "metadata-00060-0005.receipt.json"
+      }
+    ],
+    "national_evidence": "metadata-00060-completion.json",
+    "bounded_checks": {
+      "modern_start": {
+        "status": "complete",
+        "rows": 217,
+        "receipt": "probes/modern-02246518-discharge_instantaneous-start.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-02246518&parameter_code=00060&datetime=2015-09-30T00%3A00%3A00Z%2F2015-10-06T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_start": {
+        "status": "complete",
+        "rows": 217,
+        "receipt": "probes/legacy-02246518-discharge_instantaneous-start.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=02246518&parameterCd=00060&startDT=2015-09-30&endDT=2015-10-06&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      },
+      "modern_end": {
+        "status": "complete",
+        "rows": 652,
+        "receipt": "probes/modern-02246518-discharge_instantaneous-end.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-02246518&parameter_code=00060&datetime=2026-07-26T00%3A00%3A00Z%2F2026-08-01T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_end": {
+        "status": "complete",
+        "rows": 651,
+        "receipt": "probes/legacy-02246518-discharge_instantaneous-end.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=02246518&parameterCd=00060&startDT=2026-07-26&endDT=2026-08-01&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      }
+    }
+  },
+  {
+    "station_id": "03291585",
+    "monitoring_location_id": "USGS-03291585",
+    "source_agency": "USGS",
+    "product_id": "stage_instantaneous",
+    "parameter_code": "00065",
+    "computation_period_identifier": "Points",
+    "statistic_id": "00011",
+    "baseline_availability": "available",
+    "status": "unresolved",
+    "reason": "Points metadata and observations preserve null statistic_id / Unknown computation; precise instantaneous match unresolved, not missing observations",
+    "station_has_supported_parameter_metadata": true,
+    "baseline_period_start": "2018-11-16",
+    "baseline_period_end": "2026-08-01",
+    "legacy_claims": [
+      {
+        "ts_id": "242897",
+        "begin_date": "2018-11-16",
+        "end_date": "2026-08-01",
+        "loc_web_ds": ""
+      }
+    ],
+    "modern_series": [],
+    "unknown_statistic_series": [
+      {
+        "id": "f929232e08d340f1bb68ccfa59092067",
+        "begin": "2018-11-16T20:15:00+00:00",
+        "end": "2026-09-22T13:30:00+00:00",
+        "statistic_id": null,
+        "computation_identifier": "Unknown",
+        "unit_of_measure": "ft",
+        "evidence": "metadata-00065-0005.receipt.json"
+      }
+    ],
+    "national_evidence": "metadata-00065-completion.json",
+    "bounded_checks": {
+      "modern_start": {
+        "status": "complete",
+        "rows": 611,
+        "receipt": "probes/modern-03291585-stage_instantaneous-start.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-03291585&parameter_code=00065&datetime=2018-11-16T00%3A00%3A00Z%2F2018-11-22T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_start": {
+        "status": "complete",
+        "rows": 631,
+        "receipt": "probes/legacy-03291585-stage_instantaneous-start.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=03291585&parameterCd=00065&startDT=2018-11-16&endDT=2018-11-22&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      },
+      "modern_end": {
+        "status": "complete",
+        "rows": 672,
+        "receipt": "probes/modern-03291585-stage_instantaneous-end.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-03291585&parameter_code=00065&datetime=2026-07-26T00%3A00%3A00Z%2F2026-08-01T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_end": {
+        "status": "complete",
+        "rows": 672,
+        "receipt": "probes/legacy-03291585-stage_instantaneous-end.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=03291585&parameterCd=00065&startDT=2026-07-26&endDT=2026-08-01&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      }
+    }
+  },
+  {
+    "station_id": "05414213",
+    "monitoring_location_id": "USGS-05414213",
+    "source_agency": "USGS",
+    "product_id": "discharge_instantaneous",
+    "parameter_code": "00060",
+    "computation_period_identifier": "Points",
+    "statistic_id": "00011",
+    "baseline_availability": "available",
+    "status": "unresolved",
+    "reason": "Points metadata and observations preserve null statistic_id / Unknown computation; precise instantaneous match unresolved, not missing observations",
+    "station_has_supported_parameter_metadata": true,
+    "baseline_period_start": "2016-07-23",
+    "baseline_period_end": "2025-08-17",
+    "legacy_claims": [
+      {
+        "ts_id": "329753",
+        "begin_date": "2016-07-23",
+        "end_date": "2025-08-17",
+        "loc_web_ds": ""
+      }
+    ],
+    "modern_series": [],
+    "unknown_statistic_series": [
+      {
+        "id": "be5c592777aa497f86c807c497b86701",
+        "begin": "2016-07-23T11:00:00+00:00",
+        "end": "2025-08-17T11:00:00+00:00",
+        "statistic_id": null,
+        "computation_identifier": "Unknown",
+        "unit_of_measure": "ft^3/s",
+        "evidence": "metadata-00060-0005.receipt.json"
+      }
+    ],
+    "national_evidence": "metadata-00060-completion.json",
+    "bounded_checks": {
+      "modern_start": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/modern-05414213-discharge_instantaneous-start.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-05414213&parameter_code=00060&datetime=2016-07-23T00%3A00%3A00Z%2F2016-07-29T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_start": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/legacy-05414213-discharge_instantaneous-start.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=05414213&parameterCd=00060&startDT=2016-07-23&endDT=2016-07-29&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      },
+      "modern_end": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/modern-05414213-discharge_instantaneous-end.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-05414213&parameter_code=00060&datetime=2025-08-11T00%3A00%3A00Z%2F2025-08-17T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_end": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/legacy-05414213-discharge_instantaneous-end.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=05414213&parameterCd=00060&startDT=2025-08-11&endDT=2025-08-17&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      }
+    }
+  },
+  {
+    "station_id": "06129000",
+    "monitoring_location_id": "USGS-06129000",
+    "source_agency": "USGS",
+    "product_id": "discharge_instantaneous",
+    "parameter_code": "00060",
+    "computation_period_identifier": "Points",
+    "statistic_id": "00011",
+    "baseline_availability": "available",
+    "status": "unresolved",
+    "reason": "Points metadata and observations preserve null statistic_id / Unknown computation; precise instantaneous match unresolved, not missing observations",
+    "station_has_supported_parameter_metadata": true,
+    "baseline_period_start": "1955-05-03",
+    "baseline_period_end": "1958-04-22",
+    "legacy_claims": [
+      {
+        "ts_id": "223499",
+        "begin_date": "1955-05-03",
+        "end_date": "1958-04-22",
+        "loc_web_ds": ""
+      }
+    ],
+    "modern_series": [],
+    "unknown_statistic_series": [
+      {
+        "id": "f5fab8ef486d47ea95b492ea3352f648",
+        "begin": "1955-05-04T02:05:00+00:00",
+        "end": "1958-04-23T02:05:00+00:00",
+        "statistic_id": null,
+        "computation_identifier": "Unknown",
+        "unit_of_measure": "ft^3/s",
+        "evidence": "metadata-00060-0006.receipt.json"
+      }
+    ],
+    "national_evidence": "metadata-00060-completion.json",
+    "bounded_checks": {
+      "modern_start": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/modern-06129000-discharge_instantaneous-start.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-06129000&parameter_code=00060&datetime=1955-05-03T00%3A00%3A00Z%2F1955-05-09T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_start": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/legacy-06129000-discharge_instantaneous-start.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=06129000&parameterCd=00060&startDT=1955-05-03&endDT=1955-05-09&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      },
+      "modern_end": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/modern-06129000-discharge_instantaneous-end.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-06129000&parameter_code=00060&datetime=1958-04-16T00%3A00%3A00Z%2F1958-04-22T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_end": {
+        "status": "complete",
+        "rows": 1,
+        "receipt": "probes/legacy-06129000-discharge_instantaneous-end.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=06129000&parameterCd=00060&startDT=1958-04-16&endDT=1958-04-22&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      }
+    }
+  },
+  {
+    "station_id": "09423560",
+    "monitoring_location_id": "USGS-09423560",
+    "source_agency": "USGS",
+    "product_id": "discharge_instantaneous",
+    "parameter_code": "00060",
+    "computation_period_identifier": "Points",
+    "statistic_id": "00011",
+    "baseline_availability": "available",
+    "status": "unresolved",
+    "reason": "Points metadata and observations preserve null statistic_id / Unknown computation; precise instantaneous match unresolved, not missing observations",
+    "station_has_supported_parameter_metadata": true,
+    "baseline_period_start": "2018-10-10",
+    "baseline_period_end": "2026-08-01",
+    "legacy_claims": [
+      {
+        "ts_id": "251208",
+        "begin_date": "2018-10-10",
+        "end_date": "2026-08-01",
+        "loc_web_ds": ""
+      }
+    ],
+    "modern_series": [],
+    "unknown_statistic_series": [
+      {
+        "id": "4445cc3e20224a2da313cc1f5d14b35c",
+        "begin": "2018-10-10T20:00:00+00:00",
+        "end": "2026-09-22T10:45:00+00:00",
+        "statistic_id": null,
+        "computation_identifier": "Unknown",
+        "unit_of_measure": "ft^3/s",
+        "evidence": "metadata-00060-0001.receipt.json"
+      }
+    ],
+    "national_evidence": "metadata-00060-completion.json",
+    "bounded_checks": {
+      "modern_start": {
+        "status": "complete",
+        "rows": 616,
+        "receipt": "probes/modern-09423560-discharge_instantaneous-start.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-09423560&parameter_code=00060&datetime=2018-10-10T00%3A00%3A00Z%2F2018-10-16T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_start": {
+        "status": "complete",
+        "rows": 644,
+        "receipt": "probes/legacy-09423560-discharge_instantaneous-start.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=09423560&parameterCd=00060&startDT=2018-10-10&endDT=2018-10-16&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      },
+      "modern_end": {
+        "status": "complete",
+        "rows": 672,
+        "receipt": "probes/modern-09423560-discharge_instantaneous-end.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-09423560&parameter_code=00060&datetime=2026-07-26T00%3A00%3A00Z%2F2026-08-01T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_end": {
+        "status": "complete",
+        "rows": 672,
+        "receipt": "probes/legacy-09423560-discharge_instantaneous-end.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=09423560&parameterCd=00060&startDT=2026-07-26&endDT=2026-08-01&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      }
+    }
+  },
+  {
+    "station_id": "09429070",
+    "monitoring_location_id": "USGS-09429070",
+    "source_agency": "USGS",
+    "product_id": "stage_instantaneous",
+    "parameter_code": "00065",
+    "computation_period_identifier": "Points",
+    "statistic_id": "00011",
+    "baseline_availability": "available",
+    "status": "unresolved",
+    "reason": "Points metadata and observations preserve null statistic_id / Unknown computation; precise instantaneous match unresolved, not missing observations",
+    "station_has_supported_parameter_metadata": true,
+    "baseline_period_start": "2022-05-24",
+    "baseline_period_end": "2026-08-01",
+    "legacy_claims": [
+      {
+        "ts_id": "315553",
+        "begin_date": "2022-05-24",
+        "end_date": "2026-08-01",
+        "loc_web_ds": "[(2)]"
+      }
+    ],
+    "modern_series": [],
+    "unknown_statistic_series": [
+      {
+        "id": "412061c5ea3447cf882d70a38f122d00",
+        "begin": "2022-05-25T05:45:00+00:00",
+        "end": "2026-09-22T16:30:00+00:00",
+        "statistic_id": null,
+        "computation_identifier": "Unknown",
+        "unit_of_measure": "ft",
+        "evidence": "metadata-00065-0001.receipt.json"
+      }
+    ],
+    "national_evidence": "metadata-00065-completion.json",
+    "bounded_checks": {
+      "modern_start": {
+        "status": "complete",
+        "rows": 577,
+        "receipt": "probes/modern-09429070-stage_instantaneous-start.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-09429070&parameter_code=00065&datetime=2022-05-24T00%3A00%3A00Z%2F2022-05-30T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_start": {
+        "status": "complete",
+        "rows": 605,
+        "receipt": "probes/legacy-09429070-stage_instantaneous-start.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=09429070&parameterCd=00065&startDT=2022-05-24&endDT=2022-05-30&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      },
+      "modern_end": {
+        "status": "complete",
+        "rows": 786,
+        "receipt": "probes/modern-09429070-stage_instantaneous-end.receipt.json",
+        "request": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json&monitoring_location_id=USGS-09429070&parameter_code=00065&datetime=2026-07-26T00%3A00%3A00Z%2F2026-08-01T23%3A59%3A59Z&limit=10000",
+        "statistic_ids": [
+          "None"
+        ]
+      },
+      "legacy_end": {
+        "status": "complete",
+        "rows": 672,
+        "receipt": "probes/legacy-09429070-stage_instantaneous-end.receipt.json",
+        "request": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=09429070&parameterCd=00065&startDT=2026-07-26&endDT=2026-08-01&siteStatus=all",
+        "agencies": [
+          "USGS"
+        ]
+      }
+    }
+  }
+]

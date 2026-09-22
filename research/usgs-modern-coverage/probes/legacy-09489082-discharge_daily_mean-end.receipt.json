@@ -1,0 +1,23 @@
+{
+  "url": "https://waterservices.usgs.gov/nwis/dv/?format=json&sites=09489082&parameterCd=00060&startDT=1991-09-23&endDT=1991-09-29&siteStatus=all&statCd=00003",
+  "retrieved_at": "2026-09-22T14:12:34.973536+00:00",
+  "status": 200,
+  "final_url": "https://waterservices.usgs.gov/nwis/dv/?format=json&sites=09489082&parameterCd=00060&startDT=1991-09-23&endDT=1991-09-29&siteStatus=all&statCd=00003",
+  "headers": {
+    "Date": "Tue, 22 Sep 2026 14:12:35 GMT",
+    "Server": "Apache",
+    "Strict-Transport-Security": "max-age=31536000",
+    "Vary": "Accept-Encoding",
+    "Content-Type": "application/json",
+    "Cache-Control": "max-age=900",
+    "Expires": "Tue, 22 Sep 2026 14:27:35 GMT",
+    "X-UA-Compatible": "IE=edge,chrome=1",
+    "Access-Control-Allow-Origin": "*",
+    "X-Frame-Options": "deny",
+    "Connection": "close",
+    "Transfer-Encoding": "chunked"
+  },
+  "sha256": "2672f6fd4d5b58ff2cb6188d81f1a4ec883fc2ec3bb7e278eef7b7196cc41b69",
+  "bytes": 3111,
+  "file": "legacy-09489082-discharge_daily_mean-end.json.gz"
+}
