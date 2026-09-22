@@ -127,6 +127,7 @@ PAGES = [
     "docs/usage.md",
     "docs/architecture.md",
     "docs/usgs-discovery.md",
+    "docs/providers/usgs_nwis.md",
     "docs/reference.md",
     "docs/examples/camels-us.md",
 ]
