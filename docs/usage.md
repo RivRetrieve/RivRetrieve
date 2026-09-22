@@ -37,7 +37,15 @@ print(rr.series(chosen_gauges).select("station_id").unique().rows())
 
 # Output:
 # [('07374000',)]
+
+print(rr.series(chosen_gauges).select("variant", "description").rows())
+
+# Output:
+# [('c9d823a2491f4b639656a11b35a7625d', None)]
 ```
+
+USGS variants use publisher time-series identifiers. A `None` description means the source
+publishes no description; RivRetrieve does not replace it with parameter prose.
 
 The same physical filters work directly in `find`. Quantity says **what** was measured;
 frequency and statistic describe **how it was published**, such as a daily mean. RivRetrieve
@@ -125,6 +133,7 @@ for conversion to UTC. A null value, an absent row and a failed request
 are different states.
 
 Discharge uses m³/s, stage uses metres, and water temperature uses degrees Celsius.
+The USGS result preserves `ft^3/s` in `source_unit` while returning `m3/s` in `unit`.
 Source-series facts describe units and temporal properties. Equal units do not establish
 equal day definitions, stage datums or scientific comparability. RivRetrieve leaves source
 quality judgements uninterpreted and does not compute unpublished products at another frequency.
@@ -288,8 +297,8 @@ A future end stays unchanged and adds an `info` issue. See the [reference](refer
 request and conversion details.
 
 UTC conversion uses each row's established time zone to put its timestamp on a common clock.
-USGS instantaneous observations include an offset in their timestamps. Retrieve two readings
-from the same gauge and convert them:
+USGS instantaneous observations publish UTC timestamps. Retrieve two readings
+from the same gauge and apply UTC conversion; these timestamps already use UTC:
 
 ```python
 instant_gauge = rr.find(
@@ -303,17 +312,17 @@ instant_result = rr.fetch(
 print(instant_result.data.select("time", "time_zone").rows())
 
 # Output:
-# [(datetime.datetime(2023, 1, 1, 0, 0), '-06:00'), (datetime.datetime(2023, 1, 1, 0, 15), '-06:00')]
+# [(datetime.datetime(2023, 1, 1, 0, 0), '+00:00'), (datetime.datetime(2023, 1, 1, 0, 15), '+00:00')]
 
 utc_result = rr.to_utc(instant_result)
 
 print(utc_result.data.select("time", "time_zone").rows())
 
 # Output:
-# [(datetime.datetime(2023, 1, 1, 6, 0), '+00:00'), (datetime.datetime(2023, 1, 1, 6, 15), '+00:00')]
+# [(datetime.datetime(2023, 1, 1, 0, 0), '+00:00'), (datetime.datetime(2023, 1, 1, 0, 15), '+00:00')]
 ```
 
-The returned `time` remains naive and `time_zone` becomes `+00:00`. Other result fields remain
+The returned `time` remains naive and `time_zone` is `+00:00`. Other result fields remain
 unchanged. If any row has an unknown time zone, as in the USGS daily result, `to_utc` raises
 because it cannot determine the offset needed to convert that timestamp.
 Converting timestamps preserves the source's daily aggregation definition, including unknowns.

@@ -333,3 +333,17 @@ def test_equal_wall_labels_with_different_published_offsets_are_distinct_instant
     result = decode([first, other], "discharge_instantaneous")
     assert result.rows.height == 2
     assert set(result.rows["time_zone"]) == {"+00:00", "+01:00"}
+
+
+def test_internal_model_validation_cannot_be_reported_as_a_source_limitation(monkeypatch):
+    import rivretrieve._internal.providers.usgs_nwis.metadata as metadata
+    from rivretrieve._internal.issues import FatalContractError
+
+    original = metadata.PhysicalFacts
+
+    def invalid_internal_facts(**kwargs):
+        return original(facts_id="")
+
+    monkeypatch.setattr(metadata, "PhysicalFacts", invalid_internal_facts)
+    with pytest.raises(FatalContractError, match="Invalid internal USGS"):
+        decode([feature()])

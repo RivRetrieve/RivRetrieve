@@ -8,6 +8,7 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
 
 
 def _counted_replay(monkeypatch, recordings):
@@ -164,36 +165,63 @@ def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(mo
     assert narrowed.issues[: len(result.issues)] == result.issues
 
 
-def test_complete_recorded_inventory_classifies_missing_member_without_fake_identity(monkeypatch, tmp_path):
-    recording = read_recording(
-        Path(__file__).parent / "test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
+def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(monkeypatch, tmp_path):
+    """Exact known-series replay plus an authored unknown-selector empty response."""
+    from datetime import datetime
+
+    from rivretrieve._internal.transport import TransportResponse
+
+    name = "daily-02196000-2000-current"
+    current = "0df18b246e8f48ec8e6547a92070e94a"
+    replay = ModernReplay(name)
+
+    class UnknownSelectorControl:
+        def send(self, request):
+            if request.params.get("time_series_id") == current:
+                return replay.send(request)
+            expected_url, expected_params = coordinates(MANIFEST[name]["original_url"])
+            expected_params = tuple(
+                sorted((key, "not-published" if key == "time_series_id" else value) for key, value in expected_params)
+            )
+            assert coordinates(request.url, request.params) == (expected_url, expected_params)
+            return TransportResponse(
+                b'{"type":"FeatureCollection","features":[],"links":[]}',
+                200,
+                datetime.fromisoformat(MANIFEST[name]["acquired_utc"]),
+                "application/json",
+                request.url,
+                request.params,
+            )
+
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
+    monkeypatch.setattr(discovery, "HttpClient", UnknownSelectorControl)
     selected = rr.pick(
-        rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"),
-        variant=("61176", "not-published"),
+        rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"),
+        variant=(current, "not-published"),
         on_issue="ignore",
     )
-    result = rr.fetch(selected, start="2023-01-01", end="2023-01-01", on_issue="ignore")
-    assert result.data.height == 1
+    result = rr.fetch(selected, start="2000-01-01", end="2000-01-07", on_issue="ignore")
+    assert result.data.height == 7
     missing = [
         item
         for item in result.outcomes
         if item.requested_selector is not None and item.requested_selector.value == "not-published"
     ]
     assert len(missing) == 1
-    assert missing[0].status.value == "no_match"
+    # An empty answer cannot establish physical predicates for an unknown ID.
+    assert missing[0].status.value == "unresolved"
     assert missing[0].series_id is None
     assert not missing[0].facts_ids
     assert not any(
         item.variant == "not-published" or item.identity.published_id == "not-published"
         for item in result.source_series
     )
-    assert any(item.completeness.value == "complete" for item in result.inventories)
+    assert result.inventories
+    assert all(item.completeness.value == "incomplete" for item in result.inventories)
     assert rr.from_bundle(rr.to_bundle(result)).outcomes == result.outcomes
     missing_view = rr.pick(result, variant="not-published", on_issue="ignore")
-    assert not any(item.code == "selection.unresolved_inventory" for item in missing_view.issues)
+    assert missing_view.data.is_empty()
+    assert any(item.code == "selection.unresolved_inventory" for item in missing_view.issues)
 
 
 def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(monkeypatch, tmp_path):
@@ -218,30 +246,29 @@ def test_response_discovered_global_ids_are_settled_across_station_results(monke
     The second station response is authored test input, not publisher evidence.
     """
     import json
+    from dataclasses import replace
 
-    from rivretrieve._internal.engine import Payload, SourceCallOrigin, UnknownOriginFact, WithIssues
+    from rivretrieve._internal.engine import Payload, SourceCallOrigin, SourceCoordinates, UnknownOriginFact, WithIssues
     from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 
-    recording = read_recording(
-        Path(__file__).parent / "test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
+    content = body("daily-07374000-docs-2023")
     calls = []
 
     def acquire(stations, products, rendered_windows, fetch_window, config, transport, *, scope=None, known_series=()):
         station, product = stations[0], products[0]
         calls.append((station, product))
-        document = json.loads(recording.content)
-        for series in document["value"]["timeSeries"]:
-            series["sourceInfo"]["siteCode"][0]["value"] = station
-            series["sourceInfo"]["siteName"] = "Controlled protocol fixture"
-            series["sourceInfo"].pop("geoLocation", None)
-            if "name" in series:
-                series["name"] = series["name"].replace("07374000", station)
+        document = json.loads(content)
+        for feature in document["features"]:
+            feature["properties"]["monitoring_location_id"] = f"USGS-{station}"
+            feature["properties"]["time_series_id"] = f"authored-response-series-{station}"
+        resolved = SourceCoordinates(
+            replace(config.products[product].coordinates.value, monitoring_location_id=f"USGS-{station}")
+        )
         unknown = UnknownOriginFact()
         return WithIssues(
             (
                 Payload(
-                    config.products[product].coordinates,
+                    resolved,
                     ((station, product),),
                     fetch_window,
                     json.dumps(document).encode(),

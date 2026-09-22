@@ -14,7 +14,9 @@ from rivretrieve._internal.transport import HttpMethod, TransportResponse
 
 DATA = Path(__file__).parent / "test_data" / "usgs_modern"
 MANIFEST = {
-    item["name"]: item for item in (json.loads(line) for line in (DATA / "new-manifest.jsonl").read_text().splitlines())
+    item["name"]: item
+    for path in sorted(DATA.glob("*-manifest.jsonl"))
+    for item in (json.loads(line) for line in path.read_text().splitlines())
 }
 
 

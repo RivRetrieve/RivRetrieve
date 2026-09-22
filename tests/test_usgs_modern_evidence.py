@@ -13,8 +13,12 @@ from tests.usgs_modern_recordings import DATA, MANIFEST, body
 
 
 def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest():
-    hashes = dict(line.split("  ", 1)[::-1] for line in (DATA / "SHA256SUMS").read_text().splitlines())
-    assert len(hashes) == 47
+    hashes = dict(
+        line.split("  ", 1)[::-1] for path in DATA.glob("*SHA256SUMS") for line in path.read_text().splitlines()
+    )
+    assert len(hashes) == len(MANIFEST) + len(json.loads((DATA / "curated-manifest.json").read_text())) + len(
+        json.loads((DATA / "historical-manifest.json").read_text())
+    )
     for name, digest in hashes.items():
         assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == digest
     for item in MANIFEST.values():

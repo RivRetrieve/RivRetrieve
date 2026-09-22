@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from datetime import datetime
 
 import polars as pl
+from pydantic import ValidationError
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema, ZoneValue
 from rivretrieve._internal.issues import FatalContractError, Issue
@@ -178,6 +179,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             if key in rows and rows[key] != row:
                 raise ValueError("Conflicting observations for the same series and time")
             rows[key] = row
+        except ValidationError as error:
+            raise FatalContractError("Invalid internal USGS source-series definition") from error
         except (KeyError, TypeError, ValueError) as error:
             if sid is not None and sid in known:
                 definitions.setdefault(sid, known[sid])

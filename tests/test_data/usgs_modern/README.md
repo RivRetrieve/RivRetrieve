@@ -71,6 +71,20 @@ limit of 5 and strict request matching. Keep each body as a separate receipt.
 The historical continuous last returned timestamp is 2010-06-04T04:45:00+00:00;
 there is no invented row at the requested 04:59:59 endpoint.
 
+## Additional executable-documentation recordings
+
+- `camels-manifest.jsonl` retains three 2025 daily station windows, each with
+  369 padded rows and 365 rows in the documented year.
+- `documentation-manifest.jsonl` retains the 2023 single-day daily request
+  (five padded rows, one public row) and full-day continuous request
+  (479 padded rows, 96 public rows).
+- `quarter-hour-manifest.jsonl` retains the exact continuous request padded
+  through `2023-01-03T00:15:00Z` (386 padded rows, two public rows).
+
+Each supplement retains its own summary and SHA256 file. Original manifests and
+whole-day captures are unchanged. Counts come from recorded rows, not an assumed
+sampling rate. The shared replay helper reads each JSON-lines manifest.
+
 ## Publisher contract sources
 
 New captures include explicit-v1 continuous queryables and collection, v1 OpenAPI,

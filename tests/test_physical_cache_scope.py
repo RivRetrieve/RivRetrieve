@@ -4,15 +4,14 @@ The second fact segment is an engine-contract control, not claimed agency eviden
 """
 
 from dataclasses import replace
-from pathlib import Path
 
 import polars as pl
 import polars.testing as pt
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
-from rivretrieve._internal.recordings import ReplayTransport
 from rivretrieve._internal.source_series import known
+from tests.usgs_modern_recordings import ModernReplay
 
 
 def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tmp_path):
@@ -66,9 +65,7 @@ def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tm
             replace(lookup(provider), _stages=TwoSegments()) if provider == "usgs_nwis" else lookup(provider)
         ),
     )
-    replay = ReplayTransport(
-        (Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"),)
-    )
+    replay = ModernReplay("daily-07374000-docs-2023")
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
 
     def fetch(selection, cache):

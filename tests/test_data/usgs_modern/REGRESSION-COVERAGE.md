@@ -28,3 +28,24 @@ Legacy body hashes, counts, method descriptions and explicit unknown acquisition
 facts remain tested in `test_source_series_usgs.py`. Historical local-offset
 interpretation remains separate in the boundary and UTC tests. No legacy method
 ID is joined to a modern series through coincident values or dates.
+
+
+Shared tests keep their behavioral contracts while replaying the active service:
+
+- `test_live_cache.py`: all fourteen controls remain, including source vintage,
+  bypass non-mutation, incomplete-scope reacquisition, fewer/empty refresh,
+  interrupted publication, fatal parse boundaries, and policy-after-publication.
+- `test_series_driver.py`: payload contributions, partial interval proof,
+  fact-segment filtering, ambiguous outcome rejection before writes, and
+  independent nonconflicting rows remain tested.
+- Inventory, partial-explicit-scope, physical-cache-scope and bundle tests retain
+  subset/all intent, unknown selectors, round trips and independent providers.
+- Unit normalization and measurement tests retain dimensional rejection and
+  finite numeric controls. Modern null values replace WaterML sentinel protocol
+  tests; an ordinary negative modern number is not silently turned into null.
+- Executable README, usage and CAMELS examples keep literal output contracts,
+  all non-USGS workflows, exact source comparisons and saved-result checks.
+
+Authored partial-window over-response controls identify themselves as such;
+they do not claim that a publisher issued those requests. Actual documentation
+requests have separate exact-coordinate recordings and acquisition manifests.

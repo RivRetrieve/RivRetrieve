@@ -119,6 +119,7 @@ def fetch(
                 target_members = {item.series_id: item for item in selected}
                 observed_ids: set[str] = set()
                 target_errors = []
+                source_failures: dict[str, RetrievalOutcome] = {}
                 unsupported_ids: set[str] = set()
                 # A logical source observation is series + published time, not feature id.
                 seen_observations: set[tuple[str, datetime]] = set()
@@ -185,11 +186,33 @@ def fetch(
                                 definition = definition.model_copy(update={"facts": tuple(facts.values())})
                             target_members[definition.series_id] = definition
                             observed_ids.add(definition.series_id)
-                        if any(
-                            item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-                            for item in parsed.outcomes
-                        ) or any(item.severity == "error" for item in parsed.issues):
-                            target_errors.append("An observation page contains unresolved or unsupported source data")
+                        identity_scope = request_scope.model_copy(update={"predicates": ()})
+                        requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
+                        requested_ids.update(item.series_id for item in selected)
+                        for outcome in parsed.outcomes:
+                            if outcome.status not in (
+                                OutcomeStatus.FAILED,
+                                OutcomeStatus.UNSUPPORTED,
+                                OutcomeStatus.UNRESOLVED,
+                            ):
+                                continue
+                            if outcome.series_id is None or (
+                                selector is not None and outcome.series_id not in requested_ids
+                            ):
+                                target_errors.append(
+                                    "An observation page contains an unattributable or out-of-scope source failure"
+                                )
+                            else:
+                                # An identified malformed series cannot invalidate a
+                                # fully acquired, independently valid sibling.
+                                source_failures[outcome.outcome_id] = outcome.model_copy(
+                                    update={
+                                        "outcome_id": uuid4().hex,
+                                        "status": OutcomeStatus.UNRESOLVED,
+                                        "reason": "Incomplete source-series parsing: "
+                                        + (outcome.reason or "unsupported source data"),
+                                    }
+                                )
                         try:
                             document = _document(response.content)
                             _check_duplicates(document, seen_observations, coordinates)
@@ -208,6 +231,14 @@ def fetch(
                 if selector is not None and not target_members and not target_errors:
                     target_errors.append("An empty selected response does not establish the requested source identity")
                 members.update(target_members)
+                if source_failures:
+                    outcomes.extend(source_failures.values())
+                    transaction_errors.extend(
+                        dict.fromkeys(
+                            item.reason or "Identified source series is unsupported"
+                            for item in source_failures.values()
+                        )
+                    )
                 if target_errors:
                     reason = "; ".join(dict.fromkeys(target_errors))
                     transaction_errors.append(reason)
@@ -341,11 +372,14 @@ def _check_duplicates(document: dict, seen: set[tuple[str, datetime]], coordinat
     for feature in document["features"]:
         properties = feature.get("properties") if isinstance(feature, dict) else None
         if not isinstance(properties, dict):
-            raise ValueError("USGS feature has malformed properties")
+            continue  # Parse has already retained the unattributable source failure.
         identifier = properties.get("time_series_id")
         if not isinstance(identifier, str) or not identifier:
-            raise ValueError("USGS observation lacks series/time identity")
-        stamp, zone = parse_time_label(properties.get("time"), coordinates.endpoint == "daily")
+            continue  # Missing identity cannot establish a logical duplicate key.
+        try:
+            stamp, zone = parse_time_label(properties.get("time"), coordinates.endpoint == "daily")
+        except ValueError:
+            continue  # Parse has already scoped this invalid label to its source series.
         identity_time = stamp if zone == "unknown" else datetime.fromisoformat(f"{stamp.isoformat()}{zone}")
         key = (identifier, identity_time)
         if key in seen:

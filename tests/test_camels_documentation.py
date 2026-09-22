@@ -7,16 +7,13 @@ from pathlib import Path
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from rivretrieve._internal.recordings import read_recording
-from tests.test_documentation_examples import CountingReplay, blocks, execute_block, output_contracts
+from tests.test_documentation_examples import blocks, execute_block, output_contracts
+from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = "docs/examples/camels-us.md"
 STATIONS = ["01013500", "01022500", "01030500"]
-RECORDINGS = [
-    ROOT / f"tests/test_data/usgs_nwis_{station}_dv_00060_00003_2024-12-30_2026-01-02.recording.json"
-    for station in STATIONS
-]
+RECORDINGS = [f"daily-camels-{station}-2025" for station in STATIONS]
 
 
 def test_camels_prints_have_literal_outputs():
@@ -27,8 +24,7 @@ def test_camels_prints_have_literal_outputs():
 def test_complete_camels_page(monkeypatch, tmp_path):
     import rivretrieve._internal.discovery as discovery
 
-    recordings = [read_recording(path) for path in RECORDINGS]
-    replay = CountingReplay(*recordings)
+    replay = ModernReplay(*RECORDINGS)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
@@ -38,7 +34,9 @@ def test_complete_camels_page(monkeypatch, tmp_path):
         checked.extend(execute_block(block, scope, f"{PAGE}:block-{index}"))
     assert checked
     assert len(replay.calls) == 3
-    assert sorted(request.params["sites"] for request in replay.calls) == STATIONS
+    assert sorted(request.params["monitoring_location_id"] for request in replay.calls) == [
+        "USGS-" + station for station in STATIONS
+    ]
     result = scope["result"]
     assert not result.issues
     assert result.data.height == 1095
@@ -47,7 +45,7 @@ def test_complete_camels_page(monkeypatch, tmp_path):
     assert result.data["time"].max() == datetime(2025, 12, 31)
     assert result.data["time_zone"].unique().to_list() == ["unknown"]
     assert result.data["unit"].unique().to_list() == ["m3/s"]
-    assert result.data["source_unit"].unique().to_list() == ["ft3/s"]
+    assert result.data["source_unit"].unique().to_list() == ["ft^3/s"]
     assert result.data["value"].null_count() == 0
     assert result.data["series_id"].n_unique() == 3
     assert len(result.source_series) == 3
@@ -59,29 +57,29 @@ def test_complete_camels_page(monkeypatch, tmp_path):
     # Decode publisher values independently of the provider parser. Check every
     # retained date/value, not merely the displayed counts or endpoint labels.
     native_rows = []
-    methods = []
-    for recording in recordings:
-        assert recording.status_code == 200
-        assert recording.request.parameters["startDT"] == "2024-12-30"
-        assert recording.request.parameters["endDT"] == "2026-01-02"
-        document = json.loads(recording.content)
-        for series in document["value"]["timeSeries"]:
-            station = series["sourceInfo"]["siteCode"][0]["value"]
-            assert series["variable"]["unit"]["unitCode"] == "ft3/s"
-            for values in series["values"]:
-                method = str(values["method"][0]["methodID"])
-                methods.append((station, "methodID", method, "response"))
-                for item in values["value"]:
-                    time = datetime.fromisoformat(item["dateTime"])
-                    if time.year == 2025:
-                        native_rows.append((station, time, float(item["value"]) * 0.028316846592))
+    identities = []
+    for name in RECORDINGS:
+        receipt = MANIFEST[name]
+        assert receipt["status"] == 200
+        assert "2024-12-30%2F2026-01-02" in receipt["original_url"]
+        document = json.loads(body(name))
+        coordinates = set()
+        for feature in document["features"]:
+            item = feature["properties"]
+            station = item["monitoring_location_id"].removeprefix("USGS-")
+            assert item["unit_of_measure"] == "ft^3/s"
+            coordinates.add((station, "USGS.WaterData.time_series_id", item["time_series_id"], "catalogue"))
+            time = datetime.fromisoformat(item["time"])
+            if time.year == 2025:
+                native_rows.append((station, time, float(item["value"]) * 0.028316846592))
+        identities.extend(coordinates)
     expected = pl.DataFrame(native_rows, schema=["station_id", "time", "value"], orient="row")
     assert_frame_equal(
         result.data.select(expected.columns).sort("station_id", "time"),
         expected.sort("station_id", "time"),
     )
     expected_methods = pl.DataFrame(
-        methods, schema=["station_id", "identity_namespace", "published_id", "identity_origin"], orient="row"
+        identities, schema=["station_id", "identity_namespace", "published_id", "identity_origin"], orient="row"
     ).sort("station_id")
     assert_frame_equal(scope["source_series"].select(expected_methods.columns).sort("station_id"), expected_methods)
     assert len(result.outcomes) == 3

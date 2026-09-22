@@ -36,8 +36,8 @@ They are local observations, not performance guarantees.
 | --- | ---: | ---: | ---: |
 | sequential-baseline-station | 2.158 | 629,964,800 | 6 |
 | sequential-baseline-full | 5.261 | 1,186,037,760 | 57,961 |
-| sequential-modern-station | 2.731 | 804,290,560 | 6 |
-| sequential-modern-full | 6.514 | 1,286,733,824 | 59,159 |
+| final-modern-station | 2.823 | 815,251,456 | 6 |
+| final-modern-full | 6.410 | 1,268,563,968 | 59,159 |
 
 Baseline is main `d77b6dba710d7ae550b476d08322f51c8a409df1`.
 The baseline catalogue has generic route definitions and independent claims;
@@ -67,4 +67,7 @@ does not manufacture engine execution headers.
 
 The first full-suite attempt was deliberately interrupted at 6% before changing
 the high-memory catalogue encoding. It is not counted as complete validation.
-Final full-suite and review results are reported in the implementation PR.
+The second full-suite run was diagnostic and was stopped after identifying active
+legacy-replay failures while review repairs were in progress. It is also not
+counted as final validation. Final stable-head full-suite and independent review
+results are reported in the implementation PR.

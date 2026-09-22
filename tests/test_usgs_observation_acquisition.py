@@ -692,8 +692,16 @@ def test_late_page_failure_never_overlaps_held_and_fresh_values(tmp_path, mode, 
     )
     assert any(issue.details.get("series_id") == alpha_id for issue in result.issues)
     after = StoreReader().status(store, provider).manifest
-    assert after.coverage == before.coverage
-    assert all(item.retrieved_at == old_at for item in after.coverage)
+    if late == "malformed_value" and mode != "bypass":
+        # The bad identity is isolated; the fully exhausted valid sibling can
+        # establish its own fresh interval without refreshing alpha.
+        assert tuple(item for item in after.coverage if item.series_id == alpha_id) == before.coverage
+        assert {item.retrieved_at for item in after.coverage if item.series_id == definition("beta").series_id} == {
+            new_at
+        }
+    else:
+        assert after.coverage == before.coverage
+    assert all(item.retrieved_at == old_at for item in after.coverage if item.series_id == alpha_id)
     if mode == "reuse":
         assert result.provenance.served_intervals
         assert all(item.retrieved_at == old_at for item in result.provenance.served_intervals)

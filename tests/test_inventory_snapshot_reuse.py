@@ -10,7 +10,6 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.driver import _reusable_snapshot
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -23,6 +22,7 @@ from rivretrieve._internal.source_series import (
 from rivretrieve._internal.store import StoreReader, StoreRoot
 from rivretrieve._internal.store.accumulation import StoreUpdate, accumulate
 from tests.test_source_series_store import _definition, _success, _update
+from tests.usgs_modern_recordings import ModernReplay
 
 
 def test_newest_complete_inventory_with_uncovered_late_member_prevents_older_snapshot_reuse(tmp_path: Path) -> None:
@@ -62,10 +62,7 @@ def test_public_healthy_subset_reuse_excludes_unrelated_stored_failure_and_sourc
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, policy: str, contamination: str
 ) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    recording = read_recording(
-        Path(__file__).parent / "test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
+    replay = ModernReplay("daily-07374000-docs-2023")
     calls = []
 
     class CountedReplay:

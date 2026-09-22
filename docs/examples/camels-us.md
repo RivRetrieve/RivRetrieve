@@ -47,15 +47,16 @@ Do not treat them as UTC instants or infer which 24 hours each daily mean repres
 
 ## Inspect source series and coverage
 
-`series` shows the USGS method identifiers discovered during retrieval. A method
-identifier is a source identity, not a harmonised quality rating.
+`series` shows the opaque USGS series identifiers. These are available from the
+packaged catalogue before retrieval. A series identifier is a source identity,
+not a harmonised quality rating.
 
 ```python
 source_series = rr.series(result)
 print(source_series.select("station_id", "identity_namespace", "published_id").sort("station_id").rows())
 
 # Output:
-# [('01013500', 'methodID', '63596'), ('01022500', 'methodID', '63716'), ('01030500', 'methodID', '63740')]
+# [('01013500', 'USGS.WaterData.time_series_id', 'aa8ac20eb72d4fa58ea9c0eaf61e10ee'), ('01022500', 'USGS.WaterData.time_series_id', '02fec7bdbbe64d49a3d5414cabfa7ea8'), ('01030500', 'USGS.WaterData.time_series_id', 'b997d85e35254d278725c7506bf74fab')]
 ```
 
 Keep `series_id` in grouping and joins. A gauge can publish multiple matching
@@ -81,7 +82,7 @@ print(coverage.select("station_id", "rows", "first", "last", "nulls").rows())
 # [('01013500', 365, '2025-01-01', '2025-12-31', 0), ('01022500', 365, '2025-01-01', '2025-12-31', 0), ('01030500', 365, '2025-01-01', '2025-12-31', 0)]
 ```
 
-These outputs come from USGS responses retrieved on 20 September 2026. Automated
+These outputs come from USGS responses retrieved on 22 September 2026. Automated
 tests execute every block against those exact saved responses without contacting
 USGS. A later live request can differ.
 

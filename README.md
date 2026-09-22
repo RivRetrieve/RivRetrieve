@@ -47,7 +47,7 @@ for how to supply them.
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 246 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
-| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,200 | Open |
+| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,258 | Open |
 
 Station counts describe packaged catalogues, not guaranteed current data availability.
 A station can appear under both French services; their series remain separate.

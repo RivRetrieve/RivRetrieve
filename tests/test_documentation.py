@@ -37,12 +37,9 @@ def test_readme_uses_current_public_api():
 
 def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
     import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
+    from tests.usgs_modern_recordings import ModernReplay
 
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
+    replay = ModernReplay("daily-07374000-docs-2023")
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     scope = {}
     for block in python_blocks(ROOT / "README.md"):
@@ -71,12 +68,9 @@ def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
 
 def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
     import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
+    from tests.usgs_modern_recordings import ModernReplay
 
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
+    replay = ModernReplay("daily-07374000-docs-2023")
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
     gauge = rr.pick(gauges, station="07374000")
@@ -132,6 +126,7 @@ PAGES = [
     "docs/README.md",
     "docs/usage.md",
     "docs/architecture.md",
+    "docs/usgs-discovery.md",
     "docs/reference.md",
     "docs/examples/camels-us.md",
 ]
