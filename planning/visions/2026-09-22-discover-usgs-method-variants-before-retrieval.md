@@ -88,6 +88,41 @@ A focused explanation of the delivered discovery contract and actual service
 limits is in scope, not a provider-page rewrite. Resume #266 separately after
 delivery and revalidation of the resulting API behavior.
 
+## Dedicated coverage audit
+
+Track this work separately in [the coverage-audit issue](https://github.com/RivRetrieve/RivRetrieve/issues/331).
+The migration must document all missing stations and supported station/product
+combinations, not infer national parity from the successful examples above.
+
+Before replacing catalogue artifacts, freeze the pre-migration catalogue baseline
+with its repository revision, vintage, source filters and counts. Compare every
+in-scope station and supported station/product combination with fully paginated
+modern metadata, including discontinued records. Account for established publisher
+identifier changes without guessing legacy-method-to-modern-series aliases.
+
+Deliver a durable machine-readable comparison and readable summary linked from
+the audit issue. Account for the entire baseline: matched, confirmed missing and
+unresolved counts, with every missing or unresolved entry listed. Distinguish an
+entirely missing station from missing products at a station. Include source IDs,
+product coordinates, legacy period-of-record claims, request coordinates, UTC
+acquisition times, hashes, evidence references and the reason for each result.
+Access failures, incomplete pagination and ambiguous matches are unresolved,
+not confirmed source absences.
+
+For candidate gaps, make bounded modern and legacy availability checks and
+record whether the old service actually offers relevant observations. Record
+observed historical discrepancies separately; neither a metadata match nor a
+finite observation sample proves complete historical parity. A zero-gap result
+must still report its denominator and acquisition/completeness evidence.
+
+The owner may choose to serve confirmed gaps through the old API later. That
+fallback implementation requires its own GitHub issue and an explicit decision;
+it is not part of this migration or automatically authorized by the audit. Assess
+its viability against the announced legacy retirement. Completing and reviewing
+the audit is part of migration acceptance; opening its issue does not satisfy the
+work or authorize lost coverage. Bring concrete gaps and unresolved cases back to
+the owner before claiming migration delivery.
+
 ## Fresh capability evidence
 
 The following are bounded observations, not a complete national inventory or a
@@ -238,7 +273,11 @@ Under `src/rivretrieve/_internal/`:
 7. Run focused tests and relevant regressions, formatting/lint, and
    `uv run ty check src`, using the project environment. Obtain independent review
    and validate actual target-branch effects before claiming delivery.
-8. Report the delivered scope and service limits. Both #279 and #327 remain open
+8. Complete the [coverage audit](https://github.com/RivRetrieve/RivRetrieve/issues/331) with a durable
+   full-baseline comparison, all missing/unresolved entries and evidence, or an
+   evidenced zero-gap result. Obtain an explicit owner decision for any coverage
+   trade-off; do not silently omit gaps or add a legacy fallback.
+9. Report the delivered scope and service limits. Both #279 and #327 remain open
    until migration and the offline selection workflow are demonstrated. Report
    any undelivered scope instead of claiming success from endpoint replacement.
 
