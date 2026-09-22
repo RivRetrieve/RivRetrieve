@@ -40,6 +40,8 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from rivretrieve._internal.authentication import CredentialExchangeTransport
+from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+from rivretrieve._internal.catalogues.source_series import catalogue_series
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.engine import RequestedWindow
@@ -49,6 +51,7 @@ from rivretrieve._internal.observations import ObservationRequest as PublicObser
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.recordings import RecordingEnvelope, RecordingTransport, write_recording
+from rivretrieve._internal.source_series import RestrictionKind, SeriesScope
 from rivretrieve._internal.transport import (
     AuthenticatedTransport,
     CredentialHeader,
@@ -68,10 +71,14 @@ def record_observations(
     name: str,
     credentials: tuple[CredentialHeader, ...] = (),
     transport: Transport | None = None,
+    *,
+    variants: Sequence[str] = (),
 ) -> tuple[Path, ...]:
     """Drive one live provider through a recording transport and write what it exchanged.
 
     ``transport`` is the live transport to record through; it defaults to the engine ``HttpClient``.
+    Source selectors come from the declared catalogue or explicit ``variants``;
+    an absent inventory does not authorize an upstream default version.
     """
     (declared,) = load_manifest((provider_id,))
     observations = declared.declaration.observations
@@ -84,11 +91,23 @@ def record_observations(
         start=start,
         end=end,
     )
+    scope = SeriesScope(
+        provider_ids=(provider_id,),
+        station_ids=public_request.stations,
+        product_ids=public_request.products,
+        restriction=RestrictionKind.EXPLICIT if variants else RestrictionKind.ALL,
+        variants=tuple(variants),
+    )
+    artifact = load_packaged_catalogue_artifact(declared.declaration.catalogue, on_issue="raise")
+    known_series, inventories = catalogue_series(artifact, scope=scope)
     request = EngineObservationRequest(
         provider_id=public_request.provider_id,
         stations=public_request.stations,
         products=tuple(ProductId(product) for product in public_request.products),
         window=RequestedWindow(start=public_request.start, end=public_request.end),
+        scope=scope,
+        known_series=known_series,
+        inventories=inventories,
     )
     client = HttpClient() if transport is None else transport
     recording_transport = RecordingTransport(AuthenticatedTransport(client, credentials) if credentials else client)
@@ -145,7 +164,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--provider", required=True, help="Built-in provider id, e.g. za_dws.")
     parser.add_argument("--station", action="append", required=True, help="Station id; repeatable.")
-    parser.add_argument("--product", action="append", required=True, help="Product id; repeatable.")
+    parser.add_argument(
+        "--product", action="append", required=True, help="Internal access-product coordinate; repeatable."
+    )
+    parser.add_argument(
+        "--variant",
+        action="append",
+        default=[],
+        help="Explicit source variant/version selector; repeatable. Otherwise use established catalogue inventory.",
+    )
     parser.add_argument("--start", required=True, help="Requested wall-clock start, e.g. 2020-01-05.")
     parser.add_argument("--end", required=True, help="Requested wall-clock end; a bare date means the whole day.")
     parser.add_argument("--out-dir", type=Path, required=True, help="Directory receiving the recording files.")
@@ -192,6 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.name,
             credentials,
             transport=transport,
+            variants=arguments.variant,
         )
     except IssuePolicyError as error:
         for issue in error.issues:

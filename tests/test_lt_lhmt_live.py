@@ -54,7 +54,7 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
         _STAGES.config,
         replay,
     )
-    return _STAGES.parse(fetched.value[0], _STAGES.config).value
+    return _STAGES.parse(fetched.value[0], _STAGES.config).rows
 
 
 def _probe(product: ProductId) -> LiveBoundaryProbe:

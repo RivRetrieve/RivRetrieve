@@ -25,7 +25,7 @@ CATALOGUE_ONLY_PROVIDERS = (
     ),
 )
 DEFERRED_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "issue_codes.py"}
-DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py"}
+DWS_CATALOGUE_MODULE_FILES = {"__init__.py", "generate_catalogue.py", "origins.py", "catalogue_series.py"}
 ENROLLED_CATALOGUE_MODULE_FILES = {
     "za_dws": DWS_CATALOGUE_MODULE_FILES,
 }
@@ -154,6 +154,9 @@ def test_catalogue_only_provider_directory_retains_declared_surface(
                 "provenance_bindings.parquet",
                 "provenance_binding_facts.parquet",
                 "provenance_external_inputs.parquet",
+                "format.json",
+                "source_series.json",
+                "series_claims.parquet",
             }
         )
     for artifact_name in artifact_names:

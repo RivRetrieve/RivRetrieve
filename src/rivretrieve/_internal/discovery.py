@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -20,15 +20,18 @@ from rivretrieve._internal.observations import ObservationRequest, ObservationRe
 from rivretrieve._internal.primitives import CacheMode
 from rivretrieve._internal.registry import UnknownProviderError, _registry
 from rivretrieve._internal.selection import _as_frame as _selection_as_frame
-from rivretrieve._internal.selection import _EmptyReason, _require_selection, _Selection, _Series
+from rivretrieve._internal.selection import _EmptyReason, _require_selection, _Selection
 from rivretrieve._internal.selection import _find as _selection_find
 from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
+from rivretrieve._internal.selection import _station_keys as _selection_station_keys
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
     AuthenticatedTransport,
+    AuthenticationCapability,
     CredentialHeader,
     HttpClient,
     Transport,
@@ -38,7 +41,9 @@ from rivretrieve._internal.transport import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from rivretrieve._internal.engine import FetchWindow
     from rivretrieve._internal.primitives import OnIssue
+    from rivretrieve._internal.providers.registration import PublicArchiveAccess
 
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 
@@ -121,138 +126,274 @@ def find(
     *,
     provider: str | None = None,
     station: str | None = None,
-    product: str | None = None,
+    quantity: str | None = None,
+    frequency: str | None = None,
+    statistic: str | None = None,
+    temporal_support: str | None = None,
+    day_definition: str | None = None,
+    timestamp_anchor: str | None = None,
+    time_zone: str | None = None,
+    vertical_reference: str | None = None,
+    vertical_datum: str | None = None,
+    variant: str | None = None,
+    series_id: str | None = None,
+    on_issue: OnIssue = "warn",
 ) -> _Selection:
-    """Select station-product series from packaged catalogues.
+    """Find all supported series matching established physical facts, using offline catalogue evidence.
 
-    Parameters
-    ----------
-    provider : str or None, default None
-        Exact provider identifier. None includes every provider.
-    station : str or None, default None
-        Exact station identifier, including leading zeros. With provider=None,
-        the same identifier can select stations from several providers.
-    product : str or None, default None
-        Exact canonical product identifier. None includes every product.
-
-    Returns
-    -------
-    _Selection
-        Immutable, sorted, unique (provider_id, station_id, product_id) series
-        with catalogue metadata and acquisition evidence. Available and unknown
-        availability remain selectable. Unavailable pairs are excluded. A valid
-        query without a selectable pair returns an empty selection with a reason.
-
-    Raises
-    ------
-    UnknownProviderError
-        If provider is not registered.
-    UnknownStationError
-        If station is absent from the requested provider scope.
-    UnknownProductError
-        If product is absent from the global vocabulary.
-    FatalContractError
-        If shipped catalogue contracts fail.
+    Source alternatives remain distinct. Unknown facts cannot satisfy precise
+    predicates. An incomplete inventory retains explicit unresolved restrictions;
+    observation services are contacted only by fetch.
     """
     _ensure_default_providers_registered()
-    return _selection_find(_registry.iter_records(), provider=provider, station=station, product=product)
+    _validate_issue_policy(on_issue)
+    return _selection_find(
+        _registry.iter_records(),
+        provider=provider,
+        station=station,
+        quantity=quantity,
+        frequency=frequency,
+        statistic=statistic,
+        temporal_support=temporal_support,
+        day_definition=day_definition,
+        timestamp_anchor=timestamp_anchor,
+        time_zone=time_zone,
+        vertical_reference=vertical_reference,
+        vertical_datum=vertical_datum,
+        variant=variant,
+        series_id=series_id,
+        on_issue=on_issue,
+    )
 
 
 def pick(
-    selection: _Selection,
+    selection: _Selection | ObservationResult,
     *,
     provider: str | Sequence[str] | None = None,
     station: str | Sequence[str] | None = None,
-    product: str | Sequence[str] | None = None,
-) -> _Selection:
-    """Narrow an existing selection without changing it.
+    quantity: str | None = None,
+    frequency: str | None = None,
+    statistic: str | None = None,
+    temporal_support: str | None = None,
+    day_definition: str | None = None,
+    timestamp_anchor: str | None = None,
+    time_zone: str | None = None,
+    vertical_reference: str | None = None,
+    vertical_datum: str | None = None,
+    variant: str | Sequence[str] | None = None,
+    series_id: str | Sequence[str] | None = None,
+    on_issue: OnIssue = "warn",
+) -> _Selection | ObservationResult:
+    """Narrow immutable intent or a retrieved view without another source request.
 
-    Parameters
-    ----------
-    selection : _Selection
-        Selection returned by find, pick or from_frame.
-    provider : str, sequence of str or None, default None
-        Provider identifiers to retain. None or an empty sequence adds no filter.
-    station : str, sequence of str or None, default None
-        Station identifiers to retain. Provider scopes vocabulary validation.
-        None or an empty sequence adds no filter.
-    product : str, sequence of str or None, default None
-        Product identifiers to retain. None or an empty sequence adds no filter.
-
-    Returns
-    -------
-    _Selection
-        Intersection of the selection with the requested identifiers. A new
-        empty answer carries not_in_selection. An already empty selection
-        keeps its original reason.
-
-    Raises
-    ------
-    TypeError
-        If selection is not a RivRetrieve selection.
-    UnknownProviderError, UnknownStationError, UnknownProductError
-        If an identifier is outside catalogue vocabulary, even when the input
-        selection is empty.
-    FatalContractError
-        If shipped catalogue contracts fail.
+    Provenance, receipts and original outcomes remain unchanged. Original issues
+    stay in the history; ``on_issue`` reports only findings relevant to the view.
+    Original receipts can contain rows outside ``view_scope``.
     """
-    _ensure_default_providers_registered()
-    return _selection_pick(_registry.iter_records(), selection, provider=provider, station=station, product=product)
+    from rivretrieve._internal.selection import _intersect_scope, _selection_scope
+
+    _validate_issue_policy(on_issue)
+    filters = {
+        "provider": provider,
+        "station": station,
+        "quantity": quantity,
+        "frequency": frequency,
+        "statistic": statistic,
+        "temporal_support": temporal_support,
+        "day_definition": day_definition,
+        "timestamp_anchor": timestamp_anchor,
+        "time_zone": time_zone,
+        "vertical_reference": vertical_reference,
+        "vertical_datum": vertical_datum,
+        "variant": variant,
+        "series_id": series_id,
+    }
+    if isinstance(selection, ObservationResult):
+        scope = _intersect_scope(selection.view_scope or selection.scope, _selection_scope(**filters))
+        pairs = [
+            (item.series_id, facts.facts_id)
+            for item in selection.source_series
+            if scope.matches(item)
+            for facts in item.facts
+            if scope.matches_facts(facts)
+        ]
+        predicate = (
+            pl.any_horizontal(
+                [
+                    (pl.col("series_id") == identifier) & (pl.col("facts_id") == facts_id)
+                    for identifier, facts_id in pairs
+                ]
+            )
+            if pairs
+            else pl.lit(False)
+        )
+        selected = _Selection(scope=scope, known_series=selection.source_series, inventories=selection.inventories)
+        from rivretrieve._internal.selection import _with_selection_diagnostics
+
+        selected = _with_selection_diagnostics(selected, "ignore")
+        current_issues = _selection_issues_for_result(selected, selection)
+        result = ObservationResult(
+            data=selection.data.filter(predicate),
+            provenance=selection.provenance,
+            receipts=selection.receipts,
+            source_series=selection.source_series,
+            inventories=selection.inventories,
+            outcomes=selection.outcomes,
+            scope=selection.scope,
+            view_scope=scope,
+            issues=(*selection.issues, *current_issues),
+        )
+        historical_issues = tuple(issue for issue in selection.issues if _issue_applies_to_view(issue, result))
+        apply_on_issue((*historical_issues, *current_issues), on_issue)
+        return result
+    return _selection_pick(_registry.iter_records(), selection, on_issue=on_issue, **filters)
+
+
+def _issue_applies_to_view(issue: Issue, result: ObservationResult) -> bool:
+    """Report only view-relevant findings while retaining original acquisition history."""
+    from rivretrieve._internal.selection import _intersect_scope, _selection_scope
+    from rivretrieve._internal.source_series import RequestedSelector, RestrictionKind, ScopeState, SeriesScope
+
+    scope = result.view_scope or result.scope
+    if scope.state is ScopeState.EMPTY:
+        return False
+    if scope.provider_ids and str(result.provenance.provider_id) not in scope.provider_ids:
+        return False
+    if issue.provider_id is not None and scope.provider_ids and issue.provider_id not in scope.provider_ids:
+        return False
+    details = issue.details or {}
+    for field, allowed in (("station_id", scope.station_ids), ("product_id", scope.product_ids)):
+        if allowed and isinstance(details.get(field), str) and details[field] not in allowed:
+            return False
+    raw_selector = details.get("requested_selector")
+    if raw_selector is not None:
+        selector = RequestedSelector.model_validate(raw_selector)
+        if selector.kind == "variant":
+            scope = _intersect_scope(scope, _selection_scope(variant=selector.value))
+        else:
+            scope = _intersect_scope(scope, _selection_scope(series_id=selector.value))
+    recorded_scope = details.get("scope")
+    if issue.code.startswith("selection.") and isinstance(recorded_scope, dict):
+        scope = _intersect_scope(scope, SeriesScope.model_validate(recorded_scope))
+    if scope.state is ScopeState.EMPTY:
+        return False
+    inventory_scope = details.get("inventory_scope")
+    if (
+        issue.code == "source.inventory_unresolved"
+        and inventory_scope is not None
+        and all(details.get(field) is None for field in ("series_id", "requested_selector", "outcome_id"))
+    ):
+        acquired = SeriesScope.model_validate(inventory_scope)
+        if acquired.restriction is RestrictionKind.ALL:
+            scope = _intersect_scope(scope, acquired)
+            if scope.state is ScopeState.EMPTY:
+                return False
+            if scope.series_ids:
+                definitions = {item.series_id: item for item in result.source_series}
+                coordinates = acquired.model_copy(update={"predicates": ()})
+                local_ids = tuple(
+                    identifier
+                    for identifier in scope.series_ids
+                    if identifier not in definitions or coordinates.matches(definitions[identifier])
+                )
+                if not local_ids:
+                    return False
+                scope = scope.model_copy(update={"series_ids": local_ids})
+            if _finite_view_members_represented(scope, result):
+                return False
+    identity_scope = scope.model_copy(update={"predicates": ()})
+
+    def could_match(definition: SourceSeries) -> bool:
+        return identity_scope.matches(definition) and any(
+            all(
+                getattr(facts, predicate.field).state.value != "known"
+                or getattr(facts, predicate.field).value == predicate.value
+                for predicate in scope.predicates
+            )
+            for facts in definition.facts
+        )
+
+    definitions = {item.series_id: item for item in result.source_series}
+    identifier = details.get("series_id")
+    if isinstance(identifier, str) and identifier in definitions:
+        return could_match(definitions[identifier])
+    if scope.series_ids and all(identifier in definitions for identifier in scope.series_ids):
+        return any(could_match(definitions[identifier]) for identifier in scope.series_ids)
+    # A finding with no narrower source attribution remains relevant to the request.
+    return True
+
+
+def _finite_view_members_represented(scope: SeriesScope, result: ObservationResult) -> bool:
+    """Positive per-member retrieval evidence does not assert exhaustive inventory."""
+    from rivretrieve._internal.source_series import OutcomeStatus, RestrictionKind, ScopeState
+
+    if scope.state is ScopeState.EMPTY or scope.restriction is not RestrictionKind.EXPLICIT:
+        return False
+    members = tuple(
+        scope.model_copy(update={field: (value,)})
+        for field in ("variants", "series_ids")
+        for value in getattr(scope, field)
+    )
+    if not members:
+        return False
+    definitions = {item.series_id: item for item in result.source_series}
+
+    def represented(member: SeriesScope) -> bool:
+        for outcome in result.outcomes:
+            if outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                continue
+            definition = definitions.get(outcome.series_id) if outcome.series_id is not None else None
+            if definition is None or not member.matches(definition):
+                continue
+            if any(facts.facts_id in outcome.facts_ids and member.matches_facts(facts) for facts in definition.facts):
+                return True
+        return False
+
+    return all(represented(member) for member in members)
+
+
+def series(value: _Selection | ObservationResult) -> pl.DataFrame:
+    """Inspect source identities, independent physical facts, inventory and empty/failed outcomes."""
+    from rivretrieve._internal.selection import _series_frame
+
+    if isinstance(value, ObservationResult):
+        return _series_frame(
+            value.source_series,
+            value.view_scope or value.scope,
+            value.inventories,
+            value.outcomes,
+            provider_id=str(value.provenance.provider_id),
+        )
+    return _selection_as_frame(value)
 
 
 def as_frame(selection: _Selection) -> pl.DataFrame:
-    """Copy a selection into a Polars frame for inspection or filtering.
-
-    Parameters
-    ----------
-    selection : _Selection
-        Selection returned by find, pick or from_frame.
-
-    Returns
-    -------
-    polars.DataFrame
-        One row per series in SELECTION_FRAME_SCHEMA order. Identity, geometry,
-        product semantics, canonical unit, native product identifier, availability,
-        published record dates and catalogue check date travel together. Empty
-        selections retain the schema. Acquisition evidence and the empty reason
-        stay on selection rather than becoming frame columns.
-
-    Raises
-    ------
-    TypeError
-        If selection is not a RivRetrieve selection.
-    """
+    """Return an inspection frame. Use to_bundle for a durable, lossless round trip."""
     return _selection_as_frame(selection)
 
 
 def from_frame(frame: pl.DataFrame) -> _Selection:
-    """Rebuild a selection from frame identities and packaged catalogue facts.
+    """Frame imports are unsupported; use a validated versioned export bundle."""
+    return _selection_from_frame((), frame)
 
-    Parameters
-    ----------
-    frame : polars.DataFrame
-        Contains provider_id, station_id and product_id String columns in that
-        relative order. Identities must be non-null and unique. Other columns
-        are ignored, including caller-edited catalogue metadata.
 
-    Returns
-    -------
-    _Selection
-        Sorted series with current packaged metadata and acquisition evidence.
-        An empty identity frame produces the empty_frame reason.
+def to_bundle(value: _Selection | ObservationResult) -> bytes:
+    """Export a self-contained, explicitly versioned selection or result bundle."""
+    from rivretrieve._internal.export_bundle import encode_bundle
 
-    Raises
-    ------
-    TypeError
-        If frame is not a Polars DataFrame.
-    UnknownProviderError, UnknownStationError, UnknownProductError
-        If an identity is outside catalogue vocabulary.
-    FatalContractError
-        If columns, dtypes, nulls or duplicates violate the identity contract,
-        or a triple has no selectable catalogue pair.
-    """
-    _ensure_default_providers_registered()
-    return _selection_from_frame(_registry.iter_records(), frame)
+    return encode_bundle(value)
+
+
+def from_bundle(content: bytes) -> _Selection | ObservationResult:
+    """Validate and import a bundle without rebuilding identity from today's catalogue."""
+    from rivretrieve._internal.export_bundle import decode_bundle
+
+    return decode_bundle(content)
+
+
+def _validate_issue_policy(on_issue: OnIssue) -> None:
+    if on_issue not in ("raise", "warn", "ignore"):
+        raise ValueError("on_issue must be raise, warn or ignore")
 
 
 def drainage_areas(selection: _Selection) -> pl.DataFrame:
@@ -261,7 +402,7 @@ def drainage_areas(selection: _Selection) -> pl.DataFrame:
     Parameters
     ----------
     selection : _Selection
-        Selection returned by find, pick or from_frame. Multiple providers and
+        Selection returned by find, pick or from_bundle. Multiple providers and
         products are accepted; each provider-station pair appears once per
         source field, regardless of the number of selected products.
 
@@ -292,7 +433,8 @@ def drainage_areas(selection: _Selection) -> pl.DataFrame:
     Notes
     -----
     Reads only packaged metadata, without observations, credentials or network
-    access. Coverage is limited to drainage/watershed-size fields established
+    access. Gauge identity does not require numeric observation admission or map
+    coordinates. Coverage is limited to drainage/watershed-size fields established
     by existing repository evidence. Distinct source fields remain separate;
     no area is preferred, inferred, converted or scientifically harmonized.
     Neither absence state means zero or that an agency publishes no area
@@ -300,7 +442,7 @@ def drainage_areas(selection: _Selection) -> pl.DataFrame:
     """
     from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA, drainage_area_frame
 
-    stations = _selection_station_frame(selection).select("provider_id", "station_id")
+    stations = _selection_station_keys(selection)
     if stations.is_empty():
         return pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA)
     resource = files("rivretrieve._internal.catalogues").joinpath("drainage_areas.parquet")
@@ -366,104 +508,44 @@ def fetch(
     cache: CacheMode = "bypass",
     on_issue: OnIssue = "warn",
 ) -> ObservationResult:
-    """Retrieve selected observations from one provider.
+    """Retrieve every admitted source series matching one provider's retained request scope.
 
-    Parameters
-    ----------
-    selection : _Selection
-        Series to retrieve. fetch requires a nonempty selection from one provider.
-    start : str or datetime, default None
-        Required naive wall-clock endpoint in each source calendar. ISO date
-        strings begin at midnight. None and datetime.date objects are refused.
-    end : str, datetime or None, default None
-        Inclusive naive wall-clock endpoint. A bare ISO date includes that whole
-        date. None uses the caller machine's local date through its last instant.
-        A future end stays unchanged and adds one informational issue per provider.
-    receipts : bool, default False
-        Retain publisher payloads and store excerpts when True. Otherwise the
-        returned receipts.entries tuple is empty.
-    cache : {"bypass", "reuse", "refresh"}, default "bypass"
-        For live providers, bypass leaves the cache untouched, reuse serves held
-        coverage and fetches the remainder, and refresh replaces the requested
-        interval after successful retrieval. Bulk providers always read their
-        compiled store. They accept bypass and reuse, but refuse refresh.
-    on_issue : {"warn", "raise", "ignore"}, default "warn"
-        Handling for warning and error issues. Warn emits RuntimeWarning and
-        returns results. Raise raises IssuePolicyError. Ignore suppresses
-        notifications, not retained issues. Info does not activate this policy.
-
-    Returns
-    -------
-    ObservationResult
-        Five-column observation frame with native wall-clock time, per-row zone,
-        station_id, product_id and canonical value. Provenance, issues and optional
-        receipts accompany it. Source failures can yield partial or empty data
-        with issues. Successful retrieval does not establish continuous coverage.
-
-    Raises
-    ------
-    EmptySelectionError
-        If the selection is empty. The exception carries its reason.
-    MultiProviderSelectionError
-        If the selection contains more than one provider.
-    TypeError
-        If selection is not a RivRetrieve selection.
-    ValueError
-        If cache is not one of the supported modes.
-    InvalidObservationRequestError
-        If start is omitted, an endpoint is invalid or zone-aware, or start > end.
-    MissingCredentialError
-        If a selected provider lacks required credentials before source access.
-    ObservationsUnavailableError
-        If a provider has no observation stages.
-    ObservationStoreRefusedError
-        If an existing store cannot be validated.
-    IssuePolicyError
-        If on_issue="raise" and results carry warning or error issues.
-    FatalContractError
-        If a stage contract fails or refresh is requested for a bulk provider.
-        These errors are independent of on_issue.
-
-    Notes
-    -----
-    Daily products clip on native calendar dates. Other products clip on their
-    wall-clock labels. The engine pads source requests by two days at each end
-    and clips returned rows to the requested window. Unit conversion does not
-    compute a new hydrological product. Supplied credentials come from the
-    process environment or working directory .env file, not function arguments.
-    A missing compiled store returns an empty frame with bulk.store_missing,
-    a warning issue. No implicit download starts.
+    Unrestricted intent includes response-discovered matches. Reuse serves an
+    identified inventory vintage; refresh reacquires scope. Source failures remain
+    inspectable alongside independent successes. Receipts retain exact parse bytes.
     """
     cache = _parse_cache_mode(cache)
+    _validate_issue_policy(on_issue)
     _require_selection(selection)
-    if not selection.series:
-        reason = selection.empty_reason
-        if reason is None:
-            raise FatalContractError("Empty selection has no retained reason")
-        raise EmptySelectionError(reason)
-
-    partitions = _partition_by_provider(selection.series)
+    partitions = _selection_routes(selection)
+    if not partitions:
+        if selection.empty_reason is None:
+            raise FatalContractError("Selection has no executable source scope")
+        raise EmptySelectionError(selection.empty_reason)
     provider_ids = tuple(partitions)
     if len(provider_ids) != 1:
         raise MultiProviderSelectionError(provider_ids)
-
-    normalized_start, normalized_end, future_local_date = _normalize_window(selection.series, start=start, end=end)
+    routes = tuple(item for values in partitions.values() for item in values)
+    normalized_start, normalized_end, future_local_date = _normalize_window(routes, start=start, end=end)
     _require_cache_mode_available(provider_ids, cache)
-    credential_values = _resolve_credentials(provider_ids, require_all=True)
+    credentials = _resolve_credentials(provider_ids, require_all=True)
     provider_id = provider_ids[0]
-    receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
-    return _fetch_provider_series(
+    result = _fetch_provider_series(
         provider_id,
         partitions[provider_id],
+        selection=selection,
         start=normalized_start,
         end=normalized_end,
         future_local_date=future_local_date,
-        credentials=credential_values[provider_id],
-        receipts=receipt_mode,
+        credentials=credentials[provider_id],
+        receipts=ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT,
         cache=cache,
         store=_resolve_store_root(provider_id, _registry.get(provider_id)._store_root),
-        on_issue=on_issue,
+        on_issue="ignore",
     )
+    result = result.model_copy(update={"issues": (*_selection_issues_for_result(selection, result), *result.issues)})
+    apply_on_issue(result.issues, on_issue)
+    return result
 
 
 def fetch_by_provider(
@@ -475,100 +557,165 @@ def fetch_by_provider(
     cache: CacheMode = "bypass",
     on_issue: OnIssue = "warn",
 ) -> dict[str, ObservationResult]:
-    """Retrieve a selection as separate results keyed by provider.
-
-    Parameters
-    ----------
-    selection : _Selection
-        Series to retrieve from zero or more providers.
-    start : str or datetime, default None
-        Required naive wall-clock endpoint in each source calendar. ISO date
-        strings begin at midnight. None and datetime.date objects are refused.
-    end : str, datetime or None, default None
-        Inclusive naive wall-clock endpoint. A bare ISO date includes that whole
-        date. None uses the caller machine's local date through its last instant.
-        A future end stays unchanged and adds one informational issue per provider.
-    receipts : bool, default False
-        Retain publisher payloads and store excerpts when True. Otherwise the
-        returned receipts.entries tuple is empty.
-    cache : {"bypass", "reuse", "refresh"}, default "bypass"
-        For live providers, bypass leaves the cache untouched, reuse serves held
-        coverage and fetches the remainder, and refresh replaces the requested
-        interval after successful retrieval. Bulk providers always read their
-        compiled store. They accept bypass and reuse, but refuse refresh.
-    on_issue : {"warn", "raise", "ignore"}, default "warn"
-        Handling for warning and error issues. Warn emits RuntimeWarning and
-        returns results. Raise raises IssuePolicyError. Ignore suppresses
-        notifications, not retained issues. Info does not activate this policy.
-
-    Returns
-    -------
-    dict[str, ObservationResult]
-        One result per selected provider, in provider-id order. An empty
-        selection returns {} without validating its window or credentials.
-        Each result uses the same schema and semantics as fetch.
-
-    Raises
-    ------
-    TypeError
-        If selection is not a RivRetrieve selection.
-    ValueError
-        If cache is not one of the supported modes.
-    InvalidObservationRequestError
-        If start is omitted, an endpoint is invalid or zone-aware, or start > end.
-    MissingCredentialError
-        If a selected provider lacks required credentials before source access.
-    ObservationsUnavailableError
-        If a provider has no observation stages.
-    ObservationStoreRefusedError
-        If an existing store cannot be validated.
-    IssuePolicyError
-        If on_issue="raise" and results carry warning or error issues.
-    FatalContractError
-        If a stage contract fails or refresh is requested for a bulk provider.
-        These errors are independent of on_issue.
-
-    Notes
-    -----
-    Credentials are checked for all selected providers before retrieval.
-    The issue policy runs after all provider results have been assembled.
-    A fatal contract error still aborts the call. This function does not
-    merge provider frames, whose station identifiers need not be globally unique.
-    """
+    """Retrieve each provider separately, preserving its identity, source terms and outcomes."""
     cache = _parse_cache_mode(cache)
+    _validate_issue_policy(on_issue)
     _require_selection(selection)
-    partitions = _partition_by_provider(selection.series)
+    partitions = _selection_routes(selection)
     if not partitions:
+        apply_on_issue(selection.issues, on_issue)
         return {}
-    normalized_start, normalized_end, future_local_date = _normalize_window(selection.series, start=start, end=end)
+    routes = tuple(item for values in partitions.values() for item in values)
+    normalized_start, normalized_end, future_local_date = _normalize_window(routes, start=start, end=end)
     provider_ids = tuple(partitions)
     _require_cache_mode_available(provider_ids, cache)
-    credential_values = _resolve_credentials(provider_ids, require_all=True)
-    receipt_mode = ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT
-    results = {
-        provider_id: _fetch_provider_series(
+    credentials = _resolve_credentials(provider_ids, require_all=True)
+    results = {}
+    for provider_id, members in partitions.items():
+        result = _fetch_provider_series(
             provider_id,
-            series,
+            members,
+            selection=selection,
             start=normalized_start,
             end=normalized_end,
             future_local_date=future_local_date,
-            credentials=credential_values[provider_id],
-            receipts=receipt_mode,
+            credentials=credentials[provider_id],
+            receipts=ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT,
             cache=cache,
             store=_resolve_store_root(provider_id, _registry.get(provider_id)._store_root),
             on_issue="ignore",
         )
-        for provider_id, series in partitions.items()
+        results[provider_id] = result.model_copy(
+            update={"issues": (*_selection_issues_for_result(selection, result), *result.issues)}
+        )
+    definitions = tuple(item for result in results.values() for item in result.source_series)
+    results = {
+        provider_id: _reconcile_selector_searches(result, definitions) for provider_id, result in results.items()
     }
-    apply_on_issue(
-        tuple(issue for result in results.values() for issue in result.issues),
-        on_issue,
-    )
+    apply_on_issue(tuple(issue for result in results.values() for issue in result.issues), on_issue)
     return results
 
 
+def _reconcile_selector_searches(result: ObservationResult, definitions: tuple[SourceSeries, ...]) -> ObservationResult:
+    """A globally identified series is not missing from an unrelated search coordinate."""
+    from rivretrieve._internal.source_series import RequestedSelector
+
+    by_identity: dict[str, SourceSeries] = {}
+    for definition in definitions:
+        existing = by_identity.get(definition.series_id)
+        if existing is not None and (existing.provider_id, existing.station_id, existing.product_id) != (
+            definition.provider_id,
+            definition.station_id,
+            definition.product_id,
+        ):
+            raise FatalContractError("A global source-series identity has conflicting coordinates")
+        by_identity[definition.series_id] = definition
+    excluded = set()
+    for outcome in result.outcomes:
+        selector = outcome.requested_selector
+        if outcome.series_id is not None or selector is None or selector.kind != "series_id":
+            continue
+        if outcome.status.value not in ("no_match", "unresolved"):
+            continue
+        if outcome.calls or outcome.facts_ids or outcome.retrieved_at is not None:
+            continue
+        definition = by_identity.get(selector.value)
+        if definition is not None and (definition.provider_id, definition.station_id, definition.product_id) != (
+            str(result.provenance.provider_id),
+            outcome.station_id,
+            outcome.product_id,
+        ):
+            excluded.add(outcome.outcome_id)
+
+    def relevant(issue: Issue) -> bool:
+        details = issue.details or {}
+        linked_outcome = details.get("outcome_id")
+        if isinstance(linked_outcome, str) and linked_outcome in excluded:
+            return False
+        # Offline discovery findings are scoped to the relevant provider result,
+        # not copied as failures onto providers that cannot own the resolved ID.
+        raw_selector = details.get("requested_selector")
+        if issue.code in ("selection.no_match", "selection.unresolved_inventory") and raw_selector is not None:
+            selector = RequestedSelector.model_validate(raw_selector)
+            definition = by_identity.get(selector.value) if selector.kind == "series_id" else None
+            if definition is not None and definition.provider_id != str(result.provenance.provider_id):
+                return False
+        return True
+
+    return result.model_copy(
+        update={
+            "outcomes": tuple(item for item in result.outcomes if item.outcome_id not in excluded),
+            "issues": tuple(item for item in result.issues if relevant(item)),
+        }
+    )
+
+
+def _selection_issues_for_result(selection: _Selection, result: ObservationResult) -> tuple[Issue, ...]:
+    """Settle each discovery restriction independently from its acquired evidence."""
+    from rivretrieve._internal.source_series import SeriesScope
+
+    def settled(issue: Issue) -> bool:
+        details = issue.details or {}
+        recorded_scope = details.get("scope")
+        scope = SeriesScope.model_validate(recorded_scope) if isinstance(recorded_scope, dict) else selection.scope
+        if any(scope.matches(item) for item in result.source_series):
+            return True
+        identity_scope = scope.model_copy(update={"predicates": ()})
+        identities = {item.series_id for item in result.source_series if identity_scope.matches(item)}
+        selector = details.get("requested_selector")
+        for outcome in result.outcomes:
+            if outcome.status.value == "unresolved":
+                continue
+            if outcome.series_id in identities:
+                return True
+            if (
+                isinstance(selector, dict)
+                and outcome.requested_selector is not None
+                and outcome.requested_selector.model_dump(mode="json") == selector
+            ):
+                return True
+        return False
+
+    return tuple(
+        issue.model_copy(
+            update={
+                "severity": "info",
+                "code": "selection.inventory_resolved",
+                "message": "The explicit source restriction was unresolved during offline discovery and was settled by acquisition.",
+                "details": {"discovery_issue": issue.model_dump(mode="json")},
+            }
+        )
+        if issue.code == "selection.unresolved_inventory" and settled(issue)
+        else issue
+        for issue in selection.issues
+    )
+
+
+def _selection_routes(selection: _Selection) -> dict[str, tuple[SourceSeries, ...]]:
+    from rivretrieve._internal.source_series import RestrictionKind, ScopeState
+
+    if selection.scope.state is ScopeState.EMPTY:
+        return {}
+    # Physical and station scope route acquisition. Explicit response-owned IDs may
+    # be absent from the catalogue and therefore cannot remove their acquisition route.
+    route_scope = selection.scope.model_copy(
+        update={"restriction": RestrictionKind.ALL, "variants": (), "series_ids": ()}
+    )
+    candidates = tuple(item for item in selection.known_series if route_scope.matches(item))
+    if selection.scope.restriction is RestrictionKind.EXPLICIT:
+        identities_resolved = all(
+            any(item.series_id == identifier for item in candidates) for identifier in selection.scope.series_ids
+        ) and all(
+            any(item.variant == variant or item.identity.published_id == variant for item in candidates)
+            for variant in selection.scope.variants
+        )
+        if identities_resolved:
+            candidates = tuple(item for item in candidates if selection.scope.matches(item))
+    return _partition_by_provider(candidates)
+
+
 def _normalize_window(
-    series: tuple[_Series, ...],
+    series: tuple[SourceSeries, ...],
     *,
     start: object,
     end: object,
@@ -634,7 +781,8 @@ def _resolve_credentials(
     resolved: dict[str, dict[str, str]] = {}
     missing: dict[str, tuple[str, ...]] = {}
     for provider_id in provider_ids:
-        names = _registry.get(provider_id).required_credentials
+        handle = _registry.get(provider_id)
+        names = (*handle.required_credentials, *handle.optional_credentials)
         provider_values: dict[str, str] = {}
         for name in names:
             environment_value = os.environ.get(name)
@@ -648,7 +796,7 @@ def _resolve_credentials(
             if value is not None:
                 provider_values[name] = value
         resolved[provider_id] = provider_values
-        absent = tuple(name for name in names if name not in provider_values)
+        absent = tuple(name for name in handle.required_credentials if name not in provider_values)
         if absent:
             missing[provider_id] = absent
     if require_all and missing:
@@ -662,16 +810,20 @@ def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transpo
     handle = _registry.get(provider_id)
     exchange = handle.credential_exchange
     if exchange is not None:
+        headers = tuple(
+            CredentialHeader(binding.header, values[binding.variable], binding.origins)
+            for binding in exchange.credential_headers
+            if binding.variable in values
+        )
+        if not headers:
+            return base
         return CredentialExchangeTransport(
             base,
-            tuple(
-                CredentialHeader(binding.header, values[binding.variable], binding.origins)
-                for binding in exchange.credential_headers
-            ),
+            headers,
             exchange.spec,
             _SystemClock(),
         )
-    bindings = handle.credential_headers
+    bindings = tuple(binding for binding in handle.credential_headers if binding.variable in values)
     if not bindings:
         return base
     return AuthenticatedTransport(
@@ -680,8 +832,20 @@ def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transpo
     )
 
 
-def _partition_by_provider(series: tuple[_Series, ...]) -> dict[str, tuple[_Series, ...]]:
-    partitions: dict[str, list[_Series]] = {}
+def _public_archive_transport(
+    base: Transport, access: PublicArchiveAccess, fetch_window: FetchWindow, now: datetime
+) -> Transport:
+    """Resolve declared public archive access using engine-padded UTC source bounds."""
+    if isinstance(base, AuthenticationCapability) and base.can_authenticate(access.endpoint):
+        return base
+    start = datetime.fromisoformat(fetch_window.start.isoformat()).replace(tzinfo=UTC)
+    if start >= now - access.recent_horizon:
+        return base
+    return AuthenticatedTransport(base, (access.credential,))
+
+
+def _partition_by_provider(series: tuple[SourceSeries, ...]) -> dict[str, tuple[SourceSeries, ...]]:
+    partitions: dict[str, list[SourceSeries]] = {}
     for selected_series in series:
         partitions.setdefault(selected_series.provider_id, []).append(selected_series)
     return {provider_id: tuple(rows) for provider_id, rows in partitions.items()}
@@ -689,8 +853,9 @@ def _partition_by_provider(series: tuple[_Series, ...]) -> dict[str, tuple[_Seri
 
 def _fetch_provider_series(
     provider_id: str,
-    series: tuple[_Series, ...],
+    series: tuple[SourceSeries, ...],
     *,
+    selection: _Selection,
     start: datetime,
     end: datetime,
     future_local_date: date | None,
@@ -703,8 +868,20 @@ def _fetch_provider_series(
     handle = _provider_lookup(provider_id)
     by_station: dict[str, list[str]] = {}
     for selected_series in series:
-        by_station.setdefault(selected_series.station_id, []).append(selected_series.product_id)
+        product_ids = by_station.setdefault(selected_series.station_id, [])
+        if selected_series.product_id not in product_ids:
+            product_ids.append(selected_series.product_id)
     transport = _credentialed_transport(provider_id, credentials)
+    if handle.public_archive_access is not None:
+        from rivretrieve._internal.coverage import RequestedInterval
+        from rivretrieve._internal.driver import _padded_interval
+
+        transport = _public_archive_transport(
+            transport,
+            handle.public_archive_access,
+            _padded_interval(RequestedInterval(start, end)),
+            _SystemClock().utcnow(),
+        )
     results = tuple(
         handle.observations(
             stations=station_id,
@@ -716,10 +893,18 @@ def _fetch_provider_series(
             transport=transport,
             cache=cache,
             store=store,
+            scope=selection.scope.model_copy(update={"provider_ids": (provider_id,)}),
+            known_series=tuple(item for item in selection.known_series if item.provider_id == provider_id),
+            inventories=tuple(
+                item
+                for item in selection.inventories
+                if not item.scope.provider_ids or provider_id in item.scope.provider_ids
+            ),
         )
         for station_id, product_ids in by_station.items()
     )
     result = _merge_provider_results(results, series)
+    result = _reconcile_selector_searches(result, result.source_series)
     if future_local_date is not None:
         future_issue = Issue(
             severity="info",
@@ -738,7 +923,7 @@ def _fetch_provider_series(
 
 def _merge_provider_results(
     results: tuple[ObservationResult, ...],
-    series: tuple[_Series, ...],
+    series: tuple[SourceSeries, ...],
 ) -> ObservationResult:
     """provider result merge : NonEmptyTuple[ObservationResult] × SelectedSeries → ObservationResult"""
     if not results:
@@ -749,8 +934,13 @@ def _merge_provider_results(
     if request is None or "start" not in request or "end" not in request:
         raise FatalContractError("Observation provenance must retain the normalized requested window")
     merged_request = {
+        "scope": first.scope.model_dump(mode="json"),
         "series": [
-            {"station_id": selected_series.station_id, "product_id": selected_series.product_id}
+            {
+                "station_id": selected_series.station_id,
+                "product_id": selected_series.product_id,
+                "series_id": selected_series.series_id,
+            }
             for selected_series in series
         ],
         "start": request["start"],
@@ -771,6 +961,10 @@ def _merge_provider_results(
     merged_query = None if not queries else queries[0] if len(queries) == 1 else {"calls": tuple(queries)}
     return ObservationResult(
         data=_canonical_observation_order(pl.concat([result.data for result in results])),
+        source_series=_merge_series_definitions(results),
+        inventories=tuple({item.snapshot_id: item for result in results for item in result.inventories}.values()),
+        outcomes=tuple({item.outcome_id: item for result in results for item in result.outcomes}.values()),
+        scope=first.scope,
         provenance=first.provenance.model_copy(
             update={
                 "request": merged_request,
@@ -792,9 +986,30 @@ def _merge_provider_results(
     )
 
 
+def _merge_series_definitions(results: tuple[ObservationResult, ...]) -> tuple[SourceSeries, ...]:
+    definitions: dict[str, SourceSeries] = {}
+    for result in results:
+        for item in result.source_series:
+            existing = definitions.get(item.series_id)
+            if existing is None:
+                definitions[item.series_id] = item
+                continue
+            if existing.model_dump(exclude={"facts"}) != item.model_dump(exclude={"facts"}):
+                raise FatalContractError("Source-series identity changed while merging result partitions")
+            facts = {fact.facts_id: fact for fact in existing.facts}
+            for fact in item.facts:
+                if fact.facts_id in facts and facts[fact.facts_id] != fact:
+                    raise FatalContractError("Physical facts changed under the same fact-segment identity")
+                facts[fact.facts_id] = fact
+            definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
+    return tuple(definitions.values())
+
+
 def _canonical_observation_order(data: pl.DataFrame) -> pl.DataFrame:
     """canonical observation order : ObservationData → ObservationData (pure)."""
-    return data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
+    return data.sort(
+        ["station_id", "product_id", "series_id", "facts_id", "time", "time_zone", "value"], maintain_order=True
+    )
 
 
 def _merge_provider_issues(results: tuple[ObservationResult, ...]) -> tuple[Issue, ...]:
@@ -812,7 +1027,10 @@ def _merge_provider_issues(results: tuple[ObservationResult, ...]) -> tuple[Issu
 
 
 def products(provider: str | None = None) -> list[str]:
-    """List canonical product identifiers from packaged catalogues.
+    """Inspect source access-coordinate names recorded in packaged catalogues.
+
+    These internal routing names do not establish physical meaning. They are not
+    accepted by find or pick; use quantity and established physical facts there.
 
     Parameters
     ----------
@@ -822,8 +1040,8 @@ def products(provider: str | None = None) -> list[str]:
     Returns
     -------
     list[str]
-        Sorted, unique product identifiers. These are catalogue vocabulary,
-        not a guarantee that every station offers each product.
+        Sorted, unique access-coordinate names. Neither a name nor its wording
+        establishes a series statistic, temporal support or current availability.
 
     Raises
     ------

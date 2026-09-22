@@ -92,13 +92,15 @@ def test_map_empty_selection_has_no_markers(monkeypatch: pytest.MonkeyPatch) -> 
     selection = rr.find(
         provider="usgs_nwis",
         station="01646500",
-        product="stage_daily_mean",
+        quantity="stage",
+        frequency="daily",
+        statistic="mean",
     )
 
     station_map = rr.map(selection)
 
     assert selection.empty_reason is not None
-    assert selection.empty_reason.code == "no_catalogue_edge"
+    assert selection.empty_reason.code == "unresolved_inventory"
     assert isinstance(station_map, FakeMap)
     assert station_map.location == [0.0, 0.0]
     assert station_map.markers == []
@@ -114,9 +116,11 @@ def test_map_ch_foen_selection_renders_unique_unknown_crs_stations_without_mutat
 
     stations_before = catalogue_reader("ch_foen").artifact.stations
 
-    assert before.height == 738
+    # Five source fields share the same 246 gauge coordinates.
+    assert before.height == 1230
+    assert set(before["published_id"].drop_nulls()) == {"flow", "flow_ls", "height", "height_abs", "temperature"}
     assert before.select("provider_id", "station_id").unique().height == 246
-    assert before.get_column("crs").unique().sort().to_list() == ["unknown"]
+    assert stations_before.get_column("crs").unique().sort().to_list() == ["unknown"]
 
     station_map = rr.map(selection)
 
@@ -137,7 +141,9 @@ def test_map_established_crs_uses_distinct_marker_colour_and_exact_popup(
     selection = rr.find(
         provider="usgs_nwis",
         station="01646500",
-        product="discharge_daily_mean",
+        quantity="discharge",
+        frequency="daily",
+        statistic="mean",
     )
 
     station_map = rr.map(selection)

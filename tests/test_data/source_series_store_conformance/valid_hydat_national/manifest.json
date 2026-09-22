@@ -1,0 +1,319 @@
+{
+  "built_at": "2026-08-11T10:01:00.000000Z",
+  "compiler_version": "0.1.49",
+  "format_version": 5,
+  "partition_row_counts": {
+    "product=discharge/year=2023": 1,
+    "product=discharge/year=2024": 2,
+    "product=level/year=2024": 1
+  },
+  "provider_id": "fixture_bulk",
+  "publisher_artifact": {
+    "sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "url": "https://example.invalid/hydat/Hydat.sqlite3"
+  },
+  "source_column_dispositions": [
+    {
+      "disposition": "retained",
+      "source_column": "station_id"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time_zone"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "value"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "native_unit"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_quality"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_note"
+    }
+  ],
+  "source_schema": {
+    "columns": [
+      {
+        "name": "station_id",
+        "type": "string"
+      },
+      {
+        "name": "time",
+        "type": "timestamp[us]"
+      },
+      {
+        "name": "time_zone",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "float64"
+      },
+      {
+        "name": "native_unit",
+        "type": "string"
+      },
+      {
+        "name": "source_quality",
+        "type": "string"
+      },
+      {
+        "name": "source_note",
+        "type": "string"
+      }
+    ],
+    "fingerprint": "sha256:fec7d282faad87c744bd83241c5be29a15b7a7254760b7a9aed0f4e27ba3ecca"
+  },
+  "source_vintage": "2024-06-01",
+  "series": [
+    {
+      "series_id": "bc58b908b2b07a7e12518effd6c8b03871301d1c4fc312b4230c67c2260883c9",
+      "provider_id": "fixture_bulk",
+      "station_id": "ca-001",
+      "product_id": "discharge",
+      "identity": {
+        "namespace": "controlled fixture",
+        "published_id": null,
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "controlled fixture"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "78001b403c04ed543beef61175cd31cfad8d01d6d84ddb1b1f77f39ca081639c",
+          "quantity": {
+            "value": "discharge",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "source_unit": {
+            "value": "m3/s",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "normalized_unit": "m3/s",
+          "frequency": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "statistic": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "temporal_support": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    },
+    {
+      "series_id": "200b1634481dae1ce8049d3448a73902dbcf0d8a0cc9d467ff99fec397ca61a1",
+      "provider_id": "fixture_bulk",
+      "station_id": "ca-002",
+      "product_id": "discharge",
+      "identity": {
+        "namespace": "controlled fixture",
+        "published_id": null,
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "controlled fixture"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "78001b403c04ed543beef61175cd31cfad8d01d6d84ddb1b1f77f39ca081639c",
+          "quantity": {
+            "value": "discharge",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "source_unit": {
+            "value": "m3/s",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "normalized_unit": "m3/s",
+          "frequency": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "statistic": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "temporal_support": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    },
+    {
+      "series_id": "c0a1c86d2c0e9f96931197da9cf7e4a7c91262b73306b1c3a5794f4a5467c6d2",
+      "provider_id": "fixture_bulk",
+      "station_id": "ca-001",
+      "product_id": "level",
+      "identity": {
+        "namespace": "controlled fixture",
+        "published_id": null,
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "controlled fixture"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "82664c46fdbfd7113e64285184a9d6c36000fbf12f5894fe715a9422467a3d3b",
+          "quantity": {
+            "value": "stage",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "source_unit": {
+            "value": "m",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "normalized_unit": "m",
+          "frequency": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "statistic": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "temporal_support": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    }
+  ],
+  "inventories": [],
+  "outcomes": [],
+  "issues": [],
+  "source_calls": []
+}

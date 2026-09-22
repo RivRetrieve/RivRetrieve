@@ -1,0 +1,1074 @@
+[
+  {
+    "provider": "fr_hubeau",
+    "station": "1011000101",
+    "quantity": "discharge",
+    "frequency": "daily",
+    "statistic": "mean",
+    "start": "2025-01-03",
+    "end": "2025-01-03",
+    "rows": 1,
+    "issues": [],
+    "units": [
+      "m3/s"
+    ],
+    "source_units": [
+      "l/s"
+    ],
+    "time_zones": [
+      "unknown"
+    ],
+    "first": "2025-01-03 00:00:00",
+    "last": "2025-01-03 00:00:00",
+    "definitions": [
+      {
+        "series_id": "459d3589ed3488581f54179c9411a3c5edf866843320e62f6de55bacf9ad4383",
+        "provider_id": "fr_hubeau",
+        "station_id": "1011000101",
+        "product_id": "discharge_daily_mean",
+        "identity": {
+          "namespace": "fr_hubeau/daily/QmnJ",
+          "published_id": null,
+          "description": null,
+          "origin": "mapping",
+          "evidence": [
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+            "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+          ]
+        },
+        "variant": null,
+        "facts": [
+          {
+            "facts_id": "b864ba37c1c81f79ce18c101c8f089c9133e77eddae8a9ebad4ffd9538dcdfa5",
+            "quantity": {
+              "value": "discharge",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "source_unit": {
+              "value": "l/s",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "normalized_unit": "l/s",
+            "frequency": {
+              "value": "daily",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "statistic": {
+              "value": "mean",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "temporal_support": {
+              "value": "interval",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QmnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "day_definition": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "timestamp_anchor": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "time_zone": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_reference": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_datum": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "clipping_axis": "calendar_date",
+            "label_time": "00:00"
+          }
+        ]
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+        "request_parameters": {
+          "code_entite": "1011000101",
+          "date_debut_obs_elab": "2025-01-01",
+          "date_fin_obs_elab": "2025-01-05",
+          "grandeur_hydro_elab": "QmnJ",
+          "size": 20
+        },
+        "status_code": 200,
+        "retrieved_at": "2026-09-21 09:26:17.877025+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "1011000101",
+            "discharge_daily_mean"
+          ]
+        ],
+        "series_ids": [
+          "459d3589ed3488581f54179c9411a3c5edf866843320e62f6de55bacf9ad4383"
+        ]
+      }
+    ],
+    "receipts": [
+      {
+        "path": "fr_hubeau-1011000101-discharge-mean-0.body",
+        "bytes": 2172,
+        "sha256": "03859565eafb0be6513fbefae3f27a140dd9479c9721d3b6858a7efb5db9422e"
+      }
+    ]
+  },
+  {
+    "provider": "fr_hubeau",
+    "station": "1011000101",
+    "quantity": "discharge",
+    "frequency": "daily",
+    "statistic": "max",
+    "start": "2025-01-03",
+    "end": "2025-01-03",
+    "rows": 1,
+    "issues": [],
+    "units": [
+      "m3/s"
+    ],
+    "source_units": [
+      "l/s"
+    ],
+    "time_zones": [
+      "unknown"
+    ],
+    "first": "2025-01-03 00:00:00",
+    "last": "2025-01-03 00:00:00",
+    "definitions": [
+      {
+        "series_id": "407786fcc141bcbf5fc0a5d131bcc4c39ca9a8c3170f4b3bf4dc48231bb21860",
+        "provider_id": "fr_hubeau",
+        "station_id": "1011000101",
+        "product_id": "discharge_daily_max",
+        "identity": {
+          "namespace": "fr_hubeau/daily/QIXnJ",
+          "published_id": null,
+          "description": null,
+          "origin": "mapping",
+          "evidence": [
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+            "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+          ]
+        },
+        "variant": null,
+        "facts": [
+          {
+            "facts_id": "8b7d3a845e1a967b7b47babefdde1eb654ee13346a06a103191db32c50dd5944",
+            "quantity": {
+              "value": "discharge",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "source_unit": {
+              "value": "l/s",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "normalized_unit": "l/s",
+            "frequency": {
+              "value": "daily",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "statistic": {
+              "value": "max",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=QIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "temporal_support": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "day_definition": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "timestamp_anchor": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "time_zone": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_reference": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_datum": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "clipping_axis": "calendar_date",
+            "label_time": "00:00"
+          }
+        ]
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+        "request_parameters": {
+          "code_entite": "1011000101",
+          "date_debut_obs_elab": "2025-01-01",
+          "date_fin_obs_elab": "2025-01-05",
+          "grandeur_hydro_elab": "QIXnJ",
+          "size": 20
+        },
+        "status_code": 200,
+        "retrieved_at": "2026-09-21 09:26:18.593025+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "1011000101",
+            "discharge_daily_max"
+          ]
+        ],
+        "series_ids": [
+          "407786fcc141bcbf5fc0a5d131bcc4c39ca9a8c3170f4b3bf4dc48231bb21860"
+        ]
+      }
+    ],
+    "receipts": [
+      {
+        "path": "fr_hubeau-1011000101-discharge-max-0.body",
+        "bytes": 2179,
+        "sha256": "0ab0b9d1d38ea7108cdb514fd560fadf38a6fcf0d9b448a2b52d77524778cd66"
+      }
+    ]
+  },
+  {
+    "provider": "fr_hubeau",
+    "station": "1011000101",
+    "quantity": "stage",
+    "frequency": "daily",
+    "statistic": "max",
+    "start": "2025-01-03",
+    "end": "2025-01-03",
+    "rows": 1,
+    "issues": [],
+    "units": [
+      "m"
+    ],
+    "source_units": [
+      "mm"
+    ],
+    "time_zones": [
+      "unknown"
+    ],
+    "first": "2025-01-03 00:00:00",
+    "last": "2025-01-03 00:00:00",
+    "definitions": [
+      {
+        "series_id": "283255ffd72f61d1ed4499a48ee45882c3f75bb9ffd40e432fc56df41a7ed2e8",
+        "provider_id": "fr_hubeau",
+        "station_id": "1011000101",
+        "product_id": "stage_daily_max",
+        "identity": {
+          "namespace": "fr_hubeau/daily/HIXnJ",
+          "published_id": null,
+          "description": null,
+          "origin": "mapping",
+          "evidence": [
+            "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition",
+            "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+            "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+          ]
+        },
+        "variant": null,
+        "facts": [
+          {
+            "facts_id": "e396dc1da4ea3e073cab016ecfddf753ae089bad8cacae0a06cf90f4663121ff",
+            "quantity": {
+              "value": "stage",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "source_unit": {
+              "value": "mm",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "normalized_unit": "mm",
+            "frequency": {
+              "value": "daily",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "statistic": {
+              "value": "max",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_openapi_v2.json: obs_elab grandeur_hydro_elab=HIXnJ definition",
+                "tests/test_data/fr_hubeau_hydrometrie.html: Unités des observations: mm pour les hauteurs, l/s pour les débits",
+                "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json: date_obs_elab date-only labels represented at midnight"
+              ]
+            },
+            "temporal_support": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "day_definition": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "timestamp_anchor": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "time_zone": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_reference": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_datum": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "clipping_axis": "calendar_date",
+            "label_time": "00:00"
+          }
+        ]
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+        "request_parameters": {
+          "code_entite": "1011000101",
+          "date_debut_obs_elab": "2025-01-01",
+          "date_fin_obs_elab": "2025-01-05",
+          "grandeur_hydro_elab": "HIXnJ",
+          "size": 20
+        },
+        "status_code": 200,
+        "retrieved_at": "2026-09-21 09:26:19.403984+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "1011000101",
+            "stage_daily_max"
+          ]
+        ],
+        "series_ids": [
+          "283255ffd72f61d1ed4499a48ee45882c3f75bb9ffd40e432fc56df41a7ed2e8"
+        ]
+      }
+    ],
+    "receipts": [
+      {
+        "path": "fr_hubeau-1011000101-stage-max-0.body",
+        "bytes": 2172,
+        "sha256": "257bfd9e9f8360fb6350d55382aeaf8f74335b5dabe30044324edeebee9c524e"
+      }
+    ]
+  },
+  {
+    "provider": "fr_hubeau",
+    "station": "01001336",
+    "quantity": "temperature",
+    "frequency": null,
+    "statistic": null,
+    "start": "2008-07-09",
+    "end": "2008-07-10",
+    "rows": 37,
+    "issues": [],
+    "units": [
+      "degC"
+    ],
+    "source_units": [
+      "°C"
+    ],
+    "time_zones": [
+      "unknown"
+    ],
+    "first": "2008-07-09 11:00:00",
+    "last": "2008-07-10 23:00:00",
+    "definitions": [
+      {
+        "series_id": "d8bf083d3e72cfdd71cbb9acf9b389ea1dcbd4042d8f2249132eee8a1bfe115c",
+        "provider_id": "fr_hubeau",
+        "station_id": "01001336",
+        "product_id": "water_temperature_reported",
+        "identity": {
+          "namespace": "fr_hubeau/temperature/resultat",
+          "published_id": null,
+          "description": null,
+          "origin": "mapping",
+          "evidence": [
+            "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: libelle_parametre=Température de l'Eau, symbole_unite=°C, code_unite=27",
+            "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: separate source date_mesure_temp/heure_mesure_temp without zone"
+          ]
+        },
+        "variant": null,
+        "facts": [
+          {
+            "facts_id": "55caba1e13fa5d6467d951178e8cf092b5ada0c2a5fb1f340d5f85a79c150aa1",
+            "quantity": {
+              "value": "temperature",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: libelle_parametre=Température de l'Eau, symbole_unite=°C, code_unite=27",
+                "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: separate source date_mesure_temp/heure_mesure_temp without zone"
+              ]
+            },
+            "source_unit": {
+              "value": "°C",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: libelle_parametre=Température de l'Eau, symbole_unite=°C, code_unite=27",
+                "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json: separate source date_mesure_temp/heure_mesure_temp without zone"
+              ]
+            },
+            "normalized_unit": "degC",
+            "frequency": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "statistic": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "temporal_support": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "day_definition": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "timestamp_anchor": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "time_zone": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_reference": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_datum": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "clipping_axis": "source_timestamp",
+            "label_time": null
+          }
+        ]
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique",
+        "request_parameters": {
+          "code_station": "01001336",
+          "date_debut_mesure": "2008-07-07",
+          "date_fin_mesure": "2008-07-12",
+          "size": 20
+        },
+        "status_code": 206,
+        "retrieved_at": "2026-09-21 09:26:20.097685+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "01001336",
+            "water_temperature_reported"
+          ]
+        ],
+        "series_ids": [
+          "d8bf083d3e72cfdd71cbb9acf9b389ea1dcbd4042d8f2249132eee8a1bfe115c"
+        ]
+      },
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique?code_station=01001336&date_debut_mesure=2008-07-07&date_fin_mesure=2008-07-12&page=2&size=20",
+        "request_parameters": {},
+        "status_code": 206,
+        "retrieved_at": "2026-09-21 09:26:21.098500+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "01001336",
+            "water_temperature_reported"
+          ]
+        ],
+        "series_ids": [
+          "d8bf083d3e72cfdd71cbb9acf9b389ea1dcbd4042d8f2249132eee8a1bfe115c"
+        ]
+      },
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique?code_station=01001336&date_debut_mesure=2008-07-07&date_fin_mesure=2008-07-12&page=3&size=20",
+        "request_parameters": {},
+        "status_code": 206,
+        "retrieved_at": "2026-09-21 09:26:22.098343+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "01001336",
+            "water_temperature_reported"
+          ]
+        ],
+        "series_ids": [
+          "d8bf083d3e72cfdd71cbb9acf9b389ea1dcbd4042d8f2249132eee8a1bfe115c"
+        ]
+      },
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique?code_station=01001336&date_debut_mesure=2008-07-07&date_fin_mesure=2008-07-12&page=4&size=20",
+        "request_parameters": {},
+        "status_code": 206,
+        "retrieved_at": "2026-09-21 09:26:23.116562+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "01001336",
+            "water_temperature_reported"
+          ]
+        ],
+        "series_ids": [
+          "d8bf083d3e72cfdd71cbb9acf9b389ea1dcbd4042d8f2249132eee8a1bfe115c"
+        ]
+      },
+      {
+        "url": "https://hubeau.eaufrance.fr/api/v1/temperature/chronique?code_station=01001336&date_debut_mesure=2008-07-07&date_fin_mesure=2008-07-12&page=5&size=20",
+        "request_parameters": {},
+        "status_code": 206,
+        "retrieved_at": "2026-09-21 09:27:25.188206+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "01001336",
+            "water_temperature_reported"
+          ]
+        ],
+        "series_ids": [
+          "d8bf083d3e72cfdd71cbb9acf9b389ea1dcbd4042d8f2249132eee8a1bfe115c"
+        ]
+      }
+    ],
+    "receipts": [
+      {
+        "path": "fr_hubeau-01001336-temperature-reported-0.body",
+        "bytes": 16971,
+        "sha256": "c69834780bbc1884cf00f1f6c852ce4fa8aa79c170b68ae030437b173cb3e026"
+      },
+      {
+        "path": "fr_hubeau-01001336-temperature-reported-1.body",
+        "bytes": 17117,
+        "sha256": "e9d7af2881f38ead64ab52a422960baf6f6e1b385e8f4e28e149deb0d8073520"
+      },
+      {
+        "path": "fr_hubeau-01001336-temperature-reported-2.body",
+        "bytes": 17117,
+        "sha256": "5d343da6b199fd9e648a58ecff40c4fbefe8c8fecb3b62661249bc661ec9d497"
+      },
+      {
+        "path": "fr_hubeau-01001336-temperature-reported-3.body",
+        "bytes": 17120,
+        "sha256": "bae890cb8c21d74075ea696deffa1c614cec0e20dc34a606fb9e842a4e8ebc5a"
+      },
+      {
+        "path": "fr_hubeau-01001336-temperature-reported-4.body",
+        "bytes": 4496,
+        "sha256": "88947019b795f416048c450d2115f61cc0033f91f1391cb25e3fda8bc3267b68"
+      }
+    ]
+  },
+  {
+    "provider": "fr_hydroportail",
+    "station": "1232000101",
+    "quantity": "discharge",
+    "frequency": null,
+    "statistic": "instantaneous",
+    "start": "2026-06-01",
+    "end": "2026-06-02",
+    "rows": 282,
+    "issues": [
+      {
+        "severity": "info",
+        "code": "provenance.license_not_established",
+        "message": "RivRetrieve has not yet established the license for provider fr_hydroportail.",
+        "details": {
+          "field": "license"
+        },
+        "provider_id": "fr_hydroportail"
+      },
+      {
+        "severity": "info",
+        "code": "provenance.citation_not_established",
+        "message": "RivRetrieve has not yet established the citation for provider fr_hydroportail.",
+        "details": {
+          "field": "citation"
+        },
+        "provider_id": "fr_hydroportail"
+      }
+    ],
+    "units": [
+      "m3/s"
+    ],
+    "source_units": [
+      "l"
+    ],
+    "time_zones": [
+      "+00:00"
+    ],
+    "first": "2026-06-01 00:00:00",
+    "last": "2026-06-02 18:00:00",
+    "definitions": [
+      {
+        "series_id": "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182",
+        "provider_id": "fr_hydroportail",
+        "station_id": "1232000101",
+        "product_id": "discharge_instantaneous",
+        "identity": {
+          "namespace": "fr_hydroportail/Q",
+          "published_id": "raw",
+          "description": null,
+          "origin": "mapping",
+          "evidence": [
+            "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+          ]
+        },
+        "variant": null,
+        "facts": [
+          {
+            "facts_id": "189298b4c6dec234370939b19f1cae44c49e9d2d0a33e8691100656efc1198e8",
+            "quantity": {
+              "value": "discharge",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "source_unit": {
+              "value": "l",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z",
+                "https://hydro.eaufrance.fr/build/4210.e6896d9b.js sha256:72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6 HydroPortail Q unit selector: code=l, label=unit.q.l",
+                "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js sha256:ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823 HydroPortail common.unit.q.l=l/s"
+              ]
+            },
+            "normalized_unit": "l/s",
+            "source_unit_definition": {
+              "provider_id": "fr_hydroportail",
+              "namespace": "fr_hydroportail/Q",
+              "code": "l",
+              "unit": "l/s",
+              "evidence": [
+                "https://hydro.eaufrance.fr/build/4210.e6896d9b.js sha256:72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6 HydroPortail Q unit selector: code=l, label=unit.q.l",
+                "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js sha256:ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823 HydroPortail common.unit.q.l=l/s"
+              ]
+            },
+            "frequency": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "statistic": {
+              "value": "instantaneous",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "temporal_support": {
+              "value": "instantaneous",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "day_definition": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "timestamp_anchor": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "time_zone": {
+              "value": "+00:00",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_station_Q_padded.recording.json: series.title=Débit instantané; station series.metric=Q, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "vertical_reference": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_datum": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "clipping_axis": "source_timestamp",
+            "label_time": null
+          }
+        ]
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://hydro.eaufrance.fr/stationhydro/ajax/1232000101/series",
+        "request_parameters": {
+          "hydro_series[startAt]": "30/05/2026",
+          "hydro_series[endAt]": "04/06/2026",
+          "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
+          "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "Q",
+          "hydro_series[statusData]": "raw"
+        },
+        "status_code": 200,
+        "retrieved_at": "2026-09-21 09:27:27.166692+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "1232000101",
+            "discharge_instantaneous"
+          ]
+        ],
+        "series_ids": [
+          "d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182"
+        ]
+      }
+    ],
+    "receipts": [
+      {
+        "path": "fr_hydroportail-1232000101-discharge-instantaneous-0.body",
+        "bytes": 182333,
+        "sha256": "aa99bc0a91dd45c928ce64d6fd68dff875abcb1e47cf348b11354980413e3f8f"
+      }
+    ]
+  },
+  {
+    "provider": "fr_hydroportail",
+    "station": "Y251002001",
+    "quantity": "stage",
+    "frequency": null,
+    "statistic": "instantaneous",
+    "start": "2020-01-01",
+    "end": "2020-01-02",
+    "rows": 576,
+    "issues": [
+      {
+        "severity": "info",
+        "code": "provenance.license_not_established",
+        "message": "RivRetrieve has not yet established the license for provider fr_hydroportail.",
+        "details": {
+          "field": "license"
+        },
+        "provider_id": "fr_hydroportail"
+      },
+      {
+        "severity": "info",
+        "code": "provenance.citation_not_established",
+        "message": "RivRetrieve has not yet established the citation for provider fr_hydroportail.",
+        "details": {
+          "field": "citation"
+        },
+        "provider_id": "fr_hydroportail"
+      }
+    ],
+    "units": [
+      "m"
+    ],
+    "source_units": [
+      "mm"
+    ],
+    "time_zones": [
+      "+00:00"
+    ],
+    "first": "2020-01-01 00:00:00",
+    "last": "2020-01-02 23:55:00",
+    "definitions": [
+      {
+        "series_id": "78575f2a02a05120898c1e2706bbedce456cd7903ff754c3249ece02e7fad167",
+        "provider_id": "fr_hydroportail",
+        "station_id": "Y251002001",
+        "product_id": "stage_instantaneous",
+        "identity": {
+          "namespace": "fr_hydroportail/H",
+          "published_id": "raw",
+          "description": null,
+          "origin": "mapping",
+          "evidence": [
+            "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z"
+          ]
+        },
+        "variant": null,
+        "facts": [
+          {
+            "facts_id": "4e51710b2577f45f75c6bc25e05b8ba066f63719bfa63c310ecea41018ef353d",
+            "quantity": {
+              "value": "stage",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "source_unit": {
+              "value": "mm",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "normalized_unit": "mm",
+            "frequency": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "statistic": {
+              "value": "instantaneous",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "temporal_support": {
+              "value": "instantaneous",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "day_definition": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "timestamp_anchor": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "time_zone": {
+              "value": "+00:00",
+              "state": "known",
+              "evidence": [
+                "tests/test_data/fr_hydroportail_H_padded.recording.json: series.title=Hauteur instantanée; station series.metric=H, unit=mm, statuses=raw, timezone=UTC; source t labels end in Z"
+              ]
+            },
+            "vertical_reference": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "vertical_datum": {
+              "value": null,
+              "state": "not_established",
+              "evidence": []
+            },
+            "clipping_axis": "source_timestamp",
+            "label_time": null
+          }
+        ]
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://hydro.eaufrance.fr/stationhydro/ajax/Y251002001/series",
+        "request_parameters": {
+          "hydro_series[startAt]": "30/12/2019",
+          "hydro_series[endAt]": "04/01/2020",
+          "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
+          "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "H",
+          "hydro_series[statusData]": "raw"
+        },
+        "status_code": 200,
+        "retrieved_at": "2026-09-21 09:27:28.150085+00:00",
+        "content_type": "application/json",
+        "source_path": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "query": {
+          "status": "unknown",
+          "reason": "unknown"
+        },
+        "station_products": [
+          [
+            "Y251002001",
+            "stage_instantaneous"
+          ]
+        ],
+        "series_ids": [
+          "78575f2a02a05120898c1e2706bbedce456cd7903ff754c3249ece02e7fad167"
+        ]
+      }
+    ],
+    "receipts": [
+      {
+        "path": "fr_hydroportail-Y251002001-stage-instantaneous-0.body",
+        "bytes": 512256,
+        "sha256": "ced762c5fd6f096c0e9402a4d4b4ed3d7d97248573fda28e2da535a4cd26962a"
+      }
+    ]
+  }
+]

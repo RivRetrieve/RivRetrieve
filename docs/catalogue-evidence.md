@@ -6,9 +6,8 @@ Profile URI: `https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogu
 
 `describe(provider)` reads the packaged Croissant 1.0 JSON-LD offline. Its
 `schemaVersion` identifies this profile. `version` and `datePublished` still name
-the source catalogue date, when established. The descriptor does not expand the
-national acquisition graph. This is an explicit JSON/RDF representation migration
-from the former inline graph, not graph-isomorphic compression.
+the source catalogue date, when established. The descriptor describes relational files without expanding the national acquisition
+graph. Individual fact lineage can be resolved offline when needed.
 
 ### Packaged files and trust boundary
 
@@ -100,19 +99,17 @@ They are not duplicated in the evidence tables or inferred from acquisition text
 
 ### Offline Python and Polars inspection
 
-The nested Python metadata value is now `CatalogueEvidence`, not the former
-`AcquisitionProvenance` shape. Access source words through
-`evidence.header.source_records`; inspect national records through Polars relations.
-There are no legacy `.fact_bindings` or `.source_records[*].acquisitions` aliases.
+Selections carry catalogue evidence in `acquisition_provenance`, in selected-provider
+order. Each value is a `CatalogueEvidence`. Access source words through
+`evidence.header.source_records`; inspect acquisition records through Polars relations.
 
 ```python
 import polars as pl
 import rivretrieve as rr
 
-selection = rr.find(provider="ba_fhmzbih", station="2101-B",
-                    product="water_temperature_reported")
+selection = rr.find(provider="ba_fhmzbih", station="2101-B", quantity="temperature")
 evidence = selection.acquisition_provenance[0]
-row = rr.as_frame(selection).row(0, named=True)
+row = rr.series(selection).row(0, named=True)
 fact = evidence.facts.filter(
     (pl.col("station_id") == row["station_id"])
     & (pl.col("product_id") == row["product_id"])
@@ -121,26 +118,32 @@ fact = evidence.facts.filter(
 producer = fact.join(evidence.binding_facts, on="fact_id").join(
     evidence.bindings, on="binding_id"
 )
-direct = producer.join(evidence.acquisitions, on="acquisition_key")
-# For transformed producers, join binding_id to external_inputs and then fact_id
-# to facts. Repeat only those exact dependencies. source_ordinal identifies the
-# issuing source, not an inferred original measurement producer.
+# This availability fact is transformed from an acquired workbook fact.
+inputs = producer.select("binding_id").join(evidence.external_inputs, on="binding_id")
+input_facts = inputs.select("fact_id").join(evidence.facts, on="fact_id")
+input_producers = input_facts.join(evidence.binding_facts, on="fact_id").join(
+    evidence.bindings, on="binding_id"
+)
+direct = input_producers.join(evidence.acquisitions, on="acquisition_key")
+# For other transformed facts, follow their exact dependencies in the same way.
+# source_ordinal identifies the issuing source, not an inferred measurement producer.
 ```
 
-The maintained internal pure resolver supplies standard JSON-LD for an explicit
-selection. It takes validated evidence, exact fact names and, optionally, the
-selected canonical pair. It validates provider/station/product identity against the
-selected availability locator. The supplied status/reason are reported verbatim;
-the resolver does not independently certify a caller-authored row's status.
+For catalogue-maintenance work, the internal pure resolver supplies standard
+JSON-LD for exact fact names. It takes validated evidence and performs no network
+requests. This internal interface is not a public observation API. The optional
+`CanonicalPair` input requires a canonical availability row, not a series-inspection
+row: `rr.series` describes source identities and does not certify availability.
+Install `rdflib` separately to run the RDF consumer portion below, for example
+with `uv run --with rdflib python your_script.py`.
 
 ```python
 from rivretrieve._internal.catalogues.evidence_graph import (
-    CanonicalPair, FactSelection, resolve_evidence,
+    FactSelection, resolve_evidence,
 )
 
-pair = CanonicalPair(**{name: row[name] for name in CanonicalPair.model_fields})
 graph_document = resolve_evidence(
-    evidence, FactSelection(names=(fact["name"].item(),)), pair
+    evidence, FactSelection(names=(fact["name"].item(),))
 )
 # Optional consumer dependency, not imported by RivRetrieve:
 import json
@@ -164,10 +167,6 @@ and `model_dump_json()` carry the header plus five column-oriented dictionaries.
 The strict JSON parser accepts that normalized shape. A JSON value round-trip is
 not a certificate of possession of the original digest-bound Parquet bytes.
 Discovery, fetch and describe do not call full serialization or expand this graph.
-
-Strict v2 files remain a read/build transition input. They normalize once to the
-same v3 Python carrier. New builds publish v3. No runtime v2 projection, new public
-retrieval API, provider role or network resolver is introduced.
 
 
 ### Unacquired station-product facts

@@ -21,7 +21,9 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.jp_mlit.config import JpMlitSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _BASE = "http://www1.river.go.jp"
@@ -94,26 +96,32 @@ def _page(content: bytes, kind: int, station_id: str) -> tuple[str, ...]:
     try:
         text = content.decode("euc-jp", errors="strict")
     except UnicodeDecodeError as error:
-        raise FatalContractError("jp_mlit HTML is not strict EUC-JP") from error
+        raise UnsupportedSourceStructureError("jp_mlit HTML is not strict EUC-JP") from error
     if "charset=EUC-JP" not in text:
-        raise FatalContractError("jp_mlit HTML does not declare EUC-JP")
+        raise UnsupportedSourceStructureError("jp_mlit HTML does not declare EUC-JP")
     parser = _Page()
     parser.feed(text)
     if station_id not in text:
-        raise FatalContractError("jp_mlit HTML station identity differs from request")
+        raise UnsupportedSourceStructureError("jp_mlit HTML station identity differs from request")
     if "".join(parser.title_parts).strip() != _TITLES[kind]:
-        raise FatalContractError("jp_mlit HTML title differs from requested KIND")
+        raise UnsupportedSourceStructureError("jp_mlit HTML title differs from requested KIND")
+    if parser.unit_cells and parser.unit_cells != [_UNIT_BY_KIND[kind]]:
+        raise UnsupportedSourceStructureError(
+            "jp_mlit HTML unit differs from the exact publisher unit for requested KIND"
+        )
     if not parser.links:
         if any(marker in text for marker in _NO_DATA_MARKERS):
             return ()
-        raise FatalContractError("jp_mlit HTML has no uniquely established data or no-data result")
+        raise UnsupportedSourceStructureError("jp_mlit HTML has no uniquely established data or no-data result")
     if parser.unit_cells != [_UNIT_BY_KIND[kind]]:
-        raise FatalContractError("jp_mlit HTML unit differs from the exact publisher unit for requested KIND")
+        raise UnsupportedSourceStructureError(
+            "jp_mlit HTML unit differs from the exact publisher unit for requested KIND"
+        )
     if len(parser.links) != 1:
-        raise FatalContractError("jp_mlit HTML must publish exactly one DAT link")
+        raise UnsupportedSourceStructureError("jp_mlit HTML must publish exactly one DAT link")
     path = parser.links[0]
     if re.fullmatch(r"/dat/dload/download/[A-Za-z0-9._-]+\.dat", path) is None:
-        raise FatalContractError("jp_mlit HTML DAT link is off-host or malformed")
+        raise UnsupportedSourceStructureError("jp_mlit HTML DAT link is off-host or malformed")
     return (f"{_BASE}{path}",)
 
 
@@ -136,6 +144,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     payloads: list[Payload] = []
     issues: list[Issue] = []
@@ -168,9 +179,16 @@ def fetch(
                         html.content,
                         _origin(html),
                         html.prerequisite_calls,
+                        scope=scope,
+                        known_series=known_series,
                     )
                 )
-                links = _page(html.content, coordinates.kind, station_id)
+                try:
+                    links = _page(html.content, coordinates.kind, station_id)
+                except UnsupportedSourceStructureError:
+                    # Parse retains this exact HTML and identifies its unsupported series.
+                    # Do not follow unvalidated links or discard independent requests.
+                    continue
                 if not links:
                     issues.append(
                         Issue(
@@ -196,6 +214,8 @@ def fetch(
                         dat.content,
                         _origin(dat),
                         dat.prerequisite_calls,
+                        scope=scope,
+                        known_series=known_series,
                     )
                 )
     return WithIssues(tuple(payloads), tuple(issues))

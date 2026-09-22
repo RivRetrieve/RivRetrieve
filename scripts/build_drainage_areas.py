@@ -27,6 +27,7 @@ AREA_FIELDS: dict[str, tuple[tuple[str, str | None], ...]] = {
     "ch_foen": (),
     "cz_chmi": (("PLO_STA", "km²"),),
     "fr_hubeau": (("superficie_topo", None), ("superficie_reelle", None)),
+    "fr_hydroportail": (),
     "jp_mlit": (("流域面積", None),),
     "lt_lhmt": (),
     "no_nve": (("drainageBasinArea", "km2"), ("drainageBasinAreaNorway", "km2")),

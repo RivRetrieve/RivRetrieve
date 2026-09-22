@@ -74,7 +74,7 @@ def document():
 def native():
     import pandas as pd
 
-    return pd.read_parquet(ROOT / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
+    return pd.read_parquet(ROOT / "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 
 
 def test_public_consistency_is_not_body_certification(verifier, document, native):

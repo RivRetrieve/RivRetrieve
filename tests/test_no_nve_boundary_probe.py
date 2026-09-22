@@ -7,7 +7,6 @@ as the source-recording contract requires. They are pasted verbatim.
 
 from datetime import datetime
 from pathlib import Path
-from types import MappingProxyType
 
 import polars as pl
 
@@ -19,13 +18,20 @@ from rivretrieve._internal.boundary_probes import (
     WallClockExpectation,
     run_manifest_boundary_probes,
 )
-from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
+from rivretrieve._internal.engine import (
+    Payload,
+    RenderedWindow,
+    SourceCallOrigin,
+    UnknownOriginFact,
+    WindowEndpoint,
+    _make_fetch_window,
+)
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates, config
-from rivretrieve._internal.providers.no_nve.fetch import fetch
 from rivretrieve._internal.providers.no_nve.parse import parse
 from rivretrieve._internal.providers.registration import load_manifest
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.transport import TransportRequest
 
 _PROVIDER = ProviderId("no_nve")
 _STATION = "1.200.0"
@@ -61,15 +67,36 @@ def _run(product_id: ProductId, replay: ReplayTransport) -> pl.DataFrame:
         WindowEndpoint.from_datetime(datetime(2025, 7, 8)),
         WindowEndpoint.from_datetime(datetime(2025, 7, 14)),
     )
-    (payload,) = fetch(
-        (_STATION,),
-        (product_id,),
-        MappingProxyType({product_id: (_WINDOW,)}),
+    # Replay the exact historical omitted-version request, without claiming it is an all-version call.
+    recording = read_recording(recording_path(product_id))
+    request = recording.request
+    response = replay.send(
+        TransportRequest(
+            request.method,
+            request.url,
+            request.parameters,
+            {name: value for name, value in request.ordinary_headers.items() if name.lower() != "user-agent"},
+            request.body,
+        )
+    )
+    unknown = UnknownOriginFact()
+    payload = Payload(
+        config().products[product_id].coordinates,
+        ((_STATION, product_id),),
         window,
-        config(),
-        replay,
-    ).value
-    return parse(payload, config()).value
+        response.content,
+        SourceCallOrigin(
+            response.url,
+            response.request_parameters,
+            response.status_code,
+            response.retrieved_at,
+            response.content_type,
+            unknown,
+            unknown,
+        ),
+        response.prerequisite_calls,
+    )
+    return parse(payload, config()).rows
 
 
 def _probe(product_id: ProductId) -> LiveBoundaryProbe:

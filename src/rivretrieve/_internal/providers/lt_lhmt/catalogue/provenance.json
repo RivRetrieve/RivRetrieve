@@ -16,7 +16,7 @@
       "evidence": [
         {
           "evidence_id": "lt_lhmt_terms",
-          "description": "Meteo LT API data-use conditions",
+          "description": "Meteo LT API documentation and data-use conditions: historical observations waterLevel (cm) and waterDischarge (m3/s), Vidurkis per parą; observationDateUtc (UTC laiko juosta); coordinates (WGS 84)",
           "recording": {
             "recording_id": "lt_lhmt_terms",
             "repository_path": "tests/test_data/lt_lhmt_terms_licence.html",
@@ -47,7 +47,7 @@
   ],
   "descriptions": [
     "Complete 97-station Meteo LT hydro-stations response",
-    "Meteo LT API data-use conditions HTML recording",
+    "Meteo LT API documentation and data-use conditions HTML recording",
     "Exact monthly Meteo LT station observation response"
   ],
   "transformations": [
@@ -72,9 +72,9 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "df22db07a247eb47d42461ddccb7a18e07ff762bee7a1f1ba33e1b80303aa88c",
-      "byte_count": 2690,
-      "row_count": 49,
+      "sha256": "e5e79eedf3d83b8ae2b34a9a44db2df6113038ef1bf82d4f313fe8b67518a2e0",
+      "byte_count": 2722,
+      "row_count": 51,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
@@ -86,23 +86,23 @@
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "a59dc09f02e842032833950cf216429108503b985f5b3e3b2415bd8e0dde8954",
-      "byte_count": 2128,
-      "row_count": 6,
+      "sha256": "d8fc69fe5e292ebd0db1cfc943b128d08f974f7a70c5bfb7d59e9baf7d2d3d90",
+      "byte_count": 2169,
+      "row_count": 7,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "7b2a4cbb4d38acc8fcd4979c0507c9682588a627ad2a0542c23b44f4ec21517b",
-      "byte_count": 1372,
-      "row_count": 49,
+      "sha256": "9f4186e67ed8a95f7a8f7512a75bd72065b132e9b8e42c53085a038aa767f56c",
+      "byte_count": 1379,
+      "row_count": 51,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "b75c8fc689fab0c48e0d377bf4e04c9a7c536e0e96d9d6e7679b6a09bb535ddf",
-      "byte_count": 1561,
-      "row_count": 14,
+      "sha256": "b043b3f9e13205f0b31d67381ccd162eb6f239c51e14c1e6d7be2669df28f66f",
+      "byte_count": 1588,
+      "row_count": 18,
       "schema_version": 3
     }
   }

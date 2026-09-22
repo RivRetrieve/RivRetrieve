@@ -114,34 +114,34 @@ class ProductDefinition:
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
-        product_id="discharge_daily_mean",
+        product_id="discharge_daily",
         observed_property="discharge",
         frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m3/s",
-        native_column="Flow [m^3/s]",
+        native_column="COPRZP",
     ),
     ProductDefinition(
-        product_id="stage_daily_mean",
+        product_id="stage_daily",
         observed_property="stage",
         frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="m",
-        native_column="Water level [cm]",
+        native_column="COSTAN",
     ),
     ProductDefinition(
-        product_id="water_temperature_daily_mean",
+        product_id="water_temperature_daily",
         observed_property="water_temperature",
         frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
+        statistic="unknown",
+        period_type="unknown",
+        period_anchor="unknown",
         canonical_unit="degC",
-        native_column="Water temperature [deg. C]",
+        native_column="COPTMP",
     ),
 )
 
@@ -436,8 +436,8 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: the source publishes all-station yearly ZIP files; RivRetrieve's "
-            "catalogue-only provider exposes neither observation retrieval nor cache controls"
+            "true: explicit download compiles the publisher's monthly or annual ZIP archives "
+            "into a local native observation store; retrieval reads that store without network access"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
@@ -448,6 +448,8 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
 def write_catalogue(catalogue: GeneratedPlImgwCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.pl_imgw.catalogue_series import describe_catalogue
+    from rivretrieve._internal.providers.pl_imgw.config import config as source_config
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
 
     output_path = Path(out_dir)
@@ -462,6 +464,8 @@ def write_catalogue(catalogue: GeneratedPlImgwCatalogue, out_dir: Path | str) ->
         catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config,
+        source_describer=describe_catalogue,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

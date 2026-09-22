@@ -1,0 +1,29 @@
+{
+  "acquired_at": "2026-09-21T10:58:20.154992+00:00",
+  "status_code": 200,
+  "url": "https://hydro.eaufrance.fr/stationhydro/ajax/1232000101/series?hydro_series%5BstartAt%5D=30%2F05%2F2026&hydro_series%5BendAt%5D=04%2F06%2F2026&hydro_series%5BvariableType%5D=simple_and_interpolated_and_hourly_variable&hydro_series%5BsimpleAndInterpolatedAndHourlyVariable%5D=H&hydro_series%5BstatusData%5D=validated",
+  "response_headers": {
+    "Server": "nginx",
+    "Date": "Mon, 21 Sep 2026 10:58:20 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "396",
+    "Connection": "keep-alive",
+    "Cache-Control": "max-age=0, must-revalidate, private, s-maxage=0",
+    "Vary": "Accept-Encoding,Accept-Language",
+    "Expires": "Mon, 21 Sep 2026 10:58:20 GMT",
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "X-XSS-Protection": "1; mode=block",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "ETag": "\"f7fba5626b05777457846e0ff0a02407-gzip\"",
+    "Content-Encoding": "gzip",
+    "X-Proto": "http",
+    "Age": "0",
+    "X-Cache": "MISS",
+    "Accept-Ranges": "bytes"
+  },
+  "request_sha256": "50027d8fb1ded48f2d5d57923de39bde6fad5aa1442f81d96f81c1fd7dc6a274",
+  "response_sha256": "6af8bfe93d16f646f324b1051781b0d3396b358dfd0d0542bae5a7f295d619a2",
+  "body_semantics": "requests decoded response entity bytes; not TLS or compressed wire bytes"
+}

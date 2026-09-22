@@ -21,6 +21,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.lt_lhmt.config import LtLhmtSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 
@@ -39,6 +40,9 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     for product in products:
         _coordinates(product, config)
@@ -60,6 +64,8 @@ def fetch(
                     content=response.content,
                     origin=_origin(response),
                     prerequisite_calls=response.prerequisite_calls,
+                    scope=scope,
+                    known_series=known_series,
                 )
             )
     return WithIssues(value=tuple(payloads), issues=())

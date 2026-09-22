@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema, validate_catalogue
 from rivretrieve._internal.coverage import CoverageInterval
-from rivretrieve._internal.engine import SourceCallOrigin, WindowEndpoint
+from rivretrieve._internal.engine import SourceCallOrigin, WindowEndpoint, ZoneValue
 from rivretrieve._internal.issues import (
     FatalContractError,
     InvalidObservationRequestError,
@@ -25,6 +25,13 @@ from rivretrieve._internal.issues import (
     ObservationDataSchemaError,
 )
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.source_series import (
+    InventorySnapshot,
+    RetrievalOutcome,
+    SeriesScope,
+    SourceSeries,
+    admission,
+)
 
 if TYPE_CHECKING:
     from rivretrieve._internal.store.reader import ExecutedStoreQuery
@@ -37,6 +44,11 @@ ObservationDataSchema = CatalogueSchema(
         CatalogueColumn("time_zone", pl.Utf8),
         CatalogueColumn("station_id", pl.Utf8),
         CatalogueColumn("product_id", pl.Utf8),
+        CatalogueColumn("series_id", pl.Utf8),
+        CatalogueColumn("facts_id", pl.Utf8),
+        CatalogueColumn("quantity", pl.Utf8),
+        CatalogueColumn("source_unit", pl.Utf8),
+        CatalogueColumn("unit", pl.Utf8),
         CatalogueColumn("value", pl.Float64, nullable=True),
     ),
 )
@@ -192,7 +204,7 @@ class StoreExcerptReceipt(ReceiptEntry):
     executed_query : ExecutedStoreQuery
         Product, year, station and closed wall-clock predicates used by the scan.
     format_version : int
-        Store layout revision, 2 for compiled or 4 for accumulated stores.
+        Store layout revision, 5 for compiled or 7 for accumulated stores.
     source_vintage : datetime.date or None
         Bulk release date. None for an accumulated store.
     """
@@ -212,7 +224,7 @@ class StoreExcerptReceipt(ReceiptEntry):
             raise TypeError("store excerpt executed query must be ExecutedStoreQuery")
         if type(self.format_version) is not int:
             raise TypeError("store excerpt format version must be an integer")
-        if not isinstance(self.source_vintage, date) and not (self.format_version == 4 and self.source_vintage is None):
+        if self.source_vintage is not None and not isinstance(self.source_vintage, date):
             raise TypeError("store excerpt source vintage must be a date")
 
 
@@ -237,22 +249,14 @@ class Receipts:
 
 
 class ObservationResult(BaseModel):
-    """Observations and their traceability for one provider.
+    """Harmonised observations with source identities, physical facts and retrieval outcomes.
 
-    Attributes
-    ----------
-    data : polars.DataFrame
-        Columns in order: time (naive Datetime), time_zone (String), station_id
-        (String), product_id (String), value (nullable Float64). Time is the source
-        wall-clock label paired with its published zone or "unknown". Values use
-        canonical units: discharge in m3/s, stage in m and temperature in degC.
-        A null value differs from an absent row. Provider identity is in provenance.
-    provenance : ObservationProvenance
-        Request, source and catalogue evidence.
-    issues : tuple[Issue, ...]
-        Retained findings, including source failures and request information.
-    receipts : Receipts
-        Optional parse inputs and store excerpts, empty unless requested.
+    ``data`` preserves source wall-clock labels, zones, station/product routing,
+    series and fact-segment identities, source-unit vocabulary, physical quantity,
+    harmonised unit and nullable values. Definitions, scoped inventory snapshots
+    and outcomes remain inspectable even when a series has no observation rows.
+    ``scope`` is the original request; ``view_scope`` records explicit post-fetch
+    narrowing without pretending another source request occurred.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -261,6 +265,59 @@ class ObservationResult(BaseModel):
     provenance: ObservationProvenance
     issues: tuple[Issue, ...] = ()
     receipts: Receipts
+    source_series: tuple[SourceSeries, ...] = ()
+    inventories: tuple[InventorySnapshot, ...] = ()
+    outcomes: tuple[RetrievalOutcome, ...] = ()
+    scope: SeriesScope = SeriesScope()
+    view_scope: SeriesScope | None = None
+
+    @model_validator(mode="after")
+    def _validate_series_context(self) -> Self:
+        definitions = {item.series_id: item for item in self.source_series}
+        if len(definitions) != len(self.source_series):
+            raise ObservationDataSchemaError("Result contains duplicate source-series identities")
+        if self.receipts.provider_id != self.provenance.provider_id:
+            raise ObservationDataSchemaError("Receipt provider contradicts result provenance")
+        if any(item.provider_id != self.provenance.provider_id for item in self.source_series):
+            raise ObservationDataSchemaError("Result contains another provider's source-series definition")
+        effective_scope = self.view_scope or self.scope
+        for row in self.data.iter_rows(named=True):
+            definition = definitions.get(row["series_id"])
+            if definition is None:
+                raise ObservationDataSchemaError("Observation references an unknown source-series identity")
+            facts = next((item for item in definition.facts if item.facts_id == row["facts_id"]), None)
+            if facts is None:
+                raise ObservationDataSchemaError("Observation references unknown physical facts")
+            decision = admission(facts)
+            ZoneValue(row["time_zone"])
+            if not effective_scope.matches(definition) or not effective_scope.matches_facts(facts):
+                raise ObservationDataSchemaError("Observation lies outside its retained physical and identity scope")
+            if (
+                definition.provider_id != self.provenance.provider_id
+                or definition.station_id != row["station_id"]
+                or definition.product_id != row["product_id"]
+                or decision.status != "supported"
+                or facts.quantity.value != row["quantity"]
+                or facts.source_unit.value != row["source_unit"]
+                or decision.target_unit != row["unit"]
+            ):
+                raise ObservationDataSchemaError("Observation contradicts its admitted source-series facts")
+        for outcome in self.outcomes:
+            if outcome.series_id is None:
+                continue
+            definition = definitions.get(outcome.series_id)
+            if definition is None:
+                raise ObservationDataSchemaError("Retrieval outcome references an unknown source series")
+            if definition.station_id != outcome.station_id or definition.product_id != outcome.product_id:
+                raise ObservationDataSchemaError("Retrieval outcome contradicts its source-series coordinates")
+            facts_by_id = {item.facts_id: item for item in definition.facts}
+            if any(identifier not in facts_by_id for identifier in outcome.facts_ids):
+                raise ObservationDataSchemaError("Retrieval outcome references unknown physical facts")
+            if outcome.status.value in ("success", "empty") and any(
+                admission(facts_by_id[identifier]).status != "supported" for identifier in outcome.facts_ids
+            ):
+                raise ObservationDataSchemaError("Successful retrieval outcome requires admitted physical facts")
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -271,31 +328,15 @@ class ObservationResult(BaseModel):
         return values
 
     def to_polars(self) -> pl.DataFrame:
-        """Return the result's observation frame without copying.
+        """Return observation rows with identity and physical-unit context.
 
-        Returns
-        -------
-        polars.DataFrame
-            The same frame as data, with time, time_zone, station_id, product_id
-            and value. Provenance, issues and receipts stay on the result.
+        Use ``to_bundle`` to retain inventory, outcomes, provenance and receipts
+        through a durable export. These cannot be encoded by absent observation rows.
         """
         return self.data
 
     def to_pandas(self) -> Any:
-        """Convert the observation frame to a pandas DataFrame.
-
-        Returns
-        -------
-        pandas.DataFrame
-            The five observation columns. Conversion follows Polars to_pandas
-            defaults, including pandas representation of nulls. Provenance, issues
-            and receipts stay on the result.
-
-        Raises
-        ------
-        ImportError
-            If a dependency required by Polars to_pandas is unavailable.
-        """
+        """Convert identity-bearing observation rows using Polars' Pandas conversion."""
         return self.data.to_pandas()
 
 

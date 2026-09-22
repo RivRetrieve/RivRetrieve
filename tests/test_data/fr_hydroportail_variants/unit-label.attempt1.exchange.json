@@ -1,0 +1,27 @@
+{
+  "acquired_at": "2026-09-21T10:58:43.850142+00:00",
+  "status_code": 200,
+  "url": "https://hydro.eaufrance.fr/build/5621.4ab47ec9.js",
+  "response_headers": {
+    "Server": "nginx",
+    "Date": "Mon, 21 Sep 2026 10:58:43 GMT",
+    "Content-Type": "text/javascript",
+    "Content-Length": "32555",
+    "Connection": "keep-alive",
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "X-XSS-Protection": "1; mode=block",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Last-Modified": "Mon, 27 Apr 2026 14:58:43 GMT",
+    "ETag": "\"7f2b-6507259c76ec0\"",
+    "Accept-Ranges": "bytes",
+    "X-Proto": "https",
+    "Cache-Control": "max-age=3600",
+    "Age": "0",
+    "X-Cache": "MISS"
+  },
+  "request_sha256": "b926b17e55a26cb4802c0eab88f9b976b3fbf1665823eb15b88da95d6e73a251",
+  "response_sha256": "ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823",
+  "body_semantics": "requests decoded response entity bytes; not TLS or compressed wire bytes"
+}

@@ -11,6 +11,7 @@ import polars.testing as pl_testing
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     CanonicalRowsSchema,
+    Daily,
     FetchWindow,
     Instant,
     ObservationRequest,
@@ -34,8 +35,23 @@ from rivretrieve._internal.engine import (
     WithIssues,
     ZoneValue,
 )
+from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.source_series import (
+    ClippingAxis,
+    InventoryCompleteness,
+    InventorySnapshot,
+    OutcomeStatus,
+    ParsedSeries,
+    PhysicalFacts,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+    known,
+)
 from rivretrieve._internal.transport import (
     HttpMethod,
     Transport,
@@ -44,6 +60,65 @@ from rivretrieve._internal.transport import (
     TransportRequest,
     TransportResponse,
 )
+
+
+def _parsed(rows: Rows, payload: Payload, config: ProviderConfig, issues: tuple[Issue, ...] = ()) -> ParsedSeries:
+    """A response-owned concrete definition and outcome for each test payload coordinate."""
+    definitions = []
+    outcomes = []
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    for station, product_id in payload.station_products:
+        product = config.products[product_id]
+        key = f"{station}:{product_id}"
+        daily = isinstance(product.semantics, Daily)
+        fact = PhysicalFacts(
+            facts_id=f"{key}:facts",
+            quantity=known("stage", "test source definition"),
+            source_unit=known(product.unit.value, "test source definition"),
+            normalized_unit=product.unit.value,
+            frequency=known("daily" if daily else "instantaneous", "test source definition"),
+            clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
+            label_time=product.semantics.label_time.value if daily else None,
+        )
+        definitions.append(
+            SourceSeries(
+                series_id=key,
+                provider_id="failure_probe",
+                station_id=station,
+                product_id=str(product_id),
+                identity=SourceIdentity(
+                    namespace="test-source", published_id=key, origin="response", evidence=("test payload",)
+                ),
+                facts=(fact,),
+            )
+        )
+        outcomes.append(
+            RetrievalOutcome(
+                outcome_id=f"{key}:outcome",
+                series_id=key,
+                station_id=station,
+                product_id=str(product_id),
+                window=window,
+                status=OutcomeStatus.EMPTY if rows.is_empty() else OutcomeStatus.SUCCESS,
+                facts_ids=(fact.facts_id,),
+            )
+        )
+    scope = payload.scope or SeriesScope(provider_ids=("failure_probe",))
+    inventory = InventorySnapshot(
+        snapshot_id="inventory:" + ":".join(item.series_id for item in definitions),
+        scope=scope,
+        members=tuple(item.series_id for item in definitions),
+        completeness=InventoryCompleteness.COMPLETE,
+        access="test source",
+        origin="response",
+        window=window,
+        evidence=("test response inventory",),
+    )
+    return ParsedSeries(rows, tuple(definitions), (inventory,), tuple(outcomes), issues)
+
 
 _PROVIDER = ProviderId("failure_probe")
 _PRODUCT = ProductId("level")
@@ -75,6 +150,9 @@ class _TransportDrivenStages:
         fetch_window: FetchWindow,
         config: ProviderConfig,
         transport: Transport,
+        *,
+        scope: SeriesScope,
+        known_series: tuple[SourceSeries, ...],
     ) -> WithIssues[tuple[Payload, ...]]:
         assert len(stations) == len(products) == 1
         station_id = stations[0]
@@ -104,10 +182,10 @@ class _TransportDrivenStages:
         )
 
     @staticmethod
-    def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+    def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         assert config is _CONFIG
         station_id = payload.content.decode()
-        return WithIssues(
+        return _parsed(
             pl.DataFrame(
                 {
                     "station_id": [station_id],
@@ -115,9 +193,14 @@ class _TransportDrivenStages:
                     "time": [datetime(2026, 1, 1, 12)],
                     "value": [float(station_id.removeprefix("station-"))],
                     "time_zone": ["+00:00"],
+                    "series_id": [f"{station_id}:level"],
+                    "facts_id": [f"{station_id}:level:facts"],
+                    "source_unit": ["m"],
                 },
                 schema=RowsSchema.polars_schema,
-            )
+            ),
+            payload,
+            config,
         )
 
 
@@ -181,6 +264,11 @@ def test_one_source_failure_does_not_discard_independent_series() -> None:
             "station_id": ["station-1", "station-2", "station-4"],
             "product_id": ["level"] * 3,
             "value": [1.0, 2.0, 4.0],
+            "series_id": ["station-1:level", "station-2:level", "station-4:level"],
+            "facts_id": ["station-1:level:facts", "station-2:level:facts", "station-4:level:facts"],
+            "source_unit": ["m"] * 3,
+            "quantity": ["stage"] * 3,
+            "unit": ["m"] * 3,
         },
         schema=CanonicalRowsSchema.polars_schema,
     )
@@ -190,6 +278,14 @@ def test_one_source_failure_does_not_discard_independent_series() -> None:
         ("error", "station-3"),
         ("error", "station-5"),
     ]
+    assert [(item.station_id, item.status) for item in result.outcomes] == [
+        ("station-1", OutcomeStatus.SUCCESS),
+        ("station-2", OutcomeStatus.SUCCESS),
+        ("station-3", OutcomeStatus.FAILED),
+        ("station-4", OutcomeStatus.SUCCESS),
+        ("station-5", OutcomeStatus.FAILED),
+    ]
+    assert all(item.reason for item in result.outcomes if item.status is OutcomeStatus.FAILED)
     assert "timeout" in result.issues[0].message
     assert "HTTP 500" in result.issues[1].message
 
@@ -211,6 +307,8 @@ def test_all_failed_series_return_an_empty_canonical_frame_with_issues() -> None
         pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
         check_exact=True,
     )
+    assert [item.status for item in result.outcomes] == [OutcomeStatus.FAILED, OutcomeStatus.FAILED]
+    assert all(item.reason for item in result.outcomes)
     assert [issue.severity for issue in result.issues] == ["error", "error"]
     assert [issue.details["status_code"] for issue in result.issues if issue.details] == [503, 503]
 

@@ -1,0 +1,9 @@
+{
+  "url": "https://hydro.eaufrance.fr/stationhydro/R521001101/fiche",
+  "params": null,
+  "status": 200,
+  "retrieved_at": "2026-09-21T09:15:39.506643+00:00",
+  "content_type": "text/html; charset=UTF-8",
+  "bytes": 87274,
+  "sha256": "10cbcac36249ae87a0a4ff8c5673b3c00a9e8312ea07505a356e47dca38df9f0"
+}

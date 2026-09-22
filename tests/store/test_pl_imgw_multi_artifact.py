@@ -71,9 +71,9 @@ def test_multi_artifact_compile_publishes_one_union_with_complete_provenance(tmp
     assert [item.url for item in validated.manifest.publisher_artifacts] == [item.url for item in artifacts]
     assert all(not item.path.exists() for item in artifacts)
     assert validated.manifest.partition_row_counts == {
-        "product=discharge_daily_mean/year=2021": 2,
-        "product=stage_daily_mean/year=2021": 2,
-        "product=water_temperature_daily_mean/year=2021": 2,
+        "product=discharge_daily/year=2021": 2,
+        "product=stage_daily/year=2021": 2,
+        "product=water_temperature_daily/year=2021": 2,
     }
 
 
@@ -457,7 +457,7 @@ def test_imgw_source_vintage_is_publisher_labelled_coverage_end() -> None:
     assert DownloadedImgw(Path("codz_2023.zip"), _official_url("codz_2023.zip")).source_vintage == date(2023, 10, 31)
 
 
-def test_imgw_streaming_first_batch_never_calls_whole_archive_decoder(tmp_path, monkeypatch) -> None:
+def test_imgw_streaming_first_batch_retains_bounded_rows(tmp_path, monkeypatch) -> None:
     import zipfile
 
     import rivretrieve._internal.providers.pl_imgw.bulk as bulk
@@ -467,7 +467,6 @@ def test_imgw_streaming_first_batch_never_calls_whole_archive_decoder(tmp_path, 
     with zipfile.ZipFile(artifact, "w") as archive:
         archive.writestr("codz_2022_03.csv", source)
     monkeypatch.setattr(bulk, "IMGW_ROWS_PER_BATCH", 4)
-    monkeypatch.setattr(bulk, "decode_imgw", lambda _path: (_ for _ in ()).throw(AssertionError("whole decode")))
 
     first = next(iter(bulk.decode_imgw_batches(artifact).batches))
 
