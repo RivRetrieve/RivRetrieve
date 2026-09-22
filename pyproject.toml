@@ -80,6 +80,8 @@ dev = [
     "ty>=0.0.35",
     "tqdm>=4.70.0",
     "mlcroissant>=1.1.0",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
 ]
 
 # -----------------------
