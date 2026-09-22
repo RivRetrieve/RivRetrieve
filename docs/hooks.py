@@ -52,6 +52,9 @@ def on_pre_build(config: dict) -> None:
             + map_note,
         )
 
+        # Ensure <details> tags include markdown="1" so Python-Markdown parses inner tables/markdown
+        content = re.sub(r"<details(?![^>]*markdown=)>", r'<details markdown="1">', content)
+
         INDEX_MD_PATH.write_text(content, encoding="utf-8")
 
     # 2. Generate stations_map.html if missing
@@ -127,4 +130,7 @@ def on_page_markdown(markdown: str, page, config: dict, files) -> str:
 
     # Replace markdown link patterns: [text](href)
     pattern = re.compile(r"\[([^\]]+)\]\(([^)\s]+(?:\s+[^)]+)?)\)")
-    return pattern.sub(replacer, markdown)
+    markdown = pattern.sub(replacer, markdown)
+
+    # Ensure <details> tags allow nested markdown parsing
+    return re.sub(r"<details(?![^>]*markdown=)>", r'<details markdown="1">', markdown)
