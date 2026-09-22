@@ -36,7 +36,7 @@ _TIMESTAMP = re.compile(
 _NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?")
 
 
-def _timestamp(value: object, daily: bool) -> tuple[datetime, str]:
+def parse_time_label(value: object, daily: bool) -> tuple[datetime, str]:
     if not isinstance(value, str):
         raise ValueError("Observation time must be a string")
     if daily:
@@ -151,7 +151,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             current_facts = source_series(
                 properties, station, product, coordinates, metadata=False, monitoring_location_id=location
             ).facts[0]
-            stamp, zone = _timestamp(properties.get("time"), coordinates.endpoint == "daily")
+            stamp, zone = parse_time_label(properties.get("time"), coordinates.endpoint == "daily")
             number = _value(properties)
             qualifier = properties.get("qualifier")
             if (
@@ -173,7 +173,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 "facts_id": current_facts.facts_id,
                 "source_unit": current_facts.source_unit.value,
             }
-            key = (sid, stamp)
+            identity_time = stamp if zone == "unknown" else datetime.fromisoformat(f"{stamp.isoformat()}{zone}")
+            key = (sid, identity_time)
             if key in rows and rows[key] != row:
                 raise ValueError("Conflicting observations for the same series and time")
             rows[key] = row

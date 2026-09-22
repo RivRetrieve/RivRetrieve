@@ -26,7 +26,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
-from rivretrieve._internal.providers.usgs_nwis.parse import parse
+from rivretrieve._internal.providers.usgs_nwis.parse import parse, parse_time_label
 from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
@@ -121,7 +121,7 @@ def fetch(
                 target_errors = []
                 unsupported_ids: set[str] = set()
                 # A logical source observation is series + published time, not feature id.
-                seen_observations: set[tuple[str, str]] = set()
+                seen_observations: set[tuple[str, datetime]] = set()
                 for rendered in rendered_windows[product]:
                     initial = _request(coordinates, rendered, selector)
                     request: TransportRequest | None = initial
@@ -192,7 +192,7 @@ def fetch(
                             target_errors.append("An observation page contains unresolved or unsupported source data")
                         try:
                             document = _document(response.content)
-                            _check_duplicates(document, seen_observations)
+                            _check_duplicates(document, seen_observations, coordinates)
                             request = _next_request(document, initial, visited)
                         except ValueError as error:
                             if isinstance(error, _RepeatedObservationError):
@@ -336,15 +336,18 @@ def _document(content: bytes) -> dict:
     return document
 
 
-def _check_duplicates(document: dict, seen: set[tuple[str, str]]) -> None:
+def _check_duplicates(document: dict, seen: set[tuple[str, datetime]], coordinates: UsgsNwisSourceCoordinates) -> None:
     repeated: set[str] = set()
     for feature in document["features"]:
         properties = feature.get("properties") if isinstance(feature, dict) else None
         if not isinstance(properties, dict):
             raise ValueError("USGS feature has malformed properties")
-        key = (properties.get("time_series_id"), properties.get("time"))
-        if not all(isinstance(item, str) and item for item in key):
+        identifier = properties.get("time_series_id")
+        if not isinstance(identifier, str) or not identifier:
             raise ValueError("USGS observation lacks series/time identity")
+        stamp, zone = parse_time_label(properties.get("time"), coordinates.endpoint == "daily")
+        identity_time = stamp if zone == "unknown" else datetime.fromisoformat(f"{stamp.isoformat()}{zone}")
+        key = (identifier, identity_time)
         if key in seen:
             repeated.add(key[0])
         seen.add(key)

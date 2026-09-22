@@ -318,3 +318,18 @@ def test_retrieval_instant_is_part_of_outcome_identity_not_source_series_identit
     assert first.series == second.series
     assert first.outcomes[0].outcome_id != second.outcomes[0].outcome_id
     assert second.outcomes[0].retrieved_at == later.origin.retrieved_at
+
+
+@pytest.mark.parametrize("alias", ["2024-01-01T01:00:00.000000+00:00", "2024-01-01T02:00:00+01:00"])
+def test_equivalent_timestamp_spellings_cannot_hide_conflicting_observations(alias):
+    first = feature("discharge_instantaneous", time="2024-01-01T01:00:00Z")
+    conflict = feature("discharge_instantaneous", time=alias, value="99.5")
+    unsupported(decode([first, conflict], "discharge_instantaneous"))
+
+
+def test_equal_wall_labels_with_different_published_offsets_are_distinct_instants():
+    first = feature("discharge_instantaneous", time="2024-01-01T01:00:00Z")
+    other = feature("discharge_instantaneous", time="2024-01-01T01:00:00+01:00", value="99.5")
+    result = decode([first, other], "discharge_instantaneous")
+    assert result.rows.height == 2
+    assert set(result.rows["time_zone"]) == {"+00:00", "+01:00"}

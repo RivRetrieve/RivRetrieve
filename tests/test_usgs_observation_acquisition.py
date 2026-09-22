@@ -700,3 +700,75 @@ def test_late_page_failure_never_overlaps_held_and_fresh_values(tmp_path, mode, 
     else:
         assert not result.provenance.served_intervals
     assert seed.canonical_rows.height == 1
+
+
+@pytest.mark.parametrize("alias", ["2024-01-04T01:00:00.000000+00:00", "2024-01-04T02:00:00+01:00"])
+@pytest.mark.parametrize("value", ["12.25", "99.5"])
+def test_continuous_pages_detect_equivalent_published_instants(alias, value):
+    from functools import partial
+
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse_page
+
+    product = ProductId("discharge_instantaneous")
+    first_feature = feature()
+    first_feature["properties"].update(statistic_id="00011", time="2024-01-04T01:00:00Z")
+    repeated = feature()
+    repeated["properties"].update(statistic_id="00011", time=alias, value=value)
+    sibling = feature("beta")
+    sibling["properties"].update(statistic_id="00011", time="2024-01-04T01:00:00+00:00")
+    first_url = BASE.replace("/daily/", "/continuous/")
+    params = {
+        "f": "json",
+        "monitoring_location_id": LOCATION,
+        "parameter_code": "00060",
+        "datetime": "2024-01-01T00:00:00Z/2024-01-07T00:00:00Z",
+        "limit": "10000",
+        "cursor": "next",
+    }
+    first, second = page(first_feature, sibling, next_url=first_url + "?" + urlencode(params)), page(repeated)
+    window = engine._make_fetch_window(
+        engine.WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+        engine.WindowEndpoint.from_datetime(datetime(2024, 1, 7)),
+    )
+    result = fetch(
+        (STATION,),
+        (product,),
+        {product: (engine.RenderedWindow("2024-01-01T00:00:00Z", "2024-01-07T00:00:00Z"),)},
+        window,
+        config(),
+        Transport(first, second),
+        monitoring_locations={STATION: LOCATION},
+    )
+    assert [payload.content for payload in result.value] == [first, second]
+    assert result.inventories[0].completeness is InventoryCompleteness.INCOMPLETE
+    assert result.outcomes[0].status is OutcomeStatus.UNSUPPORTED
+    assert "repeats" in result.outcomes[0].reason
+
+    class Stages:
+        config = config()
+        window_declarations = window_declarations()
+        fetch = staticmethod(partial(fetch, monitoring_locations={STATION: LOCATION}))
+        parse = staticmethod(parse_page)
+
+    request = engine.ObservationRequest(
+        ProviderId("usgs_nwis"),
+        (STATION,),
+        (product,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2024, 1, 3)),
+            engine.WindowEndpoint.from_datetime(datetime(2024, 1, 5)),
+        ),
+    )
+    assembled = drive(
+        request,
+        Stages(),
+        provenance=ObservationProvenance(source="authored-control", provider_id=ProviderId("usgs_nwis")),
+        transport=Transport(first, second),
+        receipts=ReceiptMode.INCLUDE,
+    )
+    beta = next(item for item in assembled.source_series if item.variant == "beta")
+    assert assembled.canonical_rows["series_id"].to_list() == [beta.series_id]
+    assert [entry.content for entry in assembled.receipts.entries] == [first, second]
