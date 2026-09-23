@@ -1,128 +1,67 @@
-# Norway provider documentation verification
+# Norway page verification
 
-Checked on 2026-09-23 for [the provider page](../../providers/no_nve.md).
-This record distinguishes public live execution, source-page checks and replay tests.
+Checked 2026-09-23 on macOS arm64, CPython 3.13.8, with `uv sync` and a privately
+supplied `NVE_API_KEY`. Production baseline: `7dc5597a28737932f8296f3c3ae0a52ffbe2716a`;
+feedback edits were tested over merge `2a24d3f11b3a6cb2c2439e3e2a0fc637cda36d00`.
+No production code or catalogue was changed.
 
-## Revision and environment
+## Reproduce
 
-- Existing delivery branch: `docs/provider-norway`, PR #278. Thiago's original
-  commits `abaaa6f` and `09ca105` were retained, followed by the merge described below.
-- Production baseline: `origin/main` at `1f719e0033a980e4a5528ca660a2f66475ff4b63`.
-- Tested merge revision: `a898c799c06eb3b42131d115914cad91b4c5c367`, with only
-  documentation, verification scripts and the documentation test added afterwards.
-- macOS 15.7.3 arm64; CPython 3.13.8; RivRetrieve 0.1.49; `uv sync` from the lockfile.
-- The inherited uv cache contained a missing wheel. Setup succeeded with a separate
-  repository-local uv cache; this was an environment problem, not a library defect.
-- `NVE_API_KEY` was supplied privately through the process environment. No key is
-  present in scripts, logs or recordings. No registration form was submitted.
-
-## Commands and results
-
-Run these commands from the checkout root after `uv sync` and setting a valid
-`NVE_API_KEY`. The examples verifier reads and executes every Python snippet in the
-page, in order, compares stdout exactly, and reports the public result's source calls.
-It uses no internal API, fixtures or monkeypatches.
+From the checkout root, configure `NVE_API_KEY` in the environment or a private
+working-directory `.env`, then execute all reader snippets in their documented order:
 
 ```bash
 uv run python docs/verification/norway-provider/verify_examples.py
-uv run python docs/verification/norway-provider/catalogue_check.py
-uv run python docs/verification/norway-provider/probe.py
+uv run pytest -q tests/test_no_nve_documentation.py tests/test_no_nve_live.py tests/test_no_nve_public_routes.py tests/test_record_observations.py tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
+uv run python scripts/generate_reference.py --check
 ```
 
-- `examples.log`: both final snippets matched their displayed output. `providers()`
-  reported `ready`; the actual successful requests, not that readiness string,
-  established acceptance of the configured key.
-- `live-probe.log`: earlier exploratory public retrieval with `receipts=True`,
-  full issues and provenance. It returned seven non-null observations. The two
-  informational source-code summaries each cover 11 padded source rows.
-- `catalogue.log`: 4,902 catalogue locations, 3,804 stations with supported series,
-  and 15,023 version/resolution series rows. It contains every per-resolution and
-  per-statistic station count, including raw-resolution unknown frequencies and
-  instantaneous methods at daily/hourly resolutions. A station can have several
-  methods or versions; category counts need not add to a unique station total.
+The verifier uses only the public API, with no fixtures or monkeypatches. On the
+feedback revision it matched every displayed output: seven daily means, the two
+informational source-code messages, and the separate station-specific version
+lists. Fresh HTTP 200 calls at 20:40 UTC acquired `/Series`, then `/Observations`
+for station `2.605.0`, parameter `1001`, resolution `1440`, explicit version `1`.
+The padded interval was December 30, 2023 through January 9, 2024. Code summaries
+cover 11 source rows; the returned seven rows cover January 1–7. Quality `2` and
+correction `0` are independent of series version `1`.
 
-The public live requests used `cache="bypass"`. Provenance contains fresh HTTP 200
-calls to `/api/v1/Series` with station `2.605.0`, parameter `1001`, followed by
-`/api/v1/Observations` with explicit version `1`, resolution `1440`, and the
-engine-padded interval `2023-12-30T00:00:00Z/2024-01-09T23:59:59.999999Z`.
-The returned seven rows cover January 1–7, 2024, labelled at 11:00 UTC. The first
-three values, rounded to three decimals, are 401.750, 415.396 and 444.500 m³/s.
-
-The normal recording entry point was checked separately, without bypassing its
-credential composition or engine path:
+The normal recording CLI also succeeded on 2026-09-23:
 
 ```bash
 uv run python -m rivretrieve._internal.record_observations --provider no_nve --station 2.605.0 --product discharge_daily_mean --start 2024-01-01 --end 2024-01-07 --out-dir docs/verification/norway-provider/recordings --name discharge-week
 ```
 
-`recording.log` records success. The two files in `recordings/` retain exact fresh
-publisher bytes, transport parameters, times and HTTP status. They include the
-metadata call and explicit-version observation call. The credential header name
-is retained, never its value. The JSON response envelope includes
-`license: "https://data.norge.no/nlod/en"`; no claim is made about an HTTP licence header.
+The two committed recordings retain exact publisher bytes and credential header
+names, never values. The focused documentation test replays those bytes and checks
+all snippet output, source calls and catalogue counts. Replay is not live verification.
+The feedback-revision run passed all **95 tests** with one rdflib deprecation warning.
+Scoped Ruff lint/format, generated-reference and diff-whitespace checks also passed.
 
-## Claim checks
+## Claims and limits
 
-| Claim | Authority and check |
-|---|---|
-| NVE responsibility; other measurement producers | Fresh NVE Hydrology, Stasjonsnettet, Hydrologiske pålegg texts in `sources/`; no old institutional station counts reused |
-| Restricted recent data | Fresh NVE publication guidelines dated February 4, 2026; 14-day stage/discharge period is conditional, not a universal lag |
-| Credentials and service limits | Fresh HydAPI documentation and registration page; source registration steps checked without submitting; issuance time and numeric limits not claimed |
-| Readiness, retrieval and cache bypass | Public examples and provenance; `providers()` only checks configuration presence |
-| Units, quantity, statistic and frequency | `providers/no_nve/series.py` maps response parameter, unit, method and resolution independently; values need no scaling for supported units; `catalogue_check.py` checks actual packaged facts |
-| Catalogue counts and availability | `find().locations`, `series()` and all grouped counts in `catalogue.log`; snapshot, not exhaustive live national inventory |
-| Versions and scoped failures | `no_nve/fetch.py` and `metadata.py`; fresh metadata/version-1 retrieval; replay tests cover multiple versions and failures independently |
-| Splitting | `no_nve/config.py` declares `iso-instant` without a size cap; `window_planning._plan_iso_instant` returns one rendered interval; `fetch.py` loops stations, products and explicit versions; no adaptive observation-limit subdivision |
-| UTC and unknown support | Fresh HydAPI text explicitly states UTC and 11:00Z daily labels but calls daily calculation basis “Norwegian normal time” UTC-1; `series.py` establishes `+00:00` without interval support or anchor facts |
-| Quality/correction exposure | Fresh response and `parse.py`: informational summaries, not per-row quality columns; counts include padded rows; public `receipts=True` retains observation bytes |
-| Nulls, empty answers and failure isolation | Current parser plus recorded tests `test_no_nve_live.py` and `test_no_nve_public_routes.py`; fresh seven-day example has no nulls and does not independently prove these other states |
-| Terms and attribution | Fresh HydAPI and NLOD 2.0 text: attribution, licence link and modified-data conditions preserved; CC BY compatibility is qualified for databases |
+- Fresh authoritative pages in the provider page's Sources were checked on September 23.
+  NVE establishes its institutional role, other producers and conditional publication
+  restrictions. HydAPI supplies code meanings, registration steps, UTC labels and
+  service limits. NLOD 2.0 supplies qualified reuse and attribution conditions.
+- The packaged catalogue has 4,902 locations and 3,804 stations with supported series.
+  Native station evidence shows the other 1,098 list other parameters, rather than
+  missing series metadata. Daily mean counts and all resolution/method combinations
+  were checked against packaged source-series facts, not product-name assumptions.
+- `no_nve/series.py` establishes frequency separately from statistic and leaves
+  temporal support unknown. `parse.py` retains nulls and source-code summaries;
+  `fetch.py` isolates versions and failures. `config.py` uses one uncapped
+  `iso-instant` window, not adaptive observation-limit splitting.
+- No code defect was found. Daily-boundary source wording remains inconsistent;
+  no exact interval is inferred. No key-issuance timing, numeric service limit,
+  national live census, continuous-history or quality-approval claim is made.
 
-Code paths above are relative to `src/rivretrieve/_internal/`.
-[source findings](sources/findings.md) and [retrieval manifest](sources/retrieval-manifest.json)
-identify fresh authoritative checks. Text snapshots retain publisher wording with
-HTML whitespace normalized, URLs, retrieval time and status. Manifest hashes are
-of the retrieved HTML, not the text extraction. These pages are not live
-observation-response evidence.
+Full exploratory logs and source text snapshots were preserved outside the proposed
+Git diff at `.worktrees/norway-provider-evidence-2026-09-23/` in the maintainer checkout.
+They include dated source URLs/status, catalogue counts, execution output and the
+pre-feedback evidence. The committed test, recordings and verifier retain the
+focused regression and live-recheck paths.
 
-## Tests
-
-```bash
-uv run pytest -q tests/test_no_nve_documentation.py tests/test_no_nve_live.py tests/test_no_nve_public_routes.py tests/test_record_observations.py tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
-uv run python scripts/generate_reference.py --check
-uv run ruff check tests/test_no_nve_documentation.py docs/verification/norway-provider/*.py
-uv run ruff format --check tests/test_no_nve_documentation.py docs/verification/norway-provider/*.py
-```
-
-`tests.log`: **95 passed**, one existing rdflib deprecation warning. Generated
-reference check passed. Formatting and lint were checked separately.
-
-The new `test_no_nve_documentation.py` executes the exact page snippets through
-public API calls while replaying the two fresh recordings. It checks displayed
-stdout, issue codes, explicit version, calls and catalogue counts. This is an
-**authored offline regression test**, not a second live retrieval. Existing tests
-replay older recordings and authored source-failure controls; their passing does
-not establish current availability for all routes. The historical
-[conformance record](../../../tests/evidence/no_nve_conformance.md) supplies context,
-not a claim of fresh national acquisition.
-
-## Delivery-revision recheck
-
-After the page and test were committed at
-`b1e122a6cea548432b5b57b706053c1ad448b8ad`, the same live verifier was run again.
-`final-examples.log` records matching stdout and fresh HTTP 200 metadata and
-observation calls. `final-tests.log` records the focused documentation replay
-and catalogue-count recheck. Later evidence-only commits do not change the page,
-its snippets, the production baseline or that test.
-
-## Limits and review gate
-
-No catalogue regeneration, production changes or new products were made. No code
-defect was found during these checks. No national live inventory census, rate-limit
-stress test, key-issuance timing test or complete-history retrieval was performed.
-A short successful example and code summaries do not establish quality approval,
-continuous history or an exhaustive current source inventory.
-
-Independent review and Nicolas's review feedback remain required. The PR must not
-be approved or merged by the implementing agent. This record does not claim that
-the human gate has been satisfied.
+The user reviewed the page, requested these repairs and explicitly authorized merging
+without another human gate. Independent review of the repairs remains required;
+the root agent handles landing. The historical vision's earlier human gate is
+superseded by that instruction.

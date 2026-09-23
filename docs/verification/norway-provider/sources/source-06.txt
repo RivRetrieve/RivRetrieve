@@ -1,8 +1,0 @@
-Retrieved UTC: 2026-09-23T11:01:32.208978+00:00
-Requested URL: https://www.nve.no/hydrologi/
-Final URL: https://www.nve.no/vann-og-vassdrag/vannets-kretsloep/
-HTTP status: 200
-Method: fresh unauthenticated HTTP GET; HTML text extraction with BeautifulSoup get_text(" ", strip=True).
-No forms submitted; no credentials used.
-
-Forside Vann og vassdrag Vannets kretsløp Vannets kretsløp Hydrologi er vitenskapen om vannets forekomst, kretsløp og fordeling på landjorden. Fakta om vannets kretsløp Vann og problem Klima Overvann Om hydrologisk avdeling Snø Fakta om snø Målinger og målenett Hydrologiske data Forskning Bre Fakta om bre Målinger og målenett Hydrologiske data Forskning Elver Fakta om elver og innsjøer Is i elver og vann Erosjon og sedimenttransport Vanntemperatur Vannet under bakken - markvann og grunnvann Vannstand og vannføring Målinger og målenett Hydrologiske data Forskning

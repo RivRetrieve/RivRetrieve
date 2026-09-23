@@ -1,8 +1,0 @@
-Retrieved UTC: 2026-09-23T11:01:32.208978+00:00
-Requested URL: https://data.norge.no/nlod/en
-Final URL: https://data.norge.no/nlod/en
-HTTP status: 200
-Method: fresh unauthenticated HTTP GET; HTML text extraction with BeautifulSoup get_text(" ", strip=True).
-No forms submitted; no credentials used.
-
-Norwegian Licence for Open Government Data (NLOD) Norwegian Licence for Open Government Data (NLOD) The Ministry of Local Government and Regional Development has created an english version of the standard Norwegian licence for Open Government Data (NLOD). The Ministry recommends all data owners in the public sector to use this licence and we expect that the majority of Norwegian Public Sector Open data will be licenced under the NLOD. Norwegian Licence for Open Government Data (NLOD) Last updated 2023-03-07 10:08:41 UTC

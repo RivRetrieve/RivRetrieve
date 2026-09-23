@@ -13,8 +13,9 @@
 | Licence stated by NVE | Norwegian Licence for Open Government Data (NLOD) |
 | Agency documentation | [HydAPI documentation](https://hydapi.nve.no/UserDocumentation/) |
 
-Set `NVE_API_KEY` in the environment before running Python, using a key obtained
-from NVE. Catalogue browsing works without it. Retrieve one week of published
+Set `NVE_API_KEY` in the process environment or a private `.env` file in the
+directory from which Python runs, using a key obtained from NVE. Catalogue browsing
+works without it. Retrieve one week of published
 daily mean discharge at station `2.605.0`:
 
 ```python
@@ -34,7 +35,8 @@ preview = result.data.select("time", "time_zone", "value", "unit").head(3)
 print(preview.write_csv(float_precision=3), end="")
 
 print(result.data.height)
-print([(issue.severity, issue.code) for issue in result.issues])
+for issue in result.issues:
+    print(f"{issue.severity}: {issue.message}")
 ```
 
 Output:
@@ -45,15 +47,17 @@ time,time_zone,value,unit
 2024-01-02T11:00:00.000000,+00:00,415.396,m3/s
 2024-01-03T11:00:00.000000,+00:00,444.500,m3/s
 7
-[('info', 'source_quality_code'), ('info', 'source_correction_code')]
+info: no_nve published source quality code 2 without RivRetrieve interpretation
+info: no_nve published source correction code 0 without RivRetrieve interpretation
 ```
 
 The request returned seven daily means in m³/s. The preview shows three values
 rounded to three decimal places. Both endpoint dates are included. RivRetrieve
 reads the published means; it does not calculate them from more frequent observations.
-The two informational issues retain source quality and correction codes without
-interpreting them. They do not mean that the request failed or that RivRetrieve
-approved the observations.
+The two informational messages report source metadata, not retrieval problems.
+NVE calls quality code `2` **PrimaryControlled** and correction code `0` **No changes**.
+These are NVE’s descriptions of the observations, not a RivRetrieve quality
+judgement. They are separate from the series version, which is `1` in this example.
 
 `cache="bypass"` requests HydAPI rather than a local cache. This output was checked
 on 2026-09-23. NVE can revise historical observations, so later retrievals may
@@ -73,10 +77,10 @@ facilities carry out and fund hydrological investigations required by NVE; NVE
 checks and archives the mandated data. Keep that distinction when describing
 the origin of a station's record.
 
-NVE's publication guidelines allow restrictions on recent observations, including
-in regulated catchments and at hydropower installations. They specify a 14-day
-withholding period for stage and discharge where those restrictions apply; owner
-consent can allow earlier publication. Owners of privately collected data that
+NVE may withhold recent observations from public access, including in regulated
+catchments and at hydropower installations. Its publication guidelines specify
+a 14-day withholding period for stage and discharge where those restrictions
+apply. The station owner may permit earlier publication. Owners of privately collected data that
 are not required by a public authority can decide what to publish. HydAPI access
 does not promise an unrestricted real-time record at every station.
 
@@ -85,9 +89,12 @@ does not promise an unrestricted real-time record at every station.
 NVE describes HydAPI as a free service. Request a key at
 [hydapi.nve.no/Users](https://hydapi.nve.no/Users), entering an email address and
 accepting the terms. Store the key securely: NVE says it cannot be retrieved later.
-See [credential configuration](../usage.md#supplied-credentials) to supply it through
-`NVE_API_KEY`. `rr.providers()` reports `ready` when the required credential is
-configured; this does not test whether NVE accepts the key.
+Set `NVE_API_KEY` in the process environment or a private `.env` file in the
+directory from which Python runs. Process variables take precedence, including
+blank values. Keep credentials out of code, version control, logs and shared files.
+See [credential configuration](../usage.md#supplied-credentials) for details.
+`rr.providers()` reports `ready` when the credential is present locally; it does
+not authenticate with NVE or prove that the key is accepted.
 
 NVE limits requests per key and the number of observations in a response. Its
 user documentation does not give numeric limits. RivRetrieve sends separate
@@ -100,11 +107,11 @@ than treating a failed request as missing observations.
 
 ## What you can retrieve
 
-| Quantity filter | Source unit | Returned unit |
-|---|---|---|
-| `discharge` | m³/s | m³/s (`m3/s`) |
-| `stage` | m | m |
-| `temperature` | °C | °C (`degC`) |
+| Quantity filter | Published resolutions | Published statistics | Source and returned unit |
+|---|---|---|---|
+| `discharge` | Raw, hourly, daily | Mean or instantaneous, depending on series | m³/s |
+| `stage` | Raw, hourly, daily | Mean or instantaneous, depending on series | m |
+| `temperature` | Raw, hourly, daily | Mean or instantaneous, depending on series | °C |
 
 These units require no numerical scaling. Stage is water level; RivRetrieve has
 not established its vertical reference or datum.
@@ -117,6 +124,11 @@ series can contain instantaneous values; its resolution alone does not establish
 an averaging operation. Use both frequency and statistic filters for daily means,
 as in the example. RivRetrieve does not derive additional statistics.
 
+Of the 4,902 catalogue locations, 3,804 list series for the supported quantities
+and resolutions. The other 1,098 list other parameters, such as groundwater level
+and temperature, air temperature, precipitation or snow. Their presence in the
+catalogue does not make those parameters retrievable through RivRetrieve.
+
 The catalogue contains daily mean discharge at 1,620 stations, daily mean stage
 at 2,790, and daily mean temperature at 1,153. These counts can overlap and describe
 the packaged snapshot, not an exhaustive current inventory. A station being listed
@@ -126,34 +138,44 @@ short request does not establish continuous historical coverage.
 ## Source versions
 
 HydAPI can publish several versions of a station's series. `variant` is the
-published version number, represented as a string. RivRetrieve keeps those
-records separate; a larger version number is not a RivRetrieve quality ranking.
+published version number, represented as a string. Version numbers identify
+records at a particular station and quantity; they are not global quality codes.
+RivRetrieve keeps those records separate. A larger number is not a quality ranking,
+and no universal meaning for each version number has been established.
 Without an explicit version choice, retrieval checks current source metadata and
 requests all versions matching the selection's physical filters. Each version can
 return values, an empty record, or a separate failure.
 
-Inspect the example's catalogue candidate and select its published version:
+The example returned version `1` at station `2.605.0`. Another station,
+`109.42.0`, has three catalogued versions of daily mean discharge. Inspect them
+before making a version-specific request:
 
 ```python
-print(rr.series(selection).select("station_id", "variant", "frequency", "statistic").rows())
-
-version_one = rr.pick(selection, variant="1")
-print(rr.series(version_one).select("station_id", "variant").rows())
 print(rr.series(result).select("station_id", "variant").rows())
+
+other_station = rr.find(
+    provider="no_nve", station="109.42.0", quantity="discharge",
+    frequency="daily", statistic="mean",
+)
+print(rr.series(other_station).select("station_id", "variant").sort("variant").rows())
+
+version_two = rr.pick(other_station, variant="2")
+print(rr.series(version_two).select("station_id", "variant").rows())
 ```
 
 Output:
 
 ```text
-[('2.605.0', '1', 'daily', 'mean')]
 [('2.605.0', '1')]
-[('2.605.0', '1')]
+[('109.42.0', '1'), ('109.42.0', '2'), ('109.42.0', '3')]
+[('109.42.0', '2')]
 ```
 
-Here the catalogue and retrieved record both identify version `1`. `pick` narrows
-the selection; it does not make another observation request. Passing that narrowed
-selection to `fetch` requests only that version, without substituting another
-version when observations are unavailable.
+The second and third lines describe catalogue candidates, not newly retrieved
+observations. `pick` narrows the selection; it does not make an observation request.
+Passing `version_two` to `fetch` requests only that station's version `2`, without
+substituting another version when observations are unavailable. This choice does
+not select quality code `2` or assert that this version is preferable.
 
 ## Time and data status
 
