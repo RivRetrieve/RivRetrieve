@@ -64,8 +64,8 @@ not calculate them from more frequent observations. An empty issue tuple does
 not establish the quality of the values.
 
 For this bulk provider, `cache="bypass"` still reads the compiled local archive.
-The output above uses the July 17, 2026 edition; later editions can contain
-revisions. Run the snippets in order in the same Python session. See
+This example was checked using the July 17, 2026 HYDAT release. Historical
+values may change in later releases. Run the snippets in order in the same Python session. See
 [Usage](../usage.md) for general selection and result handling.
 
 ## Who measures, and who publishes

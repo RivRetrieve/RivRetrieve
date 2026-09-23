@@ -1,6 +1,11 @@
 # Canada authoritative-source claim matrix
 
-Fresh HTTP checks: 2026-09-22 UTC (timestamps in each `*.metadata.json`). This directory is evidence only, not a checkout. No archive was downloaded and no project code was run or changed. HTTP bodies are `*.response`, decoded search aids are `*.txt`; PDF text extracted with system `pdftotext -layout` is `*.pdf.txt`. Metadata includes request/final URL, status, response headers, byte count and SHA-256 of the decompressed response body. These are fresh publisher-page checks, not live observation verification. Owner separately acquires the national archive.
+Fresh publisher-page checks were made on 2026-09-22 UTC. URLs, timestamps and
+response hashes are in [the source index](sources/INDEX.json). The response
+bodies and auxiliary PDFs remain in the local evidence locations described in
+[the verification record](README.md), not in this PR. Evidence names below
+identify those retained captures. These checks are distinct from the fresh
+national archive acquisition and public-API execution.
 
 ## Claim matrix
 

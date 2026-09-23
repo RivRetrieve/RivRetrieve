@@ -84,7 +84,10 @@ record dates unestablished. These code facts do not establish publisher terms.
 ## Authoritative publisher evidence
 
 `sources/INDEX.json` identifies fresh HTTP checks, URLs, status, retrieval times,
-byte counts and SHA-256 hashes. The selected raw response bodies are retained.
+byte counts and SHA-256 hashes. Raw publisher responses are kept locally in
+`.evidence/canada-2026-09-23/publisher-snapshots/`, outside the PR diff.
+The index records their acquisition identity; offline tests do not reverify
+the hashes without those local response bodies.
 `source-claims.md` distinguishes institutional, time, status and legal claims.
 The full researcher directory remains at repository-root
 `.worktrees/visions/canada-source-evidence/`; broad searches and unused bodies
@@ -96,24 +99,28 @@ ECCC's separate server licence is not treated as identical or given invented
 precedence. MDB-specific citation wording is not relabelled as SQLite wording.
 These publisher-page checks are distinct from the actual fresh archive download.
 
-## Focused validation and remaining gates
+## Validation and review
 
 `tests/test_canada_documentation.py` checks snippet syntax/current selection,
-packaged count, evidence hashes and the index link. These are authored offline
-checks, not live acquisition evidence. Missing-store tests exercise isolation
-with test doubles. Validation results are retained in `tests.log`.
-Independent review and Nicolas's explicit feedback are required before delivery
-is complete. PR #274 must not be approved or merged by the implementing agent.
+packaged count, source-reference metadata and the index link. These are authored
+offline checks, not live acquisition evidence. Missing-store tests exercise
+isolation with test doubles. Initial validation passed 15 focused tests and 42
+existing documentation/reference tests (one upstream rdflib deprecation warning).
+Independent review passed 51 offline tests and found no outstanding issues after
+corrections at `3380799`.
 
-Validation: 15 focused tests passed; 42 existing documentation/reference tests
-passed (one upstream rdflib deprecation warning). Ruff check and format check
-passed for the new test. The authored-file whitespace check passed:
+Nicolas reviewed the provider page and requested a smaller evidence diff and a
+clearer archive-release sentence. He then explicitly authorized completion and
+merging, superseding the vision's earlier human gate and merge restriction.
+Raw responses remain locally preserved; source URLs, acquisition metadata,
+claim checks and execution results remain in this record. Public code snippets
+and displayed output are unchanged by that feedback.
+
+Current validation commands:
 
 ```bash
-git diff --check origin/main...HEAD -- docs/README.md docs/providers/ca_eccc.md docs/verification/canada-provider tests/test_canada_documentation.py ':!docs/verification/canada-provider/sources/*.response'
+uv run pytest -q tests/test_canada_documentation.py tests/test_missing_bulk_outcomes.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
+uv run ruff check tests/test_canada_documentation.py
+uv run ruff format --check tests/test_canada_documentation.py
+git diff --check origin/main
 ```
-
-The full PR diff check reports whitespace in verbatim publisher response bodies.
-Those bytes remain unchanged so their recorded hashes remain valid. The earlier
-pre-commit worktree check passed but did not include then-untracked source bodies;
-it was not a successful full-PR whitespace check.
