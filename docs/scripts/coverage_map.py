@@ -11,7 +11,8 @@ Counts are unique provider/station identities for observation-capable providers;
 they do not assert continuous observations or complete national network coverage.
 No station coordinates or station CRS assumptions enter this figure.
 Planned countries are fetchers in the legacy kratzert/RivRetrieve-Python repository,
-merged or in open pull requests, that have no provider here yet.
+merged or in open pull requests, that have no provider here yet, plus countries from the
+suggested porting order in the new-country research.
 """
 
 from __future__ import annotations
@@ -63,6 +64,18 @@ PLANNED_COUNTRY = {
     "TWN": "Taiwan",
     "ZAF": "South Africa",
 }
+# Suggested order in docs/provider_ports/new_countries.md (research/new-country-candidates), items 1-8.
+RESEARCHED_COUNTRY = {
+    "AFG": "Afghanistan",
+    "COL": "Colombia",
+    "ISR": "Israel",
+    "MEX": "Mexico",
+    "NZL": "New Zealand",
+    "PER": "Peru",
+    "SOM": "Somalia",
+    "TUR": "Türkiye",
+}
+PLANNED_COUNTRY |= RESEARCHED_COUNTRY
 ROBINSON = "ESRI:54030"
 LAND = "#E3E8EC"
 IMPLEMENTED = "#127B8C"

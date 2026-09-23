@@ -10,9 +10,7 @@ openly published river data, one that grows as new agencies are added.
 
 ## River data and where to find them
 
-From floods to droughts: understanding and modelling rivers is a central environmental concern. For that, we need data. Preferably open data. Many countries measure their rivers at thousands of stations, but compiling that information is often hard. Different data portals, different languages, different formats. All of that adds up quickly for anyone interested in the data.
-
-**The data exist, but accessing them is challenging.**
+From floods to droughts: understanding and modelling rivers is a central environmental concern. For that, we need data. Preferably open data. Many countries measure their rivers at thousands of stations, but compiling that information is often hard. Different data portals, different languages, different formats. All of that adds up quickly for anyone interested in the data. The data exist, but accessing them is challenging.
 
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
@@ -52,6 +50,20 @@ for how to supply them.
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
 The USGS catalogue retains 26,258 station identities; 26,201 have selectable modern series in this snapshot.
 A station can appear under both French services; their series remain separate.
+
+</details>
+
+<details>
+<summary>Countries coming soon</summary>
+
+Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Denmark, Estonia, Finland, Germany,
+Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Peru, Portugal, Slovenia,
+Somalia, South Africa, South Korea, Spain, Sweden, Taiwan, Türkiye and the United Kingdom.
+
+Some of these have a fetcher in the legacy
+[RivRetrieve-Python](https://github.com/kratzert/RivRetrieve-Python) that awaits porting; others
+come from our survey of national services. Sources differ in what they publish, so a country can
+arrive with a single agency or a single region first. The map shows whole countries either way.
 
 </details>
 
