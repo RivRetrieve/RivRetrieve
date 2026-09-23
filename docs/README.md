@@ -37,6 +37,7 @@ A page for each provider, describing its network, what it measures and how to ci
 written:
 
 - [Brazil: ANA](providers/br_ana.md)
+- [Canada: Environment and Climate Change Canada](providers/ca_eccc.md)
 - [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
 - [Japan: MLIT](providers/jp_mlit.md)
