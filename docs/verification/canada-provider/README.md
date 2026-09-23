@@ -19,14 +19,18 @@ The public compiler removes publisher artifacts after successful certification.
 From the checkout, the executed commands were:
 
 ```bash
-UV_CACHE_DIR="$PWD/.uv-cache" RIVRETRIEVE_CACHE_DIR="$PWD/.evidence/canada-2026-09-23/cache" uv run python -u .evidence/canada-2026-09-23/acquire.py
+export UV_CACHE_DIR="$PWD/.uv-cache"
+export RIVRETRIEVE_CACHE_DIR="$PWD/.evidence/canada-2026-09-23/cache"
+
+uv run python -u .evidence/canada-2026-09-23/acquire.py
 RIVRETRIEVE_CACHE_DIR="$PWD/.evidence/canada-2026-09-23/missing-cache" uv run python -u .evidence/canada-2026-09-23/isolated_conditions.py
 uv run python -u .evidence/canada-2026-09-23/retrieve_available.py
 uv run python -u .evidence/canada-2026-09-23/final_snippets.py
 ```
 
-For the last two commands, the process environment retained the first command's
-`RIVRETRIEVE_CACHE_DIR` and checkout-local `UV_CACHE_DIR`.
+The exports reproduce the environment retained by the original orchestration.
+The one-command missing-cache override leaves the exported acquisition cache
+unchanged for the later retrieval commands.
 The scripts here preserve the commands' inputs; full execution logs and the
 compiled store remain in the checkout's `.evidence/canada-2026-09-23/`.
 The 57 MB acquisition log contains full manifest object representations;
@@ -103,4 +107,13 @@ is complete. PR #274 must not be approved or merged by the implementing agent.
 
 Validation: 15 focused tests passed; 42 existing documentation/reference tests
 passed (one upstream rdflib deprecation warning). Ruff check and format check
-passed for the new test. `git diff --check` passed.
+passed for the new test. The authored-file whitespace check passed:
+
+```bash
+git diff --check origin/main...HEAD -- docs/README.md docs/providers/ca_eccc.md docs/verification/canada-provider tests/test_canada_documentation.py ':!docs/verification/canada-provider/sources/*.response'
+```
+
+The full PR diff check reports whitespace in verbatim publisher response bodies.
+Those bytes remain unchanged so their recorded hashes remain valid. The earlier
+pre-commit worktree check passed but did not include then-untracked source bodies;
+it was not a successful full-PR whitespace check.
