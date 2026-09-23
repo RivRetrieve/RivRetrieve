@@ -27,6 +27,10 @@ def test_norway_page_examples_match_recorded_responses(monkeypatch, tmp_path):
         with redirect_stdout(output):
             exec(compile(code, f"no_nve.md:block-{index}", "exec"), namespace)
         assert output.getvalue() == expected, index
+    candidates = rr.series(namespace["other_station"])
+    assert candidates.select("station_id", "quantity", "variant", "frequency", "statistic").sort("variant").rows() == [
+        ("109.42.0", "discharge", variant, "daily", "mean") for variant in ("1", "2", "3")
+    ]
     result = namespace["result"]
     assert result.data["value"].null_count() == 0
     assert [(issue.severity, issue.code) for issue in result.issues] == [

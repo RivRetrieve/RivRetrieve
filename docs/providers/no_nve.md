@@ -147,7 +147,15 @@ requests all versions matching the selection's physical filters. Each version ca
 return values, an empty record, or a separate failure.
 
 The example returned version `1` at station `2.605.0`. Another station,
-`109.42.0`, has three catalogued versions of daily mean discharge. Inspect them
+`109.42.0`, has three catalogued versions of daily mean discharge:
+
+| Station | Quantity | `variant` | Frequency | Statistic |
+|---|---|---|---|---|
+| `109.42.0` | Discharge | `1` | Daily | Mean |
+| `109.42.0` | Discharge | `2` | Daily | Mean |
+| `109.42.0` | Discharge | `3` | Daily | Mean |
+
+These numbers identify versions at this station, not quality levels. Inspect them
 before making a version-specific request:
 
 ```python
