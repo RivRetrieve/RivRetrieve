@@ -41,6 +41,7 @@ written:
 - [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
 - [Japan: MLIT](providers/jp_mlit.md)
+- [Norway: NVE](providers/no_nve.md)
 - [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
 - [United States — USGS](providers/usgs_nwis.md)
 
