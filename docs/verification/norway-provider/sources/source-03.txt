@@ -1,0 +1,12 @@
+Retrieved UTC: 2026-09-23T11:01:32.208978+00:00
+Requested URL: https://hydapi.nve.no/Users
+Final URL: https://hydapi.nve.no/Users
+HTTP status: 200
+Method: fresh unauthenticated HTTP GET; HTML text extraction with BeautifulSoup get_text(" ", strip=True).
+No forms submitted; no credentials used.
+
+Create a new API-key After entering the email and accepted the terms and conditions, click "Create API-key" button. You will then have your api-key created. Enter your name (optional) Enter your email Terms and conditions: Your personal data will be processed in accordance with the Personal Data legislation. NVE comply with the requirements of data protection by design and default.
+                    NVE will be collecting your personal data(e - mail - and ip - address) in order to identify you as a user of this hydrological-api
+                    We will use your personal data for statistics.Your personal data may also be used by us to identify you in order to prevent and detect any misuse of the hydrological-api
+                    NVE will delete your personal data whenever we receive a request from you asking us to do so.
+                    You can find the NVE Privacy Policy here here(in Norwegian). Yes, I accept terms and conditions Yes, I want information on email. (Information about new api versions or other changes)

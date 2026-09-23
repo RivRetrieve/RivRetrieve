@@ -1,0 +1,33 @@
+shape: (1, 58)
+┌───────────┬───────────┬───────────┬───────────┬───┬───────────┬───────────┬───────────┬──────────┐
+│ provider_ ┆ station_i ┆ product_i ┆ series_id ┆ … ┆ inventory ┆ inventory ┆ outcomes  ┆ outcome_ │
+│ id        ┆ d         ┆ d         ┆ ---       ┆   ┆ _vintage  ┆ _status   ┆ ---       ┆ reasons  │
+│ ---       ┆ ---       ┆ ---       ┆ str       ┆   ┆ ---       ┆ ---       ┆ list[str] ┆ ---      │
+│ str       ┆ str       ┆ str       ┆           ┆   ┆ list[str] ┆ list[str] ┆           ┆ list[str │
+│           ┆           ┆           ┆           ┆   ┆           ┆           ┆           ┆ ]        │
+╞═══════════╪═══════════╪═══════════╪═══════════╪═══╪═══════════╪═══════════╪═══════════╪══════════╡
+│ no_nve    ┆ 2.605.0   ┆ discharge ┆ a75a2c065 ┆ … ┆ ["2026-09 ┆ ["incompl ┆ []        ┆ []       │
+│           ┆           ┆ _daily_me ┆ ee53ee333 ┆   ┆ -04"]     ┆ ete"]     ┆           ┆          │
+│           ┆           ┆ an        ┆ 850556712 ┆   ┆           ┆           ┆           ┆          │
+│           ┆           ┆           ┆ 270…      ┆   ┆           ┆           ┆           ┆          │
+└───────────┴───────────┴───────────┴───────────┴───┴───────────┴───────────┴───────────┴──────────┘
+time,time_zone,value,unit
+2024-01-01T11:00:00.000000,+00:00,401.750,m3/s
+2024-01-02T11:00:00.000000,+00:00,415.396,m3/s
+2024-01-03T11:00:00.000000,+00:00,444.500,m3/s
+7
+(Issue(severity='info', code='source_quality_code', message='no_nve published source quality code 2 without RivRetrieve interpretation', details={'station_id': '2.605.0', 'source_quality_code': 2, 'count': 11, 'first_source_time': '2023-12-30T11:00:00', 'last_source_time': '2024-01-09T11:00:00'}, provider_id='no_nve'), Issue(severity='info', code='source_correction_code', message='no_nve published source correction code 0 without RivRetrieve interpretation', details={'station_id': '2.605.0', 'source_correction_code': 0, 'count': 11, 'first_source_time': '2023-12-30T11:00:00', 'last_source_time': '2024-01-09T11:00:00'}, provider_id='no_nve'))
+shape: (1, 58)
+┌───────────┬───────────┬───────────┬───────────┬───┬───────────┬───────────┬───────────┬──────────┐
+│ provider_ ┆ station_i ┆ product_i ┆ series_id ┆ … ┆ inventory ┆ inventory ┆ outcomes  ┆ outcome_ │
+│ id        ┆ d         ┆ d         ┆ ---       ┆   ┆ _vintage  ┆ _status   ┆ ---       ┆ reasons  │
+│ ---       ┆ ---       ┆ ---       ┆ str       ┆   ┆ ---       ┆ ---       ┆ list[str] ┆ ---      │
+│ str       ┆ str       ┆ str       ┆           ┆   ┆ list[str] ┆ list[str] ┆           ┆ list[str │
+│           ┆           ┆           ┆           ┆   ┆           ┆           ┆           ┆ ]        │
+╞═══════════╪═══════════╪═══════════╪═══════════╪═══╪═══════════╪═══════════╪═══════════╪══════════╡
+│ no_nve    ┆ 2.605.0   ┆ discharge ┆ a75a2c065 ┆ … ┆ ["2026-09 ┆ ["complet ┆ ["success ┆ []       │
+│           ┆           ┆ _daily_me ┆ ee53ee333 ┆   ┆ -23T11:00 ┆ e", "inco ┆ "]        ┆          │
+│           ┆           ┆ an        ┆ 850556712 ┆   ┆ :50.49110 ┆ mplete"]  ┆           ┆          │
+│           ┆           ┆           ┆ 270…      ┆   ┆ 5+0…      ┆           ┆           ┆          │
+└───────────┴───────────┴───────────┴───────────┴───┴───────────┴───────────┴───────────┴──────────┘
+({'url': 'https://hydapi.nve.no/api/v1/Series', 'request_parameters': {'StationId': '2.605.0', 'Parameter': 1001}, 'status_code': 200, 'retrieved_at': datetime.datetime(2026, 9, 23, 11, 0, 50, 491105, tzinfo=datetime.timezone.utc), 'content_type': 'application/json; charset=utf-8', 'source_path': {'status': 'unknown', 'reason': 'unknown'}, 'query': {'status': 'unknown', 'reason': 'unknown'}, 'station_products': (('2.605.0', 'discharge_daily_mean'),)}, {'url': 'https://hydapi.nve.no/api/v1/Observations', 'request_parameters': {'StationId': '2.605.0', 'Parameter': '1001', 'ResolutionTime': '1440', 'ReferenceTime': '2023-12-30T00:00:00Z/2024-01-09T23:59:59.999999Z', 'VersionNumber': 1}, 'status_code': 200, 'retrieved_at': datetime.datetime(2026, 9, 23, 11, 0, 51, 557562, tzinfo=datetime.timezone.utc), 'content_type': 'application/json; charset=utf-8', 'source_path': {'status': 'unknown', 'reason': 'unknown'}, 'query': {'status': 'unknown', 'reason': 'unknown'}, 'station_products': (('2.605.0', 'discharge_daily_mean'),), 'series_ids': ('a75a2c065ee53ee3338505567122700ecc5276c4ada2e9ad8ba4df8bfedc61df',)})

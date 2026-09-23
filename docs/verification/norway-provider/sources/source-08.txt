@@ -1,0 +1,8 @@
+Retrieved UTC: 2026-09-23T11:01:32.208978+00:00
+Requested URL: https://www.nve.no/vann-og-vassdrag/hydrologiske-data/
+Final URL: https://www.nve.no/vann-og-vassdrag/hydrologiske-data/
+HTTP status: 200
+Method: fresh unauthenticated HTTP GET; HTML text extraction with BeautifulSoup get_text(" ", strip=True).
+No forms submitted; no credentials used.
+
+Forside Vann og vassdrag Hydrologiske data Hydrologiske data Se eller last ned hydrologiske data Sildre Hydrologiske data fra målestasjoner, både historiske og sanntid Varsom SeNorge Kart med forholdene for snø, vann, nedbør, temperatur – historisk, nå og fremtidig Seriekart Karttjeneste for å plukke ut og laste ned måleserier etter egne kriterier,  for profesjonelle brukere HydAPI Automatisert henting av både historiske og ferske hydrologiske data Lær mer om hvordan hydrologiske data måles Hvordan sende inn hydrologiske måledata? Hvordan forstå tidsseriegrafene? Hvordan gjøre analyse på hydrologiske data? Ofte stilte spørsmål om hydrologiske data Vannstand og vannføring API Historiske data Bredata Hydrologiske pålegg Retningslinjer for publisering av hydrologiske data
