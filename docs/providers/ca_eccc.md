@@ -1,4 +1,4 @@
-# Canada — Environment and Climate Change Canada
+# Canada: Environment and Climate Change Canada
 
 [Documentation index](../README.md) · [Usage](../usage.md)
 
@@ -7,129 +7,195 @@
 | Provider | `ca_eccc` |
 | Country | Canada |
 | Published by | Water Survey of Canada, Environment and Climate Change Canada |
-| Variables | Discharge, stage |
-| Stations in the catalogue | 8,057 |
+| Quantities | Daily mean discharge and stage |
+| Stations in the catalogue | 8,057. Availability depends on quantity and period |
 | Credentials | None |
-| Access | Bulk: the national archive is downloaded once, then read locally |
-| Licence | Open Government Licence – Canada |
+| Access | Explicit national HYDAT download, then local retrieval |
+| Terms | The official HYDAT dataset record lists the Open Government Licence – Canada; see [Terms and citation](#terms-and-citation) |
 | Agency documentation | [Water Office](https://wateroffice.ec.gc.ca/), [National water data archive: HYDAT](https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey/data-products-services/national-archive-hydat.html) |
+
+First prepare the national archive. This transfers and compiles the whole dataset,
+not just the station used below. Allow time and disk space for that operation;
+see [Downloading the archive](#downloading-the-archive).
 
 ```python
 import rivretrieve as rr
 
-rr.download("ca_eccc")  # once: downloads and compiles the national archive
-
-selection = rr.find(provider="ca_eccc", product="discharge_daily_mean")
-selection = rr.pick(selection, station="05OG008")
-result = rr.fetch(selection, start="2000-01-01", end="2000-12-31")
-```
-
-## Who measures, and who publishes
-
-The Water Survey of Canada, part of Environment and Climate Change Canada, runs the national
-hydrometric network with provincial, territorial and other partners, and publishes the results
-through the [Water Office](https://wateroffice.ec.gc.ca/).
-
-Canada publishes its record in two forms:
-
-- **Near real-time readings**, through the Water Office and an ECCC programming interface. These
-  are minutes to a couple of hours old.
-- **HYDAT**, the national archive of reviewed data, republished from time to time as a dated
-  edition. The edition available on 19 September 2026 was dated 17 July 2026.
-
-RivRetrieve reads HYDAT. That means Canadian data arrive reviewed but not recent: the most recent
-weeks or months are not in the archive yet. RivRetrieve does not read the near real-time service.
-
-## Downloading the archive first
-
-Canada is a bulk provider. Rather than answering station by station, the agency distributes its
-whole archive as one SQLite database, so RivRetrieve downloads it once and then reads it from your
-own disk:
-
-```python
 rr.download("ca_eccc")
 ```
 
-That download is about 1 GB, it happens only when you ask for it, and RivRetrieve never starts it
-on its own. Until it has run, retrieval returns an empty result and an issue saying the store is
-missing. `rr.cache_status("ca_eccc")` tells you whether the archive is present.
+Then retrieve one week of published daily mean discharge at station `05OG008`:
 
-Afterwards, retrieval is local and fast, and the same copy serves every station and year until you
-download a newer vintage.
+```python
+selection = rr.find(
+    provider="ca_eccc",
+    station="05OG008",
+    quantity="discharge",
+    frequency="daily",
+    statistic="mean",
+)
+
+result = rr.fetch(
+    selection, start="1991-03-01", end="1991-03-07", cache="bypass"
+)
+
+preview = result.data.select("time", "time_zone", "value", "unit").head(3)
+print(preview.write_csv(float_precision=3), end="")
+
+print(result.data.height)
+print(result.issues)
+```
+
+Output:
+
+```text
+time,time_zone,value,unit
+1991-03-01T00:00:00.000000,unknown,0.090,m3/s
+1991-03-02T00:00:00.000000,unknown,0.090,m3/s
+1991-03-03T00:00:00.000000,unknown,0.090,m3/s
+7
+()
+```
+
+The request returned seven daily means in m³/s and no retrieval issues (the empty
+tuple `()`). The preview shows three values rounded to three decimal places.
+Both endpoint dates are included. RivRetrieve reads the published means; it does
+not calculate them from more frequent observations. An empty issue tuple does
+not establish the quality of the values.
+
+For this bulk provider, `cache="bypass"` still reads the compiled local archive.
+The output above uses the July 17, 2026 edition; later editions can contain
+revisions. Run the snippets in order in the same Python session. See
+[Usage](../usage.md) for general selection and result handling.
+
+## Who measures, and who publishes
+
+The Water Survey of Canada (WSC), within Environment and Climate Change Canada
+(ECCC), collects, interprets and publishes standardized water-quantity data.
+The national hydrometric program operates through federal, provincial and
+territorial partnerships and agreements with other organisations. WSC operates
+stations for most provinces and territories; Quebec operates its own network.
+
+WSC compiles the historical records in HYDAT and publishes near-real-time data
+through the Water Office and other services. RivRetrieve reads the HYDAT SQLite
+archive, not the near-real-time service. ECCC describes HYDAT updates as
+quarterly. An archive edition date does not tell you the latest observation date
+at each station or establish a fixed publication delay.
+
+## Downloading the archive
+
+`rr.download("ca_eccc")` explicitly downloads and compiles the national archive.
+RivRetrieve never starts this transfer during `fetch`. Without a compiled store,
+retrieval returns an empty result with a `bulk.store_missing` warning and an
+instruction to run `download`.
+
+The July 17, 2026 compressed SQLite archive was listed as approximately 266 MB
+by the publisher. Compilation also needs space for the extracted database and
+working files. The verified compiled store occupied about 413 MB; that is not
+its peak working-space requirement. The fresh download and compilation took
+about an hour on the verification machine. Size and duration vary by edition
+and computer. RivRetrieve checks its configured free-space requirement before
+starting; allow additional working space rather than treating the ZIP size as
+the disk requirement.
+
+Choose a cache location with `RIVRETRIEVE_CACHE_DIR` before preparing the archive;
+see [cache configuration](../usage.md#cache-and-bulk-downloads). After preparation,
+inspect the local copy without downloading it again:
+
+```python
+status = rr.cache_status("ca_eccc")
+
+print(status.presence.value)
+print(status.source_vintage)
+```
+
+Output for the verified copy:
+
+```text
+present
+2026-07-17
+```
+
+The same compiled copy serves later requests for other stations and periods.
+Both `cache="bypass"` and `cache="reuse"` read it locally. `cache="refresh"`
+is refused: run `rr.download("ca_eccc")` explicitly to replace the store with
+the latest available edition. Retrieval does not check for a newer archive.
 
 ## What you can retrieve
 
-| Product | HYDAT table and column | Unit | Stations |
-|---|---|---|---:|
-| `discharge_daily_mean` | `DLY_FLOWS.FLOW` | m³/s | 8,057 |
-| `stage_daily_mean` | `DLY_LEVELS.LEVEL` | m | 8,057 |
+| Quantity filter | Published statistic | Source and returned unit |
+|---|---|---|
+| `discharge` | Daily mean | m³/s |
+| `stage` | Daily mean | m |
 
-Availability is `unknown` for every station and product in the catalogue, and the catalogue says
-why: the station endpoint ECCC publishes does not state which variables a station actually holds.
-Whether a given station has discharge or stage becomes clear once the archive is on your disk.
+Use `frequency="daily"` and `statistic="mean"` for either quantity.
+Stage is water level, not water depth or automatically an elevation above sea
+level. RivRetrieve has not established a vertical reference for these series.
+Other HYDAT contents, including sediment and extremes, are outside this provider's
+supported quantities and statistics.
 
-The catalogue carries no published record dates for Canada, so the span of each station's record
-is known only from the archive itself.
+A station being listed does not guarantee data for each quantity or requested
+period. The packaged catalogue does not establish station record dates or
+per-quantity availability. The example verifies only its station, quantity and
+week, not continuous history or national coverage.
 
-## Data status
+## Time and data status
 
-The Water Office's
-[disclaimer](https://wateroffice.ec.gc.ca/disclaimer_info_e.html) distinguishes what the agency
-treats as official:
+Daily calendar dates appear at midnight with `time_zone="unknown"`.
+Read `time` and `time_zone` together. RivRetrieve has not established the time
+zone or the interval bounds for these historical daily series. The midnight
+label does not make them UTC. ECCC's FAQ describes daily means using observations
+between 00:00 and 24:00; this does not establish a zone for every historical
+record returned here.
 
-> Official data Products are Water Level and Discharge. Any other available parameters are
-> categorized as data Outputs and do not receive a standardized level of quality assurance.
+ECCC describes review and finalization before records enter its national
+historical database. Values can still carry source symbols, including `B` for
+ice conditions and `E` for estimates, and can be revised. RivRetrieve preserves
+native symbol cells in its compiled store but does not add a per-row quality
+column to `result.data` or interpret symbols as a quality ranking. Optional
+[receipts](../usage.md#receipts-optional) retain selected stored source cells;
+a store excerpt is not the original national ZIP archive.
 
-and describes its near real-time readings as preliminary:
-
-> The data are preliminary and have been transmitted automatically with limited verification and
-> review for quality assurance. Subsequent quality assurance and verification procedures may
-> result in differences between what is currently displayed and what will become the official
-> record.
-
-HYDAT, which RivRetrieve reads, is the reviewed archive rather than those near real-time readings.
-Each daily value in it can carry a symbol, for example for ice conditions or an estimated value;
-HYDAT defines them in its own `DATA_SYMBOLS` table. RivRetrieve keeps the symbols in the compiled
-store, and returns the value itself.
-
-## Time
-
-Daily values come back with `time_zone` `unknown`. HYDAT records a calendar date for each daily
-value and does not state the clock that bounds the day, so RivRetrieve does not fill one in.
+A published null daily cell remains a row with `value=null`. An absent monthly
+source record supplies no daily rows. A missing store or failed request is
+reported separately; an empty result alone does not distinguish those cases.
+Check [issues](../usage.md#issues) before interpreting gaps or empty results.
 
 ## Terms and citation
 
-The HYDAT archive is published under the
-[Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada),
-which states:
-
-> The Information Provider grants you a worldwide, royalty-free, perpetual, non-exclusive licence
-> to use the Information, including for commercial purposes, subject to the terms below.
-
-and requires attribution:
-
-> Acknowledge the source of the Information by including any attribution statement specified by
-> the Information Provider(s) and, where possible, provide a link to this licence.
-
-Where no specific statement is given, the licence prescribes the wording:
+The official [Historical Hydrometric Data dataset record](https://open.canada.ca/data/en/dataset/1ee9e14d-0814-5201-a3be-705809d8ee0e)
+links the HYDAT SQL download and lists the
+[Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada).
+It permits reuse, including commercial use, subject to its conditions, and requires
+source attribution and, where possible, a licence link. Where no specific
+attribution is supplied, its wording is:
 
 > Contains information licensed under the Open Government Licence – Canada.
 
-The Water Office disclaimer adds its own conditions on redistribution:
+ECCC also publishes a separate [Data Services End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/),
+which its hydrometric data-server documentation cites and RivRetrieve records
+as a provenance source. Its attribution provisions include third-party
+originators. These are distinct publisher licence statements. Check the linked terms
+that apply to the source and intended use.
 
-> Information presented on this web site is considered public information and may be distributed
-> or copied. No agency or individual can bundle the raw information and resell the raw
-> information. However, agencies and individuals may add value to the data and charge for the
-> value added options. An appropriate byline acknowledging Environment Canada is required.
+The [Water Office FAQ](https://wateroffice.ec.gc.ca/contactus/faq_e.html)
+provides separate citations for its websites and for `HYDAT.mdb`.
+That MDB-specific wording is not a prescribed SQLite citation. For the SQLite
+archive, a practical reference should identify ECCC/WSC, HYDAT, the actual
+SQLite edition, source URL and access date. This is suggested documentation of
+the source, not an official citation template. The Water Office's conditions
+for information on its website should not be assumed to define the archive's
+reuse terms.
 
 ## Sources
 
-| Page | Retrieved |
-|---|---|
-| [Water Office](https://wateroffice.ec.gc.ca/) | 2026-09-19 |
-| [Disclaimer for Hydrometric Information](https://wateroffice.ec.gc.ca/disclaimer_info_e.html) | 2026-09-19 |
-| [Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada) | 2026-09-19 |
-| [Open Government portal, HYDAT dataset records](https://open.canada.ca/data/en/dataset?q=HYDAT) | 2026-09-19 |
+Publisher pages checked on 2026-09-22:
 
-Station counts come from the packaged catalogue. The archive is downloaded from
-`collaboration.cmc.ec.gc.ca`.
+- [WSC overview](https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey.html), [Water Office FAQ](https://wateroffice.ec.gc.ca/contactus/faq_e.html): responsibilities, daily means and symbols, citation guidance.
+- [HYDAT archive](https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey/data-products-services/national-archive-hydat.html), [download directory](https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/): archive contents, publication and edition.
+- [Historical Hydrometric Data record](https://open.canada.ca/data/en/dataset/1ee9e14d-0814-5201-a3be-705809d8ee0e), [Open Government Licence](https://open.canada.ca/en/open-government-licence-canada), [ECCC Data Services End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/): terms and attribution.
+
+The station count describes the packaged catalogue. Fresh national acquisition
+and local example retrieval were checked on 2026-09-22–23. The
+[verification record](../verification/canada-provider/README.md) retains the
+commands, evidence and limits of these checks.
