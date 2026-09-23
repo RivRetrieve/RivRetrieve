@@ -1,6 +1,6 @@
 """Transport seam : EngineRequest × ProviderStages × Transport → assembled observations."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -18,18 +18,11 @@ from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
-from rivretrieve._internal.recordings import (
-    RecordedRequest,
-    RecordingEnvelope,
-    ReplayTransport,
-    UnmatchedRequestError,
-)
-from rivretrieve._internal.transport import HttpMethod
+from tests.usgs_modern_recordings import ModernReplay, body
 
 assert isinstance(declaration.observations, LiveStages)
 usgs_nwis = declaration.observations.stages
 
-_FIXTURE = Path(__file__).parent / "test_data" / "usgs_nwis_07374000_dv_00060_2023-01-01.json"
 _PRODUCT = ProductId("discharge_daily_mean")
 
 
@@ -56,31 +49,9 @@ def _request() -> ObservationRequest:
         stations=("07374000",),
         products=(_PRODUCT,),
         window=RequestedWindow(
-            start=WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
-            end=WindowEndpoint.from_datetime(datetime(2023, 1, 1, 23, 59, 59, 999999)),
+            start=WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+            end=WindowEndpoint.from_datetime(datetime(2024, 1, 7, 23, 59, 59, 999999)),
         ),
-    )
-
-
-def _recording() -> RecordingEnvelope:
-    return RecordingEnvelope(
-        request=RecordedRequest(
-            method=HttpMethod.GET,
-            url="https://waterservices.usgs.gov/nwis/dv/",
-            parameters={
-                "format": "json",
-                "sites": "07374000",
-                "startDT": "2022-12-30",
-                "endDT": "2023-01-03",
-                "parameterCd": "00060",
-                "statCd": "00003",
-            },
-            ordinary_headers={"Accept": "application/json", "User-Agent": "RivRetrieve"},
-        ),
-        content=_FIXTURE.read_bytes(),
-        status_code=200,
-        retrieved_at=datetime(2026, 8, 19, tzinfo=UTC),
-        content_type="application/json",
     )
 
 
@@ -89,18 +60,22 @@ def _provenance() -> ObservationProvenance:
 
 
 def test_stop_convention_flip_misses_exact_recording() -> None:
+    import json
+
     request = _request()
-    replay = ReplayTransport([_recording()])
-
+    replay = ModernReplay("daily-07374000-discharge-mean")
     baseline = drive(request, usgs_nwis, provenance=_provenance(), transport=replay)
-    assert baseline.canonical_rows.height == 1
-
-    with pytest.raises(UnmatchedRequestError) as exc_info:
+    assert baseline.canonical_rows.height == 7
+    assert set(baseline.canonical_rows["time_zone"]) == {"unknown"}
+    expected = [
+        float(feature["properties"]["value"]) * 0.028316846592
+        for feature in json.loads(body("daily-07374000-discharge-mean"))["features"]
+        if "2024-01-01" <= feature["properties"]["time"] <= "2024-01-07"
+    ]
+    assert baseline.canonical_rows["value"].to_list() == expected
+    with pytest.raises(AssertionError, match="No exact modern recording") as exc_info:
         drive(request, _ExclusiveStopUsgs, provenance=_provenance(), transport=replay)
-
-    message = str(exc_info.value)
-    assert '"endDT":"2023-01-04"' in message
-    assert '"endDT":"2023-01-03"' not in message
+    assert "2023-12-30/2024-01-10" in str(exc_info.value)
 
 
 def test_provider_modules_cannot_import_or_name_private_credential_request_authority() -> None:

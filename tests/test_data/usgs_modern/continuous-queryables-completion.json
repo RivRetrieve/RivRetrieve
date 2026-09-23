@@ -1,0 +1,9 @@
+{
+  "name": "continuous-queryables",
+  "initial_url": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/queryables?f=json",
+  "pages": [
+    "continuous-queryables"
+  ],
+  "exhausted": true,
+  "total_features": 0
+}

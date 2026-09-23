@@ -63,7 +63,14 @@ def test_recorded_http200_database_failure_returns_source_issue() -> None:
     assert isinstance(declaration.observations, LiveStages)
     stages = declaration.observations.stages
     result = stages.parse(_recorded_database_failure(), stages.config)
-    assert_frame_equal(result.value, pl.DataFrame(schema=RowsSchema.polars_schema))
+    assert_frame_equal(result.rows, pl.DataFrame(schema=RowsSchema.polars_schema))
+    assert len(result.outcomes) == 1
+    outcome = result.outcomes[0]
+    assert outcome.status == "failed"
+    assert outcome.series_id == result.series[0].series_id
+    assert outcome.station_id == "1109499"
+    assert outcome.product_id == "stage_reported"
+    assert "500:  Internal Database Error ...pq: out of shared memory" in outcome.reason
     assert len(result.issues) == 1
     issue = result.issues[0]
     assert issue.severity == "error"
@@ -73,37 +80,41 @@ def test_recorded_http200_database_failure_returns_source_issue() -> None:
     assert issue.details["source_message"] == "500:  Internal Database Error ...pq: out of shared memory"
 
 
-def test_malformed_failure_message_and_broken_json_remain_contract_errors() -> None:
+def test_malformed_failure_message_and_broken_json_remain_identified_unsupported_outcomes() -> None:
     import json
     from dataclasses import replace
-
-    import pytest
-
-    from rivretrieve._internal.issues import FatalContractError
 
     assert isinstance(declaration.observations, LiveStages)
     stages = declaration.observations.stages
     payload = _recorded_database_failure()
     document = json.loads(payload.content)
     del document["data"]
-    with pytest.raises(FatalContractError, match="source failure must carry"):
-        stages.parse(replace(payload, content=json.dumps(document).encode()), stages.config)
-    with pytest.raises(FatalContractError, match="not valid JSON"):
-        stages.parse(replace(payload, content=payload.content[:-1]), stages.config)
+    for content, reason in (
+        (json.dumps(document).encode(), "source failure must carry"),
+        (payload.content[:-1], "not valid JSON"),
+    ):
+        result = stages.parse(replace(payload, content=content), stages.config)
+        assert result.rows.is_empty()
+        assert result.outcomes[0].status == "unsupported"
+        assert result.outcomes[0].series_id == result.series[0].series_id
+        assert result.outcomes[0].station_id == "1109499"
+        assert reason in result.outcomes[0].reason
+        assert result.issues[0].code == "unsupported_source_structure"
 
 
-def test_unknown_result_state_does_not_become_a_source_failure_issue() -> None:
+def test_unknown_result_state_is_unsupported_not_an_asserted_source_failure() -> None:
     import json
     from dataclasses import replace
-
-    import pytest
-
-    from rivretrieve._internal.issues import FatalContractError
 
     assert isinstance(declaration.observations, LiveStages)
     stages = declaration.observations.stages
     payload = _recorded_database_failure()
     document = json.loads(payload.content)
     document["result"] = "BROKEN-CONTRACT"
-    with pytest.raises(FatalContractError, match="result must be 'OK'"):
-        stages.parse(replace(payload, content=json.dumps(document).encode()), stages.config)
+    result = stages.parse(replace(payload, content=json.dumps(document).encode()), stages.config)
+    assert result.rows.is_empty()
+    assert result.outcomes[0].status == "unsupported"
+    assert result.outcomes[0].series_id == result.series[0].series_id
+    assert "result must be 'OK'" in result.outcomes[0].reason
+    assert result.issues[0].code == "unsupported_source_structure"
+    assert all(issue.code != ThThaiWaterObservationIssueCodes.SOURCE_REQUEST_FAILED for issue in result.issues)

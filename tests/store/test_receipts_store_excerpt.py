@@ -80,7 +80,7 @@ def test_ca_eccc_fetch_retains_a_faithful_store_excerpt(tmp_path: Path) -> None:
     assert receipt.origin.source_path == str(store)
     assert receipt.executed_query.stations == ("02GA010",)
     assert receipt.executed_query.products == ("discharge_daily_mean",)
-    assert receipt.format_version == 2
+    assert receipt.format_version == 5
     assert receipt.source_vintage == date(2024, 6, 1)
     excerpt = pl.read_parquet(BytesIO(receipt.content))
     assert excerpt["value"].to_list() == [12.4, None, None]

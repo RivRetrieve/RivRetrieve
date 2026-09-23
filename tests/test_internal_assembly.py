@@ -14,6 +14,17 @@ from rivretrieve._internal.engine import CanonicalRowsSchema, SourceCallOrigin, 
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptAuthorship, ReceiptEntry, Receipts
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.source_series import (
+    InventoryCompleteness,
+    InventorySnapshot,
+    OutcomeStatus,
+    PhysicalFacts,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+)
 
 
 def test_assemble_packages_populated_inputs_unchanged() -> None:
@@ -24,6 +35,11 @@ def test_assemble_packages_populated_inputs_unchanged() -> None:
             "station_id": ["station-b", "station-a"],
             "product_id": ["flow", "stage"],
             "value": [100.0, -2.5],
+            "series_id": ["flow-b", "stage-a"],
+            "facts_id": ["flow-facts", "stage-facts"],
+            "source_unit": ["m3/s", "m"],
+            "quantity": ["discharge", "stage"],
+            "unit": ["m3/s", "m"],
         },
         schema=CanonicalRowsSchema.polars_schema,
     )
@@ -34,6 +50,11 @@ def test_assemble_packages_populated_inputs_unchanged() -> None:
             "station_id": ["station-b", "station-a"],
             "product_id": ["flow", "stage"],
             "value": [100.0, -2.5],
+            "series_id": ["flow-b", "stage-a"],
+            "facts_id": ["flow-facts", "stage-facts"],
+            "source_unit": ["m3/s", "m"],
+            "quantity": ["discharge", "stage"],
+            "unit": ["m3/s", "m"],
         },
         schema=CanonicalRowsSchema.polars_schema,
     )
@@ -112,7 +133,7 @@ def test_assemble_packages_empty_inputs_unchanged() -> None:
     assert result.receipts.entries == ()
 
 
-def test_assemble_return_construction_is_private_and_exactly_four_input_packaging() -> None:
+def test_assemble_return_construction_is_private_and_explicit_input_packaging() -> None:
     result = assemble(
         pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
         ObservationProvenance(source="live", provider_id=ProviderId("provider-a")),
@@ -127,6 +148,10 @@ def test_assemble_return_construction_is_private_and_exactly_four_input_packagin
         "provenance",
         "issues",
         "receipts",
+        "source_series",
+        "inventories",
+        "outcomes",
+        "scope",
     )
     assert "_AssemblyResult" not in rivretrieve.__dict__
     assert "_AssemblyResult" not in rivretrieve._internal.__dict__
@@ -149,10 +174,17 @@ def test_assemble_body_is_constructor_only_and_has_no_conversion_or_provider_dep
         "provenance",
         "issues",
         "receipts",
+        "source_series",
+        "inventories",
+        "outcomes",
+        "scope",
     )
-    for keyword in call.keywords:
+    for keyword in call.keywords[:-1]:
         assert isinstance(keyword.value, ast.Name)
         assert keyword.value.id == keyword.arg
+
+    assert isinstance(call.keywords[-1].value, ast.BoolOp)
+    assert ast.unparse(call.keywords[-1].value) == "scope or SeriesScope()"
 
     imports = [node for node in module_tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
     imported_modules = tuple(
@@ -177,3 +209,54 @@ def test_assemble_body_is_constructor_only_and_has_no_conversion_or_provider_dep
         for forbidden_fragment in ("serializ", "validator")
     )
     assert not any(imported.startswith("Annotation") or imported.endswith("Schema") for imported in imported_names)
+
+
+def test_assemble_preserves_concrete_series_inventory_outcomes_and_scope_identity() -> None:
+    rows = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
+    provenance = ObservationProvenance(source="live", provider_id=ProviderId("provider"))
+    receipts = Receipts(provider_id=ProviderId("provider"))
+    scope = SeriesScope(provider_ids=("provider",), station_ids=("station",), product_ids=("level",))
+    series = (
+        SourceSeries(
+            series_id="series",
+            provider_id="provider",
+            station_id="station",
+            product_id="level",
+            identity=SourceIdentity(
+                namespace="test-source", published_id="source-id", origin="response", evidence=("source payload",)
+            ),
+            facts=(PhysicalFacts(facts_id="facts"),),
+        ),
+    )
+    window = SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2))
+    inventories = (
+        InventorySnapshot(
+            snapshot_id="inventory",
+            scope=scope,
+            members=("series",),
+            completeness=InventoryCompleteness.COMPLETE,
+            access="test endpoint",
+            origin="response",
+            window=window,
+            evidence=("source response",),
+        ),
+    )
+    outcomes = (
+        RetrievalOutcome(
+            outcome_id="unsupported",
+            series_id="series",
+            station_id="station",
+            product_id="level",
+            window=window,
+            status=OutcomeStatus.UNSUPPORTED,
+            reason="Source unit is not established",
+        ),
+    )
+    result = assemble(
+        rows, provenance, (), receipts, source_series=series, inventories=inventories, outcomes=outcomes, scope=scope
+    )
+    assert result.source_series is series
+    assert result.inventories is inventories
+    assert result.outcomes is outcomes
+    assert result.scope is scope
+    assert result.canonical_rows is rows

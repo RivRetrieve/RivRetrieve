@@ -21,7 +21,7 @@ from rivretrieve._internal.store import (
 )
 from rivretrieve._internal.store.validation import StoreManifest
 
-FIXTURES = Path(__file__).parents[1] / "test_data" / "observation_store_conformance"
+FIXTURES = Path(__file__).parents[1] / "test_data" / "source_series_store_conformance"
 
 
 def _query(store: Path, *, station: str = "ca-001", product: str = "discharge") -> StoreQuery:
@@ -63,7 +63,16 @@ def test_reader_projects_native_rows_and_keeps_physical_value_state() -> None:
     store = FIXTURES / "valid_hydat_national"
     result = StoreReader().query(_query(store))
 
-    assert result.rows.columns == ["station_id", "product_id", "time", "value", "time_zone"]
+    assert result.rows.columns == [
+        "station_id",
+        "product_id",
+        "time",
+        "value",
+        "time_zone",
+        "series_id",
+        "facts_id",
+        "source_unit",
+    ]
     assert result.rows["value"].to_list() == [3.5, None]
     assert result.physical_rows["value_state"].to_list() == ["published_value", "published_null"]
     assert result.physical_rows["source_quality"].to_list() == ["A", "E"]
@@ -102,7 +111,7 @@ def test_status_reports_absence_or_validated_manifest_facts(tmp_path: Path) -> N
     present = reader.status(store, ProviderId("fixture_bulk"))
     assert present.presence is StorePresence.PRESENT
     assert present.exists
-    assert present.format_version == 2
+    assert present.format_version == 5
     assert present.manifest is not None
     assert isinstance(present.manifest, StoreManifest)
     assert present.compiler_version == present.manifest.compiler_version
@@ -119,4 +128,7 @@ def test_empty_query_result_has_engine_rows_schema() -> None:
         "time": pl.Datetime("us"),
         "value": pl.Float64,
         "time_zone": pl.String,
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "source_unit": pl.String,
     }

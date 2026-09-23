@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import math
 import sqlite3
 import tempfile
 import zipfile
@@ -25,11 +26,12 @@ from typing import Final
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.ca_eccc.series import source_series
+from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store import (
     ArtifactChecksum,
     Disposition,
     NativeObservationBatch,
-    NativeStoreMaterialization,
     ObservationBatchStream,
     PublisherArtifact,
     SourceColumn,
@@ -44,7 +46,6 @@ from rivretrieve._internal.store import (
 )
 
 PROVIDER_ID: Final = ProviderId("ca_eccc")
-FORMAT_VERSION: Final = 1
 HYDAT_MONTHS_PER_BATCH: Final = 512
 
 
@@ -116,7 +117,7 @@ def download_hydat(
 ) -> DownloadedHydat:
     """Resolve and transfer the latest dated HYDAT release after shared consent checks.
 
-    RR5 owns consent, disk-space refusal and the public verb. This source operation
+    Public composition owns consent, disk-space refusal and the download operation. This source operation
     only knows HYDAT's dated URL vocabulary and transfers to the already-resolved
     publisher-artifact path supplied by the composition root.
     """
@@ -141,10 +142,6 @@ def download_hydat(
                 raise
             return DownloadedHydat(path=target, url=url, source_vintage=vintage)
     raise FileNotFoundError(f"no HYDAT release found within {max_back_days} days of {today.isoformat()}")
-
-
-# The provider contract's short operation name.
-download = download_hydat
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,11 +193,6 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
     )
 
 
-# The provider contract calls its source-specific operation ``compile``. The longer
-# spelling is retained to make direct imports unambiguous in tests and tooling.
-compile = compile_hydat
-
-
 def decode_hydat_batches(path: Path, declared_schema: _HydatSchema | None = None) -> ObservationBatchStream:
     """decode_hydat_batches : HYDATSQLite → ObservationBatchStream."""
     artifact = Path(path)
@@ -233,6 +225,7 @@ def decode_hydat_batches(path: Path, declared_schema: _HydatSchema | None = None
                                 _hydat_frame(rows, schema),
                                 tuple(units),
                                 tuple(contributions),
+                                _batch_series(rows),
                             )
                             rows = []
                             units = []
@@ -242,6 +235,7 @@ def decode_hydat_batches(path: Path, declared_schema: _HydatSchema | None = None
                             _hydat_frame(rows, schema),
                             tuple(units),
                             tuple(contributions),
+                            _batch_series(rows),
                         )
             finally:
                 connection.close()
@@ -293,44 +287,6 @@ def _require_single_path(path: Path | tuple[Path, ...]) -> Path:
     return path
 
 
-def decode_hydat(path: Path, declared_schema: _HydatSchema | None = None) -> NativeStoreMaterialization:
-    """Decode every published HYDAT daily cell without unit conversion."""
-    with _sqlite_payload(path) as sqlite_path:
-        schema = _inspect_schema(sqlite_path)
-        if declared_schema is not None and schema.source_columns != declared_schema.source_columns:
-            # certify_store also checks this boundary; failing here avoids materialising a
-            # changed SQLite schema into memory.
-            raise ValueError("HYDAT source schema changed between declaration and decoding")
-        rows: list[dict[str, object]] = []
-        units: list[SourceUnitCount] = []
-        connection = _open_read_only(sqlite_path)
-        try:
-            for table in HYDAT_TABLES:
-                quoted = _quote_identifier(table.table_name)
-                cursor = connection.execute(f"SELECT rowid AS __rivretrieve_rowid, * FROM {quoted} ORDER BY rowid")
-                for ordinal, source_row in enumerate(cursor, start=1):
-                    native = dict(source_row)
-                    rowid = native.pop("__rivretrieve_rowid")
-                    emitted = _unpivot_month(table, native, schema, rows)
-                    units.append(
-                        SourceUnitCount(
-                            source_unit=f"{table.table_name}:rowid={rowid!s}:ordinal={ordinal}",
-                            publisher_records=1,
-                            expected_emitted_rows=emitted,
-                        )
-                    )
-        finally:
-            connection.close()
-    if not rows:
-        raise ValueError("HYDAT contains no daily flow or level rows")
-    frame = _hydat_frame(rows, schema)
-    return NativeStoreMaterialization(
-        rows=frame,
-        observed_source_columns=schema.source_columns,
-        source_units=tuple(units),
-    )
-
-
 def _hydat_frame(rows: list[dict[str, object]], schema: _HydatSchema) -> pl.DataFrame:
     return (
         pl.DataFrame(rows, infer_schema_length=None)
@@ -341,10 +297,15 @@ def _hydat_frame(rows: list[dict[str, object]], schema: _HydatSchema) -> pl.Data
             "time_zone",
             "value",
             "value_state",
+            "series_id",
+            "facts_id",
+            "source_unit",
             *schema.retained_names,
         )
         .with_columns(
-            pl.col("product", "station_id", "time_zone", "value_state").cast(pl.String),
+            pl.col("product", "station_id", "time_zone", "value_state", "series_id", "facts_id", "source_unit").cast(
+                pl.String
+            ),
             pl.col("time").cast(pl.Datetime("us")),
             pl.col("value").cast(pl.Float64),
             *(
@@ -400,6 +361,8 @@ def _unpivot_month(
             retained[qualified] = source[column]
 
     for day in range(1, valid_days + 1):
+        definition = source_series(station, str(table.product_id))
+        facts = definition.facts[0]
         raw_value = source[f"{table.value_prefix}{day}"]
         if raw_value is None:
             value = None
@@ -411,6 +374,11 @@ def _unpivot_month(
             raise TypeError(f"{table.table_name}.{table.value_prefix}{day} is not numeric, null, or blank")
         else:
             value = float(raw_value)
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"{table.table_name}.{table.value_prefix}{day} has a non-finite numeric observation "
+                    f"for station {station!r}, year {year}, month {month}"
+                )
             value_state = "published_value"
         output.append(
             {
@@ -420,6 +388,9 @@ def _unpivot_month(
                 "time_zone": "unknown",
                 "value": value,
                 "value_state": value_state,
+                "series_id": definition.series_id,
+                "facts_id": facts.facts_id,
+                "source_unit": facts.source_unit.value,
                 **retained,
             }
         )
@@ -519,3 +490,8 @@ def _sha256(path: Path) -> ArtifactChecksum:
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
+
+
+def _batch_series(rows: list[dict[str, object]]) -> tuple[SourceSeries, ...]:
+    pairs = {(str(row["station_id"]), str(row["product"])) for row in rows}
+    return tuple(source_series(station, product) for station, product in sorted(pairs))

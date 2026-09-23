@@ -1,0 +1,10 @@
+{
+  "parameter_code": "00065",
+  "status": "complete",
+  "reason": "publisher next-link chain terminated",
+  "pages": 6,
+  "features": 56984,
+  "last_url": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?cursor=ZTA4NzZlMWNjYjI5NDAzZmI1YzFkZDAwM2EwZjhmYjM&parameter_code=00065&limit=10000&f=json",
+  "sorting": false,
+  "active_filter": null
+}

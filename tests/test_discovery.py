@@ -34,6 +34,7 @@ EXPECTED_PRODUCT_IDS = [
     "stage_hourly_mean",
     "stage_instantaneous",
     "stage_reported",
+    "water_temperature_daily",
     "water_temperature_daily_mean",
     "water_temperature_hourly_mean",
     "water_temperature_instantaneous",
@@ -73,11 +74,10 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
     "fr_hubeau": [
         "discharge_daily_max",
         "discharge_daily_mean",
-        "discharge_instantaneous",
         "stage_daily_max",
-        "stage_instantaneous",
         "water_temperature_reported",
     ],
+    "fr_hydroportail": ["discharge_instantaneous", "stage_instantaneous"],
     "jp_mlit": [
         "discharge_daily",
         "discharge_hourly",
@@ -100,9 +100,9 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_instantaneous",
     ],
     "pl_imgw": [
-        "discharge_daily_mean",
-        "stage_daily_mean",
-        "water_temperature_daily_mean",
+        "discharge_daily",
+        "stage_daily",
+        "water_temperature_daily",
     ],
     "th_thaiwater": [
         "discharge_reported",
@@ -156,6 +156,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",

@@ -43,7 +43,9 @@ _CONFIG = ProviderConfig(
     zone=ZoneValue("+00:00"),
     products={
         ProductId("discharge_reported"): ProductConfig(
-            SourceCoordinates(ChFoenSourceCoordinates((NativeField("flow", Unit.M3_S),))),
+            SourceCoordinates(
+                ChFoenSourceCoordinates((NativeField("flow", Unit.M3_S), NativeField("flow_ls", Unit.L_S)))
+            ),
             Unit.M3_S,
             UnknownTemporalSupport(),
         ),

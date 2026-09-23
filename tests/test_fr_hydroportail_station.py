@@ -18,12 +18,12 @@ from rivretrieve._internal.engine import (
     WindowEndpoint,
     _make_fetch_window,
 )
-from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.fr_hubeau.config import config
-from rivretrieve._internal.providers.fr_hubeau.fetch import fetch
-from rivretrieve._internal.providers.fr_hubeau.parse import parse
+from rivretrieve._internal.providers.fr_hydroportail.config import config
+from rivretrieve._internal.providers.fr_hydroportail.fetch import fetch
+from rivretrieve._internal.providers.fr_hydroportail.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.source_series import SeriesScope
 
 DATA = Path(__file__).parent / "test_data"
 PRODUCT = ProductId("discharge_instantaneous")
@@ -66,10 +66,11 @@ def test_station_own_discharge_fetch_replays_exact_non_sample_station():
         _window("2026-05-30", "2026-06-04T23:59:59"),
         config(),
         ReplayTransport((recording,)),
+        scope=SeriesScope(restriction="explicit", variants=("raw",)),
     )
     (payload,) = fetched.value
     assert payload.content == recording.content
-    frame = parse(payload, config()).value
+    frame = parse(payload, config()).rows
     assert not frame.is_empty()
     assert frame["station_id"].unique().to_list() == ["1232000101"]
 
@@ -93,11 +94,11 @@ def test_station_own_discharge_parser_does_not_require_the_old_sample_site():
         ),
         recording.prerequisite_calls,
     )
-    assert not parse(payload, config()).value.is_empty()
+    assert not parse(payload, config()).rows.is_empty()
 
 
 def test_valid_empty_envelope_is_not_a_source_identity_failure():
-    assert parse(_empty_payload(), config()).value.is_empty()
+    assert parse(_empty_payload(), config()).rows.is_empty()
 
 
 @pytest.mark.parametrize(
@@ -113,37 +114,45 @@ def test_empty_envelope_checks_series_contract_before_iteration(field, value):
     payload = _empty_payload()
     document = json.loads(payload.content)
     document["series"][field] = value
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    unsupported = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert unsupported.rows.is_empty()
+    assert unsupported.outcomes[0].status == "unsupported"
+    assert unsupported.outcomes[0].reason
 
 
 def test_empty_envelope_requires_source_utc_before_iteration():
     payload = _empty_payload()
     document = json.loads(payload.content)
     document["timezone"] = "Europe/Paris"
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    unsupported = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert unsupported.rows.is_empty()
+    assert unsupported.outcomes[0].status == "unsupported"
+    assert unsupported.outcomes[0].reason
 
 
 def test_empty_envelope_requires_identity_metadata_before_iteration():
     payload = _empty_payload()
     document = json.loads(payload.content)
     del document["series"]["code"]
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    unsupported = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert unsupported.rows.is_empty()
+    assert unsupported.outcomes[0].status == "unsupported"
+    assert unsupported.outcomes[0].reason
 
 
 def _run_station_discharge_boundary(replay):
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(discovery, "HttpClient", lambda: replay)
-        selection = rr.find(provider="fr_hubeau", station="1232000101", product=PRODUCT)
-        return rr.fetch(selection, start="2026-06-01", end="2026-06-02", on_issue="raise").data
+        selection = rr.find(
+            provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"
+        )
+        return rr.fetch(rr.pick(selection, variant="raw"), start="2026-06-01", end="2026-06-02", on_issue="raise").data
 
 
 # Three literals supplied by the independent source-only author, not this parser.
 # Exact source material and authorship are recorded in the adjacent provenance document.
 STATION_DISCHARGE_PROBE = BoundaryProbe(
-    ProviderId("fr_hubeau"),
+    ProviderId("fr_hydroportail"),
     PRODUCT,
     (read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json"),),
     {

@@ -548,13 +548,13 @@ class AuthenticatedTransport:
             request = _sanitized_source_request(
                 request,
                 remove_names=tuple(value.name for value in applicable),
-                forbidden_values=tuple(value._value for value in applicable),
+                forbidden_values=_credential_redaction_values(applicable),
             )
             raise ValueError(f"source request already provides credential header: {collisions[0]}") from None
-        if _request_contains_values(request, tuple(value._value for value in applicable)):
+        if _request_contains_values(request, _credential_redaction_values(applicable)):
             request = _sanitized_source_request(
                 request,
-                forbidden_values=tuple(value._value for value in applicable),
+                forbidden_values=_credential_redaction_values(applicable),
             )
             raise ValueError("source request ordinary header contains a credential value") from None
         result = _send_with_credentials(self.transport, request, applicable)
@@ -589,7 +589,7 @@ class AuthenticatedTransport:
             )
         request = _sanitized_source_request(
             request,
-            forbidden_values=tuple(value._value for value in applicable),
+            forbidden_values=_credential_redaction_values(applicable),
         )
         raise TransportFailure(
             request,
@@ -652,14 +652,34 @@ def _validated_public_headers(headers: Mapping[str, str]) -> tuple[dict[str, str
         return {}, "request headers must be explicitly safe ordinary metadata"
 
 
+def _credential_redaction_values(credentials: tuple[CredentialHeader, ...]) -> tuple[str, ...]:
+    """Protect both a complete authentication header and its source token.
+
+    Publishers can echo a token without its HTTP authentication scheme. Such an
+    echo must not become observation bytes, retained metadata, or diagnostics.
+    """
+    values: list[str] = []
+    for credential in credentials:
+        values.append(credential._value)
+        scheme, separator, token = credential._value.partition(" ")
+        if (
+            credential.name.casefold() == "authorization"
+            and scheme.casefold() in {"token", "bearer"}
+            and separator
+            and token
+        ):
+            values.append(token)
+    return tuple(dict.fromkeys(values))
+
+
 def _response_contains_credentials(response: TransportResponse, credentials: tuple[CredentialHeader, ...]) -> bool:
-    return _response_contains_values(response, tuple(value._value for value in credentials))
+    return _response_contains_values(response, _credential_redaction_values(credentials))
 
 
 def _sanitized_request_for_credentials(
     request: TransportRequest, credentials: tuple[CredentialHeader, ...]
 ) -> TransportRequest:
-    return _sanitized_source_request(request, forbidden_values=tuple(value._value for value in credentials))
+    return _sanitized_source_request(request, forbidden_values=_credential_redaction_values(credentials))
 
 
 _PERCENT_TRIPLET = re.compile(rb"%[0-9A-Fa-f]{2}")
@@ -752,7 +772,7 @@ def _response_contains_values(response: TransportResponse, values: tuple[str, ..
 def _sanitize_if_request_contains_credentials(
     request: TransportRequest, credentials: tuple[CredentialHeader, ...]
 ) -> TransportRequest | None:
-    values = tuple(value._value for value in credentials)
+    values = _credential_redaction_values(credentials)
     if not _request_contains_values(request, values):
         return None
     return _sanitized_source_request(request, forbidden_values=values)

@@ -7,10 +7,9 @@ import hashlib
 import json
 import lzma
 import math
-import urllib.request
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
@@ -18,10 +17,14 @@ from typing import Literal, Never, cast
 from urllib.parse import parse_qsl, urlsplit  # noqa: TID251 -- structural parsing only
 
 import polars as pl
+from pydantic import BaseModel, ConfigDict
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
+    AcquisitionRecord,
+    EvidenceReference,
     MaterialIdentity,
+    NativeTableIdentity,
     verify_provenance_recordings,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -37,6 +40,7 @@ from rivretrieve._internal.catalogues.native import (
     stamp_native_table,
     write_native_table,
 )
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -52,12 +56,24 @@ from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau.origins import (
     NATIVE_TABLE_BYTE_SIZE,
+    NATIVE_TABLE_SEMANTIC_SHA256,
     NATIVE_TABLE_SHA256,
     Projection31BoundsError,
     Projection31PreconditionError,
     build_acquisition_provenance,
     hydrometry_coordinates,
 )
+
+
+class NativeInventoryCapture(BaseModel):
+    """Resolved identities of the two source-owned station acquisitions."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    native_table: NativeTableIdentity
+    hydrometry: AcquisitionRecord
+    temperature: AcquisitionRecord
+    evidence: tuple[EvidenceReference, ...]
+
 
 Product = Literal[
     "discharge_instantaneous",
@@ -73,6 +89,7 @@ Status = Literal[
     "empty_in_both_history_windows",
     "history_check_failed",
     "recent_window_empty_history_unchecked",
+    "catalogue_membership_history_unchecked",
 ]
 Basis = Literal[
     "publisher_count",
@@ -80,6 +97,7 @@ Basis = Literal[
     "two_exact_windows_empty",
     "preserved_history_failure",
     "replacement_window_failure_prior_empty_claim_unverified",
+    "catalogue_membership",
 ]
 ROUTES = {
     "discharge_instantaneous": ("observations_tr", "grandeur_hydro", "Q"),
@@ -137,8 +155,21 @@ class StationProductAvailability:
     product_id: Product
     published_count_or_new_witness_points: int
     status: Status
+    catalogue_checked_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        if self.basis == "catalogue_membership":
+            if (
+                not self.code_station
+                or self.acquisitions
+                or self.availability != "unknown"
+                or self.status != "catalogue_membership_history_unchecked"
+                or self.published_count_or_new_witness_points != 0
+                or self.catalogue_checked_at is None
+                or self.catalogue_checked_at.utcoffset() is None
+            ):
+                raise ValueError("unchecked membership must not assert observation acquisitions")
+            return
         if not self.code_station or not self.acquisitions:
             raise ValueError("availability requires station and acquisitions")
         count = self.published_count_or_new_witness_points
@@ -246,6 +277,7 @@ class StationProductAvailability:
     @property
     def reason(self) -> str:
         return {
+            "catalogue_membership_history_unchecked": "Hub’Eau catalogue membership; observation history has not been checked",
             "available": (
                 "Publisher observation count is positive for the recorded query; numerical values and continuity are not implied"
                 if self.basis == "publisher_count"
@@ -457,7 +489,7 @@ def decode_availability(document: str | bytes) -> FranceAvailability:
 
 
 PROVIDER_ID = ProviderId("fr_hubeau")
-PROVIDER_NAME = "Hub’Eau / HydroPortail — French hydrometry and water temperature"
+PROVIDER_NAME = "Hub’Eau — French hydrometry and water temperature"
 
 HYDRO_STATIONS_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations"
 HYDRO_STATIONS_PARAMS = "format=json&size=5000&in_use=true"
@@ -670,86 +702,33 @@ class GeneratedFrHubeauCatalogue:
 @dataclass(frozen=True)
 class ProductDefinition:
     product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    canonical_unit: str
     api_type: str
     grandeur_code: str | None
 
 
 PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    # --- obs_tr (real-time, ~1 month lookback) --------------------------------
-    ProductDefinition(
-        product_id="discharge_instantaneous",
-        observed_property="discharge",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
-        canonical_unit="m3/s",
-        api_type="obs_tr",
-        grandeur_code="Q",
-    ),
-    ProductDefinition(
-        product_id="stage_instantaneous",
-        observed_property="stage",
-        frequency="irregular",
-        statistic="instantaneous",
-        period_type="instant",
-        period_anchor="instant",
-        canonical_unit="m",
-        api_type="obs_tr",
-        grandeur_code="H",
-    ),
     # --- obs_elab (historical archive) ----------------------------------------
     # NOTE: HmnJ (daily mean height) does NOT exist in Hubeau obs_elab.
     # The grandeur_hydro request parameter is ignored by the API; filtering is
     # done by the parser on the grandeur_hydro_elab field in each response row.
     ProductDefinition(
         product_id="discharge_daily_mean",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
         api_type="obs_elab",
         grandeur_code="QmnJ",
     ),
     ProductDefinition(
         product_id="discharge_daily_max",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="max",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
         api_type="obs_elab",
         grandeur_code="QIXnJ",
     ),
     ProductDefinition(
         product_id="stage_daily_max",
-        observed_property="stage",
-        frequency="daily",
-        statistic="max",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m",
         api_type="obs_elab",
         grandeur_code="HIXnJ",
     ),
     # --- temperature/chronique (historical archive) ---------------------------
     ProductDefinition(
         product_id="water_temperature_reported",
-        observed_property="water_temperature",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        canonical_unit="degC",
         api_type="temperature",
         grandeur_code=None,
     ),
@@ -788,15 +767,6 @@ def refresh_native_table(
     if collision:
         station_id = sorted(collision)[0]
         return _failed_native_refresh(_native_issue(f"fr_hubeau station {station_id} occurs in both station endpoints"))
-    if len(hydro_ids) != 6454:
-        return _failed_native_refresh(
-            _native_issue(f"fr_hubeau hydrometry response contains {len(hydro_ids)} stations; expected 6454")
-        )
-    if len(temperature_ids) != 869:
-        return _failed_native_refresh(
-            _native_issue(f"fr_hubeau temperature response contains {len(temperature_ids)} stations; expected 869")
-        )
-
     hydro_frame = _native_endpoint_frame(
         hydro_result,
         "hydrometrie/referentiel/stations",
@@ -866,6 +836,8 @@ def _validated_native_rows(
     data = payload_mapping.get("data")
     if not isinstance(data, list):
         return _native_issue(f"fr_hubeau {source_endpoint} response data must be a list")
+    if payload_mapping.get("next") is not None:
+        return _native_issue(f"fr_hubeau {source_endpoint} response has unconsumed pagination")
     count = payload_mapping.get("count")
     if type(count) is not int:
         return _native_issue(f"fr_hubeau {source_endpoint} response count must be a non-boolean integer")
@@ -982,6 +954,8 @@ def build_catalogue(
     native_table: NativeTable,
     origins: Mapping[str, OriginDeclarations],
     availability: FranceAvailability,
+    *,
+    native_capture: NativeInventoryCapture | None = None,
 ) -> GeneratedFrHubeauCatalogue:
     endpoints = native_table.data["source_endpoint"].unique().sort().to_list()
     expected = frozenset({"hydrometrie/referentiel/stations", "temperature/station"})
@@ -993,12 +967,6 @@ def build_catalogue(
         )
     hydro = NativeTable(native_table.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations"))
     temperature = NativeTable(native_table.data.filter(pl.col("source_endpoint") == "temperature/station"))
-    if hydro.data.height != 6454:
-        raise FatalContractError(f"fr_hubeau native hydrometry partition has {hydro.data.height} rows; expected 6454")
-    if temperature.data.height != 869:
-        raise FatalContractError(
-            f"fr_hubeau native temperature partition has {temperature.data.height} rows; expected 869"
-        )
     hydro_origins = origins["hydrometrie/referentiel/stations"]
     temperature_origins = origins["temperature/station"]
     _require_origin_columns(hydro, hydro_origins)
@@ -1012,15 +980,14 @@ def build_catalogue(
     temperature_ids = tuple(temperature.data["code_station"].to_list())
     expected_pairs = {(station, d.product_id) for station in hydro_ids for d in HYDRO_PRODUCT_DEFS}
     expected_pairs.update((station, d.product_id) for station in temperature_ids for d in TEMP_PRODUCT_DEFS)
-    if {(pair.code_station, pair.product_id) for pair in availability.pairs} != expected_pairs:
-        raise FatalContractError("France availability must match the exact native applicable station/product pairs")
-    identity = availability.native_table
-    if (identity.sha256, identity.byte_count, identity.filename) != (
-        NATIVE_TABLE_SHA256,
-        NATIVE_TABLE_BYTE_SIZE,
-        "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    ):
-        raise FatalContractError("France availability native material identity mismatch")
+    availability = hubeau_availability(availability, expected_pairs, native_table)
+    expected_digest = (
+        native_capture.native_table.semantic_digest.sha256
+        if native_capture and native_capture.native_table.semantic_digest
+        else NATIVE_TABLE_SEMANTIC_SHA256
+    )
+    if native_table_content_digest(native_table) != expected_digest:
+        raise FatalContractError("Hub’Eau native content does not match its acquisition identity")
     products = build_products()
     station_products = build_station_products(availability)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
@@ -1031,6 +998,7 @@ def build_catalogue(
         hydrometry_station_ids=hydro_ids,
         temperature_station_ids=temperature_ids,
         availability=availability,
+        native_capture=native_capture,
     )
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedFrHubeauCatalogue(
@@ -1040,6 +1008,54 @@ def build_catalogue(
         station_products,
         acquisition_provenance,
         artifact,
+    )
+
+
+def hubeau_availability(
+    historical: FranceAvailability,
+    expected_pairs: set[tuple[str, str]],
+    native_table: NativeTable,
+) -> FranceAvailability:
+    """Reuse only service-owned evidence; membership alone leaves history unknown."""
+    identity = historical.native_table
+    if (identity.sha256, identity.byte_count, identity.filename) != (
+        NATIVE_TABLE_SHA256,
+        NATIVE_TABLE_BYTE_SIZE,
+        "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    ):
+        raise FatalContractError("Historical France availability native material identity mismatch")
+    existing: dict[tuple[str, str], StationProductAvailability] = {
+        (pair.code_station, pair.product_id): pair
+        for pair in historical.pairs
+        if pair.product_id in EXPECTED_PRODUCT_IDS
+    }
+    retrievals = dict(native_table.data.select("code_station", "retrieved_at").iter_rows())
+    pairs = tuple(
+        existing.get(key)
+        or StationProductAvailability(
+            acquisitions=(),
+            availability="unknown",
+            basis="catalogue_membership",
+            code_station=key[0],
+            product_id=cast(Product, key[1]),
+            published_count_or_new_witness_points=0,
+            status="catalogue_membership_history_unchecked",
+            catalogue_checked_at=retrievals[key[0]],
+        )
+        for key in sorted(expected_pairs)
+    )
+    statuses = Counter(pair.status for pair in pairs)
+    return replace(
+        historical,
+        pairs=pairs,
+        scope="Hub’Eau station daily hydrometry and Naïades temperature",
+        summary=AvailabilitySummary(
+            available=statuses["available"],
+            by_status=MappingProxyType(dict(statuses)),
+            pairs=len(pairs),
+            stations=len(retrievals),
+            unknown=len(pairs) - statuses["available"],
+        ),
     )
 
 
@@ -1059,18 +1075,12 @@ def _raise_catalogue_issue(code: str, message: str) -> Never:
 
 
 def build_products() -> ProductCatalog:
+    from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
+
     rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": d.product_id,
-            "observed_property": d.observed_property,
-            "frequency": d.frequency,
-            "statistic": d.statistic,
-            "period_type": d.period_type,
-            "period_anchor": d.period_anchor,
-            "unit": d.canonical_unit,
-            "native_id": d.grandeur_code or d.api_type,
-        }
+        product_row(
+            PROVIDER_ID, d.product_id, d.grandeur_code or d.api_type, SERIES_MAPPINGS[d.product_id].physical_facts()
+        )
         for d in PRODUCT_DEFINITIONS
     ]
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
@@ -1128,7 +1138,13 @@ def build_station_products(availability: FranceAvailability) -> StationProductCa
             "availability_reason": pair.reason,
             "published_record_start_date": None,
             "published_record_end_date": None,
-            "last_catalogue_check": max(a.retrieved_at_start for a in pair.acquisitions).date(),
+            "last_catalogue_check": (
+                max(a.retrieved_at_start for a in pair.acquisitions).date()
+                if pair.acquisitions
+                else pair.catalogue_checked_at.date()
+                if pair.catalogue_checked_at
+                else None
+            ),
         }
         for pair in availability.pairs
     ]
@@ -1145,8 +1161,8 @@ def build_provider_info(
         "live_products": False,
         "live_station_products": False,
         "bulk_observations": (
-            "true: 365-day window decomposition with paginated obs_elab, observations_tr, "
-            "and temperature/chronique requests; partial failures reported as recoverable issues"
+            "true: paginated obs_elab and temperature/chronique requests; "
+            "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": None,
@@ -1179,6 +1195,8 @@ def validate_generated_catalogue(
 def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) -> None:
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
+    from rivretrieve._internal.providers.fr_hubeau.config import config as source_config
     from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
     output_path = Path(out_dir)
@@ -1193,52 +1211,17 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
         catalogue.acquisition_provenance,
         tuple(FRANCE_ORIGIN_DECLARATIONS.values()),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_mappings=SERIES_MAPPINGS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
 
 
-# ---------------------------------------------------------------------------
-# Live fetchers
-# ---------------------------------------------------------------------------
-
-
-def _read_live_stations(base_url: str, query_params: str, label: str) -> dict[str, object]:
-    """Fetch all pages from a Hubeau station catalogue endpoint."""
-    initial_url = f"{base_url}?{query_params}"
-    all_data: list[object] = []
-    current_url: str | None = initial_url
-
-    while current_url is not None:
-        try:
-            with urllib.request.urlopen(current_url, timeout=60) as response:
-                if response.status < 200 or response.status >= 300:
-                    raise FatalContractError(
-                        f"fr_hubeau {label} stations live request failed with HTTP {response.status}: {current_url}"
-                    )
-                page = json.load(response)
-        except OSError as exc:
-            raise FatalContractError(f"fr_hubeau {label} stations live request failed: {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise FatalContractError(f"fr_hubeau {label} stations live response is not valid JSON: {exc}") from exc
-
-        if not isinstance(page, dict):
-            raise FatalContractError(f"fr_hubeau {label} stations live response must be a JSON object")
-
-        data = page.get("data", [])
-        if isinstance(data, list):
-            all_data.extend(data)
-
-        next_url_raw = page.get("next")
-        current_url = next_url_raw if isinstance(next_url_raw, str) and next_url_raw.strip() else None
-
-    return cast("dict[str, object]", {"data": all_data})
-
-
 def _read_fixture_json(path: Path) -> dict[str, object]:
     try:
-        with path.open(encoding="utf-8") as f:
-            value = json.load(f)
+        content = path.read_bytes()
+        value = json.loads(lzma.decompress(content) if path.suffix == ".xz" else content)
     except OSError as exc:
         raise FatalContractError(f"Unable to read fr_hubeau fixture: {path}") from exc
     except json.JSONDecodeError as exc:
@@ -1256,6 +1239,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         help="Path to a Hubeau temperature/station JSON fixture (used with --hydro-fixture).",
     )
+    parser.add_argument("--native-capture", type=Path, help="Acquisition manifest for the supplied native snapshot.")
     parser.add_argument("--native", type=Path, help="Committed native Parquet input for canonical build.")
     parser.add_argument(
         "--availability-ledger", type=Path, help="Reviewed compressed France station-product availability ledger."
@@ -1286,14 +1270,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         availability = decode_availability(lzma.decompress(args.availability_ledger.read_bytes()))
         from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
+        capture = (
+            NativeInventoryCapture.model_validate_json(args.native_capture.read_bytes())
+            if args.native_capture
+            else None
+        )
         catalogue = build_catalogue(
             read_native_table(
                 args.native,
-                expected_sha256=NATIVE_TABLE_SHA256,
-                expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+                expected_sha256=capture.native_table.sha256 if capture else NATIVE_TABLE_SHA256,
+                expected_byte_size=capture.native_table.byte_size if capture else NATIVE_TABLE_BYTE_SIZE,
             ),
             FRANCE_ORIGIN_DECLARATIONS,
             availability,
+            native_capture=capture,
         )
         verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
         write_catalogue(catalogue, args.out)

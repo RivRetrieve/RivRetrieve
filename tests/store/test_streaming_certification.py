@@ -19,7 +19,7 @@ from rivretrieve._internal.store import (
     validate_store,
 )
 from rivretrieve._internal.store.validation import StoreManifest
-from tests.store.certification_support import COLUMNS, artifact_and_request, complete, rows
+from tests.store.certification_support import COLUMNS, artifact_and_request, complete, fixture_series, rows
 
 
 def _published_store(tmp_path: Path):
@@ -134,7 +134,8 @@ def test_validation_refuses_station_order_regression_across_arrow_batches(tmp_pa
     from rivretrieve._internal.store import ObservationStoreRefusedError, compile_store
 
     _artifact, request = artifact_and_request(tmp_path)
-    frame = pl.concat([rows()] * 65_537, rechunk=True).with_columns(pl.lit("station-z").alias("station_id"))
+    frame = pl.concat([rows(station="station-z")] * 65_537, rechunk=True)
+    request = replace(request, series=(fixture_series("station-z"),))
     compile_store(request, frame)
     partition = Path(request.destination) / "product=discharge" / "year=1998" / "part-0.parquet"
     broken = pl.read_parquet(partition)
