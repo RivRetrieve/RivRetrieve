@@ -106,6 +106,15 @@ not establish current availability for all routes. The historical
 [conformance record](../../../tests/evidence/no_nve_conformance.md) supplies context,
 not a claim of fresh national acquisition.
 
+## Delivery-revision recheck
+
+After the page and test were committed at
+`b1e122a6cea548432b5b57b706053c1ad448b8ad`, the same live verifier was run again.
+`final-examples.log` records matching stdout and fresh HTTP 200 metadata and
+observation calls. `final-tests.log` records the focused documentation replay
+and catalogue-count recheck. Later evidence-only commits do not change the page,
+its snippets, the production baseline or that test.
+
 ## Limits and review gate
 
 No catalogue regeneration, production changes or new products were made. No code
