@@ -15,8 +15,8 @@
 | Terms | No licence or citation request found for the API; see [Terms and citation](#terms-and-citation) |
 | Agency documentation | [ThaiWater](https://www.thaiwater.net/), [ThaiWater data standards](https://standard.thaiwater.net/docs/) |
 
-Retrieve three days of stage at station `1`, which ThaiWater names Klong Ladprao Bang Bua Temple,
-a canal gauge in Bangkok:
+Retrieve three days of stage at station `1`, which ThaiWater names Klong Ladprao Bang Bua Temple.
+It is a telemetered water-level station on Khlong Bang Bua in Bangkok:
 
 ```python
 import rivretrieve as rr
@@ -45,11 +45,11 @@ time,time_zone,value,unit
 
 The request returned 432 stage values in metres for June 1 to 3, 2024. Both endpoint
 dates are included. In this response the values are 10 minutes apart, which gives 144
-rows per day. That spacing describes this response. The API does not state a sampling
-frequency or whether each value is an instantaneous reading or an average.
+rows per day. That spacing describes this response, not an established sampling
+interval; see [What you can retrieve](#what-you-can-retrieve).
 
-The time zone is `unknown`, so these timestamps should not be read as UTC or as
-Thailand time. The two informational issues say that RivRetrieve has no established
+The time zone is `unknown`; see [Time and data status](#time-and-data-status).
+The two informational issues say that RivRetrieve has no established
 licence or citation for this provider. They are not retrieval problems; see
 [Terms and citation](#terms-and-citation).
 
@@ -73,8 +73,8 @@ gave 52 in one place and 53 agencies from 12 ministries in another.
 
 ThaiWater's station list names an agency for each station. It uses the word agency
 (หน่วยงาน). The pages checked do not say whether that agency owns the station,
-operates its sensor, or made the measurement, so this page does not describe it
-as the station owner. The 825 stations in RivRetrieve's catalogue are attributed to:
+operates its sensor, or made the measurement. Read it as the agency to which ThaiWater
+attributes the station. The 825 stations in RivRetrieve's catalogue are attributed to:
 
 | Agency | Stations |
 |---|---:|
@@ -89,21 +89,23 @@ on 2026-09-24 it listed 804. Neither list is a complete inventory of Thai river 
 
 ## What you can retrieve
 
-| Quantity filter | Frequency and statistic | Source and returned unit |
+| Quantity filter | Published frequency and statistic | Source and returned unit |
 |---|---|---|
 | `stage` | Not established | m |
 | `discharge` | Not established | m³/s |
 
 These units require no numerical scaling. ThaiWater labels stage in metres above
-mean sea level (ม.รทก.). ThaiWater's data-exchange standard defines that unit with
+mean sea level (ม.รทก.). The water-data exchange standard published at
+[standard.thaiwater.net](https://standard.thaiwater.net/docs/) defines that unit with
 reference to Royal Thai Survey Department benchmarks. RivRetrieve records stage as
 above sea level but has not established which vertical datum each station's values use.
 
 RivRetrieve returns the values ThaiWater publishes. It does not calculate hourly or
 daily values, and the frequency and statistic filters do not match these records.
-Do not treat the 10-minute spacing in a response as an established sampling interval,
-averaging period or promise of continuous coverage. ThaiWater's data-exchange standard
-describes 10-minute water levels as readings at the labelled time, but RivRetrieve has
+The API does not state a sampling frequency or whether each value is an instantaneous
+reading or an average. Do not treat the 10-minute spacing in a response as an
+established sampling interval, averaging period or promise of continuous coverage.
+The same standard describes 10-minute water levels as readings at the labelled time, but RivRetrieve has
 not established that the API values follow that standard.
 
 Every catalogue station lists both stage and discharge. Test requests covering parts
@@ -144,8 +146,8 @@ reported as an issue.
 
 RivRetrieve requests two extra days on each side of the requested dates, then returns
 only the requested period. The three-day example above therefore asked ThaiWater for
-May 30 to June 5, 2024. RivRetrieve requests at most 365 dates from ThaiWater at a time
-and splits longer periods into several requests. That size is a conservative working
+May 30 to June 5, 2024. Each request to ThaiWater covers at most 365 calendar dates,
+counting both ends, and RivRetrieve splits longer periods into several requests. That size is a conservative working
 choice. RivRetrieve has not found a documented maximum period, and none has been measured.
 
 Stage and discharge come from the same ThaiWater response, but RivRetrieve requests each
@@ -171,15 +173,15 @@ an `error` issue with that message and no rows for the request. Check
 
 RivRetrieve has not found a licence or citation request for the API it reads. On
 2026-09-24, the ThaiWater site linked cookie and privacy policies and a privacy notice,
-but no data terms. Its footer carries a copyright notice:
+but no data terms. Its pages carry HII copyright notices, such as:
 
-> Copyright © 2019 Hydro - Informatics Institute,All rights reserved.
+> Copyright © 2024 Hydro - Informatics Institute,All rights reserved.
 
 Not finding a licence does not establish that the data are free to reuse, or that no
 terms apply.
 
-HII also publishes a separate water-level dataset from its own telemetry stations
-in Thailand's [Government Data Catalog](https://gdcatalog.go.th/dataset/gdpublish-water-level),
+HII also publishes a separate water-level dataset from its telemetry network
+(สถานีโทรมาตร สสน.) in Thailand's [Government Data Catalog](https://gdcatalog.go.th/dataset/gdpublish-water-level),
 distributed as downloadable files. That listing gives its licence as
 **Creative Commons Attribution Non-Commercial**. RivRetrieve has not established
 whether that licence applies to the API responses, or to stations attributed to other
@@ -194,6 +196,7 @@ is practical guidance, not an official ThaiWater citation.
 | Source | Checked |
 |---|---|
 | [ThaiWater](https://www.thaiwater.net/) and its site application | 2026-09-24 |
+| ThaiWater station list (`waterlevel_load` in the public API) | 2026-09-24 |
 | [HII](https://www.hii.or.th/) | 2026-09-24 |
 | [ThaiWater data standards](https://standard.thaiwater.net/docs/): date and time format, data periods, water-level measurement | 2026-09-24 |
 | [Government Data Catalog: ระดับน้ำ (water level)](https://gdcatalog.go.th/dataset/gdpublish-water-level) | 2026-09-24 |

@@ -17,7 +17,8 @@ uv run python scripts/generate_reference.py --check
 ```
 
 The verifier uses only the public API with `cache="bypass"`, with no fixtures or
-monkeypatches. At 10:59 UTC it matched every displayed line: 432 stage rows, the two
+monkeypatches. At 10:59 UTC, and again at 11:10 UTC after review edits to the prose,
+it matched every displayed line: 432 stage rows, the two
 informational provenance issues, and 432 null discharge rows with a `success` outcome.
 Each snippet made one fresh HTTP 200 call to `waterlevel_graph` for station `1`, with
 `start_date=2024-05-30` and `end_date=2024-06-05`. `rr.to_utc` refused the stage result
@@ -72,6 +73,8 @@ Scoped Ruff lint and format, the generated reference and `git diff --check` also
   Survey Department benchmarks, and a domestic datetime format without an offset. It
   governs exchange between agencies and does not state that `waterlevel_graph` follows
   it, so the page does not infer statistic, datum or zone from it.
+- An independent review re-derived these counts and source texts, reran the verifier
+  and tests, and found no blocking issue; its wording and precision points were applied.
 - No code defect was found. No licence permission, time zone, sampling interval,
   statistic, datum, continuous coverage, quality approval or ownership by the attributed
   agency is claimed.
