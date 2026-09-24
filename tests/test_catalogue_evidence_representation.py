@@ -67,6 +67,8 @@ def test_real_france_generator_does_not_render_national_acquisition_graph(
             [
                 "--native",
                 str(CATALOGUE / "native.parquet"),
+                "--native-capture",
+                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
                 "--availability-ledger",
                 str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--out",

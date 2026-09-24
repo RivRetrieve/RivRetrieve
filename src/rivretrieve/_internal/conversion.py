@@ -1,8 +1,7 @@
-"""convert : Rows × ProviderConfig × RequestedWindow → WithIssues[CanonicalRows]   (pure)"""
+"""Admission-checked per-segment conversion and physical window clipping."""
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import assert_never
 
 import polars as pl
 
@@ -10,147 +9,73 @@ from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
-    Daily,
-    Hourly,
-    Instant,
     ProductConfig,
     ProviderConfig,
     RequestedWindow,
     Rows,
     RowsSchema,
-    Unit,
-    UnknownTemporalSupport,
     WindowEndpoint,
     WithIssues,
     ZoneValue,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.source_series import ClippingAxis, SourceSeries, admission, validate_series_rows
 
 
 def convert(
-    rows: Rows,
-    config: ProviderConfig,
-    window: RequestedWindow,
+    rows: Rows, config: ProviderConfig, window: RequestedWindow, *, series: tuple[SourceSeries, ...]
 ) -> WithIssues[CanonicalRows]:
-    validate_native_rows(rows, config.products)
-
-    supplied_start = window.start
-    supplied_end = window.end
-    adapted_start = _endpoint_datetime(supplied_start)
-    adapted_end = _endpoint_datetime(supplied_end)
-
-    canonical_records: list[dict[str, object]] = []
-    semantics_by_row: list[Daily | Hourly | Instant | UnknownTemporalSupport] = []
-
+    validate_native_rows(rows, config.products, series=series)
+    facts = {fact.facts_id: fact for definition in series for fact in definition.facts}
+    start, end = _endpoint_datetime(window.start), _endpoint_datetime(window.end)
+    output: list[dict[str, object]] = []
     for row in rows.iter_rows(named=True):
-        station_id = row["station_id"]
-        product_id = row["product_id"]
-        native_time = row["time"]
-        value = row["value"]
-        row_zone = row["time_zone"]
-        product = config.products[ProductId(product_id)]
-        canonical_records.append(
+        fact = facts[row["facts_id"]]
+        timestamp = row["time"]
+        keep = (
+            start.date() <= timestamp.date() <= end.date()
+            if fact.clipping_axis is ClippingAxis.CALENDAR_DATE
+            else start <= timestamp <= end
+        )
+        if not keep:
+            continue
+        decision = admission(fact)
+        if decision.factor is None or decision.target_unit is None:
+            raise FatalContractError("Conversion received an unadmitted physical segment")
+        output.append(
             {
-                "time": native_time,
-                "time_zone": row_zone,
-                "station_id": station_id,
-                "product_id": product_id,
-                "value": _convert_value(value, product),
+                **row,
+                "value": None if row["value"] is None else row["value"] * decision.factor,
+                "quantity": fact.quantity.value,
+                "unit": decision.target_unit,
             }
         )
-        semantics_by_row.append(product.semantics)
-
-    canonical_rows = pl.DataFrame(
-        canonical_records,
-        schema=CanonicalRowsSchema.polars_schema,
-    )
-
-    keep_values: list[bool] = []
-    for native_time, semantics in zip(canonical_rows["time"], semantics_by_row, strict=True):
-        if isinstance(semantics, Daily):
-            keep_values.append(adapted_start.date() <= native_time.date() <= adapted_end.date())
-        elif isinstance(semantics, (Hourly, Instant, UnknownTemporalSupport)):
-            # Unknown support or interval anchoring cannot support inferred overlap clipping.
-            # Preserve the source label and clip it on the timestamp axis.
-
-            keep_values.append(adapted_start <= native_time <= adapted_end)
-        else:
-            assert_never(semantics)
-    canonical_rows = canonical_rows.filter(pl.Series(keep_values, dtype=pl.Boolean))
-
-    validate_catalogue(canonical_rows, CanonicalRowsSchema, on_issue="raise")
-    return WithIssues(value=canonical_rows, issues=())
+    canonical = pl.DataFrame(output, schema=CanonicalRowsSchema.polars_schema)
+    validate_catalogue(canonical, CanonicalRowsSchema, on_issue="raise")
+    return WithIssues(canonical)
 
 
 def _endpoint_datetime(endpoint: WindowEndpoint) -> datetime:
-    return datetime(
-        endpoint.year,
-        endpoint.month,
-        endpoint.day,
-        endpoint.hour,
-        endpoint.minute,
-        endpoint.second,
-        endpoint.microsecond,
-    )
+    return datetime.fromisoformat(endpoint.isoformat())
 
 
-def _convert_value(value: float | None, product: ProductConfig) -> float | None:
-    if value is None:
-        return None
-    match product.unit:
-        case Unit.M:
-            factor = 1.0
-        case Unit.CM:
-            factor = 0.01
-        case Unit.FT:
-            factor = 0.3048
-        case Unit.MM:
-            factor = 0.001
-        case Unit.M3_S:
-            factor = 1.0
-        case Unit.FT3_S:
-            factor = 0.028316846592
-        case Unit.L_S:
-            factor = 0.001
-        case Unit.DEG_C:
-            factor = 1.0
-        case _ as unreachable:
-            assert_never(unreachable)
-    return value * factor
-
-
-def validate_native_rows(rows: Rows, products: Mapping[ProductId, ProductConfig]) -> None:
-    """native row contract : Rows × ProductDefinitions → RowsContract (fail on broken assumptions)."""
+def validate_native_rows(
+    rows: Rows, products: Mapping[ProductId, ProductConfig], *, series: tuple[SourceSeries, ...]
+) -> None:
     validate_catalogue(rows, RowsSchema, on_issue="raise")
-
-    product_ids = rows["product_id"].unique().to_list()
-    missing_product_ids = sorted(product_id for product_id in product_ids if ProductId(product_id) not in products)
-    if missing_product_ids:
-        raise FatalContractError(f"Rows contain undeclared products: {', '.join(missing_product_ids)}")
-
+    validate_series_rows(rows, series)
+    for product_id in rows["product_id"].unique():
+        if ProductId(product_id) not in products:
+            raise FatalContractError(f"Rows contain undeclared product: {product_id}")
+    facts = {fact.facts_id: fact for definition in series for fact in definition.facts}
     for row in rows.iter_rows(named=True):
-        station_id = row["station_id"]
-        product_id = row["product_id"]
-        native_time = row["time"]
-        row_zone = row["time_zone"]
-        product = products[ProductId(product_id)]
-        ZoneValue(row_zone)
+        ZoneValue(row["time_zone"])
+        fact = facts[row["facts_id"]]
+        if fact.label_time is not None:
+            from rivretrieve._internal.engine import DailyLabelTime
 
-        if isinstance(product.semantics, Daily):
-            actual_label = (native_time.hour, native_time.minute, native_time.second, native_time.microsecond)
-            if actual_label != product.semantics.label_time.components:
-                actual = native_time.time().isoformat(timespec="microseconds")
-                raise FatalContractError(
-                    f"Daily row for station {station_id} and product {product_id} must have declared label "
-                    f"{product.semantics.label_time.value}; actual label is {actual}"
-                )
-        elif isinstance(product.semantics, Hourly):
-            if native_time.minute != 0 or native_time.second != 0 or native_time.microsecond != 0:
-                raise FatalContractError(
-                    f"Hourly row for station {station_id} and product {product_id} must have an on-hour label"
-                )
-        elif isinstance(product.semantics, (Instant, UnknownTemporalSupport)):
-            pass
-        else:
-            assert_never(product.semantics)
+            expected = DailyLabelTime(fact.label_time).components
+            timestamp = row["time"]
+            if (timestamp.hour, timestamp.minute, timestamp.second, timestamp.microsecond) != expected:
+                raise FatalContractError(f"Source row contradicts established timestamp anchor {fact.label_time}")

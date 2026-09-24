@@ -22,7 +22,7 @@ def _download(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...
 
 def _compile(request: BulkCompileRequest) -> ValidatedStore:
     """Adapt the shared compile request to the publisher's request type."""
-    return bulk.compile(
+    return bulk.compile_imgw(
         bulk.ImgwCompileRequest(
             publisher_artifact=request.publisher_artifact,
             destination=request.destination,

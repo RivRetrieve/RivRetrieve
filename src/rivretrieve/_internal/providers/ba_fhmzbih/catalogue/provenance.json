@@ -18,6 +18,54 @@
       "operator": "vodostaji.voda.ba",
       "evidence": [
         {
+          "evidence_id": "ba_fhmzbih_4024_Q_1Y",
+          "description": "Published workbook parameter, unit and series-name headers",
+          "recording": {
+            "recording_id": "ba_fhmzbih_4024_Q_1Y",
+            "repository_path": "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+            "source_url": "https://vodostaji.voda.ba/data/internet/stations/4/4024/Q/Q_1Y.xlsx",
+            "retrieved_at": "2026-09-02T14:45:27.662275Z",
+            "media_type": "application/vnd.rivretrieve.recording+json",
+            "sha256": "e40e760cf99d4e23b62b8d5d95edc86af01ddca9aa6c55226d59c859e8801d05"
+          }
+        },
+        {
+          "evidence_id": "ba_fhmzbih_4024_H_1Y",
+          "description": "Published workbook parameter, unit and series-name headers",
+          "recording": {
+            "recording_id": "ba_fhmzbih_4024_H_1Y",
+            "repository_path": "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+            "source_url": "https://vodostaji.voda.ba/data/internet/stations/4/4024/H/H_1Y.xlsx",
+            "retrieved_at": "2026-09-02T14:45:27.984829Z",
+            "media_type": "application/vnd.rivretrieve.recording+json",
+            "sha256": "45b5663132a58f5bdcf3ee29c5cdd8c5f83389dabb80d3716b5e318b77ca79a0"
+          }
+        },
+        {
+          "evidence_id": "ba_fhmzbih_4110_Tvode_1Y",
+          "description": "Published workbook parameter, unit and series-name headers",
+          "recording": {
+            "recording_id": "ba_fhmzbih_4110_Tvode_1Y",
+            "repository_path": "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+            "source_url": "https://vodostaji.voda.ba/data/internet/stations/4/4110/WT/Tvode_1Y.xlsx",
+            "retrieved_at": "2026-09-02T14:46:35.312471Z",
+            "media_type": "application/vnd.rivretrieve.recording+json",
+            "sha256": "e0532ec0a269acb735db6957a478652ac0fb7ece9194b688852478d6d186dbb3"
+          }
+        },
+        {
+          "evidence_id": "layer20_discharge_series",
+          "description": "Published L1_ts_id, L1_ts_name, parameter and unit",
+          "recording": {
+            "recording_id": "ba_fhmzbih_layer20_series",
+            "repository_path": "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+            "source_url": "https://vodostaji.voda.ba/data/internet/layers/20/index.json",
+            "retrieved_at": "2026-09-02T14:45:07.284216Z",
+            "media_type": "application/vnd.rivretrieve.recording+json",
+            "sha256": "afb0dbd8530f1b589028731a42611e933d6991ec35414bdaba071c7a3180dabf"
+          }
+        },
+        {
           "evidence_id": "terms_absence_surface",
           "description": "Exact-host Impressum examined for terms and citation",
           "recording": {
@@ -42,6 +90,8 @@
     }
   ],
   "descriptions": [
+    "Exact Q, H and water-temperature workbook parameter, unit and source-series headers",
+    "Exact layer-20 L1 discharge series identities; no workbook-ID equivalence established",
     "60-row stable station metadata response with volatile L1 snapshot fields excluded",
     "Exact-host Impressum response examined for published terms and citation words",
     "Exact station workbook request and response",
@@ -248,35 +298,35 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "0d3bb2d2fd92bd08c6b9e0838804b6fef3248592f1803855dd8234cddb2cb498",
-      "byte_count": 5788,
-      "row_count": 516,
+      "sha256": "6f2e52b5748a5c0e267e5ed7cc9433f2f769f9dc1e642dd88c9c3d3490958ed2",
+      "byte_count": 5812,
+      "row_count": 517,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
       "path": "provenance_acquisitions.parquet",
-      "sha256": "505e2d604af1c9e8c23ee47b163c5aca4a72c3148402c71ed19a91439082456a",
-      "byte_count": 17804,
-      "row_count": 183,
+      "sha256": "69696da18304bf57a2b18f9adfd4caec72d586a2804a340141d11504744744fb",
+      "byte_count": 18301,
+      "row_count": 185,
       "schema_version": 3
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "9d7a499deae8c03be1fd285886461880a50cd62a630db30a82038dbc15c8b7e2",
-      "byte_count": 4896,
-      "row_count": 366,
+      "sha256": "eb622f43f1c651430b3c5ae80b44611f9e4ebf252a08be801fbb53bfea1d5f55",
+      "byte_count": 4921,
+      "row_count": 367,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "8c94bd8279b2772f9149b5715d4abab14604c0393b72a4ee27d04f94d75a9449",
-      "byte_count": 3339,
-      "row_count": 516,
+      "sha256": "3953346315074cf531f1850da4f725e4d53b23108edb2b7a9dd62f24f55dc7d5",
+      "byte_count": 3338,
+      "row_count": 517,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "129f03bc8757959f4c4024c36a0021698310cf37709671b145e0d7aca856e91d",
+      "sha256": "5f6be35db86fd0309f3f93635726d42ca0919a912dcbc09f96291d47a10653e7",
       "byte_count": 2909,
       "row_count": 244,
       "schema_version": 3

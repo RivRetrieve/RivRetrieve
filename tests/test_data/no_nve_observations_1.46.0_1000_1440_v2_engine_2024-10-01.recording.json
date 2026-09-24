@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "1.46.0",
+      "Parameter": "1000",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2024-09-29T00:00:00Z/2024-10-03T23:59:59.999999Z",
+      "VersionNumber": 2
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-20T10:01:10.330500Z",
+    "content_base64": "eyJjdXJyZW50TGluayI6Imh0dHBzOi8vaHlkYXBpLm52ZS5uby9hcGkvdjEvT2JzZXJ2YXRpb25zP1N0YXRpb25JZD0xLjQ2LjAmUGFyYW1ldGVyPTEwMDAmUmVzb2x1dGlvblRpbWU9MTQ0MCZSZWZlcmVuY2VUaW1lPTIwMjQtMDktMjlUMDAlM0EwMCUzQTAwWiUyRjIwMjQtMTAtMDNUMjMlM0E1OSUzQTU5Ljk5OTk5OVomVmVyc2lvbk51bWJlcj0yIiwiYXBpVmVyc2lvbiI6IjEuMCIsImxpY2Vuc2UiOiJodHRwczovL2RhdGEubm9yZ2Uubm8vbmxvZC9lbiIsImNyZWF0ZWRBdCI6IjIwMjYtMDktMjBUMTA6MDE6MTAuMzY2MzgyWiIsInF1ZXJ5VGltZSI6IjAwOjAwOjAwLjAwNDY2MDIiLCJpdGVtQ291bnQiOjEsImRhdGEiOlt7InN0YXRpb25JZCI6IjEuNDYuMCIsInN0YXRpb25OYW1lIjoiTWplcm1lbiIsInBhcmFtZXRlciI6MTAwMCwicGFyYW1ldGVyTmFtZSI6IlZhbm5zdGFuZCIsInBhcmFtZXRlck5hbWVFbmciOiJTdGFnZSIsInNlcmllVmVyc2lvbk5vIjoyLCJtZXRob2QiOiJJbnN0YW50YW5lb3VzIiwidW5pdCI6Im0iLCJvYnNlcnZhdGlvbkNvdW50Ijo1LCJvYnNlcnZhdGlvbnMiOlt7InRpbWUiOiIyMDI0LTA5LTI5VDExOjAwOjAwWiIsInZhbHVlIjoxNjQuNjAzLCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfSx7InRpbWUiOiIyMDI0LTA5LTMwVDExOjAwOjAwWiIsInZhbHVlIjoxNjQuNTgyLCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfSx7InRpbWUiOiIyMDI0LTEwLTAxVDExOjAwOjAwWiIsInZhbHVlIjoxNjQuNTY1LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfSx7InRpbWUiOiIyMDI0LTEwLTAyVDExOjAwOjAwWiIsInZhbHVlIjoxNjQuNTQyLCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfSx7InRpbWUiOiIyMDI0LTEwLTAzVDExOjAwOjAwWiIsInZhbHVlIjoxNjQuNTE5LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfV19XX0=",
+    "sha256": "f136e13ac50289f165a9e0908218c3965949d1d15678accd26349cf885b9286d",
+    "prerequisite_calls": []
+  }
+}

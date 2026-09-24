@@ -73,7 +73,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         "source.observation.value",
         "source.observation.quality",
     )
-    canonical_observation_facts = ("observation.canonical_five_column_shape",)
+    canonical_observation_facts = ("observation.identity_bearing_shape",)
     return AcquisitionProvenance(
         schema_version=2,
         provider_id="ca_eccc",
@@ -201,7 +201,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 source_id=None,
                 acquisition_id=None,
                 transformation=Transformation(
-                    name="HYDAT observations to RivRetrieve five-column result shape",
+                    name="HYDAT observations to identity-bearing RivRetrieve observation rows",
                     external_inputs=(
                         ExternalFactReference(source_id="ca_eccc_wsc", fact="source.observation.value"),
                         ExternalFactReference(source_id="ca_eccc_wsc", fact="source.observation.quality"),

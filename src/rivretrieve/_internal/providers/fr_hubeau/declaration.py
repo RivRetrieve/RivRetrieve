@@ -9,7 +9,7 @@ from rivretrieve._internal.providers.registration import LiveStages, ProviderDec
 
 
 class _Stages:
-    """France live observation stages consumed by the shared engine."""
+    """Hub’Eau live observation stages consumed by the shared engine."""
 
     observation_source = "live"
     config = config()

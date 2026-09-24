@@ -44,6 +44,7 @@ NATIVE_TABLE_SHA256 = "abcbc2d2234ea1751d638307f89fba4cba4feca96c9cd1d77c728b87a
 NATIVE_TABLE_BYTE_SIZE = 13430
 NATIVE_TABLE_REVISION = "f805d2556a72617644f9bf90de2e3438e743b888"
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
+SERIES_RECORDING_SHA256 = "afb0dbd8530f1b589028731a42611e933d6991ec35414bdaba071c7a3180dabf"
 DATA_STANDING_TEXT = "Svi podaci koji se prikazuju i koji se dobiju kao rezultat pretrage su informativnog karaktera i ne mogu služiti kao zvanični podaci."
 
 
@@ -146,6 +147,40 @@ def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger
         media_type="text/html; charset=UTF-8",
         sha256="dd5daa83187fd11e1cd1321e4ffc78251f7f31f9e2cf528b742976f409d61709",
     )
+    series = RecordingReference(
+        recording_id="ba_fhmzbih_layer20_series",
+        repository_path="tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+        source_url="https://vodostaji.voda.ba/data/internet/layers/20/index.json",
+        retrieved_at=datetime.fromisoformat("2026-09-02T14:45:07.284216Z"),
+        media_type="application/vnd.rivretrieve.recording+json",
+        sha256=SERIES_RECORDING_SHA256,
+    )
+    product_recordings = (
+        RecordingReference(
+            recording_id="ba_fhmzbih_4024_Q_1Y",
+            repository_path="tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+            source_url="https://vodostaji.voda.ba/data/internet/stations/4/4024/Q/Q_1Y.xlsx",
+            retrieved_at=datetime.fromisoformat("2026-09-02T14:45:27.662275Z"),
+            media_type="application/vnd.rivretrieve.recording+json",
+            sha256="e40e760cf99d4e23b62b8d5d95edc86af01ddca9aa6c55226d59c859e8801d05",
+        ),
+        RecordingReference(
+            recording_id="ba_fhmzbih_4024_H_1Y",
+            repository_path="tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+            source_url="https://vodostaji.voda.ba/data/internet/stations/4/4024/H/H_1Y.xlsx",
+            retrieved_at=datetime.fromisoformat("2026-09-02T14:45:27.984829Z"),
+            media_type="application/vnd.rivretrieve.recording+json",
+            sha256="45b5663132a58f5bdcf3ee29c5cdd8c5f83389dabb80d3716b5e318b77ca79a0",
+        ),
+        RecordingReference(
+            recording_id="ba_fhmzbih_4110_Tvode_1Y",
+            repository_path="tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+            source_url="https://vodostaji.voda.ba/data/internet/stations/4/4110/WT/Tvode_1Y.xlsx",
+            retrieved_at=datetime.fromisoformat("2026-09-02T14:46:35.312471Z"),
+            media_type="application/vnd.rivretrieve.recording+json",
+            sha256="e0532ec0a269acb735db6957a478652ac0fb7ece9194b688852478d6d186dbb3",
+        ),
+    )
     provider_facts = ("source.provider.service_operator", "source.provider.station_service_identity")
     product_facts = ("source.product.native_identifiers", "source.product.native_physics")
     station_ids = sorted({pair.station_no for pair in workbook_access.pairs})
@@ -156,7 +191,13 @@ def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger
         f"station_product:{pair.station_no}:{pair.product_id}.availability" for pair in workbook_access.pairs
     )
     universe = (
-        provider_facts + product_facts + bound_stations + bound_observations + workbook_facts + availability_facts
+        provider_facts
+        + product_facts
+        + bound_stations
+        + bound_observations
+        + workbook_facts
+        + availability_facts
+        + ("source.series.layer20_discharge_identity",)
     )
     return AcquisitionProvenance(
         schema_version=2,
@@ -177,6 +218,25 @@ def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger
                 issuer="Agencija za vodno područje rijeke Save",
                 operator="vodostaji.voda.ba",
                 acquisitions=(
+                    AcquisitionRecord(
+                        acquisition_id="product_workbook_headers",
+                        method="http_request",
+                        instant_type="retrieval_interval",
+                        description="Exact Q, H and water-temperature workbook parameter, unit and source-series headers",
+                        requested_from=tuple(recording.source_url for recording in product_recordings),
+                        retrieved_at_start=min(recording.retrieved_at for recording in product_recordings),
+                        retrieved_at_end=max(recording.retrieved_at for recording in product_recordings),
+                        recording_ids=tuple(recording.recording_id for recording in product_recordings),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="layer20_series_capture",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Exact layer-20 L1 discharge series identities; no workbook-ID equivalence established",
+                        requested_from=(series.source_url,),
+                        retrieved_at_start=series.retrieved_at,
+                        recording_ids=(series.recording_id,),
+                    ),
                     AcquisitionRecord(
                         acquisition_id="catalogue_capture_2026_08_02",
                         method="http_request",
@@ -223,6 +283,19 @@ def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger
                     for pair in workbook_access.pairs
                 ),
                 evidence=(
+                    *(
+                        EvidenceReference(
+                            evidence_id=recording.recording_id,
+                            description="Published workbook parameter, unit and series-name headers",
+                            recording=recording,
+                        )
+                        for recording in product_recordings
+                    ),
+                    EvidenceReference(
+                        evidence_id="layer20_discharge_series",
+                        description="Published L1_ts_id, L1_ts_name, parameter and unit",
+                        recording=series,
+                    ),
                     EvidenceReference(
                         evidence_id="terms_absence_surface",
                         description="Exact-host Impressum examined for terms and citation",
@@ -241,6 +314,12 @@ def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger
         ),
         fact_bindings=(
             FactBinding(
+                fact_group="layer20_discharge_series",
+                facts=("source.series.layer20_discharge_identity",),
+                source_id="ba_avp_sava",
+                acquisition_id="layer20_series_capture",
+            ),
+            FactBinding(
                 fact_group="terms_surface_statement",
                 facts=("source.provider.terms_absence_statement",),
                 source_id="ba_avp_sava",
@@ -256,7 +335,7 @@ def _build_provider_acquisition_provenance(workbook_access: WorkbookAccessLedger
                 fact_group="canonical_products",
                 facts=product_facts,
                 source_id="ba_avp_sava",
-                acquisition_id="catalogue_capture_2026_08_02",
+                acquisition_id="product_workbook_headers",
             ),
             FactBinding(
                 fact_group="station_identities",

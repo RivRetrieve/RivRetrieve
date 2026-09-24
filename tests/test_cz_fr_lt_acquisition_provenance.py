@@ -85,7 +85,12 @@ def test_native_cli_invokes_shared_recording_verifier(
     monkeypatch.setattr(generator, "verify_provenance_recordings", record_call)
     args = ["--native", str(native), "--out", str(tmp_path)]
     if provider_id == "fr_hubeau":
-        args += ["--availability-ledger", "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"]
+        args += [
+            "--availability-ledger",
+            "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
+            "--native-capture",
+            "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
+        ]
     assert generator.main(args) == 0
     assert calls == [provider_id]
 
@@ -103,6 +108,8 @@ def test_native_cli_rejects_raw_byte_substitution(tmp_path: Path, provider_id: s
         args = ["--native", str(changed), "--out", str(tmp_path / "out")]
         if provider_id == "fr_hubeau":
             args += [
+                "--native-capture",
+                "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
                 "--availability-ledger",
                 "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
             ]
@@ -117,8 +124,8 @@ def test_france_binds_official_publication_without_original_producer_overclaims(
     bound_station_facts = {
         fact for binding in provenance.fact_bindings for fact in binding.facts if fact.startswith("source.station.")
     }
-    assert len(bound_station_facts) == 7323
-    assert {source.source_id for source in provenance.source_records} == {"fr_hubeau", "fr_hydroportail"}
+    assert len(bound_station_facts) == 7347
+    assert {source.source_id for source in provenance.source_records} == {"fr_hubeau"}
     acquisitions = {
         (source.source_id, acquisition.acquisition_id): acquisition
         for source in provenance.source_records
@@ -129,7 +136,7 @@ def test_france_binds_official_publication_without_original_producer_overclaims(
         for binding in provenance.fact_bindings
         if any(fact.startswith("source.observation.") and fact.endswith(".values_quality") for fact in binding.facts)
     ]
-    assert sum(len(binding.facts) for binding in values) == 33139
+    assert sum(len(binding.facts) for binding in values) == 20297
     for binding in values:
         assert binding.source_id is not None
         assert binding.acquisition_id is not None

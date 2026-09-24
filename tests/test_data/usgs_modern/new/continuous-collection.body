@@ -1,0 +1,124 @@
+{
+    "id":"continuous",
+    "links":[
+        {
+            "type":"application/json",
+            "rel":"root",
+            "title":"The landing page of this server as JSON",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1?f=json"
+        },
+        {
+            "type":"text/html",
+            "rel":"root",
+            "title":"The landing page of this server as HTML",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1?f=html"
+        },
+        {
+            "type":"application/json",
+            "rel":"self",
+            "title":"This document as JSON",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous?f=json"
+        },
+        {
+            "type":"application/ld+json",
+            "rel":"alternate",
+            "title":"This document as RDF (JSON-LD)",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous?f=jsonld"
+        },
+        {
+            "type":"text/html",
+            "rel":"alternate",
+            "title":"This document as HTML",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous?f=html"
+        },
+        {
+            "type":"application/schema+json",
+            "rel":"http://www.opengis.net/def/rel/ogc/1.0/schema",
+            "title":"Schema of collection in JSON",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/schema?f=json"
+        },
+        {
+            "type":"text/html",
+            "rel":"http://www.opengis.net/def/rel/ogc/1.0/schema",
+            "title":"Schema of collection in HTML",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/schema?f=html"
+        },
+        {
+            "type":"application/schema+json",
+            "rel":"http://www.opengis.net/def/rel/ogc/1.0/queryables",
+            "title":"Queryables for this collection as JSON",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/queryables?f=json"
+        },
+        {
+            "type":"text/html",
+            "rel":"http://www.opengis.net/def/rel/ogc/1.0/queryables",
+            "title":"Queryables for this collection as HTML",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/queryables?f=html"
+        },
+        {
+            "type":"application/geo+json",
+            "rel":"items",
+            "title":"Items as GeoJSON",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=json"
+        },
+        {
+            "type":"application/ld+json",
+            "rel":"items",
+            "title":"Items as RDF (GeoJSON-LD)",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=jsonld"
+        },
+        {
+            "type":"text/html",
+            "rel":"items",
+            "title":"Items as HTML",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=html"
+        },
+        {
+            "type":"text/csv; charset=utf-8",
+            "rel":"items",
+            "title":"Items as CSV",
+            "href":"https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items?f=csv"
+        }
+    ],
+    "title":"Continuous values",
+    "description":"Continuous data are collected via automated sensors installed at a monitoring location. They are collected at a high frequency and often at a fixed 15-minute interval. Depending on the specific monitoring location, the data may be transmitted automatically via telemetry and be available on WDFN within minutes of collection, while other times the delivery of data may be delayed if the monitoring location does not have the capacity to automatically transmit data. Continuous data are described by parameter name and parameter code (pcode). These data might also be referred to as \"instantaneous values\" or \"IV\".\n",
+    "keywords":[
+        "data",
+        "automated",
+        "subhourly",
+        "measured",
+        "computed",
+        "current",
+        "single location",
+        "features"
+    ],
+    "extent":{
+        "spatial":{
+            "bbox":[
+                [
+                    -180,
+                    -90,
+                    180,
+                    90
+                ]
+            ],
+            "crs":"http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+        },
+        "temporal":{
+            "interval":[
+                [
+                    null,
+                    null
+                ]
+            ],
+            "trs":"http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"
+        }
+    },
+    "itemType":"feature",
+    "crs":[
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS83",
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS27"
+    ],
+    "storageCrs":"http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+}

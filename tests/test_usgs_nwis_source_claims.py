@@ -1,20 +1,61 @@
-from datetime import date, datetime
+"""Modern source limits govern complete, gap-free multi-year request plans."""
+
+import json
+from datetime import datetime, timedelta
+
+import pytest
 
 from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
-from rivretrieve._internal.providers.usgs_nwis.config import window_declarations
-from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_provider_info
+from rivretrieve._internal.providers.usgs_nwis.config import config, window_declarations
+from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.window_planning import plan_windows
 
 
-def test_provider_metadata_matches_multiyear_window_planning() -> None:
-    window = _make_fetch_window(
-        WindowEndpoint.from_datetime(datetime(2020, 1, 1)),
-        WindowEndpoint.from_datetime(datetime(2023, 12, 31)),
-    )
-    for declaration in window_declarations().products.values():
-        assert plan_windows(window, declaration) == (RenderedWindow("2020-01-01", "2023-12-31"),)
-    assert build_provider_info(date(2026, 8, 2))["bulk_observations"] == (
-        "true: requests per station-product pair; "
-        "DV and IV endpoints selected by product; "
-        "partial failures reported as recoverable issues"
-    )
+@pytest.mark.parametrize("product_id", tuple(config().products))
+def test_multiyear_windows_cover_exact_source_bounds_without_gaps(product_id) -> None:
+    start, end = datetime(2020, 1, 1), datetime(2023, 12, 31, 23, 59, 59, 999999)
+    window = _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
+    declaration = window_declarations().products[product_id]
+    planned = plan_windows(window, declaration)
+    if config().products[product_id].coordinates.value.endpoint == "daily":
+        assert planned == (RenderedWindow("2020-01-01", "2023-12-31"),)
+        assert declaration.size is None
+    else:
+        assert planned == (
+            RenderedWindow("2020-01-01T00:00:00Z", "2023-01-04T23:59:59.999999Z"),
+            RenderedWindow("2023-01-05T00:00:00Z", "2023-12-31T23:59:59.999999Z"),
+        )
+        bounds = [
+            (datetime.fromisoformat(item.start.removesuffix("Z")), datetime.fromisoformat(item.stop.removesuffix("Z")))
+            for item in planned
+        ]
+        assert bounds[0][0] == start
+        assert bounds[-1][1] == end
+        tick = timedelta(microseconds=1)
+        assert all(right - left + tick <= timedelta(days=1100) for left, right in bounds)
+        assert all(
+            left_stop + tick == right_start
+            for (_, left_stop), (right_start, _) in zip(bounds, bounds[1:], strict=False)
+        )
+
+
+@pytest.mark.parametrize("product_id", ["discharge_instantaneous", "stage_instantaneous"])
+@pytest.mark.parametrize("extra", [timedelta(0), timedelta(microseconds=1)])
+def test_continuous_cap_keeps_subdaily_precision_and_exact_inclusive_endpoint(product_id, extra):
+    start = datetime(2010, 6, 1, 5, 12, 34, 123456)
+    end = start + timedelta(days=1100) - timedelta(microseconds=1) + extra
+    window = _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
+    planned = plan_windows(window, window_declarations().products[product_id])
+    assert len(planned) == (1 if extra == timedelta(0) else 2)
+    assert planned[0].start == start.isoformat() + "Z"
+    assert planned[-1].stop == end.isoformat() + "Z"
+    if extra:
+        assert planned[-1] == RenderedWindow(end.isoformat() + "Z", end.isoformat() + "Z")
+
+
+def test_provider_metadata_names_modern_collections_not_retired_routes() -> None:
+    claim = json.loads((declaration.catalogue / "provider.json").read_text())["bulk_observations"]
+    assert "requests per station-product" in claim
+    assert "daily" in claim.lower() and "continuous" in claim.lower()
+    assert "DV and IV" not in claim
+    assert "partial failures retained" in claim

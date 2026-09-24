@@ -23,6 +23,7 @@ from rivretrieve._internal.catalogues.native import (
     stamp_native_table,
     write_native_table,
 )
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
     PROVIDER_INFO_CATALOG_SCHEMA,
@@ -37,6 +38,8 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.lt_lhmt.config import SERIES_MAPPINGS, LtLhmtSourceCoordinates
+from rivretrieve._internal.providers.lt_lhmt.config import config as source_config
 from rivretrieve._internal.providers.lt_lhmt.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SHA256,
@@ -47,7 +50,6 @@ PROVIDER_ID = ProviderId("lt_lhmt")
 PROVIDER_NAME = "Lithuanian Hydrometeorological Service LHMT (Meteo.lt)"
 METADATA_URL = "https://api.meteo.lt/v1/hydro-stations"
 AVAILABILITY_REASON = "Meteo.lt hydro-stations catalogue does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
 
 
 @dataclass(frozen=True)
@@ -56,42 +58,6 @@ class GeneratedLtLhmtCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
-
-
-@dataclass(frozen=True)
-class ProductDefinition:
-    product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    canonical_unit: str
-    native_field: str
-
-
-PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    ProductDefinition(
-        product_id="discharge_daily_mean",
-        observed_property="discharge",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m3/s",
-        native_field="waterDischarge",
-    ),
-    ProductDefinition(
-        product_id="stage_daily_mean",
-        observed_property="stage",
-        frequency="daily",
-        statistic="mean",
-        period_type="interval",
-        period_anchor="provider_defined",
-        canonical_unit="m",
-        native_field="waterLevel",
-    ),
-)
 
 
 def refresh_native_table(
@@ -153,20 +119,19 @@ def build_catalogue(
 
 
 def build_products() -> ProductCatalog:
-    rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": defn.product_id,
-            "observed_property": defn.observed_property,
-            "frequency": defn.frequency,
-            "statistic": defn.statistic,
-            "period_type": defn.period_type,
-            "period_anchor": defn.period_anchor,
-            "unit": defn.canonical_unit,
-            "native_id": defn.native_field,
-        }
-        for defn in PRODUCT_DEFINITIONS
-    ]
+    rows = []
+    for product_id, declared in source_config().products.items():
+        coordinates = declared.coordinates.value
+        if not isinstance(coordinates, LtLhmtSourceCoordinates):
+            raise FatalContractError("lt_lhmt product has invalid source coordinates")
+        rows.append(
+            product_row(
+                str(PROVIDER_ID),
+                str(product_id),
+                str(coordinates.native_field),
+                SERIES_MAPPINGS[product_id].physical_facts(),
+            )
+        )
     return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
 
@@ -194,12 +159,12 @@ def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog
     for station_id, retrieved_date in station_dates.iter_rows():
         if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
             raise FatalContractError("station retrieval date must pair a string identifier with a date")
-        for defn in PRODUCT_DEFINITIONS:
+        for product_id in SERIES_MAPPINGS:
             rows.append(
                 {
                     "provider_id": PROVIDER_ID,
                     "station_id": station_id,
-                    "product_id": defn.product_id,
+                    "product_id": product_id,
                     "availability": "unknown",
                     "availability_reason": AVAILABILITY_REASON,
                     "published_record_start_date": None,
@@ -269,6 +234,8 @@ def write_catalogue(catalogue: GeneratedLtLhmtCatalogue, out_dir: Path | str) ->
         build_acquisition_provenance(),
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_mappings=SERIES_MAPPINGS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

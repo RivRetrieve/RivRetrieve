@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "2.605.0",
+      "Parameter": "1001",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2023-12-30T00:00:00Z/2024-01-09T23:59:59.999999Z",
+      "VersionNumber": 1
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-23T11:00:48.705294Z",
+    "content_base64": "eyJjdXJyZW50TGluayI6Imh0dHBzOi8vaHlkYXBpLm52ZS5uby9hcGkvdjEvT2JzZXJ2YXRpb25zP1N0YXRpb25JZD0yLjYwNS4wJlBhcmFtZXRlcj0xMDAxJlJlc29sdXRpb25UaW1lPTE0NDAmUmVmZXJlbmNlVGltZT0yMDIzLTEyLTMwVDAwJTNBMDAlM0EwMFolMkYyMDI0LTAxLTA5VDIzJTNBNTklM0E1OS45OTk5OTlaJlZlcnNpb25OdW1iZXI9MSIsImFwaVZlcnNpb24iOiIxLjAiLCJsaWNlbnNlIjoiaHR0cHM6Ly9kYXRhLm5vcmdlLm5vL25sb2QvZW4iLCJjcmVhdGVkQXQiOiIyMDI2LTA5LTIzVDExOjAwOjQ4LjY5MTcyNzhaIiwicXVlcnlUaW1lIjoiMDA6MDA6MDAuMDA3MTI1MSIsIml0ZW1Db3VudCI6MSwiZGF0YSI6W3sic3RhdGlvbklkIjoiMi42MDUuMCIsInN0YXRpb25OYW1lIjoiU29sYmVyZ2Zvc3MiLCJwYXJhbWV0ZXIiOjEwMDEsInBhcmFtZXRlck5hbWUiOiJWYW5uZsO4cmluZyIsInBhcmFtZXRlck5hbWVFbmciOiJEaXNjaGFyZ2UiLCJzZXJpZVZlcnNpb25ObyI6MSwibWV0aG9kIjoiTWVhbiIsInVuaXQiOiJtwrMvcyIsIm9ic2VydmF0aW9uQ291bnQiOjExLCJvYnNlcnZhdGlvbnMiOlt7InRpbWUiOiIyMDIzLTEyLTMwVDExOjAwOjAwWiIsInZhbHVlIjo0MDEuNTIwOCwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6Mn0seyJ0aW1lIjoiMjAyMy0xMi0zMVQxMTowMDowMFoiLCJ2YWx1ZSI6NDAxLjUyMDgsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9LHsidGltZSI6IjIwMjQtMDEtMDFUMTE6MDA6MDBaIiwidmFsdWUiOjQwMS43NSwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6Mn0seyJ0aW1lIjoiMjAyNC0wMS0wMlQxMTowMDowMFoiLCJ2YWx1ZSI6NDE1LjM5NTgsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9LHsidGltZSI6IjIwMjQtMDEtMDNUMTE6MDA6MDBaIiwidmFsdWUiOjQ0NC41LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfSx7InRpbWUiOiIyMDI0LTAxLTA0VDExOjAwOjAwWiIsInZhbHVlIjo0NDQuMjA4MywiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6Mn0seyJ0aW1lIjoiMjAyNC0wMS0wNVQxMTowMDowMFoiLCJ2YWx1ZSI6NDQzLjc1LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfSx7InRpbWUiOiIyMDI0LTAxLTA2VDExOjAwOjAwWiIsInZhbHVlIjo0NDIuNjI1LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfSx7InRpbWUiOiIyMDI0LTAxLTA3VDExOjAwOjAwWiIsInZhbHVlIjo0NDIuMTY2NywiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6Mn0seyJ0aW1lIjoiMjAyNC0wMS0wOFQxMTowMDowMFoiLCJ2YWx1ZSI6NDI5LjIyOTIsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9LHsidGltZSI6IjIwMjQtMDEtMDlUMTE6MDA6MDBaIiwidmFsdWUiOjQyMC45MTY3LCJjb3JyZWN0aW9uIjowLCJxdWFsaXR5IjoyfV19XX0=",
+    "sha256": "e63c40d920251e7a02ce00c7b6625257ccfd7a274c22f83dd1b82d55a5b6c079",
+    "prerequisite_calls": []
+  }
+}

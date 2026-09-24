@@ -1,0 +1,23 @@
+{
+  "url": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=09489082&parameterCd=00060&startDT=2001-08-26&endDT=2001-09-01&siteStatus=all",
+  "retrieved_at": "2026-09-22T14:12:39.680663+00:00",
+  "status": 200,
+  "final_url": "https://nwis.waterservices.usgs.gov/nwis/iv/?format=json&sites=09489082&parameterCd=00060&startDT=2001-08-26&endDT=2001-09-01&siteStatus=all",
+  "headers": {
+    "Date": "Tue, 22 Sep 2026 14:12:41 GMT",
+    "Server": "Apache",
+    "Strict-Transport-Security": "max-age=31536000",
+    "Vary": "Accept-Encoding",
+    "Content-Type": "application/json",
+    "Cache-Control": "max-age=900",
+    "Expires": "Tue, 22 Sep 2026 14:27:40 GMT",
+    "X-UA-Compatible": "IE=edge,chrome=1",
+    "Access-Control-Allow-Origin": "*",
+    "Content-Security-Policy": "frame-ancestors 'self'",
+    "Connection": "close",
+    "Transfer-Encoding": "chunked"
+  },
+  "sha256": "74632924d4495a3095d95a7e340c63830a81e26c6545fc4ecd3199f503108d1d",
+  "bytes": 59052,
+  "file": "legacy-09489082-discharge_instantaneous-end.json.gz"
+}

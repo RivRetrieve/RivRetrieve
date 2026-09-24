@@ -53,6 +53,11 @@ def _observation_df(**overrides: object) -> pl.DataFrame:
         "time_zone": ["+00:00", "+00:00"],
         "station_id": ["station-1", "station-1"],
         "product_id": ["flow", "flow"],
+        "series_id": ["test-series", "test-series"],
+        "facts_id": ["test-facts", "test-facts"],
+        "quantity": ["discharge", "discharge"],
+        "source_unit": ["m3/s", "m3/s"],
+        "unit": ["m3/s", "m3/s"],
         "value": [1.2, None],
     }
     data.update(overrides)
@@ -63,11 +68,35 @@ def _provenance() -> ObservationProvenance:
     return ObservationProvenance(source="live", provider_id=ProviderId("provider-a"))
 
 
+def _series_definition():
+    # Authored result-contract fixture, not provider evidence.
+    from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries, known
+
+    return SourceSeries(
+        series_id="test-series",
+        provider_id="provider-a",
+        station_id="station-1",
+        product_id="flow",
+        identity=SourceIdentity(
+            namespace="test", published_id="test-series", origin="mapping", evidence=("authored-contract-test",)
+        ),
+        facts=(
+            PhysicalFacts(
+                facts_id="test-facts",
+                quantity=known("discharge", "authored-contract-test"),
+                source_unit=known("m3/s", "authored-contract-test"),
+                normalized_unit="m3/s",
+            ),
+        ),
+    )
+
+
 def _result(data: pl.DataFrame | None = None) -> ObservationResult:
     return ObservationResult(
         data=_observation_df() if data is None else data,
         provenance=_provenance(),
         receipts=Receipts(provider_id=ProviderId("provider-a")),
+        source_series=(_series_definition(),),
     )
 
 
@@ -442,6 +471,11 @@ def test_observation_data_schema_accepts_canonical_long_table() -> None:
             "time_zone": pl.Utf8,
             "station_id": pl.Utf8,
             "product_id": pl.Utf8,
+            "series_id": pl.Utf8,
+            "facts_id": pl.Utf8,
+            "quantity": pl.Utf8,
+            "source_unit": pl.Utf8,
+            "unit": pl.Utf8,
             "value": pl.Float64,
         }
     )
@@ -458,6 +492,11 @@ def test_observation_data_schema_accepts_native_datetime_without_utc_mandate() -
             "time_zone": ["Europe/Zurich", "Europe/Zurich"],
             "station_id": ["station-1", "station-1"],
             "product_id": ["flow", "flow"],
+            "series_id": ["test-series", "test-series"],
+            "facts_id": ["test-facts", "test-facts"],
+            "quantity": ["discharge", "discharge"],
+            "source_unit": ["m3/s", "m3/s"],
+            "unit": ["m3/s", "m3/s"],
             "value": [1.2, 1.3],
         }
     )
@@ -477,7 +516,7 @@ def test_observation_data_schema_rejects_provider_id_column_as_extra_under_raise
 
 
 @pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-@pytest.mark.parametrize("missing_column", ["time", "time_zone", "station_id", "product_id", "value"])
+@pytest.mark.parametrize("missing_column", ObservationDataSchema.polars_schema.names())
 def test_observation_data_schema_rejects_missing_column(on_issue: str, missing_column: str) -> None:
     with pytest.raises(ObservationDataSchemaError) as exc_info:
         validate_observation_data(_observation_df().drop(missing_column))
@@ -537,6 +576,11 @@ def test_observation_result_constructs_with_exact_field_set() -> None:
         "provenance",
         "issues",
         "receipts",
+        "source_series",
+        "inventories",
+        "outcomes",
+        "scope",
+        "view_scope",
     )
     assert result.issues == ()
     assert result.receipts == Receipts(provider_id=ProviderId("provider-a"), entries=())
@@ -561,3 +605,127 @@ def test_observation_result_rejects_schema_violation_for_every_on_issue(on_issue
 
     assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
+
+
+def test_versioned_result_bundle_preserves_authored_contract_context_and_binary_receipt() -> None:
+    import polars.testing as pl_testing
+
+    import rivretrieve as rr
+
+    # Authored boundary values exercise binary encoding, not a source observation claim.
+    result = _result()
+    receipt = ReceiptEntry(
+        content=b"\x00\xffsource-bytes", origin=_receipt_origin(), authorship=ReceiptAuthorship.PUBLISHER_PAYLOAD
+    )
+    result = result.model_copy(update={"receipts": Receipts(provider_id=ProviderId("provider-a"), entries=(receipt,))})
+    restored = rr.from_bundle(rr.to_bundle(result))
+    pl_testing.assert_frame_equal(restored.data, result.data)
+    assert restored.source_series == result.source_series
+    assert restored.scope == result.scope
+    assert restored.receipts.entries[0].content == receipt.content
+    assert restored.receipts.entries[0].origin == receipt.origin
+
+
+def test_result_rejects_a_row_whose_unit_contradicts_its_physical_facts() -> None:
+    with pytest.raises(ObservationDataSchemaError, match="admitted source-series facts"):
+        _result(_observation_df().with_columns(pl.lit("cm").alias("unit")))
+
+
+def test_result_rejects_missing_definition_instead_of_inventing_identity() -> None:
+    with pytest.raises(ObservationDataSchemaError, match="unknown source-series"):
+        ObservationResult(
+            data=_observation_df(), provenance=_provenance(), receipts=Receipts(provider_id=ProviderId("provider-a"))
+        )
+
+
+def test_series_inspection_retains_successful_empty_and_unresolved_outcomes_without_rows() -> None:
+    import rivretrieve as rr
+    from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome, SeriesWindow
+
+    window = SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2))
+    result = ObservationResult(
+        data=pl.DataFrame(schema=ObservationDataSchema.polars_schema),
+        provenance=_provenance(),
+        receipts=Receipts(provider_id=ProviderId("provider-a")),
+        source_series=(_series_definition(),),
+        outcomes=(
+            RetrievalOutcome(
+                outcome_id="empty",
+                series_id="test-series",
+                station_id="station-1",
+                product_id="flow",
+                window=window,
+                status=OutcomeStatus.EMPTY,
+                facts_ids=("test-facts",),
+            ),
+            RetrievalOutcome(
+                outcome_id="unresolved",
+                series_id=None,
+                station_id="station-2",
+                product_id="flow",
+                window=window,
+                status=OutcomeStatus.UNRESOLVED,
+                reason="The response did not identify a concrete source series",
+            ),
+        ),
+    )
+    inspected = rr.series(result)
+    assert inspected["provider_id"].to_list() == ["provider-a", "provider-a"]
+    assert inspected.filter(pl.col("series_id") == "test-series")["outcomes"].to_list() == [["empty"]]
+    assert inspected.filter(pl.col("series_id").is_null())["outcomes"].to_list() == [["unresolved"]]
+    restored = rr.from_bundle(rr.to_bundle(result))
+    assert restored.outcomes == result.outcomes
+
+
+def test_inspection_does_not_attach_current_inventory_or_outcome_to_historical_fact_segment() -> None:
+    import rivretrieve as rr
+    from rivretrieve._internal.source_series import (
+        InventoryCompleteness,
+        InventorySnapshot,
+        OutcomeStatus,
+        RetrievalOutcome,
+        SeriesScope,
+        SeriesWindow,
+    )
+
+    definition = _series_definition()
+    current = definition.facts[0]
+    historical = current.model_copy(update={"facts_id": "historical-facts"})
+    definition = definition.model_copy(update={"facts": (current, historical)})
+    window = SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2))
+    inventory = InventorySnapshot(
+        snapshot_id="current-inventory",
+        scope=SeriesScope(),
+        members=(definition.series_id,),
+        member_facts=((definition.series_id, (current.facts_id,)),),
+        completeness=InventoryCompleteness.COMPLETE,
+        access="authored-contract",
+        origin="response",
+        evidence=("authored-contract",),
+        window=window,
+    )
+    result = ObservationResult(
+        data=pl.DataFrame(schema=ObservationDataSchema.polars_schema),
+        provenance=_provenance(),
+        receipts=Receipts(provider_id=ProviderId("provider-a")),
+        source_series=(definition,),
+        inventories=(inventory,),
+        outcomes=(
+            RetrievalOutcome(
+                outcome_id="current-empty",
+                series_id=definition.series_id,
+                station_id="station-1",
+                product_id="flow",
+                window=window,
+                status=OutcomeStatus.EMPTY,
+                facts_ids=(current.facts_id,),
+            ),
+        ),
+    )
+    inspected = rr.series(result)
+    historical_row = inspected.filter(pl.col("facts_id") == "historical-facts")
+    assert historical_row["outcomes"].to_list() == [[]]
+    assert historical_row["inventory_ids"].to_list() == [[]]
+    current_row = inspected.filter(pl.col("facts_id") == current.facts_id)
+    assert current_row["outcomes"].to_list() == [["empty"]]
+    assert current_row["inventory_ids"].to_list() == [["current-inventory"]]

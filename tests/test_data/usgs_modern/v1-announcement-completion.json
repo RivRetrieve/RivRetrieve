@@ -1,0 +1,9 @@
+{
+  "name": "v1-announcement",
+  "initial_url": "https://waterdata.usgs.gov/blog/api-v1-release/",
+  "pages": [
+    "v1-announcement"
+  ],
+  "exhausted": true,
+  "total_features": 0
+}

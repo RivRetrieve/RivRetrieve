@@ -32,19 +32,16 @@ def test_south_africa_archive_capture_names_all_exact_recorded_requests() -> Non
 
 def test_france_catalogue_capture_names_all_exact_recorded_requests() -> None:
     expected = [
-        *(
-            f"https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&page={page}&format=json"
-            for page in range(1, 8)
-        ),
-        "https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json",
+        "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=10000&format=json",
+        "https://hubeau.eaufrance.fr/api/v1/temperature/station?size=10000&format=json",
     ]
-    hydrometry = _acquisition("fr_hubeau", "hydrometry_catalogue_capture_2026_08_02")
-    temperature = _acquisition("fr_hubeau", "temperature_catalogue_capture_2026_08_02")
+    hydrometry = _acquisition("fr_hubeau", "hydrometry_catalogue_capture_2026_09_21")
+    temperature = _acquisition("fr_hubeau", "temperature_catalogue_capture_2026_09_21")
     temperature_semantics = _acquisition("fr_hubeau", "temperature_semantics_openapi_2026_09_02")
     assert hydrometry["requested_from"] == expected[:-1]
-    assert hydrometry["retrieved_at_start"] == "2026-08-02T17:32:58Z"
+    assert hydrometry["retrieved_at_start"] == "2026-09-21T09:11:52.123123Z"
     assert temperature["requested_from"] == expected[-1:]
-    assert temperature["retrieved_at_start"] == "2026-08-02T17:33:34Z"
+    assert temperature["retrieved_at_start"] == "2026-09-21T09:13:53.072109Z"
     assert temperature_semantics["requested_from"] == ["https://hubeau.eaufrance.fr/api/v1/temperature/api-docs"]
     assert temperature_semantics["retrieved_at_start"] == "2026-09-02T14:50:55.466790Z"
     path = Path("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance.json")

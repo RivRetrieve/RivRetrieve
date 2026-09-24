@@ -22,6 +22,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ch_foen.config import ChFoenRequestCoordinates, ChFoenSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import AuthenticationCapability, HttpMethod, Transport, TransportRequest
 
 _REST = "https://api.existenz.ch/apiv1/hydro/daterange"
@@ -35,8 +36,10 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
-    fields: list[str] = []
     for product in products:
         try:
             coordinates = config.products[product].coordinates.value
@@ -44,8 +47,6 @@ def fetch(
             raise FatalContractError(f"ch_foen product is absent from provider config: {product}") from exc
         if not isinstance(coordinates, ChFoenSourceCoordinates):
             raise FatalContractError(f"ch_foen product has invalid source coordinates: {product}")
-        fields.extend(field.name for field in coordinates.fields)
-    fields = list(dict.fromkeys(fields))
     query_fields = ["flow", "flow_ls", "height_abs", "height", "temperature"]
     if not products or not stations:
         return WithIssues(())
@@ -69,6 +70,8 @@ def fetch(
                     fetch_window,
                     response,
                     SourceQuery(query, ()),
+                    scope,
+                    known_series,
                 )
             )
         return WithIssues(tuple(payloads))
@@ -90,6 +93,8 @@ def fetch(
                 fetch_window,
                 response,
                 UnknownOriginFact(),
+                scope,
+                known_series,
             ),
         )
     )
@@ -129,7 +134,7 @@ def _flux(station: str, fields: list[str], start: str, stop: str) -> str:
     )
 
 
-def _payload(coordinates, pairs, window, response, query) -> Payload:
+def _payload(coordinates, pairs, window, response, query, scope, known_series) -> Payload:
     return Payload(
         coordinates,
         pairs,
@@ -145,4 +150,6 @@ def _payload(coordinates, pairs, window, response, query) -> Payload:
             query,
         ),
         response.prerequisite_calls,
+        scope,
+        known_series,
     )

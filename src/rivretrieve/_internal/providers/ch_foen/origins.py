@@ -74,7 +74,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         source_url="https://api.existenz.ch/",
         retrieved_at=datetime.fromisoformat("2026-08-20T13:12:58Z"),
         media_type="text/html; charset=UTF-8",
-        sha256="488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df",
+        sha256="b353852a474516acf404c1d8b775cc77c5cf3c97bd3055380fc4534bcba9111c",
     )
     parameters = RecordingReference(
         recording_id="ch_foen_parameters_2026_09_02",
@@ -114,7 +114,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         "source.station_product.availability_not_published",
         "source.observation.transport",
     )
-    canonical_observation_facts = ("observation.canonical_five_column_shape",)
+    canonical_observation_facts = ("observation.source_series_shape",)
     acq = AcquisitionRecord(
         acquisition_id="existenz_catalogue_capture_2026_08_02",
         method="http_request",
@@ -172,7 +172,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         acquisition_id="existenz_terms_capture_2026_08_20",
         method="http_request",
         instant_type="retrieval",
-        description="Existenz API conditions and BAFU credit response",
+        description="Existenz API conditions and BAFU credit response; published archive credential redacted in retained fixture",
         requested_from=(existenz.source_url,),
         retrieved_at_start=existenz.retrieved_at,
         recording_ids=(existenz.recording_id,),
@@ -246,7 +246,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 evidence=(
                     EvidenceReference(
                         evidence_id="existenz_api_terms",
-                        description="Intermediary API conditions and BAFU credit statement",
+                        description="Intermediary API conditions and BAFU credit statement; retained fixture has published archive credential redacted",
                         recording=existenz,
                     ),
                 ),
@@ -321,7 +321,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 source_id=None,
                 acquisition_id=None,
                 transformation=Transformation(
-                    name="BAFU observations to RivRetrieve five-column result shape",
+                    name="BAFU observations to identified RivRetrieve observations",
                     external_inputs=(
                         ExternalFactReference(source_id="ch_bafu", fact="source.observation.value"),
                         ExternalFactReference(source_id="ch_bafu", fact="source.observation.quality"),

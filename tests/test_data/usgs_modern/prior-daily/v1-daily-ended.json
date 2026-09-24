@@ -1,0 +1,38 @@
+{
+  "type": "FeatureCollection",
+  "features": [],
+  "numberReturned": 0,
+  "links": [
+    {
+      "type": "application/geo+json",
+      "rel": "self",
+      "title": "This document as GeoJSON",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items?f=json&time_series_id=4d186669708e4dc18f84d271efb953a1&datetime=2024-01-01%2F2024-01-07&limit=100"
+    },
+    {
+      "rel": "alternate",
+      "type": "application/ld+json",
+      "title": "This document as RDF (JSON-LD)",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items?f=jsonld&time_series_id=4d186669708e4dc18f84d271efb953a1&datetime=2024-01-01%2F2024-01-07&limit=100"
+    },
+    {
+      "type": "text/html",
+      "rel": "alternate",
+      "title": "This document as HTML",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items?f=html&time_series_id=4d186669708e4dc18f84d271efb953a1&datetime=2024-01-01%2F2024-01-07&limit=100"
+    },
+    {
+      "type": "text/csv; charset=utf-8",
+      "rel": "alternate",
+      "title": "This document as CSV",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items?f=csv&time_series_id=4d186669708e4dc18f84d271efb953a1&datetime=2024-01-01%2F2024-01-07&limit=100"
+    },
+    {
+      "type": "application/json",
+      "title": "Daily values",
+      "rel": "collection",
+      "href": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily"
+    }
+  ],
+  "timeStamp": "2026-09-22T10:48:59.242406Z"
+}
