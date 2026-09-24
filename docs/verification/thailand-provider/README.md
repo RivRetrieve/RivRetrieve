@@ -59,8 +59,10 @@ Scoped Ruff lint and format, the generated reference and `git diff --check` also
   `SERIES_MAPPINGS` gives m and m3/s without scaling and stage `above_sea_level` with
   no datum. `parse.py` keeps nulls and turns `result: "NO"` into an `error` issue.
 - **Sources.** ThaiWater's site is a script application; its current
-  `app.chunk.js` was searched. The footer counts 54 agencies; history text gives 52 and
-  "53 agencies, 12 ministries". It links cookie and privacy policies and a privacy
+  `app.chunk.js` was searched. A separate "supported by" (สนับสนุนข้อมูลโดย) panel counts
+  54 agencies; two versions of the history text give 52 and 53 agencies, each with
+  12 ministries, and say data are provided through www.Thaiwater.net and the ThaiWater
+  app. It links cookie and privacy policies and a privacy
   notice; no data licence, terms or citation text was found. HII's homepage places HII
   under the Ministry of Higher Education, Science, Research and Innovation and says HII
   developed the National Hydroinformatics Data Center. The Government Data Catalog

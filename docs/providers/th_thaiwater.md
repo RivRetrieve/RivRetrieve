@@ -9,14 +9,14 @@
 | Published by | Hydro-Informatics Institute (HII), through ThaiWater, คลังข้อมูลน้ำแห่งชาติ (the National Hydroinformatics Data Center) |
 | Read from | ThaiWater's public API (`api-v3.thaiwater.net`) |
 | Station agencies | HII, Royal Irrigation Department, Friend in Need (of "Pa") Volunteers Foundation, Electricity Generating Authority of Thailand |
-| Quantities | Stage and discharge |
+| Quantities | Discharge and stage |
 | Stations in the catalogue | 825. Availability depends on quantity and period |
 | Credentials | No personal credentials required |
 | Terms | No licence or citation request found for the API; see [Terms and citation](#terms-and-citation) |
 | Agency documentation | [ThaiWater](https://www.thaiwater.net/), [ThaiWater data standards](https://standard.thaiwater.net/docs/) |
 
-Retrieve three days of stage at station `1`, which ThaiWater names Klong Ladprao Bang Bua Temple.
-It is a telemetered water-level station on Khlong Bang Bua in Bangkok:
+Retrieve three days of stage at station `1`, a telemetered water-level station in
+Bangkok that ThaiWater names Klong Ladprao Bang Bua Temple:
 
 ```python
 import rivretrieve as rr
@@ -60,16 +60,18 @@ See [Usage](../usage.md) for general selection and result handling.
 
 ## Who measures, and who publishes
 
-RivRetrieve reads ThaiWater's public API. ThaiWater, คลังข้อมูลน้ำแห่งชาติ, gathers
-water and weather data from Thai agencies into one database. Its own English name is
-the National Hydroinformatics Data Center. The Hydro-Informatics Institute (HII), a
-public organisation under Thailand's Ministry of Higher Education, Science, Research
-and Innovation, developed ThaiWater and publishes it. HII describes its role as
-collecting and analysing water-resources information for other agencies to use.
+คลังข้อมูลน้ำแห่งชาติ, the National Hydroinformatics Data Center, gathers water and
+weather data from Thai agencies into one database. It provides those data through the
+ThaiWater website and mobile app. RivRetrieve reads ThaiWater's public API.
+The Hydro-Informatics Institute (HII), a public organisation under Thailand's Ministry
+of Higher Education, Science, Research and Innovation, developed the data center and
+publishes ThaiWater. HII describes its role as collecting and analysing
+water-resources information for other agencies to use.
 
 ThaiWater's own pages do not give one consistent count of contributing agencies.
-On 2026-09-24, the site footer said 54 agencies supply data, while its history text
-gave 52 in one place and 53 agencies from 12 ministries in another.
+On 2026-09-24, the site's "supported by" (สนับสนุนข้อมูลโดย) panel said 54 agencies
+supply data. Its history text, in two versions, said the data center links data from
+52 agencies and from 53 agencies, each across 12 ministries.
 
 ThaiWater's station list names an agency for each station. It uses the word agency
 (หน่วยงาน). The pages checked do not say whether that agency owns the station,
@@ -105,8 +107,8 @@ daily values, and the frequency and statistic filters do not match these records
 The API does not state a sampling frequency or whether each value is an instantaneous
 reading or an average. Do not treat the 10-minute spacing in a response as an
 established sampling interval, averaging period or promise of continuous coverage.
-The same standard describes 10-minute water levels as readings at the labelled time, but RivRetrieve has
-not established that the API values follow that standard.
+The same standard describes 10-minute water levels as readings at the labelled time,
+but RivRetrieve has not established that the API values follow that standard.
 
 Every catalogue station lists both stage and discharge. Test requests covering parts
 of June to September 2026 found stage values at 813 stations and discharge values at
@@ -147,8 +149,9 @@ reported as an issue.
 RivRetrieve requests two extra days on each side of the requested dates, then returns
 only the requested period. The three-day example above therefore asked ThaiWater for
 May 30 to June 5, 2024. Each request to ThaiWater covers at most 365 calendar dates,
-counting both ends, and RivRetrieve splits longer periods into several requests. That size is a conservative working
-choice. RivRetrieve has not found a documented maximum period, and none has been measured.
+counting both ends, and RivRetrieve splits longer periods into several requests. That
+size is a conservative working choice. RivRetrieve has not found a documented maximum
+period, and none has been measured.
 
 Stage and discharge come from the same ThaiWater response, but RivRetrieve requests each
 selected quantity separately. Selecting both quantities at a station therefore sends the
