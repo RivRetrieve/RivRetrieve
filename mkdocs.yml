@@ -1,0 +1,113 @@
+site_name: RivRetrieve
+site_description: "A Python package for downloading global river gauge data"
+site_url: "https://rivretrieve.github.io/"
+repo_url: "https://github.com/RivRetrieve/RivRetrieve"
+repo_name: "RivRetrieve/RivRetrieve"
+docs_dir: "docs"
+watch:
+  - README.md
+  - src
+exclude_docs: |
+  README.md
+  AGENTS.md
+  hooks.py
+  __pycache__/**
+  scripts/**
+  provider_ports/**
+  overrides/**
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+
+  language: en
+  palette:
+    # Palette toggle for automatic mode / light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+hooks:
+  - docs/hooks.py
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_root_heading: true
+            show_source: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js
+
+nav:
+  - Home: index.md
+  - Interactive Map: map.md
+  - User Guide:
+      - Quickstart & Usage: usage.md
+      - CAMELS-US Example: examples/camels-us.md
+      - Drainage Areas: drainage-areas.md
+
+  - Providers:
+      - Hub'Eau (France): providers/fr_hubeau.md
+      - HydroPortail (France): providers/fr_hydroportail.md
+      - MLIT (Japan): providers/jp_mlit.md
+      - FOEN (Switzerland): providers/ch_foen.md
+  - Developer Notes:
+      - Architecture: architecture.md
+      - API Reference: reference.md
+      - Product Dictionary: product_dictionary.md
+      - Catalogue Evidence: catalogue-evidence.md
+      - Catalogue Absence: catalogue-absence.md
+      - Catalogue Provenance: catalogue-provenance.md
+      - Observation Store Layout: design/observation-store-layout.md
+      - Development Conventions: development-conventions.md
+
