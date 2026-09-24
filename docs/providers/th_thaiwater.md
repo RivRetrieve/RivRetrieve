@@ -1,4 +1,4 @@
-# Thailand — ThaiWater
+# Thailand: ThaiWater
 
 [Documentation index](../README.md) · [Usage](../usage.md)
 
@@ -6,31 +6,75 @@
 |---|---|
 | Provider | `th_thaiwater` |
 | Country | Thailand |
-| Published by | Hydro-Informatics Institute (HII), through ThaiWater, the national water data warehouse |
-| Station agencies | HII, Royal Irrigation Department, Electricity Generating Authority of Thailand, Friend in Need (of "Pa") Volunteers Foundation |
-| Variables | Discharge, stage |
-| Stations in the catalogue | 825 |
-| Credentials | None |
-| Terms | No data licence or citation request published |
+| Published by | Hydro-Informatics Institute (HII), through ThaiWater, คลังข้อมูลน้ำแห่งชาติ (the National Hydroinformatics Data Center) |
+| Read from | ThaiWater's public API (`api-v3.thaiwater.net`) |
+| Station agencies | HII, Royal Irrigation Department, Friend in Need (of "Pa") Volunteers Foundation, Electricity Generating Authority of Thailand |
+| Quantities | Stage and discharge |
+| Stations in the catalogue | 825. Availability depends on quantity and period |
+| Credentials | No personal credentials required |
+| Terms | No licence or citation request found for the API; see [Terms and citation](#terms-and-citation) |
 | Agency documentation | [ThaiWater](https://www.thaiwater.net/), [ThaiWater data standards](https://standard.thaiwater.net/docs/) |
+
+Retrieve three days of stage at station `1`, which ThaiWater names Klong Ladprao Bang Bua Temple,
+a canal gauge in Bangkok:
 
 ```python
 import rivretrieve as rr
 
-selection = rr.find(provider="th_thaiwater", product="stage_reported")
-selection = rr.pick(selection, station="1")
-result = rr.fetch(selection, start="2024-06-01", end="2024-06-03")
+selection = rr.find(provider="th_thaiwater", station="1", quantity="stage")
+
+result = rr.fetch(selection, start="2024-06-01", end="2024-06-03", cache="bypass")
+
+preview = result.data.select("time", "time_zone", "value", "unit").head(3)
+print(preview.write_csv(), end="")
+
+print(result.data.height)
+print([(issue.severity, issue.code) for issue in result.issues])
 ```
+
+Output:
+
+```text
+time,time_zone,value,unit
+2024-06-01T00:00:00.000000,unknown,1.354,m
+2024-06-01T00:10:00.000000,unknown,1.346,m
+2024-06-01T00:20:00.000000,unknown,1.341,m
+432
+[('info', 'provenance.license_not_established'), ('info', 'provenance.citation_not_established')]
+```
+
+The request returned 432 stage values in metres for June 1 to 3, 2024. Both endpoint
+dates are included. In this response the values are 10 minutes apart, which gives 144
+rows per day. That spacing describes this response. The API does not state a sampling
+frequency or whether each value is an instantaneous reading or an average.
+
+The time zone is `unknown`, so these timestamps should not be read as UTC or as
+Thailand time. The two informational issues say that RivRetrieve has no established
+licence or citation for this provider. They are not retrieval problems; see
+[Terms and citation](#terms-and-citation).
+
+`cache="bypass"` requests the source rather than a local cache. This output was checked
+on 2026-09-24. ThaiWater can revise its data, so later retrievals may differ.
+Run the examples on this page in order in the same Python session.
+See [Usage](../usage.md) for general selection and result handling.
 
 ## Who measures, and who publishes
 
-RivRetrieve reads ThaiWater's public API. ThaiWater, คลังข้อมูลน้ำแห่งชาติ (the national water data warehouse), is run by the Hydro-Informatics
-Institute, a public organisation under Thailand's Ministry of Higher Education, Science, Research
-and Innovation. It brings together water data from many agencies; its site states that 54 agencies
-contribute data.
+RivRetrieve reads ThaiWater's public API. ThaiWater, คลังข้อมูลน้ำแห่งชาติ, gathers
+water and weather data from Thai agencies into one database. Its own English name is
+the National Hydroinformatics Data Center. The Hydro-Informatics Institute (HII), a
+public organisation under Thailand's Ministry of Higher Education, Science, Research
+and Innovation, developed ThaiWater and publishes it. HII describes its role as
+collecting and analysing water-resources information for other agencies to use.
 
-So ThaiWater publishes data from stations run by different agencies. ThaiWater attributes each
-station to an agency, and the 825 stations in RivRetrieve's catalogue are attributed to:
+ThaiWater's own pages do not give one consistent count of contributing agencies.
+On 2026-09-24, the site footer said 54 agencies supply data, while its history text
+gave 52 in one place and 53 agencies from 12 ministries in another.
+
+ThaiWater's station list names an agency for each station. It uses the word agency
+(หน่วยงาน). The pages checked do not say whether that agency owns the station,
+operates its sensor, or made the measurement, so this page does not describe it
+as the station owner. The 825 stations in RivRetrieve's catalogue are attributed to:
 
 | Agency | Stations |
 |---|---:|
@@ -39,45 +83,123 @@ station to an agency, and the 825 stations in RivRetrieve's catalogue are attrib
 | Friend in Need (of "Pa") Volunteers Foundation | 95 |
 | Electricity Generating Authority of Thailand | 73 |
 
+Station `1` in the example is attributed to HII. The catalogue holds the 825 telemetered
+water-level stations that ThaiWater listed on 2026-08-02. ThaiWater's list changes;
+on 2026-09-24 it listed 804. Neither list is a complete inventory of Thai river gauging.
+
 ## What you can retrieve
 
-| Product | Unit | Stations with data |
-|---|---|---:|
-| `stage_reported` | m | 813 |
-| `discharge_reported` | m³/s | 283 |
+| Quantity filter | Frequency and statistic | Source and returned unit |
+|---|---|---|
+| `stage` | Not established | m |
+| `discharge` | Not established | m³/s |
 
-Most stations report stage; about a third also report discharge.
+These units require no numerical scaling. ThaiWater labels stage in metres above
+mean sea level (ม.รทก.). ThaiWater's data-exchange standard defines that unit with
+reference to Royal Thai Survey Department benchmarks. RivRetrieve records stage as
+above sea level but has not established which vertical datum each station's values use.
 
-The products are named `_reported` because the source does not state whether each value is an
-instantaneous reading or an average; the catalogue records frequency and statistic as `unknown`.
-In practice the values arrive every 10 minutes: at station `1`, stage came back at 10-minute steps
-for windows in 2012, 2018, 2024 and 2026.
+RivRetrieve returns the values ThaiWater publishes. It does not calculate hourly or
+daily values, and the frequency and statistic filters do not match these records.
+Do not treat the 10-minute spacing in a response as an established sampling interval,
+averaging period or promise of continuous coverage. ThaiWater's data-exchange standard
+describes 10-minute water levels as readings at the labelled time, but RivRetrieve has
+not established that the API values follow that standard.
 
-"Stations with data" is what RivRetrieve found when it tested each station over a recent window
-while building the catalogue; the catalogue records the window it tested.
+Every catalogue station lists both stage and discharge. Test requests covering parts
+of June to September 2026 found stage values at 813 stations and discharge values at
+283. At the other stations, availability is unknown, and the quantity remains
+selectable. A station being listed does not guarantee data for every quantity or
+requested period.
 
-The API answers at most 365 days per request, so RivRetrieve splits longer requests.
+ThaiWater publishes stage and discharge together, and a station without discharge
+values can still publish timestamps with an empty discharge field. RivRetrieve keeps
+those as rows with a null value. At station `1`, discharge for the same three days
+returns rows, but no values:
 
-## Time
+```python
+discharge = rr.find(provider="th_thaiwater", station="1", quantity="discharge")
 
-Values come back with `time_zone` `unknown`. The API gives times without stating a zone, and
-RivRetrieve does not fill one in.
+discharge_result = rr.fetch(discharge, start="2024-06-01", end="2024-06-03", cache="bypass")
 
-## Terms
+print(discharge_result.data.height)
+print(discharge_result.data["value"].null_count())
+print([str(outcome.status) for outcome in discharge_result.outcomes])
+```
 
-ThaiWater publishes no licence and no citation request for its data. The site lists only cookie
-and privacy policies, and its footer carries a copyright notice:
+Output:
+
+```text
+432
+432
+['success']
+```
+
+All 432 discharge rows are null, and the request succeeded. A null value means that
+ThaiWater published the timestamp without a discharge value. It differs from an absent
+row, where the source supplied no timestamp, and from a failed request, which is
+reported as an issue.
+
+## Requests
+
+RivRetrieve requests two extra days on each side of the requested dates, then returns
+only the requested period. The three-day example above therefore asked ThaiWater for
+May 30 to June 5, 2024. RivRetrieve requests at most 365 dates from ThaiWater at a time
+and splits longer periods into several requests. That size is a conservative working
+choice. RivRetrieve has not found a documented maximum period, and none has been measured.
+
+Stage and discharge come from the same ThaiWater response, but RivRetrieve requests each
+selected quantity separately. Selecting both quantities at a station therefore sends the
+same request twice.
+
+## Time and data status
+
+The API gives times such as `2024-06-01 00:10` without a time zone. RivRetrieve keeps
+them as source clock labels and returns `time_zone="unknown"`. Do not assign UTC or
+Thailand time from the station's location. `rr.to_utc` raises an error for these rows
+because it cannot determine the offset.
+
+RivRetrieve found no quality flag or provisional marker in the API response. It makes no
+quality judgement of its own. A returned number therefore does not establish that
+ThaiWater or the station agency has checked it.
+
+If ThaiWater answers a request with an explicit failure message, RivRetrieve returns
+an `error` issue with that message and no rows for the request. Check
+[issues](../usage.md#issues) alongside row counts before interpreting gaps or empty results.
+
+## Terms and citation
+
+RivRetrieve has not found a licence or citation request for the API it reads. On
+2026-09-24, the ThaiWater site linked cookie and privacy policies and a privacy notice,
+but no data terms. Its footer carries a copyright notice:
 
 > Copyright © 2019 Hydro - Informatics Institute,All rights reserved.
 
-Each station is attributed to one of the agencies listed above.
+Not finding a licence does not establish that the data are free to reuse, or that no
+terms apply.
+
+HII also publishes a separate water-level dataset from its own telemetry stations
+in Thailand's [Government Data Catalog](https://gdcatalog.go.th/dataset/gdpublish-water-level),
+distributed as downloadable files. That listing gives its licence as
+**Creative Commons Attribution Non-Commercial**. RivRetrieve has not established
+whether that licence applies to the API responses, or to stations attributed to other
+agencies. Check with HII and the station agency before commercial use or redistribution.
+
+When citing retrieved data, identify ThaiWater and HII as the publishers, and record
+the station, its agency, the quantity, the requested period and the access date. This
+is practical guidance, not an official ThaiWater citation.
 
 ## Sources
 
-| Page | Retrieved |
+| Source | Checked |
 |---|---|
-| [ThaiWater](https://www.thaiwater.net/) | 2026-09-19 |
-| [ThaiWater data standards](https://standard.thaiwater.net/docs/) | 2026-09-19 |
+| [ThaiWater](https://www.thaiwater.net/) and its site application | 2026-09-24 |
+| [HII](https://www.hii.or.th/) | 2026-09-24 |
+| [ThaiWater data standards](https://standard.thaiwater.net/docs/): date and time format, data periods, water-level measurement | 2026-09-24 |
+| [Government Data Catalog: ระดับน้ำ (water level)](https://gdcatalog.go.th/dataset/gdpublish-water-level) | 2026-09-24 |
 
-Station counts and agencies come from the packaged catalogue. The 10-minute spacing was checked by
-retrieval on 2026-09-19.
+Station counts and agencies come from the packaged catalogue. The examples were run
+against the live API on 2026-09-24. They verify one station, two quantities and one
+period, not service-wide availability. The
+[verification record](../verification/thailand-provider/README.md) retains commands,
+source checks, exact output and the limits of these checks.
