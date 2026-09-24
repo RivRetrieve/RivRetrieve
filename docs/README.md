@@ -43,6 +43,7 @@ written:
 - [Japan: MLIT](providers/jp_mlit.md)
 - [Norway: NVE](providers/no_nve.md)
 - [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
+- [Thailand: ThaiWater](providers/th_thaiwater.md)
 - [United States — USGS](providers/usgs_nwis.md)
 
 ## How it works
