@@ -13,6 +13,7 @@ from rivretrieve._internal.authentication import (
     CredentialExchangeTransport,
     ExchangeSpec,
 )
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.transport import (
     CredentialHeader,
     HttpClient,
@@ -50,6 +51,18 @@ def make_transport(stage, failure):
         counts[current] += 1
         if current == stage:
             secret = _PASSWORD if current == "exchange" else _TOKEN
+            if failure == "fatal":
+                raise FatalContractError(f"{_RAW} {secret}")
+            if failure in {"unsafe", "http_after_retry", "redirect_after_retry"}:
+                if counts[current] == 1:
+                    raise requests.exceptions.ReadTimeout(f"{_RAW} {secret}")
+                if failure == "http_after_retry":
+                    return b"denied", 401, "text/plain"
+                if failure == "redirect_after_retry":
+                    return b"redirect", 302, "text/plain"
+                if current == "exchange":
+                    return f'{{"token":"{_TOKEN}"}}'.encode(), 200, _TOKEN
+                return _PASSWORD.encode(), 200, "text/plain"
             if failure == "timeout":
                 raise requests.exceptions.ReadTimeout(f"{_RAW} {secret}")
             if failure == "incomplete":
@@ -74,10 +87,10 @@ def make_transport(stage, failure):
     return transport, counts
 
 
-def capture_failure(transport):
+def capture_failure(transport, error_type=CredentialExchangeError):
     try:
         transport.send(TransportRequest(HttpMethod.GET, f"{_ORIGIN}/data"))
-    except CredentialExchangeError as error:
+    except error_type as error:
         return error
     pytest.fail("expected credential exchange failure")
 
@@ -121,7 +134,54 @@ def test_exchange_parse_failure_does_not_invent_transport_failure_metadata():
     error = capture_failure(transport)
     assert error.reason is AuthenticationFailureReason.RESPONSE_JSON_INVALID
     assert error.category is None
-    assert error.attempts is None
+    assert error.attempts == 1
     assert error.transport_reason is None
     assert error.status_code == 200
     assert counts == {"exchange": 1, "data": 0}
+
+
+@pytest.mark.parametrize("stage", ["exchange", "data"])
+def test_fatal_contract_errors_cross_exchange_without_becoming_source_failures(stage):
+    transport, counts = make_transport(stage, "fatal")
+    error = capture_failure(transport, FatalContractError)
+    assert type(error) is FatalContractError
+    assert error.issues == ()
+    assert counts[stage] == 1
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+    for secret in (_PASSWORD, _TOKEN, _RAW):
+        assert secret not in rendered
+        assert secret not in repr(vars(error))
+
+
+@pytest.mark.parametrize("stage", ["exchange", "data"])
+def test_response_metadata_rejection_keeps_attempt_count_after_retry(stage):
+    transport, counts = make_transport(stage, "unsafe")
+    error = capture_failure(transport)
+    assert error.reason is AuthenticationFailureReason.RETAINED_METADATA_UNSAFE
+    assert error.attempts == 2
+    assert error.status_code == 200
+    assert counts[stage] == 2
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+    for secret in (_PASSWORD, _TOKEN, _RAW):
+        assert secret not in rendered
+        assert secret not in repr(vars(error))
+
+
+@pytest.mark.parametrize(
+    ("failure", "reason", "status"),
+    [
+        ("http_after_retry", AuthenticationFailureReason.EXCHANGE_HTTP_STATUS, 401),
+        ("redirect_after_retry", AuthenticationFailureReason.EXCHANGE_REDIRECT_REFUSED, 302),
+    ],
+)
+def test_exchange_response_failure_keeps_attempt_count_after_retry(failure, reason, status):
+    transport, counts = make_transport("exchange", failure)
+    error = capture_failure(transport)
+    assert error.reason is reason
+    assert error.attempts == 2
+    assert error.status_code == status
+    assert counts == {"exchange": 2, "data": 0}

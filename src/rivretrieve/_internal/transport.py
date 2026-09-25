@@ -24,6 +24,8 @@ from urllib.parse import urlsplit
 import requests
 from urllib3 import exceptions as urllib3_exceptions
 
+from rivretrieve._internal.issues import FatalContractError
+
 
 class HttpMethod(StrEnum):
     GET = "GET"
@@ -239,8 +241,11 @@ class TransportResponse:
     applied_credential_header_names: tuple[str, ...] = ()
     prerequisite_calls: tuple[SecretCallTrace, ...] = ()
     executed_request: ExecutedRequestEvidence | None = field(default=None, compare=False, repr=False)
+    attempts: int = field(default=1, compare=False)
 
     def __post_init__(self) -> None:
+        if type(self.attempts) is not int or self.attempts < 1:
+            raise FatalContractError("response attempts must be a positive integer")
         object.__setattr__(self, "request_parameters", MappingProxyType(dict(self.request_parameters)))
         names = _validated_header_names(self.applied_credential_header_names, kind="applied credential")
         object.__setattr__(self, "applied_credential_header_names", names)
@@ -470,6 +475,10 @@ def _sender_failure_category(exception: BaseException) -> TransportFailureCatego
         for item in chain
     ):
         return TransportFailureCategory.INCOMPLETE_RESPONSE
+    # urllib3's connection-establishment errors inherit ConnectTimeoutError,
+    # although refused connections and DNS failures are not timeouts.
+    if any(isinstance(item, urllib3_exceptions.NewConnectionError) for item in chain):
+        return TransportFailureCategory.CONNECTION
     if any(isinstance(item, (requests.Timeout, TimeoutError, urllib3_exceptions.TimeoutError)) for item in chain):
         return TransportFailureCategory.TIMEOUT
     if any(isinstance(item, (ConnectionError, http.client.RemoteDisconnected)) for item in chain):
@@ -583,6 +592,7 @@ class HttpClient:
                     request_parameters={} if request.params is None else request.params,
                     applied_credential_header_names=credential_header_names,
                     executed_request=executed_request,
+                    attempts=attempt,
                 )
             if not replay_safe or attempt == TRANSPORT_POLICY.max_attempts:
                 raise TransportFailure(
@@ -682,6 +692,10 @@ class _CredentialSendFailure:
     category: TransportFailureCategory = TransportFailureCategory.UNKNOWN
 
 
+class _CredentialContractFailure(StrEnum):
+    FATAL = "fatal"
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class AuthenticatedTransport:
     """Apply credentials only to requests matching their exact origin scope."""
@@ -718,12 +732,13 @@ class AuthenticatedTransport:
             result = self.transport.send(request)
             if _response_contains_credentials(result, self.credentials):
                 status_code = result.status_code
+                attempts = result.attempts
                 result = None
                 request = _sanitized_request_for_credentials(request, self.credentials)
                 raise TransportFailure(
                     request,
                     TransportFailureReason.RETAINED_METADATA_UNSAFE,
-                    1,
+                    attempts,
                     status_code=status_code,
                 ) from None
             return result
@@ -746,28 +761,32 @@ class AuthenticatedTransport:
             )
             raise ValueError("source request ordinary header contains a credential value") from None
         result = _send_with_credentials(self.transport, request, applicable)
+        if result is _CredentialContractFailure.FATAL:
+            raise FatalContractError("Authenticated transport contract failed") from None
         if isinstance(result, TransportResponse):
             names = tuple(value.name for value in applicable)
             evidence = result.executed_request or ExecutedRequestEvidence(request.headers, names)
             if evidence.credential_header_names != tuple(sorted(names, key=lambda name: (name.casefold(), name))):
+                attempts = result.attempts
                 result = None
                 evidence = ExecutedRequestEvidence({}, names)
                 request = _sanitized_request_for_credentials(request, applicable)
                 raise TransportFailure(
                     request,
                     TransportFailureReason.TERMINAL_SENDER_FAILURE,
-                    1,
+                    attempts,
                 ) from None
             unsafe = _response_contains_credentials(result, applicable)
             if unsafe:
                 status_code = result.status_code
+                attempts = result.attempts
                 result = None
                 evidence = ExecutedRequestEvidence({}, names)
                 request = _sanitized_request_for_credentials(request, applicable)
                 raise TransportFailure(
                     request,
                     TransportFailureReason.RETAINED_METADATA_UNSAFE,
-                    1,
+                    attempts,
                     status_code=status_code,
                 ) from None
             return replace(
@@ -792,7 +811,7 @@ def _send_with_credentials(
     transport: Transport,
     request: TransportRequest,
     credentials: tuple[CredentialHeader, ...],
-) -> TransportResponse | _CredentialSendFailure:
+) -> TransportResponse | _CredentialSendFailure | _CredentialContractFailure:
     headers = dict(request.headers)
     headers.update((value.name, value._value) for value in credentials)
     authenticated = _make_credential_transport_request(
@@ -804,10 +823,17 @@ def _send_with_credentials(
     try:
         response = transport.send(authenticated)
         if 300 <= response.status_code < 400:
-            return _CredentialSendFailure(TransportFailureReason.REDIRECT_REFUSED, 1, response.status_code)
+            return _CredentialSendFailure(
+                TransportFailureReason.REDIRECT_REFUSED,
+                response.attempts,
+                response.status_code,
+                TransportFailureCategory.HTTP_STATUS,
+            )
         return response
     except TransportFailure as error:
         return _CredentialSendFailure(error.reason, error.attempts, error.status_code, error.category)
+    except FatalContractError:
+        return _CredentialContractFailure.FATAL
     except Exception:
         return _CredentialSendFailure(TransportFailureReason.TERMINAL_SENDER_FAILURE, 1, None)
 

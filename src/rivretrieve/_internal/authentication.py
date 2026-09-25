@@ -10,6 +10,7 @@ from enum import StrEnum
 from typing import cast
 from urllib.parse import urlsplit  # noqa: TID251 - URL parsing only; no network access
 
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.transport import (
     Clock,
     CredentialHeader,
@@ -137,6 +138,11 @@ class _Failure:
     transport_reason: TransportFailureReason | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _FatalContractViolation:
+    """Carry fatal identity without retaining secret-bearing exception state."""
+
+
 @dataclass(slots=True, repr=False)
 class CredentialExchangeTransport:
     """Acquire, cache, and apply one scoped bearer credential without exposing secret responses."""
@@ -170,9 +176,16 @@ class CredentialExchangeTransport:
         if not self.can_authenticate(request.url):
             result = self.transport.send(request)
             if _exchange_response_contains_secrets(result, self.secret_headers, self._cached):
+                attempts = result.attempts
+                status_code = result.status_code
                 result = None
                 request = _sanitized_exchange_request(request, self.secret_headers, self._cached)
-                raise CredentialExchangeError(request, AuthenticationFailureReason.RETAINED_METADATA_UNSAFE) from None
+                raise CredentialExchangeError(
+                    request,
+                    AuthenticationFailureReason.RETAINED_METADATA_UNSAFE,
+                    status_code=status_code,
+                    attempts=attempts,
+                ) from None
             return result
         now = self.clock.monotonic()
         acquired = (
@@ -180,6 +193,8 @@ class CredentialExchangeTransport:
             if self._cached is not None and now < self._cached.refresh_at
             else _acquire(self.transport, self.secret_headers, self.spec, self.clock)
         )
+        if isinstance(acquired, _FatalContractViolation):
+            raise FatalContractError("Credential exchange violated an internal contract") from None
         if isinstance(acquired, _Failure):
             raise CredentialExchangeError(
                 request,
@@ -190,6 +205,8 @@ class CredentialExchangeTransport:
                 transport_reason=acquired.transport_reason,
             ) from None
         result = _send_acquired(self.transport, request, acquired, self.spec, self.secret_headers)
+        if isinstance(result, _FatalContractViolation):
+            raise FatalContractError("Credentialed data request violated an internal contract") from None
         if isinstance(result, _Failure):
             self._cached = _Acquired(acquired.token, acquired.refresh_at, acquired.trace)
             request = _sanitized_source_request(
@@ -255,7 +272,7 @@ def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 def _acquire(
     transport: Transport, headers: tuple[CredentialHeader, ...], spec: ExchangeSpec, clock: Clock
-) -> _Acquired | _Failure:
+) -> _Acquired | _Failure | _FatalContractViolation:
     try:
         from rivretrieve._internal.transport import AuthenticatedTransport
 
@@ -269,21 +286,37 @@ def _acquire(
             or response.executed_request is None
             or response.executed_request.credential_header_names != expected_names
         ):
-            return _Failure(AuthenticationFailureReason.EXCHANGE_RESPONSE_MISMATCH, response.status_code)
+            return _Failure(
+                AuthenticationFailureReason.EXCHANGE_RESPONSE_MISMATCH, response.status_code, attempts=response.attempts
+            )
         if 300 <= response.status_code < 400:
-            return _Failure(AuthenticationFailureReason.EXCHANGE_REDIRECT_REFUSED, response.status_code)
+            return _Failure(
+                AuthenticationFailureReason.EXCHANGE_REDIRECT_REFUSED, response.status_code, attempts=response.attempts
+            )
         if not 200 <= response.status_code < 300:
-            return _Failure(AuthenticationFailureReason.EXCHANGE_HTTP_STATUS, response.status_code)
+            return _Failure(
+                AuthenticationFailureReason.EXCHANGE_HTTP_STATUS, response.status_code, attempts=response.attempts
+            )
         try:
             envelope = json.loads(response.content, object_pairs_hook=_unique_json_object)
         except _DuplicateJsonKeyError:
-            return _Failure(AuthenticationFailureReason.RESPONSE_JSON_AMBIGUOUS, response.status_code)
+            return _Failure(
+                AuthenticationFailureReason.RESPONSE_JSON_AMBIGUOUS, response.status_code, attempts=response.attempts
+            )
+        except FatalContractError:
+            return _FatalContractViolation()
         except Exception:
-            return _Failure(AuthenticationFailureReason.RESPONSE_JSON_INVALID, response.status_code)
+            return _Failure(
+                AuthenticationFailureReason.RESPONSE_JSON_INVALID, response.status_code, attempts=response.attempts
+            )
         value: object = envelope
         for index, part in enumerate(spec.token_json_path):
             if not isinstance(value, Mapping):
-                return _Failure(AuthenticationFailureReason.RESPONSE_ENVELOPE_INVALID, response.status_code)
+                return _Failure(
+                    AuthenticationFailureReason.RESPONSE_ENVELOPE_INVALID,
+                    response.status_code,
+                    attempts=response.attempts,
+                )
             mapping = cast("Mapping[str, object]", value)
             if part not in mapping:
                 return _Failure(
@@ -291,27 +324,31 @@ def _acquire(
                     if index == len(spec.token_json_path) - 1
                     else AuthenticationFailureReason.RESPONSE_ENVELOPE_INVALID,
                     response.status_code,
+                    attempts=response.attempts,
                 )
             value = mapping[part]
         if not isinstance(value, str):
-            return _Failure(AuthenticationFailureReason.TOKEN_WRONG_TYPE, response.status_code)
+            return _Failure(
+                AuthenticationFailureReason.TOKEN_WRONG_TYPE, response.status_code, attempts=response.attempts
+            )
         if not value.strip():
-            return _Failure(AuthenticationFailureReason.TOKEN_EMPTY, response.status_code)
+            return _Failure(AuthenticationFailureReason.TOKEN_EMPTY, response.status_code, attempts=response.attempts)
         try:
             CredentialHeader("Authorization", f"{spec.output_scheme} {value}", (spec.allowed_data_origin,))
         except (TypeError, ValueError):
-            return _Failure(AuthenticationFailureReason.TOKEN_INVALID, response.status_code)
+            return _Failure(AuthenticationFailureReason.TOKEN_INVALID, response.status_code, attempts=response.attempts)
         secrets = tuple(header._value for header in headers) + (value,)
         metadata_only_response = replace(response, content=b"")
         if _response_contains_values(metadata_only_response, secrets):
             status_code = response.status_code
+            attempts = response.attempts
             metadata_only_response = None
             response = None
             secrets = ()
             envelope = None
             mapping = None
             value = None
-            return _Failure(AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, status_code)
+            return _Failure(AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, status_code, attempts=attempts)
         trace = SecretCallTrace(
             method=spec.method,
             url=spec.exchange_url,
@@ -339,6 +376,8 @@ def _acquire(
             attempts=error.attempts,
             transport_reason=error.reason,
         )
+    except FatalContractError:
+        return _FatalContractViolation()
     except Exception:
         return _Failure(AuthenticationFailureReason.EXCHANGE_SEND_FAILED)
 
@@ -349,7 +388,7 @@ def _send_acquired(
     acquired: _Acquired,
     spec: ExchangeSpec,
     secret_headers: tuple[CredentialHeader, ...],
-) -> TransportResponse | _Failure:
+) -> TransportResponse | _Failure | _FatalContractViolation:
     try:
         from rivretrieve._internal.transport import AuthenticatedTransport
 
@@ -371,7 +410,9 @@ def _send_acquired(
         if _response_contains_values(response, known_text) or (
             acquired.auth_response is not None and acquired.auth_response in response.content
         ):
-            return _Failure(AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, response.status_code)
+            return _Failure(
+                AuthenticationFailureReason.RETAINED_METADATA_UNSAFE, response.status_code, attempts=response.attempts
+            )
         traces = () if acquired.trace is None else (acquired.trace,)
         return replace(response, prerequisite_calls=traces)
     except TransportFailure as error:
@@ -388,6 +429,8 @@ def _send_acquired(
             attempts=error.attempts,
             transport_reason=error.reason,
         )
+    except FatalContractError:
+        return _FatalContractViolation()
     except Exception:
         return _Failure(AuthenticationFailureReason.DATA_SEND_FAILED)
 

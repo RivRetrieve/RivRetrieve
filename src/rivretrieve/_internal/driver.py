@@ -271,7 +271,7 @@ class _SourceResponseTransport:
         raise TransportFailure(
             request,
             TransportFailureReason.HTTP_STATUS,
-            1,
+            response.attempts,
             status_code=response.status_code,
             category=TransportFailureCategory.HTTP_STATUS,
         )

@@ -307,3 +307,20 @@ def test_post_redirect_does_not_replay_without_semantic_safety(status: int, safe
             assert response.content == b""
             assert server.calls == [("POST", b"source operation", 0.0)]
         assert server.clock.sleeps == []
+
+
+def test_closed_loopback_port_exhausts_connection_failure_budget() -> None:
+    with TCPServer(("127.0.0.1", 0), BaseRequestHandler) as reserved:
+        url = f"http://127.0.0.1:{reserved.server_address[1]}/data"
+    # The listening socket is closed before Requests connects.
+    clock = VirtualClock()
+    request = TransportRequest(HttpMethod.GET, url)
+    with pytest.raises(TransportFailure) as caught:
+        HttpClient(clock=clock, sleeper=clock.sleep).send(request)
+    assert caught.value.reason is TransportFailureReason.RETRY_EXHAUSTED
+    assert caught.value.category is TransportFailureCategory.CONNECTION
+    assert caught.value.attempts == 3
+    assert caught.value.status_code is None
+    assert caught.value.request is request
+    assert isinstance(caught.value.__cause__, requests.ConnectionError)
+    assert clock.sleeps == [1.0, 2.0]

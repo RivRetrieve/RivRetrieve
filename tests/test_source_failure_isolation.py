@@ -389,3 +389,76 @@ def test_exchange_retry_diagnostics_survive_caller_issue():
     assert issue.details["failure_category"] == "timeout"
     assert issue.details["attempts"] == 3
     assert issue.details["status_code"] is None
+
+
+def test_refused_connection_category_survives_authenticated_caller_issue():
+    import requests
+    from urllib3.exceptions import MaxRetryError, NewConnectionError
+
+    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient
+
+    def sender(request, timeout_seconds):
+        raise requests.ConnectionError(MaxRetryError(None, request.url, NewConnectionError(None, "refused")))
+
+    transport = AuthenticatedTransport(
+        HttpClient(sender=sender, sleeper=lambda _: None),
+        (CredentialHeader("Authorization", "Token SENTINEL-CONNECTION", ("https://source.test",)),),
+    )
+    result = drive(
+        _request(("station-1",)),
+        _TransportDrivenStages(),
+        provenance=ObservationProvenance(source="test", provider_id=_PROVIDER),
+        transport=transport,
+    )
+    (issue,) = result.issues
+    assert issue.details["failure_category"] == "connection"
+    assert issue.details["attempts"] == 3
+    assert issue.details["status_code"] is None
+
+
+def test_non_success_after_retry_retains_attempts_in_caller_issue():
+    from rivretrieve._internal.transport import HttpClient
+
+    statuses = iter([503, 404])
+    client = HttpClient(
+        sender=lambda request, timeout: (b"source response", next(statuses), None), sleeper=lambda _: None
+    )
+    result = drive(
+        _request(("station-1",)),
+        _TransportDrivenStages(),
+        provenance=ObservationProvenance(source="test", provider_id=_PROVIDER),
+        transport=client,
+    )
+    (issue,) = result.issues
+    assert issue.severity == "warning"
+    assert issue.details["failure_category"] == "http_status"
+    assert issue.details["attempts"] == 2
+    assert issue.details["status_code"] == 404
+
+
+def test_authenticated_fatal_contract_error_bypasses_source_failure_isolation():
+    import traceback
+
+    import pytest
+
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient
+
+    secret = "SENTINEL-FATAL-CALLER"
+
+    def sender(request, timeout_seconds):
+        raise FatalContractError(secret)
+
+    transport = AuthenticatedTransport(
+        HttpClient(sender=sender, sleeper=lambda _: None),
+        (CredentialHeader("Authorization", f"Token {secret}", ("https://source.test",)),),
+    )
+    with pytest.raises(FatalContractError) as caught:
+        drive(
+            _request(("station-1",)),
+            _TransportDrivenStages(),
+            provenance=ObservationProvenance(source="test", provider_id=_PROVIDER),
+            transport=transport,
+        )
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+    assert secret not in "".join(traceback.format_exception(caught.value))

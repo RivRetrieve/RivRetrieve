@@ -1,15 +1,18 @@
 """Retry policy and credential boundaries, with no external HTTP service."""
 
 import traceback
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from http.client import IncompleteRead
+from socket import gaierror
 from typing import Any
 
 import pytest
 import requests
-from urllib3.exceptions import ProtocolError
+from urllib3.exceptions import MaxRetryError, NameResolutionError, NewConnectionError, ProtocolError, ReadTimeoutError
 
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.transport import (
     TRANSPORT_POLICY,
     AuthenticatedTransport,
@@ -23,6 +26,7 @@ from rivretrieve._internal.transport import (
     TransportFailureCategory,
     TransportFailureReason,
     TransportRequest,
+    TransportResponse,
 )
 
 _ORIGIN = "https://source.example"
@@ -321,3 +325,104 @@ def test_retry_after_does_not_change_nonretryable_response_meaning(status):
     assert response.content == b"source answer"
     assert len(sender.calls) == 1
     assert clock.sleeps == []
+
+
+def test_authenticated_redirect_after_retry_preserves_attempt_count_and_category():
+    client, sender, clock = client_for([(b"busy", 503, None), (b"redirect", 302, None)])
+    with pytest.raises(TransportFailure) as caught:
+        authenticated(client).send(TransportRequest(HttpMethod.GET, _ORIGIN))
+    assert caught.value.reason is TransportFailureReason.REDIRECT_REFUSED
+    assert caught.value.category is TransportFailureCategory.HTTP_STATUS
+    assert caught.value.status_code == 302
+    assert caught.value.attempts == len(sender.calls) == 2
+    assert clock.sleeps == [1.0]
+
+
+def test_authenticated_credential_echo_after_retry_preserves_attempt_count():
+    client, sender, clock = client_for([(b"busy", 503, None), (_SECRET.encode(), 200, "text/plain")])
+    with pytest.raises(TransportFailure) as caught:
+        authenticated(client).send(TransportRequest(HttpMethod.GET, _ORIGIN))
+    assert caught.value.reason is TransportFailureReason.RETAINED_METADATA_UNSAFE
+    assert caught.value.status_code == 200
+    assert caught.value.attempts == len(sender.calls) == 2
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+    assert _SECRET not in repr(caught.value)
+    assert clock.sleeps == [1.0]
+
+
+class FatalSender:
+    def __init__(self):
+        self.failure_ids = []
+
+    def __call__(self, request, timeout_seconds):
+        failure = FatalContractError(f"invalid contract involving {_SECRET}")
+        self.failure_ids.append(id(failure))
+        raise failure
+
+
+def test_authenticated_fatal_contract_error_stays_fatal_and_sanitized():
+    sender = FatalSender()
+    clock = PolicyClock()
+    client = HttpClient(sender=sender, clock=clock, sleeper=clock.sleep)
+    transport = authenticated(client)
+    with pytest.raises(FatalContractError) as caught:
+        transport.send(TransportRequest(HttpMethod.GET, _ORIGIN))
+    error = caught.value
+    assert id(error) not in sender.failure_ids
+    assert error.__cause__ is None and error.__context__ is None
+    assert _SECRET not in repr(error)
+    assert _SECRET not in "".join(traceback.format_exception(error))
+    rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
+    assert _SECRET not in rendered
+    assert error.issues == ()
+    assert len(sender.failure_ids) == 1
+    assert clock.sleeps == []
+
+
+@pytest.mark.parametrize(
+    "kind,category",
+    [
+        ("new_connection", TransportFailureCategory.CONNECTION),
+        ("name_resolution", TransportFailureCategory.CONNECTION),
+        ("read_timeout", TransportFailureCategory.TIMEOUT),
+    ],
+)
+@pytest.mark.parametrize("credentialed", [False, True])
+def test_nested_connection_failures_keep_specific_category(kind, category, credentialed):
+    if kind == "new_connection":
+        cause = NewConnectionError(None, _SECRET)
+    elif kind == "name_resolution":
+        cause = NameResolutionError("source.example", None, gaierror(-2, _SECRET))
+    else:
+        cause = ReadTimeoutError(None, "/query", _SECRET)
+    failure = requests.ConnectionError(MaxRetryError(None, "/query", reason=cause))
+    client, sender, clock = client_for([failure] * TRANSPORT_POLICY.max_attempts)
+    transport = authenticated(client) if credentialed else client
+    with pytest.raises(TransportFailure) as caught:
+        transport.send(TransportRequest(HttpMethod.GET, _ORIGIN))
+    assert caught.value.reason is TransportFailureReason.RETRY_EXHAUSTED
+    assert caught.value.category is category
+    assert caught.value.status_code is None
+    assert caught.value.attempts == len(sender.calls) == 3
+    assert clock.sleeps == [1.0, 2.0]
+    if credentialed:
+        assert caught.value.__cause__ is None and caught.value.__context__ is None
+        assert _SECRET not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.parametrize("attempts", [0, -1, True, 1.5])
+def test_response_rejects_invalid_attempt_count_as_fatal_contract(attempts):
+    with pytest.raises(FatalContractError, match="positive integer"):
+        TransportResponse(b"complete", 200, PolicyClock().utcnow(), None, _ORIGIN, {}, attempts=attempts)
+
+
+def test_response_attempt_count_defaults_and_survives_dataclass_replacement():
+    original = TransportResponse(b"complete", 200, PolicyClock().utcnow(), None, _ORIGIN, {})
+    assert original.attempts == 1
+    retried = replace(original, attempts=2)
+    assert retried.attempts == 2
+    # Attempt metadata does not change equality of the retained source response.
+    assert original == retried
+    replaced = replace(retried, applied_credential_header_names=("Authorization",))
+    assert replaced.attempts == 2
+    assert replaced.applied_credential_header_names == ("Authorization",)
