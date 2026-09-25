@@ -51,7 +51,7 @@ time,time_zone,value,unit
 ```
 
 The three rows contain source-published daily means in m³/s. Both endpoint dates
-are included. RivRetrieve does not calculate these means from telemetry.
+are included. RivRetrieve does not calculate these means.
 `cache="bypass"` requests the source rather than cached observations. The example
 prints each distinct issue severity and code, rather than repeating the daily
 status notices. `source_status` reports ANA's source metadata without a quality
@@ -59,8 +59,8 @@ judgement. The other notice means that RivRetrieve has not established a standar
 citation. Neither notice means that this observation request failed.
 
 The time zone is `unknown`; midnight labels do not establish the hours covered by
-each mean. Source values can change, so a later request need not reproduce this
-output exactly. Run the following examples in the same session. See
+each mean. Source values can change, so a later request may not reproduce this output
+exactly. Run the following examples in the same session. See
 [Usage](../usage.md) for general selection and result handling.
 
 ## Who measures, and who publishes
@@ -69,7 +69,7 @@ ANA, Brazil's national water and sanitation agency, coordinates the
 *Rede Hidrometeorológica Nacional* (unofficially, National Hydrometeorological
 Network). Public and private organisations operate its stations under ANA's
 supervision. Specialist staff and field observers collect the measurements;
-ANA standardizes measurement procedures and equipment.
+ANA standardises measurement procedures and equipment.
 
 ANA makes hydrological records available through Hidroweb. RivRetrieve reads
 its programming interface, HidroWebService. ANA's role as publisher does not
@@ -85,10 +85,10 @@ for an email to **telemetria@ana.gov.br**, with the subject
 *"Solicitação de acesso à API"*, a short explanation of the intended use, and:
 
 - the name of the user or institution;
-- a CPF or CNPJ, used as the username;
+- a CPF or CNPJ (Brazilian personal or company tax number), used as the username;
 - an email address to receive the password.
 
-ANA reviews the request and may ask for more information. Use the issued
+The page does not say what applicants without a CPF or CNPJ should provide. ANA reviews the request and may ask for more information. Use the issued
 *Identificador* and *Senha* (unofficially, identifier and password). The identifier
 is not the account email address.
 
@@ -102,6 +102,12 @@ does not authenticate with ANA or prove that the credentials are accepted.
 
 ## What you can retrieve
 
+ANA publishes two kinds of series. Daily series are source-published daily means,
+selected by consistency level, `bruto` or `consistido` (see
+[Daily consistency levels](#daily-consistency-levels-bruto-and-consistido)).
+Telemetry series are ANA's adopted discharge and stage values, `Vazao_Adotada`
+and `Cota_Adotada`, each labelled with its measurement time.
+
 | Quantity filter | Source selection / `variant` | Published statistic | Source unit | Returned unit |
 |---|---|---|---|---|
 | `discharge` | `bruto`, `consistido` | Daily mean | m³/s | m³/s |
@@ -110,12 +116,14 @@ does not authenticate with ANA or prove that the credentials are accepted.
 | `stage` | `Cota_Adotada` | Not established | cm | m |
 
 RivRetrieve divides stage values by 100 to convert centimetres to metres.
-Discharge is already in m³/s. Water temperature is not supported.
+Discharge is already in m³/s. Water temperature is currently not supported.
 
-The adopted telemetry fields retain ANA's names. Their measurement timestamps
-are established, but their sampling frequency and statistic are not. Do not add
-`frequency="daily"` or `statistic="instantaneous"` when selecting these fields:
-those filters require established physical facts.
+ANA's API manual documents the telemetry fields' names, units and measurement
+timestamps, but not how often they are sampled or whether each value is a spot
+reading or an average. RivRetrieve therefore leaves `frequency` and `statistic`
+unknown for these fields. Filters match only known values, so adding
+`frequency="daily"` or `statistic="instantaneous"` to `rr.find()` excludes the telemetry series.
+Select them by `variant` instead:
 
 ```python
 telemetry = rr.pick(
@@ -133,7 +141,7 @@ Output:
 ```
 
 This selects a catalogue candidate; it does not retrieve telemetry observations.
-The catalogue lists six candidates per station. A station being listed does not
+For every station, the catalogue lists the six series in the table above. A station being listed does not
 guarantee observations for every quantity, source selection or requested period.
 The successful daily example establishes availability only for that station,
 selection and period, not continuous history or national coverage.
@@ -141,7 +149,7 @@ selection and period, not continuous history or national coverage.
 ## Daily consistency levels: bruto and consistido
 
 ANA identifies daily records by *NivelConsistencia*: level 1, *Bruto*, and level 2,
-*Consistido*. Unofficially, these mean raw and consistency-checked. They are source
+*Consistido*. Unofficially, these mean raw and consistency-checked values. They are source
 categories, not a quality ranking assigned by RivRetrieve.
 
 Inspect the daily discharge candidates selected above:
@@ -181,15 +189,16 @@ Output:
 [('info', 'provenance.citation_not_established'), ('info', 'source_status'), ('warning', 'source.unresolved_inventory')]
 ```
 
-The response supplied three `consistido` observations and no `bruto` observations.
+The second line shows 3 rows from 1 series: the response supplied three
+`consistido` observations and no `bruto` observations.
 Both identities remain in the series inspection table, but only one has returned
 rows. `source.unresolved_inventory` means the response did not establish availability
 for the requested `bruto` level. The default issue policy also emits a Python warning
 with that explanation. This is a partial result, not evidence that `bruto` is absent
 from the station's entire history.
 
-Keep `series_id` when comparing records: station and date alone need not identify
-a single value. RivRetrieve neither averages the consistency levels nor selects a
+The same station and date can have one value per consistency level, so keep
+`series_id` when comparing records. RivRetrieve neither averages the consistency levels nor selects a
 preferred one. An explicit choice does not fall back to the other level. If ANA's
 response does not publish the requested level, its availability remains unresolved,
 and an issue reports that limitation rather than substituting observations.
@@ -223,12 +232,11 @@ ANA's [open data page](https://www.gov.br/ana/pt-br/acesso-a-informacao/dados-ab
 In English, unofficially: open data are made freely available for use by all of
 society, without restriction of licences, patents or control mechanisms.
 
-This is ANA's institutional open-data statement. No formatted citation for these
-observations was identified in the sources checked for this page. RivRetrieve
-reports that missing citation as an informational issue. Identify ANA, Hidroweb,
-the stations and selections used, and the retrieval date in an attribution suitable
-for the study; this is practical guidance, not an ANA-prescribed citation format.
-Personal credentials must remain private regardless of the data-use terms.
+This is ANA's institutional open-data statement. No citation format for these
+observations was found in the sources checked for this page, and RivRetrieve
+reports the missing citation as an informational notice. When citing the data, we
+suggest naming ANA and Hidroweb as the source, along with the stations, the series
+used (`bruto`, `consistido` or telemetry) and the date of retrieval.
 
 ## Sources
 
