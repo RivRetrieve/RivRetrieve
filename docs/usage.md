@@ -375,6 +375,20 @@ issues with their severity, code, message and available failure details. HTTP 40
 unsuccessful statuses, rejected credentials and exhausted transport retries produce error
 issues. An all-failed request can return an empty observation frame with issues and outcomes.
 
+HTTP requests that are safe to repeat get at most three attempts for transient timeouts,
+connection interruptions, incomplete responses, and retryable statuses. GET and HEAD are
+safe to repeat. The Swiss archive query also has established read-only semantics; arbitrary
+POST requests do not, and do not automatically follow redirects. Each retry starts the
+request again and discards incomplete bytes.
+Permanent TLS, protocol, and decoding failures are not retried.
+
+Attempts on one client start at least one second apart. Retry waits are normally one and
+two seconds. Valid `Retry-After` guidance can increase a wait, up to 60 seconds per retry.
+A longer server delay stops the request rather than retrying too early. Invalid or past
+guidance uses the normal wait. Each attempt has a 60-second connection/read timeout,
+not a whole-download deadline. Failure details retain the request URL, attempt count,
+final available status, and a safe failure category without raw credential-bearing errors.
+
 Broken stage contracts raise independently of `on_issue`. Invalid windows, missing credentials
 and catalogue-only observation requests also raise. See [reference](reference.md) for
 exception locations and [architecture](architecture.md) for failure isolation.

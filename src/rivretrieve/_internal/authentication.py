@@ -19,6 +19,8 @@ from rivretrieve._internal.transport import (
     SecretCallTrace,
     Transport,
     TransportFailure,
+    TransportFailureCategory,
+    TransportFailureReason,
     TransportRequest,
     TransportResponse,
     _credential_origin,
@@ -97,11 +99,21 @@ class AuthenticationFailureReason(StrEnum):
 
 class CredentialExchangeError(Exception):
     def __init__(
-        self, request: TransportRequest, reason: AuthenticationFailureReason, *, status_code: int | None = None
+        self,
+        request: TransportRequest,
+        reason: AuthenticationFailureReason,
+        *,
+        status_code: int | None = None,
+        category: TransportFailureCategory | None = None,
+        attempts: int | None = None,
+        transport_reason: TransportFailureReason | None = None,
     ) -> None:
         self.request = request
         self.reason = reason
         self.status_code = status_code
+        self.category = category
+        self.attempts = attempts
+        self.transport_reason = transport_reason
         super().__init__(f"credential exchange failed: {reason}")
 
 
@@ -120,6 +132,9 @@ class _Acquired:
 class _Failure:
     reason: AuthenticationFailureReason
     status_code: int | None = None
+    category: TransportFailureCategory | None = None
+    attempts: int | None = None
+    transport_reason: TransportFailureReason | None = None
 
 
 @dataclass(slots=True, repr=False)
@@ -166,7 +181,14 @@ class CredentialExchangeTransport:
             else _acquire(self.transport, self.secret_headers, self.spec, self.clock)
         )
         if isinstance(acquired, _Failure):
-            raise CredentialExchangeError(request, acquired.reason, status_code=acquired.status_code) from None
+            raise CredentialExchangeError(
+                request,
+                acquired.reason,
+                status_code=acquired.status_code,
+                category=acquired.category,
+                attempts=acquired.attempts,
+                transport_reason=acquired.transport_reason,
+            ) from None
         result = _send_acquired(self.transport, request, acquired, self.spec, self.secret_headers)
         if isinstance(result, _Failure):
             self._cached = _Acquired(acquired.token, acquired.refresh_at, acquired.trace)
@@ -175,7 +197,14 @@ class CredentialExchangeTransport:
                 remove_names=("Authorization",),
                 forbidden_values=tuple(header._value for header in self.secret_headers) + (acquired.token,),
             )
-            raise CredentialExchangeError(request, result.reason, status_code=result.status_code) from None
+            raise CredentialExchangeError(
+                request,
+                result.reason,
+                status_code=result.status_code,
+                category=result.category,
+                attempts=result.attempts,
+                transport_reason=result.transport_reason,
+            ) from None
         self._cached = _Acquired(acquired.token, acquired.refresh_at, None)
         return result
 
@@ -303,7 +332,13 @@ def _acquire(
             if error.reason.value == "retained_metadata_unsafe"
             else AuthenticationFailureReason.EXCHANGE_SEND_FAILED
         )
-        return _Failure(reason, error.status_code)
+        return _Failure(
+            reason,
+            error.status_code,
+            category=error.category,
+            attempts=error.attempts,
+            transport_reason=error.reason,
+        )
     except Exception:
         return _Failure(AuthenticationFailureReason.EXCHANGE_SEND_FAILED)
 
@@ -346,7 +381,13 @@ def _send_acquired(
             reason = AuthenticationFailureReason.RETAINED_METADATA_UNSAFE
         else:
             reason = AuthenticationFailureReason.DATA_SEND_FAILED
-        return _Failure(reason, error.status_code)
+        return _Failure(
+            reason,
+            error.status_code,
+            category=error.category,
+            attempts=error.attempts,
+            transport_reason=error.reason,
+        )
     except Exception:
         return _Failure(AuthenticationFailureReason.DATA_SEND_FAILED)
 

@@ -80,6 +80,7 @@ from rivretrieve._internal.transport import (
     SecretCallTrace,
     Transport,
     TransportFailure,
+    TransportFailureCategory,
     TransportFailureReason,
     TransportRequest,
     TransportResponse,
@@ -272,6 +273,7 @@ class _SourceResponseTransport:
             TransportFailureReason.HTTP_STATUS,
             1,
             status_code=response.status_code,
+            category=TransportFailureCategory.HTTP_STATUS,
         )
 
 
@@ -287,9 +289,14 @@ def _source_failure_issue(
         "station_id": station_id,
         "product_id": str(product_id),
         "failure_reason": failure.reason.value,
-        "attempts": None if isinstance(failure, CredentialExchangeError) else failure.attempts,
+        "attempts": failure.attempts,
         "status_code": failure.status_code,
     }
+    if failure.category is not None:
+        details["failure_category"] = failure.category.value
+    details["request_url"] = failure.request.url
+    if isinstance(failure, CredentialExchangeError) and failure.transport_reason is not None:
+        details["transport_failure_reason"] = failure.transport_reason.value
     if failure.status_code == 404 and not isinstance(failure, CredentialExchangeError):
         return Issue(
             severity="warning",
@@ -319,9 +326,11 @@ def _source_failure_issue(
     else:
         reason_text = {
             TransportFailureReason.RETRY_EXHAUSTED: (
-                "transport retries were exhausted after a timeout or retryable response"
+                "transport retries were exhausted after a timeout, connection interruption, or retryable response"
             ),
             TransportFailureReason.TERMINAL_SENDER_FAILURE: "the transport sender failed terminally",
+            TransportFailureReason.REPLAY_UNSAFE: "the failed request could not safely be repeated",
+            TransportFailureReason.RETRY_DELAY_EXCEEDED: "the server retry delay exceeded the bounded waiting policy",
             TransportFailureReason.REDIRECT_REFUSED: "a credentialed redirect was refused",
             TransportFailureReason.RETAINED_METADATA_UNSAFE: (
                 "the response could not be retained without exposing a credential"
@@ -329,9 +338,7 @@ def _source_failure_issue(
             TransportFailureReason.HTTP_STATUS: "the source returned a non-success HTTP status",
         }[failure.reason]
         status = f" with HTTP status {failure.status_code}" if failure.status_code is not None else ""
-        message = (
-            f"Provider {provider_id} failed for station {station_id}, product {product_id}: {reason_text}{status}."
-        )
+        message = f"Provider {provider_id} failed for station {station_id}, product {product_id}: {reason_text}{status} ({failure.category.value})."
     return Issue(
         severity="error",
         code="source.request_failed",

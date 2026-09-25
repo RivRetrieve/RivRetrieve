@@ -332,3 +332,60 @@ def test_404_is_warning_and_credential_rejection_names_only_the_variable() -> No
     assert "NVE_API_KEY" in result.issues[1].message
     public_text = repr(result)
     assert secret not in public_text
+
+
+def test_authenticated_interruption_category_survives_caller_issue_and_independent_success():
+    from http.client import IncompleteRead
+
+    import requests
+
+    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader, HttpClient
+
+    sentinel = "SENTINEL-RETRY-ISSUE-SECRET"
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request.url)
+        if request.url.endswith("station-1"):
+            raise requests.exceptions.ChunkedEncodingError(IncompleteRead(sentinel.encode(), 10))
+        return b"station-2", 200, "text/plain"
+
+    transport = AuthenticatedTransport(
+        HttpClient(sender=sender, sleeper=lambda _: None),
+        (CredentialHeader("Authorization", f"Token {sentinel}", ("https://source.test",)),),
+    )
+    result = drive(
+        _request(("station-1", "station-2")),
+        _TransportDrivenStages(),
+        provenance=ObservationProvenance(source="test", provider_id=_PROVIDER),
+        transport=transport,
+    )
+    assert len(calls) == 4
+    assert result.canonical_rows["station_id"].to_list() == ["station-2"]
+    (issue,) = result.issues
+    assert issue.details["failure_category"] == "incomplete_response"
+    assert issue.details["failure_reason"] == "retry_exhausted"
+    assert issue.details["request_url"] == "https://source.test/station-1"
+    assert issue.details["attempts"] == 3
+    assert issue.details["status_code"] is None
+    assert sentinel not in repr(result)
+
+
+def test_exchange_retry_diagnostics_survive_caller_issue():
+    from rivretrieve._internal.authentication import AuthenticationFailureReason, CredentialExchangeError
+    from rivretrieve._internal.driver import _source_failure_issue
+    from rivretrieve._internal.transport import TransportFailureCategory
+
+    failure = CredentialExchangeError(
+        TransportRequest(HttpMethod.GET, "https://source.test/station-1"),
+        AuthenticationFailureReason.DATA_SEND_FAILED,
+        category=TransportFailureCategory.TIMEOUT,
+        attempts=3,
+        transport_reason=TransportFailureReason.RETRY_EXHAUSTED,
+    )
+    issue = _source_failure_issue(_PROVIDER, "station-1", _PRODUCT, failure, ())
+    assert issue.details["failure_reason"] == "data_send_failed"
+    assert issue.details["transport_failure_reason"] == "retry_exhausted"
+    assert issue.details["failure_category"] == "timeout"
+    assert issue.details["attempts"] == 3
+    assert issue.details["status_code"] is None

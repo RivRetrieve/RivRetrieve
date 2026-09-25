@@ -1257,6 +1257,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
+    { name = "urllib3" },
 ]
 
 [package.optional-dependencies]
@@ -1291,6 +1292,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "requests" },
     { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'", specifier = ">=2026.2" },
+    { name = "urllib3", specifier = ">=2,<3" },
 ]
 provides-extras = ["map"]
 
