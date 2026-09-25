@@ -27,6 +27,7 @@ import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.pl_imgw.series import source_series
+from rivretrieve._internal.providers.registration import DownloadedBulkArtifact
 from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store import (
     ArtifactChecksum,
@@ -174,7 +175,7 @@ def download_imgw_history(
 
 @dataclass(frozen=True, slots=True)
 class ImgwCompileRequest:
-    """Publisher facts and resolved paths supplied by the composition root."""
+    """First-artifact identity, aggregate vintage, and resolved compilation inputs."""
 
     publisher_artifact: Path
     destination: StoreRoot
@@ -182,16 +183,12 @@ class ImgwCompileRequest:
     source_vintage: date
     built_at: datetime
     compiler_version: str
-    publisher_artifacts: tuple[DownloadedImgw, ...] = ()
+    publisher_artifacts: tuple[DownloadedBulkArtifact | DownloadedImgw, ...] = ()
 
     def __post_init__(self) -> None:
         artifacts = self.publisher_artifacts or (DownloadedImgw(self.publisher_artifact, self.publisher_url),)
         first = artifacts[0]
-        if (first.path, first.url, first.source_vintage) != (
-            self.publisher_artifact,
-            self.publisher_url,
-            self.source_vintage,
-        ):
+        if (first.path, first.url) != (self.publisher_artifact, self.publisher_url):
             raise ValueError("singular IMGW artifact must equal the first plural artifact")
         paths = [item.path.resolve() for item in artifacts]
         urls = [item.url for item in artifacts]
@@ -227,10 +224,12 @@ class ImgwCompileRequest:
                 raise ValueError("IMGW publisher artifact coverage overlaps")
             covered.update(interval)
             previous = interval[-1]
+        if self.source_vintage != max(item.source_vintage for item in artifacts):
+            raise ValueError("IMGW aggregate source vintage must equal the latest artifact coverage end")
 
 
 def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
-    """Certify and publish one complete IMGW yearly ZIP artifact."""
+    """Certify and publish the ordered IMGW archives as one store."""
     downloaded = request.publisher_artifacts or (
         DownloadedImgw(Path(request.publisher_artifact), request.publisher_url),
     )

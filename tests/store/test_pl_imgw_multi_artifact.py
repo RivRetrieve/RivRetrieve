@@ -60,7 +60,7 @@ def test_multi_artifact_compile_publishes_one_union_with_complete_provenance(tmp
             artifacts[0].path,
             root,
             artifacts[0].url,
-            artifacts[0].source_vintage,
+            max(item.source_vintage for item in artifacts),
             datetime(2026, 9, 2, tzinfo=UTC),
             "0.1.49",
             tuple(artifacts),
@@ -136,7 +136,7 @@ def test_multi_artifact_failure_retains_all_inputs_and_previous_store(tmp_path) 
                 valid,
                 root,
                 artifacts[0].url,
-                artifacts[0].source_vintage,
+                max(item.source_vintage for item in artifacts),
                 datetime(2026, 9, 3, tzinfo=UTC),
                 "0.1.49",
                 artifacts,
@@ -218,7 +218,7 @@ def test_second_artifact_unlink_failure_restores_every_artifact_and_previous_sto
                 artifacts[0].path,
                 root,
                 artifacts[0].url,
-                artifacts[0].source_vintage,
+                max(item.source_vintage for item in artifacts),
                 datetime(2026, 9, 3, tzinfo=UTC),
                 "0.1.49",
                 tuple(artifacts),
@@ -294,7 +294,7 @@ def test_post_commit_quarantine_cleanup_failure_is_loud_and_keeps_new_store_auth
                 artifacts[0].path,
                 root,
                 artifacts[0].url,
-                artifacts[0].source_vintage,
+                max(item.source_vintage for item in artifacts),
                 datetime(2026, 9, 3, tzinfo=UTC),
                 "0.1.49",
                 tuple(artifacts),
@@ -397,7 +397,7 @@ def _imgw_compile_request_for_names(tmp_path: Path, names: tuple[str, ...]):
         first.path,
         StoreRoot(tmp_path / "store"),
         first.url,
-        first.source_vintage,
+        max(item.source_vintage for item in artifacts),
         datetime(2026, 9, 2, tzinfo=UTC),
         "0.1.49",
         artifacts,
@@ -566,3 +566,128 @@ def test_imgw_identity_inventory_refuses_equal_count_record_substitution(tmp_pat
     with pytest.raises(ValueError, match="identity inventory"):
         bulk.compile_imgw(request)
     assert artifact.exists()
+
+
+def _tiny_artifact(tmp_path: Path, name: str, row: bytes):
+    import zipfile
+
+    from rivretrieve._internal.providers.pl_imgw.bulk import DownloadedImgw
+    from rivretrieve._internal.providers.registration import DownloadedBulkArtifact
+
+    path = tmp_path / name
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(path.stem + ".csv", row)
+    item = DownloadedImgw(path, _official_url(name))
+    return DownloadedBulkArtifact(path, item.url, item.source_vintage)
+
+
+def _compile_declared(artifacts, root):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.providers.pl_imgw.declaration import declaration
+    from rivretrieve._internal.providers.registration import BulkCompileRequest, BulkStore
+
+    assert isinstance(declaration.observations, BulkStore)
+    return declaration.observations.compile(
+        BulkCompileRequest(tuple(artifacts), root, datetime(2026, 9, 2, tzinfo=UTC), "0.1.49")
+    )
+
+
+@pytest.mark.parametrize("transition", [False, True], ids=["monthly", "monthly-to-annual"])
+def test_real_declaration_persists_union_and_maximum_labelled_vintage(tmp_path, transition) -> None:
+    import hashlib
+    from datetime import datetime
+
+    import polars as pl
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.store import StoreRoot, validate_store
+
+    if transition:
+        names = ("codz_2022_12.zip", "codz_2023.zip")
+        rows = (b"1;S;R;2022;12;01;100;10;7;10\r\n", b"1;S;R;2023;01;02;101;11;8;11\r\n")
+        times = (datetime(2022, 10, 1), datetime(2022, 11, 2))
+        vintage = date(2023, 10, 31)
+    else:
+        names = ("codz_1951_11.zip", "codz_1951_12.zip")
+        rows = (b"1;S;R;1951;11;01;100;10;7;9\r\n", b"1;S;R;1951;12;02;101;11;8;10\r\n")
+        times = (datetime(1951, 9, 1), datetime(1951, 10, 2))
+        vintage = date(1951, 10, 31)
+    artifacts = tuple(_tiny_artifact(tmp_path, name, row) for name, row in zip(names, rows, strict=True))
+    checksums = ["sha256:" + hashlib.sha256(item.path.read_bytes()).hexdigest() for item in artifacts]
+    root = StoreRoot(tmp_path / "store")
+    compiled = _compile_declared(artifacts, root)
+    reloaded = validate_store(root, ProviderId("pl_imgw"))
+    assert compiled.manifest == reloaded.manifest
+    for manifest in (compiled.manifest, reloaded.manifest):
+        assert isinstance(manifest, StoreManifest)
+        assert manifest.source_vintage == vintage
+        assert [item.url for item in manifest.publisher_artifacts] == [item.url for item in artifacts]
+        assert [str(item.sha256) for item in manifest.publisher_artifacts] == checksums
+    expected = pl.DataFrame(
+        {
+            "product": [
+                product for product in ("discharge_daily", "stage_daily", "water_temperature_daily") for _ in times
+            ],
+            "station_id": ["1"] * 6,
+            "time": list(times) * 3,
+            "value": [10.0, 11.0, 100.0, 101.0, 7.0, 8.0],
+        }
+    )
+    actual = pl.read_parquet(list(Path(root).rglob("*.parquet")), hive_partitioning=True).select(expected.columns)
+    assert_frame_equal(actual.sort("product", "time"), expected.sort("product", "time"))
+    assert all(not item.path.exists() for item in artifacts)
+
+
+@pytest.mark.parametrize(
+    ("index", "wrong_date"),
+    [(0, date(2021, 11, 29)), (1, date(2021, 12, 30)), (2, date(2022, 2, 1))],
+    ids=["first-unchanged-max", "nonfirst-unchanged-max", "last-changed-max"],
+)
+def test_declaration_rejects_supplied_vintage_without_changing_inputs_or_store(tmp_path, index, wrong_date) -> None:
+    from dataclasses import replace
+
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.store import StoreRoot, validate_store
+
+    root = StoreRoot(tmp_path / "store")
+    initial = _tiny_artifact(tmp_path, "codz_2023.zip", b"1;S;R;2023;03;01;100;10;7;1\r\n")
+    previous = _compile_declared((initial,), root)
+    before = {p.relative_to(root): p.read_bytes() for p in Path(root).rglob("*") if p.is_file()}
+    artifacts = tuple(
+        _tiny_artifact(
+            tmp_path, f"codz_2022_{month:02d}.zip", f"1;S;R;2022;{month:02d};01;100;10;7;{calendar_month}\r\n".encode()
+        )
+        for month, calendar_month in ((1, 11), (2, 12), (3, 1))
+    )
+    inputs = {item.path: item.path.read_bytes() for item in artifacts}
+    invalid = tuple(
+        replace(item, source_vintage=wrong_date) if n == index else item for n, item in enumerate(artifacts)
+    )
+    if index < 2:
+        assert max(item.source_vintage for item in invalid) == max(item.source_vintage for item in artifacts)
+    with pytest.raises(ValueError, match="publisher-labelled coverage end"):
+        _compile_declared(invalid, root)
+    assert {path: path.read_bytes() for path in inputs} == inputs
+    assert {p.relative_to(root): p.read_bytes() for p in Path(root).rglob("*") if p.is_file()} == before
+    assert validate_store(root, ProviderId("pl_imgw")).manifest == previous.manifest
+
+
+def test_imgw_plural_identity_rejects_disordered_periods(tmp_path) -> None:
+    with pytest.raises(ValueError, match="out of period order"):
+        _imgw_compile_request_for_names(tmp_path, ("codz_2022_02.zip", "codz_2022_01.zip"))
+
+
+def test_imgw_plural_identity_rejects_repeated_overlapping_period(tmp_path) -> None:
+    # Official publication regimes have disjoint periods; repeating a period repeats its URL.
+    with pytest.raises(ValueError, match="duplicate publisher artifact"):
+        _imgw_compile_request_for_names(tmp_path, ("codz_2023.zip", "codz_2023.zip"))
+
+
+def test_imgw_plural_identity_rejects_inconsistent_aggregate_vintage(tmp_path) -> None:
+    from dataclasses import replace
+
+    request = _imgw_compile_request_for_names(tmp_path, ("codz_2022_01.zip", "codz_2022_02.zip"))
+    with pytest.raises(ValueError, match="vintage"):
+        replace(request, source_vintage=date(2021, 11, 30))

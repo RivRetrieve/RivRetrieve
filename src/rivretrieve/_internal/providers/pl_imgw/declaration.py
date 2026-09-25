@@ -28,7 +28,7 @@ def _compile(request: BulkCompileRequest) -> ValidatedStore:
             destination=request.destination,
             publisher_url=request.publisher_url,
             source_vintage=request.source_vintage,
-            publisher_artifacts=tuple(bulk.DownloadedImgw(item.path, item.url) for item in request.publisher_artifacts),
+            publisher_artifacts=request.publisher_artifacts,
             built_at=request.built_at,
             compiler_version=request.compiler_version,
         )
