@@ -16,7 +16,12 @@ from rivretrieve._internal.store import ValidatedStore
 
 def _download(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...]:
     """Adapt the shared bulk request to the publisher's multi-artifact history."""
-    downloaded = bulk.download_imgw_history(request.destination, today=request.today, transfer=request.transfer)
+    downloaded = bulk.download_imgw_history(
+        request.destination,
+        today=request.today,
+        transfer=request.transfer,
+        previous_source_vintage=request.previous_source_vintage,
+    )
     return tuple(DownloadedBulkArtifact(item.path, item.url, item.source_vintage) for item in downloaded)
 
 

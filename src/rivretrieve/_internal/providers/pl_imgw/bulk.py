@@ -20,6 +20,7 @@ import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -51,33 +52,146 @@ BASE_URL: Final = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjn
 ANNUAL_URL_TEMPLATE: Final = BASE_URL + "/{year}/codz_{year}.zip"
 MONTHLY_URL_TEMPLATE: Final = BASE_URL + "/{year}/codz_{year}_{month:02d}.zip"
 FIRST_PUBLISHED_YEAR: Final = 1951
-ANNUAL_PUBLICATION_FIRST_YEAR: Final = 2023
 
 
 @dataclass(frozen=True, slots=True)
 class ImgwArtifactPlan:
-    """One exact official archive in a deterministic full-history plan."""
+    """One exact official archive discovered in the publisher's index."""
 
     url: str
     filename: str
 
 
-def plan_imgw_artifacts(*, first_year: int, last_year: int) -> tuple[ImgwArtifactPlan, ...]:
-    """Map hydrological publication years to the publisher's monthly/annual artifacts."""
-    if first_year < 1 or last_year > 9999 or first_year > last_year:
-        raise ValueError("IMGW publication year range is invalid")
+class _ImgwDirectoryIndex(HTMLParser):
+    """Read the publisher's Apache index without accepting an arbitrary HTML page."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.stack: list[str] = []
+        self.titles: list[str] = []
+        self.headings: list[str] = []
+        self.links: list[tuple[str, str]] = []
+        self.closed: set[str] = set()
+        self.text = ""
+        self.href: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"img", "hr", "br", "meta", "link", "input"}:
+            return
+        if tag in {"title", "h1", "a"}:
+            self.text = ""
+        if tag == "a":
+            hrefs = [value for name, value in attrs if name == "href"]
+            if len(hrefs) != 1 or not hrefs[0] or self.href is not None:
+                raise ValueError("IMGW directory index has a malformed link")
+            self.href = hrefs[0]
+        self.stack.append(tag)
+
+    def handle_data(self, data: str) -> None:
+        if self.stack and self.stack[-1] in {"title", "h1", "a"}:
+            self.text += data
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self.stack or self.stack.pop() != tag:
+            raise ValueError("IMGW directory index has malformed HTML structure")
+        self.closed.add(tag)
+        if tag == "title":
+            self.titles.append(self.text.strip())
+        elif tag == "h1":
+            self.headings.append(self.text.strip())
+        elif tag == "a":
+            if self.href is None:
+                raise ValueError("IMGW directory index has a malformed link")
+            self.links.append((self.href, self.text.strip()))
+            self.href = None
+
+
+def _imgw_directory_entries(content: bytes, url: str) -> tuple[str, ...]:
+    """Validate an exact source index and return its unambiguous relative entries."""
+    index = _ImgwDirectoryIndex()
+    try:
+        index.feed(content.decode("utf-8", errors="strict"))
+        index.close()
+    except UnicodeError as error:
+        raise ValueError("IMGW directory index is not UTF-8 HTML") from error
+    path = "/" + url.split("/", 3)[3].rstrip("/")
+    identity = f"Index of {path}"
+    if (
+        index.stack
+        or index.titles != [identity]
+        or index.headings != [identity]
+        or not {"html", "body", "table"}.issubset(index.closed)
+    ):
+        raise ValueError(f"IMGW directory index identity or structure is invalid: {url}")
+    entries: list[str] = []
+    seen: set[str] = set()
+    parent = path.rsplit("/", 1)[0] + "/"
+    for href, label in index.links:
+        if href in seen:
+            raise ValueError(f"IMGW directory index has a duplicate link: {href}")
+        seen.add(href)
+        if re.fullmatch(r"\?C=[NMSD];O=[AD]", href):
+            continue
+        if href == parent and label == "Parent Directory":
+            continue
+        if href != label or re.fullmatch(r"[A-Za-z0-9_.-]+/?", href) is None:
+            raise ValueError(f"IMGW directory index has an unsupported link: {href}")
+        entries.append(href)
+    return tuple(entries)
+
+
+def discover_imgw_artifacts(
+    *, today: date, read_index: Callable[[str], bytes], first_year: int
+) -> tuple[ImgwArtifactPlan, ...]:
+    """Discover continuous daily publication, not calendar-implied availability.
+
+    The notice promises regeneration in monthly form but gives no precedence for
+    coexisting editions. An exclusive annual or monthly listing is supported;
+    overlapping editions are refused rather than selected or deduplicated.
+    """
+    if not 1 < first_year <= today.year + (today.month >= 11):
+        raise ValueError("IMGW publication starting year is invalid")
+    root_url = BASE_URL + "/"
+    entries = _imgw_directory_entries(read_index(root_url), root_url)
+    years: list[int] = []
+    for entry in entries:
+        if entry in {"UWAGA.txt", "CODZ_publiczne_format.txt", "ZJAW_publiczne_format.txt"}:
+            continue
+        if re.fullmatch(r"[0-9]{4}/", entry) is None:
+            raise ValueError(f"IMGW publication index contains an unsupported entry: {entry}")
+        year = int(entry[:-1])
+        if year < 2 or year > today.year + (today.month >= 11):
+            raise ValueError(f"IMGW publication index contains an implausible year: {entry}")
+        if year >= first_year:
+            years.append(year)
     planned: list[ImgwArtifactPlan] = []
-    for year in range(first_year, last_year + 1):
-        if year < ANNUAL_PUBLICATION_FIRST_YEAR:
-            planned.extend(
-                ImgwArtifactPlan(
-                    MONTHLY_URL_TEMPLATE.format(year=year, month=month),
-                    f"codz_{year}_{month:02d}.zip",
-                )
-                for month in range(1, 13)
-            )
-        else:
-            planned.append(ImgwArtifactPlan(ANNUAL_URL_TEMPLATE.format(year=year), f"codz_{year}.zip"))
+    previous = first_year * 12
+    for year in sorted(years):
+        url = f"{BASE_URL}/{year}/"
+        names = _imgw_directory_entries(read_index(url), url)
+        periods: list[tuple[tuple[int, ...], str]] = []
+        for name in names:
+            # ZJAW describes a separate phenomena product, not daily CODZ values.
+            if name == "UWAGA.txt" or re.fullmatch(r"zjaw_[0-9]{4}(?:_[0-9]{2})?\.zip", name):
+                continue
+            if _ARTIFACT_NAME.fullmatch(name) is None:
+                raise ValueError(f"IMGW publication index contains an unsupported daily archive: {name}")
+            artifact_year, months = _imgw_artifact_period(Path(name))
+            if artifact_year != year:
+                raise ValueError(f"IMGW archive disagrees with its publication directory: {name}")
+            if _imgw_period_source_vintage((year, months)) > today:
+                raise ValueError(f"IMGW archive declares an unfinished publication period: {name}")
+            periods.append((months, name))
+        for months, name in sorted(periods):
+            start = year * 12 + months[0]
+            if start <= previous:
+                raise ValueError(f"IMGW publication periods overlap ambiguously: {name}")
+            if start != previous + 1:
+                raise ValueError(f"IMGW published history has a gap before {name}")
+            planned.append(ImgwArtifactPlan(url + name, name))
+            previous = year * 12 + months[-1]
+    if not planned:
+        raise ValueError("IMGW publication index contains no supported daily history")
     return tuple(planned)
 
 
@@ -125,11 +239,6 @@ class DownloadedImgw:
 ArtifactTransfer = Callable[[str, Path], None]
 
 
-def latest_completed_hydrological_year(today: date) -> int:
-    """Return the last hydrological year whose October has completed."""
-    return today.year if today.month >= 11 else today.year - 1
-
-
 def _imgw_period_source_vintage(period: tuple[int, tuple[int, ...]]) -> date:
     """Return the last date covered by the publisher-labelled hydrological period."""
     import calendar
@@ -146,17 +255,37 @@ def download_imgw_history(
     *,
     today: date,
     transfer: ArtifactTransfer,
-    first_year: int = FIRST_PUBLISHED_YEAR,
+    first_year: int | None = None,
+    previous_source_vintage: date | None = None,
 ) -> tuple[DownloadedImgw, ...]:
     """Download the complete source-backed history into unique artifact paths."""
-    last_year = latest_completed_hydrological_year(today)
-    planned = plan_imgw_artifacts(first_year=first_year, last_year=last_year)
+    import tempfile
+
     base = Path(destination)
+
+    def read_index(url: str) -> bytes:
+        # Own only a unique scratch directory; never overwrite recovery inputs.
+        with tempfile.TemporaryDirectory(prefix=".imgw-publication-", dir=base.parent) as directory:
+            target = Path(directory) / "index.html"
+            transfer(url, target)
+            return target.read_bytes()
+
+    planned = discover_imgw_artifacts(
+        today=today,
+        read_index=read_index,
+        first_year=FIRST_PUBLISHED_YEAR if first_year is None else first_year,
+    )
+    latest_vintage = _imgw_period_source_vintage(_imgw_artifact_period(Path(planned[-1].filename)))
+    if previous_source_vintage is not None and latest_vintage < previous_source_vintage:
+        raise ValueError(
+            f"IMGW published history would regress from certified coverage {previous_source_vintage} "
+            f"to {latest_vintage}; previously published trailing archives are missing"
+        )
     downloaded: list[DownloadedImgw] = []
     try:
         for item in planned:
             target = base.with_name(f"{base.name}-{item.filename}")
-            if target.exists():
+            if target.exists() or target.is_symlink():
                 raise FileExistsError(f'publisher artifact destination already exists: "{target}"')
             try:
                 transfer(item.url, target)
@@ -339,13 +468,11 @@ def _imgw_artifact_period(path: Path) -> tuple[int, tuple[int, ...]]:
     if match is None:
         raise ValueError(f"IMGW artifact name does not declare its publication period: {path.name}")
     year = int(match.group("year"))
+    if year < 2:
+        raise ValueError(f"IMGW artifact has invalid hydrological year: {path.name}")
     month_text = match.group("month")
     if month_text is None:
-        if year < ANNUAL_PUBLICATION_FIRST_YEAR:
-            raise ValueError(f"IMGW annual artifact predates annual publication form: {path.name}")
         return year, tuple(range(1, 13))
-    if year >= ANNUAL_PUBLICATION_FIRST_YEAR:
-        raise ValueError(f"IMGW monthly artifact follows annual publication transition: {path.name}")
     month = int(month_text)
     if month < 1 or month > 12:
         raise ValueError(f"IMGW artifact has invalid hydrological month: {path.name}")
