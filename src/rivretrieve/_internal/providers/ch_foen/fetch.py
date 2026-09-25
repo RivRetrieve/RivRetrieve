@@ -23,7 +23,13 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ch_foen.config import ChFoenRequestCoordinates, ChFoenSourceCoordinates
 from rivretrieve._internal.source_series import SeriesScope, SourceSeries
-from rivretrieve._internal.transport import AuthenticationCapability, HttpMethod, Transport, TransportRequest
+from rivretrieve._internal.transport import (
+    AuthenticationCapability,
+    HttpMethod,
+    ReplaySafety,
+    Transport,
+    TransportRequest,
+)
 
 _REST = "https://api.existenz.ch/apiv1/hydro/daterange"
 _FLUX = "https://influx.konzept.space/api/v2/query"
@@ -61,6 +67,8 @@ def fetch(
                 {"org": "api.existenz.ch"},
                 {"Content-Type": "application/vnd.flux", "Accept": "application/csv"},
                 query,
+                # This Flux expression only reads, filters, selects, and sorts source rows.
+                replay_safety=ReplaySafety.SAFE,
             )
             response = transport.send(request)
             payloads.append(
