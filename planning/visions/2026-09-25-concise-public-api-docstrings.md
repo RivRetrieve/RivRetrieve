@@ -124,9 +124,19 @@ At this checkpoint, the Poland repair is in open
 [PR #374](https://github.com/RivRetrieve/RivRetrieve/pull/374), on branch
 `fix/poland-publication-aware-history`, with its existing worktree at
 `.worktrees/visions/poland-publication-aware-history/`. Its PR records passing
-focused checks but incomplete live full-history verification, blocked by the
-interrupted-response failure tracked in #375. A separate open repair PR for
-#375 was not found during this check. The related provider documentation remains
+focused checks but an earlier incomplete live full-history verification caused
+by the interrupted-response failure tracked in #375.
+
+The retry repair has since merged through
+[PR #377](https://github.com/RivRetrieve/RivRetrieve/pull/377) at
+`02643d7bea3d5de55e076cb30ced8798935815b7`. That PR records independent approval
+and complete deterministic test coverage across two batches, with 4,423 passed
+and three skipped. It did not attempt a live national download. Issue #375 is
+still open, and successful Poland full-history verification must not be inferred
+from the retry PR's merge. Its validation evidence is retained at
+`.worktrees/evidence/http-retry-correctness/`.
+
+The related provider documentation remains
 in [PR #291](https://github.com/RivRetrieve/RivRetrieve/pull/291), with worktree
 `.worktrees/visions/poland-provider-documentation-review/`.
 
