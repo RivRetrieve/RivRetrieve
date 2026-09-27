@@ -122,7 +122,10 @@ class ObservationProvenance(BaseModel):
     served_intervals : tuple[CoverageInterval, ...]
         Held intervals served from an accumulated store, with retrieval instants.
     source_vintage : datetime.date or None
-        Source-stated bulk release date, not a freshness verdict.
+        Source vintage of the compiled store that served the rows, as
+        described for ``StoreManifest.source_vintage``. Its derivation depends
+        on the provider, and it is not a freshness verdict. None when no
+        compiled store was read.
     publisher_artifact_checksum : str or None
         Checksum of the first publisher artifact for compiled-store provenance.
     publisher_artifact_checksums, publisher_artifact_urls : tuple[str, ...]
@@ -212,7 +215,8 @@ class StoreExcerptReceipt(ReceiptEntry):
     format_version : int
         Store layout revision, 5 for compiled or 7 for accumulated stores.
     source_vintage : datetime.date or None
-        Bulk release date. None for an accumulated store.
+        Source vintage of the compiled store, as described for
+        ``StoreManifest.source_vintage``. None for an accumulated store.
     """
 
     store_path: StoreRoot

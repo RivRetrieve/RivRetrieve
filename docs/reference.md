@@ -1135,7 +1135,10 @@ Source and request facts that accompany observations.
 - **served_intervals : tuple[CoverageInterval, ...]**
   Held intervals served from an accumulated store, with retrieval instants.
 - **source_vintage : datetime.date or None**
-  Source-stated bulk release date, not a freshness verdict.
+  Source vintage of the compiled store that served the rows, as
+  described for `StoreManifest.source_vintage`. Its derivation depends
+  on the provider, and it is not a freshness verdict. None when no
+  compiled store was read.
 - **publisher_artifact_checksum : str or None**
   Checksum of the first publisher artifact for compiled-store provenance.
 - **publisher_artifact_checksums, publisher_artifact_urls : tuple[str, ...]**
@@ -1221,7 +1224,8 @@ A Parquet re-encoding of the exact rows returned by a store query.
 - **format_version : int**
   Store layout revision, 5 for compiled or 7 for accumulated stores.
 - **source_vintage : datetime.date or None**
-  Bulk release date. None for an accumulated store.
+  Source vintage of the compiled store, as described for
+  `StoreManifest.source_vintage`. None for an accumulated store.
 
 ### `ObservationResult.to_polars`
 
@@ -1742,7 +1746,12 @@ Manifest of a compiled bulk store.
 - **built_at : datetime**
   UTC build instant.
 - **source_vintage : datetime.date**
-  Source-stated release date.
+  Identifies the source publication state the store was compiled from.
+  Its derivation depends on the provider: for example, the date of a
+  dated publisher release, or the last date covered by the latest
+  published period. It is not a freshness verdict. `download` passes
+  it to the provider, which can refuse a new download whose published
+  history would end earlier.
 - **publisher_artifact : PublisherArtifact**
   First publisher artifact identity, retained for single-artifact access.
 - **publisher_artifacts : tuple[PublisherArtifact, ...]**

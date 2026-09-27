@@ -85,7 +85,12 @@ class StoreManifest:
     built_at : datetime
         UTC build instant.
     source_vintage : datetime.date
-        Source-stated release date.
+        Identifies the source publication state the store was compiled from.
+        Its derivation depends on the provider: for example, the date of a
+        dated publisher release, or the last date covered by the latest
+        published period. It is not a freshness verdict. ``download`` passes
+        it to the provider, which can refuse a new download whose published
+        history would end earlier.
     publisher_artifact : PublisherArtifact
         First publisher artifact identity, retained for single-artifact access.
     publisher_artifacts : tuple[PublisherArtifact, ...]
