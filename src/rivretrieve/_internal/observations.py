@@ -265,7 +265,7 @@ class ObservationResult(BaseModel):
     ``scope`` is the original request; ``view_scope`` records explicit post-fetch
     narrowing without pretending another source request occurred.
 
-    Results are immutable values returned by ``fetch``, ``fetch_by_provider``,
+    Results cannot be changed in place. They are returned by ``fetch``, ``fetch_by_provider``,
     ``pick``, ``to_utc`` and ``from_bundle``. Every result belongs to one
     provider.
 
@@ -379,7 +379,7 @@ class ObservationResult(BaseModel):
         return self.data
 
     def to_pandas(self) -> Any:
-        """Convert identity-bearing observation rows using Polars' Pandas conversion.
+        """Return the observation rows as a pandas DataFrame.
 
         Returns
         -------

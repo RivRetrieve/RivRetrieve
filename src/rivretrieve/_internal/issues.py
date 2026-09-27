@@ -7,7 +7,7 @@ from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProviderId
 
 
 class Issue(BaseModel):
-    """A retained finding distinct from a fatal contract exception.
+    """A problem or note recorded during selection or retrieval and kept with the results.
 
     Issues are kept on selections and results whatever ``on_issue`` policy is
     chosen. They let independent series return data while a failure elsewhere

@@ -37,11 +37,11 @@ rivretrieve.as_frame(selection: '_Selection') -> 'pl.DataFrame'
 
 Import: `from rivretrieve import as_frame`.
 
-Return an inspection frame. Use to_bundle for a durable, lossless round trip.
+Return the source-series table for a selection, the same table as `series`.
 
-The frame is identical to `series(selection)` for a selection. Selecting
-rows from it does not change the selection. Pass chosen identifiers back to
-`pick` instead.
+Selecting rows from the table does not change the selection. Pass chosen
+identifiers back to `pick` instead. Use `to_bundle` to save a selection
+without losing information.
 
 #### Raises
 
@@ -164,7 +164,7 @@ rivretrieve.download(provider: 'str')
 
 Import: `from rivretrieve import download`.
 
-Explicitly download and compile one bulk provider into the local cache.
+Download one bulk provider's national dataset and compile it into the local cache.
 
 #### Parameters
 
@@ -224,7 +224,7 @@ Read selected gauges' packaged drainage-area metadata offline.
 
 #### Parameters
 
-- **selection : _Selection**
+- **selection : selection**
   Selection returned by find, pick or from_bundle. Multiple providers and
   products are accepted; each provider-station pair appears once per
   source field, regardless of the number of selected products.
@@ -271,7 +271,7 @@ rivretrieve.fetch(selection: '_Selection', *, start: 'object' = None, end: 'obje
 
 Import: `from rivretrieve import fetch`.
 
-Retrieve every admitted source series matching one provider's retained request scope.
+Download observations for a selection whose series come from one provider.
 
 `fetch` requests each station and access route in the selection and
 returns every series whose physical facts and identity match the
@@ -282,7 +282,7 @@ catalogue could not settle whether they exist.
 
 #### Parameters
 
-- **selection : _Selection**
+- **selection : selection**
   Selection from `find`, `pick` or `from_bundle`. It must route to
   exactly one provider. Use `fetch_by_provider` for several providers.
 - **start : str or datetime.datetime**
@@ -405,7 +405,7 @@ rivretrieve.fetch_by_provider(selection: '_Selection', *, start: 'object' = None
 
 Import: `from rivretrieve import fetch_by_provider`.
 
-Retrieve each provider separately, preserving its identity, source terms and outcomes.
+Download observations for a selection that spans several providers, one result per provider.
 
 Parameters are the same as for `fetch`. The selection can route to any
 number of providers.
@@ -447,7 +447,7 @@ rivretrieve.find(*, provider: 'str | None' = None, station: 'str | None' = None,
 
 Import: `from rivretrieve import find`.
 
-Find all supported series matching established physical facts, using offline catalogue evidence.
+Search the packaged catalogues for source series that match the given filters.
 
 `find` reads the packaged catalogues only. It does not contact observation
 services, read credentials or use the observation cache. The returned
@@ -484,10 +484,11 @@ selection also includes matching series that a source response reveals later.
 
 #### Returns
 
-- **_Selection**
-  Immutable selection for `pick`, `series`, `fetch`,
-  `fetch_by_provider`, `drainage_areas`, `map` and `to_bundle`.
-  Inspect its source series with `series(selection)`.
+- **selection**
+  A selection to pass to `pick`, `series`, `fetch`,
+  `fetch_by_provider`, `drainage_areas`, `map` or `to_bundle`.
+  It cannot be changed in place. Inspect its source series with
+  `series(selection)`.
 
 #### Raises
 
@@ -515,18 +516,6 @@ selection with `EmptySelectionError`.
 The packaged catalogue is a snapshot. It does not establish that every
 listed series has observations for a particular period.
 
-#### Examples
-
-```pycon
->>> import rivretrieve as rr
->>> gauge = rr.find(
-...     provider="usgs_nwis", station="07374000",
-...     quantity="discharge", frequency="daily", statistic="mean",
-... )
->>> rr.series(gauge).select("station_id", "product_id", "unit").rows()
-[('07374000', 'discharge_daily_mean', 'm3/s')]
-```
-
 ### `from_bundle`
 
 ```text
@@ -535,7 +524,7 @@ rivretrieve.from_bundle(content: 'bytes') -> '_Selection | ObservationResult'
 
 Import: `from rivretrieve import from_bundle`.
 
-Validate and import a bundle without rebuilding identity from today's catalogue.
+Restore a selection or result saved by `to_bundle`.
 
 #### Parameters
 
@@ -544,7 +533,7 @@ Validate and import a bundle without rebuilding identity from today's catalogue.
 
 #### Returns
 
-- **_Selection or ObservationResult**
+- **selection or ObservationResult**
   The kind of value that was exported. Identities, physical facts,
   inventories, issues and, for results, observations, outcomes,
   provenance and receipts come from the bundle. The current packaged
@@ -571,7 +560,7 @@ rivretrieve.from_frame(frame: 'pl.DataFrame') -> '_Selection'
 
 Import: `from rivretrieve import from_frame`.
 
-Frame imports are unsupported; use a validated versioned export bundle.
+Refuse to rebuild a selection from a table; use `from_bundle` instead.
 
 Every call raises `ValueError`. An inspection frame omits request intent,
 inventory state and evidence, so it cannot be turned back into a selection.
@@ -594,8 +583,8 @@ Render selected stations without narrowing the selection.
 
 #### Parameters
 
-- **selection : _Selection**
-  Selection whose stations will be shown once each.
+- **selection : selection**
+  Selection from find, pick or from_bundle. Each station is shown once.
 
 #### Returns
 
@@ -619,15 +608,15 @@ rivretrieve.pick(selection: '_Selection | ObservationResult', *, provider: 'str 
 
 Import: `from rivretrieve import pick`.
 
-Narrow immutable intent or a retrieved view without another source request.
+Filter a selection or a fetched result without contacting a source.
 
 Filters combine with the filters already held by `selection`. A filter
 that conflicts with an existing one, such as a different quantity, leaves an
-empty selection or view. `pick` never contacts a source.
+empty selection or an empty result view.
 
 #### Parameters
 
-- **selection : _Selection or ObservationResult**
+- **selection : selection or ObservationResult**
   Selection from `find`, `pick` or `from_bundle`, or a result from
   `fetch`, `fetch_by_provider`, `pick` or `from_bundle`.
 - **provider, station, variant, series_id : str, sequence of str, or None, default None**
@@ -642,7 +631,7 @@ empty selection or view. `pick` never contacts a source.
 
 #### Returns
 
-- **_Selection or ObservationResult**
+- **selection or ObservationResult**
   The same kind of value as `selection`.
 
   For a selection, the result is a new selection with the combined filters.
@@ -672,18 +661,6 @@ empty selection or view. `pick` never contacts a source.
   If `on_issue` is invalid, or an identifier filter is an empty string.
 - **IssuePolicyError**
   If `on_issue="raise"` and a relevant warning or error issue exists.
-
-#### Examples
-
-Narrow a search to one station. A list keeps each listed station.
-
-```pycon
->>> import rivretrieve as rr
->>> daily = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
->>> one = rr.pick(daily, station=["07374000"])
->>> rr.series(one).select("station_id", "variant").rows()
-[('07374000', 'c9d823a2491f4b639656a11b35a7625d')]
-```
 
 ### `products`
 
@@ -753,12 +730,13 @@ rivretrieve.series(value: '_Selection | ObservationResult') -> 'pl.DataFrame'
 
 Import: `from rivretrieve import series`.
 
-Inspect source identities, independent physical facts, inventory and empty/failed outcomes.
+Describe each source series in a selection or result as a table.
 
 #### Parameters
 
-- **value : _Selection or ObservationResult**
-  For a selection, rows describe the source series known from packaged
+- **value : selection or ObservationResult**
+  A selection from `find`, `pick` or `from_bundle`, or a fetched
+  result. For a selection, rows describe the source series known from packaged
   evidence before retrieval. For a result, rows describe the series known
   after retrieval, including series first identified in the source
   response, together with their retrieval outcomes.
@@ -832,12 +810,12 @@ rivretrieve.to_bundle(value: '_Selection | ObservationResult') -> 'bytes'
 
 Import: `from rivretrieve import to_bundle`.
 
-Export a self-contained, explicitly versioned selection or result bundle.
+Save a selection or result as bytes that `from_bundle` can restore.
 
 #### Parameters
 
-- **value : _Selection or ObservationResult**
-  Selection or result to export, including a result view from `pick`.
+- **value : selection or ObservationResult**
+  Selection from `find`, `pick` or `from_bundle`, or a result to export, including a result view from `pick`.
 
 #### Returns
 
@@ -853,16 +831,6 @@ Export a self-contained, explicitly versioned selection or result bundle.
 
 - **TypeError**
   If `value` is neither a selection nor an observation result.
-
-#### Examples
-
-```pycon
->>> import rivretrieve as rr
->>> gauge = rr.find(provider="usgs_nwis", station="07374000", quantity="discharge")
->>> restored = rr.from_bundle(rr.to_bundle(gauge))
->>> rr.series(restored).equals(rr.series(gauge))
-True
-```
 
 ### `to_utc`
 
@@ -1009,11 +977,12 @@ These types are not re-exported from `rivretrieve`. Their locations below identi
 
 Type location: `rivretrieve._internal.selection._Selection`.
 
-Requested scope and acquired evidence; known members never freeze all-matching intent.
+A search to retrieve later: the requested filters and the catalogue evidence found for them.
 
-Selections are immutable values returned by `find`, `pick` and
-`from_bundle`. Pass them to the public functions rather than building
-them directly. `series(selection)` shows their contents as a frame.
+A selection is returned by `find`, `pick` and `from_bundle` and
+cannot be changed in place. Pass it to the public functions rather than
+building one directly. The known series are evidence, and the filters
+remain the request, so retrieval can include series found later. `series(selection)` shows their contents as a frame.
 
 #### Attributes
 
@@ -1035,7 +1004,7 @@ them directly. `series(selection)` shows their contents as a frame.
   Catalogue coordinates and CRS statements used by `map`.
 - **acquisition_provenance : tuple[CatalogueEvidence, ...]**
   Evidence describing how the packaged catalogues were acquired.
-- **empty_reason : _EmptyReason or None**
+- **empty_reason : empty-selection reason or None**
   None when at least one known admitted series matches. Otherwise
   `empty_reason.code` is `no_match` or `unresolved_inventory`.
 - **series : tuple[SourceSeries, ...]**
@@ -1055,7 +1024,7 @@ and outcomes remain inspectable even when a series has no observation rows.
 `scope` is the original request; `view_scope` records explicit post-fetch
 narrowing without pretending another source request occurred.
 
-Results are immutable values returned by `fetch`, `fetch_by_provider`,
+Results cannot be changed in place. They are returned by `fetch`, `fetch_by_provider`,
 `pick`, `to_utc` and `from_bundle`. Every result belongs to one
 provider.
 
@@ -1244,7 +1213,7 @@ through a durable export. These cannot be encoded by absent observation rows.
 ObservationResult.to_pandas(self) -> 'Any'
 ```
 
-Convert identity-bearing observation rows using Polars' Pandas conversion.
+Return the observation rows as a pandas DataFrame.
 
 #### Returns
 
@@ -1557,7 +1526,7 @@ Outcomes remain present even when there are no observation rows.
 
 Type location: `rivretrieve._internal.issues.Issue`.
 
-A retained finding distinct from a fatal contract exception.
+A problem or note recorded during selection or retrieval and kept with the results.
 
 Issues are kept on selections and results whatever `on_issue` policy is
 chosen. They let independent series return data while a failure elsewhere

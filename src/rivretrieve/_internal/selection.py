@@ -64,11 +64,12 @@ class StationLocation:
 
 @dataclass(frozen=True, slots=True)
 class _Selection:
-    """Requested scope and acquired evidence; known members never freeze all-matching intent.
+    """A search to retrieve later: the requested filters and the catalogue evidence found for them.
 
-    Selections are immutable values returned by ``find``, ``pick`` and
-    ``from_bundle``. Pass them to the public functions rather than building
-    them directly. ``series(selection)`` shows their contents as a frame.
+    A selection is returned by ``find``, ``pick`` and ``from_bundle`` and
+    cannot be changed in place. Pass it to the public functions rather than
+    building one directly. The known series are evidence, and the filters
+    remain the request, so retrieval can include series found later. ``series(selection)`` shows their contents as a frame.
 
     Attributes
     ----------
@@ -90,7 +91,7 @@ class _Selection:
         Catalogue coordinates and CRS statements used by ``map``.
     acquisition_provenance : tuple[CatalogueEvidence, ...]
         Evidence describing how the packaged catalogues were acquired.
-    empty_reason : _EmptyReason or None
+    empty_reason : empty-selection reason or None
         None when at least one known admitted series matches. Otherwise
         ``empty_reason.code`` is ``no_match`` or ``unresolved_inventory``.
     series : tuple[SourceSeries, ...]
