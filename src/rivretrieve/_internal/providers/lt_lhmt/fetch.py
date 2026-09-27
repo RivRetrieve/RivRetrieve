@@ -24,13 +24,17 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.lt_lhmt.config import SERIES_MAPPINGS, LtLhmtSourceCoordinates
-from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceResponseMeaning, attempt_request
+from rivretrieve._internal.source_acquisition import (
+    FailedSourceRequest,
+    SourceResponseMeaning,
+    attempt_request,
+    http_response_meaning,
+)
 from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
 from rivretrieve._internal.transport import (
     HttpMethod,
     Transport,
     TransportFailure,
-    TransportFailureReason,
     TransportRequest,
     TransportResponse,
 )
@@ -42,6 +46,8 @@ class LtLhmtHistoricalRoute:
 
 
 _BASE_URL = "https://api.meteo.lt/v1/hydro-stations"
+# Meteo.lt historical-route documentation: no stored station measurements.
+_HISTORICAL_RESPONSE_MEANINGS = {404: SourceResponseMeaning.NO_OBSERVATIONS}
 
 
 def fetch(
@@ -71,13 +77,7 @@ def fetch(
             request = _request(station, window.start, window.stop)
             response = attempt_request(transport, request)
             if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                meaning = (
-                    SourceResponseMeaning.NO_OBSERVATIONS
-                    if isinstance(response, TransportFailure)
-                    and response.reason is TransportFailureReason.HTTP_STATUS
-                    and response.status_code == 404
-                    else SourceResponseMeaning.UNSPECIFIED
-                )
+                meaning = http_response_meaning(response, _HISTORICAL_RESPONSE_MEANINGS)
                 for product in group_products:
                     failures.append(
                         FailedSourceRequest(

@@ -130,6 +130,39 @@ def test_default_failure_does_not_infer_absence_or_fabricate_response():
         TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, response=b"not a response")
 
 
+@pytest.mark.parametrize(
+    "reason,status,expected",
+    [
+        (TransportFailureReason.HTTP_STATUS, 404, SourceResponseMeaning.NO_OBSERVATIONS),
+        (TransportFailureReason.HTTP_STATUS, 500, SourceResponseMeaning.UNSPECIFIED),
+        (TransportFailureReason.HTTP_STATUS, None, SourceResponseMeaning.UNSPECIFIED),
+        (TransportFailureReason.HTTP_STATUS, 401, SourceResponseMeaning.UNSPECIFIED),
+        (TransportFailureReason.RETRY_EXHAUSTED, 404, SourceResponseMeaning.UNSPECIFIED),
+        (TransportFailureReason.RETRY_DELAY_EXCEEDED, 404, SourceResponseMeaning.UNSPECIFIED),
+        (TransportFailureReason.REPLAY_UNSAFE, 404, SourceResponseMeaning.UNSPECIFIED),
+    ],
+)
+def test_declared_http_meaning_requires_exact_response_status(reason, status, expected):
+    from rivretrieve._internal.source_acquisition import http_response_meaning
+
+    request = TransportRequest(HttpMethod.GET, "https://example.test/month")
+    failure = TransportFailure(request, reason, 1, status_code=status)
+    assert http_response_meaning(failure, {404: SourceResponseMeaning.NO_OBSERVATIONS}) is expected
+    assert http_response_meaning(failure, {}) is SourceResponseMeaning.UNSPECIFIED
+
+
+def test_authentication_status_does_not_establish_source_absence():
+    from rivretrieve._internal.authentication import AuthenticationFailureReason, CredentialExchangeError
+    from rivretrieve._internal.source_acquisition import http_response_meaning
+
+    request = TransportRequest(HttpMethod.GET, "https://example.test/token")
+    failure = CredentialExchangeError(request, AuthenticationFailureReason.EXCHANGE_HTTP_STATUS, status_code=404)
+    assert (
+        http_response_meaning(failure, {404: SourceResponseMeaning.NO_OBSERVATIONS})
+        is SourceResponseMeaning.UNSPECIFIED
+    )
+
+
 @pytest.mark.parametrize("failure_carrier", ["outcomes", "failed_requests", "both", "parsed_outcomes"])
 @pytest.mark.parametrize("failure_status", ["failed", "unsupported", "unresolved"])
 def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_empty(

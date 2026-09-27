@@ -1,12 +1,19 @@
 """Bounded concrete-series source-call attempts without provider failure policy."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from uuid import uuid4
 
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.source_series import SeriesWindow, SourceSeries
-from rivretrieve._internal.transport import Transport, TransportFailure, TransportRequest, TransportResponse
+from rivretrieve._internal.transport import (
+    Transport,
+    TransportFailure,
+    TransportFailureReason,
+    TransportRequest,
+    TransportResponse,
+)
 
 
 class SourceResponseMeaning(StrEnum):
@@ -14,6 +21,25 @@ class SourceResponseMeaning(StrEnum):
 
     UNSPECIFIED = "unspecified"
     NO_OBSERVATIONS = "no_observations"
+
+
+def http_response_meaning(
+    failure: TransportFailure | CredentialExchangeError,
+    declared_status_meanings: Mapping[int, SourceResponseMeaning],
+) -> SourceResponseMeaning:
+    """Resolve publisher vocabulary only for an established HTTP status failure.
+
+    A status carried by retry or authentication failure does not establish the
+    meaning of a completed source response. Issue and interval policy remain
+    engine responsibilities.
+    """
+    if (
+        not isinstance(failure, TransportFailure)
+        or failure.reason is not TransportFailureReason.HTTP_STATUS
+        or failure.status_code is None
+    ):
+        return SourceResponseMeaning.UNSPECIFIED
+    return declared_status_meanings.get(failure.status_code, SourceResponseMeaning.UNSPECIFIED)
 
 
 @dataclass(frozen=True, slots=True)
