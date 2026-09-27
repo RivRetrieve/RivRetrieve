@@ -117,8 +117,10 @@ clarified to mean the supported public API surface only.
 The user reports that repairs and tests are in progress for
 [Poland publication-aware downloads (#371)](https://github.com/RivRetrieve/RivRetrieve/issues/371)
 and [interrupted-response retries (#375)](https://github.com/RivRetrieve/RivRetrieve/issues/375).
-Verification is still in progress before these issues are closed; do not treat
-an active test run as a successful result.
+The user reports that one agent owns final verification and closure of both
+issues together. Coordinate with that owner rather than closing either issue
+from this documentation Effort. Verification is still in progress before these
+issues are closed; do not treat an active test run as a successful result.
 
 At this checkpoint, the Poland repair is in open
 [PR #374](https://github.com/RivRetrieve/RivRetrieve/pull/374), on branch
