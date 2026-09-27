@@ -131,7 +131,10 @@ def test_default_failure_does_not_infer_absence_or_fabricate_response():
 
 
 @pytest.mark.parametrize("failure_carrier", ["outcomes", "failed_requests", "both", "parsed_outcomes"])
-def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_empty(tmp_path, failure_carrier):
+@pytest.mark.parametrize("failure_status", ["failed", "unsupported", "unresolved"])
+def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_empty(
+    tmp_path, failure_carrier, failure_status
+):
     """Authored partitions of recorded rows exercise shared cache restoration."""
     from dataclasses import replace
     from datetime import timedelta
@@ -177,7 +180,7 @@ def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_
                     station_id=series.station_id,
                     product_id=series.product_id,
                     window=intervals[part],
-                    status=OutcomeStatus.FAILED,
+                    status=OutcomeStatus(failure_status),
                     reason="authored partition failure",
                 )
                 for part in (0, 2)
@@ -223,7 +226,7 @@ def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_
                             update={
                                 "outcome_id": f"parsed-failure-{part}",
                                 "window": intervals[part],
-                                "status": OutcomeStatus.FAILED,
+                                "status": OutcomeStatus(failure_status),
                                 "reason": "authored parsed partition failure",
                             }
                         )

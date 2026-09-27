@@ -479,23 +479,22 @@ def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: Requested
     return rows.filter(pl.Series(keep, dtype=pl.Boolean))
 
 
-def _exclude_served_native(
-    rows: Rows, series: tuple[SourceSeries, ...], coverage: tuple[CoverageInterval, ...]
+def _exclude_native_intervals(
+    rows: Rows, series: tuple[SourceSeries, ...], intervals: tuple[tuple[str, RequestedInterval], ...]
 ) -> Rows:
-    """Keep held successful intervals authoritative during a failed reuse acquisition."""
-    if rows.is_empty() or not coverage:
+    """Exclude concrete source intervals on each physical fact's clipping axis."""
+    if rows.is_empty() or not intervals:
         return rows
     daily_facts = tuple(
         facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_DATE
     )
     daily = pl.col("facts_id").is_in(daily_facts)
     keep = pl.lit(True)
-    for held in coverage:
+    for series_id, interval in intervals:
         inside = (
-            daily
-            & pl.col("time").dt.date().is_between(held.interval.start.date(), held.interval.end.date(), closed="both")
-        ) | (~daily & pl.col("time").is_between(held.interval.start, held.interval.end, closed="both"))
-        keep = keep & ~((pl.col("series_id") == held.series_id) & inside)
+            daily & pl.col("time").dt.date().is_between(interval.start.date(), interval.end.date(), closed="both")
+        ) | (~daily & pl.col("time").is_between(interval.start, interval.end, closed="both"))
+        keep = keep & ~((pl.col("series_id") == series_id) & inside)
     return rows.filter(keep)
 
 
@@ -1283,7 +1282,9 @@ def drive(
                     )
                 )
                 restored_ids.update(ids)
-                held_rows = _exclude_served_native(held_read.rows, held_series, tuple(served))
+                held_rows = _exclude_native_intervals(
+                    held_read.rows, held_series, tuple((item.series_id, item.interval) for item in served)
+                )
                 rows.append(held_rows)
                 _merge_definitions(definitions, held_series)
                 selected_snapshots = tuple(item for item in manifest.inventories if set(item.members).intersection(ids))
@@ -1616,14 +1617,13 @@ def drive(
                 )
                 if isinstance(fetched, SourceAcquisition):
                     unsupported = tuple(
-                        item.series_id
+                        (item.series_id, RequestedInterval(item.window.start, item.window.end))
                         for item in fetched.outcomes
                         if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
                     )
-                    # Transaction-level contradictions can span individually valid pages.
-                    # Keep their receipts and diagnostics, not ambiguous numeric rows.
-                    if unsupported:
-                        native = native.filter(~pl.col("series_id").is_in(unsupported))
+                    # A contradiction invalidates its bounded transaction, not other
+                    # independently acquired intervals of the same source series.
+                    native = _exclude_native_intervals(native, parsed.series, unsupported)
                 # Coverage/outcome evidence describes the current source page even
                 # when reuse serves held values instead of overlapping partial rows.
                 coverage_native = native
@@ -1665,10 +1665,12 @@ def drive(
                             held_interval=RequestedInterval(failed_start, failed_end),
                         )
                 if restored_held_ids:
-                    native = _exclude_served_native(
+                    native = _exclude_native_intervals(
                         native,
                         parsed.series,
-                        tuple(item for item in served if item.series_id in restored_held_ids),
+                        tuple(
+                            (item.series_id, item.interval) for item in served if item.series_id in restored_held_ids
+                        ),
                     )
                 rows.append(native)
                 identity_scope = pair_scope.model_copy(update={"predicates": ()})
