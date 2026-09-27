@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
+from uuid import uuid4
 
 import polars as pl
 
@@ -175,6 +176,7 @@ def _origin_call(origin: SourceCallOrigin) -> dict[str, object]:
         "content_type": _origin_value(origin.content_type),
         "source_path": _origin_value(origin.source_path),
         "query": _query_value(origin.query),
+        **({"attempts": origin.attempts} if origin.attempts is not None else {}),
     }
 
 
@@ -212,7 +214,7 @@ def _provenance_with_payload_origins(
         for index, payload in enumerate(payloads)
         for call in (
             *({**_secret_call(item), **contexts[index]} for item in payload.prerequisite_calls),
-            {**_origin_call(payload.origin), **contexts[index]},
+            {**_origin_call(payload.origin), **contexts[index], "call_id": uuid4().hex},
         )
     )
     endpoints = tuple(
@@ -1056,6 +1058,63 @@ def _combine_replacements(
     return combined
 
 
+@dataclass(frozen=True, slots=True)
+class _PairRetrieval:
+    """Independent selection, cache proof and source bounds for one station product."""
+
+    station: str
+    product: ProductId
+    scope: SeriesScope
+    series: tuple[SourceSeries, ...]
+    interval: RequestedInterval
+    window: SeriesWindow
+    reuse: _ReusePlan | None
+    fetch_window: FetchWindow | None
+    rendered: tuple[RenderedWindow, ...]
+
+
+def _acquisition_groups(plans: list[_PairRetrieval], provider_id: ProviderId) -> tuple[tuple[_PairRetrieval, ...], ...]:
+    """Share only Lithuania's co-published route with equal engine-established bounds.
+
+    Cache eligibility remains per pair. Other providers retain singleton failure
+    boundaries; sharing their routes requires separate source-specific evidence.
+    """
+    groups: list[list[_PairRetrieval]] = []
+    for plan in plans:
+        if plan.reuse is not None:
+            continue
+        compatible = next(
+            (
+                group
+                for group in groups
+                if provider_id == "lt_lhmt"
+                and group[0].station == plan.station
+                and group[0].fetch_window == plan.fetch_window
+                and group[0].rendered == plan.rendered
+            ),
+            None,
+        )
+        if compatible is None:
+            groups.append([plan])
+        else:
+            compatible.append(plan)
+    return tuple(tuple(group) for group in groups)
+
+
+def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
+    """Retain distinct attempts, including legacy evidence without an attempt ID."""
+    seen: set[str] = set()
+    result = []
+    for call in calls:
+        identity = call.get("call_id")
+        if isinstance(identity, str):
+            if identity in seen:
+                continue
+            seen.add(identity)
+        result.append(call)
+    return tuple(result)
+
+
 def drive(
     request: ObservationRequest,
     provider: ProviderStages,
@@ -1115,6 +1174,7 @@ def drive(
         else provider.window_declarations
     )
     finite_assessments: list[tuple[SeriesScope, SeriesWindow]] = []
+    plans: list[_PairRetrieval] = []
     for station in request.stations:
         for product in request.products:
             pair_scope = _scope_for_pair(scope, str(request.provider_id), station, str(product))
@@ -1147,652 +1207,712 @@ def drive(
             window = SeriesWindow(start=interval.start, end=interval.end)
             finite_assessments.append((pair_scope, window))
             reuse = _reusable_snapshot(manifest, pair_scope, window) if cache == "reuse" and manifest else None
-            if reuse is not None:
-                assert manifest is not None
-                members = reuse.series
-                referenced = {key for item in reuse.inventories for key in item.members}
-                acquired_members = tuple(item for item in manifest.series if item.series_id in referenced)
-                _merge_definitions(definitions, acquired_members)
-                inventories.extend(reuse.inventories)
-                snapshot = reuse.inventories[0]
-                ids = tuple(item.series_id for item in members)
-                matching_facts = tuple(
-                    fact.facts_id for item in members for fact in item.facts if pair_scope.matches_facts(fact)
+            fetch_window = None
+            rendered = ()
+            if reuse is None:
+                if product not in declarations.products:
+                    raise FatalContractError(f"Missing window declaration for {product}")
+                fetch_window = _padded_interval(interval)
+                _require_fetch_window_contains_requested(fetch_window, request.window)
+                rendered = plan_windows(fetch_window, declarations.products[product])
+            plans.append(
+                _PairRetrieval(
+                    station, product, pair_scope, pair_series, interval, window, reuse, fetch_window, rendered
                 )
-                if not ids:
-                    reason = "The retained source inventory contains no matching series"
-                    outcomes.append(
-                        RetrievalOutcome(
-                            outcome_id=stable_id(
-                                snapshot.snapshot_id, pair_scope.model_dump_json(), window.model_dump_json(), "no_match"
-                            ),
-                            series_id=None,
-                            station_id=station,
-                            product_id=str(product),
-                            window=window,
-                            status=OutcomeStatus.NO_MATCH,
-                            reason=reason,
-                        )
-                    )
-                    all_issues.append(
-                        Issue(
-                            severity="warning",
-                            code="source.no_match",
-                            message=reason,
-                            details={"station_id": station, "product_id": str(product)},
-                            provider_id=request.provider_id,
-                        )
-                    )
-                outcomes.extend(
-                    item
-                    for item in manifest.outcomes
-                    if _overlaps(item, interval)
-                    and (
-                        item.series_id in ids
-                        or (item.series_id is None and item.station_id == station and item.product_id == product)
-                    )
-                )
-                all_issues.extend(
-                    issue
-                    for issue in manifest.issues
-                    if _issue_in_scope(
-                        issue,
-                        station,
-                        str(product),
-                        ids,
-                        interval=interval,
-                        outcomes=manifest.outcomes,
-                        resolved_scope=pair_scope,
-                    )
-                )
-                cached_calls.extend(_calls_in_scope(manifest, station, str(product), ids, interval=interval))
-                for key in ids:
-                    served.extend(
-                        replace(item, facts_ids=tuple(fact for fact in item.facts_ids if fact in matching_facts))
-                        for item in served_coverage(manifest.coverage, key, interval)
-                        if set(item.facts_ids).intersection(matching_facts)
-                    )
-                if ids:
-                    assert store is not None
-                    read = StoreReader().query(
-                        StoreQuery(
-                            store,
-                            request.provider_id,
-                            (station,),
-                            (product,),
-                            interval.start,
-                            interval.end,
-                            series_ids=ids,
-                            facts_ids=matching_facts,
-                        )
-                    )
-                    rows.append(read.rows)
-                    if receipts is ReceiptMode.INCLUDE:
-                        receipt_entries.append(encode_store_excerpt(read))
-                continue
-
-            restored_held_ids: set[str] = set()
-
-            def retain_held_successes(
-                target_ids: tuple[str, ...] = (),
-                *,
-                held_scope: SeriesScope = pair_scope,
-                held_interval: RequestedInterval = interval,
-                held_station: str = station,
-                held_product: ProductId = product,
-                restored_ids: set[str] = restored_held_ids,
-            ) -> None:
-                if cache == "bypass" or manifest is None or store is None:
-                    return
-                held_series = tuple(
-                    item
-                    for item in manifest.series
-                    if held_scope.matches(item) and (not target_ids or item.series_id in target_ids)
-                )
-                ids = tuple(item.series_id for item in held_series)
-                fact_ids = tuple(
-                    fact.facts_id for item in held_series for fact in item.facts if held_scope.matches_facts(fact)
-                )
-                coverage = tuple(
-                    replace(item, interval=remaining)
-                    for key in ids
-                    for item in served_coverage(manifest.coverage, key, held_interval)
-                    if set(item.facts_ids).intersection(fact_ids)
-                    for remaining in remainder(
-                        item.interval,
-                        tuple(
-                            previous.interval
-                            for previous in served
-                            if previous.series_id == item.series_id and set(item.facts_ids).issubset(previous.facts_ids)
-                        ),
-                    )
-                )
-                if not coverage:
-                    return
-                held_read = StoreReader().query(
-                    StoreQuery(
-                        store,
-                        request.provider_id,
-                        (held_station,),
-                        (held_product,),
-                        held_interval.start,
-                        held_interval.end,
-                        series_ids=ids,
-                        facts_ids=fact_ids,
-                    )
-                )
-                restored_ids.update(ids)
-                held_rows = _exclude_native_intervals(
-                    held_read.rows, held_series, tuple((item.series_id, item.interval) for item in served)
-                )
-                rows.append(held_rows)
-                _merge_definitions(definitions, held_series)
-                selected_snapshots = tuple(item for item in manifest.inventories if set(item.members).intersection(ids))
-                referenced_ids = {key for item in selected_snapshots for key in item.members}
-                _merge_definitions(
-                    definitions, tuple(item for item in manifest.series if item.series_id in referenced_ids)
-                )
-                inventories[:0] = list(selected_snapshots)
-                for item in manifest.outcomes:
-                    if item.series_id not in ids or not _overlaps(item, held_interval):
-                        continue
-                    held_window = SeriesWindow(
-                        start=max(item.window.start, held_interval.start),
-                        end=min(item.window.end, held_interval.end),
-                    )
-                    outcomes.append(
-                        item.model_copy(
-                            update={
-                                "window": held_window,
-                                "outcome_id": stable_id(item.outcome_id, held_window.model_dump_json()),
-                            }
-                        )
-                    )
-                served.extend(coverage)
-                all_issues.extend(
-                    issue
-                    for issue in manifest.issues
-                    if _issue_in_scope(
-                        issue, held_station, str(held_product), ids, interval=held_interval, outcomes=manifest.outcomes
-                    )
-                )
-                cached_calls.extend(
-                    _calls_in_scope(manifest, held_station, str(held_product), ids, interval=held_interval)
-                )
-                if receipts is ReceiptMode.INCLUDE:
-                    receipt_entries.append(encode_store_excerpt(held_read))
-
-            if product not in declarations.products:
-                raise FatalContractError(f"Missing window declaration for {product}")
-            fetch_window = _padded_interval(interval)
-            _require_fetch_window_contains_requested(fetch_window, request.window)
-            rendered = MappingProxyType({product: plan_windows(fetch_window, declarations.products[product])})
-            try:
-                fetched = provider.fetch(
-                    (station,),
-                    (product,),
-                    rendered,
-                    fetch_window,
-                    config,
-                    _SourceResponseTransport(resolved_transport),
-                    scope=pair_scope,
-                    known_series=pair_series,
-                )
-            except (TransportFailure, CredentialExchangeError) as failure:
-                issue = _source_failure_issue(request.provider_id, station, product, failure, credential_names)
-                all_issues.append(issue)
-                retain_held_successes()
-                known_members = {
-                    key
-                    for snapshot in (*request.inventories, *(manifest.inventories if manifest is not None else ()))
-                    for key in snapshot.members
-                }
-                targets = tuple(
-                    item for item in pair_series if pair_scope.matches(item) and item.series_id in known_members
-                )
-                _merge_definitions(definitions, targets)
-                _merge_definitions(fresh_definitions, targets)
-                for target in targets or (None,):
-                    outcome = RetrievalOutcome(
+            )
+    groups = _acquisition_groups(plans, request.provider_id)
+    group_for_pair = {(plan.station, plan.product): index for index, group in enumerate(groups) for plan in group}
+    acquired: dict[int, WithIssues[tuple[Payload, ...]] | TransportFailure | CredentialExchangeError] = {}
+    payload_indices: dict[tuple[int, int], int] = {}
+    for plan in plans:
+        station, product = plan.station, plan.product
+        pair_scope, pair_series = plan.scope, plan.series
+        interval, window, reuse = plan.interval, plan.window, plan.reuse
+        if reuse is not None:
+            assert manifest is not None
+            members = reuse.series
+            referenced = {key for item in reuse.inventories for key in item.members}
+            acquired_members = tuple(item for item in manifest.series if item.series_id in referenced)
+            _merge_definitions(definitions, acquired_members)
+            inventories.extend(reuse.inventories)
+            snapshot = reuse.inventories[0]
+            ids = tuple(item.series_id for item in members)
+            matching_facts = tuple(
+                fact.facts_id for item in members for fact in item.facts if pair_scope.matches_facts(fact)
+            )
+            if not ids:
+                reason = "The retained source inventory contains no matching series"
+                outcomes.append(
+                    RetrievalOutcome(
                         outcome_id=stable_id(
-                            "failure",
-                            str(request.provider_id),
-                            station,
-                            str(product),
-                            window.model_dump_json(),
-                            str(len(fresh_outcomes)),
-                            provenance.requested_at.isoformat() if provenance.requested_at else None,
+                            snapshot.snapshot_id, pair_scope.model_dump_json(), window.model_dump_json(), "no_match"
                         ),
-                        series_id=target.series_id if target else None,
+                        series_id=None,
                         station_id=station,
                         product_id=str(product),
                         window=window,
-                        status=OutcomeStatus.FAILED,
-                        reason=issue.message,
+                        status=OutcomeStatus.NO_MATCH,
+                        reason=reason,
                     )
-                    outcomes.append(outcome)
-                    fresh_outcomes.append(outcome)
-                continue
-            all_issues.extend(
-                issue.model_copy(
-                    update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}
                 )
-                if issue.code == "source.inventory_unresolved"
-                else issue
-                for issue in fetched.issues
-            )
-            if isinstance(fetched, SourceAcquisition):
-                _merge_definitions(definitions, fetched.series)
-                _merge_definitions(fresh_definitions, fetched.series)
-                inventories.extend(fetched.inventories)
-                fresh_inventories.extend(fetched.inventories)
-                outcomes.extend(fetched.outcomes)
-                fresh_outcomes.extend(fetched.outcomes)
-                # Transaction-level failures are known before any individual page is
-                # assembled. Restore held concrete successes first, so later partial
-                # page rows cannot overlap them. Inventory-only unknown failures do
-                # not override independently successful concrete requests.
-                failed_acquired_ids = tuple(
-                    item.series_id
-                    for item in fetched.outcomes
-                    if item.series_id is not None
-                    and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-                )
-                for failed_outcome in fetched.outcomes:
-                    if failed_outcome.series_id not in failed_acquired_ids or failed_outcome.status not in (
-                        OutcomeStatus.FAILED,
-                        OutcomeStatus.UNSUPPORTED,
-                        OutcomeStatus.UNRESOLVED,
-                    ):
-                        continue
-                    failed_start = max(window.start, failed_outcome.window.start)
-                    failed_end = min(window.end, failed_outcome.window.end)
-                    if failed_start <= failed_end:
-                        retain_held_successes(
-                            (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
-                            held_interval=RequestedInterval(failed_start, failed_end),
-                        )
-                # A fully exhausted source transaction can establish an empty answer
-                # for a known concrete member even when no page contains its rows.
-                for original in fetched.outcomes:
-                    if original.status is not OutcomeStatus.EMPTY:
-                        continue
-                    definition = next((item for item in fetched.series if item.series_id == original.series_id), None)
-                    if definition is None:
-                        raise FatalContractError("Acquired empty outcome lacks a concrete source definition")
-                    established = {fact.facts_id: fact for fact in definition.facts}
-                    if any(key not in established for key in original.facts_ids):
-                        raise FatalContractError("Acquired empty outcome references unknown physical facts")
-                    matching_facts = tuple(
-                        key
-                        for key in original.facts_ids
-                        if pair_scope.matches_facts(established[key])
-                        and admission(established[key]).status == "supported"
-                    )
-                    if not pair_scope.matches(definition) or not matching_facts:
-                        continue
-                    start, end = max(window.start, original.window.start), min(window.end, original.window.end)
-                    if start > end:
-                        continue
-                    empty_outcome = original.model_copy(
-                        update={
-                            "window": SeriesWindow(start=start, end=end),
-                            "facts_ids": matching_facts,
-                            "outcome_id": stable_id(
-                                original.outcome_id, start.isoformat(), end.isoformat(), *matching_facts
-                            ),
-                        }
-                    )
-                    outcomes.append(empty_outcome)
-                    fresh_outcomes.append(empty_outcome)
-                    pending.append(
-                        SuccessfulReplacement(
-                            CoverageInterval(
-                                definition.series_id,
-                                RequestedInterval(start, end),
-                                empty_outcome.retrieved_at,
-                                empty_outcome.outcome_id,
-                                matching_facts,
-                            ),
-                            pl.DataFrame(schema=RowsSchema.polars_schema),
-                            replaced_facts_ids=matching_facts,
-                        )
-                    )
-                cached_calls.extend(
-                    {**_origin_call(origin), "station_products": ((station, str(product)),)} for origin in fetched.calls
-                )
-                for event in fetched.failed_requests:
-                    target = event.series
-                    response = event.failure.response if isinstance(event.failure, TransportFailure) else None
-                    call = {
-                        "call_id": event.event_id,
-                        "station_id": target.station_id,
-                        "product_id": target.product_id,
-                        "series_id": target.series_id,
-                        "url": event.request.url,
-                        "request_parameters": dict(event.request.params or {}),
-                        "status_code": event.failure.status_code,
-                        "retrieved_at": _origin_value(UnknownOriginFact()),
-                        "content_type": _origin_value(UnknownOriginFact()),
-                        "window": event.window.model_dump(mode="json"),
-                        "failure_reason": event.failure.reason.value,
-                        "response_meaning": event.meaning.value,
-                    }
-                    if response is not None:
-                        call.update(
-                            url=response.url,
-                            request_parameters=dict(response.request_parameters),
-                            retrieved_at=response.retrieved_at,
-                            content_type=response.content_type or _origin_value(UnknownOriginFact()),
-                        )
-                        cached_calls.extend(_secret_call(item) for item in response.prerequisite_calls)
-                    cached_calls.append(call)
-                    overlap_start = max(window.start, event.window.start)
-                    overlap_end = min(window.end, event.window.end)
-                    outside = overlap_start > overlap_end
-                    if (
-                        outside
-                        and event.meaning is SourceResponseMeaning.NO_OBSERVATIONS
-                        and isinstance(event.failure, TransportFailure)
-                        and event.failure.reason is TransportFailureReason.HTTP_STATUS
-                        and event.failure.status_code == 404
-                    ):
-                        continue
-                    _merge_definitions(definitions, (target,))
-                    _merge_definitions(fresh_definitions, (target,))
-                    failed_window = event.window if outside else SeriesWindow(start=overlap_start, end=overlap_end)
-                    if not outside:
-                        retain_held_successes(
-                            (target.series_id,),
-                            held_interval=RequestedInterval(overlap_start, overlap_end),
-                        )
-                    issue = _source_failure_issue(
-                        request.provider_id,
-                        target.station_id,
-                        ProductId(target.product_id),
-                        event.failure,
-                        credential_names,
-                    )
-                    issue = issue.model_copy(
-                        update={
-                            "details": {
-                                **(issue.details or {}),
-                                "series_id": target.series_id,
-                                "variant": target.variant,
-                                "window": event.window.model_dump(mode="json"),
-                                "outcome_id": event.event_id,
-                            },
-                            "message": issue.message
-                            + (f" Source variant: {target.variant}." if target.variant is not None else "")
-                            + f" Source interval: {event.window.start.isoformat()}..{event.window.end.isoformat()}.",
-                        }
-                    )
-                    all_issues.append(issue)
-                    outcome = RetrievalOutcome(
-                        outcome_id=event.event_id,
-                        series_id=target.series_id,
-                        station_id=target.station_id,
-                        product_id=target.product_id,
-                        window=failed_window,
-                        status=OutcomeStatus.FAILED,
-                        reason=issue.message,
-                        calls=(event.event_id,),
-                    )
-                    outcomes.append(outcome)
-                    fresh_outcomes.append(outcome)
-            if not fetched.value and not (
-                isinstance(fetched, SourceAcquisition) and (fetched.outcomes or fetched.failed_requests)
-            ):
-                reason = "Source acquisition returned no response; successful coverage is not established"
-                outcome = RetrievalOutcome(
-                    outcome_id=stable_id(
-                        "no-response", station, str(product), window.model_dump_json(), str(provenance.requested_at)
-                    ),
-                    series_id=None,
-                    station_id=station,
-                    product_id=str(product),
-                    window=window,
-                    status=OutcomeStatus.UNRESOLVED,
-                    reason=reason,
-                )
-                outcomes.append(outcome)
-                fresh_outcomes.append(outcome)
                 all_issues.append(
                     Issue(
                         severity="warning",
-                        code="source.inventory_unresolved",
+                        code="source.no_match",
                         message=reason,
                         details={"station_id": station, "product_id": str(product)},
                         provider_id=request.provider_id,
                     )
                 )
-            transaction_parsed: list[ParsedSeries] = []
-            for received in fetched.value:
-                payload = replace(
-                    received, scope=received.scope or pair_scope, known_series=received.known_series or pair_series
+            outcomes.extend(
+                item
+                for item in manifest.outcomes
+                if _overlaps(item, interval)
+                and (
+                    item.series_id in ids
+                    or (item.series_id is None and item.station_id == station and item.product_id == product)
                 )
-                payloads.append(payload)
-                if receipts is ReceiptMode.INCLUDE:
-                    receipt_entries.append(
-                        ReceiptEntry(payload.content, payload.origin, ReceiptAuthorship.PUBLISHER_PAYLOAD)
+            )
+            all_issues.extend(
+                issue
+                for issue in manifest.issues
+                if _issue_in_scope(
+                    issue,
+                    station,
+                    str(product),
+                    ids,
+                    interval=interval,
+                    outcomes=manifest.outcomes,
+                    resolved_scope=pair_scope,
+                )
+            )
+            cached_calls.extend(_calls_in_scope(manifest, station, str(product), ids, interval=interval))
+            for key in ids:
+                served.extend(
+                    replace(item, facts_ids=tuple(fact for fact in item.facts_ids if fact in matching_facts))
+                    for item in served_coverage(manifest.coverage, key, interval)
+                    if set(item.facts_ids).intersection(matching_facts)
+                )
+            if ids:
+                assert store is not None
+                read = StoreReader().query(
+                    StoreQuery(
+                        store,
+                        request.provider_id,
+                        (station,),
+                        (product,),
+                        interval.start,
+                        interval.end,
+                        series_ids=ids,
+                        facts_ids=matching_facts,
                     )
-                parsed = provider.parse(payload, config)
-                if not isinstance(parsed, ParsedSeries):
-                    raise FatalContractError("Provider parse must return ParsedSeries")
-                _validate_parsed_series(parsed)
-                validate_native_rows(parsed.rows, config.products, series=parsed.series)
-                transaction_parsed.append(parsed)
-                source_series_by_payload.append(tuple(item.series_id for item in parsed.series))
-                _merge_definitions(definitions, parsed.series)
-                _merge_definitions(fresh_definitions, parsed.series)
-                acquired_facts = {item.series_id: tuple(fact.facts_id for fact in item.facts) for item in parsed.series}
-                acquired_snapshots = []
-                for original_snapshot in parsed.inventories:
-                    snapshot = original_snapshot.model_copy(
+                )
+                rows.append(read.rows)
+                if receipts is ReceiptMode.INCLUDE:
+                    receipt_entries.append(encode_store_excerpt(read))
+            continue
+
+        restored_held_ids: set[str] = set()
+
+        def retain_held_successes(
+            target_ids: tuple[str, ...] = (),
+            *,
+            held_scope: SeriesScope = pair_scope,
+            held_interval: RequestedInterval = interval,
+            held_station: str = station,
+            held_product: ProductId = product,
+            restored_ids: set[str] = restored_held_ids,
+        ) -> None:
+            if cache == "bypass" or manifest is None or store is None:
+                return
+            held_series = tuple(
+                item
+                for item in manifest.series
+                if held_scope.matches(item) and (not target_ids or item.series_id in target_ids)
+            )
+            ids = tuple(item.series_id for item in held_series)
+            fact_ids = tuple(
+                fact.facts_id for item in held_series for fact in item.facts if held_scope.matches_facts(fact)
+            )
+            coverage = tuple(
+                replace(item, interval=remaining)
+                for key in ids
+                for item in served_coverage(manifest.coverage, key, held_interval)
+                if set(item.facts_ids).intersection(fact_ids)
+                for remaining in remainder(
+                    item.interval,
+                    tuple(
+                        previous.interval
+                        for previous in served
+                        if previous.series_id == item.series_id and set(item.facts_ids).issubset(previous.facts_ids)
+                    ),
+                )
+            )
+            if not coverage:
+                return
+            held_read = StoreReader().query(
+                StoreQuery(
+                    store,
+                    request.provider_id,
+                    (held_station,),
+                    (held_product,),
+                    held_interval.start,
+                    held_interval.end,
+                    series_ids=ids,
+                    facts_ids=fact_ids,
+                )
+            )
+            restored_ids.update(ids)
+            held_rows = _exclude_native_intervals(
+                held_read.rows, held_series, tuple((item.series_id, item.interval) for item in served)
+            )
+            rows.append(held_rows)
+            _merge_definitions(definitions, held_series)
+            selected_snapshots = tuple(item for item in manifest.inventories if set(item.members).intersection(ids))
+            referenced_ids = {key for item in selected_snapshots for key in item.members}
+            _merge_definitions(definitions, tuple(item for item in manifest.series if item.series_id in referenced_ids))
+            inventories[:0] = list(selected_snapshots)
+            for item in manifest.outcomes:
+                if item.series_id not in ids or not _overlaps(item, held_interval):
+                    continue
+                held_window = SeriesWindow(
+                    start=max(item.window.start, held_interval.start),
+                    end=min(item.window.end, held_interval.end),
+                )
+                outcomes.append(
+                    item.model_copy(
                         update={
-                            "member_facts": tuple(
-                                (key, acquired_facts[key]) for key in original_snapshot.members if key in acquired_facts
-                            ),
+                            "window": held_window,
+                            "outcome_id": stable_id(item.outcome_id, held_window.model_dump_json()),
                         }
                     )
-                    acquired_snapshots.append(
-                        snapshot.model_copy(
-                            update={
-                                "snapshot_id": stable_id(
-                                    original_snapshot.snapshot_id, snapshot.model_dump_json(exclude={"snapshot_id"})
-                                ),
-                            }
-                        )
-                    )
-                inventories.extend(acquired_snapshots)
-                fresh_inventories.extend(acquired_snapshots)
-                all_issues.extend(parsed.issues)
-                native = _clip_native(parsed.rows, parsed.series, request.window)
-                selected_ids = {item.series_id for item in parsed.series if pair_scope.matches(item)}
-                selected_facts = {
-                    fact.facts_id for item in parsed.series for fact in item.facts if pair_scope.matches_facts(fact)
-                }
-                native = native.filter(
-                    pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts)
                 )
-                if isinstance(fetched, SourceAcquisition):
-                    unsupported = tuple(
-                        (item.series_id, RequestedInterval(item.window.start, item.window.end))
-                        for item in fetched.outcomes
-                        if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
-                    )
-                    # A contradiction invalidates its bounded transaction, not other
-                    # independently acquired intervals of the same source series.
-                    native = _exclude_native_intervals(native, parsed.series, unsupported)
-                # Coverage/outcome evidence describes the current source page even
-                # when reuse serves held values instead of overlapping partial rows.
-                coverage_native = native
-                failed_ids = {
-                    item.series_id
-                    for item in parsed.outcomes
-                    if item.series_id is not None
-                    and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-                }
-                if isinstance(fetched, SourceAcquisition):
-                    failed_ids.update(
-                        item.series_id
-                        for item in fetched.outcomes
-                        if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
-                    )
-                if (
-                    any(
-                        item.series_id is None
-                        and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-                        for item in parsed.outcomes
-                    )
-                    and manifest is not None
-                ):
-                    failed_ids.update(item.series_id for item in manifest.series if pair_scope.matches(item))
-                for failed_outcome in parsed.outcomes:
-                    if (
-                        failed_outcome.series_id is not None and failed_outcome.series_id not in failed_ids
-                    ) or failed_outcome.status not in (
-                        OutcomeStatus.FAILED,
-                        OutcomeStatus.UNSUPPORTED,
-                        OutcomeStatus.UNRESOLVED,
-                    ):
-                        continue
-                    failed_start = max(window.start, failed_outcome.window.start)
-                    failed_end = min(window.end, failed_outcome.window.end)
-                    if failed_start <= failed_end:
-                        retain_held_successes(
-                            (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
-                            held_interval=RequestedInterval(failed_start, failed_end),
-                        )
-                if restored_held_ids:
-                    native = _exclude_native_intervals(
-                        native,
-                        parsed.series,
-                        tuple(
-                            (item.series_id, item.interval) for item in served if item.series_id in restored_held_ids
-                        ),
-                    )
-                rows.append(native)
-                identity_scope = pair_scope.model_copy(update={"predicates": ()})
-                requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
-                for original in parsed.outcomes:
-                    # Failure facts describe the source limitation, not admitted observations.
-                    # Keep that context without relaxing physical filtering of successful rows.
-                    failed = original.status in (
-                        OutcomeStatus.FAILED,
-                        OutcomeStatus.UNSUPPORTED,
-                        OutcomeStatus.UNRESOLVED,
-                    )
-                    eligible_ids = requested_ids if failed else selected_ids
-                    if original.series_id is not None and original.series_id not in eligible_ids:
-                        continue
-                    matching_outcome_facts = (
-                        original.facts_ids
-                        if failed
-                        else tuple(key for key in original.facts_ids if key in selected_facts)
-                    )
-                    if original.facts_ids and not matching_outcome_facts:
-                        continue
-                    overlap_start = max(window.start, original.window.start)
-                    overlap_end = min(window.end, original.window.end)
-                    if overlap_start > overlap_end:
-                        continue
-                    observed_window = SeriesWindow(start=overlap_start, end=overlap_end)
-                    observed_interval = RequestedInterval(overlap_start, overlap_end)
-                    concrete = (
-                        coverage_native.filter(
-                            (pl.col("series_id") == original.series_id)
-                            & pl.col("facts_id").is_in(original.facts_ids)
-                            & pl.col("time").is_between(overlap_start, overlap_end, closed="both")
-                        )
-                        if original.series_id
-                        else pl.DataFrame(schema=RowsSchema.polars_schema)
-                    )
-                    updates = {
-                        "window": observed_window,
-                        "outcome_id": stable_id(
-                            original.outcome_id, observed_window.model_dump_json(), *matching_outcome_facts
-                        ),
-                        "facts_ids": matching_outcome_facts,
-                    }
-                    if original.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
-                        updates["status"] = OutcomeStatus.EMPTY if concrete.is_empty() else OutcomeStatus.SUCCESS
-                    outcome = original.model_copy(update=updates)
-                    outcomes.append(outcome)
-                    fresh_outcomes.append(outcome)
-                    if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
-                        assert outcome.series_id is not None
-                        pending.append(
-                            SuccessfulReplacement(
-                                CoverageInterval(
-                                    outcome.series_id,
-                                    observed_interval,
-                                    outcome.retrieved_at,
-                                    outcome.outcome_id,
-                                    outcome.facts_ids,
-                                ),
-                                concrete,
-                                replaced_facts_ids=tuple(
-                                    dict.fromkeys(
-                                        fact.facts_id
-                                        for definition in (
-                                            *parsed.series,
-                                            *(manifest.series if manifest is not None else ()),
-                                        )
-                                        if definition.series_id == outcome.series_id
-                                        for fact in definition.facts
-                                        if pair_scope.matches_facts(fact)
-                                    )
-                                ),
-                            )
-                        )
-            if isinstance(fetched, SourceAcquisition):
-                reconciled = _reconcile_acquired_inventories(fetched, tuple(transaction_parsed), pair_scope, window)
-                inventories.extend(reconciled)
-                fresh_inventories.extend(reconciled)
-            pair_definitions = tuple(
-                item
-                for item in definitions.values()
-                if item.station_id == station and item.product_id == product and pair_scope.matches(item)
-            )
-            pair_outcomes = tuple(
-                item for item in outcomes if item.station_id == station and item.product_id == product
-            )
-            if pair_scope.restriction is RestrictionKind.ALL and not pair_definitions and not pair_outcomes:
-                settled = any(_snapshot_matches(item, pair_scope, window) for item in inventories)
-                status = OutcomeStatus.NO_MATCH if settled else OutcomeStatus.UNRESOLVED
-                reason = (
-                    "The acquired source inventory contains no matching series"
-                    if settled
-                    else "The acquired inventory cannot settle the requested source scope"
+            served.extend(coverage)
+            all_issues.extend(
+                issue
+                for issue in manifest.issues
+                if _issue_in_scope(
+                    issue, held_station, str(held_product), ids, interval=held_interval, outcomes=manifest.outcomes
                 )
+            )
+            cached_calls.extend(_calls_in_scope(manifest, held_station, str(held_product), ids, interval=held_interval))
+            if receipts is ReceiptMode.INCLUDE:
+                receipt_entries.append(encode_store_excerpt(held_read))
+
+        group_index = group_for_pair[(station, product)]
+        group = groups[group_index]
+        if group_index not in acquired:
+            fetch_window = group[0].fetch_window
+            assert fetch_window is not None
+            group_scope = pair_scope.model_copy(
+                update={
+                    "product_ids": tuple(item.product for item in group),
+                    "series_ids": tuple(dict.fromkeys(key for item in group for key in item.scope.series_ids)),
+                }
+            )
+            try:
+                acquired[group_index] = provider.fetch(
+                    (station,),
+                    tuple(item.product for item in group),
+                    MappingProxyType({item.product: item.rendered for item in group}),
+                    fetch_window,
+                    config,
+                    _SourceResponseTransport(resolved_transport),
+                    scope=group_scope,
+                    known_series=tuple(series for item in group for series in item.series),
+                )
+            except (TransportFailure, CredentialExchangeError) as failure:
+                acquired[group_index] = failure
+        try:
+            result = acquired[group_index]
+            if isinstance(result, (TransportFailure, CredentialExchangeError)):
+                raise result
+            fetched = result
+        except (TransportFailure, CredentialExchangeError) as failure:
+            issue = _source_failure_issue(request.provider_id, station, product, failure, credential_names)
+            all_issues.append(issue)
+            retain_held_successes()
+            known_members = {
+                key
+                for snapshot in (*request.inventories, *(manifest.inventories if manifest is not None else ()))
+                for key in snapshot.members
+            }
+            targets = tuple(
+                item for item in pair_series if pair_scope.matches(item) and item.series_id in known_members
+            )
+            _merge_definitions(definitions, targets)
+            _merge_definitions(fresh_definitions, targets)
+            for target in targets or (None,):
                 outcome = RetrievalOutcome(
                     outcome_id=stable_id(
+                        "failure",
                         str(request.provider_id),
                         station,
                         str(product),
-                        pair_scope.model_dump_json(),
                         window.model_dump_json(),
-                        str(provenance.requested_at),
+                        str(len(fresh_outcomes)),
+                        provenance.requested_at.isoformat() if provenance.requested_at else None,
                     ),
-                    series_id=None,
+                    series_id=target.series_id if target else None,
                     station_id=station,
                     product_id=str(product),
                     window=window,
-                    status=status,
-                    reason=reason,
+                    status=OutcomeStatus.FAILED,
+                    reason=issue.message,
                 )
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)
-                all_issues.append(
-                    Issue(
-                        severity="warning",
-                        code="source.no_match" if settled else "source.inventory_unresolved",
-                        message=reason,
-                        details={"station_id": station, "product_id": str(product)},
-                        provider_id=request.provider_id,
+            continue
+        all_issues.extend(
+            issue.model_copy(
+                update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}
+            )
+            if issue.code == "source.inventory_unresolved"
+            else issue
+            for issue in fetched.issues
+        )
+        if isinstance(fetched, SourceAcquisition):
+            _merge_definitions(definitions, fetched.series)
+            _merge_definitions(fresh_definitions, fetched.series)
+            inventories.extend(fetched.inventories)
+            fresh_inventories.extend(fetched.inventories)
+            outcomes.extend(fetched.outcomes)
+            fresh_outcomes.extend(fetched.outcomes)
+            # Transaction-level failures are known before any individual page is
+            # assembled. Restore held concrete successes first, so later partial
+            # page rows cannot overlap them. Inventory-only unknown failures do
+            # not override independently successful concrete requests.
+            failed_acquired_ids = tuple(
+                item.series_id
+                for item in fetched.outcomes
+                if item.series_id is not None
+                and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+            )
+            for failed_outcome in fetched.outcomes:
+                if failed_outcome.series_id not in failed_acquired_ids or failed_outcome.status not in (
+                    OutcomeStatus.FAILED,
+                    OutcomeStatus.UNSUPPORTED,
+                    OutcomeStatus.UNRESOLVED,
+                ):
+                    continue
+                failed_start = max(window.start, failed_outcome.window.start)
+                failed_end = min(window.end, failed_outcome.window.end)
+                if failed_start <= failed_end:
+                    retain_held_successes(
+                        (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
+                        held_interval=RequestedInterval(failed_start, failed_end),
+                    )
+            # A fully exhausted source transaction can establish an empty answer
+            # for a known concrete member even when no page contains its rows.
+            for original in fetched.outcomes:
+                if original.status is not OutcomeStatus.EMPTY:
+                    continue
+                definition = next((item for item in fetched.series if item.series_id == original.series_id), None)
+                if definition is None:
+                    raise FatalContractError("Acquired empty outcome lacks a concrete source definition")
+                established = {fact.facts_id: fact for fact in definition.facts}
+                if any(key not in established for key in original.facts_ids):
+                    raise FatalContractError("Acquired empty outcome references unknown physical facts")
+                matching_facts = tuple(
+                    key
+                    for key in original.facts_ids
+                    if pair_scope.matches_facts(established[key]) and admission(established[key]).status == "supported"
+                )
+                if not pair_scope.matches(definition) or not matching_facts:
+                    continue
+                start, end = max(window.start, original.window.start), min(window.end, original.window.end)
+                if start > end:
+                    continue
+                empty_outcome = original.model_copy(
+                    update={
+                        "window": SeriesWindow(start=start, end=end),
+                        "facts_ids": matching_facts,
+                        "outcome_id": stable_id(
+                            original.outcome_id, start.isoformat(), end.isoformat(), *matching_facts
+                        ),
+                    }
+                )
+                outcomes.append(empty_outcome)
+                fresh_outcomes.append(empty_outcome)
+                pending.append(
+                    SuccessfulReplacement(
+                        CoverageInterval(
+                            definition.series_id,
+                            RequestedInterval(start, end),
+                            empty_outcome.retrieved_at,
+                            empty_outcome.outcome_id,
+                            matching_facts,
+                        ),
+                        pl.DataFrame(schema=RowsSchema.polars_schema),
+                        replaced_facts_ids=matching_facts,
                     )
                 )
+            cached_calls.extend(
+                {**_origin_call(origin), "station_products": ((station, str(product)),)} for origin in fetched.calls
+            )
+            for event in fetched.failed_requests:
+                target = event.series
+                if len(group) > 1 and (target.station_id, target.product_id) != (station, product):
+                    continue
+                response = event.failure.response if isinstance(event.failure, TransportFailure) else None
+                call = {
+                    "call_id": event.call_id or event.event_id,
+                    **(
+                        {
+                            "station_id": target.station_id,
+                            "product_id": target.product_id,
+                            "series_id": target.series_id,
+                        }
+                        if sum(
+                            (item.call_id or item.event_id) == (event.call_id or event.event_id)
+                            for item in fetched.failed_requests
+                        )
+                        == 1
+                        else {}
+                    ),
+                    "station_products": tuple(
+                        (item.series.station_id, item.series.product_id)
+                        for item in fetched.failed_requests
+                        if (item.call_id or item.event_id) == (event.call_id or event.event_id)
+                    ),
+                    "series_ids": tuple(
+                        item.series.series_id
+                        for item in fetched.failed_requests
+                        if (item.call_id or item.event_id) == (event.call_id or event.event_id)
+                    ),
+                    "url": event.request.url,
+                    "request_parameters": dict(event.request.params or {}),
+                    "status_code": event.failure.status_code,
+                    "retrieved_at": _origin_value(UnknownOriginFact()),
+                    "content_type": _origin_value(UnknownOriginFact()),
+                    "window": event.window.model_dump(mode="json"),
+                    "failure_reason": event.failure.reason.value,
+                    "attempts": event.failure.attempts,
+                    "response_meaning": event.meaning.value,
+                }
+                if response is not None:
+                    call.update(
+                        url=response.url,
+                        request_parameters=dict(response.request_parameters),
+                        retrieved_at=response.retrieved_at,
+                        content_type=response.content_type or _origin_value(UnknownOriginFact()),
+                    )
+                    cached_calls.extend(_secret_call(item) for item in response.prerequisite_calls)
+                cached_calls.append(call)
+                overlap_start = max(window.start, event.window.start)
+                overlap_end = min(window.end, event.window.end)
+                outside = overlap_start > overlap_end
+                if (
+                    outside
+                    and event.meaning is SourceResponseMeaning.NO_OBSERVATIONS
+                    and isinstance(event.failure, TransportFailure)
+                    and event.failure.reason is TransportFailureReason.HTTP_STATUS
+                    and event.failure.status_code == 404
+                ):
+                    continue
+                _merge_definitions(definitions, (target,))
+                _merge_definitions(fresh_definitions, (target,))
+                failed_window = event.window if outside else SeriesWindow(start=overlap_start, end=overlap_end)
+                if not outside:
+                    retain_held_successes(
+                        (target.series_id,),
+                        held_interval=RequestedInterval(overlap_start, overlap_end),
+                    )
+                issue = _source_failure_issue(
+                    request.provider_id,
+                    target.station_id,
+                    ProductId(target.product_id),
+                    event.failure,
+                    credential_names,
+                )
+                issue = issue.model_copy(
+                    update={
+                        "details": {
+                            **(issue.details or {}),
+                            "series_id": target.series_id,
+                            "variant": target.variant,
+                            "window": event.window.model_dump(mode="json"),
+                            "outcome_id": event.event_id,
+                        },
+                        "message": issue.message
+                        + (f" Source variant: {target.variant}." if target.variant is not None else "")
+                        + f" Source interval: {event.window.start.isoformat()}..{event.window.end.isoformat()}.",
+                    }
+                )
+                all_issues.append(issue)
+                outcome = RetrievalOutcome(
+                    outcome_id=event.event_id,
+                    series_id=target.series_id,
+                    station_id=target.station_id,
+                    product_id=target.product_id,
+                    window=failed_window,
+                    status=OutcomeStatus.FAILED,
+                    reason=issue.message,
+                    calls=(event.call_id or event.event_id,),
+                )
+                outcomes.append(outcome)
+                fresh_outcomes.append(outcome)
+        if not fetched.value and not (
+            isinstance(fetched, SourceAcquisition) and (fetched.outcomes or fetched.failed_requests)
+        ):
+            reason = "Source acquisition returned no response; successful coverage is not established"
+            outcome = RetrievalOutcome(
+                outcome_id=stable_id(
+                    "no-response", station, str(product), window.model_dump_json(), str(provenance.requested_at)
+                ),
+                series_id=None,
+                station_id=station,
+                product_id=str(product),
+                window=window,
+                status=OutcomeStatus.UNRESOLVED,
+                reason=reason,
+            )
+            outcomes.append(outcome)
+            fresh_outcomes.append(outcome)
+            all_issues.append(
+                Issue(
+                    severity="warning",
+                    code="source.inventory_unresolved",
+                    message=reason,
+                    details={"station_id": station, "product_id": str(product)},
+                    provider_id=request.provider_id,
+                )
+            )
+        transaction_parsed: list[ParsedSeries] = []
+        for received_index, received in enumerate(fetched.value):
+            if len(group) > 1:
+                if (station, product) not in received.station_products:
+                    continue
+                payload = replace(
+                    received, station_products=((station, product),), scope=pair_scope, known_series=pair_series
+                )
+            else:
+                payload = replace(
+                    received, scope=received.scope or pair_scope, known_series=received.known_series or pair_series
+                )
+            # Pair-local parsing must not multiply the acquired bytes or call evidence.
+            # Identity is the acquisition and payload position, never URL/content equality.
+            payload_key = (group_index, received_index)
+            if payload_key not in payload_indices:
+                payload_indices[payload_key] = len(payloads)
+                payloads.append(received)
+                source_series_by_payload.append(())
+                if receipts is ReceiptMode.INCLUDE:
+                    receipt_entries.append(
+                        ReceiptEntry(received.content, received.origin, ReceiptAuthorship.PUBLISHER_PAYLOAD)
+                    )
+            payload_index = payload_indices[payload_key]
+            parsed = provider.parse(payload, config)
+            if not isinstance(parsed, ParsedSeries):
+                raise FatalContractError("Provider parse must return ParsedSeries")
+            _validate_parsed_series(parsed)
+            validate_native_rows(parsed.rows, config.products, series=parsed.series)
+            transaction_parsed.append(parsed)
+            source_series_by_payload[payload_index] = tuple(
+                dict.fromkeys((*source_series_by_payload[payload_index], *(item.series_id for item in parsed.series)))
+            )
+            _merge_definitions(definitions, parsed.series)
+            _merge_definitions(fresh_definitions, parsed.series)
+            acquired_facts = {item.series_id: tuple(fact.facts_id for fact in item.facts) for item in parsed.series}
+            acquired_snapshots = []
+            for original_snapshot in parsed.inventories:
+                snapshot = original_snapshot.model_copy(
+                    update={
+                        "member_facts": tuple(
+                            (key, acquired_facts[key]) for key in original_snapshot.members if key in acquired_facts
+                        ),
+                    }
+                )
+                acquired_snapshots.append(
+                    snapshot.model_copy(
+                        update={
+                            "snapshot_id": stable_id(
+                                original_snapshot.snapshot_id, snapshot.model_dump_json(exclude={"snapshot_id"})
+                            ),
+                        }
+                    )
+                )
+            inventories.extend(acquired_snapshots)
+            fresh_inventories.extend(acquired_snapshots)
+            all_issues.extend(parsed.issues)
+            native = _clip_native(parsed.rows, parsed.series, request.window)
+            selected_ids = {item.series_id for item in parsed.series if pair_scope.matches(item)}
+            selected_facts = {
+                fact.facts_id for item in parsed.series for fact in item.facts if pair_scope.matches_facts(fact)
+            }
+            native = native.filter(pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts))
+            if isinstance(fetched, SourceAcquisition):
+                unsupported = tuple(
+                    (item.series_id, RequestedInterval(item.window.start, item.window.end))
+                    for item in fetched.outcomes
+                    if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
+                )
+                # A contradiction invalidates its bounded transaction, not other
+                # independently acquired intervals of the same source series.
+                native = _exclude_native_intervals(native, parsed.series, unsupported)
+            # Coverage/outcome evidence describes the current source page even
+            # when reuse serves held values instead of overlapping partial rows.
+            coverage_native = native
+            failed_ids = {
+                item.series_id
+                for item in parsed.outcomes
+                if item.series_id is not None
+                and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+            }
+            if isinstance(fetched, SourceAcquisition):
+                failed_ids.update(
+                    item.series_id
+                    for item in fetched.outcomes
+                    if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
+                )
+            if (
+                any(
+                    item.series_id is None
+                    and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+                    for item in parsed.outcomes
+                )
+                and manifest is not None
+            ):
+                failed_ids.update(item.series_id for item in manifest.series if pair_scope.matches(item))
+            for failed_outcome in parsed.outcomes:
+                if (
+                    failed_outcome.series_id is not None and failed_outcome.series_id not in failed_ids
+                ) or failed_outcome.status not in (
+                    OutcomeStatus.FAILED,
+                    OutcomeStatus.UNSUPPORTED,
+                    OutcomeStatus.UNRESOLVED,
+                ):
+                    continue
+                failed_start = max(window.start, failed_outcome.window.start)
+                failed_end = min(window.end, failed_outcome.window.end)
+                if failed_start <= failed_end:
+                    retain_held_successes(
+                        (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
+                        held_interval=RequestedInterval(failed_start, failed_end),
+                    )
+            if restored_held_ids:
+                native = _exclude_native_intervals(
+                    native,
+                    parsed.series,
+                    tuple((item.series_id, item.interval) for item in served if item.series_id in restored_held_ids),
+                )
+            rows.append(native)
+            identity_scope = pair_scope.model_copy(update={"predicates": ()})
+            requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
+            for original in parsed.outcomes:
+                # Failure facts describe the source limitation, not admitted observations.
+                # Keep that context without relaxing physical filtering of successful rows.
+                failed = original.status in (
+                    OutcomeStatus.FAILED,
+                    OutcomeStatus.UNSUPPORTED,
+                    OutcomeStatus.UNRESOLVED,
+                )
+                eligible_ids = requested_ids if failed else selected_ids
+                if original.series_id is not None and original.series_id not in eligible_ids:
+                    continue
+                matching_outcome_facts = (
+                    original.facts_ids if failed else tuple(key for key in original.facts_ids if key in selected_facts)
+                )
+                if original.facts_ids and not matching_outcome_facts:
+                    continue
+                overlap_start = max(window.start, original.window.start)
+                overlap_end = min(window.end, original.window.end)
+                if overlap_start > overlap_end:
+                    continue
+                observed_window = SeriesWindow(start=overlap_start, end=overlap_end)
+                observed_interval = RequestedInterval(overlap_start, overlap_end)
+                concrete = (
+                    coverage_native.filter(
+                        (pl.col("series_id") == original.series_id)
+                        & pl.col("facts_id").is_in(original.facts_ids)
+                        & pl.col("time").is_between(overlap_start, overlap_end, closed="both")
+                    )
+                    if original.series_id
+                    else pl.DataFrame(schema=RowsSchema.polars_schema)
+                )
+                updates = {
+                    "window": observed_window,
+                    "outcome_id": stable_id(
+                        original.outcome_id, observed_window.model_dump_json(), *matching_outcome_facts
+                    ),
+                    "facts_ids": matching_outcome_facts,
+                }
+                if original.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                    updates["status"] = OutcomeStatus.EMPTY if concrete.is_empty() else OutcomeStatus.SUCCESS
+                outcome = original.model_copy(update=updates)
+                outcomes.append(outcome)
+                fresh_outcomes.append(outcome)
+                if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                    assert outcome.series_id is not None
+                    pending.append(
+                        SuccessfulReplacement(
+                            CoverageInterval(
+                                outcome.series_id,
+                                observed_interval,
+                                outcome.retrieved_at,
+                                outcome.outcome_id,
+                                outcome.facts_ids,
+                            ),
+                            concrete,
+                            replaced_facts_ids=tuple(
+                                dict.fromkeys(
+                                    fact.facts_id
+                                    for definition in (
+                                        *parsed.series,
+                                        *(manifest.series if manifest is not None else ()),
+                                    )
+                                    if definition.series_id == outcome.series_id
+                                    for fact in definition.facts
+                                    if pair_scope.matches_facts(fact)
+                                )
+                            ),
+                        )
+                    )
+        if isinstance(fetched, SourceAcquisition):
+            reconciled = _reconcile_acquired_inventories(fetched, tuple(transaction_parsed), pair_scope, window)
+            inventories.extend(reconciled)
+            fresh_inventories.extend(reconciled)
+        pair_definitions = tuple(
+            item
+            for item in definitions.values()
+            if item.station_id == station and item.product_id == product and pair_scope.matches(item)
+        )
+        pair_outcomes = tuple(item for item in outcomes if item.station_id == station and item.product_id == product)
+        if pair_scope.restriction is RestrictionKind.ALL and not pair_definitions and not pair_outcomes:
+            settled = any(_snapshot_matches(item, pair_scope, window) for item in inventories)
+            status = OutcomeStatus.NO_MATCH if settled else OutcomeStatus.UNRESOLVED
+            reason = (
+                "The acquired source inventory contains no matching series"
+                if settled
+                else "The acquired inventory cannot settle the requested source scope"
+            )
+            outcome = RetrievalOutcome(
+                outcome_id=stable_id(
+                    str(request.provider_id),
+                    station,
+                    str(product),
+                    pair_scope.model_dump_json(),
+                    window.model_dump_json(),
+                    str(provenance.requested_at),
+                ),
+                series_id=None,
+                station_id=station,
+                product_id=str(product),
+                window=window,
+                status=status,
+                reason=reason,
+            )
+            outcomes.append(outcome)
+            fresh_outcomes.append(outcome)
+            all_issues.append(
+                Issue(
+                    severity="warning",
+                    code="source.no_match" if settled else "source.inventory_unresolved",
+                    message=reason,
+                    details={"station_id": station, "product_id": str(product)},
+                    provider_id=request.provider_id,
+                )
+            )
     fresh_outcomes.extend(
         _finite_selector_assessments(
             request.provider_id, finite_assessments, definitions, inventories, outcomes, all_issues
@@ -1808,7 +1928,10 @@ def drive(
     )
     if cached_calls or served:
         enriched = enriched.model_copy(
-            update={"calls_made": tuple(cached_calls) + enriched.calls_made, "served_intervals": tuple(served)}
+            update={
+                "calls_made": _unique_calls(tuple(cached_calls) + enriched.calls_made),
+                "served_intervals": tuple(served),
+            }
         )
     if cache != "bypass" and (fresh_outcomes or fresh_inventories or fresh_definitions):
         assert store is not None

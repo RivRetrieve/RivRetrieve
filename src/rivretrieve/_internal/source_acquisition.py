@@ -1,7 +1,7 @@
 """Bounded concrete-series source-call attempts without provider failure policy."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from uuid import uuid4
 
@@ -50,6 +50,8 @@ class FailedSourceRequest:
     request: TransportRequest
     failure: TransportFailure | CredentialExchangeError
     meaning: SourceResponseMeaning = SourceResponseMeaning.UNSPECIFIED
+    # Series events may share one physical request without sharing outcome identity.
+    call_id: str | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         if not isinstance(self.meaning, SourceResponseMeaning):

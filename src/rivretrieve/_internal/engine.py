@@ -282,8 +282,12 @@ class SourceCallOrigin:
     content_type: str | UnknownOriginFact
     source_path: str | UnknownOriginFact
     query: SourceQuery | UnknownOriginFact
+    # Transport may retain a retry count without retaining each intermediate response.
+    attempts: int | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if self.attempts is not None and (type(self.attempts) is not int or self.attempts < 1):
+            raise TypeError("source-call attempts must be a positive integer when known")
         for name in ("url", "content_type", "source_path"):
             value = getattr(self, name)
             if not isinstance(value, UnknownOriginFact) and (not isinstance(value, str) or not value):
