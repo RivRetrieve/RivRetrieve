@@ -13,6 +13,8 @@ from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.test_source_field_boundaries import DATA, AlteredResponseTransport
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 def test_daily_nonmidnight_label_preserves_valid_daily_max(monkeypatch, tmp_path, policy):

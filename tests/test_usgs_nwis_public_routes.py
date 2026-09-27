@@ -12,6 +12,8 @@ import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.providers.usgs_nwis.config import config
 from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 ROUTES = {
     "discharge_daily_mean": ("daily-07374000-discharge-mean", "discharge", "mean", 0.028316846592),
     "discharge_instantaneous": ("continuous-07374000-2010-discharge", "discharge", "instantaneous", 0.028316846592),

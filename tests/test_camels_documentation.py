@@ -5,10 +5,13 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
 from tests.test_documentation_examples import blocks, execute_block
 from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
+
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = "docs/examples/camels-us.md"

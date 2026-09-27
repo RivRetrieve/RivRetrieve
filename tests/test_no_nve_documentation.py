@@ -5,9 +5,13 @@ import re
 from contextlib import redirect_stdout
 from pathlib import Path
 
+import pytest
+
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport
+
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "docs/verification/norway-provider"

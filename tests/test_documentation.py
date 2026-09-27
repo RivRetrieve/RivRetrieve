@@ -6,6 +6,7 @@ import runpy
 from pathlib import Path
 
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
@@ -17,6 +18,7 @@ def python_blocks(path: Path) -> list[str]:
     return re.findall(r"```python\n(.*?)```", path.read_text(), re.DOTALL)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_camels_example_selects_documented_gauges_without_network(monkeypatch, capsys):
     def refuse_network(*args, **kwargs):
         raise AssertionError("Offline selection must not retrieve observations")

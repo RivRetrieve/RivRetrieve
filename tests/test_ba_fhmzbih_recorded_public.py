@@ -23,6 +23,8 @@ from rivretrieve._internal.boundary_probes import (
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 DATA = Path(__file__).parent / "test_data"
 
 

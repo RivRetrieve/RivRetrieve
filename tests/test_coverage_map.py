@@ -26,6 +26,7 @@ def test_draw_needs_only_station_identity_not_unestablished_coordinates(tmp_path
     assert output.read_bytes().startswith(b"\x89PNG")
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_catalogue_counts_match_readme_and_observation_capabilities():
     import re
 
