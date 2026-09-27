@@ -16,6 +16,31 @@ expensive checks in an opt-in suite, adding skips, or weakening assertions. No f
 or test-count target has been agreed. Demonstrate substantial measured improvement and explain
 remaining costs rather than optimizing toward an arbitrary number.
 
+## Parallel work and coordination
+
+Other agents and contributors are actively working in this repository. The implementing
+agent is not alone: provider behavior, documentation, tests, and `main` may change during
+this effort. Do not assume the initial checkout, file inventory, or baseline remains current.
+
+- Use a dedicated branch and isolated worktree below the repository's `.worktrees/` directory
+  for implementation and long-running measurements. Do not switch branches in the shared
+  root checkout. During discovery publication, another session switched that checkout while
+  work was in progress; isolation is necessary, not hypothetical.
+- Inspect current open PRs, branches, worktrees, and reachable agent activity before assigning
+  ownership. Coordinate overlapping files and guarantees before editing them. Refresh this
+  evidence before integration rather than treating a starting snapshot as permanent ownership.
+- Preserve other contributors' uncommitted, unpushed, and incomplete work. Do not reset, clean,
+  remove, or overwrite their changes or worktrees. Apparent duplication may be part of an
+  active behavior change; understand it before deleting or consolidating tests.
+- Give delegated workers clear ownership and the same parallel-work warning. Use separate
+  worktrees for concurrent editing where shared files or checkout state could interfere.
+- Record the exact revision and relevant execution conditions for each timing run. Coordinate
+  expensive runs when possible; concurrent CPU or disk load can distort comparisons even in
+  separate worktrees. Do not attribute another change or resource contention to this cleanup.
+- Fetch current `main` before integration, reconcile concurrent changes without dropping their
+  guarantees, and validate the combined result. The final whole-suite review must account for
+  relevant tests added or changed while this work was underway.
+
 ## Evidence from discovery
 
 The initial local run collected 4,640 cases and finished in 4,198.75 seconds (69m 59s):
