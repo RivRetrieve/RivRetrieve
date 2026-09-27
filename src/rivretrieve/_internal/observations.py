@@ -107,7 +107,8 @@ class ObservationProvenance(BaseModel):
         A failed request for one series and interval also appears, with its
         ``window``, ``failure_reason`` and ``response_meaning``, such as
         ``no_observations`` when the provider declares that the response means
-        no stored observations for that interval.
+        no stored observations for that interval. Rows served from the cache
+        bring the calls of the earlier retrievals that produced them.
     time_windows : tuple[dict[str, object], ...]
         Additional window metadata. The current engine leaves this tuple empty.
     decomposition : tuple[str, ...]
@@ -304,8 +305,12 @@ class ObservationResult(BaseModel):
         has no concrete series identity, over the interval in its ``window``.
         A series can have several outcomes, for example ``empty``, ``success``
         and ``failed`` for different months. Outcomes remain present even when
-        a series returned no rows. A padding-only part that the provider
-        declares has no stored observations produces no outcome.
+        a series returned no rows. When cached rows are returned after a failed
+        retrieval, the cached ``success`` outcome and the new ``failed`` outcome
+        can cover the same interval. Parts requested only as padding outside
+        the requested dates produce an outcome only when their source request
+        fails, and a padding-only HTTP 404 that the provider declares to mean
+        no stored observations produces none.
     scope : SeriesScope
         The filters and restrictions of the original request.
     view_scope : SeriesScope or None
