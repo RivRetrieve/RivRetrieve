@@ -39,6 +39,7 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     TEMPERATURE_CRS_EVIDENCE_URL,
     TEMPERATURE_STATION_CATALOGUE_ORIGINS,
 )
+from tests._catalogue_projection import copy_catalogue_projection
 
 _TEST_DATA_DIR = Path(__file__).parent / "test_data"
 _HYDRO_FIXTURE = _TEST_DATA_DIR / "fr_hubeau_metadata.json"
@@ -96,8 +97,15 @@ def _assert_issue(result: object, message: str) -> None:
     assert result.value.data.height == 0
 
 
-def _catalogue():
-    return build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS, _availability())
+@pytest.fixture(scope="module")
+def _pristine_projection():
+    built = build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS, _availability())
+    return copy_catalogue_projection(built)
+
+
+@pytest.fixture
+def catalogue(_pristine_projection):
+    return copy_catalogue_projection(_pristine_projection)
 
 
 @pytest.mark.parametrize(
@@ -154,40 +162,40 @@ def test_native_build_rejects_unattested_partition_changes(
     assert str(raised.value) == "Hub’Eau native content does not match its acquisition identity"
 
 
-def test_generate_catalogue_station_count() -> None:
-    assert _catalogue().stations.height == 7323
+def test_generate_catalogue_station_count(catalogue) -> None:
+    assert catalogue.stations.height == 7323
 
 
-def test_generate_catalogue_product_count() -> None:
-    cat = _catalogue()
+def test_generate_catalogue_product_count(catalogue) -> None:
+    cat = catalogue
     assert cat.products.height == 4
 
 
-def test_generate_catalogue_station_products_cross() -> None:
-    cat = _catalogue()
+def test_generate_catalogue_station_products_cross(catalogue) -> None:
+    cat = catalogue
     assert cat.station_products.height == 20231
 
 
-def test_generate_catalogue_hydro_station_fields() -> None:
-    cat = _catalogue()
+def test_generate_catalogue_hydro_station_fields(catalogue) -> None:
+    cat = catalogue
     station = cat.stations.filter(pl.col("station_id") == "1011000101")
     assert station.height == 1
     assert station["crs"][0] == "EPSG:4326"
 
 
-def test_generate_catalogue_temp_station_fields() -> None:
-    cat = _catalogue()
+def test_generate_catalogue_temp_station_fields(catalogue) -> None:
+    cat = catalogue
     station = cat.stations.filter(pl.col("station_id") == "01001336")
     assert station.height == 1
     assert station["crs"][0] == "EPSG:4326"
 
 
-def test_generate_catalogue_filters_no_stations() -> None:
-    assert _catalogue().stations.height == read_native_table(NATIVE_PATH).data.height
+def test_generate_catalogue_filters_no_stations(catalogue) -> None:
+    assert catalogue.stations.height == read_native_table(NATIVE_PATH).data.height
 
 
-def test_generate_catalogue_hydro_station_products() -> None:
-    cat = _catalogue()
+def test_generate_catalogue_hydro_station_products(catalogue) -> None:
+    cat = catalogue
     hydro_sp = cat.station_products.filter(pl.col("station_id") == "1011000101")
     hydro_products = set(hydro_sp["product_id"].to_list())
     assert hydro_products == {
@@ -197,8 +205,8 @@ def test_generate_catalogue_hydro_station_products() -> None:
     }
 
 
-def test_generate_catalogue_temp_station_products() -> None:
-    cat = _catalogue()
+def test_generate_catalogue_temp_station_products(catalogue) -> None:
+    cat = catalogue
     temp_sp = cat.station_products.filter(pl.col("station_id") == "01001336")
     assert temp_sp["product_id"].to_list() == ["water_temperature_reported"]
 
@@ -292,9 +300,9 @@ def test_code_31_correction_checks_each_inclusive_bound(
     )
 
 
-def test_only_code_31_coordinates_are_transposed() -> None:
+def test_only_code_31_coordinates_are_transposed(catalogue) -> None:
     native = read_native_table(NATIVE_PATH).data
-    stations = _catalogue().stations
+    stations = catalogue.stations
     code_31 = native.filter(pl.col("code_projection") == 31)
     assert code_31.height == 54
     corrected = stations.join(
@@ -393,7 +401,7 @@ def test_only_code_31_coordinates_are_transposed() -> None:
     assert old_orientation["longitude_station"].max() == 49.9048593
 
 
-def test_code_26_changed_ids_pass_through_exactly() -> None:
+def test_code_26_changed_ids_pass_through_exactly(catalogue) -> None:
     ids = [
         "F462000701",
         "K040301001",
@@ -424,7 +432,7 @@ def test_code_26_changed_ids_pass_through_exactly() -> None:
         )
         .sort("station_id")
     )
-    actual = _catalogue().stations.filter(pl.col("station_id").is_in(ids)).sort("station_id")
+    actual = catalogue.stations.filter(pl.col("station_id").is_in(ids)).sort("station_id")
     pl_testing.assert_frame_equal(actual, expected, check_exact=True)
 
 

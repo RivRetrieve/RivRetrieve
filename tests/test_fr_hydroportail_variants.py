@@ -1,6 +1,7 @@
 """Public HydroPortail selector contracts; authored protocol controls are synthetic."""
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -9,8 +10,13 @@ from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
+from rivretrieve._internal.engine import SourceCoordinates
 from rivretrieve._internal.observations import ReceiptAuthorship
+from rivretrieve._internal.providers.fr_hydroportail.config import config
+from rivretrieve._internal.providers.fr_hydroportail.parse import parse
+from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
+from tests._recorded_payload import recorded_payload
 
 VARIANTS = {"raw", "validated", "pre_validated_and_validated", "most_valid"}
 
@@ -152,21 +158,57 @@ def test_null_absent_empty_and_failed_variants_remain_distinct(monkeypatch, tmp_
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
 @pytest.mark.parametrize("variant", sorted(VARIANTS))
 @pytest.mark.parametrize("field", ["code", "metric", "unit", "statuses", "timezone", "title"])
-def test_empty_variant_checks_envelope_identity(monkeypatch, tmp_path, quantity, variant, field):
-    def mutate(body):
-        if field == "timezone":
-            body[field] = "Europe/Paris"
-        else:
-            body["series"][field] = "unexpected"
+def test_empty_variant_parser_checks_envelope_identity(quantity, variant, field):
+    metric = "Q" if quantity == "discharge" else "H"
+    recording = read_recording(
+        Path(__file__).parent
+        / "test_data/fr_hydroportail_variants"
+        / f"Y251002001_{metric}_padded_{variant}.recording.json"
+    )
+    payload = recorded_payload(
+        recording, "Y251002001", f"{quantity}_instantaneous", config(), "2019-12-30", "2020-01-04"
+    )
+    payload = replace(
+        payload,
+        source_coordinates=SourceCoordinates(replace(payload.source_coordinates.value, variant=variant)),
+    )
+    document = json.loads(payload.content)
+    document["series"]["data"] = []
+    if field == "timezone":
+        document[field] = "Europe/Paris"
+    else:
+        document["series"][field] = "unexpected"
+    result = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert result.rows.is_empty()
+    assert result.issues
+    assert len(result.outcomes) == 1
+    outcome = result.outcomes[0]
+    assert outcome.status == "unsupported" and outcome.reason
+    assert outcome.station_id == "Y251002001"
+    assert outcome.product_id == f"{quantity}_instantaneous"
+    assert outcome.series_id == result.series[0].series_id
+    assert result.series[0].variant == variant
+
+
+@pytest.mark.parametrize("quantity", ["discharge", "stage"])
+def test_public_empty_variant_failure_keeps_identity_receipt_and_no_coverage(monkeypatch, tmp_path, quantity):
+    def mutate(document):
+        document["series"]["statuses"] = "unexpected"
 
     transport = SyntheticVariantTransport(empty=VARIANTS, mutation=mutate)
     install(monkeypatch, tmp_path, transport)
-    result = retrieve(rr.pick(public_selection(quantity), variant=variant))
-    assert transport.calls == [variant]
+    selection = rr.pick(public_selection(quantity), variant="validated")
+    result = retrieve(selection, cache="reuse")
+    assert transport.calls == ["validated"]
     assert result.data.is_empty()
     assert result.issues
     assert any(outcome.status == "unsupported" and outcome.reason for outcome in result.outcomes)
     assert not any(outcome.status in {"empty", "success"} for outcome in result.outcomes)
+    assert result.outcomes[0].series_id == selection.series[0].series_id
+    assert result.receipts.entries[0].content == transport.contents["validated"]
+    assert rr.cache_status("fr_hydroportail").coverage == ()
+    retrieve(selection, cache="reuse")
+    assert transport.calls == ["validated", "validated"]
 
 
 def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(monkeypatch, tmp_path):
