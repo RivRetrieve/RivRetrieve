@@ -494,7 +494,11 @@ class RequestedSelector(BaseModel):
 
 
 class RetrievalOutcome(BaseModel):
-    """Retrieval status for a source series or an unresolved requested selector.
+    """Retrieval status for one source series over the interval in ``window``.
+
+    An outcome can instead describe a requested station, access route or
+    selector that has no concrete series identity. A series can have several
+    outcomes for different intervals or fact segments.
 
     ``series_id`` can be absent when no concrete identity is established.
     ``requested_selector`` preserves the caller restriction without inventing

@@ -34,6 +34,24 @@ Preserve source facts, vocabulary, and unknowns. Do not infer source judgement, 
 
 Raise on fatal internal contract errors; caller issue policy must not hide invalid stage output. Retain supported source failures as issues at the established isolation boundaries so independent series can still return results. Preserve the failure's identity and reason alongside those results. Do not silently log and continue or replace this partial-result model with a blanket crash rule.
 
+## Public API docstrings
+
+Use NumPy-style docstrings where public interfaces need explanation.
+Apply this rule to public functions and user-facing returned types, methods,
+and attributes, including those implemented under `_internal`.
+
+Use judgement. If the name and signature fully explain an interface, no
+docstring or prose summary is required. Do not add text or sections solely
+for coverage or repeat information already clear from the signature.
+
+Document what readers need to use and interpret the interface correctly:
+non-obvious constraints, units, return contents, side effects, and failure
+behavior. Include only applicable sections. A one-line summary is enough
+when no further explanation is needed. Add examples when they clarify use.
+
+All docstring prose must follow `docs/AGENTS.md`. Keep documentation accurate
+when changing an interface.
+
 ## Complex-data assertions
 
 Prefer library-specific assertions over manual element-by-element checks of structure or values:
