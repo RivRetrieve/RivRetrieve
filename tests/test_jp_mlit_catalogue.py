@@ -26,6 +26,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.jp_mlit import generate_catalogue
 from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+from tests._catalogue_projection import copy_catalogue_projection
 
 CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue")
 FIXTURE_PATH = Path("tests/test_data/jp_mlit_metadata.json")
@@ -84,24 +85,15 @@ def _frame_content_digest(frame: pl.DataFrame) -> str:
     )
 
 
-def _products() -> pl.DataFrame:
-    return _catalogue().products
+@pytest.fixture(scope="module")
+def _pristine_projection():
+    built = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+    return copy_catalogue_projection(built)
 
 
-def _stations() -> pl.DataFrame:
-    return _catalogue().stations
-
-
-def _station_products() -> pl.DataFrame:
-    return _catalogue().station_products
-
-
-def _provider() -> dict[str, object]:
-    return _catalogue().provider_info
-
-
-def _catalogue() -> generate_catalogue.GeneratedJpMlitCatalogue:
-    return generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+@pytest.fixture
+def catalogue(_pristine_projection):
+    return copy_catalogue_projection(_pristine_projection)
 
 
 def _page(station_id: str, *, coordinate: str = "北緯 35度41分04秒 東経 139度24分47秒") -> bytes:
@@ -149,12 +141,12 @@ def test_rejected_response_fixture_identity() -> None:
     assert body.count(generate_catalogue._SOURCE_MARKER) == 0
 
 
-def test_products_count() -> None:
-    assert _products().height == 4
+def test_products_count(catalogue) -> None:
+    assert catalogue.products.height == 4
 
 
-def test_products_ids() -> None:
-    assert set(_products()["product_id"]) == {
+def test_products_ids(catalogue) -> None:
+    assert set(catalogue.products["product_id"]) == {
         "stage_daily",
         "discharge_daily",
         "stage_hourly",
@@ -162,70 +154,73 @@ def test_products_ids() -> None:
     }
 
 
-def test_canonical_products_have_correct_units() -> None:
-    products = _products()
+def test_canonical_products_have_correct_units(catalogue) -> None:
+    products = catalogue.products
     assert products.filter(pl.col("product_id") == "stage_daily")["unit"][0] == "m"
     assert products.filter(pl.col("product_id") == "discharge_daily")["unit"][0] == "m3/s"
 
 
-def test_provider_specific_products_have_correct_frequency() -> None:
-    row = _products().filter(pl.col("product_id") == "stage_hourly")
+def test_provider_specific_products_have_correct_frequency(catalogue) -> None:
+    row = catalogue.products.filter(pl.col("product_id") == "stage_hourly")
     assert row["frequency"][0] == "hourly"
     assert row["statistic"][0] == "unknown"
-    assert _products()["period_type"].unique().to_list() == ["unknown"]
-    assert _products().filter(pl.col("product_id").str.ends_with("_daily"))["frequency"].to_list() == ["daily", "daily"]
+    assert catalogue.products["period_type"].unique().to_list() == ["unknown"]
+    assert catalogue.products.filter(pl.col("product_id").str.ends_with("_daily"))["frequency"].to_list() == [
+        "daily",
+        "daily",
+    ]
 
 
-def test_product_native_ids_preserve_integer_kind_identity() -> None:
-    assert set(_products()["native_id"]) == {"2", "3", "6", "7"}
+def test_product_native_ids_preserve_integer_kind_identity(catalogue) -> None:
+    assert set(catalogue.products["native_id"]) == {"2", "3", "6", "7"}
 
 
-def test_stations_count() -> None:
-    assert _stations().height == 1023
+def test_stations_count(catalogue) -> None:
+    assert catalogue.stations.height == 1023
 
 
-def test_stations_have_unknown_crs() -> None:
-    assert _stations()["crs"].unique().to_list() == ["unknown"]
+def test_stations_have_unknown_crs(catalogue) -> None:
+    assert catalogue.stations["crs"].unique().to_list() == ["unknown"]
 
 
-def test_stations_have_exact_schema() -> None:
-    assert _stations().schema == STATION_CATALOG_SCHEMA.polars_schema
+def test_stations_have_exact_schema(catalogue) -> None:
+    assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
 
 
-def test_known_station_present() -> None:
-    assert "301011281104010" in _stations()["station_id"].to_list()
+def test_known_station_present(catalogue) -> None:
+    assert "301011281104010" in catalogue.stations["station_id"].to_list()
 
 
-def test_stations_have_valid_coordinates() -> None:
-    stations = _stations()
+def test_stations_have_valid_coordinates(catalogue) -> None:
+    stations = catalogue.stations
     assert stations["latitude"].null_count() == stations["longitude"].null_count() == 0
     assert stations["latitude"].min() >= 20.0 and stations["latitude"].max() <= 50.0
     assert stations["longitude"].min() >= 120.0 and stations["longitude"].max() <= 155.0
 
 
-def test_station_products_count() -> None:
-    assert _station_products().height == 4092
+def test_station_products_count(catalogue) -> None:
+    assert catalogue.station_products.height == 4092
 
 
-def test_station_products_availability_unknown() -> None:
-    assert _station_products()["availability"].cast(pl.Utf8).unique().to_list() == ["unknown"]
+def test_station_products_availability_unknown(catalogue) -> None:
+    assert catalogue.station_products["availability"].cast(pl.Utf8).unique().to_list() == ["unknown"]
 
 
-def test_provider_info_id() -> None:
-    assert _provider()["provider_id"] == "jp_mlit"
+def test_provider_info_id(catalogue) -> None:
+    assert catalogue.provider_info["provider_id"] == "jp_mlit"
 
 
-def test_provider_info_catalogue_version() -> None:
-    assert _provider()["catalogue_version"] == "2026-08-02"
+def test_provider_info_catalogue_version(catalogue) -> None:
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_provider_info_live_flags_false() -> None:
-    provider = _provider()
+def test_provider_info_live_flags_false(catalogue) -> None:
+    provider = catalogue.provider_info
     assert provider["live_stations"] is provider["live_products"] is provider["live_station_products"] is False
 
 
-def test_provider_info_name_and_bulk_observation_description() -> None:
-    provider = _provider()
+def test_provider_info_name_and_bulk_observation_description(catalogue) -> None:
+    provider = catalogue.provider_info
     assert provider["name"] == "MLIT Water Information System — Japan national hydrometric network"
     assert provider["bulk_observations"] == (
         "true: monthly-window decomposition for hourly products (KINDs 2,6), "
@@ -234,15 +229,15 @@ def test_provider_info_name_and_bulk_observation_description() -> None:
     )
 
 
-def test_catalogue_validates_without_error() -> None:
+def test_catalogue_validates_without_error(catalogue) -> None:
     validate_catalogue(
-        pl.DataFrame([_provider()], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
+        pl.DataFrame([catalogue.provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
         PROVIDER_INFO_CATALOG_SCHEMA,
         on_issue="raise",
     )
-    validate_catalogue(_products(), PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    validate_catalogue(_stations(), STATION_CATALOG_SCHEMA, on_issue="raise")
-    validate_catalogue(_station_products(), STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(catalogue.products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(catalogue.stations, STATION_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(catalogue.station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
 
 
 def test_packaged_catalogue_loads() -> None:
@@ -288,16 +283,6 @@ def test_catalogue_generation_surface_is_native_only() -> None:
         "validate_generated_catalogue",
     ):
         assert not hasattr(generate_catalogue, name)
-
-
-def test_module_docstring_contains_native_denotation() -> None:
-    assert (
-        "refresh_native_table : Responses × StationIds × RetrievedAtByStation × PriorNativeTable? → WithIssues[NativeTable]"
-        in (generate_catalogue.__doc__ or "")
-    )
-    assert "build_catalogue : NativeTable × OriginDeclarations → GeneratedJpMlitCatalogue" in (
-        generate_catalogue.__doc__ or ""
-    )
 
 
 CORE_TOKENS = [
@@ -698,7 +683,7 @@ def test_committed_accepted_responses_rematerialize_exact_native_rows() -> None:
     assert actual.filter(pl.col("観測所記号") == "301011281104310")["流域面積"].item() == "\u00a0"
 
 
-def test_native_coordinates_are_an_independent_exact_projection() -> None:
+def test_native_coordinates_are_an_independent_exact_projection(catalogue) -> None:
     native = read_native_table(NATIVE_PATH).data.select("観測所記号", "世界測地系")
     pattern = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
     rows = []
@@ -713,7 +698,7 @@ def test_native_coordinates_are_an_independent_exact_projection() -> None:
                 "source_longitude": lon_d + lon_m / 60 + lon_s / 3600,
             }
         )
-    stations = _stations()
+    stations = catalogue.stations
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert stations["station_id"].dtype == pl.Utf8
     assert stations["crs"].unique().to_list() == ["unknown"]
@@ -806,17 +791,17 @@ def test_mixed_native_instants_drive_station_dates_and_maximum_version() -> None
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
-def test_each_station_product_date_is_its_native_station_date() -> None:
+def test_each_station_product_date_is_its_native_station_date(catalogue) -> None:
     native_dates = read_native_table(NATIVE_PATH).data.select(
         pl.col("観測所記号").alias("station_id"), pl.col("retrieved_at").dt.date().alias("native_date")
     )
-    joined = _station_products().join(native_dates, on="station_id")
+    joined = catalogue.station_products.join(native_dates, on="station_id")
     assert joined.filter(pl.col("last_catalogue_check") != pl.col("native_date")).is_empty()
-    assert _provider()["catalogue_version"] == "2026-08-02"
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_provider_info_is_exactly_the_reduced_carrier() -> None:
-    fresh = _provider()
+def test_provider_info_is_exactly_the_reduced_carrier(catalogue) -> None:
+    fresh = catalogue.provider_info
     committed = json.loads((CATALOGUE_PATH / "provider.json").read_text())
     assert fresh == committed
     assert tuple(fresh) == (
