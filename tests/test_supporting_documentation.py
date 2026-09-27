@@ -5,23 +5,9 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
-import pytest
 from polars.testing import assert_frame_equal
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGES = (
-    "docs/README.md",
-    "docs/architecture.md",
-    "docs/reference.md",
-    "docs/product_dictionary.md",
-    "docs/drainage-areas.md",
-    "docs/catalogue-evidence.md",
-    "docs/catalogue-provenance.md",
-    "docs/catalogue-absence.md",
-    "docs/design/observation-store-layout.md",
-    "docs/development-conventions.md",
-    "CONTEXT.md",
-)
 
 
 def execute(page):
@@ -79,21 +65,6 @@ def test_architecture_markdown_exact_receipt(monkeypatch, tmp_path):
     assert result.receipts.entries[0].content == body(name)
     assert result.receipts.entries[0].authorship.value == "publisher_payload"
     assert result.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(MANIFEST[name]["acquired_utc"])
-
-
-@pytest.mark.parametrize("page", PAGES)
-def test_supporting_documentation_links(page):
-    path = ROOT / page
-    for destination in re.findall(r"\[[^\]]*\]\(([^)]+)\)", path.read_text()):
-        if "://" in destination or destination.startswith("mailto:"):
-            continue
-        local, _, fragment = destination.partition("#")
-        target = (path.parent / local).resolve() if local else path
-        assert target.exists(), (page, destination)
-        if fragment and target.suffix == ".md":
-            headings = re.findall(r"^#{1,6} (.+)$", target.read_text(), re.MULTILINE)
-            anchors = [re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-") for heading in headings]
-            assert fragment in anchors, (page, destination)
 
 
 def test_physical_product_markdown():

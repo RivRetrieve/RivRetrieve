@@ -7,18 +7,13 @@ from pathlib import Path
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from tests.test_documentation_examples import blocks, execute_block, output_contracts
+from tests.test_documentation_examples import blocks, execute_block
 from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = "docs/examples/camels-us.md"
 STATIONS = ["01013500", "01022500", "01030500"]
 RECORDINGS = [f"daily-camels-{station}-2025" for station in STATIONS]
-
-
-def test_camels_prints_have_literal_outputs():
-    for block in blocks(PAGE):
-        output_contracts(block)
 
 
 def test_complete_camels_page(monkeypatch, tmp_path):

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-from importlib.metadata import version
 from pathlib import Path
+
+from tests._distribution import InstalledDistribution
 
 _CANONICAL_CATALOGUE_FILES = {
     "format.json",
@@ -42,31 +41,8 @@ _PROVENANCE_PROVIDER_IDS = {
 }
 
 
-def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
-    result = subprocess.run(command, cwd=cwd, env=env, check=False, text=True, capture_output=True)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_wheel_carries_every_manifest_catalogue(tmp_path: Path) -> None:
+def test_wheel_carries_every_manifest_catalogue(direct_distribution: InstalledDistribution) -> None:
     repository = Path(__file__).parents[1]
-    wheel_directory = tmp_path / "dist"
-    environment = tmp_path / "environment"
-    execution_directory = tmp_path / "outside-repository"
-    execution_directory.mkdir()
-
-    _run(
-        ["uv", "build", "--wheel", "--out-dir", str(wheel_directory)],
-        cwd=repository,
-    )
-    wheels = tuple(wheel_directory.glob("rivretrieve-*.whl"))
-    assert len(wheels) == 1
-
-    _run(["uv", "venv", str(environment)], cwd=execution_directory)
-    python = environment / "bin" / "python"
-    _run(
-        ["uv", "pip", "install", "--python", str(python), str(wheels[0]), f"mlcroissant=={version('mlcroissant')}"],
-        cwd=execution_directory,
-    )
 
     expected_descriptor = json.loads(
         (repository / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/croissant.json").read_text()
@@ -150,14 +126,7 @@ groups = thailand.acquisition_provenance[0].header.withheld_facts
 assert groups == ()
 """
     verification += "\nclosure_oracles = " + repr(_CLOSURE_ORACLES) + "\n" + _PROFILE_VERIFICATION
-    clean_environment = os.environ.copy()
-    clean_environment.pop("PYTHONPATH", None)
-    clean_environment.pop("VIRTUAL_ENV", None)
-    _run(
-        [str(python), "-c", verification],
-        cwd=execution_directory,
-        env=clean_environment,
-    )
+    direct_distribution.verify(verification)
 
 
 # Original v2 inputs: git 6f0edf6. Full selected semantic closures (excluding JSON-LD

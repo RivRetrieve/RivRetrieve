@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,27 @@ _EMPTY_SERIES = (
     b'"parameterName":"Vannstand","parameterNameEng":"Stage","serieVersionNo":1,"method":"Mean","unit":"m",'
     b'"observationCount":0,"observations":[]}]}'
 )
+
+
+class _RecordingClock:
+    def __init__(self):
+        self.elapsed = 0.0
+
+    def monotonic(self):
+        return self.elapsed
+
+    def utcnow(self):
+        return datetime(2026, 9, 25, tzinfo=UTC) + timedelta(seconds=self.elapsed)
+
+    def sleep(self, seconds):
+        assert seconds >= 0
+        self.elapsed += seconds
+
+
+def _client(sender):
+    # Keep real pacing/retry orchestration, but advance a coherent virtual clock.
+    clock = _RecordingClock()
+    return HttpClient(sender=sender, clock=clock, sleeper=clock.sleep)
 
 
 def _nve_source_response(request, observation_body=_EMPTY_SERIES):
@@ -76,7 +98,7 @@ def test_credentialed_recording_keeps_the_header_name_and_never_the_value(tmp_pa
         tmp_path,
         "no_nve_probe",
         credentials=(CredentialHeader("X-API-Key", _SECRET, (_ORIGIN,)),),
-        transport=HttpClient(sender=sender),
+        transport=_client(sender),
     )
 
     assert len(written) == len(seen_headers) == 2
@@ -148,7 +170,7 @@ def test_recording_main_resolves_declared_exchange_below_recorder(tmp_path, monk
         assert dict(request.headers)["Authorization"] == f"Bearer {token}"
         return _nve_source_response(request, payload)
 
-    monkeypatch.setattr(recorder, "HttpClient", lambda: HttpClient(sender=sender))
+    monkeypatch.setattr(recorder, "HttpClient", lambda: _client(sender))
     assert (
         recorder.main(
             [
@@ -276,7 +298,7 @@ def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_rec
             return b'{"token":"ACQUIRED-TOKEN-SENTINEL"}', 200, "application/json"
         return payload, 200, "application/json"
 
-    monkeypatch.setattr(recorder, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda _: None))
+    monkeypatch.setattr(recorder, "HttpClient", lambda: _client(sender))
     args = [
         "--provider",
         "no_nve",
@@ -321,7 +343,7 @@ def test_recording_main_retains_not_found_response_without_error_exit(tmp_path, 
     def sender(request, timeout_seconds):
         return recording.content, recording.status_code, recording.content_type
 
-    monkeypatch.setattr(recorder, "HttpClient", lambda: HttpClient(sender=sender))
+    monkeypatch.setattr(recorder, "HttpClient", lambda: _client(sender))
     assert (
         recorder.main(
             [
@@ -373,7 +395,7 @@ def test_recorder_routes_catalogue_owned_versions_through_real_provider_fetch(tm
         "1900-01-05T00:00:00",
         tmp_path,
         "catalogue_version",
-        transport=HttpClient(sender=sender),
+        transport=_client(sender),
     )
     assert [request.url for request in sent] == [f"{_ORIGIN}/api/v1/Series", f"{_ORIGIN}/api/v1/Observations"]
     assert sent[1].params["VersionNumber"] == 1
@@ -401,7 +423,7 @@ def test_recorder_explicit_unknown_version_is_sent_without_catalogue_fallback(tm
         "1900-01-05",
         tmp_path,
         "explicit_version",
-        transport=HttpClient(sender=sender),
+        transport=_client(sender),
         variants=("99999",),
     )
     assert len(sent) == 1
@@ -438,7 +460,7 @@ def test_recorder_without_established_or_explicit_version_never_invents_default(
         "1900-01-05",
         tmp_path,
         "no_version",
-        transport=HttpClient(sender=inventory_only),
+        transport=_client(inventory_only),
     )
     assert len(sent) == 1
     assert tuple(tmp_path.glob("*.recording.json")) == (written,)
