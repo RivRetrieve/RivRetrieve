@@ -45,6 +45,8 @@ from rivretrieve._internal.transport import (
 )
 from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _DAILY = "daily-07374000-discharge-mean"
 _INSTANT = "continuous-07374000-2010-discharge"
 _START = datetime(2010, 6, 1, 5)
