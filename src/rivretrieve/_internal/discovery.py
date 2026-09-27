@@ -831,8 +831,7 @@ def fetch(
         A source failure for one station or access route becomes an issue and
         a ``failed`` outcome, and independent series still return their rows.
         Some providers request a series in independent parts, such as
-        Lithuania's historical months. A failed part is then reported for its
-        own interval: the issue's ``details["window"]`` holds the source
+        monthly files. A failed part is reported for its own interval: the issue's ``details["window"]`` holds the source
         interval, and the ``failed`` outcome covers its overlap with the
         requested window, or the whole source interval when the part lies
         outside that window. Rows from the other parts are kept.
@@ -840,12 +839,12 @@ def fetch(
         Failed HTTP requests produce ``source.request_failed`` (error) or, for
         HTTP 404, ``source.http_not_found`` (warning). Their ``details`` keep the
         station, product, request URL, attempt count, status code and failure
-        reason. One exception applies: a Lithuania historical month that
-        returns HTTP 404, which the source uses for "no stored observations",
-        and lies wholly outside the requested dates produces no issue and no
-        outcome. It was fetched only as padding, and its call stays in
-        ``provenance.calls_made``. Other failures in such padding months are
-        still reported.
+        reason. A provider can declare that an HTTP 404 response means the
+        source has no stored observations for that interval. When such a part
+        lies wholly outside the requested dates, it was requested only as
+        padding: it produces no issue and no outcome, and its call stays in
+        ``provenance.calls_made``. Other failures in padding parts are still
+        reported.
 
         When every request fails, ``data`` is empty and the issues and outcomes
         explain why. A null ``value`` is a published missing value, an
@@ -1552,12 +1551,22 @@ def download(provider: str):
         authoritative and the exception names the residue.
     OSError
         If local file operations fail.
+    ValueError
+        If the provider finds the publisher's listing or artifacts
+        inconsistent, or finds that the newly published history would end
+        before the source vintage of the existing compiled store. The existing
+        store is not replaced.
 
     Notes
     -----
     This call can transfer a national dataset. It is not needed for live
     providers. Before publication, a failed compilation preserves the previous
     store and publisher inputs. Use clear_cache explicitly for recovery.
+
+    An existing compiled store that passes validation supplies its source
+    vintage, so the provider can refuse a download whose published history
+    would regress. An existing store that fails validation does not block the
+    call, because ``download`` is how such a store is rebuilt.
     Transport failures can also propagate rather than becoming result issues.
 
     The store is written under ``RIVRETRIEVE_CACHE_DIR`` when that variable is

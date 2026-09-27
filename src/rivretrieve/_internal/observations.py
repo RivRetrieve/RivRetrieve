@@ -106,7 +106,8 @@ class ObservationProvenance(BaseModel):
         Ordered source-call origins and sanitized prerequisite exchange events.
         A failed request for one series and interval also appears, with its
         ``window``, ``failure_reason`` and ``response_meaning``, such as
-        ``no_observations`` for a Lithuania month with no stored observations.
+        ``no_observations`` when the provider declares that the response means
+        no stored observations for that interval.
     time_windows : tuple[dict[str, object], ...]
         Additional window metadata. The current engine leaves this tuple empty.
     decomposition : tuple[str, ...]
