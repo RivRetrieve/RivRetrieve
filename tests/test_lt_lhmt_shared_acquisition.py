@@ -376,35 +376,60 @@ def test_shared_non_absence_failure_preserves_other_month(transport, failure, re
         assert all(item.reason and item.window.start.month == item.window.end.month == 5 for item in failures)
 
 
-@pytest.mark.parametrize("exhausted", [False, True])
-def test_shared_http_retries_report_attempt_count_not_invented_intermediate_calls(transport, monkeypatch, exhausted):
+@pytest.mark.parametrize("scenario", ["http-success", "http-exhausted", "exception-success"])
+def test_shared_http_retries_preserve_each_physical_attempt(transport, monkeypatch, scenario):
     from rivretrieve._internal.transport import TRANSPORT_POLICY, HttpClient, SenderResponse
 
     attempts = []
 
     def sender(request, timeout):
         attempts.append(request)
-        if exhausted or len(attempts) == 1:
+        if scenario == "exception-success" and len(attempts) == 1:
+            raise TimeoutError("authored source timeout")
+        if scenario == "http-exhausted" or len(attempts) == 1:
             return SenderResponse(b'{"error":"temporarily unavailable"}', 503, "application/json")
         return SenderResponse(transport.recording.content, 200, "application/json")
 
     client = HttpClient(sender=sender, sleeper=lambda delay: None)
     monkeypatch.setattr(discovery, "HttpClient", lambda: client)
-    result = fetch(receipts=True)
+    result = fetch(receipts=True, cache="reuse")
+    exhausted = scenario == "http-exhausted"
     count = TRANSPORT_POLICY.max_attempts if exhausted else 2
     assert len(attempts) == count
     assert len({request.url for request in attempts}) == 1
     calls = result.provenance.calls_made
-    # The transport exposes the final response and total attempts, not the
-    # timestamps or response metadata of intermediate retry attempts.
-    assert len(calls) == 1
-    assert calls[0]["attempts"] == count
-    assert calls[0]["status_code"] == (503 if exhausted else 200)
-    assert set(map(tuple, calls[0]["station_products"])) == {(STATION, product) for product in PRODUCTS}
+    assert len(calls) == count
+    call_ids = tuple(call["call_id"] for call in calls)
+    assert len(set(call_ids)) == count
+    assert len({call["acquisition_id"] for call in calls}) == 1
+    assert [call["attempt"] for call in calls] == list(range(1, count + 1))
+    assert all(isinstance(call["retrieved_at"], datetime) for call in calls)
+    assert [call["retrieved_at"] for call in calls] == sorted(call["retrieved_at"] for call in calls)
+    assert all(call["url"] == attempts[0].url for call in calls)
+    assert all(
+        set(map(tuple, call["station_products"])) == {(STATION, product) for product in PRODUCTS} for call in calls
+    )
+    if scenario == "exception-success":
+        assert calls[0]["status_code"] is None
+        assert calls[0]["failure_reason"] == calls[0]["failure_category"] == "timeout"
+        assert calls[1]["status_code"] == 200
+    else:
+        assert [call["status_code"] for call in calls] == ([503] * count if exhausted else [503, 200])
+        assert all(
+            call["failure_reason"] == call["failure_category"] == "http_status"
+            for call in calls
+            if call["status_code"] == 503
+        )
+    if not exhausted:
+        assert calls[-1]["failure_reason"] is calls[-1]["failure_category"] is None
+    manifest = rr.cache_status("lt_lhmt").manifest
+    assert manifest is not None
+    assert {call["call_id"] for call in manifest.source_calls} == set(call_ids)
+    assert len(manifest.source_calls) == count
     if exhausted:
         assert result.data.is_empty()
         assert len(result.outcomes) == 2
-        assert all(item.status.value == "failed" and item.calls == (calls[0]["call_id"],) for item in result.outcomes)
+        assert all(item.status.value == "failed" and item.calls == call_ids for item in result.outcomes)
         assert result.issues
         assert not result.receipts.entries
     else:
@@ -412,6 +437,12 @@ def test_shared_http_retries_report_attempt_count_not_invented_intermediate_call
         assert not result.issues
         assert len(result.receipts.entries) == 1
         assert result.receipts.entries[0].content == transport.recording.content
+        chosen = rr.pick(selection(), series_id=tuple(result.data["series_id"].unique()))
+        held = fetch(chosen, cache="reuse")
+        assert len(attempts) == count
+        assert {call["call_id"] for call in held.provenance.calls_made} == set(call_ids)
+        assert len(held.provenance.calls_made) == count
+        pt.assert_frame_equal(held.data, result.data)
 
 
 def test_unrestricted_incomplete_inventory_reacquires_once_for_both_products(transport):

@@ -81,6 +81,7 @@ from rivretrieve._internal.transport import (
     HttpClient,
     SecretCallTrace,
     Transport,
+    TransportAttempt,
     TransportFailure,
     TransportFailureCategory,
     TransportFailureReason,
@@ -180,6 +181,36 @@ def _origin_call(origin: SourceCallOrigin) -> dict[str, object]:
     }
 
 
+def _attempt_call(attempt: TransportAttempt) -> dict[str, object]:
+    """Retain facts observed at one sender invocation, not an inferred retry history."""
+    return {
+        "call_id": attempt.attempt_id,
+        "url": attempt.url,
+        "request_parameters": dict(attempt.request_parameters),
+        "status_code": attempt.status_code,
+        "retrieved_at": attempt.retrieved_at,
+        "content_type": attempt.content_type or _origin_value(UnknownOriginFact()),
+        "failure_reason": attempt.failure_category.value if attempt.failure_category is not None else None,
+        "failure_category": attempt.failure_category.value if attempt.failure_category is not None else None,
+    }
+
+
+def _payload_calls(payload: Payload) -> tuple[dict[str, object], ...]:
+    if not payload.attempt_traces:
+        return ({**_origin_call(payload.origin), "call_id": uuid4().hex},)
+    acquisition_id = uuid4().hex
+    return tuple(
+        {
+            **(_origin_call(payload.origin) if index == len(payload.attempt_traces) else {}),
+            **_attempt_call(attempt),
+            "acquisition_id": acquisition_id,
+            "attempt": index,
+            "attempts": len(payload.attempt_traces),
+        }
+        for index, attempt in enumerate(payload.attempt_traces, 1)
+    )
+
+
 def _provenance_with_payload_origins(
     provenance: ObservationProvenance,
     payloads: tuple[Payload, ...],
@@ -214,7 +245,7 @@ def _provenance_with_payload_origins(
         for index, payload in enumerate(payloads)
         for call in (
             *({**_secret_call(item), **contexts[index]} for item in payload.prerequisite_calls),
-            {**_origin_call(payload.origin), **contexts[index], "call_id": uuid4().hex},
+            *({**item, **contexts[index]} for item in _payload_calls(payload)),
         )
     )
     endpoints = tuple(
@@ -278,6 +309,7 @@ class _SourceResponseTransport:
             status_code=response.status_code,
             category=TransportFailureCategory.HTTP_STATUS,
             response=response,
+            attempt_traces=response.attempt_traces,
         )
 
 
@@ -1598,7 +1630,27 @@ def drive(
                         content_type=response.content_type or _origin_value(UnknownOriginFact()),
                     )
                     cached_calls.extend(_secret_call(item) for item in response.prerequisite_calls)
-                cached_calls.append(call)
+                attempt_traces = event.failure.attempt_traces if isinstance(event.failure, TransportFailure) else ()
+                if attempt_traces:
+                    call_ids = tuple(attempt.attempt_id for attempt in attempt_traces)
+                    cached_calls.extend(
+                        {
+                            **call,
+                            **_attempt_call(attempt),
+                            "acquisition_id": event.call_id or event.event_id,
+                            "acquisition_failure_reason": event.failure.reason.value,
+                            "attempt": index,
+                            "response_meaning": (
+                                event.meaning.value
+                                if index == len(attempt_traces)
+                                else SourceResponseMeaning.UNSPECIFIED.value
+                            ),
+                        }
+                        for index, attempt in enumerate(attempt_traces, 1)
+                    )
+                else:
+                    call_ids = (event.call_id or event.event_id,)
+                    cached_calls.append(call)
                 overlap_start = max(window.start, event.window.start)
                 overlap_end = min(window.end, event.window.end)
                 outside = overlap_start > overlap_end
@@ -1648,7 +1700,7 @@ def drive(
                     window=failed_window,
                     status=OutcomeStatus.FAILED,
                     reason=issue.message,
-                    calls=(event.call_id or event.event_id,),
+                    calls=call_ids,
                 )
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)

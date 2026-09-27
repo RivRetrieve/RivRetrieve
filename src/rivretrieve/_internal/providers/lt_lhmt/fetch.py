@@ -105,6 +105,7 @@ def fetch(
                     prerequisite_calls=response.prerequisite_calls,
                     scope=scope,
                     known_series=known_series,
+                    attempt_traces=response.attempt_traces,
                 )
             )
     return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
