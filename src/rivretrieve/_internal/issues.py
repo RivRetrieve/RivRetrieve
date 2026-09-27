@@ -23,8 +23,10 @@ class Issue(BaseModel):
         ``source_no_data``. Examples include ``source.request_failed`` (error, a
         failed source request), ``source.http_not_found`` (warning, HTTP 404),
         ``bulk.store_missing`` (warning, no compiled store),
-        ``selection.no_match`` and ``selection.unresolved_inventory`` (warning,
-        an explicit restriction matched no known series), ``request.future_end``
+        ``selection.no_match`` (warning, the evidence establishes that nothing
+        matches an explicit restriction), ``selection.unresolved_inventory``
+        (warning, the inventory cannot settle whether an explicit restriction
+        matches), ``request.future_end``
         (info) and ``provenance.license_not_established`` (info). This list is
         not exhaustive.
     message : str

@@ -316,17 +316,21 @@ catalogue could not settle whether they exist.
   `result.receipts`. See `ReceiptEntry`.
 - **cache : {"bypass", "reuse", "refresh"}, default "bypass"**
   Local observation cache behaviour for live providers. `bypass` fetches
-  without reading or writing the cache. `reuse` serves cached
-  observations when successful earlier retrievals cover the whole request,
-  and otherwise fetches the full request again. `refresh` requests the
-  interval again, and a successful answer replaces the cached answer. If
-  the request fails, rows cached by earlier successful retrievals are
-  still returned with the failure issue and `failed` outcome, and
-  `provenance.served_intervals` shows their original retrieval times.
-  The same applies when `reuse` has to fetch again. Successful answers
-  from `reuse` and `refresh` are written to the cache. For a bulk
-  provider, `bypass` and `reuse` both read its compiled store, and
-  `refresh` is refused.
+  without reading or writing the cache. `reuse` decides separately for
+  each station and access route. It serves cached observations where the
+  cache knows the matching series and successful earlier retrievals
+  cover the requested interval, and fetches the whole requested interval
+  again for each station and access route that is not covered.
+  `refresh` requests the interval again, and a successful answer
+  replaces the cached answer. If a request fails or its answer cannot be
+  used, rows cached by earlier successful retrievals are still returned
+  with the new issue and its `failed` or `unsupported` outcome. The
+  earlier `success` or `empty` outcomes for those rows are also
+  returned, and `provenance.served_intervals` shows their original
+  retrieval times. The same applies when `reuse` has to fetch again.
+  Successful answers from `reuse` and `refresh` are written to the
+  cache. For a bulk provider, `bypass` and `reuse` both read its
+  compiled store, and `refresh` is refused.
 - **on_issue : {"warn", "raise", "ignore"}, default "warn"**
   Handling of `warning` and `error` issues after retrieval. `warn`
   emits one `RuntimeWarning` per issue and returns the result.
@@ -357,19 +361,27 @@ catalogue could not settle whether they exist.
   other parts are kept.
 
   Failed HTTP requests produce `source.request_failed` (error) or, for
-  HTTP 404, `source.http_not_found` (warning). Their `details` keep the
-  station, product, request URL, attempt count, status code and failure
-  reason. A provider can declare that an HTTP 404 response means the
-  source has no stored observations for that interval. When such a part
-  lies wholly outside the requested dates, it was requested only as
-  padding: it produces no issue and no outcome, and its call stays in
-  `provenance.calls_made`. Other failures in padding parts are still
-  reported.
+  HTTP 404, `source.http_not_found` (warning). Their `details` keep
+  the station, product, request URL, attempt count, status code and
+  failure reason.
 
-  When every request fails, `data` is empty and the issues and outcomes
-  explain why. A null `value` is a published missing value, an
-  `empty` outcome means the source returned no rows, and a failed
-  request is reported through issues and outcomes.
+  A part requested only as padding, wholly outside the requested dates,
+  produces no outcome unless its source request fails. A failed padding
+  request is reported with an issue and a `failed` outcome over its
+  source interval, except an HTTP 404 that the provider declares to mean
+  no stored observations for that interval. That 404 produces no issue
+  and no outcome, and its call stays in `provenance.calls_made`. A
+  padding response that cannot be used, such as a malformed one, is
+  reported with an issue only.
+
+  When every request fails, the issues and outcomes explain why. `data`
+  is then empty, except with `cache="reuse"` or `cache="refresh"`
+  when the cache holds rows from earlier successful retrievals. Those rows
+  and their earlier outcomes are returned alongside the failures, as
+  described for `cache`. A null `value` means the source gives no
+  value for that time, and the row is still returned. An `empty`
+  outcome means no rows were found for its series and interval. A failed
+  request is reported through issues and `failed` outcomes.
 
 #### Raises
 
@@ -400,9 +412,10 @@ catalogue could not settle whether they exist.
 
 #### Notes
 
-Live providers are contacted over the network unless `reuse` finds the
-whole request in the cache. Requests that are safe to repeat are retried
-for transient failures. The usage guide describes the retry limits.
+Live providers are contacted over the network unless `reuse` finds every
+requested station and access route covered in the cache. Requests that are
+safe to repeat are retried for transient failures. The usage guide
+describes the retry limits.
 
 Credentials are read from the process environment, then from a `.env`
 file in the working directory. They are required even when the answer
@@ -1091,8 +1104,16 @@ result belongs to one provider.
 - **inventories : tuple[InventorySnapshot, ...]**
   Inventory snapshots used or acquired during retrieval.
 - **outcomes : tuple[RetrievalOutcome, ...]**
-  One status per retrieved series or unresolved request, present even
-  when a series returned no rows.
+  Retrieval statuses, each for one source series, or for a request that
+  has no concrete series identity, over the interval in its `window`.
+  A series can have several outcomes, for example `empty`, `success`
+  and `failed` for different months. Outcomes remain present even when
+  a series returned no rows. When cached rows are returned after a failed
+  retrieval, the cached `success` outcome and the new `failed` outcome
+  can cover the same interval. Parts requested only as padding outside
+  the requested dates produce an outcome only when their source request
+  fails, and a padding-only HTTP 404 that the provider declares to mean
+  no stored observations produces none.
 - **scope : SeriesScope**
   The filters and restrictions of the original request.
 - **view_scope : SeriesScope or None**
@@ -1136,7 +1157,8 @@ Source and request facts that accompany observations.
   A failed request for one series and interval also appears, with its
   `window`, `failure_reason` and `response_meaning`, such as
   `no_observations` when the provider declares that the response means
-  no stored observations for that interval.
+  no stored observations for that interval. Rows served from the cache
+  bring the calls of the earlier retrievals that produced them.
 - **time_windows : tuple[dict[str, object], ...]**
   Additional window metadata. The current engine leaves this tuple empty.
 - **decomposition : tuple[str, ...]**
@@ -1545,7 +1567,11 @@ A caller restriction, not an assertion of published source identity.
 
 Type location: `rivretrieve._internal.source_series.RetrievalOutcome`.
 
-Retrieval status for a source series or an unresolved requested selector.
+Retrieval status for one source series over the interval in `window`.
+
+An outcome can instead describe a requested station, access route or
+selector that has no concrete series identity. A series can have several
+outcomes for different intervals or fact segments.
 
 `series_id` can be absent when no concrete identity is established.
 `requested_selector` preserves the caller restriction without inventing
@@ -1587,8 +1613,10 @@ stays visible with its identity and reason.
   `source_no_data`. Examples include `source.request_failed` (error, a
   failed source request), `source.http_not_found` (warning, HTTP 404),
   `bulk.store_missing` (warning, no compiled store),
-  `selection.no_match` and `selection.unresolved_inventory` (warning,
-  an explicit restriction matched no known series), `request.future_end`
+  `selection.no_match` (warning, the evidence establishes that nothing
+  matches an explicit restriction), `selection.unresolved_inventory`
+  (warning, the inventory cannot settle whether an explicit restriction
+  matches), `request.future_end`
   (info) and `provenance.license_not_established` (info). This list is
   not exhaustive.
 - **message : str**
