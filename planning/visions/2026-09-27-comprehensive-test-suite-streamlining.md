@@ -16,30 +16,29 @@ expensive checks in an opt-in suite, adding skips, or weakening assertions. No f
 or test-count target has been agreed. Demonstrate substantial measured improvement and explain
 remaining costs rather than optimizing toward an arbitrary number.
 
-## Parallel work and coordination
+## Concurrent work owned by the user
 
-Other agents and contributors are actively working in this repository. The implementing
-agent is not alone: provider behavior, documentation, tests, and `main` may change during
-this effort. Do not assume the initial checkout, file inventory, or baseline remains current.
+At publication, the user is working on these specific items in parallel:
 
-- Use a dedicated branch and isolated worktree below the repository's `.worktrees/` directory
-  for implementation and long-running measurements. Do not switch branches in the shared
-  root checkout. During discovery publication, another session switched that checkout while
-  work was in progress; isolation is necessary, not hypothetical.
-- Inspect current open PRs, branches, worktrees, and reachable agent activity before assigning
-  ownership. Coordinate overlapping files and guarantees before editing them. Refresh this
-  evidence before integration rather than treating a starting snapshot as permanent ownership.
-- Preserve other contributors' uncommitted, unpushed, and incomplete work. Do not reset, clean,
-  remove, or overwrite their changes or worktrees. Apparent duplication may be part of an
-  active behavior change; understand it before deleting or consolidating tests.
-- Give delegated workers clear ownership and the same parallel-work warning. Use separate
-  worktrees for concurrent editing where shared files or checkout state could interfere.
-- Record the exact revision and relevant execution conditions for each timing run. Coordinate
-  expensive runs when possible; concurrent CPU or disk load can distort comparisons even in
-  separate worktrees. Do not attribute another change or resource contention to this cleanup.
-- Fetch current `main` before integration, reconcile concurrent changes without dropping their
-  guarantees, and validate the combined result. The final whole-suite review must account for
-  relevant tests added or changed while this work was underway.
+- [Issue #389: Lithuania duplicates monthly requests across quantities](https://github.com/RivRetrieve/RivRetrieve/issues/389).
+  The user is repairing the public acquisition path so co-published discharge and stage share
+  a monthly source call. This overlaps the driver/provider acquisition boundary and Lithuania
+  request-count, receipt, and failure-isolation tests. Do not independently repair this bug or
+  slim away its regression coverage. Coordinate any overlapping library or test edits with
+  the user, then evaluate the repaired behavior rather than preserving the known duplication.
+- [PR #291: Poland provider documentation](https://github.com/RivRetrieve/RivRetrieve/pull/291).
+  The user is reviewing the Poland page and documentation index. Coordinate changes affecting
+  `docs/providers/pl_imgw.md`, its examples, and related Poland/documentation coverage.
+- [PR #293: Lithuania provider documentation](https://github.com/RivRetrieve/RivRetrieve/pull/293).
+  The user is reviewing the Lithuania page, its verification material and recorded example
+  tests. That review depends on the #389 repair: request-count explanations and checks must
+  follow the repaired behavior. Do not delete or rewrite this active review's tests as
+  apparent duplication without coordinating with the user.
+
+Read the current issue/PR state before touching these areas; they may have advanced or merged.
+These are coordination points, not a blanket stop on unrelated cleanup. Work in an isolated
+worktree under `.worktrees/`, leave the shared root checkout and others' work untouched, and
+include the integrated changes when comparing timings and reviewing final coverage.
 
 ## Evidence from discovery
 
