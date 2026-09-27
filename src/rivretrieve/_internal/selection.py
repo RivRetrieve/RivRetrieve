@@ -64,7 +64,39 @@ class StationLocation:
 
 @dataclass(frozen=True, slots=True)
 class _Selection:
-    """Requested scope and acquired evidence; known members never freeze all-matching intent."""
+    """Requested scope and acquired evidence; known members never freeze all-matching intent.
+
+    Selections are immutable values returned by ``find``, ``pick`` and
+    ``from_bundle``. Pass them to the public functions rather than building
+    them directly. ``series(selection)`` shows their contents as a frame.
+
+    Attributes
+    ----------
+    scope : SeriesScope
+        Requested filters and source restrictions. ``fetch`` retrieves by this
+        intent, not only by the known members below.
+    known_series : tuple[SourceSeries, ...]
+        Source-series definitions retained from packaged evidence for the
+        selected stations and access routes. Some may not match the physical
+        filters.
+    inventories : tuple[InventorySnapshot, ...]
+        Packaged inventory snapshots for the selected coordinates.
+    issues : tuple[Issue, ...]
+        Findings recorded during selection, such as ``selection.no_match`` or
+        ``selection.unresolved_inventory``. ``fetch`` copies them into its
+        result. An unresolved restriction that retrieval settles becomes an
+        ``info`` issue with code ``selection.inventory_resolved``.
+    locations : tuple[StationLocation, ...]
+        Catalogue coordinates and CRS statements used by ``map``.
+    acquisition_provenance : tuple[CatalogueEvidence, ...]
+        Evidence describing how the packaged catalogues were acquired.
+    empty_reason : _EmptyReason or None
+        None when at least one known admitted series matches. Otherwise
+        ``empty_reason.code`` is ``no_match`` or ``unresolved_inventory``.
+    series : tuple[SourceSeries, ...]
+        Property returning the known series that match ``scope`` and have at
+        least one matching fact segment with supported admission.
+    """
 
     scope: SeriesScope
     known_series: tuple[SourceSeries, ...] = ()

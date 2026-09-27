@@ -9,16 +9,31 @@ from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProviderId
 class Issue(BaseModel):
     """A retained finding distinct from a fatal contract exception.
 
+    Issues are kept on selections and results whatever ``on_issue`` policy is
+    chosen. They let independent series return data while a failure elsewhere
+    stays visible with its identity and reason.
+
     Attributes
     ----------
     severity : {"info", "warning", "error"}
         Finding severity. Only warning and error activate the caller issue policy.
     code : str
-        Machine-readable classification.
+        Machine-readable classification, written as ``<area>.<finding>``.
+        Examples include ``source.request_failed`` (error, a failed source
+        request), ``source.http_not_found`` (warning, HTTP 404),
+        ``bulk.store_missing`` (warning, no compiled store),
+        ``selection.no_match`` and ``selection.unresolved_inventory``
+        (warning, an explicit restriction matched no known series),
+        ``request.future_end`` (info) and
+        ``provenance.license_not_established`` (info). This list is not
+        exhaustive.
     message : str
         Human-readable finding.
     details : dict[str, object] or None
         Structured context, such as station, product and source failure reason.
+        Source request failures record ``station_id``, ``product_id``,
+        ``request_url``, ``attempts``, ``status_code``, ``failure_reason`` and,
+        when known, ``failure_category``.
     provider_id : ProviderId or None
         Provider responsible for the affected series when known.
     """
@@ -37,6 +52,12 @@ class RivRetrieveError(Exception):
 
 
 class IssuePolicyError(RivRetrieveError):
+    """Raised when ``on_issue="raise"`` and warning or error issues exist.
+
+    ``issues`` holds those warning and error issues. The result they belong to
+    is not returned.
+    """
+
     def __init__(self, issues: Sequence[Issue], message: str | None = None) -> None:
         self.issues = tuple(issues)
         if message is None:
@@ -45,6 +66,13 @@ class IssuePolicyError(RivRetrieveError):
 
 
 class FatalContractError(RivRetrieveError):
+    """Raised when a request or internal contract cannot be satisfied.
+
+    These errors are raised whatever ``on_issue`` policy is chosen. Its
+    subclasses name specific causes, such as invalid requests or missing
+    credentials.
+    """
+
     def __init__(self, message: str | None = None, *, issues: Sequence[Issue] = ()) -> None:
         self.issues = tuple(issues)
         if message is None:
@@ -61,6 +89,12 @@ class InvalidObservationRequestError(FatalContractError):
 
 
 class MissingCredentialError(FatalContractError):
+    """Raised before retrieval when a required credential is not set.
+
+    ``missing_by_provider`` maps each provider identifier to the missing
+    variable names. No source request is made.
+    """
+
     def __init__(self, missing_by_provider: dict[str, tuple[str, ...]]) -> None:
         self.missing_by_provider = {provider_id: tuple(names) for provider_id, names in missing_by_provider.items()}
         requirements = "; ".join(
@@ -75,11 +109,11 @@ class MissingCredentialError(FatalContractError):
 
 
 class ObservationsUnavailableError(FatalContractError):
-    pass
+    """Raised by ``fetch`` for a provider that ships a catalogue but no observations, such as ``za_dws``."""
 
 
 class ObservationDataSchemaError(FatalContractError):
-    pass
+    """Raised when observation rows break the frame schema or contradict their source-series facts."""
 
 
 def apply_on_issue(issues: Sequence[Issue], on_issue: OnIssue) -> None:

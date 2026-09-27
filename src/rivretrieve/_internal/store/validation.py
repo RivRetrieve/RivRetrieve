@@ -191,6 +191,14 @@ class StoreRefusal:
 
 
 class ObservationStoreRefusedError(FatalContractError):
+    """Raised when an existing local observation store is malformed or incompatible.
+
+    ``refusal`` records the kind (``malformed`` or ``incompatible``), the store
+    path, the provider and the defect. The store is left in place. Rebuild a
+    compiled store with ``download`` or remove an accumulated store with
+    ``clear_cache``.
+    """
+
     refusal: StoreRefusal
 
     def __init__(self, refusal: StoreRefusal) -> None:
