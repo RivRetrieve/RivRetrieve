@@ -1,0 +1,42 @@
+{
+  "method": "Fresh HTTP GET; unmodified HTTP entity bytes saved; Accept-Encoding identity; no credentials; HTTP headers saved in manifest",
+  "records": [
+    {
+      "name": "station-02196000-daily-discharge-metadata",
+      "requested_url": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?f=json&monitoring_location_id=USGS-02196000&parameter_code=00060&statistic_id=00003&limit=100",
+      "acquired_at_utc": "2026-09-22T19:29:48.847052+00:00",
+      "status": 200,
+      "final_url": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?f=json&monitoring_location_id=USGS-02196000&parameter_code=00060&statistic_id=00003&limit=100",
+      "headers": {
+        "Date": "Tue, 22 Sep 2026 19:29:49 GMT",
+        "Content-Type": "application/json; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "Connection": "close",
+        "Vary": "Accept-Encoding",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "*",
+        "Age": "0",
+        "Api-Version": "1.3.0",
+        "Cache-Control": "public, max-age=3600",
+        "Content-Crs": "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>",
+        "Content-Language": "en-US",
+        "Referrer-Policy": "origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "Via": "1.1 5502255f9557c1e2c098b94110b6151c.cloudfront.net (CloudFront), https/1.1 api-umbrella (ApacheTrafficServer [cMsSfW])",
+        "X-Amz-Cf-Id": "AsJaboLRu5PW_npI6dJylB58v5lLCah5XrThtHUHfFxi9d6NNXiTXQ==",
+        "X-Amz-Cf-Pop": "HIO52-P1",
+        "X-Api-Umbrella-Request-Id": "d0pac8mmai8m46i41isg",
+        "X-Build-Version": "1.3.0-62cd9abf",
+        "X-Cache": "Miss from cloudfront",
+        "X-Content-Type-Options": "nosniff",
+        "X-Vcap-Request-Id": "62488c19-92f4-4e15-7083-4d1f8579710c",
+        "X-Xss-Protection": "1; mode=block",
+        "X-Frame-Options": "SAMEORIGIN"
+      },
+      "bytes": 3694,
+      "sha256": "c3a1ead522bd19db40cc01c50f268cef4ea9ed19a6a48af683f627365d94fe71",
+      "response_file": "station-02196000-daily-discharge-metadata.response.gz"
+    }
+  ],
+  "storage": "Deterministic gzip (mtime=0); bytes and sha256 describe the decompressed, unmodified HTTP entity bytes, not the gzip container."
+}

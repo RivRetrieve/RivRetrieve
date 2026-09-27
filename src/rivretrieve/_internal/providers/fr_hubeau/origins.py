@@ -25,7 +25,7 @@ from rivretrieve._internal.acquisition_provenance import (
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 
 if TYPE_CHECKING:
-    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import FranceAvailability
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import FranceAvailability, NativeInventoryCapture
 
 CODE_PROJECTION_31_AXIS_TRANSPOSITION = MappingProxyType(
     {"latitude": "longitude_station", "longitude": "latitude_station"}
@@ -146,24 +146,6 @@ _CITATION = "L'utilisateur de ces données doit néanmoins veiller à citer l'au
 
 _PUBLICATION_DOCUMENTS = (
     (
-        "fr_hydroportail_legal",
-        "HydroPortail publication",
-        "tests/test_data/fr_hydroportail_legal.html",
-        "https://hydro.eaufrance.fr/edito/mentions-legales",
-        "2026-09-13T17:56:59.417284+00:00",
-        "text/html; charset=UTF-8",
-        "ef51f384ce7541ed4c152bde1a3763cde18bddfb9ffeddfa80f527930c317eb4",
-    ),
-    (
-        "fr_hydroportail_about",
-        "PHyC platform operation",
-        "tests/test_data/fr_hydroportail_about.html",
-        "https://hydro.eaufrance.fr/edito/a-propos-dhydroportail",
-        "2026-09-13T17:56:59.341556+00:00",
-        "text/html; charset=UTF-8",
-        "c9371602ebcd4bb20332195975ce02eacf454002742fbea6b0eafd4b566711cf",
-    ),
-    (
         "fr_hubeau_hydrometrie",
         "Hydrometry distribution and network roles",
         "tests/test_data/fr_hubeau_hydrometrie.html",
@@ -180,11 +162,12 @@ def build_acquisition_provenance(
     hydrometry_station_ids: tuple[str, ...],
     temperature_station_ids: tuple[str, ...],
     availability: FranceAvailability,
+    native_capture: NativeInventoryCapture | None = None,
 ) -> AcquisitionProvenance:
     """Bind official publication separately from original measurement authorship."""
     station_ids = hydrometry_station_ids + temperature_station_ids
-    if len(station_ids) != 7323 or len(set(station_ids)) != 7323:
-        raise ValueError("France provenance requires exactly 7,323 unique station identifiers")
+    if not station_ids or len(set(station_ids)) != len(station_ids):
+        raise ValueError("Hub’Eau provenance requires unique station identifiers")
     terms = RecordingReference(
         recording_id="fr_hubeau_terms",
         repository_path=f"tests/test_data/{_TERMS_FILE}",
@@ -212,7 +195,6 @@ def build_acquisition_provenance(
                 recording=temperature,
             ),
         ],
-        "fr_hydroportail": [],
     }
     acquisitions: dict[str, list[AcquisitionRecord]] = {
         "fr_hubeau": [
@@ -264,23 +246,17 @@ def build_acquisition_provenance(
                 ),
             ),
         ],
-        "fr_hydroportail": [
-            AcquisitionRecord(
-                acquisition_id="station_observation_publication",
-                method="runtime_http_request",
-                instant_type="runtime",
-                description="HydroPortail station-own instantaneous Q/H publication from PHyC; not a shared-site series or original-producer assertion",
-                requested_from=("https://hydro.eaufrance.fr/stationhydro/ajax/{station}/series",),
-            )
-        ],
     }
+    if native_capture is not None:
+        acquisitions["fr_hubeau"][:2] = [native_capture.hydrometry, native_capture.temperature]
+        evidence["fr_hubeau"].extend(native_capture.evidence)
     bindings: list[FactBinding] = []
 
     def bind(group: str, facts: tuple[str, ...], source: str, acquisition: str) -> None:
         bindings.append(FactBinding(fact_group=group, facts=facts, source_id=source, acquisition_id=acquisition))
 
     for identifier, scope, path, url, instant, media_type, digest in _PUBLICATION_DOCUMENTS:
-        source = "fr_hubeau" if identifier == "fr_hubeau_hydrometrie" else "fr_hydroportail"
+        source = "fr_hubeau"
         recording = RecordingReference(
             recording_id=identifier,
             repository_path=path,
@@ -321,20 +297,48 @@ def build_acquisition_provenance(
         "temperature_semantics_openapi_2026_09_02",
     )
     bind("observation_transport", ("source.observation.transport",), "fr_hubeau", "observation_transport")
-    for ids, acquisition in (
-        (hydrometry_station_ids, "hydrometry_catalogue_capture_2026_08_02"),
-        (temperature_station_ids, "temperature_catalogue_capture_2026_08_02"),
+    for partition, ids, acquisition in (
+        (
+            "hydrometry",
+            hydrometry_station_ids,
+            native_capture.hydrometry.acquisition_id if native_capture else "hydrometry_catalogue_capture_2026_08_02",
+        ),
+        (
+            "temperature",
+            temperature_station_ids,
+            native_capture.temperature.acquisition_id if native_capture else "temperature_catalogue_capture_2026_08_02",
+        ),
     ):
         bind(
             acquisition,
-            tuple(f"source.station.{station}.identity_location_crs" for station in ids),
+            (f"source.station_inventory.{partition}.identity_location_crs",)
+            + tuple(f"source.station.{station}.identity_location_crs" for station in ids),
             "fr_hubeau",
             acquisition,
         )
+    bindings.append(
+        FactBinding(
+            fact_group="canonical_station_identity_geometry",
+            facts=("station.station_id", "station.latitude", "station.longitude", "station.crs"),
+            source_id=None,
+            acquisition_id=None,
+            transformation=Transformation(
+                name="Hub’Eau native station fields with independently evidenced coordinate correction",
+                external_inputs=tuple(
+                    ExternalFactReference(
+                        source_id="fr_hubeau", fact=f"source.station_inventory.{partition}.identity_location_crs"
+                    )
+                    for partition in ("hydrometry", "temperature")
+                ),
+            ),
+        )
+    )
     for pair in availability.pairs:
         external = []
         for index, acquisition in enumerate(pair.acquisitions):
-            source = "fr_hubeau" if acquisition.role == "publisher_count" else "fr_hydroportail"
+            source = "fr_hubeau"
+            if acquisition.role != "publisher_count":
+                raise ValueError("Hub’Eau availability cannot use another publication service")
             identifier = f"availability_{pair.code_station}_{pair.product_id}_{index}"
             fact = f"source.availability.{pair.code_station}.{pair.product_id}.{index}"
             acquisitions[source].append(
@@ -350,6 +354,12 @@ def build_acquisition_provenance(
             )
             bind(identifier, (fact,), source, identifier)
             external.append(ExternalFactReference(source_id=source, fact=fact))
+        if not external:
+            external.append(
+                ExternalFactReference(
+                    source_id="fr_hubeau", fact=f"source.station.{pair.code_station}.identity_location_crs"
+                )
+            )
         bindings.append(
             FactBinding(
                 fact_group=f"availability:{pair.code_station}:{pair.product_id}",
@@ -362,7 +372,6 @@ def build_acquisition_provenance(
             )
         )
     for source, acquisition_id, products in (
-        ("fr_hydroportail", "station_observation_publication", {"discharge_instantaneous", "stage_instantaneous"}),
         (
             "fr_hubeau",
             "observation_transport",
@@ -401,18 +410,13 @@ def build_acquisition_provenance(
                 ),
             ),
         ),
-        SourceRecord(
-            source_id="fr_hydroportail",
-            issuer="Service Central Vigicrues",
-            operator="HydroPortail / PHyC",
-            acquisitions=tuple(acquisitions["fr_hydroportail"]),
-            evidence=tuple(evidence["fr_hydroportail"]),
-        ),
     )
     provenance = AcquisitionProvenance(
         schema_version=2,
         provider_id="fr_hubeau",
-        native_table=NativeTableIdentity(
+        native_table=native_capture.native_table
+        if native_capture
+        else NativeTableIdentity(
             repository_path=NATIVE_TABLE_REPOSITORY_PATH,
             revision=NATIVE_TABLE_REVISION,
             sha256=NATIVE_TABLE_SHA256,

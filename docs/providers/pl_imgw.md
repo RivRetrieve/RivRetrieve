@@ -1,4 +1,4 @@
-# Poland — IMGW-PIB
+# Poland: IMGW-PIB
 
 [Documentation index](../README.md) · [Usage](../usage.md)
 
@@ -7,111 +7,344 @@
 | Provider | `pl_imgw` |
 | Country | Poland |
 | Published by | Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy (IMGW-PIB), the Institute of Meteorology and Water Management – National Research Institute |
-| Variables | Discharge, stage, water temperature |
-| Stations in the catalogue | 1,301 |
+| Quantities | Daily discharge, stage and water temperature |
+| Stations in the catalogue | 1,301. Availability depends on quantity and period |
 | Credentials | None |
-| Access | Bulk: IMGW's yearly files are downloaded once, then read locally |
-| Terms stated by IMGW-PIB | Free of charge with exceptions, including business use; attribution required |
-| Agency documentation | [IMGW public data](https://danepubliczne.imgw.pl/), [Regulamin (regulations)](https://danepubliczne.imgw.pl/regulations) |
+| Access | Explicit download of IMGW-PIB's national daily archive, then local retrieval |
+| Terms | IMGW-PIB's data regulations: conditional free use, an agreement for business and other listed uses, and prescribed attribution; see [Terms and citation](#terms-and-citation) |
+| Agency documentation | [IMGW-PIB public data](https://danepubliczne.imgw.pl/), [Regulamin (data regulations)](https://danepubliczne.imgw.pl/regulations), [daily hydrological data](https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/) |
+
+First prepare the national archive. This downloads IMGW-PIB's daily files for every
+station and every published year, then compiles them into a local store. Allow time
+and disk space for that operation; see [Downloading the archive](#downloading-the-archive).
 
 ```python
 import rivretrieve as rr
 
-rr.download("pl_imgw")  # once: downloads and compiles IMGW's yearly files
-
-selection = rr.find(provider="pl_imgw", product="discharge_daily_mean")
-selection = rr.pick(selection, station="152140120")
-result = rr.fetch(selection, start="2020-01-01", end="2020-12-31")
-```
-
-## Who measures, and who publishes
-
-IMGW-PIB is Poland's national hydrological and meteorological service. It runs the national
-measurement network and publishes its data on its public data portal,
-[danepubliczne.imgw.pl](https://danepubliczne.imgw.pl/), as yearly files of daily values for all
-stations at once. RivRetrieve reads those files.
-
-## Downloading the archive first
-
-Poland is a bulk provider. Because RivRetrieve does not redistribute any data and IMGW publishes whole years for every station in one file,
-RivRetrieve downloads the files locally once and reads them from your disk:
-
-```python
 rr.download("pl_imgw")
 ```
 
-The download happens only when you ask for it. Until then, retrieval returns an empty result and
-an issue saying the store is missing; `rr.cache_status("pl_imgw")` tells you whether it is there. 
+Then retrieve one week of daily discharge on the Odra at Gozdowice, station `152140020`:
+
+```python
+selection = rr.find(provider="pl_imgw", station="152140020", quantity="discharge")
+
+result = rr.fetch(selection, start="2024-01-01", end="2024-01-07")
+
+preview = result.data.select("time", "time_zone", "value", "unit").head(3)
+print(preview.write_csv(), end="")
+
+print(result.data.height)
+print([(issue.severity, issue.code) for issue in result.issues])
+```
+
+Output:
+
+```text
+time,time_zone,value,unit
+2024-01-01T00:00:00.000000,unknown,999.0,m3/s
+2024-01-02T00:00:00.000000,unknown,1010.0,m3/s
+2024-01-03T00:00:00.000000,unknown,1020.0,m3/s
+7
+[('info', 'provenance.license_not_established'), ('info', 'provenance.citation_not_established')]
+```
+
+The request returned seven daily values in m³/s, one for each date. Both endpoint
+dates are included. The dates carry `time_zone="unknown"`; see
+[Time and data status](#time-and-data-status). The value `999.0` on January 1 is a
+published discharge, not a missing-data code.
+
+The two informational issues say that RivRetrieve does not record a single licence
+or citation for this provider. They are not retrieval problems, and they do not mean
+that IMGW-PIB sets no conditions; see [Terms and citation](#terms-and-citation).
+
+Retrieval reads the local store and makes no request to IMGW-PIB. This output was
+checked on 2026-09-27 using the archive IMGW-PIB published on that date, whose latest
+year ends on October 31, 2025. IMGW-PIB revises and withdraws historical values, so a
+later download may return different values. Run the snippets in order in the same
+Python session. See [Usage](../usage.md) for general selection and result handling.
+
+## Who measures, and who publishes
+
+IMGW-PIB runs the hydrological measurement and observation network of Poland's
+state hydrological and meteorological service (państwowa służba
+hydrologiczno-meteorologiczna, PSHM). Its 2025 hydrological yearbook reports 952
+hydrological stations operating in that year. IMGW-PIB processes their measurements
+and observations and stores them in its Central Historical Database (Centralna Baza
+Danych Historycznych).
+
+IMGW-PIB publishes daily hydrological data on its public data portal,
+[danepubliczne.imgw.pl](https://danepubliczne.imgw.pl/), as archive files covering
+every station at once. The files are organised by hydrological year, which runs from
+November to October. RivRetrieve reads these daily files (`codz`). It does not read
+IMGW-PIB's current operational data or its yearbooks.
+
+According to IMGW-PIB's regulations, the data are owned by the State Treasury
+(Skarb Państwa) and IMGW-PIB manages and makes them available.
+
+## Downloading the archive
+
+`rr.download("pl_imgw")` explicitly downloads and compiles the complete daily archive.
+It first reads IMGW-PIB's directory listing of daily data, then downloads every daily
+file listed from hydrological year 1951 to the latest year IMGW-PIB has published.
+RivRetrieve never starts this transfer during `fetch`. Without a compiled store,
+retrieval returns an empty result with a `bulk.store_missing` warning and an
+instruction to run `download`.
+
+On 2026-09-27 IMGW-PIB listed one file per month up to hydrological year 2022 and one
+file per year from 2023 to 2025, so the download consisted of 867 files totalling
+about 122 MB. The compiled store occupied about 223 MB. The whole operation took about
+85 minutes on the verification machine: about 18 minutes to transfer the files and the
+rest to compile and check the store. During compilation the cache location briefly
+held at least 9 GB of working files. Size and duration vary with the archive, the
+network and the computer. RivRetrieve refuses to start unless 6 GB are free at the
+cache location, but that check does not cover the working space: allow at least 9 GB.
+
+IMGW-PIB's notice in the daily-data folder (`UWAGA.txt`) says that the single annual
+files are a temporary arrangement and that it will regenerate them in the earlier
+form. RivRetrieve accepts either form for a year. It stops, rather than choosing, if
+a year is listed in both forms or if the listed years leave a gap.
+
+A failed download leaves any existing store unchanged. RivRetrieve retries an
+interrupted file transfer up to three attempts in total. If a file still fails, the
+download stops and removes the files it has downloaded. It also refuses to replace a
+valid store with a newly listed archive that ends earlier than that store.
+
+Choose a cache location with `RIVRETRIEVE_CACHE_DIR` before preparing the archive;
+see [cache configuration](../usage.md#cache-and-bulk-downloads). After preparation,
+inspect the local copy without downloading it again:
+
+```python
+status = rr.cache_status("pl_imgw")
+
+print(status.presence.value)
+print(status.source_vintage)
+```
+
+Output for the verified copy:
+
+```text
+present
+2025-10-31
+```
+
+`source_vintage` is the last date covered by the newest downloaded file: the end of
+hydrological year 2025 for the verified copy. It does not tell you the latest
+observation at each station. IMGW-PIB adds each hydrological year some months after it
+ends; its change list (`lista_zmian_hydro.txt`) records hydrological year 2025 as added
+on 2026-08-31. The archive therefore does not contain recent days, and until IMGW-PIB
+adds the next year a new download ends on the same date.
+
+The same compiled copy serves later requests for other stations and periods. Both
+`cache="bypass"` and `cache="reuse"` read it locally. `cache="refresh"` is refused:
+run `rr.download("pl_imgw")` again to replace the store with the files IMGW-PIB
+publishes at that time. Retrieval does not check for newer files.
 
 ## What you can retrieve
 
-| Product | IMGW column | Unit published | Unit delivered | Stations listed |
-|---|---|---|---|---:|
-| `discharge_daily_mean` | Flow [m^3/s] | m³/s | m³/s | 1,301 |
-| `stage_daily_mean` | Water level [cm] | cm | m | 1,301 |
-| `water_temperature_daily_mean` | Water temperature [deg. C] | °C | °C | 1,301 |
+IMGW-PIB's daily files have no header row. The publisher's field description
+(`CODZ_publiczne_format.txt`) names each field:
 
-Availability is `unknown` for every station and product because IMGW does
-not state which variables each station measures.
+| Quantity filter | IMGW-PIB field | Source unit | Returned unit |
+|---|---|---|---|
+| `discharge` | `COPRZP`: Przepływ [m^3/s] (discharge) | m³/s | m³/s |
+| `stage` | `COSTAN`: Stan wody [cm] (water level) | cm | m |
+| `temperature` | `COPTMP`: Temperatura wody [st. C] (water temperature) | °C | °C |
+
+RivRetrieve converts stage from centimetres to metres. Stage is water level, not
+water depth or an elevation above sea level. RivRetrieve has not established its
+vertical reference.
+
+At Gozdowice, IMGW-PIB's file gives a water level of `474` cm for January 1, 2024.
+RivRetrieve returns it in metres:
+
+```python
+stage = rr.find(provider="pl_imgw", station="152140020", quantity="stage")
+
+stage_result = rr.fetch(stage, start="2024-01-01", end="2024-01-01")
+
+print(stage_result.data.select("time", "value", "unit").write_csv(), end="")
+```
+
+Output:
+
+```text
+time,value,unit
+2024-01-01T00:00:00.000000,4.74,m
+```
+
+Each value is a daily value, and `frequency="daily"` matches all three quantities.
+IMGW-PIB does not state one statistic for the whole archive. Its 2025 yearbook
+describes daily water levels and discharges at automatic stations as means of
+10-minute values, but uses the 06:00 UTC reading at stations where only an observer
+measures, and daily water temperatures from 06:00 UTC measurements. The yearbook
+covers selected stations in 2025, and RivRetrieve has not established which method
+applies to each station and year in the archive. The statistic therefore remains
+unknown, and `statistic="mean"` does not match these series.
+
+Every catalogue station lists all three quantities. IMGW-PIB does not state which
+quantities each station measures, so availability is unknown for every station and
+quantity. A station being listed does not guarantee data for any quantity or
+requested period. Far fewer stations measure water temperature than water level: for
+2025, the yearbook reports daily water levels from 916 stations in IMGW-PIB's
+database, discharges from 714 and water temperatures from 93.
+
+Gozdowice has no water temperature for the example week. The request still returns
+one row for each date, with no value:
+
+```python
+temperature = rr.find(provider="pl_imgw", station="152140020", quantity="temperature")
+
+temperature_result = rr.fetch(temperature, start="2024-01-01", end="2024-01-07")
+
+print(temperature_result.data.height)
+print(temperature_result.data["value"].null_count())
+```
+
+Output:
+
+```text
+7
+7
+```
+
+The daily file has a record for each of these dates, with an empty temperature field.
+RivRetrieve keeps such a record as a row with `value=null`. A date with no record in
+the file returns no row. A missing store is reported as an issue, and an empty result
+alone does not distinguish these cases. Check [issues](../usage.md#issues) before
+interpreting gaps or empty results.
+
+IMGW-PIB's field description marks missing values with codes as well as empty fields,
+and says that since 2024 they are always empty (`NULL`). RivRetrieve returns the
+codes as null values:
+
+| Quantity | Code | Meaning stated by IMGW-PIB |
+|---|---|---|
+| Stage | `9999` | Brak danych w bazie (no data in the database) |
+| Discharge | `99999.999` | Przepływ w tym dniu nie był opracowywany (discharge was not computed for that day) |
+| Water temperature | `99.9` | Brak danych w bazie (no data in the database), for example because temperature is not measured at the station |
+
+These are unofficial English translations. Other values, including `999`, are returned
+as published.
 
 ## Station coordinates
 
-The coordinates in the catalogue come from the Global Runoff Data Centre (GRDC), which supplied
-metadata for the same 1,301 stations, not from IMGW. The catalogue records the coordinate reference system as `unknown`, because
-the source does not state one.
+IMGW-PIB's station list contains the 1,301 station identifiers, names and rivers, but
+no coordinates. The positions in the catalogue come from a station table carried over
+from an earlier version of RivRetrieve. A station-metadata workbook later supplied by
+the Global Runoff Data Centre (GRDC) contains the same positions, but it has not been
+established that GRDC was their original source.
+The coordinate reference system is recorded as `unknown` because it has not been
+established. [Maps](../usage.md#maps) display such positions as if they used
+EPSG:4326, which does not establish their reference system.
 
-## Data status
+## Time and data status
 
-IMGW's regulations note that some data may not have been verified:
+The daily files give dates, not times or a time zone. RivRetrieve returns each date at
+midnight with `time_zone="unknown"`. Read `time` and `time_zone` together. The
+midnight label does not make the values UTC or Polish local time, and it does not
+establish the interval a daily value represents. `rr.to_utc` refuses these rows.
 
-> Część udostępnianych danych może stanowić dane niezweryfikowane, gdy IMGW-PIB dysponuje danymi
-> jedynie w takiej postaci na chwilę ich udostępnienia.
+IMGW-PIB's regulations warn that some data may be unverified:
 
-In English, unofficially: some of the data made available may be unverified, where IMGW-PIB holds
-the data only in that form at the time they are made available.
+> Część udostępnianych danych może stanowić dane niezweryfikowane, gdy IMGW-PIB
+> dysponuje danymi jedynie w takiej postaci na chwilę ich udostępnienia.
 
-## Time
+Unofficial translation: Some of the data made available may be unverified data, where
+IMGW-PIB holds the data only in that form at the time they are made available.
 
-Values come back with `time_zone` `unknown`. IMGW's files give dates, not a time zone, and do not
-state the clock that bounds each day.
+The daily files contain no quality flag, and RivRetrieve does not add a quality
+judgement. A returned value does not establish that IMGW-PIB has verified it.
+
+IMGW-PIB revises published files. Its change list (`lista_zmian_hydro.txt`) records
+corrected values, and in 2026 it withdrew uncertain 1997 discharges and water levels
+at several stations. The yearbook states that IMGW-PIB updates archived discharges when
+the stage-discharge relationship at a gauge changes. Record the download date with any
+analysis, and download again to use the current files.
 
 ## Terms and citation
 
-IMGW-PIB's [regulations](https://danepubliczne.imgw.pl/regulations) make use free of charge,
-subject to exceptions, and set a condition:
+IMGW-PIB's [Regulamin Udostępniania Danych](https://danepubliczne.imgw.pl/regulations)
+(data regulations) set the conditions for using its data. IMGW-PIB publishes them in
+Polish, and the English view of its portal shows the same Polish text. The
+translations below are unofficial. Read the full
+regulations before use, particularly for commercial, professional or planning work.
+RivRetrieve does not decide which conditions apply to a particular use.
 
-> Udostępnienie i korzystanie z danych następuje pod warunkiem wskazania źródła pochodzenia danych,
-> poprzez umieszczenie przez korzystającego na wszelkiego rodzaju pracach lub produktach,
-> opracowanych z użyciem danych IMGW-PIB informacji: „Źródłem pochodzenia danych jest Instytut
-> Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy".
+The regulations state that, subject to exceptions in generally applicable law and in
+the regulations themselves, use of the data is free of charge („korzystanie z danych
+jest nieodpłatne”). They allow free use for private purposes, and for any purpose
+where the data are high-value datasets:
 
-In English, unofficially: access and use are conditional on stating the source, by placing on any
-work or product made with IMGW-PIB data the statement "The source of the data is the Institute of
+> Korzystający może używać nieodpłatnie udostępnionych danych do celów prywatnych,
+> a w przypadku danych o wysokiej wartości w każdym celu.
+
+Unofficial translation: The user may use data made available free of charge for
+private purposes and, in the case of high-value data, for any purpose.
+
+They define a private purpose as private, non-profit use, including master's and
+doctoral theses. High-value data are defined by reference to EU Implementing
+Regulation 2023/138. RivRetrieve has not established whether these daily archives are
+high-value data.
+
+Free access does not cover business activity or the other purposes listed in § 3 of
+the regulations, unless the data are high-value data. Those uses require an agreement
+with IMGW-PIB that sets the costs the user bears. The listed purposes include
+hydrological and meteorological support for maritime and inland shipping, fisheries
+and agriculture, and studies of hydrological and morphological elements of surface
+waters for water-management planning. Separately, public authorities, water owners and managers,
+universities, research institutes and certain other scientific bodies have free access
+for their statutory tasks, research or teaching, as § 4 describes.
+
+Use is conditional on stating the source on any work or product made with IMGW-PIB
+data:
+
+> Udostępnienie i korzystanie z danych następuje pod warunkiem wskazania źródła
+> pochodzenia danych, poprzez umieszczenie przez korzystającego na wszelkiego rodzaju
+> pracach lub produktach, opracowanych z użyciem danych IMGW-PIB informacji:
+> „Źródłem pochodzenia danych jest Instytut Meteorologii i Gospodarki Wodnej –
+> Państwowy Instytut Badawczy”.
+
+Unofficial translation: Access to and use of the data are conditional on indicating
+the source of the data, by the user placing on works or products of any kind prepared
+using IMGW-PIB data the statement: "The source of the data is the Institute of
 Meteorology and Water Management – National Research Institute".
 
-Where the data have been processed, the regulations ask for a second statement as well:
+Where the user has processed the data, the regulations require a second statement:
 
-> „Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu Badawczego zostały
-> przetworzone".
+> „Dane Instytutu Meteorologii i Gospodarki Wodnej – Państwowego Instytutu
+> Badawczego zostały przetworzone”.
 
-In English, unofficially: "The data of the Institute of Meteorology and Water Management – National
-Research Institute have been processed". 
+Unofficial translation: "The data of the Institute of Meteorology and Water
+Management – National Research Institute have been processed".
 
-The regulations also state that free access does not cover use for business activity or for a set
-of listed purposes, unless the data are high-value datasets:
+The prescribed statements are the Polish texts. RivRetrieve's output already differs
+from the published files: stage is converted to metres, and the records are returned
+as rows rather than as IMGW-PIB's files. The regulations do not define processing, and
+RivRetrieve does not decide whether a particular use counts as processed data.
 
-> Nieodpłatnym dostępem nie są objęte przypadki udostępniania danych do celów, o których mowa w
-> ust. 2, chyba że są to dane o wysokiej wartości.
+The regulations state that omitting these statements can lead to liability, including
+criminal liability. They also describe using data made available free of charge for
+the purposes listed in § 3 as fraud within the meaning of Article 286 of the Polish
+Criminal Code. IMGW-PIB accepts no liability for damage arising from use of the data,
+which is at the user's own risk.
 
-They warn that missing attribution can lead to liability, including under Polish copyright law.
-Read [the regulations](https://danepubliczne.imgw.pl/regulations) in full before commercial use.
+Identify the station, quantity, requested period and download date of the archive
+alongside the prescribed statements to make the retrieved record traceable. This is
+practical guidance, not an IMGW-PIB citation template.
 
 ## Sources
 
-| Page | Retrieved |
+| Source | Checked |
 |---|---|
-| [IMGW public data portal](https://danepubliczne.imgw.pl/) | 2026-09-19 |
-| [Regulamin Udostępniania Danych IMGW-PIB](https://danepubliczne.imgw.pl/regulations) | 2026-09-19 |
+| [Regulamin Udostępniania Danych IMGW-PIB](https://danepubliczne.imgw.pl/regulations): owner and manager of the data, conditions of use, attribution, unverified data | 2026-09-27 |
+| [Daily hydrological data](https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/): [field description](https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/CODZ_publiczne_format.txt), [notice](https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/UWAGA.txt), archive files | 2026-09-27 |
+| [Station list](https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_stacji_hydro.csv) and [change list](https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/lista_zmian_hydro.txt) | 2026-09-27 |
+| [Rocznik Hydrologiczny 2025](https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/Roczniki/Rocznik%20hydrologiczny/Rocznik%20Hydrologiczny%202025.pdf) (hydrological yearbook), pp. 5 and 7–9: network, database and daily-value methods | 2026-09-27 |
+| [IMGW-PIB: O Instytucie](https://imgw.pl/strona-glowna/o-instytucie/) (about the institute) | 2026-09-25 |
 
-Station counts come from the packaged catalogue. The provenance of the station positions is
-recorded in the provider's catalogue evidence.
+The station count describes the packaged catalogue. A fresh national download and the
+examples on this page were run on 2026-09-27. They verify one station, three quantities
+and one week, not continuous history or national coverage. The
+[verification record](../verification/poland-provider/index.md) retains the commands,
+source checks, exact output and the limits of these checks.

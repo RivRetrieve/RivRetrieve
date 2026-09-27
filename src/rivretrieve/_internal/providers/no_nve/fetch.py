@@ -6,20 +6,37 @@ Contributed by: Thiago von Däniken
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
+from datetime import datetime
 
 from rivretrieve._internal.engine import (
     FetchWindow,
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
-    WithIssues,
 )
-from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
+from rivretrieve._internal.providers.no_nve.metadata import acquire_inventory
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_series_request
+from rivretrieve._internal.source_series import (
+    InventoryCompleteness,
+    OutcomeStatus,
+    PhysicalFacts,
+    RestrictionKind,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+    admission,
+    stable_id,
+)
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _URL = "https://hydapi.nve.no/api/v1/Observations"
@@ -32,26 +49,189 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
-) -> WithIssues[tuple[Payload, ...]]:
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
+) -> SourceAcquisition:
     resolved = tuple((product, _coordinates(product, config)) for product in products)
     payloads: list[Payload] = []
+    issues: list[Issue] = []
+    failed_requests: list[FailedSourceRequest] = []
+    inventories = []
+    definitions = []
+    outcomes = []
+    calls = []
+    requested_window = SeriesWindow(
+        start=datetime.fromisoformat(fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(fetch_window.end.isoformat()),
+    )
     for station in stations:
         for product, coordinates in resolved:
-            for window in rendered_windows[product]:
-                reference_time = _reference_time(window)
-                request = _request(station, coordinates, reference_time)
-                response = transport.send(request)
-                payloads.append(
-                    Payload(
-                        source_coordinates=SourceCoordinates(coordinates),
-                        station_products=((station, product),),
-                        fetch_window=fetch_window,
-                        content=response.content,
-                        origin=_origin(response),
-                        prerequisite_calls=response.prerequisite_calls,
+            matching = tuple(
+                item
+                for item in known_series
+                if item.station_id == station and item.product_id == product and (scope is None or scope.matches(item))
+            )
+            if coordinates.version_number is None and (scope is None or scope.restriction is RestrictionKind.ALL):
+                inventory = acquire_inventory(station, str(product), coordinates, transport, requested_window)
+                current = {item.series_id: item for item in inventory.series}
+                historical = {item.series_id: item for item in matching if item.series_id not in current}
+                snapshot = inventory.inventories[0]
+                if historical and snapshot.completeness is InventoryCompleteness.COMPLETE:
+                    # A disappeared catalogue member is still independently requested. Its absence
+                    # from current metadata does not establish historical nonexistence.
+                    reason = "Acquired catalogue versions are absent from current HydAPI metadata; historical inventory remains unresolved"
+                    snapshot = snapshot.model_copy(
+                        update={
+                            "completeness": InventoryCompleteness.INCOMPLETE,
+                            "reason": reason,
+                            "snapshot_id": stable_id(snapshot.snapshot_id, reason, *sorted(historical)),
+                        }
+                    )
+                    issues.append(
+                        Issue(
+                            severity="warning",
+                            code="source.inventory_unresolved",
+                            message=reason,
+                            details={"station_id": station, "product_id": product},
+                            provider_id=ProviderId("no_nve"),
+                        )
+                    )
+                inventories.append(snapshot)
+                definitions.extend(inventory.series)
+                outcomes.extend(inventory.outcomes)
+                calls.extend(inventory.calls)
+                issues.extend(inventory.issues)
+                candidates = {**historical, **current}
+                matching = tuple(item for item in candidates.values() if scope is None or scope.matches(item))
+            versions = {
+                int(item.identity.published_id)
+                for item in matching
+                if item.identity.namespace == "HydAPI.version"
+                and item.identity.published_id is not None
+                and item.identity.published_id.isdecimal()
+            }
+            if coordinates.version_number is not None:
+                versions.add(coordinates.version_number)
+            if scope is not None and scope.restriction is RestrictionKind.EXPLICIT:
+                versions.update(int(value) for value in scope.variants if value.isascii() and value.isdecimal())
+            if not versions:
+                if inventories and inventories[-1].completeness is InventoryCompleteness.COMPLETE:
+                    if not inventory.outcomes:
+                        unresolved = any(
+                            admission(fact).status != "supported"
+                            or any(
+                                getattr(fact, predicate.field).value is None
+                                for predicate in (scope.predicates if scope else ())
+                            )
+                            for item in inventory.series
+                            for fact in item.facts
+                        )
+                        reason = (
+                            "Current HydAPI metadata cannot settle physical matching or admission for every version"
+                            if unresolved
+                            else "Current HydAPI inventory has no version matching the requested physical facts"
+                        )
+                        if unresolved:
+                            issues.append(
+                                Issue(
+                                    severity="warning",
+                                    code="source.inventory_unresolved",
+                                    message=reason,
+                                    provider_id=ProviderId("no_nve"),
+                                    details={"station_id": station, "product_id": product},
+                                )
+                            )
+                        outcomes.append(
+                            RetrievalOutcome(
+                                outcome_id=stable_id(
+                                    inventories[-1].snapshot_id, reason, scope.model_dump_json() if scope else None
+                                ),
+                                series_id=None,
+                                station_id=station,
+                                product_id=product,
+                                window=requested_window,
+                                status=OutcomeStatus.UNRESOLVED if unresolved else OutcomeStatus.NO_MATCH,
+                                reason=reason,
+                                retrieved_at=inventories[-1].acquired_at,
+                            )
+                        )
+                    continue
+                issues.append(
+                    Issue(
+                        severity="warning",
+                        code="source.inventory_unresolved",
+                        message="No established HydAPI version selector is available; upstream default is not all-series retrieval",
+                        details={"station_id": station, "product_id": product},
+                        provider_id=ProviderId("no_nve"),
                     )
                 )
-    return WithIssues(value=tuple(payloads), issues=())
+                continue
+            for version in sorted(versions):
+                concrete = replace(coordinates, version_number=version)
+                for window in rendered_windows[product]:
+                    reference_time = _reference_time(window)
+                    request = _request(station, concrete, reference_time)
+                    target = next((item for item in matching if item.identity.published_id == str(version)), None)
+                    if target is None:
+                        identifier = stable_id(
+                            "no_nve",
+                            station,
+                            "HydAPI.requested_version",
+                            concrete.parameter,
+                            str(version),
+                            concrete.resolution_time,
+                        )
+                        target = SourceSeries(
+                            series_id=identifier,
+                            provider_id="no_nve",
+                            station_id=station,
+                            product_id=product,
+                            identity=SourceIdentity(
+                                namespace="HydAPI.requested_version",
+                                published_id=None,
+                                origin="mapping",
+                                evidence=(
+                                    f"Caller requested documented VersionNumber selector {version}; source identity remains unestablished",
+                                ),
+                            ),
+                            variant=str(version),
+                            facts=(PhysicalFacts(facts_id=stable_id(identifier, "unestablished")),),
+                        )
+                    attempted = attempt_series_request(
+                        transport,
+                        request,
+                        target,
+                        SeriesWindow(
+                            start=datetime.fromisoformat(fetch_window.start.isoformat()),
+                            end=datetime.fromisoformat(fetch_window.end.isoformat()),
+                        ),
+                    )
+                    if isinstance(attempted, FailedSourceRequest):
+                        failed_requests.append(attempted)
+                        continue
+                    response = attempted
+                    payloads.append(
+                        Payload(
+                            source_coordinates=SourceCoordinates(concrete),
+                            station_products=((station, product),),
+                            fetch_window=fetch_window,
+                            content=response.content,
+                            origin=_origin(response),
+                            prerequisite_calls=response.prerequisite_calls,
+                            scope=scope,
+                            known_series=tuple(item for item in matching if item.identity.published_id == str(version)),
+                        )
+                    )
+    return SourceAcquisition(
+        value=tuple(payloads),
+        issues=tuple(issues),
+        failed_requests=tuple(failed_requests),
+        series=tuple(definitions),
+        inventories=tuple(inventories),
+        outcomes=tuple(outcomes),
+        calls=tuple(calls),
+    )
 
 
 def _coordinates(product: ProductId, config: ProviderConfig) -> NoNveSourceCoordinates:
@@ -79,6 +259,7 @@ def _request(station: str, coordinates: NoNveSourceCoordinates, reference_time: 
             "Parameter": coordinates.parameter,
             "ResolutionTime": coordinates.resolution_time,
             "ReferenceTime": reference_time,
+            "VersionNumber": coordinates.version_number,
         },
         headers={"Accept": "application/json"},
     )

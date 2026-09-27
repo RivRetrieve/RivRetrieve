@@ -29,3 +29,8 @@ planning/visions/*
 
 # Local installed-distribution validation environments and extracted sdists
 .distribution-checks/
+
+# Documentation build outputs
+site/
+docs/index.md
+docs/assets/stations_map.html

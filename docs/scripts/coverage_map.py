@@ -1,4 +1,4 @@
-"""coverage_map : CatalogueStationIdentities × Admin0Boundaries → CountShadedPNG.
+"""coverage_map : CatalogueStationIdentities × Admin0Boundaries → CoverageStatusPNG.
 
 Reproduce from the checkout catalogue and Natural Earth 1:50m Admin 0 Countries:
 
@@ -10,6 +10,9 @@ saved copy of that ZIP. Match ADM0_A3, not sovereign ownership of dependencies.
 Counts are unique provider/station identities for observation-capable providers;
 they do not assert continuous observations or complete national network coverage.
 No station coordinates or station CRS assumptions enter this figure.
+Planned countries are fetchers in the legacy kratzert/RivRetrieve-Python repository,
+merged or in open pull requests, that have no provider here yet, plus countries from the
+suggested porting order in the new-country research.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ PROVIDER_COUNTRY = {
     "ch_foen": "CHE",
     "cz_chmi": "CZE",
     "fr_hubeau": "FRA",
+    "fr_hydroportail": "FRA",
     "jp_mlit": "JPN",
     "lt_lhmt": "LTU",
     "no_nve": "NOR",
@@ -38,9 +42,44 @@ PROVIDER_COUNTRY = {
     "th_thaiwater": "THA",
     "usgs_nwis": "USA",
 }
+PLANNED_COUNTRY = {
+    "ARG": "Argentina",
+    "AUS": "Australia",
+    "BEL": "Belgium (Flanders, Wallonia)",
+    "CHL": "Chile",
+    "DEU": "Germany (Berlin)",
+    "DNK": "Denmark",
+    "ESP": "Spain",
+    "EST": "Estonia",
+    "FIN": "Finland",
+    "GBR": "United Kingdom (EA, NRFA, SEPA)",
+    "GRC": "Greece",
+    "IRL": "Ireland (OPW)",
+    "ITA": "Italy (Tuscany)",
+    "KOR": "South Korea",
+    "NLD": "Netherlands",
+    "PRT": "Portugal",
+    "SVN": "Slovenia",
+    "SWE": "Sweden",
+    "TWN": "Taiwan",
+    "ZAF": "South Africa",
+}
+# Suggested order in docs/provider_ports/new_countries.md (research/new-country-candidates), items 1-8.
+RESEARCHED_COUNTRY = {
+    "AFG": "Afghanistan",
+    "COL": "Colombia",
+    "ISR": "Israel",
+    "MEX": "Mexico",
+    "NZL": "New Zealand",
+    "PER": "Peru",
+    "SOM": "Somalia",
+    "TUR": "Türkiye",
+}
+PLANNED_COUNTRY |= RESEARCHED_COUNTRY
 ROBINSON = "ESRI:54030"
-BACKGROUND = "#FBFCFD"
 LAND = "#E3E8EC"
+IMPLEMENTED = "#127B8C"
+PLANNED = "#F29E38"
 
 
 def country_counts(stations: pl.DataFrame) -> dict[str, int]:
@@ -57,10 +96,9 @@ def country_counts(stations: pl.DataFrame) -> dict[str, int]:
 
 
 def draw(world, stations: pl.DataFrame, out: Path) -> None:
-    """Render country counts without using station geometry."""
+    """Render implemented and planned countries on a transparent sea, without station geometry."""
     import matplotlib.pyplot as plt
-    from matplotlib.cm import ScalarMappable
-    from matplotlib.colors import LogNorm
+    from matplotlib.patches import Patch
 
     counts = country_counts(stations)
     missing = counts.keys() - set(world["ADM0_A3"])
@@ -69,31 +107,35 @@ def draw(world, stations: pl.DataFrame, out: Path) -> None:
     land = world.loc[world["ADM0_A3"] != "ATA"].copy()
     land["gauges"] = land["ADM0_A3"].map(counts)
     land = land.to_crs(ROBINSON)
-    lower, upper = min(50, min(counts.values())), max(30000, max(counts.values()))
-    norm = LogNorm(vmin=lower, vmax=upper)
-    fig, ax = plt.subplots(figsize=(14, 7), facecolor=BACKGROUND)
-    ax.set_facecolor(BACKGROUND)
-    land.plot(ax=ax, color=LAND, linewidth=0)
-    land.loc[land["gauges"].notna()].plot(
-        ax=ax,
-        column="gauges",
-        cmap="GnBu",
-        norm=norm,
-        edgecolor=BACKGROUND,
-        linewidth=0.25,
-    )
+    planned = land.loc[land["ADM0_A3"].isin(PLANNED_COUNTRY.keys() - counts.keys())]
+    plt.rcParams["hatch.linewidth"] = 0.9
+    fig, ax = plt.subplots(figsize=(14, 7))
+    land.plot(ax=ax, color=LAND, edgecolor="white", linewidth=0.25)
+    land.loc[land["gauges"].notna()].plot(ax=ax, color=IMPLEMENTED, edgecolor="white", linewidth=0.25)
+    if not planned.empty:
+        planned.plot(ax=ax, facecolor="none", edgecolor=PLANNED, hatch="////", linewidth=0.5)
     ax.set_axis_off()
     ax.margins(0.01)
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0.12)
-    legend = fig.add_axes((0.32, 0.065, 0.36, 0.018))
-    ticks = sorted({lower, 100, 500, 1000, 5000, upper})
-    bar = fig.colorbar(ScalarMappable(norm=norm, cmap="GnBu"), cax=legend, orientation="horizontal", ticks=ticks)
-    bar.ax.set_xticklabels([f"{tick:,}" for tick in ticks])
-    bar.ax.minorticks_off()
-    bar.ax.tick_params(labelsize=8, length=2)
-    bar.set_label("Gauging stations · logarithmic scale", fontsize=9)
-    bar.outline.set_visible(False)
-    fig.savefig(out, dpi=200, facecolor=BACKGROUND)
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0.08)
+    handles = [
+        Patch(facecolor=IMPLEMENTED, edgecolor="none", label="Implemented"),
+        Patch(facecolor="none", edgecolor=PLANNED, hatch="////", label="Coming soon"),
+    ]
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=2,
+        fontsize=11,
+        handlelength=2.2,
+        handleheight=1.2,
+        frameon=True,
+        facecolor="white",
+        edgecolor="none",
+        framealpha=1,
+        labelcolor="#1F2328",
+        borderpad=0.8,
+    )
+    fig.savefig(out, dpi=200, transparent=True)
     plt.close(fig)
 
 
@@ -117,7 +159,9 @@ def main() -> None:
     )
     counts = country_counts(stations)
     print(stations.group_by("provider_id").len().sort("provider_id"))
-    print(f"{sum(counts.values()):,} unique stations; {len(supported)} providers; {len(counts)} countries")
+    print(
+        f"{sum(counts.values()):,} unique provider-station records; {len(supported)} providers; {len(counts)} countries"
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     draw(gpd.read_file(args.world), stations, args.out)
 

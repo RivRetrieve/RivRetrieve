@@ -102,3 +102,52 @@ def test_public_failed_bulk_compile_requires_explicit_clear_then_retries(
     assert validated.manifest.provider_id == provider_id
     assert validate_store(store, ProviderId(provider_id)).manifest.provider_id == provider_id
     assert not tuple(Path(store).parent.glob("publisher-artifact.download*"))
+
+
+def test_public_poland_multi_artifact_download_uses_real_declaration_and_compiler(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
+) -> None:
+    from datetime import date
+
+    operations = pl_declaration.observations
+    assert isinstance(operations, BulkStore)
+    monkeypatch.setattr(pl_bulk, "FIRST_PUBLISHED_YEAR", 2022)
+    names = ["codz_2022_01.zip", "codz_2022_02.zip"]
+    from tests.store.test_pl_imgw_publication_public import publication
+
+    content_by_url = publication({2022: names})
+    calls = []
+
+    class OfflineClient:
+        def send(self, request):
+            if request.method.value == "HEAD":
+                return SimpleNamespace(status_code=200, content=b"")
+            calls.append(request.url)
+            return SimpleNamespace(status_code=200, content=content_by_url[request.url])
+
+    root = StoreRoot(tmp_path / "pl_imgw" / "store")
+    registry = ProviderRegistry()
+    registry.register(
+        "pl_imgw",
+        stub_packaged_catalogue_artifact("pl_imgw"),
+        bulk_config=operations.config,
+        observation_store=root,
+        bulk_operations=operations,
+    )
+    monkeypatch.setattr(bulk_lifecycle, "_ensure_default_providers_registered", lambda: None)
+    monkeypatch.setattr(bulk_lifecycle, "_registry", registry)
+    monkeypatch.setattr(bulk_lifecycle, "HttpClient", OfflineClient)
+
+    result = rr.download("pl_imgw")
+
+    assert calls == [
+        pl_bulk.BASE_URL + "/",
+        pl_bulk.BASE_URL + "/2022/",
+        *(pl_bulk.BASE_URL + "/2022/" + name for name in names),
+    ]
+    assert result.manifest.source_vintage == date(2021, 12, 31)
+    assert validate_store(root, ProviderId("pl_imgw")).manifest == result.manifest
+    assert rr.cache_status("pl_imgw").source_vintage == date(2021, 12, 31)
+    assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))

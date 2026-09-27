@@ -35,11 +35,14 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
         "fetch",
         "fetch_by_provider",
         "find",
+        "from_bundle",
         "from_frame",
         "map",
         "pick",
         "products",
         "providers",
+        "series",
+        "to_bundle",
         "to_utc",
     ]
     removed = (
@@ -137,13 +140,16 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (738, 0, 0),
         "cz_chmi": (4_155, 0, 0),
-        "fr_hubeau": (33_139, 0, 0),
+        # Native inventories acquired 2026-09-21; these are snapshot checks.
+        "fr_hubeau": (20_297, 0, 0),
+        "fr_hydroportail": (12_818, 0, 0),
         "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
         "no_nve": (44_118, 0, 0),
         "pl_imgw": (3_903, 0, 0),
         "th_thaiwater": (1_650, 0, 0),
-        "usgs_nwis": (157_548, 57_450, 57_450),
+        # Modern metadata UTC ranges do not establish calendar observation support.
+        "usgs_nwis": (157_548, 0, 0),
         "za_dws": (8_715, 0, 0),
     }
     expected_station_product_columns = (
@@ -163,6 +169,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ch_foen",
         "cz_chmi",
         "fr_hubeau",
+        "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
@@ -205,3 +212,13 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
             provider_id
         ]
         assert "metadata" not in artifact.provider_info
+
+
+def test_usgs_legacy_calendar_period_claims_remain_independent_evidence() -> None:
+    root = Path(__file__).parents[1]
+    legacy = pl.read_parquet(root / "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet")
+    modern = pl.read_parquet(root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/station_products.parquet")
+    assert legacy.height == modern.height == 157_548
+    for column in ("published_record_start_date", "published_record_end_date"):
+        assert legacy[column].count() == 57_450
+        assert modern[column].count() == 0

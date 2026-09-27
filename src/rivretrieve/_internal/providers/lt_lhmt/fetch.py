@@ -1,4 +1,4 @@
-"""lt_lhmt fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]].
+"""Acquire independently exhaustive historical months and retain bounded failures.
 
 Contributed by: Thiago von Däniken
 """
@@ -7,21 +7,37 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
+from uuid import uuid4
 
+from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
-    WithIssues,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.providers.lt_lhmt.config import LtLhmtSourceCoordinates
-from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
+from rivretrieve._internal.providers.lt_lhmt.config import SERIES_MAPPINGS, LtLhmtSourceCoordinates
+from rivretrieve._internal.source_acquisition import (
+    FailedSourceRequest,
+    SourceResponseMeaning,
+    attempt_request,
+    http_response_meaning,
+)
+from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
+from rivretrieve._internal.transport import (
+    HttpMethod,
+    Transport,
+    TransportFailure,
+    TransportRequest,
+    TransportResponse,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +46,8 @@ class LtLhmtHistoricalRoute:
 
 
 _BASE_URL = "https://api.meteo.lt/v1/hydro-stations"
+# Meteo.lt historical-route documentation: no stored station measurements.
+_HISTORICAL_RESPONSE_MEANINGS = {404: SourceResponseMeaning.NO_OBSERVATIONS}
 
 
 def fetch(
@@ -39,30 +57,55 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
-) -> WithIssues[tuple[Payload, ...]]:
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
+) -> SourceAcquisition:
     for product in products:
         _coordinates(product, config)
-    groups: dict[tuple[str, str | None], list[ProductId]] = {}
+    groups: dict[RenderedWindow, list[ProductId]] = {}
     for product in products:
         for window in rendered_windows[product]:
-            groups.setdefault((window.start, window.stop), []).append(product)
+            groups.setdefault(window, []).append(product)
 
     payloads: list[Payload] = []
+    failures: list[FailedSourceRequest] = []
     for station in stations:
-        for (start, stop), group_products in groups.items():
-            request = _request(station, start, stop)
-            response = transport.send(request)
+        for window, group_products in groups.items():
+            if window.bounds is None:
+                raise FatalContractError("lt_lhmt requires engine-established monthly bounds")
+            request = _request(station, window.start, window.stop)
+            response = attempt_request(transport, request)
+            if isinstance(response, (TransportFailure, CredentialExchangeError)):
+                meaning = http_response_meaning(response, _HISTORICAL_RESPONSE_MEANINGS)
+                for product in group_products:
+                    failures.append(
+                        FailedSourceRequest(
+                            uuid4().hex,
+                            SERIES_MAPPINGS[product].source_series("lt_lhmt", station, product),
+                            SeriesWindow(
+                                start=datetime.fromisoformat(window.bounds.start.isoformat()),
+                                end=datetime.fromisoformat(window.bounds.end.isoformat()),
+                            ),
+                            request,
+                            response,
+                            meaning=meaning,
+                        )
+                    )
+                continue
             payloads.append(
                 Payload(
                     source_coordinates=SourceCoordinates(LtLhmtHistoricalRoute()),
                     station_products=tuple((station, product) for product in group_products),
-                    fetch_window=fetch_window,
+                    fetch_window=window.bounds,
                     content=response.content,
                     origin=_origin(response),
                     prerequisite_calls=response.prerequisite_calls,
+                    scope=scope,
+                    known_series=known_series,
                 )
             )
-    return WithIssues(value=tuple(payloads), issues=())
+    return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
 
 
 def _coordinates(product: ProductId, config: ProviderConfig) -> LtLhmtSourceCoordinates:

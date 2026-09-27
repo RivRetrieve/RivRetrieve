@@ -77,7 +77,7 @@
   ],
   "transformations": [
     {
-      "name": "HYDAT observations to RivRetrieve five-column result shape",
+      "name": "HYDAT observations to identity-bearing RivRetrieve observation rows",
       "kind": "derived_value",
       "marker_value": null
     },
@@ -112,8 +112,8 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "95c8cede266803758b2de37a0cf8124e36a5ac4b783d6dac70c9632fccb931a2",
-      "byte_count": 2670,
+      "sha256": "a94a25beabd912919432c7eb1a6c3ac1f28113fecf7a5ee1a304776568688253",
+      "byte_count": 2647,
       "row_count": 41,
       "schema_version": 3
     },

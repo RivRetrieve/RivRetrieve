@@ -15,9 +15,9 @@ from rivretrieve._internal.acquisition_provenance import (
 from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.registry import UnknownProviderError
 from tests._provenance import legacy_document
+from tests.usgs_modern_recordings import ModernReplay
 
 _ROOT = Path(__file__).parents[1]
 _PROVIDERS = _ROOT / "src/rivretrieve/_internal/providers"
@@ -36,13 +36,12 @@ def test_describe_rejects_unknown_provider(provider: str) -> None:
 
 
 def test_recorded_usgs_fetch_carries_exact_verified_source_words(monkeypatch: pytest.MonkeyPatch) -> None:
-    recording = read_recording(_ROOT / "tests/test_data/usgs_nwis_09380000_iv_00060_2020-07-01.recording.json")
-    replay = ReplayTransport((recording,))
+    replay = ModernReplay("continuous-07374000-2010-discharge")
     monkeypatch.setattr(discovery, "_credentialed_transport", lambda provider_id, values: replay)
     result = rr.fetch(
-        rr.find(provider="usgs_nwis", station="09380000", product="discharge_instantaneous"),
-        start="2020-07-01T00:00:00",
-        end="2020-07-01T23:00:00",
+        rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", temporal_support="instantaneous"),
+        start="2010-06-01T05:00:00",
+        end="2010-06-02T04:59:59",
         on_issue="ignore",
     )
     evidence = load_packaged_catalogue_artifact(_PROVIDERS / "usgs_nwis/catalogue").acquisition_provenance
@@ -86,6 +85,7 @@ def test_provider_terms_do_not_promote_an_explicit_absence_or_unbound_statement(
 def test_south_africa_remains_catalogue_only() -> None:
     from rivretrieve._internal.issues import ObservationsUnavailableError
 
-    selection = rr.from_frame(rr.as_frame(rr.find(provider="za_dws")).head(1))
+    candidates = rr.find(provider="za_dws")
+    selection = rr.find(provider="za_dws", station=candidates.known_series[0].station_id)
     with pytest.raises(ObservationsUnavailableError, match="no observations registered"):
         rr.fetch(selection, start="2020-01-01", end="2020-01-02", on_issue="ignore")

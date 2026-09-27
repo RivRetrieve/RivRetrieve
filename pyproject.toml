@@ -16,6 +16,7 @@ dependencies = [
     "tzdata>=2026.2 ; sys_platform == 'emscripten' or sys_platform == 'win32'",
     "jsonschema>=4.25.1",
     "python-dotenv>=1.2.2",
+    "urllib3>=2,<3",
 ]
 
 [project.scripts]
@@ -80,6 +81,8 @@ dev = [
     "ty>=0.0.35",
     "tqdm>=4.70.0",
     "mlcroissant>=1.1.0",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
 ]
 
 # -----------------------

@@ -300,6 +300,9 @@ def test_canonical_cli_writes_only_five_canonical_artifacts(tmp_path: Path) -> N
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
     assert pl.read_parquet(tmp_path / "stations.parquet").height == 97
     assert pl.read_parquet(tmp_path / "products.parquet").height == 2

@@ -19,11 +19,14 @@ The signatures below preserve runtime annotations and defaults. Some annotations
 - [fetch](#fetch)
 - [fetch_by_provider](#fetch_by_provider)
 - [find](#find)
+- [from_bundle](#from_bundle)
 - [from_frame](#from_frame)
 - [map](#map)
 - [pick](#pick)
 - [products](#products)
 - [providers](#providers)
+- [series](#series)
+- [to_bundle](#to_bundle)
 - [to_utc](#to_utc)
 
 ### `as_frame`
@@ -34,26 +37,16 @@ rivretrieve.as_frame(selection: '_Selection') -> 'pl.DataFrame'
 
 Import: `from rivretrieve import as_frame`.
 
-Copy a selection into a Polars frame for inspection or filtering.
+Return the source-series table for a selection, the same table as `series`.
 
-#### Parameters
-
-- **selection : _Selection**
-  Selection returned by find, pick or from_frame.
-
-#### Returns
-
-- **polars.DataFrame**
-  One row per series in SELECTION_FRAME_SCHEMA order. Identity, geometry,
-  product semantics, canonical unit, native product identifier, availability,
-  published record dates and catalogue check date travel together. Empty
-  selections retain the schema. Acquisition evidence and the empty reason
-  stay on selection rather than becoming frame columns.
+Selecting rows from the table does not change the selection. Pass chosen
+identifiers back to `pick` instead. Use `to_bundle` to save a selection
+without losing information.
 
 #### Raises
 
 - **TypeError**
-  If selection is not a RivRetrieve selection.
+  If `selection` is not a selection. Use `series` for a result.
 
 ### `cache_status`
 
@@ -88,6 +81,8 @@ Inspect one provider's local observation store without source access.
   If an existing store is invalid or interrupted publication needs recovery.
 - **OSError**
   If local file operations fail.
+- **ValueError**
+  If `RIVRETRIEVE_CACHE_DIR` is set to a blank value.
 
 ### `clear_cache`
 
@@ -121,6 +116,8 @@ Delete one provider's compiled observation store or accumulated live store.
   If the pending-download namespace is symlinked or contains an unsafe entry.
 - **OSError**
   If deletion fails. This operation is not transactional.
+- **ValueError**
+  If `RIVRETRIEVE_CACHE_DIR` is set to a blank value.
 
 #### Notes
 
@@ -171,13 +168,14 @@ rivretrieve.download(provider: 'str')
 
 Import: `from rivretrieve import download`.
 
-Explicitly download and compile one bulk provider into the local cache.
+Download a bulk provider's national dataset and compile it into the local cache.
 
 #### Parameters
 
 - **provider : str**
-  Registered bulk provider identifier. Calling this function is consent
-  to transfer the publisher artifacts and compile them locally.
+  Registered bulk provider identifier, currently `"ca_eccc"` or
+  `"pl_imgw"`. Calling this function is consent to transfer the
+  publisher artifacts and compile them locally.
 
 #### Returns
 
@@ -205,6 +203,12 @@ Explicitly download and compile one bulk provider into the local cache.
   authoritative and the exception names the residue.
 - **OSError**
   If local file operations fail.
+- **ValueError**
+  If the provider finds the publisher's listing or artifacts
+  inconsistent, or finds that the newly published history would end
+  before the source vintage of the existing compiled store. The existing
+  store is not replaced. Also raised if `RIVRETRIEVE_CACHE_DIR` is set
+  to a blank value.
 
 #### Notes
 
@@ -212,6 +216,16 @@ This call can transfer a national dataset. It is not needed for live
 providers. Before publication, a failed compilation preserves the previous
 store and publisher inputs. Use clear_cache explicitly for recovery.
 Transport failures can also propagate rather than becoming result issues.
+
+An existing compiled store that passes validation supplies its source
+vintage, so the provider can refuse a download whose published history
+would regress. An existing store that fails validation does not block the
+call, because `download` is how such a store is rebuilt.
+
+The store is written under `RIVRETRIEVE_CACHE_DIR` when that variable is
+set in the environment or the working directory `.env` file, otherwise
+under the platform's user cache directory. `cache_status` and
+`clear_cache` resolve the same location.
 
 ### `drainage_areas`
 
@@ -225,8 +239,8 @@ Read selected gauges' packaged drainage-area metadata offline.
 
 #### Parameters
 
-- **selection : _Selection**
-  Selection returned by find, pick or from_frame. Multiple providers and
+- **selection : selection**
+  Selection returned by find, pick or from_bundle. Multiple providers and
   products are accepted; each provider-station pair appears once per
   source field, regardless of the number of selected products.
 
@@ -257,7 +271,8 @@ Read selected gauges' packaged drainage-area metadata offline.
 #### Notes
 
 Reads only packaged metadata, without observations, credentials or network
-access. Coverage is limited to drainage/watershed-size fields established
+access. Gauge identity does not require numeric observation admission or map
+coordinates. Coverage is limited to drainage/watershed-size fields established
 by existing repository evidence. Distinct source fields remain separate;
 no area is preferred, inferred, converted or scientifically harmonized.
 Neither absence state means zero or that an agency publishes no area
@@ -271,73 +286,163 @@ rivretrieve.fetch(selection: '_Selection', *, start: 'object' = None, end: 'obje
 
 Import: `from rivretrieve import fetch`.
 
-Retrieve selected observations from one provider.
+Download observations for a selection whose series come from one provider.
+
+`fetch` requests each station and access route in the selection and
+returns every series whose physical facts and identity match the
+selection's filters. An unrestricted selection includes matching series
+that are first identified in the source response. An explicit `variant`
+or `series_id` restriction returns only those series, even when the
+catalogue could not settle whether they exist.
 
 #### Parameters
 
-- **selection : _Selection**
-  Series to retrieve. fetch requires a nonempty selection from one provider.
-- **start : str or datetime, default None**
-  Required naive wall-clock endpoint in each source calendar. ISO date
-  strings begin at midnight. None and datetime.date objects are refused.
-- **end : str, datetime or None, default None**
-  Inclusive naive wall-clock endpoint. A bare ISO date includes that whole
-  date. None uses the caller machine's local date through its last instant.
-  A future end stays unchanged and adds one informational issue per provider.
+- **selection : selection**
+  Selection from `find`, `pick` or `from_bundle`. It must route to
+  exactly one provider. Use `fetch_by_provider` for several providers.
+- **start : str or datetime.datetime**
+  Required first time label to include, on the source's own wall clock.
+  Accepts an ISO date (`"2023-01-01"`, meaning midnight), an ISO
+  date-time without a zone (`"2023-01-01T06:00"`) or a naive
+  `datetime`. Python `date` objects and values with a time zone are
+  refused.
+- **end : str, datetime.datetime or None, default None**
+  Last time label to include, in the same forms as `start`. A date-only
+  end includes that whole date. None means the final instant of the
+  caller machine's current local date. An end in the future is kept and
+  adds an `info` issue with code `request.future_end`.
 - **receipts : bool, default False**
-  Retain publisher payloads and store excerpts when True. Otherwise the
-  returned receipts.entries tuple is empty.
+  If True, keep the source bytes behind the returned rows in
+  `result.receipts`. See `ReceiptEntry`.
 - **cache : {"bypass", "reuse", "refresh"}, default "bypass"**
-  For live providers, bypass leaves the cache untouched, reuse serves held
-  coverage and fetches the remainder, and refresh replaces the requested
-  interval after successful retrieval. Bulk providers always read their
-  compiled store. They accept bypass and reuse, but refuse refresh.
+  Local observation cache behaviour for live providers. `bypass` fetches
+  without reading or writing the cache. `reuse` decides separately for
+  each station and access route. It serves cached observations where the
+  cache knows the matching series and successful earlier retrievals
+  cover the requested interval, and fetches the whole requested interval
+  again for each station and access route that is not covered.
+  `refresh` requests the interval again, and a successful answer
+  replaces the cached answer. If a request fails or its answer cannot be
+  used, rows cached by earlier successful retrievals are still returned
+  with the new issue and its `failed` or `unsupported` outcome. The
+  earlier `success` or `empty` outcomes for those rows are also
+  returned, and `provenance.served_intervals` shows their original
+  retrieval times. The same applies when `reuse` has to fetch again.
+  Successful answers from `reuse` and `refresh` are written to the
+  cache. For a bulk provider, `bypass` and `reuse` both read its
+  compiled store, and `refresh` is refused.
 - **on_issue : {"warn", "raise", "ignore"}, default "warn"**
-  Handling for warning and error issues. Warn emits RuntimeWarning and
-  returns results. Raise raises IssuePolicyError. Ignore suppresses
-  notifications, not retained issues. Info does not activate this policy.
+  Handling of `warning` and `error` issues after retrieval. `warn`
+  emits one `RuntimeWarning` per issue and returns the result.
+  `raise` raises `IssuePolicyError` carrying those issues. `ignore`
+  returns the result without notification. `info` issues never trigger
+  the policy. Every issue stays in `result.issues` when a result is
+  returned.
 
 #### Returns
 
 - **ObservationResult**
-  Five-column observation frame with native wall-clock time, per-row zone,
-  station_id, product_id and canonical value. Provenance, issues and optional
-  receipts accompany it. Source failures can yield partial or empty data
-  with issues. Successful retrieval does not establish continuous coverage.
+  Observation rows in `data` together with `source_series`,
+  `inventories`, `outcomes`, `provenance`, `receipts` and
+  `issues`. Values are converted to m3/s for discharge, m for stage
+  and degC for water temperature, and `source_unit` keeps the published
+  unit. Timestamps stay on the source's wall clock with a per-row
+  `time_zone`, which can be `unknown`. Rows are clipped to the
+  requested window by calendar date or by source timestamp, as recorded
+  in each fact segment's `clipping_axis`.
+
+  A source failure for one station or access route becomes an issue and a
+  `failed` outcome, and independent series still return their rows. Some
+  providers request a series in independent parts, such as monthly files.
+  A failed part is reported for its own interval: the issue's
+  `details["window"]` holds the source interval, and the `failed`
+  outcome covers its overlap with the requested window, or the whole
+  source interval when the part lies outside that window. Rows from the
+  other parts are kept.
+
+  Failed HTTP requests produce `source.request_failed` (error) or, for
+  HTTP 404, `source.http_not_found` (warning). Their `details` keep
+  the station, product, request URL, attempt count, status code and
+  failure reason.
+
+  A part requested only as padding, wholly outside the requested dates,
+  produces no outcome unless its source request fails. A failed padding
+  request is reported with an issue and a `failed` outcome over its
+  source interval, except an HTTP 404 that the provider declares to mean
+  no stored observations for that interval. That 404 produces no issue
+  and no outcome, and its call stays in `provenance.calls_made`. A
+  padding response that cannot be used, such as a malformed one, is
+  reported with an issue only.
+
+  When every request fails, the issues and outcomes explain why. `data`
+  is then empty, except with `cache="reuse"` or `cache="refresh"`
+  when the cache holds rows from earlier successful retrievals. Those rows
+  and their earlier outcomes are returned alongside the failures, as
+  described for `cache`. A null `value` means the source gives no
+  value for that time, and the row is still returned. An `empty`
+  outcome means no rows were found for its series and interval. A failed
+  request is reported through issues and `failed` outcomes.
 
 #### Raises
 
-- **EmptySelectionError**
-  If the selection is empty. The exception carries its reason.
-- **MultiProviderSelectionError**
-  If the selection contains more than one provider.
 - **TypeError**
-  If selection is not a RivRetrieve selection.
+  If `selection` is not a selection.
 - **ValueError**
-  If cache is not one of the supported modes.
+  If `cache` or `on_issue` is invalid, or `RIVRETRIEVE_CACHE_DIR`
+  is set to a blank value.
+- **EmptySelectionError**
+  If the selection routes to no provider, station and access route.
+- **MultiProviderSelectionError**
+  If the selection routes to more than one provider.
 - **InvalidObservationRequestError**
-  If start is omitted, an endpoint is invalid or zone-aware, or start > end.
+  If `start` is missing, either endpoint has an unsupported type,
+  cannot be parsed or has a time zone, or `start` is after `end`.
 - **MissingCredentialError**
-  If a selected provider lacks required credentials before source access.
+  If a required credential is not set. No source request is made.
 - **ObservationsUnavailableError**
-  If a provider has no observation stages.
-- **ObservationStoreRefusedError**
-  If an existing store cannot be validated.
-- **IssuePolicyError**
-  If on_issue="raise" and results carry warning or error issues.
+  If the provider only publishes a catalogue, such as `za_dws`.
 - **FatalContractError**
-  If a stage contract fails or refresh is requested for a bulk provider.
-  These errors are independent of on_issue.
+  If `cache="refresh"` is requested for a bulk provider, before any
+  transfer, or if a provider stage breaks its output contract. These
+  errors are raised whatever `on_issue` is.
+- **ObservationStoreRefusedError**
+  If an existing local store is malformed or incompatible.
+- **IssuePolicyError**
+  If `on_issue="raise"` and the result has a warning or error issue.
 
 #### Notes
 
-Daily products clip on native calendar dates. Other products clip on their
-wall-clock labels. The engine pads source requests by two days at each end
-and clips returned rows to the requested window. Unit conversion does not
-compute a new hydrological product. Supplied credentials come from the
-process environment or working directory .env file, not function arguments.
-A missing compiled store returns an empty frame with bulk.store_missing,
-a warning issue. No implicit download starts.
+Live providers are contacted over the network unless `reuse` finds every
+requested station and access route covered in the cache. Requests that are
+safe to repeat are retried for transient failures. The usage guide
+describes the retry limits.
+
+Credentials are read from the process environment, then from a `.env`
+file in the working directory. They are required even when the answer
+comes from the cache. The cache location is `RIVRETRIEVE_CACHE_DIR`,
+read the same way, or the platform's user cache directory.
+
+A bulk provider without a compiled store returns an empty result with a
+`bulk.store_missing` warning and an `unresolved` outcome. `fetch`
+never starts a national download. Call `download` to create the store.
+
+#### Examples
+
+This example contacts the USGS service. The output shown was checked
+against a recorded USGS response.
+
+```pycon
+>>> import rivretrieve as rr
+>>> gauge = rr.find(
+...     provider="usgs_nwis", station="07374000",
+...     quantity="discharge", frequency="daily", statistic="mean",
+... )
+>>> result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")  # doctest: +SKIP
+>>> result.data.select("time", "time_zone", "source_unit", "unit", "value").rows()  # doctest: +SKIP
+[(datetime.datetime(2023, 1, 1, 0, 0), 'unknown', 'ft^3/s', 'm3/s', 10562.183778816001)]
+>>> [outcome.status.value for outcome in result.outcomes]  # doctest: +SKIP
+['success']
+```
 
 ### `fetch_by_provider`
 
@@ -347,104 +452,154 @@ rivretrieve.fetch_by_provider(selection: '_Selection', *, start: 'object' = None
 
 Import: `from rivretrieve import fetch_by_provider`.
 
-Retrieve a selection as separate results keyed by provider.
+Download observations for a multi-provider selection, one result per provider.
 
-#### Parameters
-
-- **selection : _Selection**
-  Series to retrieve from zero or more providers.
-- **start : str or datetime, default None**
-  Required naive wall-clock endpoint in each source calendar. ISO date
-  strings begin at midnight. None and datetime.date objects are refused.
-- **end : str, datetime or None, default None**
-  Inclusive naive wall-clock endpoint. A bare ISO date includes that whole
-  date. None uses the caller machine's local date through its last instant.
-  A future end stays unchanged and adds one informational issue per provider.
-- **receipts : bool, default False**
-  Retain publisher payloads and store excerpts when True. Otherwise the
-  returned receipts.entries tuple is empty.
-- **cache : {"bypass", "reuse", "refresh"}, default "bypass"**
-  For live providers, bypass leaves the cache untouched, reuse serves held
-  coverage and fetches the remainder, and refresh replaces the requested
-  interval after successful retrieval. Bulk providers always read their
-  compiled store. They accept bypass and reuse, but refuse refresh.
-- **on_issue : {"warn", "raise", "ignore"}, default "warn"**
-  Handling for warning and error issues. Warn emits RuntimeWarning and
-  returns results. Raise raises IssuePolicyError. Ignore suppresses
-  notifications, not retained issues. Info does not activate this policy.
+Parameters are the same as for `fetch`. The selection can route to any
+number of providers.
 
 #### Returns
 
 - **dict[str, ObservationResult]**
-  One result per selected provider, in provider-id order. An empty
-  selection returns {} without validating its window or credentials.
-  Each result uses the same schema and semantics as fetch.
+  One result per routed provider, keyed by provider identifier. Each
+  result has the same contents as a `fetch` result for that provider.
+  An empty selection returns an empty dictionary after applying
+  `on_issue` to the selection's issues.
 
 #### Raises
 
-- **TypeError**
-  If selection is not a RivRetrieve selection.
-- **ValueError**
-  If cache is not one of the supported modes.
-- **InvalidObservationRequestError**
-  If start is omitted, an endpoint is invalid or zone-aware, or start > end.
 - **MissingCredentialError**
-  If a selected provider lacks required credentials before source access.
-- **ObservationsUnavailableError**
-  If a provider has no observation stages.
-- **ObservationStoreRefusedError**
-  If an existing store cannot be validated.
-- **IssuePolicyError**
-  If on_issue="raise" and results carry warning or error issues.
+  If any selected provider lacks a required credential. Credentials for
+  every provider are checked before any provider is contacted.
 - **FatalContractError**
-  If a stage contract fails or refresh is requested for a bulk provider.
-  These errors are independent of on_issue.
+  If `cache="refresh"` includes a bulk provider, before any provider is
+  contacted, or if a provider breaks a stage contract.
+- **IssuePolicyError**
+  If `on_issue="raise"` and any result has a warning or error issue.
+  The policy is applied once, after every provider has been retrieved.
 
 #### Notes
 
-Credentials are checked for all selected providers before retrieval.
-The issue policy runs after all provider results have been assembled.
-A fatal contract error still aborts the call. This function does not
-merge provider frames, whose station identifiers need not be globally unique.
+Providers are retrieved one after another. Source failures stay inside the
+affected provider's result as issues and outcomes. An exception raised
+while retrieving one provider stops the call, and results already
+retrieved for other providers are not returned. The other exceptions
+listed for `fetch`, apart from `EmptySelectionError` and
+`MultiProviderSelectionError`, can also be raised.
 
 ### `find`
 
 ```text
-rivretrieve.find(*, provider: 'str | None' = None, station: 'str | None' = None, product: 'str | None' = None) -> '_Selection'
+rivretrieve.find(*, provider: 'str | None' = None, station: 'str | None' = None, quantity: 'str | None' = None, frequency: 'str | None' = None, statistic: 'str | None' = None, temporal_support: 'str | None' = None, day_definition: 'str | None' = None, timestamp_anchor: 'str | None' = None, time_zone: 'str | None' = None, vertical_reference: 'str | None' = None, vertical_datum: 'str | None' = None, variant: 'str | None' = None, series_id: 'str | None' = None, on_issue: 'OnIssue' = 'warn') -> '_Selection'
 ```
 
 Import: `from rivretrieve import find`.
 
-Select station-product series from packaged catalogues.
+Search the packaged catalogues for source series that match the given filters.
+
+`find` reads the packaged catalogues only. It does not contact observation
+services, read credentials or use the observation cache. The returned
+selection records the filters as request intent together with the catalogue
+evidence known today. `fetch` uses that intent, so an unrestricted
+selection also includes matching series that a source response reveals later.
 
 #### Parameters
 
 - **provider : str or None, default None**
-  Exact provider identifier. None includes every provider.
+  Provider identifier, such as `"usgs_nwis"`. None searches every
+  built-in provider. `providers()` lists the identifiers.
 - **station : str or None, default None**
-  Exact station identifier, including leading zeros. With provider=None,
-  the same identifier can select stations from several providers.
-- **product : str or None, default None**
-  Exact canonical product identifier. None includes every product.
+  Station identifier as the provider publishes it. Keep identifiers as
+  strings so leading zeros survive. Without `provider`, the station is
+  searched in every provider that lists it.
+- **quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None**
+  Exact filters on established physical facts. Quantities are
+  `"discharge"`, `"stage"` and `"temperature"`. Packaged catalogues
+  currently use frequencies such as `"daily"` and `"hourly"` and
+  statistics such as `"mean"`, `"min"`, `"max"` and
+  `"instantaneous"`. A fact that is unknown for a series never matches
+  a filter on that fact. Values are compared as exact strings and are not
+  checked against a vocabulary, so a misspelled value returns an empty
+  selection without an issue.
+- **variant, series_id : str or None, default None**
+  Explicit source restriction. `variant` matches the source's variant
+  name or its published identifier. `series_id` matches RivRetrieve's
+  internal source-series identifier, as shown by `series`. Other
+  versions of the series are never substituted.
+- **on_issue : {"warn", "raise", "ignore"}, default "warn"**
+  Handling of warning and error issues found during selection. See
+  `fetch` for the meaning of each policy.
 
 #### Returns
 
-- **_Selection**
-  Immutable, sorted, unique (provider_id, station_id, product_id) series
-  with catalogue metadata and acquisition evidence. Available and unknown
-  availability remain selectable. Unavailable pairs are excluded. A valid
-  query without a selectable pair returns an empty selection with a reason.
+- **selection**
+  A selection to pass to `pick`, `series`, `fetch`,
+  `fetch_by_provider`, `drainage_areas`, `map` or `to_bundle`.
+  It cannot be changed in place. Inspect its source series with
+  `series(selection)`.
 
 #### Raises
 
 - **UnknownProviderError**
-  If provider is not registered.
+  If `provider` is not a built-in provider.
 - **UnknownStationError**
-  If station is absent from the requested provider scope.
-- **UnknownProductError**
-  If product is absent from the global vocabulary.
-- **FatalContractError**
-  If shipped catalogue contracts fail.
+  If `station` is not listed by the selected providers.
+- **ValueError**
+  If `on_issue` is not one of the accepted values, or `provider`,
+  `station`, `variant` or `series_id` is an empty string.
+- **IssuePolicyError**
+  If `on_issue="raise"` and selection produced a warning issue.
+
+#### Notes
+
+Two issue codes can be recorded on the selection's `issues` for an
+explicit `variant` or `series_id` that matches no known series.
+`selection.no_match` means the packaged evidence establishes that nothing
+matches. `selection.unresolved_inventory` means the catalogue cannot tell
+whether the source publishes that series. RivRetrieve still requests an
+unresolved restriction during `fetch`. Physical filters that match nothing
+produce an empty selection without an issue. `fetch` refuses such a
+selection with `EmptySelectionError`.
+
+The packaged catalogue is a snapshot. It does not establish that every
+listed series has observations for a particular period.
+
+### `from_bundle`
+
+```text
+rivretrieve.from_bundle(content: 'bytes') -> '_Selection | ObservationResult'
+```
+
+Import: `from rivretrieve import from_bundle`.
+
+Restore a selection or result saved by `to_bundle`.
+
+#### Parameters
+
+- **content : bytes**
+  Bytes produced by `to_bundle`.
+
+#### Returns
+
+- **selection or ObservationResult**
+  The kind of value that was exported. Identities, physical facts,
+  inventories, issues and, for results, observations, outcomes,
+  provenance and receipts come from the bundle. The current packaged
+  catalogue is not consulted, so a restored selection keeps the evidence
+  it had when exported.
+
+#### Raises
+
+- **TypeError**
+  If `content` is not `bytes`.
+- **ValueError**
+  If the bytes are not a bundle, the bundle version is not 2, or its
+  contents fail validation. Bundles from other format versions must be
+  exported again or re-fetched.
+- **ObservationDataSchemaError**
+  If a result bundle's observation rows contradict its source-series
+  definitions or the observation frame schema, its outcomes contradict
+  those definitions, or its receipt provider differs from its
+  provenance provider.
 
 ### `from_frame`
 
@@ -454,30 +609,16 @@ rivretrieve.from_frame(frame: 'pl.DataFrame') -> '_Selection'
 
 Import: `from rivretrieve import from_frame`.
 
-Rebuild a selection from frame identities and packaged catalogue facts.
+Refuse to rebuild a selection from a table; use `from_bundle` instead.
 
-#### Parameters
-
-- **frame : polars.DataFrame**
-  Contains provider_id, station_id and product_id String columns in that
-  relative order. Identities must be non-null and unique. Other columns
-  are ignored, including caller-edited catalogue metadata.
-
-#### Returns
-
-- **_Selection**
-  Sorted series with current packaged metadata and acquisition evidence.
-  An empty identity frame produces the empty_frame reason.
+Every call raises `ValueError`. An inspection frame omits request intent,
+inventory state and evidence, so it cannot be turned back into a selection.
+Use `to_bundle` and `from_bundle` to save and restore a selection.
 
 #### Raises
 
-- **TypeError**
-  If frame is not a Polars DataFrame.
-- **UnknownProviderError, UnknownStationError, UnknownProductError**
-  If an identity is outside catalogue vocabulary.
-- **FatalContractError**
-  If columns, dtypes, nulls or duplicates violate the identity contract,
-  or a triple has no selectable catalogue pair.
+- **ValueError**
+  Always.
 
 ### `map`
 
@@ -491,8 +632,8 @@ Render selected stations without narrowing the selection.
 
 #### Parameters
 
-- **selection : _Selection**
-  Selection whose stations will be shown once each.
+- **selection : selection**
+  Selection from find, pick or from_bundle. Each station is shown once.
 
 #### Returns
 
@@ -511,41 +652,64 @@ Render selected stations without narrowing the selection.
 ### `pick`
 
 ```text
-rivretrieve.pick(selection: '_Selection', *, provider: 'str | Sequence[str] | None' = None, station: 'str | Sequence[str] | None' = None, product: 'str | Sequence[str] | None' = None) -> '_Selection'
+rivretrieve.pick(selection: '_Selection | ObservationResult', *, provider: 'str | Sequence[str] | None' = None, station: 'str | Sequence[str] | None' = None, quantity: 'str | None' = None, frequency: 'str | None' = None, statistic: 'str | None' = None, temporal_support: 'str | None' = None, day_definition: 'str | None' = None, timestamp_anchor: 'str | None' = None, time_zone: 'str | None' = None, vertical_reference: 'str | None' = None, vertical_datum: 'str | None' = None, variant: 'str | Sequence[str] | None' = None, series_id: 'str | Sequence[str] | None' = None, on_issue: 'OnIssue' = 'warn') -> '_Selection | ObservationResult'
 ```
 
 Import: `from rivretrieve import pick`.
 
-Narrow an existing selection without changing it.
+Filter a selection or a fetched result without contacting a source.
+
+Filters combine with the filters already held by `selection`. A filter
+that conflicts with an existing one, such as a different quantity, leaves an
+empty selection or an empty result view.
 
 #### Parameters
 
-- **selection : _Selection**
-  Selection returned by find, pick or from_frame.
-- **provider : str, sequence of str or None, default None**
-  Provider identifiers to retain. None or an empty sequence adds no filter.
-- **station : str, sequence of str or None, default None**
-  Station identifiers to retain. Provider scopes vocabulary validation.
-  None or an empty sequence adds no filter.
-- **product : str, sequence of str or None, default None**
-  Product identifiers to retain. None or an empty sequence adds no filter.
+- **selection : selection or ObservationResult**
+  Selection from `find`, `pick` or `from_bundle`, or a result from
+  `fetch`, `fetch_by_provider`, `pick` or `from_bundle`.
+- **provider, station, variant, series_id : str, sequence of str, or None, default None**
+  One identifier or a list of identifiers. A list keeps series matching
+  any of its values. `variant` and `series_id` have the same meaning
+  as in `find`.
+- **quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None**
+  Exact filters on established physical facts, as in `find`.
+- **on_issue : {"warn", "raise", "ignore"}, default "warn"**
+  Handling of warning and error issues relevant to the narrowed selection
+  or view. See `fetch` for the meaning of each policy.
 
 #### Returns
 
-- **_Selection**
-  Intersection of the selection with the requested identifiers. A new
-  empty answer carries not_in_selection. An already empty selection
-  keeps its original reason.
+- **selection or ObservationResult**
+  The same kind of value as `selection`.
+
+  For a selection, the result is a new selection with the combined filters.
+  Findings about explicit `variant` or `series_id` restrictions are
+  recalculated for the narrowed request. Other selection issues are kept.
+
+  For a result, the returned result keeps only observation rows whose
+  series and fact segment match the combined filters. `view_scope` holds
+  the combined filters and `scope` still holds the original request.
+  Provenance, receipts, source-series definitions, inventories and
+  outcomes are unchanged, so they can describe series and rows outside
+  the view. `issues` keeps every original issue and adds any selection
+  findings for the view. `on_issue` acts only on the issues relevant to
+  the view.
 
 #### Raises
 
 - **TypeError**
-  If selection is not a RivRetrieve selection.
-- **UnknownProviderError, UnknownStationError, UnknownProductError**
-  If an identifier is outside catalogue vocabulary, even when the input
-  selection is empty.
-- **FatalContractError**
-  If shipped catalogue contracts fail.
+  If `selection` is neither a selection nor an observation result.
+- **UnknownProviderError**
+  If `selection` is a selection and a requested provider is not registered.
+- **UnknownStationError**
+  If `selection` is a selection and a requested station is not listed
+  for its providers. Unknown identifiers applied to a result leave an
+  empty view instead.
+- **ValueError**
+  If `on_issue` is invalid, or an identifier filter is an empty string.
+- **IssuePolicyError**
+  If `on_issue="raise"` and a relevant warning or error issue exists.
 
 ### `products`
 
@@ -555,7 +719,10 @@ rivretrieve.products(provider: 'str | None' = None) -> 'list[str]'
 
 Import: `from rivretrieve import products`.
 
-List canonical product identifiers from packaged catalogues.
+Inspect source access-coordinate names recorded in packaged catalogues.
+
+These internal routing names do not establish physical meaning. They are not
+accepted by find or pick; use quantity and established physical facts there.
 
 #### Parameters
 
@@ -565,8 +732,8 @@ List canonical product identifiers from packaged catalogues.
 #### Returns
 
 - **list[str]**
-  Sorted, unique product identifiers. These are catalogue vocabulary,
-  not a guarantee that every station offers each product.
+  Sorted, unique access-coordinate names. Neither a name nor its wording
+  establishes a series statistic, temporal support or current availability.
 
 #### Raises
 
@@ -604,6 +771,117 @@ environment or the working directory .env file. A present environment
 variable takes precedence, including a blank value. Values are not returned.
 No source request is made.
 
+### `series`
+
+```text
+rivretrieve.series(value: '_Selection | ObservationResult') -> 'pl.DataFrame'
+```
+
+Import: `from rivretrieve import series`.
+
+Describe each source series in a selection or result as a table.
+
+#### Parameters
+
+- **value : selection or ObservationResult**
+  A selection from `find`, `pick` or `from_bundle`, or a fetched
+  result. For a selection, rows describe the source series known from packaged
+  evidence before retrieval. For a result, rows describe the series known
+  after retrieval, including series first identified in the source
+  response, together with their retrieval outcomes.
+
+#### Returns
+
+- **polars.DataFrame**
+  One row per source series and physical-fact segment that matches the
+  selection or view. The schema is fixed and shown under "Series
+  inspection frame" in the API reference. Rows sort by `provider_id`,
+  `station_id`, `product_id`, `series_id` and `facts_id`.
+
+  Columns form these groups:
+
+  - Identity: `provider_id`, `station_id`, `product_id` (an internal
+  access route), `series_id` and `facts_id` join rows to
+  observations and outcomes. `identity_namespace`, `published_id`,
+  `description`, `identity_origin` (`catalogue`, `response` or
+  `mapping`), `identity_evidence` and `variant` preserve the
+  agency's own identity. A null `description` means no
+  description was recorded for the series.
+  - Request: `requested_variants` and `requested_series_ids` repeat
+  explicit restrictions. `requested_selector_kind` and
+  `requested_selector_value` are filled only on rows for an outcome
+  that has no concrete series identity.
+  - Matching and admission: `physical_match` is `matched`,
+  `not_matched` or `unestablished`. `admission` is `supported`
+  when established quantity and unit facts allow numeric rows,
+  otherwise `unsupported` with `admission_reason`.
+  - Units: `source_unit` with `source_unit_state` and
+  `source_unit_evidence`, `normalized_unit`, and `unit`, the
+  harmonised unit of returned values (m3/s, m or degC). `unit` is null
+  for unsupported series.
+  - Physical facts: `quantity`, `frequency`, `statistic`,
+  `temporal_support`, `day_definition`, `timestamp_anchor`,
+  `time_zone`, `vertical_reference` and `vertical_datum`. Each has
+  a `<fact>_state` column (`known`, `source_silent` or
+  `not_established`) and a `<fact>_evidence` list. The value is
+  null unless the state is `known`.
+  - Inventory: `inventory_ids`, `inventory_scope` and
+  `inventory_windows` (JSON text), `inventory_vintage` (ISO
+  acquisition time or catalogue check date) and `inventory_status`
+  (`complete`, `incomplete` or `unresolved`). Inventory describes
+  what is known about which series exist. It is not observation
+  coverage.
+  - Outcomes: `outcomes` (statuses such as `success`, `empty` or
+  `failed`), `outcome_windows` (JSON text) and `outcome_reasons`.
+  These lists are empty for a selection.
+
+  For a result, a series with a `failed`, `unsupported` or
+  `unresolved` outcome keeps its row even if it lies outside the
+  physical filters. An outcome without a concrete series identity adds a
+  row with null identity and fact columns and `physical_match` set to
+  `unestablished`.
+
+#### Raises
+
+- **TypeError**
+  If `value` is neither a selection nor an observation result.
+
+#### Notes
+
+A row with `admission` equal to `unsupported` is still listed. Retrieval
+returns no numeric observation rows for such a series.
+
+### `to_bundle`
+
+```text
+rivretrieve.to_bundle(value: '_Selection | ObservationResult') -> 'bytes'
+```
+
+Import: `from rivretrieve import to_bundle`.
+
+Save a selection or result as bytes that `from_bundle` can restore.
+
+#### Parameters
+
+- **value : selection or ObservationResult**
+  Selection from `find`, `pick` or `from_bundle`, or a result to
+  export, including a result view from `pick`.
+
+#### Returns
+
+- **bytes**
+  ZIP archive in bundle format version 2. Write the bytes to a file to
+  keep them. A selection bundle holds its request intent, source-series
+  definitions, inventories, issues, station locations, catalogue evidence
+  and empty-selection reason. A result bundle also holds the observation
+  rows as Parquet, the outcomes, the view scope, provenance and any
+  retained receipt bytes. Nothing is read from or written to disk.
+
+#### Raises
+
+- **TypeError**
+  If `value` is neither a selection nor an observation result.
+
 ### `to_utc`
 
 ```text
@@ -624,7 +902,7 @@ Convert observation labels to UTC using each row's published zone.
 
 - **ObservationResult**
   New result with naive UTC time values and time_zone="+00:00" on every row.
-  Data keeps its five columns and timestamp dtype. Conversion uses Python
+  Data keeps its ten identity-bearing columns and timestamp dtype. Conversion uses Python
   datetime values with microsecond precision, so submicrosecond precision
   is not preserved. Provenance, issues and receipts are unchanged.
   The input is not modified.
@@ -645,30 +923,70 @@ not establish a daily product's day definition or make series comparable.
 
 ## Frame schemas
 
-### Selection frame
+### Series inspection frame
 
 | Column | Polars dtype |
 | --- | --- |
 | `provider_id` | `String` |
 | `station_id` | `String` |
 | `product_id` | `String` |
-| `latitude` | `Float64` |
-| `longitude` | `Float64` |
-| `crs` | `String` |
-| `observed_property` | `String` |
+| `series_id` | `String` |
+| `facts_id` | `String` |
+| `identity_namespace` | `String` |
+| `published_id` | `String` |
+| `description` | `String` |
+| `identity_origin` | `String` |
+| `variant` | `String` |
+| `requested_variants` | `List(String)` |
+| `requested_series_ids` | `List(String)` |
+| `requested_selector_kind` | `String` |
+| `requested_selector_value` | `String` |
+| `physical_match` | `String` |
+| `admission` | `String` |
+| `admission_reason` | `String` |
+| `source_unit` | `String` |
+| `source_unit_state` | `String` |
+| `source_unit_evidence` | `List(String)` |
+| `normalized_unit` | `String` |
+| `identity_evidence` | `List(String)` |
+| `unit` | `String` |
+| `quantity` | `String` |
 | `frequency` | `String` |
 | `statistic` | `String` |
-| `period_type` | `String` |
-| `period_anchor` | `String` |
-| `unit` | `String` |
-| `native_id` | `String` |
-| `availability` | `Enum(categories=['available', 'unknown'])` |
-| `availability_reason` | `String` |
-| `published_record_start_date` | `Date` |
-| `published_record_end_date` | `Date` |
-| `last_catalogue_check` | `Date` |
+| `temporal_support` | `String` |
+| `day_definition` | `String` |
+| `timestamp_anchor` | `String` |
+| `time_zone` | `String` |
+| `vertical_reference` | `String` |
+| `vertical_datum` | `String` |
+| `quantity_state` | `String` |
+| `frequency_state` | `String` |
+| `statistic_state` | `String` |
+| `temporal_support_state` | `String` |
+| `day_definition_state` | `String` |
+| `timestamp_anchor_state` | `String` |
+| `time_zone_state` | `String` |
+| `vertical_reference_state` | `String` |
+| `vertical_datum_state` | `String` |
+| `quantity_evidence` | `List(String)` |
+| `frequency_evidence` | `List(String)` |
+| `statistic_evidence` | `List(String)` |
+| `temporal_support_evidence` | `List(String)` |
+| `day_definition_evidence` | `List(String)` |
+| `timestamp_anchor_evidence` | `List(String)` |
+| `time_zone_evidence` | `List(String)` |
+| `vertical_reference_evidence` | `List(String)` |
+| `vertical_datum_evidence` | `List(String)` |
+| `inventory_ids` | `List(String)` |
+| `inventory_scope` | `List(String)` |
+| `inventory_windows` | `List(String)` |
+| `outcome_windows` | `List(String)` |
+| `inventory_vintage` | `List(String)` |
+| `inventory_status` | `List(String)` |
+| `outcomes` | `List(String)` |
+| `outcome_reasons` | `List(String)` |
 
-See `_Series` below for column meanings. Published record bounds and native_id can be absent. Availability unknown remains selectable.
+Identity and facts are separate. Nullable facts carry explicit evidence states; admission and inventory are not completeness scores. Use to_bundle for lossless exports.
 
 ### Drainage-area frame
 
@@ -692,6 +1010,11 @@ See `drainage_areas` above and [drainage-area metadata](drainage-areas.md) for J
 | `time_zone` | `String` |
 | `station_id` | `String` |
 | `product_id` | `String` |
+| `series_id` | `String` |
+| `facts_id` | `String` |
+| `quantity` | `String` |
+| `source_unit` | `String` |
+| `unit` | `String` |
 | `value` | `Float64` |
 
 Only value is nullable. Time precision can vary while remaining Datetime. The zone belongs to each row, not the timestamp dtype. See `ObservationResult` below for units and meanings.
@@ -704,71 +1027,110 @@ These types are not re-exported from `rivretrieve`. Their locations below identi
 
 Type location: `rivretrieve._internal.selection._Selection`.
 
-An immutable selection of packaged station-product series.
+A search to retrieve later: requested filters plus the catalogue evidence found.
+
+A selection is returned by `find`, `pick` and `from_bundle` and cannot
+be changed in place. Pass it to the public functions rather than building
+one directly. The known series are evidence, and the filters remain the
+request, so retrieval can include series found later. `series(selection)`
+shows their contents as a frame.
 
 #### Attributes
 
-- **series : tuple[_Series, ...]**
-  Sorted, unique series keys with catalogue facts. Use as_frame to inspect.
-- **empty_reason : _EmptyReason or None**
-  Present exactly when series is empty. Its code is no_catalogue_edge,
-  not_in_selection or empty_frame, with requested identities and any
-  published_products retained for explanation.
+- **scope : SeriesScope**
+  Requested filters and source restrictions. `fetch` retrieves by this
+  intent, not only by the known members below.
+- **known_series : tuple[SourceSeries, ...]**
+  Source-series definitions retained from packaged evidence for the
+  selected stations and access routes. Some may not match the physical
+  filters.
+- **inventories : tuple[InventorySnapshot, ...]**
+  Packaged inventory snapshots for the selected coordinates.
+- **issues : tuple[Issue, ...]**
+  Findings recorded during selection, such as `selection.no_match` or
+  `selection.unresolved_inventory`. `fetch` copies them into its
+  result. An unresolved restriction that retrieval settles becomes an
+  `info` issue with code `selection.inventory_resolved`.
+- **locations : tuple[StationLocation, ...]**
+  Catalogue coordinates and CRS statements used by `map`.
 - **acquisition_provenance : tuple[CatalogueEvidence, ...]**
-  Provider-scoped normalized catalogue evidence. It does not certify
-  continuous observation history.
-
-### `_Series`
-
-Type location: `rivretrieve._internal.selection._Series`.
-
-One selectable station-product pair and its packaged catalogue facts.
-
-#### Attributes
-
-- **provider_id, station_id, product_id : str**
-  Exact series identity. Station identifiers are provider-scoped strings.
-- **latitude, longitude : float**
-  Station coordinates interpreted with crs.
-- **crs : str**
-  Published EPSG reference identifier or "unknown".
-- **observed_property, frequency, statistic : str**
-  Canonical product quantity, sampling frequency and published statistic.
-- **period_type, period_anchor : str**
-  Published temporal support and label anchor, including explicit unknowns.
-- **unit : str**
-  Canonical output unit, not necessarily the source's original unit.
-- **native_id : str or None**
-  Source product identifier when established.
-- **availability : {"available", "unknown"}**
-  Packaged pair availability. Neither value promises present-day retrieval.
-- **availability_reason : str or None**
-  Recorded explanation for unknown availability.
-- **published_record_start_date, published_record_end_date : datetime.date or None**
-  Source-stated record bounds. They do not establish continuity or limit fetch.
-- **last_catalogue_check : datetime.date**
-  Recorded catalogue check date, not a live status.
+  Evidence describing how the packaged catalogues were acquired.
+- **empty_reason : empty-selection reason or None**
+  None when at least one known admitted series matches. Otherwise
+  `empty_reason.code` is `no_match` or `unresolved_inventory`.
+- **series : tuple[SourceSeries, ...]**
+  Property returning the known series that match `scope` and have at
+  least one matching fact segment with supported admission.
 
 ### `ObservationResult`
 
 Type location: `rivretrieve._internal.observations.ObservationResult`.
 
-Observations and their traceability for one provider.
+Harmonised observations with source identities, physical facts and retrieval outcomes.
+
+`data` preserves source wall-clock labels, zones, station/product routing,
+series and fact-segment identities, source-unit vocabulary, physical quantity,
+harmonised unit and nullable values. Definitions, scoped inventory snapshots
+and outcomes remain inspectable even when a series has no observation rows.
+`scope` is the original request; `view_scope` records explicit post-fetch
+narrowing without pretending another source request occurred.
+
+Results cannot be changed in place. They are returned by `fetch`,
+`fetch_by_provider`, `pick`, `to_utc` and `from_bundle`. Every
+result belongs to one provider.
 
 #### Attributes
 
 - **data : polars.DataFrame**
-  Columns in order: time (naive Datetime), time_zone (String), station_id
-  (String), product_id (String), value (nullable Float64). Time is the source
-  wall-clock label paired with its published zone or "unknown". Values use
-  canonical units: discharge in m3/s, stage in m and temperature in degC.
-  A null value differs from an absent row. Provider identity is in provenance.
+  Observation rows with exactly the ten columns of the observation frame
+  schema, even when empty. `time` is a naive source wall-clock label and
+  `time_zone` is an IANA zone, a fixed offset such as `+00:00`, or
+  `unknown`. `value` is a float in `unit` (m3/s, m or degC) or null
+  when the source gives no value for that time. A null value is still a
+  row, unlike an absent row or a failed request. `source_unit` keeps the
+  published unit. `series_id` and `facts_id` join each row to
+  `source_series`.
 - **provenance : ObservationProvenance**
-  Request, source and catalogue evidence.
+  Request, source-call, terms and cache context for the retrieval.
 - **issues : tuple[Issue, ...]**
-  Retained findings, including source failures and request information.
+  Every finding retained for the retrieval, including source failures
+  with their identity and reason.
 - **receipts : Receipts**
-  Optional parse inputs and store excerpts, empty unless requested.
+  Source bytes kept when retrieval used `receipts=True`, otherwise no
+  entries.
+- **source_series : tuple[SourceSeries, ...]**
+  Definitions and physical facts for the requested series, including
+  series first identified in the response.
+- **inventories : tuple[InventorySnapshot, ...]**
+  Inventory snapshots used or acquired during retrieval.
+- **outcomes : tuple[RetrievalOutcome, ...]**
+  Retrieval statuses, each for one source series, or for a request that
+  has no concrete series identity, over the interval in its `window`.
+  A series can have several outcomes, for example `empty`, `success`
+  and `failed` for different months. Outcomes remain present even when
+  a series returned no rows. When cached rows are returned after a failed
+  retrieval, the cached `success` outcome and the new `failed` outcome
+  can cover the same interval. Parts requested only as padding outside
+  the requested dates produce an outcome only when their source request
+  fails, and a padding-only HTTP 404 that the provider declares to mean
+  no stored observations produces none.
+- **scope : SeriesScope**
+  The filters and restrictions of the original request.
+- **view_scope : SeriesScope or None**
+  Filters applied afterwards with `pick`. None when the result has not
+  been narrowed.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `data` | `polars.dataframe.frame.DataFrame` | yes |
+| `provenance` | `rivretrieve._internal.observations.ObservationProvenance` | yes |
+| `issues` | `tuple[rivretrieve._internal.issues.Issue, ...]` | no |
+| `receipts` | `rivretrieve._internal.observations.Receipts` | yes |
+| `source_series` | `tuple[rivretrieve._internal.source_series.SourceSeries, ...]` | no |
+| `inventories` | `tuple[rivretrieve._internal.source_series.InventorySnapshot, ...]` | no |
+| `outcomes` | `tuple[rivretrieve._internal.source_series.RetrievalOutcome, ...]` | no |
+| `scope` | `rivretrieve._internal.source_series.SeriesScope` | no |
+| `view_scope` | `rivretrieve._internal.source_series.SeriesScope &#124; None` | no |
 
 ### `ObservationProvenance`
 
@@ -792,6 +1154,11 @@ Source and request facts that accompany observations.
   Selected series and resolved start and end wall-clock endpoints.
 - **calls_made : tuple[dict[str, object], ...]**
   Ordered source-call origins and sanitized prerequisite exchange events.
+  A failed request for one series and interval also appears, with its
+  `window`, `failure_reason` and `response_meaning`, such as
+  `no_observations` when the provider declares that the response means
+  no stored observations for that interval. Rows served from the cache
+  bring the calls of the earlier retrievals that produced them.
 - **time_windows : tuple[dict[str, object], ...]**
   Additional window metadata. The current engine leaves this tuple empty.
 - **decomposition : tuple[str, ...]**
@@ -806,7 +1173,10 @@ Source and request facts that accompany observations.
 - **served_intervals : tuple[CoverageInterval, ...]**
   Held intervals served from an accumulated store, with retrieval instants.
 - **source_vintage : datetime.date or None**
-  Source-stated bulk release date, not a freshness verdict.
+  Source vintage of the compiled store that served the rows, as
+  described for `StoreManifest.source_vintage`. Its derivation depends
+  on the provider, and it is not a freshness verdict. None when no
+  compiled store was read.
 - **publisher_artifact_checksum : str or None**
   Checksum of the first publisher artifact for compiled-store provenance.
 - **publisher_artifact_checksums, publisher_artifact_urls : tuple[str, ...]**
@@ -814,11 +1184,41 @@ Source and request facts that accompany observations.
 - **acquisition_provenance : CatalogueEvidence or None**
   Normalized evidence for the packaged catalogue, not observation quality.
 
+| Field | Python type | Required |
+| --- | --- | --- |
+| `source` | `str` | yes |
+| `provider_id` | `rivretrieve._internal.primitives.ProviderId` | yes |
+| `rivretrieve_version` | `str &#124; None` | no |
+| `catalogue_version` | `str &#124; None` | no |
+| `license` | `str &#124; None` | no |
+| `citation` | `str &#124; None` | no |
+| `requested_at` | `datetime.datetime &#124; None` | no |
+| `retrieved_at` | `datetime.datetime &#124; None` | no |
+| `request` | `dict[str, object] &#124; None` | no |
+| `calls_made` | `tuple[dict[str, object], ...]` | no |
+| `time_windows` | `tuple[dict[str, object], ...]` | no |
+| `decomposition` | `tuple[str, ...]` | no |
+| `endpoints` | `tuple[str, ...]` | no |
+| `query` | `dict[str, object] &#124; None` | no |
+| `response_version` | `str &#124; None` | no |
+| `metadata` | `str &#124; None` | no |
+| `served_intervals` | `tuple[rivretrieve._internal.coverage.CoverageInterval, ...]` | no |
+| `source_vintage` | `datetime.date &#124; None` | no |
+| `publisher_artifact_checksum` | `str &#124; None` | no |
+| `publisher_artifact_checksums` | `tuple[str, ...]` | no |
+| `publisher_artifact_urls` | `tuple[str, ...]` | no |
+| `acquisition_provenance` | `rivretrieve._internal.catalogues.evidence.CatalogueEvidence &#124; None` | no |
+
 ### `Receipts`
 
 Type location: `rivretrieve._internal.observations.Receipts`.
 
 Optional byte receipts for one provider.
+
+Receipts let you inspect source material, for example values before unit
+conversion. Their content can include rows outside the requested window or
+a `pick` view, and values in source units. They are not a full
+reproducibility archive.
 
 #### Attributes
 
@@ -858,9 +1258,10 @@ A Parquet re-encoding of the exact rows returned by a store query.
 - **executed_query : ExecutedStoreQuery**
   Product, year, station and closed wall-clock predicates used by the scan.
 - **format_version : int**
-  Store layout revision, 2 for compiled or 4 for accumulated stores.
+  Store layout revision, 5 for compiled or 7 for accumulated stores.
 - **source_vintage : datetime.date or None**
-  Bulk release date. None for an accumulated store.
+  Source vintage of the compiled store, as described for
+  `StoreManifest.source_vintage`. None for an accumulated store.
 
 ### `ObservationResult.to_polars`
 
@@ -868,13 +1269,10 @@ A Parquet re-encoding of the exact rows returned by a store query.
 ObservationResult.to_polars(self) -> 'pl.DataFrame'
 ```
 
-Return the result's observation frame without copying.
+Return observation rows with identity and physical-unit context.
 
-#### Returns
-
-- **polars.DataFrame**
-  The same frame as data, with time, time_zone, station_id, product_id
-  and value. Provenance, issues and receipts stay on the result.
+Use `to_bundle` to retain inventory, outcomes, provenance and receipts
+through a durable export. These cannot be encoded by absent observation rows.
 
 ### `ObservationResult.to_pandas`
 
@@ -882,38 +1280,365 @@ Return the result's observation frame without copying.
 ObservationResult.to_pandas(self) -> 'Any'
 ```
 
-Convert the observation frame to a pandas DataFrame.
+Return the observation rows as a pandas DataFrame.
 
 #### Returns
 
 - **pandas.DataFrame**
-  The five observation columns. Conversion follows Polars to_pandas
-  defaults, including pandas representation of nulls. Provenance, issues
-  and receipts stay on the result.
+  The ten observation columns of `data`. `time` stays naive, so
+  read it together with `time_zone`. Issues, outcomes, provenance
+  and receipts are not included.
 
-#### Raises
+### `EvidenceState`
 
-- **ImportError**
-  If a dependency required by Polars to_pandas is unavailable.
+Type location: `rivretrieve._internal.source_series.EvidenceState`.
+
+Whether a physical fact is known, absent from the source, or not established here.
+
+Values: `known`, `source_silent`, `not_established`.
+
+### `EvidenceFact`
+
+Type location: `rivretrieve._internal.source_series.EvidenceFact`.
+
+One independently established physical fact and its evidence.
+
+`known` requires a nonempty value and evidence. `source_silent` means
+the source does not state the fact; `not_established` means it has not
+been established here. Both unknown states retain a null value.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `value` | `str &#124; None` | no |
+| `state` | `rivretrieve._internal.source_series.EvidenceState` | no |
+| `evidence` | `tuple[str, ...]` | no |
+
+### `ClippingAxis`
+
+Type location: `rivretrieve._internal.source_series.ClippingAxis`.
+
+Whether a request clips daily calendar labels or source wall-clock timestamps.
+
+Values: `calendar_date`, `source_timestamp`.
+
+### `SourceUnitCodeDefinition`
+
+Type location: `rivretrieve._internal.source_series.SourceUnitCodeDefinition`.
+
+Published meaning of a unit code for one provider access namespace.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `provider_id` | `str` | yes |
+| `namespace` | `str` | yes |
+| `code` | `str` | yes |
+| `unit` | `str` | yes |
+| `evidence` | `tuple[str, ...]` | yes |
+
+### `PhysicalFacts`
+
+Type location: `rivretrieve._internal.source_series.PhysicalFacts`.
+
+Physical meaning for one fact segment within a source series.
+
+Each EvidenceFact retains its own knowledge state. Frequency and statistic
+describe observations, not how often the service updates. Temporal support
+describes the interval represented by a value. Day definition, timestamp
+anchor and time zone remain independent facts; none is inferred from another.
+`normalized_unit` preserves the source unit scale and zero. Conversion
+to the output unit is described by Admission, not by unit normalization.
+`facts_id` joins this segment to observation rows and retrieval outcomes.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `facts_id` | `str` | yes |
+| `quantity` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `source_unit` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `normalized_unit` | `str &#124; None` | no |
+| `source_unit_definition` | `rivretrieve._internal.source_series.SourceUnitCodeDefinition &#124; None` | no |
+| `frequency` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `statistic` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `temporal_support` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `day_definition` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `timestamp_anchor` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `time_zone` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `vertical_reference` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `vertical_datum` | `rivretrieve._internal.source_series.EvidenceFact` | no |
+| `clipping_axis` | `rivretrieve._internal.source_series.ClippingAxis` | no |
+| `label_time` | `str &#124; None` | no |
+
+### `Admission`
+
+Type location: `rivretrieve._internal.source_series.Admission`.
+
+Whether established quantity and unit facts permit harmonised numeric rows.
+
+`supported` carries the target unit and multiplicative conversion factor.
+`unsupported` carries a reason. Admission does not rank source quality or
+require every temporal fact to be known.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `status` | `Literal['supported', 'unsupported']` | yes |
+| `reason` | `str &#124; None` | no |
+| `target_unit` | `str &#124; None` | no |
+| `factor` | `float &#124; None` | no |
+
+### `SourceIdentity`
+
+Type location: `rivretrieve._internal.source_series.SourceIdentity`.
+
+Agency-published identity within a source namespace, with origin and evidence.
+
+`published_id` and description can be absent. Origin records whether the
+identity was acquired from a catalogue, response or established mapping.
+An identity is not a harmonised quality score.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `namespace` | `str` | yes |
+| `published_id` | `str &#124; None` | no |
+| `description` | `str &#124; None` | no |
+| `origin` | `Literal['catalogue', 'response', 'mapping']` | yes |
+| `evidence` | `tuple[str, ...]` | yes |
+
+### `SourceSeries`
+
+Type location: `rivretrieve._internal.source_series.SourceSeries`.
+
+One concrete source identity at a provider, station and access route.
+
+`series_id` joins the definition to rows, inventories and outcomes.
+`product_id` is an internal access route, not a physical classification.
+`variant` preserves a selectable source alternative when established.
+`facts` contains independently identified physical-fact segments.
+Matching physical facts do not establish scientific interchangeability.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `series_id` | `str` | yes |
+| `provider_id` | `str` | yes |
+| `station_id` | `str` | yes |
+| `product_id` | `str` | yes |
+| `identity` | `rivretrieve._internal.source_series.SourceIdentity` | yes |
+| `variant` | `str &#124; None` | no |
+| `facts` | `tuple[rivretrieve._internal.source_series.PhysicalFacts, ...]` | yes |
+
+### `PhysicalPredicate`
+
+Type location: `rivretrieve._internal.source_series.PhysicalPredicate`.
+
+An exact filter on a known physical fact; unknown facts do not match.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `field` | `Literal['quantity', 'frequency', 'statistic', 'temporal_support', 'day_definition', 'timestamp_anchor', 'time_zone', 'vertical_reference', 'vertical_datum']` | yes |
+| `value` | `str` | yes |
+
+### `RestrictionKind`
+
+Type location: `rivretrieve._internal.source_series.RestrictionKind`.
+
+All matching identities, or an explicit variant or series-ID restriction.
+
+Values: `all`, `explicit`.
+
+### `ScopeState`
+
+Type location: `rivretrieve._internal.source_series.ScopeState`.
+
+An active request scope or an empty intersection of filters.
+
+Values: `active`, `empty`.
+
+### `SeriesScope`
+
+Type location: `rivretrieve._internal.source_series.SeriesScope`.
+
+Physical filters and source restrictions retained by a selection or result.
+
+Empty coordinate tuples impose no coordinate restriction. `all` includes
+matching identities discovered during retrieval, not only packaged members.
+`explicit` retains requested variants or series IDs without fallback to
+other identities. Variant matching accepts a variant or published source ID.
+All physical predicates must match known facts within a fact segment.
+An `empty` scope matches nothing.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `state` | `rivretrieve._internal.source_series.ScopeState` | no |
+| `provider_ids` | `tuple[str, ...]` | no |
+| `station_ids` | `tuple[str, ...]` | no |
+| `product_ids` | `tuple[str, ...]` | no |
+| `predicates` | `tuple[rivretrieve._internal.source_series.PhysicalPredicate, ...]` | no |
+| `restriction` | `rivretrieve._internal.source_series.RestrictionKind` | no |
+| `variants` | `tuple[str, ...]` | no |
+| `series_ids` | `tuple[str, ...]` | no |
+
+### `SeriesWindow`
+
+Type location: `rivretrieve._internal.source_series.SeriesWindow`.
+
+Closed request interval with ordered, naive source wall-clock endpoints.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `start` | `datetime.datetime` | yes |
+| `end` | `datetime.datetime` | yes |
+
+### `InventoryCompleteness`
+
+Type location: `rivretrieve._internal.source_series.InventoryCompleteness`.
+
+Completeness of one scoped inventory: complete, incomplete or unresolved.
+
+Values: `complete`, `incomplete`, `unresolved`.
+
+### `CatalogueSeriesClaim`
+
+Type location: `rivretrieve._internal.source_series.CatalogueSeriesClaim`.
+
+A scoped publisher catalogue claim, not an alias for a response series.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `provider_id` | `str` | yes |
+| `station_id` | `str` | yes |
+| `product_id` | `str` | yes |
+| `identity` | `rivretrieve._internal.source_series.SourceIdentity` | yes |
+| `native_coordinates` | `tuple[tuple[str, str &#124; None], ...]` | no |
+
+### `InventorySnapshot`
+
+Type location: `rivretrieve._internal.source_series.InventorySnapshot`.
+
+What is known about source-series membership for a scope and access route.
+
+`members` holds concrete series IDs; `member_facts` can identify their
+fact segments. Catalogue claims retain separately published catalogue
+identities rather than pretending they are response series.
+Completeness applies only to this scope, access and optional window, not
+countrywide coverage or a full historical census. Incomplete and unresolved
+snapshots carry a reason. Acquisition time and catalogue check date record
+evidence timing, not continuous observation coverage.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `snapshot_id` | `str` | yes |
+| `scope` | `rivretrieve._internal.source_series.SeriesScope` | yes |
+| `members` | `tuple[str, ...]` | yes |
+| `member_facts` | `tuple[tuple[str, tuple[str, ...]], ...]` | no |
+| `completeness` | `rivretrieve._internal.source_series.InventoryCompleteness` | yes |
+| `access` | `str` | yes |
+| `origin` | `Literal['catalogue', 'response', 'compiled']` | yes |
+| `acquired_at` | `datetime.datetime &#124; None` | no |
+| `catalogue_check_date` | `datetime.date &#124; None` | no |
+| `catalogue_claims` | `tuple[rivretrieve._internal.source_series.CatalogueSeriesClaim, ...]` | no |
+| `window` | `rivretrieve._internal.source_series.SeriesWindow &#124; None` | no |
+| `evidence` | `tuple[str, ...]` | yes |
+| `reason` | `str &#124; None` | no |
+
+### `OutcomeStatus`
+
+Type location: `rivretrieve._internal.source_series.OutcomeStatus`.
+
+Result of one retrieval: success, empty, failed, unsupported, unresolved or no_match.
+
+`success` and `empty` retain a concrete series and fact IDs. `empty`
+means no observation rows, not a row with a null value. `failed` records
+a source failure; `unsupported` records an unsupported series.
+`unresolved` means availability cannot be established. `no_match` means
+the available evidence establishes that nothing matches the request.
+
+Values: `success`, `empty`, `failed`, `unsupported`, `unresolved`, `no_match`.
+
+### `RequestedSelector`
+
+Type location: `rivretrieve._internal.source_series.RequestedSelector`.
+
+A caller restriction, not an assertion of published source identity.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `kind` | `Literal['variant', 'series_id']` | yes |
+| `value` | `str` | yes |
+
+### `RetrievalOutcome`
+
+Type location: `rivretrieve._internal.source_series.RetrievalOutcome`.
+
+Retrieval status for one source series over the interval in `window`.
+
+An outcome can instead describe a requested station, access route or
+selector that has no concrete series identity. A series can have several
+outcomes for different intervals or fact segments.
+
+`series_id` can be absent when no concrete identity is established.
+`requested_selector` preserves the caller restriction without inventing
+a source identity. Unsuccessful outcomes retain a reason. `calls` links
+source-call evidence; `retrieved_at` records retrieval timing when known.
+Outcomes remain present even when there are no observation rows.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `outcome_id` | `str` | yes |
+| `series_id` | `str &#124; None` | yes |
+| `station_id` | `str` | yes |
+| `product_id` | `str` | yes |
+| `window` | `rivretrieve._internal.source_series.SeriesWindow` | yes |
+| `status` | `rivretrieve._internal.source_series.OutcomeStatus` | yes |
+| `facts_ids` | `tuple[str, ...]` | no |
+| `reason` | `str &#124; None` | no |
+| `retrieved_at` | `datetime.datetime &#124; None` | no |
+| `calls` | `tuple[str, ...]` | no |
+| `requested_selector` | `rivretrieve._internal.source_series.RequestedSelector &#124; None` | no |
 
 ### `Issue`
 
 Type location: `rivretrieve._internal.issues.Issue`.
 
-A retained finding distinct from a fatal contract exception.
+A problem or note recorded during selection or retrieval, kept with the results.
+
+Issues are kept on selections and results whatever `on_issue` policy is
+chosen. They let independent series return data while a failure elsewhere
+stays visible with its identity and reason.
 
 #### Attributes
 
 - **severity : {"info", "warning", "error"}**
   Finding severity. Only warning and error activate the caller issue policy.
 - **code : str**
-  Machine-readable classification.
+  Machine-readable classification, usually written as
+  `<area>.<finding>`. Some provider codes have no dot, such as
+  `source_no_data`. Examples include `source.request_failed` (error, a
+  failed source request), `source.http_not_found` (warning, HTTP 404),
+  `bulk.store_missing` (warning, no compiled store),
+  `selection.no_match` (warning, the evidence establishes that nothing
+  matches an explicit restriction), `selection.unresolved_inventory`
+  (warning, the inventory cannot settle whether an explicit restriction
+  matches), `request.future_end`
+  (info) and `provenance.license_not_established` (info). This list is
+  not exhaustive.
 - **message : str**
   Human-readable finding.
 - **details : dict[str, object] or None**
   Structured context, such as station, product and source failure reason.
+  Source request failures record `station_id`, `product_id`,
+  `request_url`, `attempts`, `status_code`, `failure_reason` and,
+  when known, `failure_category`. `status_code` is None when no HTTP
+  status was received, for example after a timeout. A failed request for
+  one series and interval also records `series_id`, `variant`,
+  `window` (the source interval) and `outcome_id`.
 - **provider_id : ProviderId or None**
   Provider responsible for the affected series when known.
+
+| Field | Python type | Required |
+| --- | --- | --- |
+| `severity` | `Literal['info', 'warning', 'error']` | yes |
+| `code` | `str` | yes |
+| `message` | `str` | yes |
+| `details` | `dict[str, object] &#124; None` | no |
+| `provider_id` | `Optional[rivretrieve._internal.primitives.ProviderId]` | no |
 
 ### `CatalogueEvidence`
 
@@ -938,35 +1663,46 @@ Validated catalogue evidence in normalized Polars relations.
   Exact ordered input facts for transformations. JSON serialization uses
   one array per physical column and is explicit, not part of discovery.
 
+| Field | Python type | Required |
+| --- | --- | --- |
+| `header` | `rivretrieve._internal.catalogues.evidence.EvidenceHeader` | yes |
+| `facts` | `polars.dataframe.frame.DataFrame` | yes |
+| `acquisitions` | `polars.dataframe.frame.DataFrame` | yes |
+| `bindings` | `polars.dataframe.frame.DataFrame` | yes |
+| `binding_facts` | `polars.dataframe.frame.DataFrame` | yes |
+| `external_inputs` | `polars.dataframe.frame.DataFrame` | yes |
+
 ### `RequestedInterval`
 
 Type location: `rivretrieve._internal.coverage.RequestedInterval`.
 
-A closed native wall-clock interval at microsecond precision.
+A closed interval on the native wall-clock label axis.
 
-#### Attributes
-
-- **start, end : datetime**
-  Naive endpoints, including both boundaries. Start must not exceed end.
-  These are source calendar labels rather than absolute UTC instants.
+`start` and `end` are naive source wall-clock labels, and both are
+included.
 
 ### `CoverageInterval`
 
 Type location: `rivretrieve._internal.coverage.CoverageInterval`.
 
-A successfully retrieved interval, including a successful empty answer.
+Successful coverage for exactly one concrete source series, not inventory.
+
+Coverage records that a retrieval succeeded for an interval. It does not
+mean that observations exist at every time step in that interval.
 
 #### Attributes
 
-- **station_id : str**
-  Source station identifier.
-- **product_id : ProductId**
-  Canonical product identifier.
+- **series_id : str**
+  Source series that was retrieved.
 - **interval : RequestedInterval**
-  Closed naive native wall-clock interval with start and end datetimes.
-- **retrieved_at : datetime**
-  UTC instant when the source was queried successfully. This is not a
-  continuity or freshness claim.
+  Covered wall-clock interval.
+- **retrieved_at : datetime.datetime or None**
+  UTC instant of the source retrieval, or None when it is not known.
+- **outcome_id : str**
+  Retrieval outcome that established the coverage. A successful
+  answer with no rows can also establish coverage.
+- **facts_ids : tuple[str, ...]**
+  Physical-fact segments covered, when recorded.
 
 ### `SourceCallOrigin`
 
@@ -1045,7 +1781,7 @@ Manifest of a compiled bulk store.
 #### Attributes
 
 - **format_version : int**
-  Compiled layout revision, 2.
+  Compiled layout revision, 5.
 - **provider_id : ProviderId**
   Provider whose native observations are stored.
 - **compiler_version : str**
@@ -1053,7 +1789,12 @@ Manifest of a compiled bulk store.
 - **built_at : datetime**
   UTC build instant.
 - **source_vintage : datetime.date**
-  Source-stated release date.
+  Identifies the source publication state the store was compiled from.
+  Its derivation depends on the provider: for example, the date of a
+  dated publisher release, or the last date covered by the latest
+  published period. It is not a freshness verdict. `download` passes
+  it to the provider, which can refuse a new download whose published
+  history would end earlier.
 - **publisher_artifact : PublisherArtifact**
   First publisher artifact identity, retained for single-artifact access.
 - **publisher_artifacts : tuple[PublisherArtifact, ...]**
@@ -1074,7 +1815,7 @@ Manifest of accumulated live parse output.
 #### Attributes
 
 - **format_version : int**
-  Accumulated layout revision, 4.
+  Accumulated layout revision, 7.
 - **provider_id : ProviderId**
   Provider whose native observations are stored.
 - **built_at : datetime**
@@ -1133,7 +1874,7 @@ Function Raises sections state the conditions. FatalContractError subclasses byp
 
 The table uses the built-in manifest and declarations, not source probes. Credential names are requirements, not a readiness or successful-access test. Bulk retrieval needs explicit `download()` consent before a store exists.
 
-Counts describe packaged inventory accounting only. They do not establish countrywide completeness, continuous history or present-day source access. Available and unknown pairs are selectable. Unavailable pairs are not. See the [provider handoff](README.md#providers) for ownership and coverage qualifications.
+Counts describe packaged inventory accounting only. They do not establish countrywide completeness, continuous history or present-day source access. Pair counts describe access routes, not concrete source-series counts or admission. See the [provider handoff](README.md#providers) for ownership and coverage qualifications.
 
 | Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
@@ -1142,18 +1883,19 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 246 | 0 | 738 | 0 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
-| `fr_hubeau` | live | none | 7323 | 20966 | 12173 | 0 |
+| `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
+| `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
 | `jp_mlit` | live | none | 1023 | 0 | 4092 | 0 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
-| `usgs_nwis` | live | none | 26258 | 57961 | 0 | 99587 |
+| `usgs_nwis` | live | none | 26258 | 58421 | 0 | 99127 |
 | `za_dws` | catalogue-only | none | 2905 | 0 | 8715 | 0 |
 
-### Packaged product vocabulary
+### Packaged access coordinates
 
-Product identifiers and output units come from products.parquet. A provider listing a product does not imply that every station offers it. Use `find` and inspect availability for the selected series.
+Access coordinates and declared units come from products.parquet. These are internal routes, not public physical filters or scientific authority. A provider listing a route does not imply that every station offers it. Use physical filters in `find` and inspect `series` for admission, units and facts. A product route does not select a preferred source variant.
 
 | Provider | Product | Canonical unit |
 | --- | --- | --- |
@@ -1178,10 +1920,10 @@ Product identifiers and output units come from products.parquet. A provider list
 | `cz_chmi` | `water_temperature_daily_mean` | `degC` |
 | `fr_hubeau` | `discharge_daily_max` | `m3/s` |
 | `fr_hubeau` | `discharge_daily_mean` | `m3/s` |
-| `fr_hubeau` | `discharge_instantaneous` | `m3/s` |
 | `fr_hubeau` | `stage_daily_max` | `m` |
-| `fr_hubeau` | `stage_instantaneous` | `m` |
 | `fr_hubeau` | `water_temperature_reported` | `degC` |
+| `fr_hydroportail` | `discharge_instantaneous` | `m3/s` |
+| `fr_hydroportail` | `stage_instantaneous` | `m` |
 | `jp_mlit` | `discharge_daily` | `m3/s` |
 | `jp_mlit` | `discharge_hourly` | `m3/s` |
 | `jp_mlit` | `stage_daily` | `m` |
@@ -1197,9 +1939,9 @@ Product identifiers and output units come from products.parquet. A provider list
 | `no_nve` | `water_temperature_daily_mean` | `degC` |
 | `no_nve` | `water_temperature_hourly_mean` | `degC` |
 | `no_nve` | `water_temperature_instantaneous` | `degC` |
-| `pl_imgw` | `discharge_daily_mean` | `m3/s` |
-| `pl_imgw` | `stage_daily_mean` | `m` |
-| `pl_imgw` | `water_temperature_daily_mean` | `degC` |
+| `pl_imgw` | `discharge_daily` | `m3/s` |
+| `pl_imgw` | `stage_daily` | `m` |
+| `pl_imgw` | `water_temperature_daily` | `degC` |
 | `th_thaiwater` | `discharge_reported` | `m3/s` |
 | `th_thaiwater` | `stage_reported` | `m` |
 | `usgs_nwis` | `discharge_daily_mean` | `m3/s` |

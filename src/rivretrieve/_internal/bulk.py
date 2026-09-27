@@ -24,6 +24,7 @@ from rivretrieve._internal.providers.registration import (
 )
 from rivretrieve._internal.registry import _ProviderHandle, _registry
 from rivretrieve._internal.store import StoreRoot, StoreStatus, ValidatedStore, store_status
+from rivretrieve._internal.store.validation import ObservationStoreRefusedError, StoreManifest, validate_store
 from rivretrieve._internal.transport import HttpClient, HttpMethod, Transport, TransportRequest
 
 
@@ -160,6 +161,18 @@ def _download(
     if available < required:
         raise InsufficientDiskSpaceError(provider_id, required, available)
 
+    previous_source_vintage = None
+    if Path(root).exists():
+        try:
+            previous = validate_store(root, provider_id)
+        except ObservationStoreRefusedError:
+            # Explicit download is also the established rebuild path for refused
+            # stores. Only a valid compiled store can establish a coverage floor.
+            pass
+        else:
+            if isinstance(previous.manifest, StoreManifest):
+                previous_source_vintage = previous.manifest.source_vintage
+
     work = Path(root).parent
     work.mkdir(parents=True, exist_ok=True)
     artifact = work / "publisher-artifact.download"
@@ -170,6 +183,7 @@ def _download(
             today=today,
             probe=lambda url: client.send(TransportRequest(HttpMethod.HEAD, url)).status_code,
             transfer=lambda url, destination: _transfer(client, url, destination),
+            previous_source_vintage=previous_source_vintage,
         )
     )
 

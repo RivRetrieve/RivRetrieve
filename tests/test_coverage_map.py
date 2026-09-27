@@ -49,7 +49,7 @@ def test_catalogue_counts_match_readme_and_observation_capabilities():
     assert actual == table
     assert supported == set(module["PROVIDER_COUNTRY"])
     assert "za_dws" not in supported
-    assert sum(actual.values()) == 67681
+    assert sum(actual.values()) == 74115
     assert module["country_counts"](frame) == module["country_counts"](stations)
 
 
@@ -79,3 +79,48 @@ def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_
     assert plotted[1]["gauges"].tolist() == [60]
     with pytest.raises(ValueError, match="Boundary source lacks ADM0_A3"):
         module["draw"](world.loc[world["ADM0_A3"] != "USA"], stations, tmp_path / "missing.png")
+
+
+def test_usgs_supported_station_counts_preserve_native_scope_and_exact_approved_gaps():
+    import json
+
+    catalogue = ROOT / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue"
+    evidence = ROOT / "research/usgs-modern-coverage"
+    stations = pl.read_parquet(catalogue / "stations.parquet")
+    native = pl.read_parquet(catalogue / "native.parquet")
+    legacy = pl.read_parquet(evidence / "legacy-catalogue/station_products.parquet").filter(
+        pl.col("availability") == "available"
+    )
+    modern = pl.read_parquet(catalogue / "station_products.parquet").filter(pl.col("availability") == "available")
+    assert native.height == stations.height == 26_258
+    assert set(native["site_no"]) == set(stations["station_id"])
+    assert legacy.height == 57_961
+    assert modern.height == 58_421
+    legacy_stations, modern_stations = set(legacy["station_id"]), set(modern["station_id"])
+    assert len(legacy_stations) == 26_200
+    assert len(modern_stations) == 26_201
+    assert modern_stations <= set(stations["station_id"])
+    assert legacy_stations - modern_stations == {"09385701"}
+    absent = set(stations["station_id"]) - modern_stations
+    assert len(absent) == 57
+    baseline_zero_supported = absent - {"09385701"}
+    assert len(baseline_zero_supported) == 56
+    assert baseline_zero_supported.isdisjoint(legacy_stations)
+    assert modern_stations - legacy_stations == {"02312719", "11047350"}
+    keys = ["station_id", "product_id"]
+    lost = set(legacy.join(modern.select(keys), on=keys, how="anti").select(keys).iter_rows())
+    approved = {
+        (item["station_id"], item["product_id"]) for item in json.loads((evidence / "missing.json").read_text())
+    }
+    assert (
+        lost
+        == approved
+        == {
+            ("04208504", "stage_instantaneous"),
+            ("09385701", "discharge_daily_mean"),
+            ("10079500", "discharge_instantaneous"),
+            ("13297380", "discharge_instantaneous"),
+            ("13297380", "stage_instantaneous"),
+        }
+    )
+    assert modern.join(legacy.select(keys), on=keys, how="anti").height == 465

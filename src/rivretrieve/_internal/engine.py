@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 from math import isfinite
@@ -20,6 +20,8 @@ import polars as pl
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.source_acquisition import FailedSourceRequest
+from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
 from rivretrieve._internal.transport import SecretCallTrace
 
 
@@ -181,12 +183,15 @@ class ProductWindowDeclarations:
 class RenderedWindow:
     start: str
     stop: str | None
+    bounds: FetchWindow | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.start, str) or not self.start:
             raise TypeError("rendered window start must be a non-empty string")
         if self.stop is not None and (not isinstance(self.stop, str) or not self.stop):
             raise TypeError("rendered window stop must be a non-empty string or None")
+        if self.bounds is not None and not isinstance(self.bounds, FetchWindow):
+            raise TypeError("rendered window bounds must be a FetchWindow or None")
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +200,9 @@ class ObservationRequest:
     stations: tuple[str, ...]
     products: tuple[ProductId, ...]
     window: RequestedWindow
+    scope: SeriesScope | None = None
+    known_series: tuple[SourceSeries, ...] = ()
+    inventories: tuple[InventorySnapshot, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,6 +323,8 @@ class Payload:
     content: bytes
     origin: SourceCallOrigin
     prerequisite_calls: tuple[SecretCallTrace, ...]
+    scope: SeriesScope | None = None
+    known_series: tuple[SourceSeries, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.content) is not bytes:
@@ -333,6 +343,17 @@ class WithIssues[A]:
     issues: tuple[Issue, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class SourceAcquisition(WithIssues[tuple[Payload, ...]]):
+    """Acquired payloads and bounded source-call evidence, including independent failures."""
+
+    series: tuple[SourceSeries, ...] = ()
+    inventories: tuple[InventorySnapshot, ...] = ()
+    outcomes: tuple[RetrievalOutcome, ...] = ()
+    calls: tuple[SourceCallOrigin, ...] = ()
+    failed_requests: tuple[FailedSourceRequest, ...] = ()
+
+
 type Rows = pl.DataFrame
 type CanonicalRows = pl.DataFrame
 
@@ -344,6 +365,9 @@ RowsSchema = CatalogueSchema(
         CatalogueColumn("time", pl.Datetime()),
         CatalogueColumn("value", pl.Float64, nullable=True),
         CatalogueColumn("time_zone", pl.Utf8),
+        CatalogueColumn("series_id", pl.Utf8),
+        CatalogueColumn("facts_id", pl.Utf8),
+        CatalogueColumn("source_unit", pl.Utf8),
     ),
 )
 
@@ -354,6 +378,11 @@ CanonicalRowsSchema = CatalogueSchema(
         CatalogueColumn("time_zone", pl.Utf8),
         CatalogueColumn("station_id", pl.Utf8),
         CatalogueColumn("product_id", pl.Utf8),
+        CatalogueColumn("series_id", pl.Utf8),
+        CatalogueColumn("facts_id", pl.Utf8),
+        CatalogueColumn("quantity", pl.Utf8),
+        CatalogueColumn("source_unit", pl.Utf8),
+        CatalogueColumn("unit", pl.Utf8),
         CatalogueColumn("value", pl.Float64, nullable=True),
     ),
 )

@@ -12,10 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from rivretrieve._internal.providers.ca_eccc.bulk import decode_hydat
 from rivretrieve._internal.recordings import ReplayTransport, UnmatchedRequestError, read_recording
 from rivretrieve._internal.transport import TransportRequest
-from tests.store.test_ca_eccc_streaming import _representative_hydat
+from tests.store.test_ca_eccc_streaming import _compile_rows, _representative_hydat
 
 _DATA = Path(__file__).parent / "test_data" / "ca_eccc_hydat_no_days"
 
@@ -34,7 +33,7 @@ def _decoded_sparse_rows(tmp_path: Path):
     )
     connection.commit()
     connection.close()
-    decoded = decode_hydat(database).rows
+    decoded = _compile_rows(database)
     return decoded.filter(decoded["station_id"] == "07HF001")
 
 

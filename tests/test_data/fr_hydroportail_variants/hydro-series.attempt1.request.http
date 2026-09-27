@@ -1,0 +1,7 @@
+GET /build/hydro-series.6104cd00.js HTTP/1.1
+Host: hydro.eaufrance.fr
+User-Agent: RivRetrieve
+Accept-Encoding: gzip, deflate
+Accept: */*
+Connection: keep-alive
+

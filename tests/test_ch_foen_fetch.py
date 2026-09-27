@@ -2,6 +2,8 @@ from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
 
+import polars as pl
+
 from rivretrieve._internal.engine import (
     RenderedWindow,
     SourceQuery,
@@ -132,4 +134,50 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
         "content_type",
         "source_path",
         "query",
+        "station_products",
+        "series_ids",
     }
+    expected_fields = {
+        "discharge_reported": (("flow", "success"), ("flow_ls", "unresolved")),
+        "stage_reported": (("height", "success"), ("height_abs", "unresolved")),
+        "water_temperature_reported": (("temperature", "success"),),
+    }
+    for product, call in zip(PRODUCTS, result.provenance.calls_made, strict=True):
+        assert call["station_products"] == (("2135", product),)
+        definitions = {
+            definition.identity.published_id: definition
+            for definition in result.source_series
+            if definition.station_id == "2135" and definition.product_id == product
+        }
+        expected = tuple(definitions[field].series_id for field, _ in expected_fields[product])
+        assert call["series_ids"] == expected
+        for field, status in expected_fields[product]:
+            identifier = definitions[field].series_id
+            assert [outcome.status.value for outcome in result.outcomes if outcome.series_id == identifier] == [status]
+            rows = result.canonical_rows.filter(pl.col("series_id") == identifier)
+            assert rows.height == (6 if status == "success" else 0)
+
+
+def test_flux_read_only_post_retries_through_authenticated_http_client():
+    from rivretrieve._internal.transport import HttpClient, HttpMethod, ReplaySafety
+
+    calls = []
+
+    def sender(request, timeout_seconds):
+        calls.append(request)
+        if len(calls) == 1:
+            raise TimeoutError("transient read")
+        return b"complete source bytes", 200, "application/csv"
+
+    transport = AuthenticatedTransport(
+        HttpClient(sender=sender, sleeper=lambda _: None),
+        (CredentialHeader("Authorization", "Token SENTINEL-FLUX", ("https://influx.konzept.space",)),),
+    )
+    rendered = {p: (RenderedWindow("2020-01-01T00:00:00Z", "2020-01-01T01:00:00Z"),) for p in PRODUCTS}
+    result = fetch(
+        ("2135",), PRODUCTS, rendered, window("2020-01-01T00:00:00", "2020-01-01T01:00:00"), config(), transport
+    )
+    assert len(calls) == 2
+    assert all(request.method is HttpMethod.POST and request.replay_safety is ReplaySafety.SAFE for request in calls)
+    assert calls[0].body == calls[1].body
+    assert result.value[0].content == b"complete source bytes"

@@ -1,20 +1,15 @@
 """StoreQuery → StoreReadResult ⊎ StoreRefusal; StoreRoot → StoreStatus."""
 
 from rivretrieve._internal.store.certification import (
-    CertificationError,
-    DecodedPublisherArtifact,
     NativeStoreMaterialization,
     SourceUnitContribution,
     SourceUnitCount,
     StoreCertificationError,
     StorePostCommitCleanupError,
-    certified_compile,
-    certify_compile,
     certify_store,
     certify_store_batches,
 )
 from rivretrieve._internal.store.compiler import (
-    CompileStoreRequest,
     NativeObservationBatch,
     NativeStoreRows,
     ObservationBatchStream,
@@ -56,10 +51,7 @@ from rivretrieve._internal.store.validation import (
 
 __all__ = [
     "ArtifactChecksum",
-    "CertificationError",
-    "DecodedPublisherArtifact",
     "NativeStoreMaterialization",
-    "CompileStoreRequest",
     "Disposition",
     "ExecutedStoreQuery",
     "NativeStoreRows",
@@ -90,8 +82,6 @@ __all__ = [
     "StoreStatus",
     "ValidatedStore",
     "ValueState",
-    "certified_compile",
-    "certify_compile",
     "certify_store",
     "compile_store",
     "encode_store_excerpt",

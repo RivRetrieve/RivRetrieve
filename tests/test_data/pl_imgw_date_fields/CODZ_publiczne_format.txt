@@ -1,0 +1,19 @@
+Pole      Zawartoœæ pola
+
+PSKDSZS - Kod stacji                             
+PSNZWP  - Nazwa stacji                          
+KDNRZK  - Nazwa rzeki/jeziora
+COROKH  - Rok hydrologiczny                     
+COMSCH  - WskaŸnik miesi¹ca w roku hydrologicznym   
+CODZIEN - Dzieñ                                    
+COSTAN  - Stan wody [cm]                           
+COPRZP  - Przep³yw [m^3/s] 
+COPTMP  - Temperatura wody [st. C]
+COMSCK  - Miesi¹c kalendarzowy
+
+
+Stan wody 9999 albo NULL oznacza brak danych w bazie.
+Przep³yw 99999.999 albo NULL oznacza, ¿e przep³yw w tym dniu nie by³ opracowywany.
+Temperatura 99.9 albo NULL oznacza brak danych w bazie, która mo¿e wynikaæ np. z braku pomiarów temperatury na stacji.
+
+Od roku 2024 braki w danych s¹ oznaczane zawsze jako NULL.

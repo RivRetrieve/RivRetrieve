@@ -159,3 +159,18 @@ def _validate_unique_keys(df: pl.DataFrame, schema: CatalogueSchema) -> None:
         if duplicate_count:
             joined_columns = ", ".join(key_columns)
             raise FatalContractError(f"{schema.name} contains duplicate key rows: {joined_columns}")
+
+
+CATALOGUE_SERIES_CLAIMS_SCHEMA = CatalogueSchema(
+    name="CatalogueSeriesClaims",
+    columns=(
+        CatalogueColumn("provider_id", pl.String),
+        CatalogueColumn("station_id", pl.String),
+        CatalogueColumn("product_id", pl.String),
+        CatalogueColumn("namespace", pl.String),
+        CatalogueColumn("published_id", pl.String, nullable=True),
+        CatalogueColumn("description", pl.String, nullable=True),
+        CatalogueColumn("native_coordinates", pl.List(pl.Struct({"name": pl.String, "value": pl.String}))),
+        CatalogueColumn("evidence", pl.List(pl.String)),
+    ),
+)

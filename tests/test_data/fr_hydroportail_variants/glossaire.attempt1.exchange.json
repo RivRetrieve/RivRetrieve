@@ -1,0 +1,29 @@
+{
+  "acquired_at": "2026-09-21T10:58:39.889664+00:00",
+  "status_code": 200,
+  "url": "https://hydro.eaufrance.fr/glossaire",
+  "response_headers": {
+    "Server": "nginx",
+    "Date": "Mon, 21 Sep 2026 10:58:39 GMT",
+    "Content-Type": "text/html; charset=UTF-8",
+    "Content-Length": "9246",
+    "Connection": "keep-alive",
+    "Cache-Control": "max-age=0, private, s-maxage=0",
+    "Vary": "Accept-Encoding,Accept-Language",
+    "X-Cache-Tags": "cms-pages,cms-glossary",
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "X-XSS-Protection": "1; mode=block",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "ETag": "\"67d219fe06349c684516d619f5db45b9-gzip\"",
+    "Content-Encoding": "gzip",
+    "X-Proto": "http",
+    "Age": "0",
+    "X-Cache": "MISS",
+    "Accept-Ranges": "bytes"
+  },
+  "request_sha256": "444e0c68f1d9e5d39277d872e5c68d226e229fe375ad911a7de55fb031314c59",
+  "response_sha256": "e5a4c19910f3745dc39e06fe91195597d7cc6e724b7597cd4d85f348a2a4f8f9",
+  "body_semantics": "requests decoded response entity bytes; not TLS or compressed wire bytes"
+}
