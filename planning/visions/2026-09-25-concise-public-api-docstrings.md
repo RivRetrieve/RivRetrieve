@@ -112,6 +112,47 @@ launch, documentation deployment, or general release engineering. Both
 repositories remain private. The initial broad request to cover all code was
 clarified to mean the supported public API surface only.
 
+## Concurrent repair work (2026-09-27)
+
+The user reports that repairs and tests are in progress for
+[Poland publication-aware downloads (#371)](https://github.com/RivRetrieve/RivRetrieve/issues/371)
+and [interrupted-response retries (#375)](https://github.com/RivRetrieve/RivRetrieve/issues/375).
+The user reports that one agent owns final verification and closure of both
+issues together. Coordinate with that owner rather than closing either issue
+from this documentation Effort. Verification is still in progress before these
+issues are closed; do not treat an active test run as a successful result.
+
+At this checkpoint, the Poland repair is in open
+[PR #374](https://github.com/RivRetrieve/RivRetrieve/pull/374), on branch
+`fix/poland-publication-aware-history`, with its existing worktree at
+`.worktrees/visions/poland-publication-aware-history/`. Its PR records passing
+focused checks but an earlier incomplete live full-history verification caused
+by the interrupted-response failure tracked in #375.
+
+The retry repair has since merged through
+[PR #377](https://github.com/RivRetrieve/RivRetrieve/pull/377) at
+`02643d7bea3d5de55e076cb30ced8798935815b7`. That PR records independent approval
+and complete deterministic test coverage across two batches, with 4,423 passed
+and three skipped. It did not attempt a live national download. Issue #375 is
+still open, and successful Poland full-history verification must not be inferred
+from the retry PR's merge. Its validation evidence is retained at
+`.worktrees/evidence/http-retry-correctness/`.
+
+The related provider documentation remains
+in [PR #291](https://github.com/RivRetrieve/RivRetrieve/pull/291), with worktree
+`.worktrees/visions/poland-provider-documentation-review/`.
+
+Recheck the issues, linked PRs, test results, and worktree ownership when starting
+implementation; these are dated coordination facts, not permanent blockers.
+Work on this documentation Effort in a separate branch and worktree. Preserve
+other agents' repair branches, worktrees, test runs, and evidence. Do not repair
+those defects as part of this Effort or document unmerged behavior as current.
+Most public API documentation can proceed independently. Before merging, compare
+against the latest `main` and reconcile affected download, retry/failure, and
+returned-store contracts with any repairs that have landed. If repairs remain
+pending, describe the current behavior accurately and record the remaining
+integration check rather than claiming the repairs have passed.
+
 ## Evidence of success
 
 - Review covers the complete supported public surface and actual returned
