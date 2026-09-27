@@ -366,10 +366,14 @@ catalogue could not settle whether they exist.
   `provenance.calls_made`. Other failures in padding parts are still
   reported.
 
-  When every request fails, `data` is empty and the issues and outcomes
-  explain why. A null `value` is a published missing value, an
-  `empty` outcome means the source returned no rows, and a failed
-  request is reported through issues and outcomes.
+  When every request fails, the issues and outcomes explain why. `data`
+  is then empty, except with `cache="reuse"` or `cache="refresh"`
+  when the cache holds rows from earlier successful retrievals. Those rows
+  are returned alongside the failures, as described for `cache`. A null
+  `value` means the source gives no value for that time, and the row is
+  still returned. An `empty` outcome means the source returned no rows
+  for its interval. A failed request is reported through issues and
+  `failed` outcomes.
 
 #### Raises
 
@@ -1091,8 +1095,12 @@ result belongs to one provider.
 - **inventories : tuple[InventorySnapshot, ...]**
   Inventory snapshots used or acquired during retrieval.
 - **outcomes : tuple[RetrievalOutcome, ...]**
-  One status per retrieved series or unresolved request, present even
-  when a series returned no rows.
+  Retrieval statuses, each for one source series, or for a request that
+  has no concrete series identity, over the interval in its `window`.
+  A series can have several outcomes, for example `empty`, `success`
+  and `failed` for different months. Outcomes remain present even when
+  a series returned no rows. A padding-only part that the provider
+  declares has no stored observations produces no outcome.
 - **scope : SeriesScope**
   The filters and restrictions of the original request.
 - **view_scope : SeriesScope or None**

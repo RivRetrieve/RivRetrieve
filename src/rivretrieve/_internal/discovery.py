@@ -855,10 +855,14 @@ def fetch(
         ``provenance.calls_made``. Other failures in padding parts are still
         reported.
 
-        When every request fails, ``data`` is empty and the issues and outcomes
-        explain why. A null ``value`` is a published missing value, an
-        ``empty`` outcome means the source returned no rows, and a failed
-        request is reported through issues and outcomes.
+        When every request fails, the issues and outcomes explain why. ``data``
+        is then empty, except with ``cache="reuse"`` or ``cache="refresh"``
+        when the cache holds rows from earlier successful retrievals. Those rows
+        are returned alongside the failures, as described for ``cache``. A null
+        ``value`` means the source gives no value for that time, and the row is
+        still returned. An ``empty`` outcome means the source returned no rows
+        for its interval. A failed request is reported through issues and
+        ``failed`` outcomes.
 
     Raises
     ------

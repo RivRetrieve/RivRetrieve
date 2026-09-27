@@ -300,8 +300,12 @@ class ObservationResult(BaseModel):
     inventories : tuple[InventorySnapshot, ...]
         Inventory snapshots used or acquired during retrieval.
     outcomes : tuple[RetrievalOutcome, ...]
-        One status per retrieved series or unresolved request, present even
-        when a series returned no rows.
+        Retrieval statuses, each for one source series, or for a request that
+        has no concrete series identity, over the interval in its ``window``.
+        A series can have several outcomes, for example ``empty``, ``success``
+        and ``failed`` for different months. Outcomes remain present even when
+        a series returned no rows. A padding-only part that the provider
+        declares has no stored observations produces no outcome.
     scope : SeriesScope
         The filters and restrictions of the original request.
     view_scope : SeriesScope or None
