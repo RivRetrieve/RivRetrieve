@@ -178,8 +178,6 @@ class ReceiptEntry:
     ----------
     content : bytes
         Exact provider parse input, or a store excerpt for StoreExcerptReceipt.
-        Parse input can be an extracted archive member rather than the whole
-        downloaded file.
     origin : SourceCallOrigin
         Source-call facts with explicit unknown states and no request headers.
     authorship : ReceiptAuthorship
@@ -273,19 +271,20 @@ class ObservationResult(BaseModel):
     ``scope`` is the original request; ``view_scope`` records explicit post-fetch
     narrowing without pretending another source request occurred.
 
-    Results cannot be changed in place. They are returned by ``fetch``, ``fetch_by_provider``,
-    ``pick``, ``to_utc`` and ``from_bundle``. Every result belongs to one
-    provider.
+    Results cannot be changed in place. They are returned by ``fetch``,
+    ``fetch_by_provider``, ``pick``, ``to_utc`` and ``from_bundle``. Every
+    result belongs to one provider.
 
     Attributes
     ----------
     data : polars.DataFrame
         Observation rows with exactly the ten columns of the observation frame
-        schema, even when empty. ``time`` is a naive source wall-clock label
-        and ``time_zone`` is an IANA zone, a fixed offset such as ``+00:00``,
-        or ``unknown``. ``value`` is a float in ``unit`` (m3/s, m or degC) or
-        null when the source published a missing value. ``source_unit`` keeps
-        the published unit. ``series_id`` and ``facts_id`` join each row to
+        schema, even when empty. ``time`` is a naive source wall-clock label and
+        ``time_zone`` is an IANA zone, a fixed offset such as ``+00:00``, or
+        ``unknown``. ``value`` is a float in ``unit`` (m3/s, m or degC) or null
+        when the source gives no value for that time. A null value is still a
+        row, unlike an absent row or a failed request. ``source_unit`` keeps the
+        published unit. ``series_id`` and ``facts_id`` join each row to
         ``source_series``.
     provenance : ObservationProvenance
         Request, source-call, terms and cache context for the retrieval.

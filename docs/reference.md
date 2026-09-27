@@ -81,6 +81,8 @@ Inspect one provider's local observation store without source access.
   If an existing store is invalid or interrupted publication needs recovery.
 - **OSError**
   If local file operations fail.
+- **ValueError**
+  If `RIVRETRIEVE_CACHE_DIR` is set to a blank value.
 
 ### `clear_cache`
 
@@ -114,6 +116,8 @@ Delete one provider's compiled observation store or accumulated live store.
   If the pending-download namespace is symlinked or contains an unsafe entry.
 - **OSError**
   If deletion fails. This operation is not transactional.
+- **ValueError**
+  If `RIVRETRIEVE_CACHE_DIR` is set to a blank value.
 
 #### Notes
 
@@ -164,7 +168,7 @@ rivretrieve.download(provider: 'str')
 
 Import: `from rivretrieve import download`.
 
-Download one bulk provider's national dataset and compile it into the local cache.
+Download a bulk provider's national dataset and compile it into the local cache.
 
 #### Parameters
 
@@ -203,19 +207,20 @@ Download one bulk provider's national dataset and compile it into the local cach
   If the provider finds the publisher's listing or artifacts
   inconsistent, or finds that the newly published history would end
   before the source vintage of the existing compiled store. The existing
-  store is not replaced.
+  store is not replaced. Also raised if `RIVRETRIEVE_CACHE_DIR` is set
+  to a blank value.
 
 #### Notes
 
 This call can transfer a national dataset. It is not needed for live
 providers. Before publication, a failed compilation preserves the previous
 store and publisher inputs. Use clear_cache explicitly for recovery.
+Transport failures can also propagate rather than becoming result issues.
 
 An existing compiled store that passes validation supplies its source
 vintage, so the provider can refuse a download whose published history
 would regress. An existing store that fails validation does not block the
 call, because `download` is how such a store is rebuilt.
-Transport failures can also propagate rather than becoming result issues.
 
 The store is written under `RIVRETRIEVE_CACHE_DIR` when that variable is
 set in the environment or the working directory `.env` file, otherwise
@@ -313,10 +318,15 @@ catalogue could not settle whether they exist.
   Local observation cache behaviour for live providers. `bypass` fetches
   without reading or writing the cache. `reuse` serves cached
   observations when successful earlier retrievals cover the whole request,
-  and otherwise fetches the full request again. `refresh` fetches again
-  and replaces the cached answer for the requested interval. `reuse`
-  and `refresh` write to the cache. For a bulk provider, `bypass` and
-  `reuse` both read its compiled store, and `refresh` is refused.
+  and otherwise fetches the full request again. `refresh` requests the
+  interval again, and a successful answer replaces the cached answer. If
+  the request fails, rows cached by earlier successful retrievals are
+  still returned with the failure issue and `failed` outcome, and
+  `provenance.served_intervals` shows their original retrieval times.
+  The same applies when `reuse` has to fetch again. Successful answers
+  from `reuse` and `refresh` are written to the cache. For a bulk
+  provider, `bypass` and `reuse` both read its compiled store, and
+  `refresh` is refused.
 - **on_issue : {"warn", "raise", "ignore"}, default "warn"**
   Handling of `warning` and `error` issues after retrieval. `warn`
   emits one `RuntimeWarning` per issue and returns the result.
@@ -337,13 +347,14 @@ catalogue could not settle whether they exist.
   requested window by calendar date or by source timestamp, as recorded
   in each fact segment's `clipping_axis`.
 
-  A source failure for one station or access route becomes an issue and
-  a `failed` outcome, and independent series still return their rows.
-  Some providers request a series in independent parts, such as
-  monthly files. A failed part is reported for its own interval: the issue's `details["window"]` holds the source
-  interval, and the `failed` outcome covers its overlap with the
-  requested window, or the whole source interval when the part lies
-  outside that window. Rows from the other parts are kept.
+  A source failure for one station or access route becomes an issue and a
+  `failed` outcome, and independent series still return their rows. Some
+  providers request a series in independent parts, such as monthly files.
+  A failed part is reported for its own interval: the issue's
+  `details["window"]` holds the source interval, and the `failed`
+  outcome covers its overlap with the requested window, or the whole
+  source interval when the part lies outside that window. Rows from the
+  other parts are kept.
 
   Failed HTTP requests produce `source.request_failed` (error) or, for
   HTTP 404, `source.http_not_found` (warning). Their `details` keep the
@@ -372,8 +383,8 @@ catalogue could not settle whether they exist.
 - **MultiProviderSelectionError**
   If the selection routes to more than one provider.
 - **InvalidObservationRequestError**
-  If `start` is missing, either endpoint has an unsupported type or a
-  time zone, or `start` is after `end`.
+  If `start` is missing, either endpoint has an unsupported type,
+  cannot be parsed or has a time zone, or `start` is after `end`.
 - **MissingCredentialError**
   If a required credential is not set. No source request is made.
 - **ObservationsUnavailableError**
@@ -428,7 +439,7 @@ rivretrieve.fetch_by_provider(selection: '_Selection', *, start: 'object' = None
 
 Import: `from rivretrieve import fetch_by_provider`.
 
-Download observations for a selection that spans several providers, one result per provider.
+Download observations for a multi-provider selection, one result per provider.
 
 Parameters are the same as for `fetch`. The selection can route to any
 number of providers.
@@ -573,7 +584,9 @@ Restore a selection or result saved by `to_bundle`.
   exported again or re-fetched.
 - **ObservationDataSchemaError**
   If a result bundle's observation rows contradict its source-series
-  definitions or the observation frame schema.
+  definitions or the observation frame schema, its outcomes contradict
+  those definitions, or its receipt provider differs from its
+  provenance provider.
 
 ### `from_frame`
 
@@ -779,8 +792,8 @@ Describe each source series in a selection or result as a table.
   observations and outcomes. `identity_namespace`, `published_id`,
   `description`, `identity_origin` (`catalogue`, `response` or
   `mapping`), `identity_evidence` and `variant` preserve the
-  agency's own identity. A null `description` means the source
-  publishes none.
+  agency's own identity. A null `description` means no
+  description was recorded for the series.
   - Request: `requested_variants` and `requested_series_ids` repeat
   explicit restrictions. `requested_selector_kind` and
   `requested_selector_value` are filled only on rows for an outcome
@@ -838,17 +851,18 @@ Save a selection or result as bytes that `from_bundle` can restore.
 #### Parameters
 
 - **value : selection or ObservationResult**
-  Selection from `find`, `pick` or `from_bundle`, or a result to export, including a result view from `pick`.
+  Selection from `find`, `pick` or `from_bundle`, or a result to
+  export, including a result view from `pick`.
 
 #### Returns
 
 - **bytes**
   ZIP archive in bundle format version 2. Write the bytes to a file to
   keep them. A selection bundle holds its request intent, source-series
-  definitions, inventories, issues, station locations and catalogue
-  evidence. A result bundle also holds the observation rows as Parquet,
-  the outcomes, the view scope, provenance and any retained receipt
-  bytes. Nothing is read from or written to disk.
+  definitions, inventories, issues, station locations, catalogue evidence
+  and empty-selection reason. A result bundle also holds the observation
+  rows as Parquet, the outcomes, the view scope, provenance and any
+  retained receipt bytes. Nothing is read from or written to disk.
 
 #### Raises
 
@@ -1000,12 +1014,13 @@ These types are not re-exported from `rivretrieve`. Their locations below identi
 
 Type location: `rivretrieve._internal.selection._Selection`.
 
-A search to retrieve later: the requested filters and the catalogue evidence found for them.
+A search to retrieve later: requested filters plus the catalogue evidence found.
 
-A selection is returned by `find`, `pick` and `from_bundle` and
-cannot be changed in place. Pass it to the public functions rather than
-building one directly. The known series are evidence, and the filters
-remain the request, so retrieval can include series found later. `series(selection)` shows their contents as a frame.
+A selection is returned by `find`, `pick` and `from_bundle` and cannot
+be changed in place. Pass it to the public functions rather than building
+one directly. The known series are evidence, and the filters remain the
+request, so retrieval can include series found later. `series(selection)`
+shows their contents as a frame.
 
 #### Attributes
 
@@ -1047,19 +1062,20 @@ and outcomes remain inspectable even when a series has no observation rows.
 `scope` is the original request; `view_scope` records explicit post-fetch
 narrowing without pretending another source request occurred.
 
-Results cannot be changed in place. They are returned by `fetch`, `fetch_by_provider`,
-`pick`, `to_utc` and `from_bundle`. Every result belongs to one
-provider.
+Results cannot be changed in place. They are returned by `fetch`,
+`fetch_by_provider`, `pick`, `to_utc` and `from_bundle`. Every
+result belongs to one provider.
 
 #### Attributes
 
 - **data : polars.DataFrame**
   Observation rows with exactly the ten columns of the observation frame
-  schema, even when empty. `time` is a naive source wall-clock label
-  and `time_zone` is an IANA zone, a fixed offset such as `+00:00`,
-  or `unknown`. `value` is a float in `unit` (m3/s, m or degC) or
-  null when the source published a missing value. `source_unit` keeps
-  the published unit. `series_id` and `facts_id` join each row to
+  schema, even when empty. `time` is a naive source wall-clock label and
+  `time_zone` is an IANA zone, a fixed offset such as `+00:00`, or
+  `unknown`. `value` is a float in `unit` (m3/s, m or degC) or null
+  when the source gives no value for that time. A null value is still a
+  row, unlike an absent row or a failed request. `source_unit` keeps the
+  published unit. `series_id` and `facts_id` join each row to
   `source_series`.
 - **provenance : ObservationProvenance**
   Request, source-call, terms and cache context for the retrieval.
@@ -1199,8 +1215,6 @@ Retained bytes with an origin and explicit authorship.
 
 - **content : bytes**
   Exact provider parse input, or a store excerpt for StoreExcerptReceipt.
-  Parse input can be an extracted archive member rather than the whole
-  downloaded file.
 - **origin : SourceCallOrigin**
   Source-call facts with explicit unknown states and no request headers.
 - **authorship : ReceiptAuthorship**
@@ -1557,7 +1571,7 @@ Outcomes remain present even when there are no observation rows.
 
 Type location: `rivretrieve._internal.issues.Issue`.
 
-A problem or note recorded during selection or retrieval and kept with the results.
+A problem or note recorded during selection or retrieval, kept with the results.
 
 Issues are kept on selections and results whatever `on_issue` policy is
 chosen. They let independent series return data while a failure elsewhere
@@ -1568,24 +1582,25 @@ stays visible with its identity and reason.
 - **severity : {"info", "warning", "error"}**
   Finding severity. Only warning and error activate the caller issue policy.
 - **code : str**
-  Machine-readable classification, written as `<area>.<finding>`.
-  Examples include `source.request_failed` (error, a failed source
-  request), `source.http_not_found` (warning, HTTP 404),
+  Machine-readable classification, usually written as
+  `<area>.<finding>`. Some provider codes have no dot, such as
+  `source_no_data`. Examples include `source.request_failed` (error, a
+  failed source request), `source.http_not_found` (warning, HTTP 404),
   `bulk.store_missing` (warning, no compiled store),
-  `selection.no_match` and `selection.unresolved_inventory`
-  (warning, an explicit restriction matched no known series),
-  `request.future_end` (info) and
-  `provenance.license_not_established` (info). This list is not
-  exhaustive.
+  `selection.no_match` and `selection.unresolved_inventory` (warning,
+  an explicit restriction matched no known series), `request.future_end`
+  (info) and `provenance.license_not_established` (info). This list is
+  not exhaustive.
 - **message : str**
   Human-readable finding.
 - **details : dict[str, object] or None**
   Structured context, such as station, product and source failure reason.
   Source request failures record `station_id`, `product_id`,
   `request_url`, `attempts`, `status_code`, `failure_reason` and,
-  when known, `failure_category`. A failed request for one series and
-  interval also records `series_id`, `variant`, `window` (the
-  source interval) and `outcome_id`.
+  when known, `failure_category`. `status_code` is None when no HTTP
+  status was received, for example after a timeout. A failed request for
+  one series and interval also records `series_id`, `variant`,
+  `window` (the source interval) and `outcome_id`.
 - **provider_id : ProviderId or None**
   Provider responsible for the affected series when known.
 

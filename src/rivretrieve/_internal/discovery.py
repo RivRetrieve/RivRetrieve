@@ -490,8 +490,8 @@ def series(value: _Selection | ObservationResult) -> pl.DataFrame:
           observations and outcomes. ``identity_namespace``, ``published_id``,
           ``description``, ``identity_origin`` (``catalogue``, ``response`` or
           ``mapping``), ``identity_evidence`` and ``variant`` preserve the
-          agency's own identity. A null ``description`` means the source
-          publishes none.
+          agency's own identity. A null ``description`` means no
+          description was recorded for the series.
         - Request: ``requested_variants`` and ``requested_series_ids`` repeat
           explicit restrictions. ``requested_selector_kind`` and
           ``requested_selector_value`` are filled only on rows for an outcome
@@ -585,17 +585,18 @@ def to_bundle(value: _Selection | ObservationResult) -> bytes:
     Parameters
     ----------
     value : selection or ObservationResult
-        Selection from ``find``, ``pick`` or ``from_bundle``, or a result to export, including a result view from ``pick``.
+        Selection from ``find``, ``pick`` or ``from_bundle``, or a result to
+        export, including a result view from ``pick``.
 
     Returns
     -------
     bytes
         ZIP archive in bundle format version 2. Write the bytes to a file to
         keep them. A selection bundle holds its request intent, source-series
-        definitions, inventories, issues, station locations and catalogue
-        evidence. A result bundle also holds the observation rows as Parquet,
-        the outcomes, the view scope, provenance and any retained receipt
-        bytes. Nothing is read from or written to disk.
+        definitions, inventories, issues, station locations, catalogue evidence
+        and empty-selection reason. A result bundle also holds the observation
+        rows as Parquet, the outcomes, the view scope, provenance and any
+        retained receipt bytes. Nothing is read from or written to disk.
 
     Raises
     ------
@@ -634,7 +635,9 @@ def from_bundle(content: bytes) -> _Selection | ObservationResult:
         exported again or re-fetched.
     ObservationDataSchemaError
         If a result bundle's observation rows contradict its source-series
-        definitions or the observation frame schema.
+        definitions or the observation frame schema, its outcomes contradict
+        those definitions, or its receipt provider differs from its
+        provenance provider.
     """
     from rivretrieve._internal.export_bundle import decode_bundle
 
@@ -804,10 +807,15 @@ def fetch(
         Local observation cache behaviour for live providers. ``bypass`` fetches
         without reading or writing the cache. ``reuse`` serves cached
         observations when successful earlier retrievals cover the whole request,
-        and otherwise fetches the full request again. ``refresh`` fetches again
-        and replaces the cached answer for the requested interval. ``reuse``
-        and ``refresh`` write to the cache. For a bulk provider, ``bypass`` and
-        ``reuse`` both read its compiled store, and ``refresh`` is refused.
+        and otherwise fetches the full request again. ``refresh`` requests the
+        interval again, and a successful answer replaces the cached answer. If
+        the request fails, rows cached by earlier successful retrievals are
+        still returned with the failure issue and ``failed`` outcome, and
+        ``provenance.served_intervals`` shows their original retrieval times.
+        The same applies when ``reuse`` has to fetch again. Successful answers
+        from ``reuse`` and ``refresh`` are written to the cache. For a bulk
+        provider, ``bypass`` and ``reuse`` both read its compiled store, and
+        ``refresh`` is refused.
     on_issue : {"warn", "raise", "ignore"}, default "warn"
         Handling of ``warning`` and ``error`` issues after retrieval. ``warn``
         emits one ``RuntimeWarning`` per issue and returns the result.
@@ -828,13 +836,14 @@ def fetch(
         requested window by calendar date or by source timestamp, as recorded
         in each fact segment's ``clipping_axis``.
 
-        A source failure for one station or access route becomes an issue and
-        a ``failed`` outcome, and independent series still return their rows.
-        Some providers request a series in independent parts, such as
-        monthly files. A failed part is reported for its own interval: the issue's ``details["window"]`` holds the source
-        interval, and the ``failed`` outcome covers its overlap with the
-        requested window, or the whole source interval when the part lies
-        outside that window. Rows from the other parts are kept.
+        A source failure for one station or access route becomes an issue and a
+        ``failed`` outcome, and independent series still return their rows. Some
+        providers request a series in independent parts, such as monthly files.
+        A failed part is reported for its own interval: the issue's
+        ``details["window"]`` holds the source interval, and the ``failed``
+        outcome covers its overlap with the requested window, or the whole
+        source interval when the part lies outside that window. Rows from the
+        other parts are kept.
 
         Failed HTTP requests produce ``source.request_failed`` (error) or, for
         HTTP 404, ``source.http_not_found`` (warning). Their ``details`` keep the
@@ -863,8 +872,8 @@ def fetch(
     MultiProviderSelectionError
         If the selection routes to more than one provider.
     InvalidObservationRequestError
-        If ``start`` is missing, either endpoint has an unsupported type or a
-        time zone, or ``start`` is after ``end``.
+        If ``start`` is missing, either endpoint has an unsupported type,
+        cannot be parsed or has a time zone, or ``start`` is after ``end``.
     MissingCredentialError
         If a required credential is not set. No source request is made.
     ObservationsUnavailableError
@@ -952,7 +961,7 @@ def fetch_by_provider(
     cache: CacheMode = "bypass",
     on_issue: OnIssue = "warn",
 ) -> dict[str, ObservationResult]:
-    """Download observations for a selection that spans several providers, one result per provider.
+    """Download observations for a multi-provider selection, one result per provider.
 
     Parameters are the same as for ``fetch``. The selection can route to any
     number of providers.
@@ -1516,7 +1525,7 @@ def _ensure_default_providers_registered() -> None:
 
 
 def download(provider: str):
-    """Download one bulk provider's national dataset and compile it into the local cache.
+    """Download a bulk provider's national dataset and compile it into the local cache.
 
     Parameters
     ----------
@@ -1555,19 +1564,20 @@ def download(provider: str):
         If the provider finds the publisher's listing or artifacts
         inconsistent, or finds that the newly published history would end
         before the source vintage of the existing compiled store. The existing
-        store is not replaced.
+        store is not replaced. Also raised if ``RIVRETRIEVE_CACHE_DIR`` is set
+        to a blank value.
 
     Notes
     -----
     This call can transfer a national dataset. It is not needed for live
     providers. Before publication, a failed compilation preserves the previous
     store and publisher inputs. Use clear_cache explicitly for recovery.
+    Transport failures can also propagate rather than becoming result issues.
 
     An existing compiled store that passes validation supplies its source
     vintage, so the provider can refuse a download whose published history
     would regress. An existing store that fails validation does not block the
     call, because ``download`` is how such a store is rebuilt.
-    Transport failures can also propagate rather than becoming result issues.
 
     The store is written under ``RIVRETRIEVE_CACHE_DIR`` when that variable is
     set in the environment or the working directory ``.env`` file, otherwise
@@ -1605,6 +1615,8 @@ def cache_status(provider: str):
         If an existing store is invalid or interrupted publication needs recovery.
     OSError
         If local file operations fail.
+    ValueError
+        If ``RIVRETRIEVE_CACHE_DIR`` is set to a blank value.
     """
     from rivretrieve._internal.bulk import cache_status as bulk_cache_status
 
@@ -1636,6 +1648,8 @@ def clear_cache(provider: str):
         If the pending-download namespace is symlinked or contains an unsafe entry.
     OSError
         If deletion fails. This operation is not transactional.
+    ValueError
+        If ``RIVRETRIEVE_CACHE_DIR`` is set to a blank value.
 
     Notes
     -----

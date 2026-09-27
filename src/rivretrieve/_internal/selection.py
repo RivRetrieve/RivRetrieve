@@ -64,12 +64,13 @@ class StationLocation:
 
 @dataclass(frozen=True, slots=True)
 class _Selection:
-    """A search to retrieve later: the requested filters and the catalogue evidence found for them.
+    """A search to retrieve later: requested filters plus the catalogue evidence found.
 
-    A selection is returned by ``find``, ``pick`` and ``from_bundle`` and
-    cannot be changed in place. Pass it to the public functions rather than
-    building one directly. The known series are evidence, and the filters
-    remain the request, so retrieval can include series found later. ``series(selection)`` shows their contents as a frame.
+    A selection is returned by ``find``, ``pick`` and ``from_bundle`` and cannot
+    be changed in place. Pass it to the public functions rather than building
+    one directly. The known series are evidence, and the filters remain the
+    request, so retrieval can include series found later. ``series(selection)``
+    shows their contents as a frame.
 
     Attributes
     ----------
