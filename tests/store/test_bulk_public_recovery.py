@@ -109,23 +109,15 @@ def test_public_poland_multi_artifact_download_uses_real_declaration_and_compile
     monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
 ) -> None:
-    import io
-    import zipfile
     from datetime import date
 
     operations = pl_declaration.observations
     assert isinstance(operations, BulkStore)
-    planned = pl_bulk.plan_imgw_artifacts(first_year=2022, last_year=2022)[-2:]
-    monkeypatch.setattr(pl_bulk, "plan_imgw_artifacts", lambda **kwargs: planned)
-    content_by_url = {}
-    for month, item in zip((11, 12), planned, strict=True):
-        content = io.BytesIO()
-        with zipfile.ZipFile(content, "w") as archive:
-            archive.writestr(
-                f"codz_2022_{month:02d}.csv",
-                f"1;S;R;2022;{month};01;100;10;7;{month - 2}\r\n".encode(),
-            )
-        content_by_url[item.url] = content.getvalue()
+    monkeypatch.setattr(pl_bulk, "FIRST_PUBLISHED_YEAR", 2022)
+    names = ["codz_2022_01.zip", "codz_2022_02.zip"]
+    from tests.store.test_pl_imgw_publication_public import publication
+
+    content_by_url = publication({2022: names})
     calls = []
 
     class OfflineClient:
@@ -150,8 +142,12 @@ def test_public_poland_multi_artifact_download_uses_real_declaration_and_compile
 
     result = rr.download("pl_imgw")
 
-    assert calls == [item.url for item in planned]
-    assert result.manifest.source_vintage == date(2022, 10, 31)
+    assert calls == [
+        pl_bulk.BASE_URL + "/",
+        pl_bulk.BASE_URL + "/2022/",
+        *(pl_bulk.BASE_URL + "/2022/" + name for name in names),
+    ]
+    assert result.manifest.source_vintage == date(2021, 12, 31)
     assert validate_store(root, ProviderId("pl_imgw")).manifest == result.manifest
-    assert rr.cache_status("pl_imgw").source_vintage == date(2022, 10, 31)
+    assert rr.cache_status("pl_imgw").source_vintage == date(2021, 12, 31)
     assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))

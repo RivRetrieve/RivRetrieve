@@ -7,11 +7,30 @@ from pathlib import Path
 
 import pytest
 
-from rivretrieve._internal.providers.pl_imgw.bulk import (
-    download_imgw_history,
-    plan_imgw_artifacts,
-)
+from rivretrieve._internal.providers.pl_imgw.bulk import BASE_URL, download_imgw_history
 from rivretrieve._internal.store.validation import StoreManifest
+
+
+def _index(url: str, names: tuple[str, ...]) -> bytes:
+    identity = "Index of /" + url.split("/", 3)[3].rstrip("/")
+    links = "".join(f'<tr><td><a href="{name}">{name}</a></td></tr>' for name in names)
+    return f"<html><head><title>{identity}</title></head><body><h1>{identity}</h1><table>{links}</table></body></html>".encode()
+
+
+def _listing_transfer(transfer, names: tuple[str, ...]):
+    years = sorted({name[5:9] for name in names})
+    listings = {BASE_URL + "/": _index(BASE_URL + "/", tuple(year + "/" for year in years))}
+    for year in years:
+        url = f"{BASE_URL}/{year}/"
+        listings[url] = _index(url, tuple(name for name in names if name[5:9] == year))
+
+    def receive(url: str, destination: Path) -> None:
+        if url in listings:
+            destination.write_bytes(listings[url])
+        else:
+            transfer(url, destination)
+
+    return receive
 
 
 def _official_url(name: str) -> str:
@@ -26,16 +45,6 @@ def test_imgw_near_sentinel_numeric_is_not_reclassified_as_published_null() -> N
         999.0004,
         "published_value",
     )
-
-
-def test_imgw_plan_uses_monthly_archives_before_2023_and_annual_after() -> None:
-    planned = plan_imgw_artifacts(first_year=2022, last_year=2023)
-
-    assert len(planned) == 13
-    assert planned[0].url.endswith("/2022/codz_2022_01.zip")
-    assert planned[11].url.endswith("/2022/codz_2022_12.zip")
-    assert planned[12].url.endswith("/2023/codz_2023.zip")
-    assert len({item.filename for item in planned}) == 13
 
 
 def test_multi_artifact_compile_publishes_one_union_with_complete_provenance(tmp_path) -> None:
@@ -87,7 +96,9 @@ def test_imgw_history_download_transfers_every_planned_artifact_once(tmp_path) -
     downloaded = download_imgw_history(
         tmp_path / "publisher-artifact.download",
         today=date(2024, 6, 1),
-        transfer=transfer,
+        transfer=_listing_transfer(
+            transfer, tuple(f"codz_2022_{month:02d}.zip" for month in range(1, 13)) + ("codz_2023.zip",)
+        ),
         first_year=2022,
     )
 
@@ -156,7 +167,12 @@ def test_imgw_history_download_removes_partial_current_target_and_refuses_preexi
     first_target = base.with_name(base.name + "-codz_2023.zip")
     first_target.write_bytes(b"existing")
     with pytest.raises(FileExistsError, match="already exists"):
-        download_imgw_history(base, today=date(2024, 1, 1), transfer=lambda _url, _path: None, first_year=2023)
+        download_imgw_history(
+            base,
+            today=date(2024, 1, 1),
+            transfer=_listing_transfer(lambda _url, _path: None, ("codz_2023.zip",)),
+            first_year=2023,
+        )
     assert first_target.read_bytes() == b"existing"
 
     first_target.unlink()
@@ -166,7 +182,9 @@ def test_imgw_history_download_removes_partial_current_target_and_refuses_preexi
         raise OSError("transfer failed")
 
     with pytest.raises(OSError, match="transfer failed"):
-        download_imgw_history(base, today=date(2024, 1, 1), transfer=partial, first_year=2023)
+        download_imgw_history(
+            base, today=date(2024, 1, 1), transfer=_listing_transfer(partial, ("codz_2023.zip",)), first_year=2023
+        )
     assert not first_target.exists()
 
 
@@ -322,14 +340,6 @@ def test_imgw_rejects_hydrological_month_that_disagrees_with_archive_name(tmp_pa
         next(iter(decode_imgw_batches(artifact).batches))
 
 
-def test_imgw_completed_hydrological_year_changes_in_november() -> None:
-    from rivretrieve._internal.providers.pl_imgw.bulk import latest_completed_hydrological_year
-
-    assert latest_completed_hydrological_year(date(2024, 10, 31)) == 2023
-    assert latest_completed_hydrological_year(date(2024, 11, 1)) == 2024
-    assert latest_completed_hydrological_year(date(2024, 12, 31)) == 2024
-
-
 def test_imgw_plural_identity_rejects_duplicate_paths_urls_and_mislabeled_url(tmp_path) -> None:
     from datetime import UTC, datetime
 
@@ -419,9 +429,9 @@ def test_imgw_plural_compile_identity_refuses_internal_period_gap(tmp_path: Path
 
 
 @pytest.mark.parametrize("name", ("codz_2023_01.zip", "codz_2022.zip", "codz_2024_12.zip"))
-def test_imgw_compile_identity_refuses_wrong_publication_regime(tmp_path: Path, name: str) -> None:
-    with pytest.raises(ValueError, match="annual publication|annual artifact"):
-        _imgw_compile_request_for_names(tmp_path, (name,))
+def test_imgw_compile_identity_accepts_either_publication_form_in_any_year(tmp_path: Path, name: str) -> None:
+    request = _imgw_compile_request_for_names(tmp_path, (name,))
+    assert len(request.publisher_artifacts) == 1
 
 
 @pytest.mark.parametrize(
@@ -473,7 +483,7 @@ def test_imgw_streaming_first_batch_retains_bounded_rows(tmp_path, monkeypatch) 
     assert first.rows.height == 4
 
 
-def test_imgw_history_download_includes_just_completed_year_in_november(tmp_path) -> None:
+def test_imgw_history_download_includes_just_published_year_in_november(tmp_path) -> None:
     calls: list[str] = []
 
     def transfer(url: str, destination: Path) -> None:
@@ -481,7 +491,10 @@ def test_imgw_history_download_includes_just_completed_year_in_november(tmp_path
         destination.write_bytes(b"publisher")
 
     downloaded = download_imgw_history(
-        tmp_path / "publisher.download", today=date(2024, 11, 1), transfer=transfer, first_year=2023
+        tmp_path / "publisher.download",
+        today=date(2024, 11, 1),
+        transfer=_listing_transfer(transfer, ("codz_2023.zip", "codz_2024.zip")),
+        first_year=2023,
     )
 
     assert [Path(item.url).name for item in downloaded] == ["codz_2023.zip", "codz_2024.zip"]
