@@ -278,7 +278,8 @@ def test_failed_refresh_does_not_replace_held_concrete_values(tmp_path: Path) ->
     held = _drive(store, CountedReplay(_INSTANT))
     before = {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")}
     result = _drive(store, RefusedTransport(), cache="refresh")
-    assert result.canonical_rows.is_empty()
+    assert_frame_equal(result.canonical_rows, held.canonical_rows)
+    assert result.provenance.served_intervals[0].retrieved_at == held.provenance.retrieved_at
     assert len(result.issues) == 1
     assert {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")} == before
     reused = _drive(store, RefusedTransport())

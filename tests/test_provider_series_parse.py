@@ -5,11 +5,12 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
+from rivretrieve._internal.engine import WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.lt_lhmt.declaration import declaration
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.source_series import ParsedSeries
+from rivretrieve._internal.window_planning import plan_windows
 
 
 def payload():
@@ -22,7 +23,7 @@ def payload():
     fetched = stages.fetch(
         ("anyksciu-vms",),
         products,
-        {p: (RenderedWindow("2023-06", None),) for p in products},
+        {p: plan_windows(window, stages.window_declarations.products[p]) for p in products},
         window,
         stages.config,
         ReplayTransport((recording,)),

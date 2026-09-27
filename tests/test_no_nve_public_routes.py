@@ -191,6 +191,9 @@ def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(m
 
 
 def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(monkeypatch, tmp_path):
+    from dataclasses import replace
+    from datetime import timedelta
+
     from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
 
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
@@ -209,7 +212,8 @@ def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(m
             requests.append(request)
             if fail and request.url.endswith("/Observations") and request.params["VersionNumber"] == 3:
                 raise TransportFailure(request, TransportFailureReason.RETRY_EXHAUSTED, 3, status_code=503)
-            return replay.send(request)
+            response = replay.send(request)
+            return replace(response, retrieved_at=response.retrieved_at + timedelta(days=1)) if fail else response
 
     monkeypatch.setattr(discovery, "HttpClient", Observed)
     selection = rr.find(
@@ -225,8 +229,28 @@ def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(m
     fail = True
     failed = fetch("refresh")
     assert len(requests) == 8
-    # Refresh exposes fresh successes only. It does not relabel held rows as new source results.
-    pl_testing.assert_frame_equal(failed.data, rr.pick(first, variant=("1", "2")).data)
+    # Refresh retains the failed version at its original vintage alongside fresh siblings.
+    pl_testing.assert_frame_equal(failed.data, first.data)
+    assert {item.series_id for item in failed.provenance.served_intervals} == {third.series_id}
+    assert all(item.retrieved_at == observations[2].retrieved_at for item in failed.provenance.served_intervals)
+    assert {item.series_id: item for item in failed.source_series} == {
+        item.series_id: item for item in first.source_series
+    }
+    held_calls = [
+        call
+        for call in failed.provenance.calls_made
+        if call.get("request_parameters", {}).get("VersionNumber") == 3
+        and call.get("retrieved_at") == observations[2].retrieved_at
+    ]
+    assert held_calls
+    for variant in ("1", "2"):
+        sibling = next(item for item in first.source_series if item.variant == variant)
+        assert any(
+            outcome.series_id == sibling.series_id
+            and outcome.status == "success"
+            and outcome.retrieved_at == observations[int(variant) - 1].retrieved_at + timedelta(days=1)
+            for outcome in failed.outcomes
+        )
     assert any(outcome.series_id == third.series_id and outcome.status == "failed" for outcome in failed.outcomes)
     retained = rr.fetch(
         rr.pick(selection, variant="3"), start="2024-01-02", end="2024-01-02", cache="reuse", on_issue="ignore"
@@ -237,9 +261,13 @@ def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(m
     prior_coverage = [item for item in retained.provenance.served_intervals if item.series_id == third.series_id]
     assert prior_coverage
     assert all(item.retrieved_at == observations[2].retrieved_at for item in prior_coverage)
-    assert not any(
-        outcome.series_id == third.series_id and outcome.status in ("success", "empty") for outcome in failed.outcomes
-    )
+    held_outcomes = [
+        outcome
+        for outcome in failed.outcomes
+        if outcome.series_id == third.series_id and outcome.status in ("success", "empty")
+    ]
+    assert held_outcomes
+    assert all(outcome.retrieved_at == observations[2].retrieved_at for outcome in held_outcomes)
     settled = [item for item in failed.inventories if "reconciled" in item.access]
     assert settled[-1].completeness == "incomplete"
     fetch("reuse")
