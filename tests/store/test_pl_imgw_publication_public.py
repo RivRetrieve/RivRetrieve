@@ -332,3 +332,132 @@ def test_public_download_propagates_unexpected_previous_store_validation_failure
     assert {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()} == before
     assert validate_store(root, ProviderId("pl_imgw")).manifest == original.manifest
     assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))
+
+
+def test_public_exact_archive_compiles_blank_calendar_cell_without_losing_source(public_imgw, monkeypatch):
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.primitives import ProductId
+    from rivretrieve._internal.store import StoreQuery, read_store
+
+    root, responses, _calls = public_imgw
+    monkeypatch.setattr(bulk, "FIRST_PUBLISHED_YEAR", 1992)
+    names = [f"codz_1992_{month:02d}.zip" for month in range(1, 8)]
+    responses.update(publication({1992: names}))
+    # Only July's hydrological archive is recorded source data. The preceding
+    # six tiny publications are synthetic continuity fixtures.
+    source = Path(__file__).parents[1] / "test_data/pl_imgw_date_fields/codz_1992_07.zip"
+    responses[f"{ROOT}1992/{names[-1]}"] = source.read_bytes()
+    result = rr.download("pl_imgw")
+    assert_provenance(root, result, responses, names, date(1992, 5, 31))
+    assert sum(result.manifest.partition_row_counts.values()) == (25408 + 6) * 3
+    query = StoreQuery(
+        root,
+        ProviderId("pl_imgw"),
+        ("149220010",),
+        tuple(ProductId(name) for name in ("discharge_daily", "stage_daily", "water_temperature_daily")),
+        datetime(1992, 5, 16),
+        datetime(1992, 5, 16),
+    )
+    rows = read_store(query).physical_rows.sort("product")
+    source_cells = (" 149220010", "NOWOSIELCE", "Pielnica (22618)", "1992", "07", "16", "137", ".170", "99.9", "")
+    expected = pl.DataFrame(
+        {
+            "product": ["discharge_daily", "stage_daily", "water_temperature_daily"],
+            "time": [datetime(1992, 5, 16)] * 3,
+            "time_zone": ["unknown"] * 3,
+            "value": [0.17, 137.0, None],
+            "value_state": ["published_value", "published_value", "published_null"],
+            **{column.name: [value] * 3 for column, value in zip(bulk.IMGW_SOURCE_COLUMNS, source_cells, strict=True)},
+        }
+    )
+    assert_frame_equal(rows.select(expected.columns), expected)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["missing-hydro-month", "conflicting-month", "noninteger-month", "invalid-day", "period", "certification"],
+)
+def test_public_date_failure_preserves_existing_store_and_exact_recovery_bytes(public_imgw, monkeypatch, failure):
+    from dataclasses import replace
+
+    from rivretrieve._internal.store.certification import StoreCertificationError
+
+    root, responses, _calls = public_imgw
+    responses.update(publication({2023: ["codz_2023.zip"]}))
+    previous = rr.download("pl_imgw")
+    before = {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()}
+    cells = ["1", "S", "R", "2023", "01", "01", "100", "10", "7", " \t"]
+    changes = {
+        "missing-hydro-month": (4, ""),
+        "conflicting-month": (9, "12"),
+        "noninteger-month": (9, "NULL"),
+        "invalid-day": (5, "31"),
+        "period": (3, "2022"),
+    }
+    if failure in changes:
+        position, value = changes[failure]
+        cells[position] = value
+    content = io.BytesIO()
+    with zipfile.ZipFile(content, "w") as archive_file:
+        archive_file.writestr("codz_2023.csv", ";".join(cells) + "\r\n")
+    responses[f"{ROOT}2023/codz_2023.zip"] = content.getvalue()
+    if failure == "certification":
+        original_decode = bulk.decode_imgw_batches
+        calls = 0
+
+        def corrupt_second_decode(paths):
+            nonlocal calls
+            calls += 1
+            stream = original_decode(paths)
+            if calls == 1:
+                return stream
+
+            def changed():
+                for batch in stream.batches:
+                    # A verifier must detect filling the retained source blank,
+                    # even though the correctly derived timestamp stays unchanged.
+                    yield replace(batch, rows=batch.rows.with_columns(pl.lit("11").alias("IMGW_DAILY.calendar_month")))
+
+            return replace(stream, batches=changed())
+
+        monkeypatch.setattr(bulk, "decode_imgw_batches", corrupt_second_decode)
+    reasons = {
+        "missing-hydro-month": "month_indicator",
+        "conflicting-month": "inconsistent month",
+        "noninteger-month": "calendar_month",
+        "invalid-day": "calendar date",
+        "period": "filename publication period",
+        "certification": "read-back differs",
+    }
+    error = StoreCertificationError if failure == "certification" else ValueError
+    with pytest.raises(error, match=reasons[failure]):
+        rr.download("pl_imgw")
+    assert {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()} == before
+    assert validate_store(root, ProviderId("pl_imgw")).manifest == previous.manifest
+    assert rr.cache_status("pl_imgw").source_vintage == previous.manifest.source_vintage
+    (retained,) = Path(root).parent.glob("publisher-artifact.download*")
+    assert retained.read_bytes() == content.getvalue()
+
+
+@pytest.mark.parametrize("calendar_cell", ["", " \t"])
+def test_public_compiler_preserves_exact_additional_month_blank(public_imgw, calendar_cell):
+    from polars.testing import assert_frame_equal
+
+    root, responses, _calls = public_imgw
+    responses.update(publication({2023: ["codz_2023.zip"]}))
+    cells = ("1", "S", "R", "2023", "01", "01", "100", "10", "7", calendar_cell)
+    content = io.BytesIO()
+    with zipfile.ZipFile(content, "w") as archive_file:
+        archive_file.writestr("codz_2023.csv", ";".join(cells) + "\r\n")
+    responses[f"{ROOT}2023/codz_2023.zip"] = content.getvalue()
+    result = rr.download("pl_imgw")
+    assert_provenance(root, result, responses, ["codz_2023.zip"], date(2023, 10, 31))
+    rows = pl.read_parquet(list(Path(root).rglob("*.parquet")), hive_partitioning=False)
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2022, 11, 1)] * 3,
+            **{column.name: [value] * 3 for column, value in zip(bulk.IMGW_SOURCE_COLUMNS, cells, strict=True)},
+        }
+    )
+    assert_frame_equal(rows.select(expected.columns), expected)

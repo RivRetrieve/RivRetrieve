@@ -655,12 +655,15 @@ def _emit_source_row(
             raise ValueError(
                 f"IMGW filename publication period disagrees with hydrological year/month in {member!r} row {ordinal}"
             )
+    if not 1 <= hydrological_month <= 12:
+        raise ValueError(f"IMGW member {member!r} row {ordinal} has invalid month_indicator")
     day = _integer(source[5], member, ordinal, "day")
-    calendar_month = _integer(source[9], member, ordinal, "calendar_month")
-    expected_hydrological_month = (calendar_month + 1) % 12 + 1
-    if hydrological_month != expected_hydrological_month:
+    # IMGW defines hydrological months 01..12 as November..October. The
+    # additional calendar-month cell can be blank; retain it without filling it.
+    calendar_month = (hydrological_month + 9) % 12 + 1
+    if source[9].strip() and _integer(source[9], member, ordinal, "calendar_month") != calendar_month:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has inconsistent month indicators")
-    calendar_year = hydrological_year - 1 if calendar_month >= 11 else hydrological_year
+    calendar_year = hydrological_year - 1 if hydrological_month <= 2 else hydrological_year
     try:
         timestamp = datetime(calendar_year, calendar_month, day)
     except ValueError as error:
