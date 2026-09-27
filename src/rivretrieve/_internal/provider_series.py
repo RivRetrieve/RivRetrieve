@@ -91,6 +91,17 @@ class SeriesMapping:
         )
         return facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
 
+    def source_series(self, provider: str, station: str, product: str) -> SourceSeries:
+        """Resolve a mapped source identity without requiring observation bytes."""
+        return SourceSeries(
+            series_id=stable_id(provider, station, self.namespace, self.published_id),
+            provider_id=provider,
+            station_id=station,
+            product_id=product,
+            identity=self.identity(),
+            facts=(self.physical_facts(),),
+        )
+
     def identity(self) -> SourceIdentity:
         """Describe the published selector without manufacturing a variant label."""
         return SourceIdentity(
@@ -133,15 +144,7 @@ def parse_mapped_series(
         mapping = mappings[product]
         facts = mapping.physical_facts()
         fact_id = facts.facts_id
-        identity = mapping.identity()
-        series = SourceSeries(
-            series_id=stable_id(provider, station, mapping.namespace, mapping.published_id),
-            provider_id=provider,
-            station_id=station,
-            product_id=product,
-            identity=identity,
-            facts=(facts,),
-        )
+        series = mapping.source_series(provider, station, product)
         definitions.append(series)
         if not scope.matches(series):
             continue

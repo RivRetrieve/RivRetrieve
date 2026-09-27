@@ -46,6 +46,10 @@ Product declarations supply source access routes; product names do not select a 
 Source coordinates identify such things as an endpoint, parameter code, or value column.
 Window declarations tell the engine how to split and render the fetch window.
 Providers consume those renderings without shifting their bounds.
+Monthly renderings also carry engine-established closed calendar-month bounds.
+A provider that retrieves independent, exhaustive months attaches those bounds to
+its payloads and failed requests. A dependent cursor transaction remains one
+acquisition: an individual page does not establish exhaustive coverage.
 
 ## A recorded USGS request
 
@@ -129,7 +133,13 @@ Those are different reasons for absent information.
 ### Failures and partial results
 
 The driver isolates source-call failures for each requested series and carries them as issues alongside any returned rows.
-This keeps one source-call failure from discarding independent series.
+This keeps one source-call failure from discarding independent series or independently
+exhaustive months. Failures retain their request identity, interval, reason, and
+available response metadata. Lithuania historical-month HTTP 404 means that no
+station observations are stored for that month. When its engine-established bounds
+fall wholly outside the requested dates, that padding-only absence remains in
+provenance without a requested-data warning or failed outcome. Other failures,
+including malformed responses and authentication errors in padding, remain diagnostic.
 Caller policy controls how those issues are reported, not their classification or retention.
 Fatal contract errors bypass that policy because invalid stage output cannot form a valid result.
 See [usage](usage.md) for severity, caller-policy choices, and interpretation of empty results.
@@ -158,8 +168,10 @@ requires a complete inventory for the recorded scope and vintage, plus coverage 
 member. Subset success cannot satisfy that request. When this proof is insufficient, retrieval
 reacquires the full requested scope through the provider's normal padded fetch windows, rather
 than fetching only uncovered intervals. Refresh replaces successful series intervals without
-erasing siblings. Failed or unsupported acquisition can retain held successful observations
-at their original retrieval vintage, alongside the new diagnostics, not as fresh successes.
+erasing siblings. During reuse and refresh, failed or unsupported intervals retain
+held successful observations at their original retrieval vintage, alongside the new
+diagnostics, not as fresh successes. Independently successful months replace only
+their own requested intervals; failed months establish no successful coverage.
 Coverage does not assert continuous observations.
 Served intervals carry their retrieval instants in provenance, without an automatic freshness verdict.
 

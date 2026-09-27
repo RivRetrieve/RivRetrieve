@@ -284,6 +284,7 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
     reason: TransportFailureReason
     attempts: int
     status_code: int | None
+    response: TransportResponse | None
 
     def __init__(
         self,
@@ -293,7 +294,11 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
         *,
         status_code: int | None = None,
         category: TransportFailureCategory = TransportFailureCategory.UNKNOWN,
+        response: TransportResponse | None = None,
     ) -> None:
+        if response is not None and not isinstance(response, TransportResponse):
+            raise TypeError("failure response must be a TransportResponse or None")
+        self.response = response
         self.request = request
         self.reason = reason
         self.attempts = attempts

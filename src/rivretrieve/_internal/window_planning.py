@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from calendar import monthrange
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from rivretrieve._internal.engine import (
     FetchWindow,
     RenderedWindow,
     StopConvention,
     WindowDeclaration,
+    WindowEndpoint,
     WindowRenderingVocabulary,
+    _make_fetch_window,
 )
 
 __all__ = ("plan_windows",)
@@ -106,14 +108,19 @@ def _plan_year_month(fetch_window: FetchWindow, declaration: WindowDeclaration) 
     final = _datetime_from_endpoint(fetch_window, "end").replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     windows = []
     while cursor <= final:
+        stop = cursor.replace(day=monthrange(cursor.year, cursor.month)[1])
+        bounds = _make_fetch_window(
+            WindowEndpoint.from_datetime(cursor),
+            WindowEndpoint.from_datetime(datetime.combine(stop.date(), time.max)),
+        )
         if declaration.rendering is WindowRenderingVocabulary.YEAR_MONTH:
-            windows.append(RenderedWindow(f"{cursor.year:04d}-{cursor.month:02d}", None))
+            windows.append(RenderedWindow(f"{cursor.year:04d}-{cursor.month:02d}", None, bounds))
         else:
-            stop = cursor.replace(day=monthrange(cursor.year, cursor.month)[1])
             windows.append(
                 RenderedWindow(
                     cursor.date().isoformat(),
                     _render_date_stop(stop, declaration.stop_convention),
+                    bounds,
                 )
             )
         if cursor.month == 12:
