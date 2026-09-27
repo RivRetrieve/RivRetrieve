@@ -411,6 +411,13 @@ class ProviderStages(Protocol):
 
 
 @runtime_checkable
+class SharedAcquisitionProvider(Protocol):
+    """Declare products co-published by one independently exhaustive source route."""
+
+    shared_acquisition_products: tuple[frozenset[ProductId], ...]
+
+
+@runtime_checkable
 class TransportWindowDeclarationProvider(Protocol):
     """Select source window semantics from an engine-supplied transport capability."""
 
@@ -1105,11 +1112,13 @@ class _PairRetrieval:
     rendered: tuple[RenderedWindow, ...]
 
 
-def _acquisition_groups(plans: list[_PairRetrieval], provider_id: ProviderId) -> tuple[tuple[_PairRetrieval, ...], ...]:
-    """Share only Lithuania's co-published route with equal engine-established bounds.
+def _acquisition_groups(
+    plans: list[_PairRetrieval], shared_products: tuple[frozenset[ProductId], ...]
+) -> tuple[tuple[_PairRetrieval, ...], ...]:
+    """Share declared co-published products with equal engine-established bounds.
 
-    Cache eligibility remains per pair. Other providers retain singleton failure
-    boundaries; sharing their routes requires separate source-specific evidence.
+    Cache eligibility remains per pair. Providers without an explicit source-route
+    declaration retain singleton failure boundaries.
     """
     groups: list[list[_PairRetrieval]] = []
     for plan in plans:
@@ -1119,7 +1128,9 @@ def _acquisition_groups(plans: list[_PairRetrieval], provider_id: ProviderId) ->
             (
                 group
                 for group in groups
-                if provider_id == "lt_lhmt"
+                if any(
+                    {plan.product, *(item.product for item in group)}.issubset(products) for products in shared_products
+                )
                 and group[0].station == plan.station
                 and group[0].fetch_window == plan.fetch_window
                 and group[0].rendered == plan.rendered
@@ -1252,7 +1263,8 @@ def drive(
                     station, product, pair_scope, pair_series, interval, window, reuse, fetch_window, rendered
                 )
             )
-    groups = _acquisition_groups(plans, request.provider_id)
+    shared_products = provider.shared_acquisition_products if isinstance(provider, SharedAcquisitionProvider) else ()
+    groups = _acquisition_groups(plans, shared_products)
     group_for_pair = {(plan.station, plan.product): index for index, group in enumerate(groups) for plan in group}
     acquired: dict[int, WithIssues[tuple[Payload, ...]] | TransportFailure | CredentialExchangeError] = {}
     payload_indices: dict[tuple[int, int], int] = {}
@@ -1455,12 +1467,9 @@ def drive(
                 )
             except (TransportFailure, CredentialExchangeError) as failure:
                 acquired[group_index] = failure
-        try:
-            result = acquired[group_index]
-            if isinstance(result, (TransportFailure, CredentialExchangeError)):
-                raise result
-            fetched = result
-        except (TransportFailure, CredentialExchangeError) as failure:
+        result = acquired[group_index]
+        if isinstance(result, (TransportFailure, CredentialExchangeError)):
+            failure = result
             issue = _source_failure_issue(request.provider_id, station, product, failure, credential_names)
             all_issues.append(issue)
             retain_held_successes()
@@ -1495,6 +1504,7 @@ def drive(
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)
             continue
+        fetched = result
         all_issues.extend(
             issue.model_copy(
                 update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}

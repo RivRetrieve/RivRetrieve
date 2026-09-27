@@ -318,7 +318,12 @@ def test_shared_internal_parser_contract_errors_still_raise(transport, monkeypat
     class BrokenParse:
         config = original.config
         window_declarations = original.window_declarations
-        fetch = staticmethod(original.fetch)
+        shared_acquisition_products = original.shared_acquisition_products
+
+        @staticmethod
+        def fetch(stations, products, *args, **kwargs):
+            assert set(products) == PRODUCTS
+            return original.fetch(stations, products, *args, **kwargs)
 
         @staticmethod
         def parse(payload, config):
@@ -329,6 +334,7 @@ def test_shared_internal_parser_contract_errors_still_raise(transport, monkeypat
     )
     with pytest.raises(FatalContractError, match="authored shared parser defect"):
         fetch(on_issue=policy)
+    assert transport.calls == [(STATION, "2023-06")]
 
 
 @pytest.mark.parametrize("advance_clock", [False, True])

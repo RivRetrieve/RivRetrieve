@@ -62,15 +62,42 @@ def test_public_monthly_failure_retains_received_metadata(monkeypatch, delay, at
     result = rr.fetch(selection, start="2023-05-03", end="2023-06-28", cache="bypass", receipts=True, on_issue="ignore")
     assert result.data.height == 28
     assert sent == ["2023-05"] * attempts + ["2023-06"]
-    failed, success = result.provenance.calls_made
-    assert failed["retrieved_at"] == NOW
-    assert failed["content_type"] == "text/plain"
-    assert failed["status_code"] == 500
-    assert failed["failure_reason"] == reason
-    assert failed["request_parameters"] == {}
-    assert failed["window"] == {"start": "2023-05-01T00:00:00", "end": "2023-05-31T23:59:59.999999"}
-    assert failed["url"].endswith("/2023-05")
+    calls = result.provenance.calls_made
+    assert len(calls) == attempts + 1
+    failed_calls, success = calls[:-1], calls[-1]
+    assert len({call["call_id"] for call in calls}) == attempts + 1
+    assert len({call["acquisition_id"] for call in failed_calls}) == 1
+    assert success["acquisition_id"] != failed_calls[0]["acquisition_id"]
+    for ordinal, failed in enumerate(failed_calls, 1):
+        assert failed["attempt"] == ordinal
+        assert failed["retrieved_at"] == NOW
+        assert failed["content_type"] == "text/plain"
+        assert failed["status_code"] == 500
+        assert failed["failure_reason"] == failed["failure_category"] == "http_status"
+        assert failed["acquisition_failure_reason"] == reason
+        assert failed["request_parameters"] == {}
+        assert failed["window"] == {"start": "2023-05-01T00:00:00", "end": "2023-05-31T23:59:59.999999"}
+        assert failed["url"].endswith("/2023-05")
+        assert set(map(tuple, failed["station_products"])) == {("anyksciu-vms", "discharge_daily_mean")}
+    outcomes = [item for item in result.outcomes if item.status.value == "failed"]
+    assert len(outcomes) == 1
+    assert outcomes[0].calls == tuple(call["call_id"] for call in failed_calls)
+    assert outcomes[0].station_id == "anyksciu-vms"
+    assert outcomes[0].product_id == "discharge_daily_mean"
+    assert outcomes[0].reason
+    assert len(result.issues) == 1
+    issue = result.issues[0]
+    assert issue.details["failure_reason"] == reason
+    assert issue.details["failure_category"] == "http_status"
+    assert issue.details["attempts"] == attempts
+    assert issue.details["status_code"] == 500
+    assert issue.details["station_id"] == "anyksciu-vms"
+    assert issue.details["product_id"] == "discharge_daily_mean"
+    assert issue.details["request_url"] == failed_calls[0]["url"]
+    assert issue.details["window"] == failed_calls[0]["window"]
     assert success["retrieved_at"] == NOW
+    assert success["status_code"] == 200
+    assert success["url"].endswith("/2023-06")
     assert len(result.receipts.entries) == 1
     assert result.receipts.entries[0].content == recording.content
 

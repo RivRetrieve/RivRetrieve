@@ -301,6 +301,7 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
 
     class _CapturingProvider:
         window_declarations = declarations
+        shared_acquisition_products = (frozenset(products),) if provider_id == "lt_lhmt" else ()
 
         def __init__(self) -> None:
             self.config = config
