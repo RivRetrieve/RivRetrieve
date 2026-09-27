@@ -329,11 +329,25 @@ catalogue could not settle whether they exist.
 
   A source failure for one station or access route becomes an issue and
   a `failed` outcome, and independent series still return their rows.
+  Some providers request a series in independent parts, such as
+  Lithuania's historical months. A failed part is then reported for its
+  own interval: the issue's `details["window"]` holds the source
+  interval, and the `failed` outcome covers its overlap with the
+  requested window, or the whole source interval when the part lies
+  outside that window. Rows from the other parts are kept.
+
   Failed HTTP requests produce `source.request_failed` (error) or, for
   HTTP 404, `source.http_not_found` (warning). Their `details` keep the
   station, product, request URL, attempt count, status code and failure
-  reason. When every request fails, `data` is empty and the issues and
-  outcomes explain why. A null `value` is a published missing value, an
+  reason. One exception applies: a Lithuania historical month that
+  returns HTTP 404, which the source uses for "no stored observations",
+  and lies wholly outside the requested dates produces no issue and no
+  outcome. It was fetched only as padding, and its call stays in
+  `provenance.calls_made`. Other failures in such padding months are
+  still reported.
+
+  When every request fails, `data` is empty and the issues and outcomes
+  explain why. A null `value` is a published missing value, an
   `empty` outcome means the source returned no rows, and a failed
   request is reported through issues and outcomes.
 
@@ -1094,6 +1108,9 @@ Source and request facts that accompany observations.
   Selected series and resolved start and end wall-clock endpoints.
 - **calls_made : tuple[dict[str, object], ...]**
   Ordered source-call origins and sanitized prerequisite exchange events.
+  A failed request for one series and interval also appears, with its
+  `window`, `failure_reason` and `response_meaning`, such as
+  `no_observations` for a Lithuania month with no stored observations.
 - **time_windows : tuple[dict[str, object], ...]**
   Additional window metadata. The current engine leaves this tuple empty.
 - **decomposition : tuple[str, ...]**
@@ -1552,7 +1569,9 @@ stays visible with its identity and reason.
   Structured context, such as station, product and source failure reason.
   Source request failures record `station_id`, `product_id`,
   `request_url`, `attempts`, `status_code`, `failure_reason` and,
-  when known, `failure_category`.
+  when known, `failure_category`. A failed request for one series and
+  interval also records `series_id`, `variant`, `window` (the
+  source interval) and `outcome_id`.
 - **provider_id : ProviderId or None**
   Provider responsible for the affected series when known.
 

@@ -104,6 +104,9 @@ class ObservationProvenance(BaseModel):
         Selected series and resolved start and end wall-clock endpoints.
     calls_made : tuple[dict[str, object], ...]
         Ordered source-call origins and sanitized prerequisite exchange events.
+        A failed request for one series and interval also appears, with its
+        ``window``, ``failure_reason`` and ``response_meaning``, such as
+        ``no_observations`` for a Lithuania month with no stored observations.
     time_windows : tuple[dict[str, object], ...]
         Additional window metadata. The current engine leaves this tuple empty.
     decomposition : tuple[str, ...]

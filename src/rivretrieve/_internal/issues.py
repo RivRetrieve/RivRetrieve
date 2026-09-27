@@ -33,7 +33,9 @@ class Issue(BaseModel):
         Structured context, such as station, product and source failure reason.
         Source request failures record ``station_id``, ``product_id``,
         ``request_url``, ``attempts``, ``status_code``, ``failure_reason`` and,
-        when known, ``failure_category``.
+        when known, ``failure_category``. A failed request for one series and
+        interval also records ``series_id``, ``variant``, ``window`` (the
+        source interval) and ``outcome_id``.
     provider_id : ProviderId or None
         Provider responsible for the affected series when known.
     """
