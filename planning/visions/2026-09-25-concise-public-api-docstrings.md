@@ -112,7 +112,7 @@ launch, documentation deployment, or general release engineering. Both
 repositories remain private. The initial broad request to cover all code was
 clarified to mean the supported public API surface only.
 
-## Concurrent repair work (2026-09-25)
+## Concurrent repair work (2026-09-27)
 
 The user reports that repairs and tests are in progress for
 [Poland publication-aware downloads (#371)](https://github.com/RivRetrieve/RivRetrieve/issues/371)
