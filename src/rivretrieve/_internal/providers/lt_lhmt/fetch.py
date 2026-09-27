@@ -78,6 +78,7 @@ def fetch(
             response = attempt_request(transport, request)
             if isinstance(response, (TransportFailure, CredentialExchangeError)):
                 meaning = http_response_meaning(response, _HISTORICAL_RESPONSE_MEANINGS)
+                call_id = uuid4().hex
                 for product in group_products:
                     failures.append(
                         FailedSourceRequest(
@@ -90,6 +91,7 @@ def fetch(
                             request,
                             response,
                             meaning=meaning,
+                            call_id=call_id,
                         )
                     )
                 continue
@@ -103,6 +105,7 @@ def fetch(
                     prerequisite_calls=response.prerequisite_calls,
                     scope=scope,
                     known_series=known_series,
+                    attempt_traces=response.attempt_traces,
                 )
             )
     return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
@@ -137,4 +140,5 @@ def _origin(response: TransportResponse) -> SourceCallOrigin:
         content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
+        attempts=response.attempts,
     )

@@ -20,6 +20,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import requests
 from urllib3 import exceptions as urllib3_exceptions
@@ -230,6 +231,27 @@ class SecretCallTrace:
             raise ValueError("secret call response must be withheld")
 
 
+@dataclass(frozen=True, slots=True)
+class TransportAttempt:
+    """Retained metadata for one actual sender outcome, without response bytes."""
+
+    attempt_id: str
+    url: str
+    request_parameters: Mapping[str, RequestParameter]
+    retrieved_at: datetime
+    status_code: int | None = None
+    content_type: str | None = None
+    failure_category: TransportFailureCategory | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "request_parameters", MappingProxyType(dict(self.request_parameters)))
+
+
+def _validate_attempt_traces(traces: tuple[TransportAttempt, ...]) -> None:
+    if not isinstance(traces, tuple) or any(not isinstance(trace, TransportAttempt) for trace in traces):
+        raise TypeError("attempt traces must be a tuple of TransportAttempt values")
+
+
 @dataclass(frozen=True)
 class TransportResponse:
     content: bytes
@@ -242,8 +264,10 @@ class TransportResponse:
     prerequisite_calls: tuple[SecretCallTrace, ...] = ()
     executed_request: ExecutedRequestEvidence | None = field(default=None, compare=False, repr=False)
     attempts: int = field(default=1, compare=False)
+    attempt_traces: tuple[TransportAttempt, ...] = field(default=(), compare=False)
 
     def __post_init__(self) -> None:
+        _validate_attempt_traces(self.attempt_traces)
         if type(self.attempts) is not int or self.attempts < 1:
             raise FatalContractError("response attempts must be a positive integer")
         object.__setattr__(self, "request_parameters", MappingProxyType(dict(self.request_parameters)))
@@ -285,6 +309,7 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
     attempts: int
     status_code: int | None
     response: TransportResponse | None
+    attempt_traces: tuple[TransportAttempt, ...]
 
     def __init__(
         self,
@@ -295,9 +320,12 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
         status_code: int | None = None,
         category: TransportFailureCategory = TransportFailureCategory.UNKNOWN,
         response: TransportResponse | None = None,
+        attempt_traces: tuple[TransportAttempt, ...] = (),
     ) -> None:
         if response is not None and not isinstance(response, TransportResponse):
             raise TypeError("failure response must be a TransportResponse or None")
+        _validate_attempt_traces(attempt_traces)
+        self.attempt_traces = attempt_traces or (() if response is None else response.attempt_traces)
         self.response = response
         self.request = request
         self.reason = reason
@@ -564,6 +592,7 @@ class HttpClient:
         )
         replay_safe = request.method in {HttpMethod.GET, HttpMethod.HEAD} or request.replay_safety is ReplaySafety.SAFE
         retry_delay = 0.0
+        attempt_traces: list[TransportAttempt] = []
         for attempt in range(1, TRANSPORT_POLICY.max_attempts + 1):
             if attempt > 1:
                 self._sleeper(retry_delay)
@@ -576,6 +605,15 @@ class HttpClient:
                 response = sent if isinstance(sent, SenderResponse) else SenderResponse(*sent)
             except (requests.RequestException, TimeoutError, ConnectionError) as exception:
                 category = _sender_failure_category(exception)
+                attempt_traces.append(
+                    TransportAttempt(
+                        str(uuid4()),
+                        request.url,
+                        request.params or {},
+                        self._clock.utcnow(),
+                        failure_category=category,
+                    )
+                )
                 if not _is_retryable_sender_exception(exception):
                     reason = TransportFailureReason.TERMINAL_SENDER_FAILURE
                 elif not replay_safe:
@@ -584,19 +622,34 @@ class HttpClient:
                     reason = TransportFailureReason.RETRY_EXHAUSTED
                 else:
                     continue
-                raise TransportFailure(request, reason, attempt, category=category) from exception
+                raise TransportFailure(
+                    request, reason, attempt, category=category, attempt_traces=tuple(attempt_traces)
+                ) from exception
 
             content, status_code, content_type = response.content, response.status_code, response.content_type
+            retrieved_at = self._clock.utcnow()
+            attempt_traces.append(
+                TransportAttempt(
+                    str(uuid4()),
+                    request.url,
+                    request.params or {},
+                    retrieved_at,
+                    status_code=status_code,
+                    content_type=content_type,
+                    failure_category=TransportFailureCategory.HTTP_STATUS if status_code >= 400 else None,
+                )
+            )
             received = TransportResponse(
                 content=content,
                 status_code=status_code,
-                retrieved_at=self._clock.utcnow(),
+                retrieved_at=retrieved_at,
                 content_type=content_type,
                 url=request.url,
                 request_parameters={} if request.params is None else request.params,
                 applied_credential_header_names=credential_header_names,
                 executed_request=executed_request,
                 attempts=attempt,
+                attempt_traces=tuple(attempt_traces),
             )
             if status_code not in TRANSPORT_POLICY.retryable_status_codes:
                 return received
@@ -699,6 +752,7 @@ class _CredentialSendFailure:
     status_code: int | None
     category: TransportFailureCategory = TransportFailureCategory.UNKNOWN
     response: TransportResponse | None = None
+    attempt_traces: tuple[TransportAttempt, ...] = ()
 
 
 class _CredentialContractFailure(StrEnum):
@@ -743,7 +797,12 @@ class AuthenticatedTransport:
                 result = self.transport.send(request)
             except TransportFailure as error:
                 failure = _CredentialSendFailure(
-                    error.reason, error.attempts, error.status_code, error.category, error.response
+                    error.reason,
+                    error.attempts,
+                    error.status_code,
+                    error.category,
+                    error.response,
+                    error.attempt_traces,
                 )
                 result = error.response
             if result is not None and _response_contains_credentials(result, self.credentials):
@@ -759,6 +818,13 @@ class AuthenticatedTransport:
                     status_code=status_code,
                 ) from None
             if failure is not None:
+                if _attempts_contain_credentials(failure.attempt_traces, self.credentials):
+                    raise TransportFailure(
+                        request,
+                        TransportFailureReason.RETAINED_METADATA_UNSAFE,
+                        failure.attempts,
+                        status_code=failure.status_code,
+                    ) from None
                 raise TransportFailure(
                     request,
                     failure.reason,
@@ -766,6 +832,7 @@ class AuthenticatedTransport:
                     status_code=failure.status_code,
                     category=failure.category,
                     response=result,
+                    attempt_traces=failure.attempt_traces,
                 ) from None
             assert result is not None
             return result
@@ -791,6 +858,13 @@ class AuthenticatedTransport:
         if result is _CredentialContractFailure.FATAL:
             raise FatalContractError("Authenticated transport contract failed") from None
         failure = result if isinstance(result, _CredentialSendFailure) else None
+        if failure is not None and _attempts_contain_credentials(failure.attempt_traces, self.credentials):
+            attempts, status_code = failure.attempts, failure.status_code
+            result = None
+            failure = None
+            raise TransportFailure(
+                request, TransportFailureReason.RETAINED_METADATA_UNSAFE, attempts, status_code=status_code
+            ) from None
         if failure is not None and failure.response is not None:
             result = failure.response
         if isinstance(result, TransportResponse):
@@ -840,6 +914,7 @@ class AuthenticatedTransport:
             status_code=result.status_code,
             category=result.category,
             response=result.response,
+            attempt_traces=result.attempt_traces,
         ) from None
 
 
@@ -865,10 +940,13 @@ def _send_with_credentials(
                 response.status_code,
                 TransportFailureCategory.HTTP_STATUS,
                 response,
+                response.attempt_traces,
             )
         return response
     except TransportFailure as error:
-        return _CredentialSendFailure(error.reason, error.attempts, error.status_code, error.category, error.response)
+        return _CredentialSendFailure(
+            error.reason, error.attempts, error.status_code, error.category, error.response, error.attempt_traces
+        )
     except FatalContractError:
         return _CredentialContractFailure.FATAL
     except Exception:
@@ -986,6 +1064,26 @@ def _request_contains_values(request: TransportRequest, values: tuple[str, ...])
     )
 
 
+def _attempt_retained_text(trace: TransportAttempt) -> tuple[str, ...]:
+    return (
+        trace.url,
+        trace.content_type or "",
+        *(str(name) for name in trace.request_parameters),
+        *(str(value) for value in trace.request_parameters.values()),
+    )
+
+
+def _attempts_contain_credentials(
+    traces: tuple[TransportAttempt, ...], credentials: tuple[CredentialHeader, ...]
+) -> bool:
+    values = _credential_redaction_values(credentials)
+    return any(
+        _encoded_candidate_contains_values(candidate, values, refuse_malformed=False)
+        for trace in traces
+        for candidate in _attempt_retained_text(trace)
+    )
+
+
 def _response_contains_values(response: TransportResponse, values: tuple[str, ...]) -> bool:
     retained_text: list[str] = [
         response.url,
@@ -998,6 +1096,8 @@ def _response_contains_values(response: TransportResponse, values: tuple[str, ..
         retained_text.extend(response.executed_request.ordinary_headers.keys())
         retained_text.extend(response.executed_request.ordinary_headers.values())
         retained_text.extend(response.executed_request.credential_header_names)
+    for trace in response.attempt_traces:
+        retained_text.extend(_attempt_retained_text(trace))
     for call in response.prerequisite_calls:
         retained_text.extend(
             (

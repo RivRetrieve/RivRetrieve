@@ -22,7 +22,7 @@ from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import FailedSourceRequest
 from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
-from rivretrieve._internal.transport import SecretCallTrace
+from rivretrieve._internal.transport import SecretCallTrace, TransportAttempt
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -273,6 +273,9 @@ class SourceCallOrigin:
     query : SourceQuery or UnknownOriginFact
         Executed local statement and parameters when applicable. UnknownOriginFact
         carries a reason rather than filling an inapplicable fact by assumption.
+    attempts : int or None
+        Transport attempt count when retained. Payload attempt traces carry the
+        individual outcomes when the transport exposes them.
     """
 
     url: str | UnknownOriginFact
@@ -282,8 +285,12 @@ class SourceCallOrigin:
     content_type: str | UnknownOriginFact
     source_path: str | UnknownOriginFact
     query: SourceQuery | UnknownOriginFact
+    # Transport may retain a retry count without retaining each intermediate response.
+    attempts: int | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if self.attempts is not None and (type(self.attempts) is not int or self.attempts < 1):
+            raise TypeError("source-call attempts must be a positive integer when known")
         for name in ("url", "content_type", "source_path"):
             value = getattr(self, name)
             if not isinstance(value, UnknownOriginFact) and (not isinstance(value, str) or not value):
@@ -325,8 +332,13 @@ class Payload:
     prerequisite_calls: tuple[SecretCallTrace, ...]
     scope: SeriesScope | None = None
     known_series: tuple[SourceSeries, ...] = ()
+    attempt_traces: tuple[TransportAttempt, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.attempt_traces, tuple) or any(
+            not isinstance(attempt, TransportAttempt) for attempt in self.attempt_traces
+        ):
+            raise TypeError("payload attempt traces must be a tuple of TransportAttempt values")
         if type(self.content) is not bytes:
             raise TypeError("payload content must be bytes")
         if not isinstance(self.origin, SourceCallOrigin):

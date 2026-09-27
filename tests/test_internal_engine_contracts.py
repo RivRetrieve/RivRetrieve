@@ -346,6 +346,7 @@ def test_payload_accepts_bytes_and_preserves_complete_source_call() -> None:
         "content_type",
         "source_path",
         "query",
+        "attempts",
     )
     assert "headers" not in {field.name for field in fields(SourceCallOrigin)}
     assert origin.request_parameters == {"station": "station-1"}
@@ -597,3 +598,10 @@ def test_payload_requires_explicit_prerequisite_trace_tuple() -> None:
             b"data",
             SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown),
         )
+
+
+@pytest.mark.parametrize("attempts", [0, -1, True, "2"])
+def test_source_call_origin_rejects_invalid_attempt_counts(attempts: object) -> None:
+    unknown = UnknownOriginFact()
+    with pytest.raises(TypeError, match="attempts must be a positive integer"):
+        SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown, attempts=attempts)  # type: ignore[arg-type]
