@@ -1,0 +1,30 @@
+{
+  "format_version": 2,
+  "request": {
+    "method": "GET",
+    "url": "https://hydapi.nve.no/api/v1/Observations",
+    "parameters": {
+      "StationId": "109.42.0",
+      "Parameter": "1001",
+      "ResolutionTime": "1440",
+      "ReferenceTime": "2024-01-01/2024-01-03",
+      "VersionNumber": 2
+    },
+    "body": null,
+    "ordinary_headers": {
+      "Accept": "application/json",
+      "User-Agent": "RivRetrieve"
+    },
+    "credential_header_names": [
+      "X-API-Key"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "retrieved_at": "2026-09-19T19:40:07.693302Z",
+    "content_base64": "eyJjdXJyZW50TGluayI6Imh0dHBzOi8vaHlkYXBpLm52ZS5uby9hcGkvdjEvT2JzZXJ2YXRpb25zP1N0YXRpb25JZD0xMDkuNDIuMCZQYXJhbWV0ZXI9MTAwMSZSZXNvbHV0aW9uVGltZT0xNDQwJlJlZmVyZW5jZVRpbWU9MjAyNC0wMS0wMSUyRjIwMjQtMDEtMDMmVmVyc2lvbk51bWJlcj0yIiwiYXBpVmVyc2lvbiI6IjEuMCIsImxpY2Vuc2UiOiJodHRwczovL2RhdGEubm9yZ2Uubm8vbmxvZC9lbiIsImNyZWF0ZWRBdCI6IjIwMjYtMDktMTlUMTk6NDA6MDcuNzI4NDk1NloiLCJxdWVyeVRpbWUiOiIwMDowMDowMC4wMDY0ODgxIiwiaXRlbUNvdW50IjoxLCJkYXRhIjpbeyJzdGF0aW9uSWQiOiIxMDkuNDIuMCIsInN0YXRpb25OYW1lIjoiRHJpdmEgdi9FbHZlcmjDuHkgYnJ1IiwicGFyYW1ldGVyIjoxMDAxLCJwYXJhbWV0ZXJOYW1lIjoiVmFubmbDuHJpbmciLCJwYXJhbWV0ZXJOYW1lRW5nIjoiRGlzY2hhcmdlIiwic2VyaWVWZXJzaW9uTm8iOjIsIm1ldGhvZCI6Ik1lYW4iLCJ1bml0IjoibcKzL3MiLCJvYnNlcnZhdGlvbkNvdW50IjoyLCJvYnNlcnZhdGlvbnMiOlt7InRpbWUiOiIyMDI0LTAxLTAxVDExOjAwOjAwWiIsInZhbHVlIjo1Ny45Mzk0NCwiY29ycmVjdGlvbiI6MCwicXVhbGl0eSI6Mn0seyJ0aW1lIjoiMjAyNC0wMS0wMlQxMTowMDowMFoiLCJ2YWx1ZSI6NzQuMzM5MTgsImNvcnJlY3Rpb24iOjAsInF1YWxpdHkiOjJ9XX1dfQ==",
+    "sha256": "e07b826a506d47d1598424fb9f5ea4cf7b6d5fd802c38cc2379837282749b393",
+    "prerequisite_calls": []
+  }
+}

@@ -1,32 +1,33 @@
 """publisher receipt : USGSFetch × ReceiptRequest → UntouchedPublisherPayload."""
 
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.observations import ReceiptAuthorship
-from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
 
-_RECORDING = Path("tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json")
+_RECORDING = "daily-07374000-discharge-mean"
 
 
 def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    recording = read_recording(_RECORDING)
-    replay = ReplayTransport((recording,))
+    recording = MANIFEST[_RECORDING]
+    replay = ModernReplay(_RECORDING)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
 
     selection = rr.find(
         provider="usgs_nwis",
         station="07374000",
-        product="discharge_daily_mean",
+        quantity="discharge",
+        frequency="daily",
+        statistic="mean",
     )
     result = rr.fetch(
         selection,
-        start="2023-01-01",
-        end="2023-01-01",
+        start="2024-01-01",
+        end="2024-01-07",
         receipts=True,
         on_issue="ignore",
     )
@@ -36,7 +37,7 @@ def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.M
     assert result.data.select("station_id", "product_id", "time", "time_zone").row(0) == (
         "07374000",
         "discharge_daily_mean",
-        datetime(2023, 1, 1),
+        datetime(2024, 1, 1),
         "unknown",
     )
     assert not hasattr(result, "raw")
@@ -44,9 +45,9 @@ def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.M
     receipt = result.receipts.entries[0]
     assert receipt.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
     assert receipt.authorship.value == "publisher_payload"
-    assert receipt.content is recording.content
-    assert receipt.origin.url == "https://waterservices.usgs.gov/nwis/dv/"
-    assert receipt.origin.request_parameters == recording.request.parameters
-    assert receipt.origin.status_code == recording.status_code
-    assert receipt.origin.retrieved_at == recording.retrieved_at
-    assert receipt.origin.content_type == recording.content_type
+    assert receipt.content == body(_RECORDING)
+    assert receipt.origin.url == "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items"
+    assert dict(receipt.origin.request_parameters) == dict(replay.calls[0].params)
+    assert receipt.origin.status_code == recording["status"]
+    assert receipt.origin.retrieved_at == datetime.fromisoformat(recording["acquired_utc"])
+    assert receipt.origin.content_type == recording["headers"]["Content-Type"]

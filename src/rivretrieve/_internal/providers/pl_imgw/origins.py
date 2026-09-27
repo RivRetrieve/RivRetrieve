@@ -176,6 +176,22 @@ def build_acquisition_provenance(
         media_type="text/html; charset=UTF-8",
         sha256="998edce594f80302054adc06e45f8118a4346ddcc392a5648c7dc9e7347177bf",
     )
+    codz = RecordingReference(
+        recording_id="pl_imgw_codz_format",
+        repository_path="tests/test_data/pl_imgw_annual/CODZ_publiczne_format.txt",
+        source_url="https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/CODZ_publiczne_format.txt",
+        retrieved_at=datetime.fromisoformat("2026-09-20T09:52:00.066902+00:00"),
+        media_type="text/plain; charset=windows-1250",
+        sha256="d8e7cbbc7680663d99813dd5f9abd793384b2f560600229625bb808ea71ef362",
+    )
+    yearbook = RecordingReference(
+        recording_id="pl_imgw_yearbook_2025",
+        repository_path="tests/test_data/pl_imgw_annual/yearbook-2025.pdf",
+        source_url="https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/Roczniki/Rocznik%20hydrologiczny/Rocznik%20Hydrologiczny%202025.pdf",
+        retrieved_at=datetime.fromisoformat("2026-09-20T09:59:57.031773+00:00"),
+        media_type="application/pdf",
+        sha256="c2ad75c472ab46363fb149ac5cf982230e2506d7e0b73b8e4eecb6623fa2a916",
+    )
     return AcquisitionProvenance(
         schema_version=2,
         provider_id="pl_imgw",
@@ -196,6 +212,16 @@ def build_acquisition_provenance(
                 issuer="Institute of Meteorology and Water Management – National Research Institute",
                 operator="IMGW public-data portal",
                 acquisitions=(
+                    AcquisitionRecord(
+                        acquisition_id="imgw_archive_definitions_2026_09_20",
+                        method="http_campaign",
+                        instant_type="retrieval_interval",
+                        description="CODZ units/daily fields and yearbook station-dependent methods; archive-wide statistics remain unestablished",
+                        requested_from=(codz.source_url, yearbook.source_url),
+                        retrieved_at_start=codz.retrieved_at,
+                        retrieved_at_end=yearbook.retrieved_at,
+                        recording_ids=(codz.recording_id, yearbook.recording_id),
+                    ),
                     AcquisitionRecord(
                         acquisition_id="imgw_catalogue_routes_2026_08_02",
                         method="http_campaign",
@@ -228,6 +254,16 @@ def build_acquisition_provenance(
                     ),
                 ),
                 evidence=(
+                    EvidenceReference(
+                        evidence_id="pl_imgw_codz_definition",
+                        description="Exact publisher CODZ physical columns and missing-cell definitions",
+                        recording=codz,
+                    ),
+                    EvidenceReference(
+                        evidence_id="pl_imgw_yearbook_methods",
+                        description="Exact publisher yearbook methods, selected stations only, pp. 7-9",
+                        recording=yearbook,
+                    ),
                     EvidenceReference(
                         evidence_id="pl_imgw_terms",
                         description="IMGW public-data regulations recording",
@@ -312,8 +348,14 @@ def build_acquisition_provenance(
         ),
         fact_bindings=(
             FactBinding(
+                fact_group="imgw_archive_physics",
+                facts=(IMGW_SOURCE_FACTS[1],),
+                source_id="sr.pl.imgw",
+                acquisition_id="imgw_archive_definitions_2026_09_20",
+            ),
+            FactBinding(
                 fact_group="imgw_catalogue_inputs",
-                facts=IMGW_SOURCE_FACTS,
+                facts=tuple(fact for fact in IMGW_SOURCE_FACTS if fact != IMGW_SOURCE_FACTS[1]),
                 source_id="sr.pl.imgw",
                 acquisition_id="imgw_catalogue_routes_2026_08_02",
             ),

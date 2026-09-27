@@ -1,8 +1,9 @@
-"""USGS catalogue maintenance : refresh(SeriesRdbRows × ExpandedRdbRows, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedUsgsNwisCatalogue."""
+"""Build modern series catalogues inside the independently retained native station scope."""
 
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import urllib.request
@@ -297,6 +298,8 @@ class GeneratedUsgsNwisCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    source_native: pl.DataFrame
+    modern_metadata: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -325,7 +328,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         param_code="00060",
         stat_code="00003",
@@ -335,10 +338,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="discharge_instantaneous",
         observed_property="discharge",
-        frequency="irregular",
+        frequency="unknown",
         statistic="instantaneous",
         period_type="instant",
-        period_anchor="instant",
+        period_anchor="unknown",
         canonical_unit="m3/s",
         param_code="00060",
         stat_code=None,
@@ -351,7 +354,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="mean",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code="00003",
@@ -364,7 +367,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="max",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code="00001",
@@ -377,7 +380,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
         frequency="daily",
         statistic="min",
         period_type="interval",
-        period_anchor="start",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code="00002",
@@ -387,10 +390,10 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="stage_instantaneous",
         observed_property="stage",
-        frequency="irregular",
+        frequency="unknown",
         statistic="instantaneous",
         period_type="instant",
-        period_anchor="instant",
+        period_anchor="unknown",
         canonical_unit="m",
         param_code="00065",
         stat_code=None,
@@ -696,6 +699,91 @@ def build_catalogue(
         products=products,
         stations=stations,
         station_products=station_products,
+        source_native=native_table.data,
+    )
+
+
+def read_modern_metadata(directory: Path):
+    """Verify exact publisher bytes and every link in both saved metadata chains."""
+    features = []
+    receipts = []
+    for parameter in ("00060", "00065"):
+        completion = json.loads((directory / f"metadata-{parameter}-completion.json").read_text())
+        if completion["status"] != "complete" or completion["active_filter"] is not None or completion["sorting"]:
+            raise FatalContractError("Modern metadata must include complete unsorted discontinued records")
+        expected = f"https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?f=json&parameter_code={parameter}&limit=10000"
+        count = 0
+        for index in range(completion["pages"]):
+            stem = f"metadata-{parameter}-{index:04d}"
+            receipt = json.loads((directory / f"{stem}.receipt.json").read_text())
+            raw = gzip.decompress((directory / f"{stem}.json.gz").read_bytes())
+            if receipt["status"] != 200 or receipt["url"] != expected or receipt["final_url"] != expected:
+                raise FatalContractError("Modern metadata receipt breaks the publisher pagination chain")
+            if len(raw) != receipt["bytes"] or hashlib.sha256(raw).hexdigest() != receipt["sha256"]:
+                raise FatalContractError("Modern metadata bytes do not match their receipt")
+            page = json.loads(raw)
+            if page["type"] != "FeatureCollection" or page["numberReturned"] != len(page["features"]):
+                raise FatalContractError("Malformed modern metadata feature collection")
+            links = [link["href"] for link in page["links"] if link["rel"] == "next"]
+            if len(links) > 1:
+                raise FatalContractError("Ambiguous modern metadata pagination")
+            expected = links[0] if links else None
+            for feature in page["features"]:
+                properties = feature["properties"]
+                if feature["id"] != properties["id"] or properties["parameter_code"] != parameter:
+                    raise FatalContractError("Modern metadata contradicts requested identity or parameter")
+                features.append(properties)
+            count += len(page["features"])
+            receipts.append(receipt)
+        if expected is not None or count != completion["features"] or receipts[-1]["url"] != completion["last_url"]:
+            raise FatalContractError("Modern metadata chain is incomplete")
+    return features, receipts
+
+
+def monitoring_locations(native_table: NativeTable) -> dict[str, str]:
+    """Retain publisher agency prefixes without assuming every station belongs to USGS."""
+    return {
+        row["site_no"]: f"{row['agency_cd']}-{row['site_no']}"
+        for row in native_table.data.select("site_no", "agency_cd").iter_rows(named=True)
+    }
+
+
+def build_modern_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
+    metadata_directory: Path,
+) -> GeneratedUsgsNwisCatalogue:
+    """Build current availability from modern metadata within the legacy station scope."""
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
+
+    legacy = build_catalogue(native_table, origins)
+    features, receipts = read_modern_metadata(metadata_directory)
+    descriptions = modern_source_descriptions(features, monitoring_locations(native_table))
+    available = {(item.station_id, item.product_id) for item in descriptions.descriptions}
+    vintage = max(datetime.fromisoformat(item["retrieved_at"]) for item in receipts).date()
+    rows = []
+    for row in legacy.station_products.iter_rows(named=True):
+        present = (row["station_id"], row["product_id"]) in available
+        row.update(
+            availability="available" if present else "unavailable",
+            availability_reason=(
+                "Modern metadata UTC range bounds are not physical observation support"
+                if present
+                else "No matching series in the complete modern metadata snapshot"
+            ),
+            published_record_start_date=None,
+            published_record_end_date=None,
+            last_catalogue_check=vintage,
+        )
+        rows.append(row)
+    station_products = pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)
+    provider_info = {
+        **legacy.provider_info,
+        "catalogue_version": vintage.isoformat(),
+        "bulk_observations": "true: modern daily or continuous requests per station-product; partial failures retained",
+    }
+    return GeneratedUsgsNwisCatalogue(
+        provider_info, legacy.products, legacy.stations, station_products, native_table.data, metadata_directory
     )
 
 
@@ -882,6 +970,11 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
 
+    if catalogue.modern_metadata is None:
+        raise FatalContractError(
+            "Modern USGS publication requires complete modern metadata; legacy native builds cannot be published"
+        )
+
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as file:
@@ -890,13 +983,42 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-    metadata = build_catalogue_metadata(
-        __import__(
-            "rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["build_acquisition_provenance"]
-        ).build_acquisition_provenance(),
-        (STATION_CATALOGUE_ORIGINS,),
-        {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
+    from rivretrieve._internal.providers.usgs_nwis.origins import (
+        build_modern_acquisition_provenance,
     )
+
+    files = {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
+    features, receipts = read_modern_metadata(catalogue.modern_metadata)
+    locations = monitoring_locations(NativeTable(catalogue.source_native))
+    descriptions = modern_source_descriptions(features, locations)
+    provenance = build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
+    metadata = build_catalogue_metadata(
+        provenance, (STATION_CATALOGUE_ORIGINS,), files, source_descriptions=descriptions
+    )
+    from rivretrieve._internal.catalogues.source_series import decode_source_descriptions, encode_source_descriptions
+
+    metadata["source_series.json"] = encode_source_descriptions(descriptions, schema_version=2)
+    if decode_source_descriptions(metadata["source_series.json"]) != descriptions:
+        raise FatalContractError("Source-description encoding changed source definitions")
+    from rivretrieve._internal.catalogues.descriptor import build_catalogue_descriptor
+    from rivretrieve._internal.catalogues.evidence import normalize_provenance
+
+    evidence = normalize_provenance(
+        provenance, stations=catalogue.stations, station_products=catalogue.station_products
+    )
+    metadata["monitoring_locations.json"] = (
+        json.dumps(locations, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    metadata.pop("croissant.json")
+    metadata["croissant.json"] = (
+        json.dumps(
+            build_catalogue_descriptor(evidence, (STATION_CATALOGUE_ORIGINS,), {**files, **metadata}),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    ).encode()
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
 
@@ -948,6 +1070,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
     source.add_argument("--rdb-dir", type=Path, help="Absolute directory containing the two attested RDB passes.")
     source.add_argument("--live", action="store_true", help="Refresh from the live USGS NWIS site service.")
+    parser.add_argument("--modern-metadata", type=Path, help="Verified complete modern metadata recording directory.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for an attested native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
@@ -958,6 +1081,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--native requires --out")
         if args.native_out is not None or args.retrieved_at is not None:
             parser.error("--native cannot be combined with --native-out or --retrieved-at")
+        if args.modern_metadata is None:
+            parser.error("--native publication requires --modern-metadata")
         from rivretrieve._internal.providers.usgs_nwis.origins import (
             NATIVE_TABLE_BYTE_SIZE,
             NATIVE_TABLE_SHA256,
@@ -971,7 +1096,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_sha256=NATIVE_TABLE_SHA256,
             expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
         )
-        catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
+        catalogue = build_modern_catalogue(native_table, STATION_CATALOGUE_ORIGINS, args.modern_metadata)
         write_catalogue(catalogue, args.out)
         return 0
 

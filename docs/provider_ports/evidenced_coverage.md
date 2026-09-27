@@ -1,5 +1,9 @@
 # Evidenced baseline access: France, Bosnia and Thailand
 
+The French counts below describe the historical combined catalogue. Current
+`fr_hubeau` and `fr_hydroportail` have independent source inventories; see the
+[current native coverage account](../../maintenance/catalogue/fr_hydroportail/COVERAGE.md).
+
 Measured target: `120b2792294011308a06d31c7bb3a55134865b74` (schema 3).
 Sample-before target: `b68a38eaca4a4460eaad0ed271ef746e04a245d0`.
 The accepted evidence destination and the measured final selection agree. This is

@@ -1,0 +1,12 @@
+{
+  "url": "https://hubeau.eaufrance.fr/api/v1/temperature/station",
+  "params": {
+    "size": 10000,
+    "format": "json"
+  },
+  "status": 200,
+  "retrieved_at": "2026-09-21T09:13:53.072109+00:00",
+  "content_type": "application/json",
+  "bytes": 1386836,
+  "sha256": "3616649c79ad3b2debf4a07956cd6ad98952652e804424aa2ba82d299f7cfc6b"
+}

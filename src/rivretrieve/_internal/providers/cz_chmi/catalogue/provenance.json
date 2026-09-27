@@ -63,7 +63,7 @@
   "descriptions": [
     "Complete 831-row CHMI historical hydrology metadata response",
     "CHMI licensing and attribution HTML recording",
-    "CHMI product dictionary establishing HH and QH as hourly means",
+    "CHMI TSCON_ID/TSCON_DS and UNIT_ID/UNIT_DS dictionary: HD/QD/TD daily means and HH/QH hourly means, quantities and coded units",
     "Exact annual CHMI station-cadence response"
   ],
   "transformations": [
@@ -88,9 +88,9 @@
   "files": {
     "provenance_facts.parquet": {
       "path": "provenance_facts.parquet",
-      "sha256": "6e333ac96dce6010f62ca947e118c86cc6d6ea2db91fa8837f72f2ec74c8b20f",
-      "byte_count": 2704,
-      "row_count": 50,
+      "sha256": "f1b8524f1cbeacb0fca3fd576d7cee0ee08a28b4c8d432488f067382110ca5e5",
+      "byte_count": 2714,
+      "row_count": 51,
       "schema_version": 3
     },
     "provenance_acquisitions.parquet": {
@@ -102,23 +102,23 @@
     },
     "provenance_bindings.parquet": {
       "path": "provenance_bindings.parquet",
-      "sha256": "cf5fda66cade2a3d6b7ae183e01c2aa204ff4295d98ddb5f22948dc98cbbfd12",
-      "byte_count": 2154,
+      "sha256": "3a12e28bc0615eb493b17ab00e9c6fe55deade8a45b30bd53baa6ac92ab6540e",
+      "byte_count": 2149,
       "row_count": 7,
       "schema_version": 3
     },
     "provenance_binding_facts.parquet": {
       "path": "provenance_binding_facts.parquet",
-      "sha256": "9ad2dc9e1081fc61a4656fe0c7a1c8747a2b4bdb19d3cdeea87dc90cb0b635d5",
-      "byte_count": 1377,
-      "row_count": 50,
+      "sha256": "5d0f549d88f3b78f2f4f447a5636ca66a5a893c7bb58195962aacd60f7c90b29",
+      "byte_count": 1379,
+      "row_count": 51,
       "schema_version": 3
     },
     "provenance_external_inputs.parquet": {
       "path": "provenance_external_inputs.parquet",
-      "sha256": "74819c655c084832ded76d767cbc1eb226f75b27b13193db829d6768da14c249",
-      "byte_count": 1584,
-      "row_count": 17,
+      "sha256": "c920e41711679bd57c6eaba0075e3f2651b41b8f1623eadd649f08888deb3c65",
+      "byte_count": 1595,
+      "row_count": 19,
       "schema_version": 3
     }
   }

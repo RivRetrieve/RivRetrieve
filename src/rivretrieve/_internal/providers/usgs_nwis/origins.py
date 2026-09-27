@@ -95,6 +95,23 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         media_type="text/html; charset=utf-8",
         sha256="11be7513f1f383b3db9856d55afd91324920c954ba9f00eb5032294b2cf81ce3",
     )
+    instantaneous_definition = RecordingReference(
+        recording_id="usgs_nwis_instantaneous_values_definition",
+        repository_path="tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+        source_url="https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/",
+        retrieved_at=datetime.fromisoformat("2026-09-19T20:58:46.743636Z"),
+        media_type="text/html; charset=UTF-8",
+        sha256="1cec37f8cec8173f635d4afaba2d08814347d9cff672b25c29d427b004d0b3a2",
+    )
+    instantaneous_definition_capture = AcquisitionRecord(
+        acquisition_id="instantaneous_values_definition_capture_2026_09_19",
+        method="http_request",
+        instant_type="retrieval",
+        description="Publisher Instantaneous Values Service Details documentation calls the returned measurement an instantaneous value; it does not establish a concrete series sampling frequency.",
+        requested_from=(instantaneous_definition.source_url,),
+        retrieved_at_start=instantaneous_definition.retrieved_at,
+        recording_ids=(instantaneous_definition.recording_id,),
+    )
     catalogue = AcquisitionRecord(
         acquisition_id="national_site_campaign_2026_08_02",
         method="http_campaign",
@@ -135,8 +152,13 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         source_id="usgs_nwis",
         issuer="U.S. Geological Survey",
         operator="National Water Information System",
-        acquisitions=(catalogue, runtime, licence_terms, citation_terms),
+        acquisitions=(catalogue, runtime, licence_terms, citation_terms, instantaneous_definition_capture),
         evidence=(
+            EvidenceReference(
+                evidence_id="usgs_instantaneous_value_definition",
+                description='Publisher service documentation: "most recent instantaneous value"; the service request URL is /nwis/iv/.',
+                recording=instantaneous_definition,
+            ),
             EvidenceReference(
                 evidence_id="usgs_public_domain_statement",
                 description="Agency-wide USGS copyright and credits recording",
@@ -164,6 +186,12 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         ),
     )
     bindings = (
+        FactBinding(
+            fact_group="instantaneous_value_definition",
+            facts=("source.usgs.instantaneous_value_definition",),
+            source_id="usgs_nwis",
+            acquisition_id=instantaneous_definition_capture.acquisition_id,
+        ),
         FactBinding(
             fact_group="license_statement",
             facts=("source.usgs.license_statement",),
@@ -248,3 +276,95 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
 def build_acquisition_provenance() -> AcquisitionProvenance:
     """Build closed usgs_nwis acquisition provenance."""
     return _complete_catalogue_carrier(_build_provider_acquisition_provenance())
+
+
+def build_modern_acquisition_provenance(receipts, metadata_directory):
+    """Supplement retained station provenance with independently acquired modern facts."""
+    import hashlib
+
+    legacy = _build_provider_acquisition_provenance()
+    recordings = tuple(
+        RecordingReference(
+            recording_id=f"modern_metadata_{index}",
+            repository_path=f"research/usgs-modern-coverage/{receipt['file']}",
+            source_url=receipt["url"],
+            retrieved_at=datetime.fromisoformat(receipt["retrieved_at"]),
+            media_type="application/gzip",
+            sha256=hashlib.sha256((metadata_directory / receipt["file"]).read_bytes()).hexdigest(),
+        )
+        for index, receipt in enumerate(receipts)
+    )
+    acquisition = AcquisitionRecord(
+        acquisition_id="modern_time_series_metadata_2026_09_22",
+        method="http_campaign",
+        instant_type="retrieval_interval",
+        description="Complete unsorted v1 metadata pagination for parameters 00060 and 00065, including discontinued records; exact decompressed response hashes and request receipts retained alongside gzip recordings. Station scope remains the independently acquired native station table. UTC metadata ranges do not establish physical daily support.",
+        requested_from=tuple(item.source_url for item in recordings),
+        retrieved_at_start=min(item.retrieved_at for item in recordings),
+        retrieved_at_end=max(item.retrieved_at for item in recordings),
+        recording_ids=tuple(item.recording_id for item in recordings),
+    )
+    observation_request = AcquisitionRecord(
+        acquisition_id="modern_observation_request",
+        method="runtime_http_request",
+        instant_type="runtime",
+        description="Exact modern Water Data v1 daily or continuous request and response retained at runtime; independent of historical WaterServices calls",
+        requested_from=(
+            "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
+            "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items",
+        ),
+    )
+    observation_binding = FactBinding(
+        fact_group="modern_observation_values",
+        facts=("source.observation.modern_values_qualifiers_and_timestamps",),
+        source_id="usgs_nwis",
+        acquisition_id=observation_request.acquisition_id,
+    )
+    source = legacy.source_records[0]
+    source = source.model_copy(
+        update={
+            "acquisitions": source.acquisitions + (acquisition, observation_request),
+            "evidence": source.evidence
+            + tuple(
+                EvidenceReference(
+                    evidence_id=item.recording_id,
+                    description="Exact modern metadata response compressed losslessly",
+                    recording=item,
+                )
+                for item in recordings
+            ),
+        }
+    )
+    modern_facts = (
+        "source.product.modern_parameter_statistic_computation_codes",
+        "source.station_product.modern_series_availability",
+        "source.series.modern_identity_description_and_utc_ranges",
+    )
+    binding = FactBinding(
+        fact_group="modern_series_metadata",
+        facts=modern_facts,
+        source_id="usgs_nwis",
+        acquisition_id=acquisition.acquisition_id,
+    )
+    provenance = legacy.model_copy(
+        update={
+            "source_records": (source,),
+            "fact_universe": legacy.fact_universe + modern_facts + observation_binding.facts,
+            "fact_bindings": legacy.fact_bindings + (binding, observation_binding),
+        }
+    )
+    return complete_transformed_fact_universe(
+        provenance,
+        CATALOGUE_FACT_UNIVERSE,
+        transformation=Transformation(
+            name="USGS native station facts and modern series metadata to canonical catalogue carriers",
+            external_inputs=tuple(
+                ExternalFactReference(source_id="usgs_nwis", fact=fact)
+                for fact in (
+                    "source.provider.usgs_agency_identity",
+                    "source.station.nwis_identity_location_datum",
+                    *modern_facts,
+                )
+            ),
+        ),
+    )

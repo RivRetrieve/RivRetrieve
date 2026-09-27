@@ -65,12 +65,15 @@ def test_installed_drainage_areas_offline(distribution: str) -> None:
         # Reuse dependency directories without executing their editable-install .pth files.
         sites = tuple((environment / "lib").glob("python*/site-packages"))
         assert len(sites) == 1
-        dependency_paths = [
-            path
-            for path in sys.path
-            if Path(path).name == "site-packages" and Path(path).is_relative_to(Path(sys.prefix))
-        ]
+        dependency_paths = list(
+            dict.fromkeys(
+                str(Path(path).resolve())
+                for path in sys.path
+                if Path(path).is_absolute() and Path(path).name == "site-packages" and Path(path).is_dir()
+            )
+        )
         assert dependency_paths
+        assert all(not Path(path).is_relative_to(repository / "src") for path in dependency_paths)
         (sites[0] / "project_dependencies.pth").write_text("\n".join(dependency_paths) + "\n")
         # No inherited provider credentials, dotenv files, or Python import overrides.
         clean_environment = {"PATH": os.environ["PATH"], "HOME": str(execution)}
@@ -105,16 +108,17 @@ assert catalogues.joinpath("drainage_areas.parquet").is_file()
 provider_root = files("rivretrieve._internal.providers")
 provider_ids = rr.providers()["provider_id"].to_list()
 frames = []
+selections = []
 for provider_id in provider_ids:
     catalogue = provider_root.joinpath(provider_id, "catalogue")
     assert not catalogue.joinpath("native.parquet").is_file()
     stations = pl.read_parquet(catalogue.joinpath("stations.parquet"))
     station_id = "02GA010" if provider_id == "ca_eccc" else stations["station_id"][0]
     selection = rr.find(provider=provider_id, station=station_id)
-    frames.append(rr.as_frame(selection))
+    selections.append(rr.from_bundle(rr.to_bundle(selection)))
+    frames.append(rr.drainage_areas(selections[-1]))
 
-selection = rr.from_frame(pl.concat(frames))
-actual = rr.drainage_areas(selection)
+actual = pl.concat(frames)
 schema = pl.Schema({
     "provider_id": pl.String,
     "station_id": pl.String,
@@ -128,7 +132,7 @@ assert actual.schema == schema
 assert set(actual["provider_id"]) == set(provider_ids)
 keys = ["provider_id", "station_id", "source_field"]
 assert actual.unique(subset=keys).height == actual.height
-assert_frame_equal(actual, rr.drainage_areas(selection))
+assert_frame_equal(actual, pl.concat([rr.drainage_areas(item) for item in selections]))
 for value in actual["source_value"].drop_nulls():
     assert isinstance(json.loads(value), (str, int, float, bool))
 assert actual.filter(pl.col("state") != "value")["source_value"].null_count() == actual.filter(
@@ -145,6 +149,6 @@ effective = canada.filter(pl.col("source_field") == "DRAINAGE_AREA_EFFECT").row(
 assert effective["source_dtype"] == "Float64"
 assert effective["source_value"] is None
 assert effective["state"] == "source_null"
-empty = rr.from_frame(rr.as_frame(selection).head(0))
+empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.drainage_areas(empty), pl.DataFrame(schema=schema))
 """

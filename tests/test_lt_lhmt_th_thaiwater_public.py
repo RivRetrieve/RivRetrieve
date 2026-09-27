@@ -60,7 +60,18 @@ def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
     selection = rr.find(provider=provider, station=station)
     result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
 
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert result.data.height == expected_rows
     assert result.data.equals(
         result.data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
@@ -105,7 +116,7 @@ def test_thaiwater_find_exposes_the_original_baseline_available_and_unknown_pair
     ]
 
 
-def test_thaiwater_unknown_pair_beyond_sample_returns_recorded_null_rows_and_can_be_reused(
+def test_thaiwater_null_rows_do_not_establish_complete_inventory_for_reuse(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -124,7 +135,8 @@ def test_thaiwater_unknown_pair_beyond_sample_returns_recorded_null_rows_and_can
     assert len(replay.requests) == 2
     assert all(entry.content == envelope.content for entry in result.receipts.entries)
     repeated = rr.fetch(selection, start="2026-06-10", end="2026-09-04", cache="reuse", on_issue="ignore")
-    assert len(replay.requests) == 2
+    # Incomplete source inventory cannot satisfy an unrestricted all-series request.
+    assert len(replay.requests) == 4
     from polars.testing import assert_frame_equal
 
     assert_frame_equal(result.data, repeated.data)

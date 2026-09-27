@@ -18,6 +18,7 @@ from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, l
 from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
+    Daily,
     FetchWindow,
     Instant,
     Payload,
@@ -56,8 +57,80 @@ from rivretrieve._internal.provider_info import ProviderInfo, ProviderInfoValida
 from rivretrieve._internal.providers.ca_eccc.config import config as ca_eccc_config
 from rivretrieve._internal.registry import ProviderRegistry, UnknownProviderError, _ProviderHandle, _registry
 from rivretrieve._internal.results import CatalogProvenance
+from rivretrieve._internal.source_series import (
+    ClippingAxis,
+    InventoryCompleteness,
+    InventorySnapshot,
+    OutcomeStatus,
+    ParsedSeries,
+    PhysicalFacts,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+    known,
+)
 from tests._stubs import stub_provider
 from tests.conftest import RegisteredStub
+
+
+def _parsed(rows: Rows, payload: Payload, config: ProviderConfig, issues: tuple[Issue, ...] = ()) -> ParsedSeries:
+    """A response-owned concrete definition and outcome for each test payload coordinate."""
+    definitions = []
+    outcomes = []
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    for station, product_id in payload.station_products:
+        product = config.products[product_id]
+        key = f"{station}:{product_id}"
+        daily = isinstance(product.semantics, Daily)
+        fact = PhysicalFacts(
+            facts_id=f"{key}:facts",
+            quantity=known("stage", "test source definition"),
+            source_unit=known(product.unit.value, "test source definition"),
+            normalized_unit=product.unit.value,
+            frequency=known("daily" if daily else "instantaneous", "test source definition"),
+            clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
+            label_time=product.semantics.label_time.value if daily else None,
+        )
+        definitions.append(
+            SourceSeries(
+                series_id=key,
+                provider_id=payload.scope.provider_ids[0],
+                station_id=station,
+                product_id=str(product_id),
+                identity=SourceIdentity(
+                    namespace="test-source", published_id=key, origin="response", evidence=("test payload",)
+                ),
+                facts=(fact,),
+            )
+        )
+        outcomes.append(
+            RetrievalOutcome(
+                outcome_id=f"{key}:outcome",
+                series_id=key,
+                station_id=station,
+                product_id=str(product_id),
+                window=window,
+                status=OutcomeStatus.EMPTY if rows.is_empty() else OutcomeStatus.SUCCESS,
+                facts_ids=(fact.facts_id,),
+            )
+        )
+    scope = payload.scope or SeriesScope(provider_ids=("test_provider",))
+    inventory = InventorySnapshot(
+        snapshot_id="inventory:" + ":".join(item.series_id for item in definitions),
+        scope=scope,
+        members=tuple(item.series_id for item in definitions),
+        completeness=InventoryCompleteness.COMPLETE,
+        access="test source",
+        origin="response",
+        window=window,
+        evidence=("test response inventory",),
+    )
+    return ParsedSeries(rows, tuple(definitions), (inventory,), tuple(outcomes), issues)
 
 
 def _instance_values(value: object) -> Iterator[object]:
@@ -122,6 +195,9 @@ class _EngineModule:
         window: FetchWindow,
         config: ProviderConfig,
         transport: object,
+        *,
+        scope: SeriesScope,
+        known_series: tuple[SourceSeries, ...],
     ) -> WithIssues[tuple[Payload, ...]]:
         _EngineModule.events.append("fetch")
         _EngineModule.fetched_window = window
@@ -148,20 +224,28 @@ class _EngineModule:
         )
 
     @staticmethod
-    def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+    def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         _EngineModule.events.append("parse")
-        assert payload is _EngineModule.emitted_payload
-        return WithIssues(
-            value=pl.DataFrame(
+        assert _EngineModule.emitted_payload is not None
+        assert payload.content is _EngineModule.emitted_payload.content
+        assert payload.origin is _EngineModule.emitted_payload.origin
+        return _parsed(
+            pl.DataFrame(
                 {
                     "station_id": ["station-1"],
                     "product_id": ["level"],
                     "time": [datetime(2026, 1, 1)],
                     "value": [1.5],
                     "time_zone": ["+00:00"],
+                    "series_id": ["station-1:level"],
+                    "facts_id": ["station-1:level:facts"],
+                    "source_unit": ["m"],
                 },
                 schema=RowsSchema.polars_schema,
-            )
+            ),
+            payload,
+            config,
+            (),
         )
 
     @staticmethod
@@ -190,8 +274,13 @@ class _InfoOnlyEngineModule(_EngineModule):
         window: FetchWindow,
         config: ProviderConfig,
         transport: object,
+        *,
+        scope: SeriesScope,
+        known_series: tuple[SourceSeries, ...],
     ) -> WithIssues[tuple[Payload, ...]]:
-        fetched = _EngineModule.fetch(stations, products, rendered_windows, window, config, transport)
+        fetched = _EngineModule.fetch(
+            stations, products, rendered_windows, window, config, transport, scope=scope, known_series=known_series
+        )
         return WithIssues(value=fetched.value)
 
 
@@ -282,12 +371,27 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
                 "station_id": ["station-1"],
                 "product_id": ["level"],
                 "value": [1.5],
+                "series_id": ["station-1:level"],
+                "facts_id": ["station-1:level:facts"],
+                "source_unit": ["m"],
+                "quantity": ["stage"],
+                "unit": ["m"],
             },
             schema=ObservationDataSchema.polars_schema,
         ),
         check_exact=True,
     )
-    assert tuple(type(result).model_fields) == ("data", "provenance", "issues", "receipts")
+    assert tuple(type(result).model_fields) == (
+        "data",
+        "provenance",
+        "issues",
+        "receipts",
+        "source_series",
+        "inventories",
+        "outcomes",
+        "scope",
+        "view_scope",
+    )
     assert result.provenance.source == "test-engine"
     assert result.provenance.request is not None
     assert result.provenance.request["start"] == "2026-01-01T00:00:00"
@@ -433,7 +537,7 @@ def test_registry_preserves_explicit_midnight_end(
     assert result.provenance.request["end"] == "2026-01-02T00:00:00"
 
 
-def test_registry_observations_converter_leak_raises_fatal_contract_error_naming_row(
+def test_registry_observations_converter_leak_raises_fatal_contract_error(
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -449,6 +553,8 @@ def test_registry_observations_converter_leak_raises_fatal_contract_error_naming
         rows: Rows,
         config: ProviderConfig,
         window: object,
+        *,
+        series: tuple[SourceSeries, ...],
     ) -> WithIssues[CanonicalRows]:
         return WithIssues(
             value=pl.DataFrame(
@@ -458,6 +564,11 @@ def test_registry_observations_converter_leak_raises_fatal_contract_error_naming
                     "station_id": ["station-1"],
                     "product_id": ["level"],
                     "value": [1.5],
+                    "series_id": ["station-1:level"],
+                    "facts_id": ["station-1:level:facts"],
+                    "source_unit": ["m"],
+                    "quantity": ["stage"],
+                    "unit": ["m"],
                 },
                 schema=CanonicalRowsSchema.polars_schema,
             )
@@ -476,13 +587,7 @@ def test_registry_observations_converter_leak_raises_fatal_contract_error_naming
 
     assert not isinstance(exc_info.value, IssuePolicyError)
     assert exc_info.value.issues == ()
-    assert str(exc_info.value) == (
-        "CanonicalRows zero-based row index 0 is outside RequestedWindow on the Instant timestamp axis: "
-        "timestamp=2026-01-03T00:00:00, time_zone='+00:00', station_id='station-1', "
-        "product_id='level', requested_start=2026-01-01T00:00:00, "
-        "requested_end=2026-01-02T23:59:59.999999. This is a convert-stage contract breach; please "
-        "report this row and request window."
-    )
+    assert str(exc_info.value) == ("CanonicalRows contain observations outside the RequestedWindow physical axis")
     assert _EngineModule.events == ["fetch", "parse"]
 
 
@@ -525,6 +630,9 @@ def test_registry_observations_exclusive_stop_source_keeps_reading_at_closed_req
             window: FetchWindow,
             config: ProviderConfig,
             transport: object,
+            *,
+            scope: SeriesScope,
+            known_series: tuple[SourceSeries, ...],
         ) -> WithIssues[tuple[Payload, ...]]:
             _ExclusiveStopModule.events.append("fetch")
             _ExclusiveStopModule.renderings = rendered_windows[ProductId("level")]
@@ -548,20 +656,36 @@ def test_registry_observations_exclusive_stop_source_keeps_reading_at_closed_req
             )
 
         @staticmethod
-        def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+        def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             _ExclusiveStopModule.events.append("parse")
             readings = tuple(datetime.fromisoformat(value) for value in json.loads(payload.content))
-            return WithIssues(
-                value=pl.DataFrame(
+            return _parsed(
+                pl.DataFrame(
                     {
                         "station_id": ["station-1" for _ in readings],
                         "product_id": ["level" for _ in readings],
                         "time": list(readings),
                         "value": [1.5 for _ in readings],
                         "time_zone": ["+00:00" for _ in readings],
+                        "series_id": [
+                            f"{station}:{product}"
+                            for station, product in zip(
+                                ["station-1" for _ in readings], ["level" for _ in readings], strict=True
+                            )
+                        ],
+                        "facts_id": [
+                            f"{station}:{product}:facts"
+                            for station, product in zip(
+                                ["station-1" for _ in readings], ["level" for _ in readings], strict=True
+                            )
+                        ],
+                        "source_unit": ["m"] * len(["station-1" for _ in readings]),
                     },
                     schema=RowsSchema.polars_schema,
-                )
+                ),
+                payload,
+                config,
+                (),
             )
 
     _registry.register(
@@ -591,6 +715,11 @@ def test_registry_observations_exclusive_stop_source_keeps_reading_at_closed_req
             "station_id": ["station-1"],
             "product_id": ["level"],
             "value": [1.5],
+            "series_id": ["station-1:level"],
+            "facts_id": ["station-1:level:facts"],
+            "source_unit": ["m"],
+            "quantity": ["stage"],
+            "unit": ["m"],
         },
         schema=ObservationDataSchema.polars_schema,
     )
@@ -661,6 +790,9 @@ def test_registry_observations_parameterless_fixed_span_returns_rows_and_underco
             window: FetchWindow,
             config: ProviderConfig,
             transport: object,
+            *,
+            scope: SeriesScope,
+            known_series: tuple[SourceSeries, ...],
         ) -> WithIssues[tuple[Payload, ...]]:
             _FixedSpanModule.events.append("fetch")
             _FixedSpanModule.renderings = rendered_windows[ProductId("level")]
@@ -680,20 +812,26 @@ def test_registry_observations_parameterless_fixed_span_returns_rows_and_underco
             )
 
         @staticmethod
-        def parse(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+        def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             _FixedSpanModule.events.append("parse")
             readings = tuple(datetime.fromisoformat(value) for value in json.loads(payload.content))
-            return WithIssues(
-                value=pl.DataFrame(
+            return _parsed(
+                pl.DataFrame(
                     {
                         "station_id": ["station-1", "station-1"],
                         "product_id": ["level", "level"],
                         "time": list(readings),
                         "value": [1.0, 2.0],
                         "time_zone": ["+00:00", "+00:00"],
+                        "series_id": ["station-1:level", "station-1:level"],
+                        "facts_id": ["station-1:level:facts", "station-1:level:facts"],
+                        "source_unit": ["m", "m"],
                     },
                     schema=RowsSchema.polars_schema,
-                )
+                ),
+                payload,
+                config,
+                (),
             )
 
     _registry.register(
@@ -718,6 +856,11 @@ def test_registry_observations_parameterless_fixed_span_returns_rows_and_underco
             "station_id": ["station-1", "station-1"],
             "product_id": ["level", "level"],
             "value": [1.0, 2.0],
+            "series_id": ["station-1:level", "station-1:level"],
+            "facts_id": ["station-1:level:facts", "station-1:level:facts"],
+            "source_unit": ["m", "m"],
+            "quantity": ["stage", "stage"],
+            "unit": ["m", "m"],
         },
         schema=ObservationDataSchema.polars_schema,
     )
@@ -1042,10 +1185,23 @@ def test_observation_result_carries_shared_acquisition_provenance(
     )
 
     assert result.provenance.acquisition_provenance is shared
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
 
 
-@pytest.mark.parametrize("provider_id", ("usgs_nwis", "za_dws", "ca_eccc", "ch_foen", "fr_hubeau", "pl_imgw", "br_ana"))
+@pytest.mark.parametrize(
+    "provider_id", ("usgs_nwis", "za_dws", "ca_eccc", "ch_foen", "fr_hubeau", "fr_hydroportail", "pl_imgw", "br_ana")
+)
 def test_registry_terms_come_from_verified_acquisition_statements(
     source_terms_catalogue_artifact: Callable[[str], PackagedCatalogArtifact],
     provider_id: str,
@@ -1068,7 +1224,7 @@ def test_registry_terms_come_from_verified_acquisition_statements(
     assert result.provenance.citation == expected.get("citation")
     assert {issue.code for issue in result.issues} == (
         {"provenance.license_not_established", "provenance.citation_not_established"}
-        if provider_id in ("za_dws", "pl_imgw")
+        if provider_id in ("za_dws", "pl_imgw", "fr_hydroportail")
         else {"provenance.citation_not_established"}
         if provider_id == "br_ana"
         else set()

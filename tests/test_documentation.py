@@ -10,6 +10,7 @@ import polars as pl
 from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
+from rivretrieve._internal.observations import ObservationDataSchema
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,12 +37,9 @@ def test_readme_uses_current_public_api():
 
 def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
     import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
+    from tests.usgs_modern_recordings import ModernReplay
 
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
+    replay = ModernReplay("daily-07374000-docs-2023")
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     scope = {}
     for block in python_blocks(ROOT / "README.md"):
@@ -56,22 +54,25 @@ def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
             "value": [373000.0 * 0.028316846592],
         }
     )
-    assert_frame_equal(result.data, expected)
+    assert_frame_equal(result.data.select(expected.columns), expected)
+    assert result.data.columns == list(ObservationDataSchema.polars_schema)
+    assert result.source_series
+    assert result.data["series_id"].n_unique() == 1
+    assert result.data["unit"].to_list() == ["m3/s"]
     assert not result.issues
     assert not result.receipts.entries
-    assert capsys.readouterr().out == "[('07374000', 10562.183778816001)]\n()\n"
+    assert capsys.readouterr().out == (
+        "[('07374000', 10562.183778816001)]\n()\n['bruto', 'consistido']\n['consistido']\n"
+    )
 
 
 def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
     import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
+    from tests.usgs_modern_recordings import ModernReplay
 
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
+    replay = ModernReplay("daily-07374000-docs-2023")
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
+    gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
     gauge = rr.pick(gauges, station="07374000")
     # Only this shorter public window matches the committed publisher recording.
     result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")
@@ -84,7 +85,11 @@ def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
             "value": [373000.0 * 0.028316846592],
         }
     )
-    assert_frame_equal(result.data, expected)
+    assert_frame_equal(result.data.select(expected.columns), expected)
+    assert result.data.columns == list(ObservationDataSchema.polars_schema)
+    assert result.source_series
+    assert result.data["series_id"].n_unique() == 1
+    assert result.data["unit"].to_list() == ["m3/s"]
     assert not result.issues
     assert not result.receipts.entries
 
@@ -121,6 +126,8 @@ PAGES = [
     "docs/README.md",
     "docs/usage.md",
     "docs/architecture.md",
+    "docs/usgs-discovery.md",
+    "docs/providers/usgs_nwis.md",
     "docs/reference.md",
     "docs/examples/camels-us.md",
 ]

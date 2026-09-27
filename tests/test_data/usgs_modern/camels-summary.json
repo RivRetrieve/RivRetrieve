@@ -1,0 +1,35 @@
+[
+  {
+    "name": "daily-camels-01013500-2025",
+    "status": 200,
+    "rows": 369,
+    "first": "2024-12-30",
+    "last": "2026-01-02",
+    "public_2025_rows": 365,
+    "null_values": 0,
+    "next_urls": [],
+    "sha256": "16b204152791d9bb06f8369d8cba0f5ad91bbd15c29d743a87b9ac44e3ca7f41"
+  },
+  {
+    "name": "daily-camels-01022500-2025",
+    "status": 200,
+    "rows": 369,
+    "first": "2024-12-30",
+    "last": "2026-01-02",
+    "public_2025_rows": 365,
+    "null_values": 0,
+    "next_urls": [],
+    "sha256": "0b4db39403b3fb83470b9bbdc33f20e7815195433e1361e43ffe1f91e6d2086e"
+  },
+  {
+    "name": "daily-camels-01030500-2025",
+    "status": 200,
+    "rows": 369,
+    "first": "2024-12-30",
+    "last": "2026-01-02",
+    "public_2025_rows": 365,
+    "null_values": 0,
+    "next_urls": [],
+    "sha256": "4b03b33ee0e20139f7554138f0244130d01827bc453d9b54dd784b8cb149ad40"
+  }
+]

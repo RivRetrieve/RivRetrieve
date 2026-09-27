@@ -14,6 +14,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import re
 import zipfile
 from collections.abc import Callable, Iterator
@@ -25,11 +26,13 @@ from typing import Any, Final, cast
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.pl_imgw.series import source_series
+from rivretrieve._internal.providers.registration import DownloadedBulkArtifact
+from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store import (
     ArtifactChecksum,
     Disposition,
     NativeObservationBatch,
-    NativeStoreMaterialization,
     ObservationBatchStream,
     PublisherArtifact,
     SourceColumn,
@@ -44,7 +47,6 @@ from rivretrieve._internal.store import (
 )
 
 PROVIDER_ID: Final = ProviderId("pl_imgw")
-FORMAT_VERSION: Final = 1
 BASE_URL: Final = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe"
 ANNUAL_URL_TEMPLATE: Final = BASE_URL + "/{year}/codz_{year}.zip"
 MONTHLY_URL_TEMPLATE: Final = BASE_URL + "/{year}/codz_{year}_{month:02d}.zip"
@@ -101,9 +103,9 @@ IMGW_SOURCE_DISPOSITIONS: Final = tuple(
 _RETAINED_NAMES: Final = tuple(column.name for column in IMGW_SOURCE_COLUMNS)
 
 _PRODUCT_COLUMNS: Final = (
-    (ProductId("stage_daily_mean"), 6, frozenset({9999.0})),
-    (ProductId("discharge_daily_mean"), 7, frozenset({99999.999, 999.0})),
-    (ProductId("water_temperature_daily_mean"), 8, frozenset({99.9})),
+    (ProductId("stage_daily"), 6, frozenset({9999.0})),
+    (ProductId("discharge_daily"), 7, frozenset({99999.999})),
+    (ProductId("water_temperature_daily"), 8, frozenset({99.9})),
 )
 
 
@@ -121,38 +123,6 @@ class DownloadedImgw:
 
 
 ArtifactTransfer = Callable[[str, Path], None]
-
-
-def download_imgw(
-    destination: Path,
-    *,
-    year: int,
-    transfer: ArtifactTransfer,
-) -> DownloadedImgw:
-    """Transfer one named yearly archive to an already-authorised destination.
-
-    Consent, free-space checks and orchestration across multiple years belong to
-    the shared bulk verbs (RR5); this source operation performs no implicit work.
-    """
-    if type(year) is not int or year < 1 or year > 9999:
-        raise ValueError("IMGW archive year must be an integer in 1..9999")
-    target = Path(destination)
-    if target.exists():
-        raise FileExistsError(f'publisher artifact destination already exists: "{target}"')
-    if not target.parent.is_dir():
-        raise FileNotFoundError(f'publisher artifact parent does not exist: "{target.parent}"')
-    url = ANNUAL_URL_TEMPLATE.format(year=year)
-    try:
-        transfer(url, target)
-        if not target.is_file():
-            raise OSError("IMGW transfer returned without creating the artifact")
-    except BaseException:
-        target.unlink(missing_ok=True)
-        raise
-    return DownloadedImgw(target, url)
-
-
-download = download_imgw
 
 
 def latest_completed_hydrological_year(today: date) -> int:
@@ -205,7 +175,7 @@ def download_imgw_history(
 
 @dataclass(frozen=True, slots=True)
 class ImgwCompileRequest:
-    """Publisher facts and resolved paths supplied by the composition root."""
+    """First-artifact identity, aggregate vintage, and resolved compilation inputs."""
 
     publisher_artifact: Path
     destination: StoreRoot
@@ -213,16 +183,12 @@ class ImgwCompileRequest:
     source_vintage: date
     built_at: datetime
     compiler_version: str
-    publisher_artifacts: tuple[DownloadedImgw, ...] = ()
+    publisher_artifacts: tuple[DownloadedBulkArtifact | DownloadedImgw, ...] = ()
 
     def __post_init__(self) -> None:
         artifacts = self.publisher_artifacts or (DownloadedImgw(self.publisher_artifact, self.publisher_url),)
         first = artifacts[0]
-        if (first.path, first.url, first.source_vintage) != (
-            self.publisher_artifact,
-            self.publisher_url,
-            self.source_vintage,
-        ):
+        if (first.path, first.url) != (self.publisher_artifact, self.publisher_url):
             raise ValueError("singular IMGW artifact must equal the first plural artifact")
         paths = [item.path.resolve() for item in artifacts]
         urls = [item.url for item in artifacts]
@@ -258,10 +224,12 @@ class ImgwCompileRequest:
                 raise ValueError("IMGW publisher artifact coverage overlaps")
             covered.update(interval)
             previous = interval[-1]
+        if self.source_vintage != max(item.source_vintage for item in artifacts):
+            raise ValueError("IMGW aggregate source vintage must equal the latest artifact coverage end")
 
 
 def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
-    """Certify and publish one complete IMGW yearly ZIP artifact."""
+    """Certify and publish the ordered IMGW archives as one store."""
     downloaded = request.publisher_artifacts or (
         DownloadedImgw(Path(request.publisher_artifact), request.publisher_url),
     )
@@ -279,9 +247,6 @@ def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
         source_column_dispositions=IMGW_SOURCE_DISPOSITIONS,
     )
     return certify_store_batches(compile_request, artifacts, decode_imgw_batches)
-
-
-compile = compile_imgw
 
 
 IMGW_ROWS_PER_BATCH: Final = 65_536
@@ -310,7 +275,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                 contributions: Counter[str] = Counter()
                 for unit, row in _merge_station_order(iterators):
                     rows.append(row)
-                    if product == ProductId("discharge_daily_mean"):
+                    if product == ProductId("discharge_daily"):
                         units.append(unit)
                     contributions[unit.source_unit] += 1
                     if len(rows) == IMGW_ROWS_PER_BATCH:
@@ -318,6 +283,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                             _imgw_frame(rows),
                             tuple(units),
                             tuple(SourceUnitContribution(name, count) for name, count in sorted(contributions.items())),
+                            _batch_series(rows),
                         )
                         rows = []
                         units = []
@@ -327,6 +293,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                         _imgw_frame(rows),
                         tuple(units),
                         tuple(SourceUnitContribution(name, count) for name, count in sorted(contributions.items())),
+                        _batch_series(rows),
                     )
 
     return ObservationBatchStream(IMGW_SOURCE_COLUMNS, batches(), expected_records, expected_rows, inventory_sha256)
@@ -496,6 +463,11 @@ def _iter_imgw_raw_records(path: Path):
                 for line_number, record in enumerate(reader, start=1):
                     if not record or (len(record) == 1 and record[0] == ""):
                         continue
+                    # Annual source files can encode an entire CSV record as one
+                    # quoted field. Decode that publisher layer without materializing
+                    # the archive or changing the ten native cell strings.
+                    if delimiter == "," and len(record) == 1:
+                        record = next(csv.reader((record[0],), delimiter=",", strict=True))
                     if len(record) != len(_SOURCE_FIELDS):
                         raise ValueError(
                             f"IMGW member {info.filename!r} row {line_number} has {len(record)} source columns; expected {len(_SOURCE_FIELDS)}"
@@ -508,96 +480,33 @@ def _iter_imgw_raw_records(path: Path):
 def _imgw_frame(rows: list[dict[str, object]]) -> pl.DataFrame:
     return (
         pl.DataFrame(rows, infer_schema_length=None)
-        .select("product", "station_id", "time", "time_zone", "value", "value_state", *_RETAINED_NAMES)
+        .select(
+            "product",
+            "station_id",
+            "time",
+            "time_zone",
+            "value",
+            "value_state",
+            "series_id",
+            "facts_id",
+            "source_unit",
+            *_RETAINED_NAMES,
+        )
         .with_columns(
-            pl.col("product", "station_id", "time_zone", "value_state", *_RETAINED_NAMES).cast(pl.String),
+            pl.col(
+                "product",
+                "station_id",
+                "time_zone",
+                "value_state",
+                "series_id",
+                "facts_id",
+                "source_unit",
+                *_RETAINED_NAMES,
+            ).cast(pl.String),
             pl.col("time").cast(pl.Datetime("us")),
             pl.col("value").cast(pl.Float64),
         )
     )
-
-
-def decode_imgw(path: Path) -> NativeStoreMaterialization:
-    """Decode all CSV members strictly, retaining native cells and values."""
-    artifact = Path(path)
-    if not artifact.is_file():
-        raise FileNotFoundError(f'IMGW publisher artifact does not exist: "{artifact}"')
-    rows: list[dict[str, object]] = []
-    units: list[SourceUnitCount] = []
-    try:
-        with zipfile.ZipFile(artifact) as archive:
-            members = sorted(
-                (info for info in archive.infolist() if not info.is_dir()),
-                key=lambda info: info.filename.encode("utf-8"),
-            )
-            if not members:
-                raise ValueError("IMGW ZIP archive contains no files")
-            non_csv = [info.filename for info in members if Path(info.filename).suffix.lower() != ".csv"]
-            if non_csv:
-                raise ValueError(f"IMGW ZIP archive contains undeclared non-CSV members: {non_csv!r}")
-            if len(members) != 1:
-                raise ValueError(f"IMGW ZIP archive must contain exactly one CSV member; found {len(members)}")
-            for info in members:
-                member_rows = _decode_csv_member(archive.read(info), info.filename)
-                before = len(rows)
-                for source_ordinal, source in enumerate(member_rows, start=1):
-                    _emit_source_row(source, info.filename, source_ordinal, rows)
-                emitted = len(rows) - before
-                units.append(SourceUnitCount(info.filename, len(member_rows), emitted))
-    except zipfile.BadZipFile as error:
-        raise ValueError("IMGW publisher artifact is not a valid ZIP") from error
-    if not rows:
-        raise ValueError("IMGW publisher artifact contains no daily records")
-    frame = _imgw_frame(rows)
-    return NativeStoreMaterialization(frame, IMGW_SOURCE_COLUMNS, tuple(units))
-
-
-def _decode_csv_member(raw: bytes, member: str) -> list[tuple[str, ...]]:
-    text = _decode_text(raw, member)
-    first_line = next((line for line in text.splitlines() if line), "")
-    if not first_line:
-        return []
-    delimiter = ";" if ";" in first_line else ","
-    if delimiter == ",":
-        probe = next(csv.reader(io.StringIO(first_line), delimiter=","), [])
-        if len(probe) == 1 and first_line.startswith('"'):
-            text = _unwrap_fully_quoted(text)
-    records: list[tuple[str, ...]] = []
-    try:
-        reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
-        for line_number, record in enumerate(reader, start=1):
-            if not record or (len(record) == 1 and record[0] == ""):
-                continue
-            if len(record) != len(_SOURCE_FIELDS):
-                raise ValueError(
-                    f"IMGW member {member!r} row {line_number} has {len(record)} source columns; "
-                    f"expected {len(_SOURCE_FIELDS)}"
-                )
-            records.append(tuple(record))
-    except csv.Error as error:
-        raise ValueError(f"IMGW member {member!r} is truncated or malformed: {error}") from error
-    return records
-
-
-def _decode_text(raw: bytes, member: str) -> str:
-    if raw.startswith(b"\xef\xbb\xbf"):
-        return raw.decode("utf-8-sig", errors="strict")
-    try:
-        return raw.decode("cp1250", errors="strict")
-    except UnicodeDecodeError as error:
-        raise ValueError(f"IMGW member {member!r} is neither BOM UTF-8 nor CP1250") from error
-
-
-def _unwrap_fully_quoted(text: str) -> str:
-    fixed: list[str] = []
-    for line in text.splitlines():
-        if not line:
-            fixed.append(line)
-            continue
-        if not (line.startswith('"') and line.endswith('"')):
-            raise ValueError("IMGW fully quoted CSV contains a truncated outer record")
-        fixed.append(line[1:-1].replace('""', '"'))
-    return "\n".join(fixed)
 
 
 def _emit_source_row(
@@ -631,6 +540,8 @@ def _emit_source_row(
         raise ValueError(f"IMGW member {member!r} row {ordinal} has an invalid calendar date") from error
     retained = dict(zip(_RETAINED_NAMES, source, strict=True))
     for product, value_index, null_sentinels in _PRODUCT_COLUMNS:
+        definition = source_series(station, str(product))
+        facts = definition.facts[0]
         value, state = _native_value(source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels)
         output.append(
             {
@@ -640,6 +551,9 @@ def _emit_source_row(
                 "time_zone": "unknown",
                 "value": value,
                 "value_state": state,
+                "series_id": definition.series_id,
+                "facts_id": facts.facts_id,
+                "source_unit": facts.source_unit.value,
                 **retained,
             }
         )
@@ -666,6 +580,8 @@ def _native_value(
         value = float(stripped)
     except ValueError as error:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has non-numeric {field}") from error
+    if not math.isfinite(value):
+        raise ValueError(f"IMGW member {member!r} row {ordinal} has non-finite {field}")
     if value in null_sentinels:
         return None, "published_null"
     return value, "published_value"
@@ -677,3 +593,8 @@ def _sha256(path: Path) -> ArtifactChecksum:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return ArtifactChecksum(f"sha256:{digest.hexdigest()}")
+
+
+def _batch_series(rows: list[dict[str, object]]) -> tuple[SourceSeries, ...]:
+    pairs = {(str(row["station_id"]), str(row["product"])) for row in rows}
+    return tuple(source_series(station, product) for station, product in sorted(pairs))

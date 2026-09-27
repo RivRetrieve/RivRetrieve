@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>À propos d&#039;Hydroportail | SC Vigicrues - HydroPortail</title>
+                <link rel="stylesheet" href="/build/2123.cddae3c0.css"><link rel="stylesheet" href="/build/app.07edbb10.css">
+    
+    <link rel="stylesheet" href="/build/ckeditor_content.a66bb3b1.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <link rel="icon" href="/favicon.ico" />
+</head>
+        
+<body
+        class="navbar--pinned scrolling-body"        data-timezone="UTC"        data-q="m3"        data-search-display="map">
+
+<div id="svg-sprites"></div>
+
+    <hx:include src="/menu/main" class="hinclude-header">
+<div class="infinity-loading mx-auto" role="status" aria-live="polite">
+    <span class="sr-only">Chargement...</span>
+    <div>
+        <span></span>
+    </div>
+    <div>
+        <span></span>
+    </div>
+    <div>
+        <span></span>
+    </div>
+</div>
+</hx:include>
+
+<div class="main" id="main" tabindex="-1">
+                                                                                <main class="main__content">
+                                            <div class="main__column py-3 container-fluid">
+                            <div class="content wysiwyg container--narrow documentation__body">
+        <div class="header__identity">
+    <div>
+        <nav aria-label="Fil d&#039;ariane">
+            <ol class="breadcrumb mb-0 py-2 px-0">
+                <li class="breadcrumb-item"><a href="/">Accueil</a></li>
+                                    <li class="breadcrumb-item">À propos d&#039;Hydroportail</li>
+                            </ol>
+        </nav>
+                    <h1>À propos d&#039;Hydroportail</h1>
+            </div>
+    <div class="block__header__actions">
+        
+    </div>
+</div>
+        <div class="ck-content">
+            <h3><strong>HYDROPORTAIL, QU'EST CE QUE C'EST ?</strong></h3><p>HydroPortail est la nouvelle application d'accès aux données hydrométriques, ainsi qu’aux données météorologiques utilisées par les Services de Prévision des Crues, qui remplace les interfaces d'accès à la Banque HYDRO 2 depuis le 25/01/2022:</p><ul><li>Hydro2 - le client lourd</li><li>HydroWeb - le portail Internet <a href="https://www.hydro.eaufrance.fr" target="_blank" rel="noreferrer noopener">www.hydro.eaufrance.fr</a></li></ul><p>Cette application a été déployée dans le cadre de l'opération Hydro 3 terminée également le 25/01/2022.</p><p>Vous trouverez une présentation de l'Opération HYDRO 3 ici : <a href="https://professionnels.ofb.fr/fr/node/39" target="_blank" rel="noreferrer noopener">https://professionnels.ofb.fr/fr/node/39</a></p><p>Et des informations générales sur les données hauteurs et débits des cours d'eau : <a href="http://www.eaufrance.fr/s-informer/observer-et-evaluer/etat-des-milieux/rivieres-et-lacs/?id_article=41" target="_blank" rel="noreferrer noopener">http://www.eaufrance.fr/s-informer/observer-et-evaluer/etat-des-milieux/rivieres-et-lacs/?id_article=41</a></p><p>Vous pouvez également faire une demande d'abonnement à la liste de diffusion des actualités HYDRO 3, en envoyant un mail VIDE depuis l'adresse voulue à sympa@developpement-durable.gouv.fr ayant comme objet : SUBSCRIBE ldif.hydro3.externe@developpement-durable.gouv.fr</p><p>HydroPortail s'interface via des services web à une base de données unique contenue dans la nouvelle Plate-forme Hydro Centrale (PHyC) gérée par le Service Central Vigicrues.</p><p>Cette application a dans un premier temps été accessible uniquement depuis le Réseau Interministériel de l’État (RIE) pour l'ensemble des D(R)EAL et le Service Central Vigicrues depuis 2015.</p><p>Elle a ensuite été rendue disponible depuis Internet :</p><ul><li>courant 2018 pour la consultation et la mise à jour, par des producteurs de données extérieurs au ministère, de certains éléments du référentiel dont ils ont la charge ;</li><li>début 2022 pour la consultation, par le grand public des données et éléments de référentiel publics via l’adresse <a href="https://www.hydro.eaufrance.fr" target="_blank" rel="noreferrer noopener">www.hydro.eaufrance.fr</a>.</li></ul><p>HydroPortail est l'outil principal d'interaction avec la Plate-forme Hydro Centrale.</p><p>À l'heure actuelle, l'application permet à tous les producteurs de données (qu'ils soient dans ou hors du ministère) :</p><ul><li><strong>la visualisation</strong> et la gestion <strong>du référentiel</strong></li><li><strong>la consultation et l'export de données temps réel et historiques</strong></li><li><strong>la visualisation des courbes de tarage, des courbes de correction et des jaugeages</strong> et leur gestion</li><li><strong>la visualisation d'un certain nombre de paramètres : seuils,</strong> alarmes, <strong>lois statistiques, événements</strong>, droits, <strong>réseaux </strong>et leur gestion</li><li>la conversion de fichier CSV simplifié Sandre Hydrométrie au format XML Sandre Hydrométrie</li><li>l'import de données dans la PHyC au format XML Sandre Hydrométrie</li><li><strong>la réalisation d'analyses statistiques, l'affichage des fiches synthèse des sites et stations</strong></li><li><strong>la visualisation cartographique de certaine statistiques, données et comparatifs.</strong></li></ul><p>Les fonctionnalités surlignées <strong>en gras</strong> dans la liste ci-dessus sont également accessibles à tous les internautes pour les données et référentiels publics.</p><p>Voir également <a href="/uploads/Publications/plaquette_HP_Grand_Public_vdef.pdf">la plaquette de communication</a>.</p>
+        </div>
+    </div>
+                    </div>
+                                                <footer class="main-footer d-print-none">
+    <div class="main-footer__container">
+        <div class="container--narrow">
+            <nav class="mb-4 main-footer__nav-bar overflow-hidden">
+    <ul class="menu menu--footer-menu p-2">
+                    <li class="menu__item">
+                                    <a href="/edito/mentions-legales">Mentions légales</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/accessibilite">Accessibilité</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/credits">Crédits</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/contacts">Contact</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/glossaire">Glossaire</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/faq">FAQ</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/aide/accueil">Aide en ligne</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/a-propos-dhydroportail">À propos d&#039;Hydroportail</a>
+                            </li>
+            </ul>
+</nav>
+            <ul class="main-footer__logo-list">
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                            <img src="/build/images/footer/logo-rf.png"
+                     alt="Logo République Française">
+                    </li>
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                        <a href="https://www.ecologie.gouv.fr/"
+               title="Ministère de la Transition Écologique"
+               target="_blank" rel="noopener noreferrer">
+                            <img src="/build/images/footer/logo-mte.png"
+                     alt="Logo Ministère de la Transition Écologique">
+            </a>        </li>
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                        <a href="https://ofb.gouv.fr/"
+               title="Office Français de la Biodiversité (OFB)"
+               target="_blank" rel="noopener noreferrer">
+                            <img src="/build/images/footer/logo-ofb.png"
+                     alt="Logo Office Français de la Biodiversité (OFB)">
+            </a>        </li>
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                        <a href="https://www.vigicrues.gouv.fr"
+               title="Vigicrues"
+               target="_blank" rel="noopener noreferrer">
+                            <img src="/build/images/footer/logo-vigicrue.png"
+                     alt="Logo Vigicrues">
+            </a>        </li>
+    </ul>        </div>
+    </div>
+</footer>
+                    </main>
+                    <div class="sr-only" id="liveRegion" role="log" aria-live="assertive" aria-atomic="true"
+         aria-relevant="additions"></div>
+</div>
+
+    <script src="/bundles/fosjsrouting/js/router.js"></script>
+    <script src="/build/runtime.fcf6b619.js" defer></script><script src="/build/4692.8f03972d.js" defer></script><script src="/build/9960.0ad93b47.js" defer></script><script src="/build/1272.35b7958d.js" defer></script><script src="/build/7127.a84d7508.js" defer></script><script src="/build/4721.6dc5679c.js" defer></script><script src="/build/9479.b3996e6c.js" defer></script><script src="/build/2123.1f80354f.js" defer></script><script src="/build/5621.4ab47ec9.js" defer></script><script src="/build/app.7ea62787.js" defer></script>
+</body>
+</html>

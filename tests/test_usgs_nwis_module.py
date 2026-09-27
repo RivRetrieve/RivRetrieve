@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from functools import partial
+
+import polars as pl
+
 import rivretrieve as rr
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.providers.usgs_nwis.config import config, window_declarations
@@ -19,7 +23,10 @@ def test_usgs_nwis_in_providers_list() -> None:
 def test_usgs_nwis_declares_the_engine_stage_contract() -> None:
     assert stages.config is config()
     assert stages.window_declarations is window_declarations()
-    assert stages.fetch is fetch
+    assert isinstance(stages.fetch, partial)
+    assert stages.fetch.func is fetch
+    assert len(stages.fetch.keywords["monitoring_locations"]) == 26_258
+    assert stages.fetch.keywords["monitoring_locations"]["07374000"] == "USGS-07374000"
     assert stages.parse is parse
     assert stages.observation_source == "live"
 
@@ -48,13 +55,20 @@ def test_usgs_nwis_station_products_offline() -> None:
     result = catalogue_reader("usgs_nwis").read_station_products()
     assert result.data.height == 157_548
     assert "unknown" not in set(result.data["availability"].cast(str))
+    assert result.data.filter(pl.col("availability") == "available").height == 58_421
+    # Metadata ranges are UTC bounds, not daily physical support dates.
+    assert result.data["published_record_start_date"].null_count() == 157_548
+    assert result.data["published_record_end_date"].null_count() == 157_548
+    missing = result.data.filter((pl.col("station_id") == "04208504") & (pl.col("product_id") == "stage_instantaneous"))
+    assert missing["availability"].item() == "unavailable"
+    assert missing["availability_reason"].item() == "No matching series in the complete modern metadata snapshot"
 
 
 def test_usgs_nwis_info() -> None:
     info = provider_info("usgs_nwis")
     assert info.provider_id == "usgs_nwis"
     assert "USGS" in info.name or "Geological Survey" in info.name
-    assert info.catalogue_version == "2026-08-02"
+    assert info.catalogue_version == "2026-09-22"
 
 
 def test_usgs_nwis_declared_catalogue_path_exists() -> None:

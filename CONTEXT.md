@@ -7,18 +7,17 @@ Project-specific domain language for RivRetrieve. Glossary only.
 ### Core
 
 **Unknown**:
-A representable state meaning the source does not tell us. Distinct from zero, from
-empty, and from a default. Never resolved by assumption, and never filled by computing
-a value the source did not publish. A license or citation RivRetrieve has not yet
-established is absent, not [[unknown]]: that is RivRetrieve's pre-research state, not
-source silence.
-_Avoid_: missing, N/A, not available, default
+A fact without an established value. Physical facts distinguish `source_silent` (the
+source does not state it) from `not_established` (RivRetrieve has not established it).
+Neither means zero, an empty answer, or a default. A known fact carries a value and evidence.
+A license or citation not yet established is absent, not a claim of source silence.
+_Avoid_: default, assumed
 
 **Receipt**:
 What a [[provider]]'s parse [[stage]] was handed, kept alongside the returned result so a
 user can audit a value against what the source actually said, and only when the caller
-asks for it — unasked, the slot exists and is empty and no response bytes are reachable
-from the result. It is bytes and stays bytes: thirteen sources answer in JSON, CSV, HTML
+asks for it ; unasked, the slot exists and is empty and no response bytes are reachable
+from the result. It is bytes and stays bytes: sources answer in JSON, CSV, HTML
 and spreadsheets, and modelling that would be parsing. Each entry carries a uniform
 envelope naming where the bytes came from, with the fields that do not apply left
 [[unknown]] and request headers excluded entirely so a credential has no route in. It is
@@ -29,9 +28,7 @@ which matters: a **publisher payload** is untouched bytes the source itself serv
 **store excerpt** is bytes RivRetrieve produced by encoding rows read out of its own
 [[store]]. A store excerpt contains exactly the selected rows the [[store]] holds, whether compiled
 or accumulated, and never reconstructs a value the store does not hold.
-_Avoid_: raw (the former name; it presented RivRetrieve's own encoding as the source's own
-words), untouched payload (one unzipping step removes it from what the server sent),
-response, blob
+_Avoid_: raw, untouched payload (a store excerpt is authored by RivRetrieve), response, blob
 
 **Native table**:
 One [[provider]]'s station metadata in the source's own vocabulary: its column names,
@@ -40,7 +37,7 @@ shape its source arrives in, and it is the single point where thirteen unlike tr
 become one thing. The canonical station catalogue is built from it rather than beside
 it, which is why the source's own columns are a table to be read rather than a blob to
 be parsed.
-_Avoid_: metadata (the opaque per-row JSON string it replaces), raw table (collides with
+_Avoid_: opaque metadata, raw table (collides with
 [[receipt]], the exact bytes handed to a [[provider]]'s parse [[stage]] and retained only when
 requested), source table
 
@@ -74,7 +71,7 @@ A catalogue fact or row RivRetrieve does not expose because its acquisition reco
 not established. It records our evidence gap, not a claim that the source publishes
 nothing. A [[catalogue absence]] carries the recorded reason; an [[origin]] may retain
 the `unknown` carrier marker without turning this gap into source silence.
-_Avoid_: native-only (the retired origin name), not published (a different claim), rejected
+_Avoid_: not published (a different claim), rejected
 
 **Documented**:
 The [[origin]] for a constant the source states in its documentation rather than carrying
@@ -115,8 +112,8 @@ leave it unfilled.
 The period a source itself states a series covers, carried as
 `published_record_start_date` and `published_record_end_date`. It is a nominal envelope and
 nothing more: it does not establish continuity, absence of gaps, quality, or that the data is
-still retrievable. Twelve of the thirteen sources publish none, so it is [[unknown]] for most
-of the catalogue and is never used to prevent a fetch. The name carries `published` because a
+still retrievable. A bound is populated only where established by source evidence.
+An absent bound does not establish source silence and is never used to prevent a fetch. The name carries `published` because a
 bound RivRetrieve established by asking rather than by reading is a weaker and different claim
 — bounded by how we asked — and would need its own column and its own [[origin]] form rather
 than this one.
@@ -124,28 +121,53 @@ _Avoid_: start_date, end_date (bare, they invite an observed value into a publis
 period of record (does not say who established it), coverage (implies continuity)
 
 **Issue**:
-A fact about the data, returned rather than raised. A station answering 404, a window
-holding no observations, a zone that could not be established are all issues: non-fatal,
-carried alongside the value, and never a reason to discard the rows that did arrive. The
-[[engine]] isolates each requested series at its one source-call boundary: a 404 is a
-`warning`, while timeout, retry exhaustion, terminal sender failure, refused redirect,
-credential rejection, and every other non-success HTTP status are `error` issues for that
-series. Other series still run, and an all-failed request is an empty five-column frame
-whose issues state why. An exception is the other thing entirely — a violation of the
-contract between [[stage]]s, such as a parse handing back a frame with the wrong columns,
-where there is no result worth assembling. Severity is `info | warning | error`; `info`
-records what merely deserves saying, like a unit having been converted, and never activates
-the caller's issue policy.
-_Avoid_: error, warning, failure (each names one severity, not the category)
+A source or data condition retained alongside a result, with severity
+`info | warning | error`. Recoverable failures retain their identity and reason while
+independent series can return rows. The caller's `on_issue` policy can warn, raise, or
+ignore warning and error issues; informational issues do not activate it. Empty answers,
+failed requests and published null values are distinct. An all-failed result has the
+same ten-column observation schema as a successful result. Invalid internal stage output
+raises a fatal contract error outside this policy.
+_Avoid_: exception (a different control path), silent failure
+
+**Source series**:
+A concrete source identity at a station, with a source namespace, published identifier
+when supplied, and evidence. `series_id` is RivRetrieve's key for that identity;
+`variant` exposes an optional source-specific selector. Brazil ANA's Bruto (raw) and
+Consistido (quality-checked) series remain separate. ANA performs that checking, not
+RivRetrieve. Source-series identity is not a harmonised quality score.
+_Avoid_: preferred series, quality tier
+
+**Physical facts**:
+Independently evidenced statements about quantity, source unit, frequency, statistic,
+temporal support, day definition, timestamp anchor, time zone or vertical reference.
+A `facts_id` identifies a segment of these facts within a [[source series]]. A daily
+frequency does not establish a mean statistic or which hours the value covers. Temporal
+support describes the measurement interval, not how often the agency updates its service.
+_Avoid_: inferred product, update cadence
+
+**Inventory**:
+An acquired statement about source-series membership within a stated scope, access path
+and optional window. It records evidence and completeness, not successful retrieval.
+`complete`, `incomplete`, and `unresolved` describe that bounded claim. A static catalogue
+does not establish all identities a response may publish.
+_Avoid_: coverage, exhaustive census
+
+**Retrieval outcome**:
+The recorded result of asking for a series and window: `success`, `empty`, `failed`,
+`unsupported`, `unresolved`, or `no_match`. A successful outcome identifies concrete
+source-series facts. Other outcomes retain a reason, and can retain the requested
+selector without pretending that it names a published series.
+_Avoid_: null value, missing row
 
 ### Structure
 
 **Engine**:
-The shared core every provider sits on. It owns the contracts between stages and
-performs the [[stage]]s that are the same for everyone. Its call of a provider's fetch
-stage for one requested series is the observation pipeline's sole failure-isolation point:
-a source failure becomes an [[issue]] there and cannot cancel independent series.
-_Avoid_: core, framework, base
+The shared core every provider uses. It owns stage contracts, request planning,
+source-series selection, unit conversion, clipping and result assembly. Supported source
+failures become [[issue]]s at their established isolation boundaries without cancelling
+independent series. Invalid internal stage output remains fatal.
+_Avoid_: framework, base
 
 **Provider**:
 An adapter over the [[engine]] for one national source. It contributes only what is
@@ -163,37 +185,27 @@ provider file.
 _Avoid_: step, phase
 
 **Source coordinates**:
-How one source names and locates the thing a canonical product id names: its parameter
-code, endpoint, table, workbook, column or field. Declared per product in a
-[[provider]]'s `config.py`, and read by fetch to address the source and by parse to pick
-the right value out of what comes back. Every source names its products its own way, so
-this is a fact about the source rather than behaviour, which is why it is declared
-rather than coded.
-_Avoid_: product policy (the pre-redesign name, one private variant per provider),
-parameter code, native field (both name only one coordinate of several)
+How a [[provider]] addresses a source: parameter code, endpoint, table, workbook,
+column or field. Internal product routes select these access coordinates and window
+rules. A route is not itself evidence of quantity, statistic, frequency or source-series
+identity. Response and catalogue evidence establish those facts separately.
+_Avoid_: physical classification, quality rank
 
 **Catalogue-only**:
-A [[provider]] registered with no observation [[stage]]s. Its packaged catalogue is read
-normally, while asking it for observations raises rather than returning an empty result,
-because the source is reachable and the question is answerable — the port simply has not
-been written. Eleven of the thirteen are catalogue-only, so this is the ordinary state of
-a provider rather than an exceptional one.
-_Avoid_: unported, disabled, stub, broken
+A [[provider]] registered without observation [[stage]]s. South Africa DWS is the
+catalogue-only provider. Its packaged catalogue can be read, but observation retrieval
+raises because that provider has no observation port. The other twelve providers support
+observation retrieval through live access or compiled bulk stores.
+_Avoid_: disabled, broken
 
 **Provider declaration**:
-The single statement, living in a [[provider]]'s own directory, of everything the
-[[engine]] needs to make that source usable: where its packaged catalogue sits, which
-[[provider-kind]] it is, and the names of any credential variables observation access
-requires. A header-authenticated provider also declares the header name and exact source
-origin without carrying a credential value. A credential-exchange provider instead
-declares the exchange specification and its input header bindings; public retrieval
-and maintainer recording compose the shared exchange transport from those facts. It is the only file a new source must write
-beyond its stage code, and it is read once, at registration. Everything else a provider used to state
-about itself — the catalogue-reading functions each of the thirteen copied verbatim — was
-never called, because the engine reads the catalogue from the artifact directly.
-_Avoid_: registration block, provider module (the pre-registry file, whose catalogue
-functions no runtime path reached), config (which declares [[source-coordinates]] per
-product, a different fact), plugin
+The statement in a [[provider]] directory of its packaged catalogue, provider kind,
+observation configuration and credential requirements. Header authentication declares
+the header name and source origin without a credential value. Credential exchange
+declares the exchange specification and input header bindings. Public retrieval and
+maintainer recording compose transport from these declarations. Registration reads them;
+lower-level operations receive resolved dependencies.
+_Avoid_: credential storage, provider instance
 
 **Provider kind**:
 Which of exactly three shapes a [[provider]] takes, declared in its
@@ -203,43 +215,36 @@ source contributing a download and a [[compile]]. The set is closed. A source fi
 of the three is an engine change argued once and applied to every provider, not a fourth
 architecture a single provider invents — which is the distinction between adding a
 provider, which touches one directory, and adding a kind of provider, which is a design
-decision. Dispatching on kind rather than on provider id is what removes the last
-hand-written per-provider branch.
+decision. Dispatch uses the declared kind rather than provider identity.
 _Avoid_: provider type, capability, variant, strategy
 
 **Selection**:
-The set of series a caller has settled on, at the grain of one
-`(provider_id, station_id, product_id)` triple, produced by `find` or narrowed by `pick` and
-handed to `fetch`. It is a value rather than an object: immutable, printable as a table, and
-carrying no methods, no chaining and no query language, so every capability enters through a
-function rather than by growing the thing a user is holding. An empty selection is an ordinary
-answer and retains a machine-readable reason for being empty, which `fetch` reports when it
-refuses to retrieve nothing.
-_Avoid_: query, queryset, handle (which named the deleted per-provider object), result (which
-is what `fetch` returns), filter
+An immutable requested scope plus acquired source-series evidence, produced by `find`
+and narrowed by `pick`. The scope holds physical filters and optional explicit variant
+or series restrictions. It is not just a list of currently known members: an unrestricted
+selection can admit matching source identities discovered in a response. Packaged
+inventory is not an exhaustive current or historical census. An empty selection retains
+its reason. `no_match` means established facts show nothing matches; `unresolved_inventory`
+means the available evidence cannot establish whether the requested series is available.
+_Avoid_: result (what `fetch` returns), frozen inventory
 
 **Shows rather than decides**:
-The test that admits a capability the catalogue cannot fully support. A capability that decides
-on the caller's behalf and does not record what it dropped turns an [[unknown]] into a silent
-exclusion, so it does not ship — this is what removed the bounding box, `record_covers` and the
-live catalogue argument. A capability that displays every row and leaves the judgement to a
-person makes the same [[unknown]] visible rather than operative, which is why a map renders
-unstated-frame coordinates while a bounding box may not compare them.
-_Avoid_: best-effort filtering, graceful degradation, partial support
+A capability may display source facts and unknowns without choosing a scientific
+interpretation for the caller. Physical filters require established facts; matching
+physical facts do not establish scientific interchangeability. Source alternatives
+remain visible unless the caller restricts them explicitly.
+_Avoid_: quality ranking, preferred variant
 
 ### Time
 
 **Native time**:
-A timestamp exactly as the provider published it. The complete returned observation
-frame is `time | time_zone | station_id | product_id | value`, in that order. Its `time`
-column holds the source's naive wall-clock value, paired on every row with the
-source-published `time_zone`, or `unknown` only where the source establishes no zone.
-All five columns travel together as the observation frame; `time` and `time_zone` are
-not meaningful alone. The pairing exists because one dataframe timestamp column carries
-a single zone for all its rows, while one result may span stations in different zones.
-_Avoid_: raw time (collides with [[receipt]], the exact bytes handed to a [[provider]]'s parse
-[[stage]] and retained only when requested), local time (ambiguous between the gauge's
-own zone and a provider-wide national zone)
+A timestamp in the source's published wall-clock calendar. The returned observation
+columns are `time`, `time_zone`, `station_id`, `product_id`, `series_id`, `facts_id`,
+`quantity`, `source_unit`, `unit`, and `value`, in that order. `time` is naive and paired
+with the source-established zone or `unknown`. A result can contain different zones,
+source identities and physical-fact segments. Its converted values use `unit`; its
+`source_unit` records the source spelling rather than the converted scale.
+_Avoid_: inferred local time, UTC timestamp
 
 **Best-effort UTC**:
 Conversion of [[native-time]] to UTC, offered where the source zone is documented and
@@ -271,8 +276,8 @@ date. The engine never clips it by assuming what "today" means at a station. The
 is never an absolute interval on the world's timeline: asking for one day across two
 stations in different zones asks each gauge for its own day, not for one shared 24 hours. An endpoint carrying a zone is
 refused rather than reinterpreted, because a window that means an instant can only be
-placed against a [[station-timezone]], and five of the thirteen sources publish none — the
-capability would evaporate by country. This is what makes clipping possible for a station
+placed against an established [[station-timezone]]. A station or series may lack that
+evidence. Wall-clock windows make clipping possible for a station
 whose zone is [[unknown]]: wall clock compares to wall clock without needing a zone on
 either side. A caller wanting an absolute interval converts the returned [[native-time]]
 afterwards.
@@ -290,11 +295,8 @@ _Avoid_: query window, padded window, over-fetch window
 
 **Sub-window**:
 One piece of a [[fetch-window]] a [[provider]] can actually ask its source for, computed
-by the [[engine]] from the [[window-granularity]] a provider-product declares. Six of the
-thirteen sources cannot answer an arbitrary window in one request, and each expressed
-that with its own private splitting code; the granularity is a fact about the source,
-the splitting is arithmetic, and the two are separated so that only the engine performs
-the arithmetic.
+by the [[engine]] from the [[window-granularity]] a provider-product declares. Some sources cannot answer an arbitrary window in one request. Granularity states
+the source constraint; the engine performs the interval arithmetic.
 _Avoid_: chunk, window split, decomposition (which names the act, not the piece)
 
 **Window granularity**:
@@ -383,10 +385,13 @@ The user's local observations for reuse on their own machine, populated in two w
 a bulk provider's national dataset is compiled by an explicit `download()`, and a live
 provider's parse output accumulates when retrieval requests `reuse` or `refresh`.
 Both use one root, one [[store]] format family, and one shared reader. Live retrieval
-bypasses the cache by default; reuse serves held [[coverage]] and fetches its remainder,
-while refresh replaces the requested interval with the source's current answer.
+bypasses the cache by default. Reuse serves held rows only when inventory evidence and
+[[coverage]] satisfy the requested scope and interval. Otherwise it reacquires the full
+requested scope and interval for that station and internal product route, not just the
+uncovered dates. Refresh requests a current answer and replaces successful series
+intervals; failures preserve held rows and coverage.
 `cache_status` reports either kind and `clear_cache` removes it only when asked.
-_Avoid_: user cache (the retired separate lifecycle), archive, our cache
+_Avoid_: archive, our cache
 
 **Archive**:
 A collection of retrieved river data assembled in order to publish or redistribute it.
@@ -398,8 +403,8 @@ _Avoid_: cache, bundled dataset
 **Store**:
 Native observations at rest in RivRetrieve's own layout, together with the [[manifest]]
 describing them. A [[cache]] holds a compiled store or an accumulated store. Compiled
-stores use revision `2` and retain the source columns declared by [[compile]]; accumulated
-stores use revision `4` and hold live parse output with [[coverage]]. Both hold native
+stores use revision `5` and retain the source columns declared by [[compile]]; accumulated
+stores use revision `7` and hold live parse output with [[coverage]]. Both hold native
 values and native wall-clock timestamps. The shared reader supplies the same convert
 [[stage]] for unit conversion and clipping, so a cached value is never converted twice.
 The format is authored by RivRetrieve and versioned; an unrecognised revision is refused
@@ -412,8 +417,8 @@ downloaded whole because that source offers no per-station access. It is the inp
 [[compile]] and not a queryable thing: it is deleted once compiling succeeds, so a
 [[store]] is the only surviving copy of the observations. What survives of it is its
 identity rather than its bytes, recorded in the [[manifest]] as the URL it came from, its
-source vintage and its checksum, which names precisely which release a value was compiled
-from and allows that exact release to be fetched again.
+source vintage and its checksum. These identify the compiled bytes but do not guarantee
+that the publisher will serve the same release again.
 _Avoid_: raw download, source file, bulk payload
 
 **Compile**:
@@ -447,68 +452,50 @@ age field, or expiry; a caller wanting current source values explicitly refreshe
 _Avoid_: stale, freshness, age, cache expiry
 
 **Coverage**:
-A series and closed native wall-clock interval successfully retrieved from its source,
-paired with the UTC instant of retrieval. It records that the source was asked, not that
-observations exist throughout the interval; a successful empty answer is covered too.
-An accumulated [[store]] uses coverage to serve held intervals and fetch only the remainder.
-Retrieval instants travel with served intervals in provenance without a freshness verdict.
-_Avoid_: published record (a source-stated envelope, not a record of retrieval), continuity
+A successfully retrieved concrete source series, physical-fact scope and closed native
+wall-clock interval, linked to its successful outcome and retrieval instant when known.
+It records that the source was asked, not that observations exist throughout the interval;
+a successful empty answer is covered too. An accumulated [[store]] combines coverage
+with inventory evidence to decide whether the requested scope can be served locally.
+An incomplete request is reacquired for the full requested interval, not only its gaps.
+Coverage for one identity or fact segment cannot
+stand in for another. Failed outcomes remain separate and do not create coverage.
+_Avoid_: inventory, published record, continuity
 
 **Manifest**:
 The machine-readable record beside a [[store]], stating its format version and build
 instant. For a compiled store it identifies the [[publisher-artifact]] and [[source-vintage]];
 for an accumulated store it records each series' [[coverage]] and retrieval instants.
-Both record partition row counts. A reader validates it before scanning observations,
+Both record partition row counts, concrete source-series definitions, physical-fact
+segments, scoped inventories, retrieval outcomes, issues and source-call provenance. A reader validates it before scanning observations,
 so an incompatible or malformed store is refused and every served value remains traceable.
 _Avoid_: metadata, header, index
 
 ### Proof
 
 **Recording**:
-A saved interaction with a real source: the exact request that was issued, the exact
-response bytes that came back, the instant it was made, and a digest. It is the only
-admissible observation fixture. Every [[provider]] already sends through one injectable
-transport seam, so there is exactly one point at which a recording is made and exactly one
-at which it is replayed, and replay resolves a request rather than answering
-unconditionally — a replay handed a request it holds no recording for fails instead of
-returning something. That is what makes a fake that ignores the [[requested-window]]
-unconstructible, and it is why a wrong [[window-rendering]] declaration is caught by a
-missed lookup rather than by a reviewer. A recording is repeatable by construction: it
-carries what to ask and when it was last asked, so drift is detectable later without being
-detected now. Distinct from a [[receipt]], which is the same bytes travelling out with a
-result for a user to audit; a recording is the same bytes travelling in, so a test can be
-about the source rather than about us.
-_Avoid_: fixture (the repository's nine invented observation payloads were also called
-fixtures, which is how a belief passed for an observation), mock, stub, cassette, sample
+A saved interaction with a real source: the exact request, response bytes, retrieval
+instant and digest. Replay matches the request through the transport seam and refuses
+requests for which no recording exists. A recording establishes what the source returned
+at capture time, not present-day service availability. A [[receipt]] exposes bytes to a
+caller; a recording supplies source evidence to a test.
+_Avoid_: mock, stub, invented payload
 
 **Invented payload**:
-An observation payload written by an author from what they believed a source returns. It
-proves a port reproduces its author's belief, which is how eleven providers held a
-boundary defect while their tests passed. It is never a [[recording]] and never grounds an expectation. Former invented payloads and
-pre-engine implementations remain recoverable in Git history, not as live fixtures or
-baselines.
-_Avoid_: synthetic fixture, toy fixture, minimal fixture (all three describe the size
-rather than the defect, and the defect is the authorship)
+An author-created response used to exercise a structural or failure condition. It can
+test software behavior but is not a [[recording]] and cannot establish a publisher's
+physical meaning, values or availability. Tests must distinguish these controls from
+real source evidence.
+_Avoid_: source evidence, recording
 
 **Boundary probe**:
-The one audited defect a single provider-product is shown not to have, converted from the
-charting audit's prose into an executable claim about what its source published. Its input
-is a [[recording]] whose readings straddle local midnight in the source's own calendar; its
-assertion is three literals — how many readings returned, the wall-clock time of the first,
-the wall-clock time of the last — chosen to be checkable by eye against the recorded bytes
-in under a minute, because an expectation nobody can audit is indistinguishable from one
-nobody wrote. Everything beyond those three is engine business already carried by the
-always-on window invariants. It does not re-run the retired implementation: the audit
-established that the old code was wrong, and the open question is whether the new code is
-right.
-_Avoid_: regression test (nothing regressed; the behaviour never worked), edge case test,
-timezone test
+A test of clipping against a [[recording]] with observations around a requested
+boundary. Counts and first/last native time labels are checked directly against the
+source bytes, including calendar and time-zone meaning where established.
+_Avoid_: inferred timezone, computed source truth
 
 **Independent expectation**:
-A [[boundary-probe]]'s three literals, authored from a [[recording]] and the source's own
-documentation by an author with no access to the port's code or its output. The separation
-is the entire content: an author who can run the port will write down what the port does,
-whichever answer that is. This is a rule about how the work is done rather than about what
-the code contains, so it lives in `AGENTS.md` and binds whoever reads it.
-_Avoid_: golden value, expected output, baseline (which named the retired practice of
-comparing two implementations over an [[invented-payload]])
+An expected value grounded in source bytes and publisher definitions rather than the
+implementation's own output. Exact receipt identity, source values, units and native
+time labels provide independent checks of retrieval and conversion.
+_Avoid_: implementation-as-oracle

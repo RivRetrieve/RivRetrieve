@@ -8,7 +8,7 @@ span providers. It does not retrieve observations or require credentials.
 import json
 import rivretrieve as rr
 
-gauges = rr.find(provider="ca_eccc", product="discharge_daily_mean")
+gauges = rr.find(provider="ca_eccc", quantity="discharge", frequency="daily", statistic="mean")
 gauge = rr.pick(gauges, station="02GA010")
 areas = rr.drainage_areas(gauge)
 ```
@@ -64,6 +64,7 @@ fields, not a harmonized drainage-area dataset or a scientific recommendation.
 | `ca_eccc` | `DRAINAGE_AREA_GROSS`, `DRAINAGE_AREA_EFFECT` | None. |
 | `cz_chmi` | `PLO_STA` | `km²` |
 | `fr_hubeau` | `superficie_topo`, `superficie_reelle` | None. |
+| `fr_hydroportail` | No drainage-area field acquired. | `no_metadata`. |
 | `jp_mlit` | `流域面積` | None; source strings retain inline units. |
 | `no_nve` | `drainageBasinArea`, `drainageBasinAreaNorway` | `km2` |
 | `pl_imgw` | `area` | None. |

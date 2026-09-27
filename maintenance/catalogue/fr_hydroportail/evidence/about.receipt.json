@@ -1,0 +1,9 @@
+{
+  "url": "https://hydro.eaufrance.fr/edito/a-propos-dhydroportail",
+  "params": null,
+  "status": 200,
+  "retrieved_at": "2026-09-21T09:12:18.303912+00:00",
+  "content_type": "text/html; charset=UTF-8",
+  "bytes": 9649,
+  "sha256": "c9371602ebcd4bb20332195975ce02eacf454002742fbea6b0eafd4b566711cf"
+}
