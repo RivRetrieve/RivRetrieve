@@ -19,6 +19,8 @@ from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
 
+pytest_plugins = ("tests._distribution",)
+
 
 def _packaged_provenance(provider_id: str) -> CatalogueEvidence | None:
     if provider_id not in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS:
