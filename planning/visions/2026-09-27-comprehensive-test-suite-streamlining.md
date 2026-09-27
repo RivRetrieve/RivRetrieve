@@ -35,6 +35,13 @@ At publication, the user is working on these specific items in parallel:
   follow the repaired behavior. Do not delete or rewrite this active review's tests as
   apparent duplication without coordinating with the user.
 
+- [Effort #380: user-facing API documentation](https://github.com/RivRetrieve/RivRetrieve/issues/380).
+  The user is completing and checking public API docstrings, returned interfaces, and the
+  contributor rule in `AGENTS.md`. This overlaps docstrings in source modules, the generated
+  `docs/reference.md`, and documentation-contract tests. Coordinate edits in those areas;
+  removing brittle wording checks must not undo the accurate documentation or distinct
+  public-interface guarantees this effort establishes.
+
 Read the current issue/PR state before touching these areas; they may have advanced or merged.
 These are coordination points, not a blanket stop on unrelated cleanup. Work in an isolated
 worktree under `.worktrees/`, leave the shared root checkout and others' work untouched, and
