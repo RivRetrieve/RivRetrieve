@@ -284,6 +284,7 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
     reason: TransportFailureReason
     attempts: int
     status_code: int | None
+    response: TransportResponse | None
 
     def __init__(
         self,
@@ -293,7 +294,11 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
         *,
         status_code: int | None = None,
         category: TransportFailureCategory = TransportFailureCategory.UNKNOWN,
+        response: TransportResponse | None = None,
     ) -> None:
+        if response is not None and not isinstance(response, TransportResponse):
+            raise TypeError("failure response must be a TransportResponse or None")
+        self.response = response
         self.request = request
         self.reason = reason
         self.attempts = attempts
@@ -582,18 +587,19 @@ class HttpClient:
                 raise TransportFailure(request, reason, attempt, category=category) from exception
 
             content, status_code, content_type = response.content, response.status_code, response.content_type
+            received = TransportResponse(
+                content=content,
+                status_code=status_code,
+                retrieved_at=self._clock.utcnow(),
+                content_type=content_type,
+                url=request.url,
+                request_parameters={} if request.params is None else request.params,
+                applied_credential_header_names=credential_header_names,
+                executed_request=executed_request,
+                attempts=attempt,
+            )
             if status_code not in TRANSPORT_POLICY.retryable_status_codes:
-                return TransportResponse(
-                    content=content,
-                    status_code=status_code,
-                    retrieved_at=self._clock.utcnow(),
-                    content_type=content_type,
-                    url=request.url,
-                    request_parameters={} if request.params is None else request.params,
-                    applied_credential_header_names=credential_header_names,
-                    executed_request=executed_request,
-                    attempts=attempt,
-                )
+                return received
             if not replay_safe or attempt == TRANSPORT_POLICY.max_attempts:
                 raise TransportFailure(
                     request,
@@ -601,8 +607,9 @@ class HttpClient:
                     attempt,
                     status_code=status_code,
                     category=TransportFailureCategory.HTTP_STATUS,
+                    response=received,
                 )
-            guidance = _retry_after_seconds(response.retry_after, self._clock.utcnow())
+            guidance = _retry_after_seconds(response.retry_after, received.retrieved_at)
             if guidance is not None:
                 if guidance > TRANSPORT_POLICY.max_retry_delay_seconds:
                     raise TransportFailure(
@@ -611,6 +618,7 @@ class HttpClient:
                         attempt,
                         status_code=status_code,
                         category=TransportFailureCategory.HTTP_STATUS,
+                        response=received,
                     )
                 retry_delay = max(retry_delay, guidance)
 
@@ -690,6 +698,7 @@ class _CredentialSendFailure:
     attempts: int
     status_code: int | None
     category: TransportFailureCategory = TransportFailureCategory.UNKNOWN
+    response: TransportResponse | None = None
 
 
 class _CredentialContractFailure(StrEnum):
@@ -729,11 +738,19 @@ class AuthenticatedTransport:
         origin = _request_origin(request.url)
         applicable = tuple(credential for credential in self.credentials if origin in credential.origins)
         if not applicable:
-            result = self.transport.send(request)
-            if _response_contains_credentials(result, self.credentials):
+            failure = None
+            try:
+                result = self.transport.send(request)
+            except TransportFailure as error:
+                failure = _CredentialSendFailure(
+                    error.reason, error.attempts, error.status_code, error.category, error.response
+                )
+                result = error.response
+            if result is not None and _response_contains_credentials(result, self.credentials):
                 status_code = result.status_code
                 attempts = result.attempts
                 result = None
+                failure = None
                 request = _sanitized_request_for_credentials(request, self.credentials)
                 raise TransportFailure(
                     request,
@@ -741,6 +758,16 @@ class AuthenticatedTransport:
                     attempts,
                     status_code=status_code,
                 ) from None
+            if failure is not None:
+                raise TransportFailure(
+                    request,
+                    failure.reason,
+                    failure.attempts,
+                    status_code=failure.status_code,
+                    category=failure.category,
+                    response=result,
+                ) from None
+            assert result is not None
             return result
         existing = {name.lower() for name in request.headers}
         names = tuple(value.name.lower() for value in applicable)
@@ -763,24 +790,18 @@ class AuthenticatedTransport:
         result = _send_with_credentials(self.transport, request, applicable)
         if result is _CredentialContractFailure.FATAL:
             raise FatalContractError("Authenticated transport contract failed") from None
+        failure = result if isinstance(result, _CredentialSendFailure) else None
+        if failure is not None and failure.response is not None:
+            result = failure.response
         if isinstance(result, TransportResponse):
             names = tuple(value.name for value in applicable)
             evidence = result.executed_request or ExecutedRequestEvidence(request.headers, names)
-            if evidence.credential_header_names != tuple(sorted(names, key=lambda name: (name.casefold(), name))):
-                attempts = result.attempts
-                result = None
-                evidence = ExecutedRequestEvidence({}, names)
-                request = _sanitized_request_for_credentials(request, applicable)
-                raise TransportFailure(
-                    request,
-                    TransportFailureReason.TERMINAL_SENDER_FAILURE,
-                    attempts,
-                ) from None
-            unsafe = _response_contains_credentials(result, applicable)
+            unsafe = _response_contains_credentials(result, self.credentials)
             if unsafe:
                 status_code = result.status_code
                 attempts = result.attempts
                 result = None
+                failure = None
                 evidence = ExecutedRequestEvidence({}, names)
                 request = _sanitized_request_for_credentials(request, applicable)
                 raise TransportFailure(
@@ -789,11 +810,25 @@ class AuthenticatedTransport:
                     attempts,
                     status_code=status_code,
                 ) from None
-            return replace(
+            if evidence.credential_header_names != tuple(sorted(names, key=lambda name: (name.casefold(), name))):
+                attempts = result.attempts
+                result = None
+                failure = None
+                evidence = ExecutedRequestEvidence({}, names)
+                request = _sanitized_request_for_credentials(request, applicable)
+                raise TransportFailure(
+                    request,
+                    TransportFailureReason.TERMINAL_SENDER_FAILURE,
+                    attempts,
+                ) from None
+            retained = replace(
                 result,
                 applied_credential_header_names=names,
                 executed_request=evidence,
             )
+            if failure is None:
+                return retained
+            result = replace(failure, response=retained)
         request = _sanitized_source_request(
             request,
             forbidden_values=_credential_redaction_values(applicable),
@@ -804,6 +839,7 @@ class AuthenticatedTransport:
             result.attempts,
             status_code=result.status_code,
             category=result.category,
+            response=result.response,
         ) from None
 
 
@@ -828,10 +864,11 @@ def _send_with_credentials(
                 response.attempts,
                 response.status_code,
                 TransportFailureCategory.HTTP_STATUS,
+                response,
             )
         return response
     except TransportFailure as error:
-        return _CredentialSendFailure(error.reason, error.attempts, error.status_code, error.category)
+        return _CredentialSendFailure(error.reason, error.attempts, error.status_code, error.category, error.response)
     except FatalContractError:
         return _CredentialContractFailure.FATAL
     except Exception:

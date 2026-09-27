@@ -479,12 +479,18 @@ def test_conflicting_refresh_retains_held_series_without_marking_it_fresh(tmp_pa
         page(contradictory_alpha),
     )
     result = run("refresh", transport)
-    assert result.canonical_rows.filter(pl.col("series_id") == alpha_id).is_empty()
-    assert result.canonical_rows.filter(pl.col("series_id") == beta_id)["value"].to_list() == [20.0 * 0.028316846592]
+    pt.assert_frame_equal(result.canonical_rows.filter(pl.col("series_id") == alpha_id), old_alpha)
+    pt.assert_frame_equal(
+        result.canonical_rows.filter(pl.col("series_id") == beta_id),
+        seed.canonical_rows.filter(pl.col("series_id") == beta_id),
+    )
     assert any(item.series_id == alpha_id and item.status is OutcomeStatus.UNSUPPORTED for item in result.outcomes)
-    assert not result.provenance.served_intervals
+    assert any(item.series_id == beta_id and item.status is OutcomeStatus.UNRESOLVED for item in result.outcomes)
+    assert result.provenance.served_intervals
+    assert {item.series_id for item in result.provenance.served_intervals} == {alpha_id, beta_id}
+    assert all(item.retrieved_at == old_time for item in result.provenance.served_intervals)
     status = StoreReader().status(store, provider)
-    assert {item.retrieved_at for item in status.coverage if item.series_id == alpha_id} == {old_time}
+    assert {item.retrieved_at for item in status.coverage} == {old_time}
     explicit = replace(
         request,
         scope=SeriesScope(
@@ -671,7 +677,7 @@ def test_late_page_failure_never_overlaps_held_and_fresh_values(tmp_path, mode, 
     )
     alpha_id = definition("alpha").series_id
     alpha = result.canonical_rows.filter(pl.col("series_id") == alpha_id).sort("time")
-    expected_first = 12.25 if mode == "reuse" else 99.5
+    expected_first = 12.25 if mode in ("reuse", "refresh") else 99.5
     expected = pl.DataFrame(
         {
             "time": [datetime(2000, 1, 1), datetime(2000, 1, 3)],
@@ -702,7 +708,7 @@ def test_late_page_failure_never_overlaps_held_and_fresh_values(tmp_path, mode, 
     else:
         assert after.coverage == before.coverage
     assert all(item.retrieved_at == old_at for item in after.coverage if item.series_id == alpha_id)
-    if mode == "reuse":
+    if mode in ("reuse", "refresh"):
         assert result.provenance.served_intervals
         assert all(item.retrieved_at == old_at for item in result.provenance.served_intervals)
     else:

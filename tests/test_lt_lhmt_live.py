@@ -17,7 +17,6 @@ from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     FetchWindow,
     ObservationRequest,
-    RenderedWindow,
     RequestedWindow,
     WindowEndpoint,
     _make_fetch_window,
@@ -27,6 +26,7 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.lt_lhmt.declaration import declaration
 from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.window_planning import plan_windows
 
 _PROVIDER = ProviderId("lt_lhmt")
 _PRODUCTS = (ProductId("discharge_daily_mean"), ProductId("stage_daily_mean"))
@@ -49,7 +49,7 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
     fetched = _STAGES.fetch(
         ("anyksciu-vms",),
         (product,),
-        {product: (RenderedWindow("2023-06", None),)},
+        {product: plan_windows(_fetch_window(), _STAGES.window_declarations.products[product])},
         _fetch_window(),
         _STAGES.config,
         replay,

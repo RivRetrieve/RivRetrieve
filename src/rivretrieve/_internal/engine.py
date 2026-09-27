@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 from math import isfinite
@@ -183,12 +183,15 @@ class ProductWindowDeclarations:
 class RenderedWindow:
     start: str
     stop: str | None
+    bounds: FetchWindow | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.start, str) or not self.start:
             raise TypeError("rendered window start must be a non-empty string")
         if self.stop is not None and (not isinstance(self.stop, str) or not self.stop):
             raise TypeError("rendered window stop must be a non-empty string or None")
+        if self.bounds is not None and not isinstance(self.bounds, FetchWindow):
+            raise TypeError("rendered window bounds must be a FetchWindow or None")
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,7 +345,7 @@ class WithIssues[A]:
 
 @dataclass(frozen=True, slots=True)
 class SourceAcquisition(WithIssues[tuple[Payload, ...]]):
-    """Acquired publisher payloads with independently failed source-series calls."""
+    """Acquired payloads and bounded source-call evidence, including independent failures."""
 
     series: tuple[SourceSeries, ...] = ()
     inventories: tuple[InventorySnapshot, ...] = ()
