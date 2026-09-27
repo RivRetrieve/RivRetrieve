@@ -2,8 +2,11 @@
 
 ## Docstrings
 
-Use NumPy-style docstrings. Document parameters, returns, and raised exceptions for public functions
-and for internal functions whose contract is not clear from the signature.
+Public functions and user-facing returned types, methods and attributes follow the
+[public API docstring rule](../AGENTS.md#public-api-docstrings) in the root `AGENTS.md`.
+
+For internal functions, use NumPy-style docstrings when the contract is not clear from the
+signature. Document the parameters, returns and raised exceptions that need explanation.
 
 ## Provider safety guards
 

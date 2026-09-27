@@ -10,7 +10,11 @@ _PRECISION = timedelta(microseconds=1)
 
 @dataclass(frozen=True, slots=True)
 class RequestedInterval:
-    """A closed interval on the native wall-clock label axis."""
+    """A closed interval on the native wall-clock label axis.
+
+    ``start`` and ``end`` are naive source wall-clock labels, and both are
+    included.
+    """
 
     start: datetime
     end: datetime
@@ -24,7 +28,25 @@ class RequestedInterval:
 
 @dataclass(frozen=True, slots=True)
 class CoverageInterval:
-    """Successful coverage for exactly one concrete source series, not inventory."""
+    """Successful coverage for exactly one concrete source series, not inventory.
+
+    Coverage records that a retrieval succeeded for an interval. It does not
+    mean that observations exist at every time step in that interval.
+
+    Attributes
+    ----------
+    series_id : str
+        Source series that was retrieved.
+    interval : RequestedInterval
+        Covered wall-clock interval.
+    retrieved_at : datetime.datetime or None
+        UTC instant of the source retrieval, or None when it is not known.
+    outcome_id : str
+        Retrieval outcome that established the coverage. A successful
+        answer with no rows can also establish coverage.
+    facts_ids : tuple[str, ...]
+        Physical-fact segments covered, when recorded.
+    """
 
     series_id: str
     interval: RequestedInterval

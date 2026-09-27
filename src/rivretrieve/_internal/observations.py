@@ -104,6 +104,10 @@ class ObservationProvenance(BaseModel):
         Selected series and resolved start and end wall-clock endpoints.
     calls_made : tuple[dict[str, object], ...]
         Ordered source-call origins and sanitized prerequisite exchange events.
+        A failed request for one series and interval also appears, with its
+        ``window``, ``failure_reason`` and ``response_meaning``, such as
+        ``no_observations`` when the provider declares that the response means
+        no stored observations for that interval.
     time_windows : tuple[dict[str, object], ...]
         Additional window metadata. The current engine leaves this tuple empty.
     decomposition : tuple[str, ...]
@@ -118,7 +122,10 @@ class ObservationProvenance(BaseModel):
     served_intervals : tuple[CoverageInterval, ...]
         Held intervals served from an accumulated store, with retrieval instants.
     source_vintage : datetime.date or None
-        Source-stated bulk release date, not a freshness verdict.
+        Source vintage of the compiled store that served the rows, as
+        described for ``StoreManifest.source_vintage``. Its derivation depends
+        on the provider, and it is not a freshness verdict. None when no
+        compiled store was read.
     publisher_artifact_checksum : str or None
         Checksum of the first publisher artifact for compiled-store provenance.
     publisher_artifact_checksums, publisher_artifact_urls : tuple[str, ...]
@@ -206,7 +213,8 @@ class StoreExcerptReceipt(ReceiptEntry):
     format_version : int
         Store layout revision, 5 for compiled or 7 for accumulated stores.
     source_vintage : datetime.date or None
-        Bulk release date. None for an accumulated store.
+        Source vintage of the compiled store, as described for
+        ``StoreManifest.source_vintage``. None for an accumulated store.
     """
 
     store_path: StoreRoot
@@ -231,6 +239,11 @@ class StoreExcerptReceipt(ReceiptEntry):
 @dataclass(frozen=True, slots=True)
 class Receipts:
     """Optional byte receipts for one provider.
+
+    Receipts let you inspect source material, for example values before unit
+    conversion. Their content can include rows outside the requested window or
+    a ``pick`` view, and values in source units. They are not a full
+    reproducibility archive.
 
     Attributes
     ----------
@@ -257,6 +270,43 @@ class ObservationResult(BaseModel):
     and outcomes remain inspectable even when a series has no observation rows.
     ``scope`` is the original request; ``view_scope`` records explicit post-fetch
     narrowing without pretending another source request occurred.
+
+    Results cannot be changed in place. They are returned by ``fetch``,
+    ``fetch_by_provider``, ``pick``, ``to_utc`` and ``from_bundle``. Every
+    result belongs to one provider.
+
+    Attributes
+    ----------
+    data : polars.DataFrame
+        Observation rows with exactly the ten columns of the observation frame
+        schema, even when empty. ``time`` is a naive source wall-clock label and
+        ``time_zone`` is an IANA zone, a fixed offset such as ``+00:00``, or
+        ``unknown``. ``value`` is a float in ``unit`` (m3/s, m or degC) or null
+        when the source gives no value for that time. A null value is still a
+        row, unlike an absent row or a failed request. ``source_unit`` keeps the
+        published unit. ``series_id`` and ``facts_id`` join each row to
+        ``source_series``.
+    provenance : ObservationProvenance
+        Request, source-call, terms and cache context for the retrieval.
+    issues : tuple[Issue, ...]
+        Every finding retained for the retrieval, including source failures
+        with their identity and reason.
+    receipts : Receipts
+        Source bytes kept when retrieval used ``receipts=True``, otherwise no
+        entries.
+    source_series : tuple[SourceSeries, ...]
+        Definitions and physical facts for the requested series, including
+        series first identified in the response.
+    inventories : tuple[InventorySnapshot, ...]
+        Inventory snapshots used or acquired during retrieval.
+    outcomes : tuple[RetrievalOutcome, ...]
+        One status per retrieved series or unresolved request, present even
+        when a series returned no rows.
+    scope : SeriesScope
+        The filters and restrictions of the original request.
+    view_scope : SeriesScope or None
+        Filters applied afterwards with ``pick``. None when the result has not
+        been narrowed.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -336,7 +386,15 @@ class ObservationResult(BaseModel):
         return self.data
 
     def to_pandas(self) -> Any:
-        """Convert identity-bearing observation rows using Polars' Pandas conversion."""
+        """Return the observation rows as a pandas DataFrame.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The ten observation columns of ``data``. ``time`` stays naive, so
+            read it together with ``time_zone``. Issues, outcomes, provenance
+            and receipts are not included.
+        """
         return self.data.to_pandas()
 
 
