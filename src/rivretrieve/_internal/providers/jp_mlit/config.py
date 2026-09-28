@@ -6,6 +6,7 @@ Contributed by: Thiago von Däniken
 from dataclasses import dataclass
 
 from rivretrieve._internal.engine import (
+    CalendarLabelConvention,
     Daily,
     DailyLabelTime,
     DayDefinition,
@@ -56,7 +57,13 @@ _CONFIG = ProviderConfig(
         ),
     },
 )
-_MONTH = WindowDeclaration(WindowGranularity("year-month"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE)
+# Hour columns are 1時 through 24時; the terminal label belongs to the following date.
+_MONTH = WindowDeclaration(
+    WindowGranularity("year-month"),
+    WindowRenderingVocabulary.DATE,
+    StopConvention.INCLUSIVE,
+    calendar_labels=CalendarLabelConvention.HOURS_1_TO_24,
+)
 _YEAR = WindowDeclaration(WindowGranularity("year"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE)
 _WINDOWS = ProductWindowDeclarations(
     products={

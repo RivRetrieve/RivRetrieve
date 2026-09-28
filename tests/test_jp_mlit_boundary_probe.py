@@ -50,7 +50,7 @@ def _runner(product: ProductId):
         payloads = fetch(
             (_STATION,),
             (product,),
-            MappingProxyType({product: (RenderedWindow(start, stop),)}),
+            MappingProxyType({product: (RenderedWindow(start, stop, bounds=window),)}),
             window,
             config(),
             replay,

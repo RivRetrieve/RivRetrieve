@@ -148,14 +148,28 @@ class StopConvention(StrEnum):
     EXCLUSIVE = "exclusive"
 
 
+class CalendarLabelConvention(StrEnum):
+    """Published labels within calendar-date requests, independent of temporal support."""
+
+    CALENDAR_DATES = "calendar-dates"
+    HOURS_1_TO_24 = "hours-1-to-24"
+
+
 @dataclass(frozen=True, slots=True)
 class WindowDeclaration:
     granularity: WindowGranularity
     rendering: WindowRenderingVocabulary
     stop_convention: StopConvention
     size: int | None = None
+    calendar_labels: CalendarLabelConvention = field(default=CalendarLabelConvention.CALENDAR_DATES, kw_only=True)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.calendar_labels, CalendarLabelConvention):
+            raise TypeError("calendar labels must be CalendarLabelConvention")
+        if self.calendar_labels is CalendarLabelConvention.HOURS_1_TO_24 and (
+            self.granularity != "year-month" or self.rendering is not WindowRenderingVocabulary.DATE
+        ):
+            raise ValueError("hours-1-to-24 labels require monthly date windows")
         if not isinstance(self.granularity, str) or not self.granularity:
             raise TypeError("window granularity must be a non-empty string")
         if not isinstance(self.rendering, WindowRenderingVocabulary):

@@ -1,26 +1,30 @@
-"""cz_chmi fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]].
+"""Acquire independent CHMI annual files and retain shared-product failures.
 
 Contributed by: Thiago von Däniken
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
+from uuid import uuid4
 
+from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
-    WithIssues,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.providers.cz_chmi.config import CzChmiSourceCoordinates
-from rivretrieve._internal.source_series import SeriesScope, SourceSeries
-from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest
+from rivretrieve._internal.providers.cz_chmi.config import SERIES_MAPPINGS, CzChmiSourceCoordinates
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
+from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportFailure, TransportRequest
 
 _BASE = "https://opendata.chmi.cz/hydrology/historical/data"
 
@@ -49,8 +53,8 @@ def fetch(
     *,
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
-) -> WithIssues[tuple[Payload, ...]]:
-    groups: dict[tuple[str, str, str], list[tuple[ProductId, CzChmiSourceCoordinates]]] = {}
+) -> SourceAcquisition:
+    groups: dict[tuple[str, str, RenderedWindow], list[tuple[ProductId, CzChmiSourceCoordinates]]] = {}
     for station_id in stations:
         for product_id in products:
             try:
@@ -63,24 +67,44 @@ def fetch(
             for rendered in rendered_windows[product_id]:
                 if rendered.stop is not None:
                     raise FatalContractError("cz_chmi annual window must have no rendered stop")
-                groups.setdefault((station_id, coordinates.file_code, rendered.start), []).append(
-                    (product_id, coordinates)
-                )
+                if rendered.bounds is None:
+                    raise FatalContractError("cz_chmi requires engine-established annual bounds")
+                groups.setdefault((station_id, coordinates.file_code, rendered), []).append((product_id, coordinates))
 
     payloads: list[Payload] = []
-    for (station_id, file_code, year), members in groups.items():
+    failures: list[FailedSourceRequest] = []
+    for (station_id, file_code, rendered), members in groups.items():
+        bounds = rendered.bounds
+        assert bounds is not None
+        year = rendered.start
         cadence = "daily" if file_code == "DQ" else "hourly"
         url = f"{_BASE}/{cadence}/H_{station_id}_{file_code}_{year}.json"
-        response = transport.send(
-            TransportRequest(method=HttpMethod.GET, url=url, headers={"Accept": "application/json"})
-        )
+        request = TransportRequest(method=HttpMethod.GET, url=url, headers={"Accept": "application/json"})
+        response = attempt_request(transport, request)
+        if isinstance(response, (TransportFailure, CredentialExchangeError)):
+            call_id = uuid4().hex
+            for product_id, _ in members:
+                failures.append(
+                    FailedSourceRequest(
+                        uuid4().hex,
+                        SERIES_MAPPINGS[product_id].source_series("cz_chmi", station_id, product_id),
+                        SeriesWindow(
+                            start=datetime.fromisoformat(bounds.start.isoformat()),
+                            end=datetime.fromisoformat(bounds.end.isoformat()),
+                        ),
+                        request,
+                        response,
+                        call_id=call_id,
+                    )
+                )
+            continue
         payloads.append(
             Payload(
                 source_coordinates=SourceCoordinates(
                     CzChmiRequestCoordinates(file_code, tuple(coordinates.ts_con_id for _, coordinates in members))
                 ),
                 station_products=tuple((station_id, product_id) for product_id, _ in members),
-                fetch_window=fetch_window,
+                fetch_window=bounds,
                 content=response.content,
                 origin=SourceCallOrigin(
                     url=response.url,
@@ -90,10 +114,12 @@ def fetch(
                     content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
                     source_path=UnknownOriginFact(),
                     query=UnknownOriginFact(),
+                    attempts=response.attempts,
                 ),
                 prerequisite_calls=response.prerequisite_calls,
                 scope=scope,
                 known_series=known_series,
+                attempt_traces=response.attempt_traces,
             )
         )
-    return WithIssues(value=tuple(payloads), issues=())
+    return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))

@@ -239,17 +239,22 @@ def test_internal_parser_error_is_never_isolated_as_source_failure(monkeypatch):
         acquire(Transport(page(feature())))
 
 
-def test_late_continuous_chunk_failure_blocks_whole_transaction():
+@pytest.mark.parametrize("failed_span", [0, 1, 2])
+def test_continuous_span_failure_does_not_block_independent_siblings(failed_span):
     product = ProductId("discharge_instantaneous")
     start = datetime(2000, 1, 1, 12)
-    stop = start + timedelta(days=1101)
+    stop = start + timedelta(days=2201)
     window = engine._make_fetch_window(
         engine.WindowEndpoint.from_datetime(start), engine.WindowEndpoint.from_datetime(stop)
     )
     rendered = plan_windows(window, window_declarations().products[product])
     observation = feature()
     observation["properties"].update(statistic_id="00011", time="2000-01-01T12:00:00Z")
-    transport = Transport(page(observation), "fail")
+    responses = []
+    for index, rendered_window in enumerate(rendered):
+        observation["properties"]["time"] = rendered_window.start
+        responses.append("fail" if index == failed_span else page(observation))
+    transport = Transport(*responses)
     result = fetch(
         (STATION,),
         (product,),
@@ -259,12 +264,19 @@ def test_late_continuous_chunk_failure_blocks_whole_transaction():
         transport,
         monitoring_locations={STATION: LOCATION},
     )
-    assert len(transport.requests) == 2
+    assert len(transport.requests) == 3
     assert all("statistic_id" not in request.params for request in transport.requests)
-    assert result.inventories[0].completeness is InventoryCompleteness.INCOMPLETE
-    assert len(result.value) == 1
-    assert result.outcomes[0].window.start == start
-    assert result.outcomes[0].window.end == stop
+    assert [item.completeness for item in result.inventories] == [
+        InventoryCompleteness.INCOMPLETE if index == failed_span else InventoryCompleteness.COMPLETE
+        for index in range(3)
+    ]
+    assert len(result.value) == 2
+    expected = rendered[failed_span].bounds
+    assert result.outcomes[0].window.start == datetime.fromisoformat(expected.start.isoformat())
+    assert result.outcomes[0].window.end == datetime.fromisoformat(expected.end.isoformat())
+    assert [payload.fetch_window for payload in result.value] == [
+        item.bounds for index, item in enumerate(rendered) if index != failed_span
+    ]
 
 
 @pytest.mark.parametrize("endpoint,statistic", [("daily", None), ("continuous", "00011"), ("dv", "00003")])
@@ -786,3 +798,121 @@ def test_continuous_pages_detect_equivalent_published_instants(alias, value):
     beta = next(item for item in assembled.source_series if item.variant == "beta")
     assert assembled.canonical_rows["series_id"].to_list() == [beta.series_id]
     assert [entry.content for entry in assembled.receipts.entries] == [first, second]
+
+
+def test_unknown_initial_failure_retains_request_evidence_without_series_identity():
+    result = acquire(Transport("fail"))
+    assert not result.series
+    assert len(result.failed_requests) == 1
+    failed = result.failed_requests[0]
+    assert failed.series.series_id is None
+    assert failed.series.station_id == STATION
+    assert failed.series.product_id == PRODUCT
+    assert failed.failure.status_code == 429
+    assert failed.request.url == BASE
+    assert result.outcomes[0].status is OutcomeStatus.UNRESOLVED
+    assert result.outcomes[0].series_id is None
+
+
+@pytest.mark.parametrize("failed_span", [0, 1, 2])
+def test_continuous_independent_success_persists_while_failed_span_retries(tmp_path, failed_span):
+    from functools import partial
+
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.observations import ObservationProvenance
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse_page
+    from rivretrieve._internal.store import StoreReader, StoreRoot
+
+    product = ProductId("discharge_instantaneous")
+    provider = ProviderId("usgs_nwis")
+
+    class Stages:
+        config = config()
+        window_declarations = window_declarations()
+        fetch = staticmethod(partial(fetch, monitoring_locations={STATION: LOCATION}))
+        parse = staticmethod(parse_page)
+
+    class SpanTransport:
+        def __init__(self):
+            self.requests = []
+
+        def send(self, request):
+            index = len(self.requests) % 3
+            self.requests.append(request)
+            if index == failed_span:
+                raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
+            start = datetime.fromisoformat(request.params["datetime"].split("/")[0].removesuffix("Z"))
+            observation = feature()
+            observation["properties"].update(statistic_id="00011", time=(start + timedelta(hours=60)).isoformat() + "Z")
+            return TransportResponse(
+                page(observation),
+                200,
+                datetime(2026, 9, 28, tzinfo=UTC),
+                "application/geo+json",
+                request.url,
+                request.params or {},
+            )
+
+    transport = SpanTransport()
+    store = StoreRoot(tmp_path / "store")
+    request = engine.ObservationRequest(
+        provider,
+        (STATION,),
+        (product,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 3)),
+            engine.WindowEndpoint.from_datetime(datetime(2006, 1, 20)),
+        ),
+    )
+
+    def run():
+        return drive(
+            request,
+            Stages(),
+            transport=transport,
+            cache="reuse",
+            store=store,
+            provenance=ObservationProvenance(source="USGS", provider_id=provider),
+        )
+
+    result = run()
+    assert len(transport.requests) == 3
+    assert result.canonical_rows.height == 2
+    assert len(result.provenance.calls_made) == 3
+    coverage = StoreReader().status(store, provider).coverage
+    assert len(coverage) == 2
+    failed = [item for item in result.outcomes if item.status is OutcomeStatus.FAILED]
+    assert len(failed) == 1
+    assert all(not (item.interval.start <= failed[0].window.start <= item.interval.end) for item in coverage)
+    run()
+    assert len(transport.requests) == 6
+
+
+def test_unknown_selector_failure_links_request_without_inventing_series():
+    result = acquire(
+        Transport("fail"), scope=SeriesScope(restriction=RestrictionKind.EXPLICIT, variants=("unestablished",))
+    )
+    unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
+    assert unresolved.series_id is None
+    assert unresolved.requested_selector.value == "unestablished"
+    assert unresolved.calls == (result.failed_requests[0].call_id,)
+    assert result.failed_requests[0].request.params["time_series_id"] == "unestablished"
+
+
+def test_incomplete_cursor_links_actual_http_retry_attempts():
+    from tests.test_transport_attempt_evidence import client_for
+
+    client, _ = client_for(
+        [
+            (page(feature(), next_url=next_url()), 200, "application/geo+json"),
+            *[(b"unavailable", 503, "text/plain")] * 3,
+        ]
+    )
+    result = acquire(client)
+    expected = tuple(item.attempt_id for item in result.value[0].attempt_traces) + tuple(
+        item.attempt_id for item in result.failed_requests[0].failure.attempt_traces
+    )
+    unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
+    assert unresolved.calls == expected
+    assert len(expected) == 4

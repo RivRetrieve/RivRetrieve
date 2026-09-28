@@ -14,7 +14,6 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, WithIssu
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
 from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS, FrHubeauSourceCoordinates
-from rivretrieve._internal.providers.fr_hubeau.fetch import next_url_from_response
 from rivretrieve._internal.source_series import ParsedSeries
 
 
@@ -32,7 +31,6 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     if not isinstance(document, dict):
         raise UnsupportedSourceStructureError("fr_hubeau payload must be a JSON object")
     root = cast("dict[str, object]", document)
-    next_url_from_response(payload.content)
     raw_rows = root.get("data")
     if not isinstance(raw_rows, list):
         raise UnsupportedSourceStructureError("fr_hubeau payload has no observation data list")
