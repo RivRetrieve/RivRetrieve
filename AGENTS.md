@@ -52,6 +52,15 @@ when no further explanation is needed. Add examples when they clarify use.
 All docstring prose must follow `docs/AGENTS.md`. Keep documentation accurate
 when changing an interface.
 
+## Contributing tests
+
+Before adding a test, check existing coverage and identify the distinct behavior or
+architectural rule it protects. Use focused tests for edge cases, and explain why expensive
+end-to-end combinations need separate coverage. Reuse expensive unchanged inputs only when
+tests remain isolated and changed or corrupt inputs still reach validation. Measure and report
+the runtime impact of costly new coverage. Lock exact wording or code structure only when that
+property is an intentional contract.
+
 ## Complex-data assertions
 
 Prefer library-specific assertions over manual element-by-element checks of structure or values:
