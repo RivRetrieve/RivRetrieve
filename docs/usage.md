@@ -505,7 +505,7 @@ print([entry.authorship.value for entry in receipt_result.receipts.entries])
 # ['publisher_payload']
 ```
 
-- `publisher_payload` holds the bytes handed to the parser, such as an extracted archive member.
+- `publisher_payload` holds the bytes handed to the parser.
 - `store_excerpt` holds cached rows encoded as Parquet by RivRetrieve, rather than the original
   publisher bytes. Both live caches and compiled bulk stores can return these excerpts.
 

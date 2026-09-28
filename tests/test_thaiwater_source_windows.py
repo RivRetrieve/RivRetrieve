@@ -24,6 +24,8 @@ from rivretrieve._internal.primitives import CacheMode, ProductId, ProviderId
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _DATA = Path(__file__).parent / "test_data"
 _RECORDINGS = (
     read_recording(_DATA / "th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json"),

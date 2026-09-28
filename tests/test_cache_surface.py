@@ -9,6 +9,8 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.store import StoreRoot
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 def test_dotenv_relocates_live_and_compiled_store_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)

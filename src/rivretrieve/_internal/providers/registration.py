@@ -44,6 +44,7 @@ class BulkDownloadRequest:
     today: date
     probe: BulkProbe
     transfer: BulkTransfer
+    previous_source_vintage: date | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,6 +14,8 @@ import pytest
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "tests/test_data/french_provider_documentation"
 

@@ -89,6 +89,14 @@ def _doc_markdown(doc: str) -> str:
             output.extend((f"#### {section}", ""))
             index += 2
             continue
+        if section == "Examples" and line.startswith(">>>"):
+            # A doctest session ends at the next blank line.
+            end = index
+            while end < len(lines) and lines[end]:
+                end += 1
+            output.extend(("```pycon", *lines[index:end], "```"))
+            index = end
+            continue
         if section in {"Parameters", "Returns", "Raises", "Attributes"} and line:
             if not line.startswith(" "):
                 output.append(f"- **{line.replace('`', '')}**")

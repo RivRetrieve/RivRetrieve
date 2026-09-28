@@ -20,6 +20,8 @@ import rivretrieve as rr
 from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 DATA = Path(__file__).parent / "test_data"
 ARCHIVE = read_recording(DATA / "ch_foen_2018_flux_january2024_full.recording.json")
 REST = json.loads((DATA / "ch_foen_2018_historical_rest.json").read_text())

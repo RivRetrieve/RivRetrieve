@@ -7,6 +7,8 @@ import pytest
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 def test_daily_discharge_discovery_includes_both_ana_consistency_series(monkeypatch: pytest.MonkeyPatch) -> None:
     def forbidden_transport():

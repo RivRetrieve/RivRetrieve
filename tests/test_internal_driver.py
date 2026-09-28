@@ -261,15 +261,19 @@ def _config(coordinates: SourceCoordinates) -> ProviderConfig:
     )
 
 
+@pytest.mark.parametrize("provider_id", ["throwaway", "lt_lhmt"])
+@pytest.mark.parametrize("equal_renderings", [False, True])
 def test_drive_plans_each_requested_product_and_passes_immutable_keyed_renderings(
     monkeypatch: pytest.MonkeyPatch,
+    provider_id: str,
+    equal_renderings: bool,
 ) -> None:
     products = (ProductId("date_product"), ProductId("year_product"))
     requested = RequestedWindow(
         WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
         WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23, 59, 59, 999999)),
     )
-    request = ObservationRequest(ProviderId("throwaway"), ("station-1",), products, requested)
+    request = ObservationRequest(ProviderId(provider_id), ("station-1",), products, requested)
     product_config = ProductConfig(SourceCoordinates({"field": "value"}), Unit.M, Instant())
     config = ProviderConfig(ZoneValue("+00:00"), dict.fromkeys(products, product_config))
     declarations = ProductWindowDeclarations(
@@ -278,10 +282,13 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
                 WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE
             ),
             products[1]: WindowDeclaration(
-                WindowGranularity("year"), WindowRenderingVocabulary.YEAR, StopConvention.INCLUSIVE
+                WindowGranularity("date" if equal_renderings else "year"),
+                WindowRenderingVocabulary.DATE if equal_renderings else WindowRenderingVocabulary.YEAR,
+                StopConvention.INCLUSIVE,
             ),
         }
     )
+    shared = provider_id == "lt_lhmt" and equal_renderings
     received: list[tuple[Mapping[ProductId, tuple[RenderedWindow, ...]], FetchWindow]] = []
     planned_with: list[FetchWindow] = []
     real_plan_windows = driver_module.plan_windows
@@ -294,6 +301,7 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
 
     class _CapturingProvider:
         window_declarations = declarations
+        shared_acquisition_products = (frozenset(products),) if provider_id == "lt_lhmt" else ()
 
         def __init__(self) -> None:
             self.config = config
@@ -311,8 +319,8 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
             known_series: tuple[SourceSeries, ...],
         ) -> WithIssues[tuple[Payload, ...]]:
             assert stations == ("station-1",)
-            assert len(supplied_products) == 1
-            assert supplied_products[0] in products
+            assert len(supplied_products) == (2 if shared else 1)
+            assert set(supplied_products).issubset(products)
             assert supplied_config is config
             received.append((rendered_windows, fetch_window))
             return WithIssues(())
@@ -325,15 +333,16 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
     )
 
     assert result.canonical_rows.is_empty()
-    assert len(received) == 2
-    assert [tuple(rendered) for rendered, _ in received] == [
-        (ProductId("date_product"),),
-        (ProductId("year_product"),),
-    ]
+    assert len(received) == (1 if shared else 2)
+    assert [tuple(rendered) for rendered, _ in received] == ([products] if shared else [(products[0],), (products[1],)])
     rendered_by_product = {product: rendered[product] for rendered, _ in received for product in rendered}
     assert rendered_by_product == {
         ProductId("date_product"): (RenderedWindow("2025-12-30", "2026-01-04"),),
-        ProductId("year_product"): (RenderedWindow("2025", None), RenderedWindow("2026", None)),
+        ProductId("year_product"): (
+            (RenderedWindow("2025-12-30", "2026-01-04"),)
+            if equal_renderings
+            else (RenderedWindow("2025", None), RenderedWindow("2026", None))
+        ),
     }
     rendered_windows, fetch_window = received[0]
     with pytest.raises(TypeError):
@@ -1596,13 +1605,17 @@ def test_payload_origins_enrich_provenance_as_json_safe_ordered_facts() -> None:
     assert enriched.endpoints == ("https://same.test/data",)
     assert enriched.retrieved_at == datetime(2026, 1, 2, 2, tzinfo=UTC)
     assert len(enriched.calls_made) == 4
-    assert enriched.calls_made[0] == enriched.calls_made[1]
+    assert enriched.calls_made[0]["call_id"] != enriched.calls_made[1]["call_id"]
+    assert {key: value for key, value in enriched.calls_made[0].items() if key != "call_id"} == {
+        key: value for key, value in enriched.calls_made[1].items() if key != "call_id"
+    }
     assert tuple(call["url"] for call in enriched.calls_made[:3]) == (
         "https://same.test/data",
         "https://same.test/data",
         "https://same.test/data",
     )
     assert set(enriched.calls_made[3]) == {
+        "call_id",
         "url",
         "request_parameters",
         "status_code",
@@ -1616,7 +1629,7 @@ def test_payload_origins_enrich_provenance_as_json_safe_ordered_facts() -> None:
     assert all(
         value == {"status": "unknown", "reason": "unknown"}
         for key, value in enriched.calls_made[3].items()
-        if key != "station_products"
+        if key not in ("station_products", "call_id")
     )
     assert enriched.calls_made[2]["request_parameters"] == {
         "status": "unknown",

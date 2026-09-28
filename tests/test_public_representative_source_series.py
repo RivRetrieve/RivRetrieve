@@ -10,6 +10,8 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _DATA = Path(__file__).parent / "test_data"
 
 

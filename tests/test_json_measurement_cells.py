@@ -2,14 +2,17 @@
 
 import json
 from dataclasses import replace
+from importlib import import_module
 from pathlib import Path
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 from rivretrieve._internal import discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from tests._recorded_payload import recorded_payload
 
 DATA = Path(__file__).parent / "test_data"
 CASES = (
@@ -60,22 +63,63 @@ class MeasurementReplay(ReplayTransport):
             self.selected_content is not None and response.content != self.selected_content
         ):
             return response
-        document = json.loads(response.content)
-        rows = document["series"]["data"] if "series" in document else document["data"]
-        assert rows
-        for row in rows:
-            assert self.field in row, "mutation must start from a genuine published measurement cell"
-            if self.mutation == "missing":
-                del row[self.field]
-            else:
-                row[self.field] = {"null": None, "true": True, "false": False}[self.mutation]
-        content = json.dumps(document, ensure_ascii=False).encode()
+        content = _measurement_content(response.content, self.field, self.mutation)
         self.modified_bodies.append(content)
         return replace(response, content=content)
 
 
+def _measurement_content(content, field, mutation):
+    if mutation == "original":
+        return content
+    document = json.loads(content)
+    rows = document["series"]["data"] if "series" in document else document["data"]
+    assert rows
+    for row in rows:
+        assert field in row, "mutation must start from a genuine published measurement cell"
+        if mutation == "missing":
+            del row[field]
+        else:
+            row[field] = {"null": None, "true": True, "false": False}[mutation]
+    return json.dumps(document, ensure_ascii=False).encode()
+
+
 @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
 @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
+def test_france_parser_measurement_cells_keep_absence_distinct_from_null(case, mutation):
+    route, station, _predicates, start, end, filenames, field, _count = case
+    provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
+    config = import_module(f"rivretrieve._internal.providers.{provider}.config").config()
+    parse = import_module(f"rivretrieve._internal.providers.{provider}.parse").parse
+    product = {
+        "daily": "discharge_daily_mean",
+        "temperature": "water_temperature_reported",
+        "hydroportail": "discharge_instantaneous",
+    }[route]
+    for filename in filenames:
+        recording = read_recording(DATA / filename)
+        payload = recorded_payload(recording, station, product, config, start, end)
+        baseline = parse(payload, config)
+        result = parse(replace(payload, content=_measurement_content(payload.content, field, mutation)), config)
+        assert result.series == baseline.series
+        if mutation in ("missing", "true", "false"):
+            assert result.rows.is_empty()
+            assert result.outcomes
+            assert all(outcome.status == "unsupported" and outcome.reason for outcome in result.outcomes)
+            assert all(outcome.series_id == baseline.series[0].series_id for outcome in result.outcomes)
+            assert any(issue.code == "unsupported_source_structure" for issue in result.issues)
+        else:
+            assert result.rows.height == baseline.rows.height
+            assert all(outcome.status in ("success", "empty") for outcome in result.outcomes)
+            if mutation == "null":
+                assert result.rows["value"].is_null().all()
+            else:
+                assert_frame_equal(result.rows, baseline.rows)
+
+
+# Each source route still traverses discovery, acquisition, clipping, receipts and cache.
+@pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
+@pytest.mark.parametrize("mutation", ["original", "null", "missing"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     route, station, predicates, start, end, filenames, field, count = case
@@ -108,6 +152,7 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_pat
 
 
 @pytest.mark.parametrize("mutation", ["missing", "true", "false"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_bad_daily_measurement_does_not_discard_independent_recorded_statistic(monkeypatch, mutation):
     mean = read_recording(DATA / "fr_hubeau_1011000101_QmnJ_padded.recording.json")
     maximum = read_recording(DATA / "fr_hubeau_1011000101_QIXnJ_padded.recording.json")

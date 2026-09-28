@@ -15,6 +15,7 @@ import pytest
 from rivretrieve._internal import bulk
 from rivretrieve._internal.providers.pl_imgw.bulk import (
     ANNUAL_URL_TEMPLATE,
+    BASE_URL,
     PROVIDER_ID,
     ImgwCompileRequest,
     compile_imgw,
@@ -60,13 +61,24 @@ def _archive(year: int) -> bytes:
 @contextmanager
 def _publisher(framing: str, *, recover: bool) -> Iterator[tuple[str, Counter[str], dict[str, bytes]]]:
     bodies = {f"codz_{year}.zip": _archive(year) for year in (2023, 2024)}
+    source_path = BASE_URL.removeprefix("https://danepubliczne.imgw.pl")
+
+    def directory(suffix: str, names: tuple[str, ...]) -> bytes:
+        identity = f"Index of {source_path}{suffix}".rstrip("/")
+        links = "".join(f'<tr><td><a href="{name}">{name}</a></td></tr>' for name in names)
+        return (
+            f"<html><head><title>{identity}</title></head><body><h1>{identity}</h1><table>{links}</table></body></html>"
+        ).encode()
+
+    indices = {"/": directory("", ("2023/", "2024/"))}
+    indices.update({f"/{year}/": directory(f"/{year}", (f"codz_{year}.zip",)) for year in (2023, 2024)})
     calls: Counter[str] = Counter()
 
     class ArchiveEndpoint(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            name = self.path.rsplit("/", 1)[-1]
+            name = self.path if self.path.endswith("/") else self.path.rsplit("/", 1)[-1]
             calls[name] += 1
-            body = bodies[name]
+            body = indices[name] if name in indices else bodies[name]
             interrupted = name == "codz_2024.zip" and (not recover or calls[name] == 1)
             self.send_response(200)
             self.send_header("Connection", "close")
@@ -116,11 +128,11 @@ def test_recovered_archive_keeps_earlier_success_and_writes_only_complete_bytes(
             destination,
             today=date(2025, 1, 1),
             first_year=2023,
-            transfer=lambda url, target: bulk._transfer(client, f"{origin}/{url.rsplit('/', 1)[-1]}", target),
+            transfer=lambda url, target: bulk._transfer(client, origin + url.removeprefix(BASE_URL), target),
         )
 
     assert checks
-    assert calls == {"codz_2023.zip": 1, "codz_2024.zip": 2}
+    assert calls == {"/": 1, "/2023/": 1, "/2024/": 1, "codz_2023.zip": 1, "codz_2024.zip": 2}
     assert [item.path for item in downloaded] == [first, second]
     assert first.read_bytes() == bodies["codz_2023.zip"]
     assert second.read_bytes() == bodies["codz_2024.zip"]
@@ -167,7 +179,7 @@ def test_exhausted_acquisition_rolls_back_artifacts_without_replacing_valid_stor
                 request.destination,
                 today=request.today,
                 first_year=2023,
-                transfer=lambda url, target: request.transfer(f"{origin}/{url.rsplit('/', 1)[-1]}", target),
+                transfer=lambda url, target: request.transfer(origin + url.removeprefix(BASE_URL), target),
             )
             return tuple(DownloadedBulkArtifact(item.path, item.url, item.source_vintage) for item in downloaded)
 
@@ -193,8 +205,8 @@ def test_exhausted_acquisition_rolls_back_artifacts_without_replacing_valid_stor
     assert caught.value.attempts == 3
     assert caught.value.category is TransportFailureCategory.INCOMPLETE_RESPONSE
     assert caught.value.status_code is None
-    assert caught.value.request.url == f"{origin}/codz_2024.zip"
-    assert calls == {"codz_2023.zip": 1, "codz_2024.zip": 3}
+    assert caught.value.request.url == f"{origin}/2024/codz_2024.zip"
+    assert calls == {"/": 1, "/2023/": 1, "/2024/": 1, "codz_2023.zip": 1, "codz_2024.zip": 3}
     assert not list(tmp_path.glob("publisher-artifact.download*"))
     assert set(tmp_path.iterdir()) == {Path(root), unrelated}
     assert unrelated.read_bytes() == b"unrelated publisher input"

@@ -24,6 +24,8 @@ from rivretrieve._internal.store.accumulation import StoreUpdate, accumulate
 from tests.test_source_series_store import _definition, _success, _update
 from tests.usgs_modern_recordings import ModernReplay
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 def test_newest_complete_inventory_with_uncovered_late_member_prevents_older_snapshot_reuse(tmp_path: Path) -> None:
     store = StoreRoot(tmp_path / "store")

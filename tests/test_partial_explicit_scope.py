@@ -10,6 +10,8 @@ from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 def _counted_replay(monkeypatch, recordings):
     replay = ReplayTransport(recordings)

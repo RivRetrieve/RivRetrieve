@@ -6,10 +6,13 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport
+
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "tests/test_data/japan_provider_documentation"

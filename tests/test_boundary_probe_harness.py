@@ -179,6 +179,7 @@ def test_registered_probe_replays_and_checks_the_three_literals() -> None:
     assert result.equals(_frame())
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_ba_fhmzbih_daily_mean_absent_and_unestablished_physical_request_refused(monkeypatch) -> None:
     product_id = "discharge_daily_mean"
     assert product_id not in rr.products("ba_fhmzbih")
