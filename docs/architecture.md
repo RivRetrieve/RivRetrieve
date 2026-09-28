@@ -178,7 +178,9 @@ Coverage does not assert continuous observations.
 Bosnia's rolling workbooks establish only the observations they contain. Their
 rows update matching series, physical facts, timestamps and time zones in the
 cache. Rows absent from a later workbook remain held at their earlier acquisition
-vintage. These snapshots establish no reusable temporal coverage, even when empty;
+vintage. Observation-only outcomes list exact physical-fact, timestamp and time-zone
+keys, linking each returned snapshot row to its acquisition calls and retrieval
+instant. These snapshots establish no reusable temporal coverage, even when empty;
 retrieval must contact the source again.
 Served intervals carry their retrieval instants in provenance, without an automatic freshness verdict.
 

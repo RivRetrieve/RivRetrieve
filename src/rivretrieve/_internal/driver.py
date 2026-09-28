@@ -1065,21 +1065,64 @@ def _combine_replacements(
 ) -> list[SuccessfulReplacement]:
     """Replace one concrete window once, with every acquired native contribution."""
     grouped: dict[tuple[str, RequestedInterval], list[SuccessfulReplacement]] = {}
-    for replacement in replacements:
-        key = replacement.coverage.series_id, replacement.coverage.interval
-        grouped.setdefault(key, []).append(replacement)
     by_id = {item.outcome_id: item for item in fresh_outcomes}
-    combined = []
-    for (series_id, interval), parts in grouped.items():
-        failed = any(
-            item.series_id == series_id
-            and item.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
-            and item.window.start <= interval.end
-            and item.window.end >= interval.start
-            for item in fresh_outcomes
+    failures = tuple(
+        item
+        for item in fresh_outcomes
+        if item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+    )
+    for replacement in replacements:
+        original = by_id[replacement.coverage.outcome_id]
+        excluded = tuple(
+            RequestedInterval(item.window.start, item.window.end)
+            for item in failures
+            if (
+                item.series_id == original.series_id
+                or (
+                    item.series_id is None
+                    and item.station_id == original.station_id
+                    and item.product_id == original.product_id
+                )
+            )
         )
-        if failed:
-            continue
+        for interval in remainder(replacement.coverage.interval, excluded):
+            part = replacement
+            if interval != replacement.coverage.interval:
+                native = replacement.rows.filter(pl.col("time").is_between(interval.start, interval.end))
+                outcome = original.model_copy(
+                    update={
+                        "outcome_id": stable_id(
+                            original.outcome_id, interval.start.isoformat(), interval.end.isoformat()
+                        ),
+                        "window": SeriesWindow(start=interval.start, end=interval.end),
+                        "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
+                        "observation_keys": tuple(
+                            dict.fromkeys(native.select("facts_id", "time", "time_zone").iter_rows())
+                        )
+                        if original.coverage == "observations"
+                        else (),
+                    }
+                )
+                outcomes.append(outcome)
+                fresh_outcomes.append(outcome)
+                by_id[outcome.outcome_id] = outcome
+                part = replace(
+                    replacement,
+                    rows=native,
+                    coverage=replace(replacement.coverage, interval=interval, outcome_id=outcome.outcome_id),
+                )
+            key = part.coverage.series_id, part.coverage.interval
+            grouped.setdefault(key, []).append(part)
+    combined = []
+    snapshot_keys: set[tuple[str, str, datetime, str]] = set()
+    for (series_id, interval), parts in grouped.items():
+        for part in parts:
+            if by_id[part.coverage.outcome_id].coverage != "observations":
+                continue
+            keys = {(series_id, *key) for key in part.rows.select("facts_id", "time", "time_zone").iter_rows()}
+            if snapshot_keys.intersection(keys):
+                raise FatalContractError("Independent snapshot acquisitions overlap observation keys")
+            snapshot_keys.update(keys)
         if len(parts) == 1:
             combined.append(parts[0])
             continue
@@ -1913,7 +1956,7 @@ def drive(
                     if original.series_id
                     else pl.DataFrame(schema=RowsSchema.polars_schema)
                 )
-                updates = {
+                updates: dict[str, object] = {
                     "window": observed_window,
                     "outcome_id": stable_id(
                         original.outcome_id, observed_window.model_dump_json(), *matching_outcome_facts
@@ -1922,6 +1965,10 @@ def drive(
                 }
                 if original.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
                     updates["status"] = OutcomeStatus.EMPTY if concrete.is_empty() else OutcomeStatus.SUCCESS
+                if original.coverage == "observations":
+                    updates["observation_keys"] = tuple(
+                        dict.fromkeys(concrete.select("facts_id", "time", "time_zone").iter_rows())
+                    )
                 outcome = original.model_copy(update=updates)
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)
@@ -2035,8 +2082,29 @@ def drive(
                 how="anti",
             )
             combined = pl.concat([combined, held_rows])
-            held_ids = set(held_rows["series_id"])
-            outcomes.extend(item for item in manifest.outcomes if item.series_id in held_ids)
+            held_keys = set(held_rows.select("series_id", "facts_id", "time", "time_zone").iter_rows())
+            # Outcomes remain immutable acquisition evidence in the store. The
+            # last acquired reference owns a currently held observation key.
+            attributed: set[tuple[str, str, datetime, str]] = set()
+            for item in reversed(manifest.outcomes):
+                if item.series_id is None or item.coverage != "observations":
+                    continue
+                keys = tuple(
+                    key
+                    for key in item.observation_keys
+                    if (item.series_id, *key) in held_keys and (item.series_id, *key) not in attributed
+                )
+                if not keys:
+                    continue
+                attributed.update((item.series_id, *key) for key in keys)
+                outcomes.append(
+                    item.model_copy(
+                        update={
+                            "outcome_id": stable_id(item.outcome_id, repr(keys)),
+                            "observation_keys": keys,
+                        }
+                    )
+                )
             cached_calls.extend(manifest.source_calls)
             if receipts is ReceiptMode.INCLUDE and not held_rows.is_empty():
                 receipt_entries.append(encode_store_excerpt(held_read))

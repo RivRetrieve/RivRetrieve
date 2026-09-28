@@ -692,6 +692,12 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
         ):
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.overlap:{index}")
         coverage.append(record)
+    observed_keys = {
+        (outcome.series_id, *key)
+        for outcome in outcomes.values()
+        if outcome.coverage == "observations" and outcome.status is OutcomeStatus.SUCCESS
+        for key in outcome.observation_keys
+    }
     partitions = _discover_partitions(raw, store, provider_id)
     for identifier, path in partitions.items():
         _validate_partition(
@@ -704,25 +710,22 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             provider_id,
             allowed_null_states=("published_null",),
         )
-        for batch in _open_parquet(path).iter_batches(columns=["series_id", "facts_id", "time"]):
-            for series_id, facts_id, timestamp in zip(
+        for batch in _open_parquet(path).iter_batches(columns=["series_id", "facts_id", "time", "time_zone"]):
+            for series_id, facts_id, timestamp, time_zone in zip(
                 batch.column("series_id").to_pylist(),
                 batch.column("facts_id").to_pylist(),
                 batch.column("time").to_pylist(),
+                batch.column("time_zone").to_pylist(),
                 strict=True,
             ):
-                if not any(
-                    c.series_id == series_id
-                    and facts_id in c.facts_ids
-                    and c.interval.start <= timestamp <= c.interval.end
-                    for c in coverage
-                ) and not any(
-                    outcome.coverage == "observations"
-                    and outcome.status is OutcomeStatus.SUCCESS
-                    and outcome.series_id == series_id
-                    and facts_id in outcome.facts_ids
-                    and outcome.window.start <= timestamp <= outcome.window.end
-                    for outcome in outcomes.values()
+                if (
+                    not any(
+                        c.series_id == series_id
+                        and facts_id in c.facts_ids
+                        and c.interval.start <= timestamp <= c.interval.end
+                        for c in coverage
+                    )
+                    and (series_id, facts_id, timestamp, time_zone) not in observed_keys
                 ):
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
     _validate_series_partitions(raw, partitions, store, provider_id)

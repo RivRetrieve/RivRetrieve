@@ -1,9 +1,11 @@
 """Acquisition identity and overlapping transaction composition through the driver."""
 
+import json
 from dataclasses import replace
 from datetime import datetime
 from types import SimpleNamespace
 
+import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
@@ -15,6 +17,7 @@ from rivretrieve._internal.engine import (
     SourceCoordinates,
     WindowEndpoint,
     WithIssues,
+    _make_fetch_window,
 )
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
@@ -104,3 +107,49 @@ def test_unknown_series_failed_request_keeps_call_and_interval(tmp_path):
     assert result.outcomes[0].series_id is None
     assert result.outcomes[0].calls == ("unknown-failure",)
     assert result.provenance.calls_made[0]["status_code"] == 503
+
+
+@pytest.mark.parametrize("failed_first", [False, True])
+@pytest.mark.parametrize("failure_kind", ["unknown", "partial"])
+def test_failed_overlap_returned_rows_agree_with_persisted_replacement(tmp_path, failed_first, failure_kind):
+    from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget
+    from rivretrieve._internal.source_series import SeriesWindow
+    from rivretrieve._internal.transport import HttpMethod, TransportFailure, TransportFailureReason, TransportRequest
+
+    payload = single_payload()
+    store = tmp_path / "store"
+    held = run(store, (payload,))
+    document = json.loads(payload.content)
+    for member in document["tsList"]:
+        for row in member["tsData"]["data"]["values"]:
+            row[1] = 999
+    fresh = replace(payload, content=json.dumps(document).encode(), acquisition_id="new-values")
+    if failure_kind == "unknown":
+        request = TransportRequest(HttpMethod.GET, "https://example.test/observations")
+        event = FailedSourceRequest(
+            "unknown-failure",
+            SourceRequestTarget("0-203-1-000400", "discharge_daily_mean"),
+            SeriesWindow(start=datetime(2023, 6, 1), end=datetime(2023, 6, 2, 23, 59, 59, 999999)),
+            request,
+            TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503),
+        )
+        acquired = SourceAcquisition((fresh,), failed_requests=(event,))
+        expected = held.canonical_rows
+    else:
+        failed = replace(
+            payload,
+            content=b"{}",
+            acquisition_id="failed-subinterval",
+            fetch_window=_make_fetch_window(
+                WindowEndpoint.from_datetime(datetime(2023, 6, 2)),
+                WindowEndpoint.from_datetime(datetime(2023, 6, 2, 23, 59, 59, 999999)),
+            ),
+        )
+        acquired = (failed, fresh) if failed_first else (fresh, failed)
+        expected = held.canonical_rows.with_columns(
+            pl.when(pl.col("time").dt.day() == 1).then(999.0).otherwise(pl.col("value")).alias("value")
+        )
+    result = run(store, acquired)
+    assert_frame_equal(result.canonical_rows.sort("time"), expected.sort("time"))
+    persisted = pl.concat([pl.read_parquet(path) for path in store.rglob("*.parquet")])
+    assert_frame_equal(persisted.select("time", "value").sort("time"), expected.select("time", "value").sort("time"))

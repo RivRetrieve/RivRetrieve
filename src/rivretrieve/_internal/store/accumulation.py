@@ -20,6 +20,7 @@ from rivretrieve._internal.source_series import (
     OutcomeStatus,
     RetrievalOutcome,
     SourceSeries,
+    stable_id,
     validate_series_rows,
 )
 from rivretrieve._internal.store.provenance import encode_source_call
@@ -123,10 +124,30 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         inventories = _merge_records(
             previous.inventories if previous else (), update.inventories, "snapshot_id", move_reobserved=True
         )
-        outcomes = _merge_records(previous.outcomes if previous else (), update.outcomes, "outcome_id")
+        accepted_keys = {
+            item.coverage.outcome_id: tuple(
+                dict.fromkeys(item.rows.select("facts_id", "time", "time_zone").iter_rows())
+            )
+            for item in update.replacements
+        }
+        durable_outcomes = tuple(
+            item.model_copy(
+                update={
+                    "observation_keys": accepted_keys.get(item.outcome_id, ()),
+                    "outcome_id": item.outcome_id
+                    if item.observation_keys == accepted_keys.get(item.outcome_id, ())
+                    else stable_id(item.outcome_id, "unretained-observations"),
+                }
+            )
+            if item.coverage == "observations"
+            else item
+            for item in update.outcomes
+        )
+        outcomes = _merge_records(previous.outcomes if previous else (), durable_outcomes, "outcome_id")
         definitions = {item.series_id: item for item in series}
         outcome_by_id = {item.outcome_id: item for item in outcomes}
         replacements: list[SuccessfulReplacement] = []
+        snapshot_keys: set[tuple[str, str, datetime, str]] = set()
         for replacement in update.replacements:
             coverage = replacement.coverage
             outcome = outcome_by_id.get(coverage.outcome_id)
@@ -161,6 +182,14 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                 or rows.filter(~pl.col("facts_id").is_in(coverage.facts_ids)).height
             ):
                 raise FatalContractError("Replacement rows exceed their successful series interval or physical facts")
+            if outcome.coverage == "observations":
+                keys = tuple(rows.select("facts_id", "time", "time_zone").iter_rows())
+                if set(outcome.observation_keys) != set(keys):
+                    raise FatalContractError("Snapshot outcome keys must identify exactly its acquired rows")
+                identities = {(coverage.series_id, *key) for key in keys}
+                if snapshot_keys.intersection(identities):
+                    raise FatalContractError("Independent snapshot replacements overlap observation keys")
+                snapshot_keys.update(identities)
             if (outcome.status is OutcomeStatus.EMPTY) != rows.is_empty():
                 raise FatalContractError("Successful empty and nonempty outcomes must match their native rows")
             replacements.append(replace(replacement, coverage=coverage))
