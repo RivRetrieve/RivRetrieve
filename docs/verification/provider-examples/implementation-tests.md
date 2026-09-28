@@ -103,3 +103,50 @@ was absent; it is not counted as completed optional coverage.
 Final `uv run python scripts/generate_reference.py --check` passed with
 `Reference is current.` The root retained
 `scratchpad/acquisition-validation/final-reference.log`.
+
+## First integrated full-suite failure
+
+The root's full `uv run pytest` at `28d12fb` returned **41 failed, 4,631 passed,
+five skipped, 78 warnings and seven errors in 2,448.63 s (40:48)**. This is not a
+passing final suite. The skip set included absent optional geopandas/folium and
+the unavailable controlled private Thai bodies. Packaging setup also lacked a
+fresh-cache build prerequisite; a subsequent warmed packaging subset passed
+four tests in 14.17 s. Neither explanation dismisses the remaining contract
+failures. The root assigned repairs and will rerun the complete suite with
+optional dependencies and warmed build prerequisites.
+
+The provider-page runs retained here still identify the exact `28d12fb` code.
+They do not verify any later repair. Final acceptance remains incomplete for
+both the repository suite and the HydroPortail source blocker.
+
+The root then reran the environment-affected subset at unchanged `28d12fb`:
+
+```bash
+uv run --extra map pytest tests/test_documentation_examples.py tests/test_distribution_isolation.py tests/test_drainage_area_packaging.py tests/test_packaging_carries_catalogues.py tests/test_packaging_excludes_catalogue_build_inputs.py -q
+```
+
+With a warmed external `UV_CACHE_DIR`, **33 tests passed in 138.81 s**. The
+optional map extra and an online build preflight supplied missing environment
+prerequisites; source and dependency files did not change. The root retained
+`scratchpad/acquisition-validation/final-environment-regressions.log`. A full
+rerun with these prerequisites remains required.
+
+## Reference generation check
+
+The root later found that `mkdocs build` regenerates `docs/reference.md`. Its
+initial post-build `--check` therefore did not establish that the committed
+reference was current. The evidence checkout ran the check **before** any build:
+
+```text
+$ uv run python scripts/generate_reference.py --check
+Reference drift: run uv run python scripts/generate_reference.py
+```
+
+It exited 1 in 5.21 s. After correcting `CoverageInterval.interval` from
+"Covered wall-clock interval" to "Covered interval on its declared time axis",
+`uv run python scripts/generate_reference.py` regenerated the reference. An
+immediate pre-build `--check` exited 0 in 0.41 s with `Reference is current.`
+The regenerated page documents format 8, native/UTC interval axes and explicit
+outcome coverage/key evidence. The docstring correction changes documentation,
+not executable behavior. Independent AST comparison is required before carrying
+forward the unchanged-behavior live examples.

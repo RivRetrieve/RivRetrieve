@@ -90,10 +90,11 @@ were not retained in the published diagnostic record.
 
 ## Checkout provenance
 
-Only these two checkouts were created for this verification:
+These three checkouts were created for this verification:
 
 - `.worktrees/visions/provider-example-verification`, branch
-  `verify/provider-examples`, started from baseline `0b443049d50819978030e29e46011ca2101cb337`.
+  `verify/provider-examples-baseline` (renamed from `verify/provider-examples`),
+  started from baseline `0b443049d50819978030e29e46011ca2101cb337`.
   Documentation-only evidence commits do not change the code running in its
   baseline bulk processes.
 - `.worktrees/visions/provider-examples-final`, detached at
@@ -134,3 +135,9 @@ bash-process wall time was 377.52 s. Final evidence is under
 `final/fr_hydroportail/`; it is not a successful observation example. Required
 all-provider live acceptance therefore remains incomplete even if every
 repository regression passes. Final bulk execution is still in progress.
+
+- `.worktrees/visions/provider-example-evidence` now holds the
+  `verify/provider-examples` delivery branch. It merges the reviewed production
+  implementation without changing either active compiler checkout. Completed
+  output files are copied here byte-for-byte from the original evidence directory.
+  This checkout also corrects one coverage docstring and regenerates the reference.
