@@ -877,6 +877,7 @@ def _reusable_snapshot(
     if scope.restriction is RestrictionKind.EXPLICIT:
         return _explicit_reuse(manifest, scope, window)
     definitions = {item.series_id: item for item in manifest.series}
+    newer_overlaps: list[InventorySnapshot] = []
     for snapshot in reversed(manifest.inventories):
         held = snapshot.scope
         if snapshot.origin == "catalogue":
@@ -885,10 +886,6 @@ def _reusable_snapshot(
             RequestedInterval(window.start, window.end, axis=window.axis),
             snapshot.window.axis if snapshot.window else window.axis,
         )
-        if snapshot.window is not None and (
-            snapshot.window.start > compared.start or snapshot.window.end < compared.end
-        ):
-            continue
         if (held.provider_ids, held.station_ids, held.product_ids) != (
             scope.provider_ids,
             scope.station_ids,
@@ -906,6 +903,31 @@ def _reusable_snapshot(
                 continue
             if held.variants and scope.variants and not set(held.variants).intersection(scope.variants):
                 continue
+        if snapshot.window is not None and (
+            snapshot.window.start > compared.start or snapshot.window.end < compared.end
+        ):
+            if snapshot.window.start <= compared.end and snapshot.window.end >= compared.start:
+                newer_overlaps.append(snapshot)
+            continue
+        # New narrower source knowledge can invalidate an older broad identity
+        # proof even when the old interval still has successfully cached rows.
+        if any(
+            (
+                item.scope.restriction is RestrictionKind.ALL
+                and (
+                    item.completeness is not InventoryCompleteness.COMPLETE
+                    or set(item.members) != set(snapshot.members)
+                    or (item.member_facts and dict(item.member_facts) != dict(snapshot.member_facts))
+                )
+            )
+            or not set(item.members).issubset(snapshot.members)
+            or any(
+                not set(facts).issubset(dict(snapshot.member_facts).get(member, ()))
+                for member, facts in item.member_facts
+            )
+            for item in newer_overlaps
+        ):
+            return None
         # A newer applicable observation cannot be hidden by an older inventory.
         if scope.restriction is RestrictionKind.ALL and not _snapshot_matches(snapshot, scope, window):
             return None
