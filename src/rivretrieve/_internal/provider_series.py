@@ -131,6 +131,7 @@ def parse_mapped_series(
     window = SeriesWindow(
         start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
         end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        axis=payload.acquisition_axis,
     )
     acquired = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     scope = payload.scope or SeriesScope(
@@ -182,7 +183,14 @@ def parse_mapped_series(
             )
         outcomes.append(
             RetrievalOutcome(
-                outcome_id=stable_id(series.series_id, window.model_dump_json(), status, response_hash, str(acquired)),
+                outcome_id=stable_id(
+                    payload.acquisition_id,
+                    series.series_id,
+                    window.model_dump_json(),
+                    status,
+                    response_hash,
+                    str(acquired),
+                ),
                 series_id=series.series_id,
                 station_id=station,
                 product_id=product,
@@ -191,11 +199,17 @@ def parse_mapped_series(
                 facts_ids=(fact_id,),
                 reason=reason,
                 retrieved_at=acquired,
+                calls=tuple(item.attempt_id for item in payload.attempt_traces) or (payload.acquisition_id,),
             )
         )
     inventory = InventorySnapshot(
         snapshot_id=stable_id(
-            provider, scope.model_dump_json(), window.model_dump_json(), response_hash, str(acquired)
+            payload.acquisition_id,
+            provider,
+            scope.model_dump_json(),
+            window.model_dump_json(),
+            response_hash,
+            str(acquired),
         ),
         scope=scope,
         members=tuple(s.series_id for s in definitions),

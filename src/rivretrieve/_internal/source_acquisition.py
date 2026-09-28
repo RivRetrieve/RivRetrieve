@@ -43,9 +43,25 @@ def http_response_meaning(
 
 
 @dataclass(frozen=True, slots=True)
+class SourceRequestTarget:
+    """A requested station and product before any concrete series is established."""
+
+    station_id: str
+    product_id: str
+
+    @property
+    def series_id(self) -> None:
+        return None
+
+    @property
+    def variant(self) -> None:
+        return None
+
+
+@dataclass(frozen=True, slots=True)
 class FailedSourceRequest:
     event_id: str
-    series: SourceSeries
+    series: SourceSeries | SourceRequestTarget
     window: SeriesWindow
     request: TransportRequest
     failure: TransportFailure | CredentialExchangeError

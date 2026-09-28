@@ -3,6 +3,7 @@
 Contributed by: Thiago von Däniken
 """
 
+from dataclasses import replace
 from datetime import datetime
 from io import BytesIO
 from math import isfinite
@@ -147,6 +148,11 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                     )
                 )
         return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), tuple(outcomes), tuple(issues))
-    return parse_mapped_series(
+    parsed = parse_mapped_series(
         payload, provider_config, provider="ba_fhmzbih", mappings=SERIES_MAPPINGS, native_parse=_parse_native
+    )
+    # A rolling workbook establishes its published rows, not complete temporal coverage.
+    return replace(
+        parsed,
+        outcomes=tuple(outcome.model_copy(update={"coverage": "observations"}) for outcome in parsed.outcomes),
     )

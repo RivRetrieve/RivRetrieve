@@ -66,7 +66,7 @@ def test_combined_store_refused_before_values_or_network(operation, tmp_path, mo
             pytest.fail("stale publication identity reached source transport")
 
     monkeypatch.setattr(discovery, "HttpClient", NoNetwork)
-    with pytest.raises(ObservationStoreRefusedError, match="publication.service"):
+    with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 7"):
         if operation == "status":
             rr.cache_status("fr_hubeau")
         else:
@@ -113,7 +113,7 @@ def test_service_specific_daily_store_and_bundles_round_trip(tmp_path, monkeypat
     result = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="reuse", on_issue="raise")
     assert result.data.height > 0
     manifest = json.loads((tmp_path / "fr_hubeau/store/manifest.json").read_text())
-    assert manifest["format_version"] == 7
+    assert manifest["format_version"] == 8
     assert manifest["publication_service"] == "hubeau"
     assert rr.cache_status("fr_hubeau").exists
     for value in (selection, result):
@@ -161,3 +161,32 @@ def test_current_context_only_empty_bundle_round_trip():
     assert tuple(item.model_dump_json() for item in restored.acquisition_provenance) == tuple(
         item.model_dump_json() for item in selection.acquisition_provenance
     )
+
+
+@pytest.mark.parametrize("operation", ("status", "reuse", "refresh"))
+def test_current_store_revision_still_refuses_retired_publication_service(operation, tmp_path, monkeypatch, artifacts):
+    cache = tmp_path / "cache"
+    target = cache / "fr_hubeau/store"
+    shutil.copytree(artifacts / "store", target)
+    path = target / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["format_version"] = 8
+    path.write_text(json.dumps(manifest))
+    before = _files(cache)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(cache))
+    monkeypatch.setattr(validation, "_open_parquet", _no_values)
+
+    class NoNetwork:
+        def send(self, request):
+            pytest.fail("retired publication identity reached source transport")
+
+    monkeypatch.setattr(discovery, "HttpClient", NoNetwork)
+    with pytest.raises(ObservationStoreRefusedError, match="publication.service"):
+        if operation == "status":
+            rr.cache_status("fr_hubeau")
+        else:
+            selection = rr.find(
+                provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
+            )
+            rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache=operation, on_issue="ignore")
+    assert _files(cache) == before

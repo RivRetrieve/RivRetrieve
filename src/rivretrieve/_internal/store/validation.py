@@ -31,6 +31,7 @@ from rivretrieve._internal.source_series import (
     admission,
 )
 from rivretrieve._internal.store.provenance import decode_source_call
+from rivretrieve._internal.time_axis import TimeAxis, timestamp_on_axis
 
 StoreRoot = NewType("StoreRoot", Path)
 PartitionIdentifier = NewType("PartitionIdentifier", str)
@@ -130,7 +131,7 @@ class AccumulatedStoreManifest:
     Attributes
     ----------
     format_version : int
-        Accumulated layout revision, 7.
+        Accumulated layout revision, 8.
     provider_id : ProviderId
         Provider whose native observations are stored.
     built_at : datetime
@@ -141,7 +142,7 @@ class AccumulatedStoreManifest:
         Exact physical row counts keyed by product/year.
     """
 
-    format_version: Literal[7]
+    format_version: Literal[8]
     provider_id: ProviderId
     built_at: datetime
     coverage: tuple[CoverageInterval, ...]
@@ -299,7 +300,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
     version = raw["format_version"]
     if type(version) is not int:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
-    if version not in (5, 7):
+    if version not in (5, 8):
         _refuse(
             StoreRefusalKind.INCOMPATIBLE,
             store,
@@ -328,7 +329,7 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
 def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
-    if raw["format_version"] == 7:
+    if raw["format_version"] == 8:
         schema = schema["$defs"]["accumulated"]
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
@@ -632,7 +633,7 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     if raw["provider_id"] != str(provider_id):
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
     _validate_metadata(raw, store, provider_id)
-    if raw["format_version"] == 7:
+    if raw["format_version"] == 8:
         return _validate_accumulated(raw, store, provider_id)
     _validate_source_contract(raw, store, provider_id)
     partition_files = _discover_partitions(raw, store, provider_id)
@@ -663,7 +664,11 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
         try:
             record = CoverageInterval(
                 item["series_id"],
-                RequestedInterval(datetime.fromisoformat(item["start"]), datetime.fromisoformat(item["end"])),
+                RequestedInterval(
+                    datetime.fromisoformat(item["start"]),
+                    datetime.fromisoformat(item["end"]),
+                    axis=TimeAxis(item["axis"]),
+                ),
                 datetime.fromisoformat(item["retrieved_at"]) if item["retrieved_at"] is not None else None,
                 item["outcome_id"],
                 tuple(item["facts_ids"]),
@@ -675,6 +680,8 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             outcome is None
             or outcome.series_id != record.series_id
             or outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            or outcome.coverage != "interval"
+            or outcome.window.axis is not record.interval.axis
             or outcome.window.start > record.interval.start
             or outcome.window.end < record.interval.end
             or outcome.retrieved_at != record.retrieved_at
@@ -684,6 +691,7 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.outcome:{index}")
         if any(
             previous.series_id == record.series_id
+            and previous.interval.axis is record.interval.axis
             and bool(set(previous.facts_ids).intersection(record.facts_ids))
             and previous.interval.start <= record.interval.end
             and previous.interval.end >= record.interval.start
@@ -691,6 +699,12 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
         ):
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.overlap:{index}")
         coverage.append(record)
+    observed_keys = {
+        (outcome.series_id, *key)
+        for outcome in outcomes.values()
+        if outcome.coverage == "observations" and outcome.status is OutcomeStatus.SUCCESS
+        for key in outcome.observation_keys
+    }
     partitions = _discover_partitions(raw, store, provider_id)
     for identifier, path in partitions.items():
         _validate_partition(
@@ -703,23 +717,28 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             provider_id,
             allowed_null_states=("published_null",),
         )
-        for batch in _open_parquet(path).iter_batches(columns=["series_id", "facts_id", "time"]):
-            for series_id, facts_id, timestamp in zip(
+        for batch in _open_parquet(path).iter_batches(columns=["series_id", "facts_id", "time", "time_zone"]):
+            for series_id, facts_id, timestamp, time_zone in zip(
                 batch.column("series_id").to_pylist(),
                 batch.column("facts_id").to_pylist(),
                 batch.column("time").to_pylist(),
+                batch.column("time_zone").to_pylist(),
                 strict=True,
             ):
-                if not any(
-                    c.series_id == series_id
-                    and facts_id in c.facts_ids
-                    and c.interval.start <= timestamp <= c.interval.end
-                    for c in coverage
+                if (
+                    not any(
+                        c.series_id == series_id
+                        and facts_id in c.facts_ids
+                        and (axis_timestamp := timestamp_on_axis(timestamp, time_zone, c.interval.axis)) is not None
+                        and c.interval.start <= axis_timestamp <= c.interval.end
+                        for c in coverage
+                    )
+                    and (series_id, facts_id, timestamp, time_zone) not in observed_keys
                 ):
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
     _validate_series_partitions(raw, partitions, store, provider_id)
     manifest = AccumulatedStoreManifest(
-        format_version=7,
+        format_version=8,
         provider_id=provider_id,
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
         coverage=tuple(coverage),

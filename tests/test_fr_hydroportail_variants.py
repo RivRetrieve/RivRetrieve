@@ -252,6 +252,17 @@ def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(monkeypatch,
     selection = rr.find(
         provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"
     )
+    from rivretrieve._internal.store import ObservationStoreRefusedError
+
+    held_files = {p.relative_to(tmp_path): p.read_bytes() for p in (tmp_path / "cache").rglob("*") if p.is_file()}
+    with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 7"):
+        rr.fetch(selection, start="2026-06-01", end="2026-06-02", cache="reuse", on_issue="ignore")
+    assert transport.calls == []
+    assert {
+        p.relative_to(tmp_path): p.read_bytes() for p in (tmp_path / "cache").rglob("*") if p.is_file()
+    } == held_files
+    # Remove only the copied obsolete store before testing current variant acquisition.
+    shutil.rmtree(tmp_path / "cache")
     result = rr.fetch(selection, start="2026-06-01", end="2026-06-02", cache="reuse", on_issue="ignore")
     assert set(transport.calls) == VARIANTS
     assert set(rr.series(result)["variant"].drop_nulls()) == VARIANTS
