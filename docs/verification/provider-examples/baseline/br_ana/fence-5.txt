@@ -1,0 +1,1 @@
+[('15400000', 'bruto', 'daily', 'mean'), ('15400000', 'consistido', 'daily', 'mean')]

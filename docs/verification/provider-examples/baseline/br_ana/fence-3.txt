@@ -1,0 +1,1 @@
+[('Vazao_Adotada', None, None)]

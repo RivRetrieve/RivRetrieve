@@ -113,3 +113,11 @@ This record does not grant approval or merge authority. No code defect was
 established during these checks. There is no live-access blocker for the displayed
 examples. The bounded source and observation checks above do not establish facts
 outside their stated scope.
+
+## Script formatting
+
+On 2026-09-28, ancillary scripts received whitespace and import cleanup only.
+The original executed bytes remain in Git at
+`0b443049d50819978030e29e46011ca2101cb337`. The exact provider-example script
+was left unchanged to preserve the recorded execution input. These maintenance
+changes do not constitute a new execution of the historical verification.

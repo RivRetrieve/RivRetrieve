@@ -124,3 +124,11 @@ uv run ruff check tests/test_canada_documentation.py
 uv run ruff format --check tests/test_canada_documentation.py
 git diff --check origin/main
 ```
+
+## Script formatting
+
+On 2026-09-28, ancillary scripts received whitespace and import cleanup only.
+The original executed bytes remain in Git at
+`0b443049d50819978030e29e46011ca2101cb337`. The exact provider-example script
+was left unchanged to preserve the recorded execution input. These maintenance
+changes do not constitute a new execution of the historical verification.
