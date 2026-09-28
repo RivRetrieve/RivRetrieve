@@ -161,7 +161,7 @@ They share a reader and format family but preserve different information.
 | Live `cache="refresh"` | Replacement answer for the successfully retrieved requested interval | Fetch and parse again, convert, update storage, assemble |
 | Bulk | Certified compiled publisher observations | Read store, convert, assemble without provider fetch or parse |
 
-Accumulated stores use format revision `7`.
+Accumulated stores use format revision `8`.
 Their coverage records which closed intervals were successfully retrieved and when, including successful empty answers.
 Coverage is per concrete series and interval, separate from inventory knowledge. All-series reuse
 requires a complete inventory for the recorded scope and vintage, plus coverage of every required

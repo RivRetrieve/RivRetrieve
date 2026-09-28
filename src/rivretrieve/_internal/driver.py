@@ -14,7 +14,13 @@ from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
 from rivretrieve._internal.conversion import convert, validate_native_rows
-from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval, remainder, served_coverage
+from rivretrieve._internal.coverage import (
+    CoverageInterval,
+    RequestedInterval,
+    interval_envelope,
+    remainder,
+    served_coverage,
+)
 from rivretrieve._internal.engine import (
     CanonicalRows,
     CanonicalRowsSchema,
@@ -75,6 +81,7 @@ from rivretrieve._internal.store.validation import (
     StoreRefusal,
     StoreRefusalKind,
 )
+from rivretrieve._internal.time_axis import TimeAxis, axis_time_expression
 from rivretrieve._internal.transport import (
     AuthenticationCapability,
     HttpClient,
@@ -532,14 +539,24 @@ def _exclude_native_intervals(
     keep = pl.lit(True)
     for series_id, interval in intervals:
         inside = (
-            daily & pl.col("time").dt.date().is_between(interval.start.date(), interval.end.date(), closed="both")
-        ) | (~daily & pl.col("time").is_between(interval.start, interval.end, closed="both"))
+            axis_time_expression(interval.axis).is_between(interval.start, interval.end, closed="both")
+            if interval.axis is TimeAxis.UTC
+            else (
+                daily & pl.col("time").dt.date().is_between(interval.start.date(), interval.end.date(), closed="both")
+            )
+            | (~daily & pl.col("time").is_between(interval.start, interval.end, closed="both"))
+        )
         keep = keep & ~((pl.col("series_id") == series_id) & inside)
     return rows.filter(keep)
 
 
 def _snapshot_matches(snapshot: InventorySnapshot, scope: SeriesScope, window: SeriesWindow) -> bool:
     held = snapshot.scope
+    if snapshot.window is not None and snapshot.window.axis is not window.axis:
+        converted = interval_envelope(
+            RequestedInterval(window.start, window.end, axis=window.axis), snapshot.window.axis
+        )
+        window = SeriesWindow(start=converted.start, end=converted.end, axis=converted.axis)
     if snapshot.origin == "catalogue":
         return False
     if snapshot.window is not None and (snapshot.window.start > window.start or snapshot.window.end < window.end):
@@ -576,11 +593,19 @@ def _reconcile_acquired_inventories(
     outcomes = (*acquired.outcomes, *(item for parsed in parsed_results for item in parsed.outcomes))
     reconciled = []
     for snapshot in acquired.inventories:
+        compared = interval_envelope(
+            RequestedInterval(window.start, window.end, axis=window.axis),
+            snapshot.window.axis if snapshot.window is not None else window.axis,
+        )
         snapshot_window = (
-            window
+            SeriesWindow(start=compared.start, end=compared.end, axis=compared.axis)
             if snapshot.window is None
-            else SeriesWindow(start=max(window.start, snapshot.window.start), end=min(window.end, snapshot.window.end))
-            if snapshot.window.start <= window.end and snapshot.window.end >= window.start
+            else SeriesWindow(
+                start=max(compared.start, snapshot.window.start),
+                end=min(compared.end, snapshot.window.end),
+                axis=compared.axis,
+            )
+            if snapshot.window.start <= compared.end and snapshot.window.end >= compared.start
             else None
         )
         if snapshot_window is None or not _snapshot_matches(snapshot, scope, snapshot_window):
@@ -588,7 +613,9 @@ def _reconcile_acquired_inventories(
         scoped_outcomes = tuple(
             item
             for item in outcomes
-            if item.window.start <= snapshot_window.end and item.window.end >= snapshot_window.start
+            if item.window.axis is snapshot_window.axis
+            and item.window.start <= snapshot_window.end
+            and item.window.end >= snapshot_window.start
         )
         reasons: list[str] = []
         members = set(snapshot.members)
@@ -631,13 +658,15 @@ def _reconcile_acquired_inventories(
                 if not observed_definition and not acquired_empty:
                     reasons.append("A matching admitted member lacks a concrete response definition")
                 coverage = tuple(
-                    RequestedInterval(outcome.window.start, outcome.window.end)
+                    RequestedInterval(outcome.window.start, outcome.window.end, axis=outcome.window.axis)
                     for outcome in scoped_outcomes
                     if outcome.series_id == key
                     and fact.facts_id in outcome.facts_ids
                     and outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
                 )
-                if remainder(RequestedInterval(snapshot_window.start, snapshot_window.end), coverage):
+                if remainder(
+                    RequestedInterval(snapshot_window.start, snapshot_window.end, axis=snapshot_window.axis), coverage
+                ):
                     reasons.append("A matching admitted member lacks successful coverage in this acquisition")
         reason = "; ".join(dict.fromkeys(reasons)) if reasons else None
         evidence = (
@@ -684,15 +713,20 @@ def _reconcile_acquired_inventories(
 def _covered_facts(
     manifest: AccumulatedStoreManifest, definition: SourceSeries, scope: SeriesScope, window: SeriesWindow
 ) -> bool:
-    interval = RequestedInterval(window.start, window.end)
+    interval = RequestedInterval(window.start, window.end, axis=window.axis)
     return all(
-        not remainder(
-            interval,
-            tuple(
-                item.interval
-                for item in manifest.coverage
-                if item.series_id == definition.series_id and fact.facts_id in item.facts_ids
-            ),
+        any(
+            not remainder(
+                interval_envelope(interval, axis),
+                tuple(
+                    item.interval
+                    for item in manifest.coverage
+                    if item.series_id == definition.series_id
+                    and fact.facts_id in item.facts_ids
+                    and item.interval.axis is axis
+                ),
+            )
+            for axis in TimeAxis
         )
         for fact in definition.facts
         if scope.matches_facts(fact) and admission(fact).status == "supported"
@@ -716,8 +750,12 @@ def _explicit_reuse(manifest: AccumulatedStoreManifest, scope: SeriesScope, wind
                 scope.product_ids,
             ):
                 continue
+            compared = interval_envelope(
+                RequestedInterval(window.start, window.end, axis=window.axis),
+                snapshot.window.axis if snapshot.window else window.axis,
+            )
             if snapshot.window is not None and (
-                snapshot.window.start > window.end or snapshot.window.end < window.start
+                snapshot.window.start > compared.end or snapshot.window.end < compared.start
             ):
                 continue
             if definition.series_id in snapshot.members:
@@ -760,7 +798,13 @@ def _reusable_snapshot(
         held = snapshot.scope
         if snapshot.origin == "catalogue":
             continue
-        if snapshot.window is not None and (snapshot.window.start > window.start or snapshot.window.end < window.end):
+        compared = interval_envelope(
+            RequestedInterval(window.start, window.end, axis=window.axis),
+            snapshot.window.axis if snapshot.window else window.axis,
+        )
+        if snapshot.window is not None and (
+            snapshot.window.start > compared.start or snapshot.window.end < compared.end
+        ):
             continue
         if (held.provider_ids, held.station_ids, held.product_ids) != (
             scope.provider_ids,
@@ -810,29 +854,15 @@ def _reusable_snapshot(
             for fact in definition.facts
         ):
             return None
-        interval = RequestedInterval(window.start, window.end)
-        outcome_facts = {item.outcome_id: item.facts_ids for item in manifest.outcomes}
-        if all(
-            not remainder(
-                interval,
-                tuple(
-                    item.interval
-                    for item in manifest.coverage
-                    if item.series_id == definition.series_id
-                    and fact.facts_id in (item.facts_ids or outcome_facts.get(item.outcome_id, ()))
-                ),
-            )
-            for definition in members
-            for fact in definition.facts
-            if scope.matches_facts(fact) and admission(fact).status == "supported"
-        ):
+        if all(_covered_facts(manifest, definition, scope, window) for definition in members):
             return _ReusePlan((snapshot,), members)
         return None
     return None
 
 
 def _overlaps(outcome: RetrievalOutcome, interval: RequestedInterval) -> bool:
-    return outcome.window.start <= interval.end and outcome.window.end >= interval.start
+    compared = interval_envelope(interval, outcome.window.axis)
+    return outcome.window.start <= compared.end and outcome.window.end >= compared.start
 
 
 def _issue_in_scope(
@@ -960,7 +990,7 @@ def _finite_selector_assessments(
                 definition = definitions.get(outcome.series_id) if outcome.series_id is not None else None
                 if definition is None or not identity_scope.matches(definition):
                     continue
-                if outcome.window.start > window.end or outcome.window.end < window.start:
+                if not _overlaps(outcome, RequestedInterval(window.start, window.end, axis=window.axis)):
                     continue
                 if outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
                     represented = True
@@ -1074,7 +1104,7 @@ def _combine_replacements(
     for replacement in replacements:
         original = by_id[replacement.coverage.outcome_id]
         excluded = tuple(
-            RequestedInterval(item.window.start, item.window.end)
+            RequestedInterval(item.window.start, item.window.end, axis=item.window.axis)
             for item in failures
             if (
                 item.series_id == original.series_id
@@ -1085,16 +1115,21 @@ def _combine_replacements(
                 )
             )
         )
-        for interval in remainder(replacement.coverage.interval, excluded):
+        for interval in remainder(
+            replacement.coverage.interval,
+            tuple(item for item in excluded if item.axis is replacement.coverage.interval.axis),
+        ):
             part = replacement
             if interval != replacement.coverage.interval:
-                native = replacement.rows.filter(pl.col("time").is_between(interval.start, interval.end))
+                native = replacement.rows.filter(
+                    axis_time_expression(interval.axis).is_between(interval.start, interval.end)
+                )
                 outcome = original.model_copy(
                     update={
                         "outcome_id": stable_id(
                             original.outcome_id, interval.start.isoformat(), interval.end.isoformat()
                         ),
-                        "window": SeriesWindow(start=interval.start, end=interval.end),
+                        "window": SeriesWindow(start=interval.start, end=interval.end, axis=interval.axis),
                         "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
                         "observation_keys": tuple(
                             dict.fromkeys(native.select("facts_id", "time", "time_zone").iter_rows())
@@ -1125,6 +1160,11 @@ def _combine_replacements(
             snapshot_keys.update(keys)
         if len(parts) == 1:
             combined.append(parts[0])
+            continue
+        if any(by_id[part.coverage.outcome_id].coverage == "observations" for part in parts):
+            if not all(by_id[part.coverage.outcome_id].coverage == "observations" for part in parts):
+                raise FatalContractError("A replacement window mixes interval and observation-only evidence")
+            combined.extend(parts)
             continue
         contributors = tuple(by_id[item.coverage.outcome_id] for item in parts)
         native = pl.concat([item.rows for item in parts])
@@ -1391,7 +1431,8 @@ def drive(
             for key in ids:
                 served.extend(
                     replace(item, facts_ids=tuple(fact for fact in item.facts_ids if fact in matching_facts))
-                    for item in served_coverage(manifest.coverage, key, interval)
+                    for axis in TimeAxis
+                    for item in served_coverage(manifest.coverage, key, interval_envelope(interval, axis))
                     if set(item.facts_ids).intersection(matching_facts)
                 )
             if ids:
@@ -1438,14 +1479,17 @@ def drive(
             coverage = tuple(
                 replace(item, interval=remaining)
                 for key in ids
-                for item in served_coverage(manifest.coverage, key, held_interval)
+                for axis in TimeAxis
+                for item in served_coverage(manifest.coverage, key, interval_envelope(held_interval, axis))
                 if set(item.facts_ids).intersection(fact_ids)
                 for remaining in remainder(
                     item.interval,
                     tuple(
                         previous.interval
                         for previous in served
-                        if previous.series_id == item.series_id and set(item.facts_ids).issubset(previous.facts_ids)
+                        if previous.series_id == item.series_id
+                        and set(item.facts_ids).issubset(previous.facts_ids)
+                        and previous.interval.axis is item.interval.axis
                     ),
                 )
             )
@@ -1457,16 +1501,21 @@ def drive(
                     request.provider_id,
                     (held_station,),
                     (held_product,),
-                    held_interval.start,
-                    held_interval.end,
+                    interval_envelope(held_interval, TimeAxis.NATIVE).start,
+                    interval_envelope(held_interval, TimeAxis.NATIVE).end,
                     series_ids=ids,
                     facts_ids=fact_ids,
                 )
             )
             restored_ids.update(ids)
             held_rows = _exclude_native_intervals(
-                held_read.rows, held_series, tuple((item.series_id, item.interval) for item in served)
+                held_read.rows.filter(
+                    axis_time_expression(held_interval.axis).is_between(held_interval.start, held_interval.end)
+                ),
+                held_series,
+                tuple((item.series_id, item.interval) for item in served),
             )
+            held_rows = _clip_native(held_rows, held_series, request.window)
             rows.append(held_rows)
             _merge_definitions(definitions, held_series)
             selected_snapshots = tuple(item for item in manifest.inventories if set(item.members).intersection(ids))
@@ -1476,9 +1525,11 @@ def drive(
             for item in manifest.outcomes:
                 if item.series_id not in ids or not _overlaps(item, held_interval):
                     continue
+                compared = interval_envelope(held_interval, item.window.axis)
                 held_window = SeriesWindow(
-                    start=max(item.window.start, held_interval.start),
-                    end=min(item.window.end, held_interval.end),
+                    start=max(item.window.start, compared.start),
+                    end=min(item.window.end, compared.end),
+                    axis=item.window.axis,
                 )
                 outcomes.append(
                     item.model_copy(
@@ -1594,12 +1645,13 @@ def drive(
                     OutcomeStatus.UNRESOLVED,
                 ):
                     continue
-                failed_start = max(window.start, failed_outcome.window.start)
-                failed_end = min(window.end, failed_outcome.window.end)
+                requested_failure_axis = interval_envelope(interval, failed_outcome.window.axis)
+                failed_start = max(requested_failure_axis.start, failed_outcome.window.start)
+                failed_end = min(requested_failure_axis.end, failed_outcome.window.end)
                 if failed_start <= failed_end:
                     retain_held_successes(
                         (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
-                        held_interval=RequestedInterval(failed_start, failed_end),
+                        held_interval=RequestedInterval(failed_start, failed_end, axis=failed_outcome.window.axis),
                     )
             # A fully exhausted source transaction can establish an empty answer
             # for a known concrete member even when no page contains its rows.
@@ -1619,12 +1671,16 @@ def drive(
                 )
                 if not pair_scope.matches(definition) or not matching_facts:
                     continue
-                start, end = max(window.start, original.window.start), min(window.end, original.window.end)
+                start, end = (
+                    (original.window.start, original.window.end)
+                    if original.window.axis is TimeAxis.UTC
+                    else (max(window.start, original.window.start), min(window.end, original.window.end))
+                )
                 if start > end:
                     continue
                 empty_outcome = original.model_copy(
                     update={
-                        "window": SeriesWindow(start=start, end=end),
+                        "window": SeriesWindow(start=start, end=end, axis=original.window.axis),
                         "facts_ids": matching_facts,
                         "outcome_id": stable_id(
                             original.outcome_id, start.isoformat(), end.isoformat(), *matching_facts
@@ -1637,7 +1693,7 @@ def drive(
                     SuccessfulReplacement(
                         CoverageInterval(
                             definition.series_id,
-                            RequestedInterval(start, end),
+                            RequestedInterval(start, end, axis=original.window.axis),
                             empty_outcome.retrieved_at,
                             empty_outcome.outcome_id,
                             matching_facts,
@@ -1719,8 +1775,9 @@ def drive(
                 else:
                     call_ids = (event.call_id or event.event_id,)
                     cached_calls.append(call)
-                overlap_start = max(window.start, event.window.start)
-                overlap_end = min(window.end, event.window.end)
+                requested_failure_axis = interval_envelope(interval, event.window.axis)
+                overlap_start = max(requested_failure_axis.start, event.window.start)
+                overlap_end = min(requested_failure_axis.end, event.window.end)
                 outside = overlap_start > overlap_end
                 if (
                     outside
@@ -1733,11 +1790,15 @@ def drive(
                 if isinstance(target, SourceSeries):
                     _merge_definitions(definitions, (target,))
                     _merge_definitions(fresh_definitions, (target,))
-                failed_window = event.window if outside else SeriesWindow(start=overlap_start, end=overlap_end)
+                failed_window = (
+                    event.window
+                    if outside
+                    else SeriesWindow(start=overlap_start, end=overlap_end, axis=event.window.axis)
+                )
                 if not outside:
                     retain_held_successes(
                         (target.series_id,) if target.series_id is not None else (),
-                        held_interval=RequestedInterval(overlap_start, overlap_end),
+                        held_interval=RequestedInterval(overlap_start, overlap_end, axis=event.window.axis),
                     )
                 issue = _source_failure_issue(
                     request.provider_id,
@@ -1841,12 +1902,13 @@ def drive(
                     OutcomeStatus.UNRESOLVED,
                 ):
                     continue
-                failed_start = max(window.start, failed_outcome.window.start)
-                failed_end = min(window.end, failed_outcome.window.end)
+                requested_failure_axis = interval_envelope(interval, failed_outcome.window.axis)
+                failed_start = max(requested_failure_axis.start, failed_outcome.window.start)
+                failed_end = min(requested_failure_axis.end, failed_outcome.window.end)
                 if failed_start <= failed_end:
                     retain_held_successes(
                         (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
-                        held_interval=RequestedInterval(failed_start, failed_end),
+                        held_interval=RequestedInterval(failed_start, failed_end, axis=failed_outcome.window.axis),
                     )
         for payload_index, parsed in parsed_payloads:
             source_series_by_payload[payload_index] = tuple(
@@ -1906,7 +1968,7 @@ def drive(
             native = native.filter(pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts))
             if isinstance(fetched, SourceAcquisition):
                 unsupported = tuple(
-                    (item.series_id, RequestedInterval(item.window.start, item.window.end))
+                    (item.series_id, RequestedInterval(item.window.start, item.window.end, axis=item.window.axis))
                     for item in fetched.outcomes
                     if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
                 )
@@ -1915,7 +1977,11 @@ def drive(
                 native = _exclude_native_intervals(native, parsed.series, unsupported)
             # Coverage/outcome evidence describes the current source page even
             # when reuse serves held values instead of overlapping partial rows.
-            coverage_native = native
+            coverage_native = (
+                parsed.rows.filter(pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts))
+                if any(item.window.axis is TimeAxis.UTC for item in parsed.outcomes)
+                else native
+            )
             if restored_held_ids:
                 native = _exclude_native_intervals(
                     native,
@@ -1941,17 +2007,27 @@ def drive(
                 )
                 if original.facts_ids and not matching_outcome_facts:
                     continue
-                overlap_start = max(window.start, original.window.start)
-                overlap_end = min(window.end, original.window.end)
+                overlap_start = (
+                    original.window.start
+                    if original.window.axis is TimeAxis.UTC
+                    else max(window.start, original.window.start)
+                )
+                overlap_end = (
+                    original.window.end
+                    if original.window.axis is TimeAxis.UTC
+                    else min(window.end, original.window.end)
+                )
                 if overlap_start > overlap_end:
                     continue
-                observed_window = SeriesWindow(start=overlap_start, end=overlap_end)
-                observed_interval = RequestedInterval(overlap_start, overlap_end)
+                observed_window = SeriesWindow(start=overlap_start, end=overlap_end, axis=original.window.axis)
+                observed_interval = RequestedInterval(overlap_start, overlap_end, axis=original.window.axis)
                 concrete = (
                     coverage_native.filter(
                         (pl.col("series_id") == original.series_id)
                         & pl.col("facts_id").is_in(original.facts_ids)
-                        & pl.col("time").is_between(overlap_start, overlap_end, closed="both")
+                        & axis_time_expression(original.window.axis).is_between(
+                            overlap_start, overlap_end, closed="both"
+                        )
                     )
                     if original.series_id
                     else pl.DataFrame(schema=RowsSchema.polars_schema)

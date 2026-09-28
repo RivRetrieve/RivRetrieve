@@ -23,6 +23,7 @@ from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import FailedSourceRequest
 from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
+from rivretrieve._internal.time_axis import TimeAxis
 from rivretrieve._internal.transport import SecretCallTrace, TransportAttempt
 
 
@@ -335,6 +336,7 @@ class Payload:
     known_series: tuple[SourceSeries, ...] = ()
     attempt_traces: tuple[TransportAttempt, ...] = field(default=(), kw_only=True)
     acquisition_id: str = field(default_factory=lambda: uuid4().hex, kw_only=True)
+    acquisition_axis: TimeAxis = field(default=TimeAxis.NATIVE, kw_only=True)
 
     def __post_init__(self) -> None:
         if not isinstance(self.attempt_traces, tuple) or any(

@@ -17,6 +17,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.time_axis import TimeAxis
 
 
 class EvidenceState(StrEnum):
@@ -385,11 +386,12 @@ class SeriesScope(BaseModel):
 
 
 class SeriesWindow(BaseModel):
-    """Closed request interval with ordered, naive source wall-clock endpoints."""
+    """Closed source interval on an explicit native-label or UTC-instant axis."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     start: datetime
     end: datetime
+    axis: TimeAxis = TimeAxis.NATIVE
 
     @model_validator(mode="after")
     def check(self) -> SeriesWindow:
