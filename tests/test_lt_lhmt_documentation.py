@@ -16,7 +16,7 @@ EVIDENCE = ROOT / "docs/verification/lithuania-provider"
 def test_lithuania_page_examples_match_recorded_responses(monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/lt_lhmt.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)
-    assert len(blocks) == page.count("```python") == 2
+    assert len(blocks) == page.count("```python") == 1
     replay = ReplayTransport(sorted((EVIDENCE / "recordings").glob("*.recording.json")))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
@@ -26,12 +26,17 @@ def test_lithuania_page_examples_match_recorded_responses(monkeypatch, tmp_path)
         with redirect_stdout(output):
             exec(compile(code, f"lt_lhmt.md:block-{index}", "exec"), namespace)
         assert output.getvalue() == expected, index
-    for name in ("result", "stage_result"):
-        result = namespace[name]
-        assert result.data.height == 7
-        assert result.data["value"].null_count() == 0
-        assert [call["url"].rsplit("/", 1)[-1] for call in result.provenance.calls_made] == ["2019-12", "2020-01"]
-    assert namespace["stage_result"].data["value"].head(3).to_list() == [0.45, 0.45, 0.51]
+    result = namespace["result"]
+    assert result.data.height == 7
+    assert result.data["value"].null_count() == 0
+    assert [call["url"].rsplit("/", 1)[-1] for call in result.provenance.calls_made] == ["2019-12", "2020-01"]
+    stage = rr.find(provider="lt_lhmt", station="nemajunu-vms", quantity="stage", frequency="daily", statistic="mean")
+    stage_rows = rr.fetch(stage, start="2020-01-01", end="2020-01-07", cache="bypass").data
+    assert stage_rows.select("value", "source_unit", "unit").head(3).rows() == [
+        (0.45, "cm", "m"),
+        (0.45, "cm", "m"),
+        (0.51, "cm", "m"),
+    ]
 
 
 def test_lithuania_page_catalogue_count_units_and_index():

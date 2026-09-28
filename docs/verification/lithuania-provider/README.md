@@ -19,20 +19,23 @@ uv run python scripts/generate_reference.py --check
 ```
 
 The verifier uses only the public API with `cache="bypass"`, with no fixtures or
-monkeypatches. At 07:36 UTC on 2026-09-28 it matched both displayed outputs
-exactly. Each page example is a separate `fetch` and made two HTTP 200 calls, for
-the `2019-12` and `2020-01` historical months of `nemajunu-vms`. The December call
+monkeypatches. At 08:22 UTC on 2026-09-28 it matched the page's single example
+and its displayed output exactly. The example made two HTTP 200 calls, for the
+`2019-12` and `2020-01` historical months of `nemajunu-vms`. The December call
 comes from the two-day fetch padding. Its live behaviour checks returned:
 
 | Check | Rows | Nulls | Source calls | Issues |
 |---|---:|---:|---|---|
+| Stage, `nemajunu-vms`, 2020-01-01..07 | 7 | 0 | `2019-12` 200, `2020-01` 200 | none |
 | Discharge, `birstono-vms`, 2024-06-10..12 | 3 | 3 | `2024-06` 200 | none |
 | Discharge, `nemajunu-vms`, 2025-06-10..12 | 0 | 0 | `2025-06` 404 | warning `source.http_not_found` |
 | Discharge, `nemajunu-vms`, 2024-12-27..30 | 4 | 0 | `2025-01` 404, `2024-12` 200 | none |
 | Stage, `juodkrantes-vms`, 2020-01-10..12 | 0 | 0 | `2020-01` 404 | warning `source.http_not_found` |
 | Both quantities, `nemajunu-vms`, 2020-01-01..07 | 14 | 0 | `2019-12` 200, `2020-01` 200 | none |
 
-Each check is asserted. They establish the page's distinctions: a published null
+Each check is asserted. The stage check returns 0.45, 0.45 and 0.51 m with
+`source_unit` `cm` for the first three days, confirming the conversion in the
+page's table. The other checks establish the page's distinctions: a published null
 is a row with `value=null`; an unpublished requested month is an identified
 warning, not an empty success; an unpublished padding-only month is recorded in
 provenance without an issue. One `fetch` selecting both quantities sends one
@@ -47,10 +50,10 @@ The two committed recordings were made with the normal recording CLI on
 uv run python -m rivretrieve._internal.record_observations --provider lt_lhmt --station nemajunu-vms --product discharge_daily_mean --start 2020-01-01 --end 2020-01-07 --out-dir docs/verification/lithuania-provider/recordings --name nemajunu-week
 ```
 
-The API publishes both fields in one monthly document, so these responses serve
-both page examples. `tests/test_lt_lhmt_documentation.py` replays them through both
-examples and checks their output, source calls, catalogue count, units and index
-link. Replay is not live verification.
+The API publishes both fields in one monthly document, so these two monthly
+responses serve both quantities. `tests/test_lt_lhmt_documentation.py` replays them
+through the page example and the stage-unit check, and checks their output, source
+calls, catalogue count, units and index link. Replay is not live verification.
 
 On 2026-09-28 the pytest command above passed 148 tests (one warning), including
 the 42 shared-acquisition regression tests for #389. Scoped Ruff lint and format,

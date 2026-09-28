@@ -11,7 +11,7 @@ import rivretrieve as rr
 print("run at", datetime.now(UTC).isoformat(timespec="seconds"))
 page = Path("docs/providers/lt_lhmt.md").read_text()
 blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)
-assert len(blocks) == page.count("```python") == 2
+assert len(blocks) == page.count("```python") == 1
 namespace = {}
 for index, (code, expected) in enumerate(blocks, 1):
     output = io.StringIO()
@@ -21,9 +21,8 @@ for index, (code, expected) in enumerate(blocks, 1):
     print(output.getvalue(), end="")
     assert output.getvalue() == expected, index
 print("Public snippets match all displayed output.")
-for name in ("result", "stage_result"):
-    calls = namespace[name].provenance.calls_made
-    print(name, "source calls:", [(call["url"].rsplit("/", 1)[-1], call["status_code"]) for call in calls])
+calls = namespace["result"].provenance.calls_made
+print("result source calls:", [(call["url"].rsplit("/", 1)[-1], call["status_code"]) for call in calls])
 
 
 def daily_mean(station, quantity):
@@ -38,8 +37,7 @@ def summary(label, result):
     return result
 
 
-for name in ("result", "stage_result"):
-    assert [call["url"].rsplit("/", 1)[-1] for call in namespace[name].provenance.calls_made] == ["2019-12", "2020-01"]
+assert [call["url"].rsplit("/", 1)[-1] for call in calls] == ["2019-12", "2020-01"]
 
 print("CLAIMS")
 stations = len(rr.find(provider="lt_lhmt").locations)
@@ -52,6 +50,14 @@ print(
     .sort("quantity")
     .rows(),
 )
+stage = summary(
+    "stage units nemajunu-vms 2020-01-01..07",
+    rr.fetch(daily_mean("nemajunu-vms", "stage"), start="2020-01-01", end="2020-01-07", cache="bypass"),
+)
+stage_preview = stage.data.select("value", "source_unit", "unit").head(3).rows()
+print("stage preview:", stage_preview)
+assert stage.data.height == 7 and stage.issues == ()
+assert stage_preview == [(0.45, "cm", "m"), (0.45, "cm", "m"), (0.51, "cm", "m")]
 nulls = summary(
     "published null discharge birstono-vms 2024-06-10..12",
     rr.fetch(daily_mean("birstono-vms", "discharge"), start="2024-06-10", end="2024-06-12", cache="bypass"),

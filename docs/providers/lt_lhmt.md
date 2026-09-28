@@ -8,14 +8,16 @@
 | Country | Lithuania |
 | Published by | Lietuvos hidrometeorologijos tarnyba (LHMT), the Lithuanian Hydrometeorological Service under the Ministry of Environment |
 | Read from | Meteo.lt API (`api.meteo.lt`) |
-| Quantities | Daily mean discharge and stage |
+| Quantities | Historical daily mean discharge and stage |
 | Stations in the catalogue | 97. Availability depends on quantity and period |
 | Credentials | None |
 | Licence stated by LHMT | Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0), unless stated otherwise |
 | Agency documentation | [Meteo.lt API](https://api.meteo.lt/) |
 
-Retrieve one week of published daily mean discharge at station `nemajunu-vms`,
-Nemajūnai on the Nemunas:
+RivRetrieve reads only the API's historical feed, so it provides nothing more
+recent than the latest published year; the API's separate feed of the last 30 days
+of readings is not read. Retrieve one week of published daily mean discharge at
+station `nemajunu-vms`, Nemajūnai on the Nemunas:
 
 ```python
 import rivretrieve as rr
@@ -56,8 +58,7 @@ the values.
 
 `cache="bypass"` requests the Meteo.lt API rather than a local cache. This output
 was checked on 2026-09-28. Published values can change, so a later retrieval need
-not reproduce this output exactly. Run the examples in order in the same Python
-session.
+not reproduce this output exactly.
 See [Usage](../usage.md) for general selection and result handling.
 
 ## Who measures, and who publishes
@@ -86,35 +87,10 @@ for example `nemajunu-vms`.
 | `stage` | `waterLevel` | Daily mean | cm | m |
 
 The API documents both fields as daily means ("Vidurkis per parą"). RivRetrieve
-converts stage from centimetres to metres; discharge needs no conversion. Stage is
-water level; RivRetrieve has not established its vertical reference or datum.
-
-```python
-stage = rr.find(
-    provider="lt_lhmt",
-    station="nemajunu-vms",
-    quantity="stage",
-    frequency="daily",
-    statistic="mean",
-)
-
-stage_result = rr.fetch(stage, start="2020-01-01", end="2020-01-07", cache="bypass")
-
-preview = stage_result.data.select("time", "value", "source_unit", "unit").head(3)
-print(preview.write_csv(), end="")
-```
-
-Output:
-
-```text
-time,value,source_unit,unit
-2020-01-01T00:00:00.000000,0.45,cm,m
-2020-01-02T00:00:00.000000,0.45,cm,m
-2020-01-03T00:00:00.000000,0.51,cm,m
-```
-
-The API published 45, 45 and 51 cm for these dates; `source_unit` keeps the
-published unit, and `value` is in metres.
+converts stage from centimetres to metres; discharge needs no conversion. The
+`source_unit` column keeps the published unit, `cm`, alongside the returned `m`.
+Stage is water level; RivRetrieve has not established its vertical reference or
+datum.
 
 The catalogue lists both quantities at every station, because the station list does
 not say which quantities each station publishes. A station being listed does not
@@ -148,6 +124,8 @@ interpreting an empty result.
 The API also has a separate *measured* feed that RivRetrieve does not read. It
 holds stage and water temperature for the last 30 days, with UTC timestamps, and
 no discharge. The historical feed that RivRetrieve reads has no water temperature.
+Retrieval of the measured stage and water temperature is tracked in
+[issue #292](https://github.com/RivRetrieve/RivRetrieve/issues/292).
 
 ## Time and data status
 
@@ -179,8 +157,8 @@ exceeding the limit may block the address without warning.
 
 RivRetrieve sends one request per station and calendar month. Because each
 monthly response contains both discharge and stage, one `fetch` that selects both
-quantities shares that request; separate `fetch` calls for each quantity, as in the
-examples above, request the same months again. RivRetrieve also requests the
+quantities shares that request; separate `fetch` calls for each quantity request
+the same months again. RivRetrieve also requests the
 neighbouring month when the selected period starts on the first or second day of a
 month, or ends on one of its last two days. If that extra month is unpublished, the
 request is not reported as an issue. Twenty years at one station take about 240
