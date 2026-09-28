@@ -3,10 +3,11 @@
 Checked 2026-09-27 (UTC) on macOS arm64, CPython 3.13, with `uv sync`. No credentials
 are needed. Tested revision: merge `b65ab75de6b94ab760a0986a4ea7c373f23d4e54`, which
 brings `docs/provider-poland` up to `main` at `f08ea0a`. The resumed checks also
-include `main` at `bcf6faa`. The final branch also includes `main` at `565d391`;
-its additional Python changes are docstrings only (verified by comparing parsed
-syntax trees with docstrings removed). No production code or catalogue was changed
-by this documentation revision.
+include `main` at `bcf6faa`. The first published revision included `main` at
+`565d391`, whose additional Python changes were docstrings only. After human
+feedback, the branch incorporated `main` at `28c4e5d` and received fresh validation
+on 2026-09-28. No production code or catalogue was changed by this documentation
+revision; intervening production changes came from `main`.
 
 ## Reproduce
 
@@ -21,7 +22,8 @@ uv run mkdocs build --strict -d <scratch directory>
 ```
 
 The verifier uses only the public API, with no fixtures or monkeypatches, and compares
-each printed result with the page's following output block.
+each printed result with the page's following output block. The current page contains
+archive preparation and one discharge example.
 
 ## Live evidence
 
@@ -57,8 +59,16 @@ blocks in that draft, with zero mismatches. Human review then removed the stage,
 temperature and cache-status demonstrations to keep the provider page focused.
 The remaining discharge example and its output are unchanged. No staging directory remained after the check.
 
-The resumed documentation test command passed all 45 tests (one dependency
-deprecation warning). `uv run mkdocs build --strict` passed, as did Ruff lint and
+On 2026-09-28 the remaining discharge example was checked again against the retained
+live store, with `main` at `28c4e5d` incorporated. Its printed output matched exactly,
+with zero mismatches. No download or rebuild was performed, and no staging directory
+remained.
+
+The 2026-09-27 documentation test command passed all 45 tests (one dependency
+deprecation warning). After the human edits and incorporation of `main` at
+`28c4e5d`, the same command passed 31 tests on 2026-09-28 in 94.15 seconds,
+with the same dependency warning. The count changed because `main` streamlined
+the documentation tests; all three Poland-specific tests still passed. `uv run mkdocs build --strict` passed, as did Ruff lint and
 format checks for the verifier and documentation test. The earlier full-suite log
 was interrupted; it is not evidence of a completed full-suite pass.
 
@@ -68,7 +78,11 @@ was interrupted; it is not evidence of a completed full-suite pass.
 `tests/test_data/pl_imgw_annual/codz_2024.zip` (retrieved 2026-09-20) and replays the
 retrieval snippets with network access disabled. It checks their printed output, the
 publisher URL in the provenance, the `to_utc` refusal, the catalogue counts, the
-product facts and the index link. It is not live acquisition evidence.
+product facts and the index link. It is not live acquisition evidence. The separate
+annual-archive compilation protects the documentation's executable contract:
+the printed example must work through the public API with its documented cache
+configuration and with network access disabled. This checks the reader's code,
+rather than duplicating the compiler's detailed edge-case tests.
 
 ## Claims and limits
 
@@ -103,6 +117,10 @@ product facts and the index link. It is not live acquisition evidence.
   day boundary, a vertical reference, a coordinate reference system or quality
   approval. No legal conclusion about which conditions of the regulations apply to a
   particular use is drawn.
+
+The shorter-archive replacement safeguard remains unchanged. Human review raised
+whether intentional publisher withdrawals should allow an explicit replacement;
+that design question is recorded on [#392](https://github.com/RivRetrieve/RivRetrieve/issues/392#issuecomment-5866204605).
 
 Exploratory logs, the full download log and source snapshots are preserved outside the
 Git diff at `.worktrees/poland-provider-evidence-2026-09-24/` in the maintainer checkout.

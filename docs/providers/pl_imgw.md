@@ -287,7 +287,7 @@ practical guidance, not an IMGW-PIB citation template.
 | [IMGW-PIB: O Instytucie](https://imgw.pl/strona-glowna/o-instytucie/) (about the institute) | 2026-09-25 |
 
 The station count describes the packaged catalogue. A fresh national download and the
-examples on this page were run on 2026-09-27. They verify one station, three quantities
-and one week, not continuous history or national coverage. The
+example on this page were run on 2026-09-27. The example verifies one station,
+discharge and one week, not continuous history or national coverage. The
 [verification record](../verification/poland-provider/index.md) retains the commands,
 source checks, exact output and the limits of these checks.
