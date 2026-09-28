@@ -150,3 +150,9 @@ The regenerated page documents format 8, native/UTC interval axes and explicit
 outcome coverage/key evidence. The docstring correction changes documentation,
 not executable behavior. Independent AST comparison is required before carrying
 forward the unchanged-behavior live examples.
+
+The root owns publication of this reference/docstring correction in a separate
+PR. The evidence branch briefly contained the same correction during validation,
+then removed those two file deltas to avoid duplicate ownership. The recorded
+pre-build checks above are historical execution evidence, not a claim that this
+evidence-only PR publishes the generated reference.

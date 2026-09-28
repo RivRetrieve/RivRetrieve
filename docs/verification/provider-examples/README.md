@@ -140,4 +140,5 @@ repository regression passes. Final bulk execution is still in progress.
   `verify/provider-examples` delivery branch. It merges the reviewed production
   implementation without changing either active compiler checkout. Completed
   output files are copied here byte-for-byte from the original evidence directory.
-  This checkout also corrects one coverage docstring and regenerates the reference.
+  This checkout identified reference drift before building documentation. The
+  root owns the coverage-docstring/reference correction in a separate PR.
