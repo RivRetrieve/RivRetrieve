@@ -141,3 +141,51 @@ def test_isolated_utc_store_coverage_uses_published_offset_across_native_year_bo
     assert StoreReader().status(store, ProviderId("axis_control")).manifest.coverage == (coverage,)
     persisted = pl.concat([pl.read_parquet(path) for path in store.rglob("*.parquet")])
     pt.assert_frame_equal(persisted.select("time", "time_zone", "value"), rows.select("time", "time_zone", "value"))
+
+
+def test_all_scope_member_proof_uses_only_complete_contributor_absence():
+    from types import SimpleNamespace
+
+    from rivretrieve._internal.driver import _covered_facts
+    from rivretrieve._internal.provider_series import SeriesMapping
+    from rivretrieve._internal.source_series import InventorySnapshot, SeriesScope, SeriesWindow
+
+    definition = SeriesMapping(
+        namespace="authored",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        evidence=("authored finite identity control",),
+    ).source_series("axis_control", "station", "discharge")
+    start, middle, end = datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)
+    scope = SeriesScope(provider_ids=("axis_control",), station_ids=("station",), product_ids=("discharge",))
+    coverage = CoverageInterval(
+        definition.series_id,
+        RequestedInterval(start, middle - timedelta(microseconds=1)),
+        None,
+        "first-span",
+        (definition.facts[0].facts_id,),
+    )
+    missing = InventorySnapshot(
+        snapshot_id="second-span",
+        scope=scope,
+        members=(),
+        completeness="complete",
+        origin="response",
+        access="exhaustive finite authored query",
+        window=SeriesWindow(start=middle, end=end),
+        evidence=("control",),
+    )
+    manifest = SimpleNamespace(coverage=(coverage,))
+    window = SeriesWindow(start=start, end=end)
+    assert not _covered_facts(manifest, definition, scope, window)
+    assert _covered_facts(manifest, definition, scope, window, (missing,))
+    different_facts = missing.model_copy(
+        update={"members": (definition.series_id,), "member_facts": ((definition.series_id, ("other-source-facts",)),)}
+    )
+    assert _covered_facts(manifest, definition, scope, window, (different_facts,))
+    unspecified_facts = missing.model_copy(update={"members": (definition.series_id,), "member_facts": ()})
+    assert not _covered_facts(manifest, definition, scope, window, (unspecified_facts,))
+    assert not _covered_facts(
+        manifest, definition, scope, window, (missing.model_copy(update={"completeness": "incomplete"}),)
+    )
