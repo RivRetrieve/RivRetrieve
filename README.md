@@ -180,15 +180,6 @@ Start with the [documentation index](docs/README.md).
 - [Public API and software reference](docs/reference.md).
 - [Architecture](docs/architecture.md): responsibilities, a traced request and contracts.
 
-## Contributing tests
-
-Before adding a test, check existing coverage and identify the distinct behavior or
-architectural rule it protects. Use focused tests for edge cases, and explain why expensive
-end-to-end combinations need separate coverage. Reuse expensive unchanged inputs only when
-tests remain isolated and changed or corrupt inputs still reach validation. Measure and report
-the runtime impact of costly new coverage. Lock exact wording or code structure only when that
-property is an intentional contract.
-
 ## Data rights
 
 All data rights remain with the original providers. Credit the providers of data you use and
