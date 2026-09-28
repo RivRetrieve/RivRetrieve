@@ -69,9 +69,14 @@ data from the national hydrometeorological database through its
 This institutional role does not identify the operator of every station in the
 published catalogue.
 
-The historical hydrology service publishes one file per station and calendar
-year for each group of quantities. Station identifiers are CHMI's WIGOS
-identifiers, for example `0-203-1-180100`.
+For each station and calendar year, CHMI publishes separate files for daily and
+hourly observations. The daily file can contain mean discharge, stage and water
+temperature; the hourly file can contain mean discharge and stage. A file need
+not contain every quantity. For example, the daily file used above contains
+discharge and stage for 2020, but no water temperature.
+
+Select a station using CHMI's station identifier, such as `0-203-1-180100` for
+VD České Údolí. RivRetrieve keeps these source identifiers unchanged.
 
 ## What you can retrieve
 
@@ -102,9 +107,9 @@ so requests cannot provide observations more recent than its published records.
 There is no fixed latest year imposed by RivRetrieve.
 
 CHMI also publishes current observations in its `recent` and `now` folders and
-other historical datasets. RivRetrieve does not read those through this provider.
-The quantities in the table above describe what is available through RivRetrieve,
-not the full range of CHMI publications.
+additional historical series that RivRetrieve does not yet read. Making these
+available is on the roadmap
+([#294](https://github.com/RivRetrieve/RivRetrieve/issues/294)).
 
 ## Time and data status
 

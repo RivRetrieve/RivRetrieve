@@ -138,3 +138,30 @@ No required source check was blocked. The graphical hydrology guide was not
 used because text extraction did not expose its substantive content. Tests were
 focused, not a full repository suite. Independent review and human review of
 PR #295 remain required. This work does not approve or merge that PR.
+
+## Follow-up after user feedback, 2026-09-28
+
+The user reviewed the page and requested clearer annual-file/station wording and
+a roadmap pointer. The follow-up explains daily versus hourly files, states that
+a quantity may be absent (TD is absent in the checked 2020 example file), and
+links existing [#294](https://github.com/RivRetrieve/RivRetrieve/issues/294).
+A [dated clarification](https://github.com/RivRetrieve/RivRetrieve/issues/294#issuecomment-5872834287)
+preserves that issue's historical evidence while requiring source-defined
+semantics for future mappings. No duplicate issue or production change.
+
+The page's Python block remains byte-for-byte equal to the tested `example.py`;
+its request and displayed output are unchanged. The following checks passed
+again after the prose edits:
+
+```bash
+uv run --with rdflib pytest -q tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
+uv run python scripts/generate_reference.py --check
+git diff --check
+```
+
+The user then explicitly authorized completion and merge without further human
+gates, superseding the earlier restriction. The
+[PR authorization record](https://github.com/RivRetrieve/RivRetrieve/pull/295#issuecomment-5872842211)
+retains the exact instruction. Final independent re-review and repository checks
+still precede merge by the root implementing agent. The original vision and
+verification record above retain their historical context.
