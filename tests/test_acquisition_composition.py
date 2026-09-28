@@ -190,3 +190,50 @@ def test_snapshot_contributions_keep_distinct_key_groups_and_acquisition_vintage
         1: first_time,
         2: second_time,
     }
+
+
+@pytest.mark.parametrize("defect", ["mixed_failure", "unknown_offset"])
+def test_incompatible_axis_evidence_is_fatal_before_cache_mutation(tmp_path, monkeypatch, defect):
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget
+    from rivretrieve._internal.source_series import SeriesWindow
+    from rivretrieve._internal.time_axis import TimeAxis
+    from rivretrieve._internal.transport import HttpMethod, TransportFailure, TransportFailureReason, TransportRequest
+
+    store = tmp_path / "store"
+    payload = single_payload()
+    run(store, (payload,))
+    before = {path.relative_to(store): path.read_bytes() for path in store.rglob("*") if path.is_file()}
+    original_parse = parse
+
+    def axis_parse(received, config):
+        parsed = original_parse(received, config)
+        return replace(
+            parsed,
+            rows=parsed.rows.with_columns(
+                pl.lit("unknown" if defect == "unknown_offset" else "+00:00").alias("time_zone")
+            ),
+            outcomes=tuple(
+                item.model_copy(update={"window": item.window.model_copy(update={"axis": TimeAxis.UTC})})
+                for item in parsed.outcomes
+            ),
+        )
+
+    monkeypatch.setattr("tests.test_acquisition_composition.parse", axis_parse)
+    if defect == "mixed_failure":
+        request = TransportRequest(HttpMethod.GET, "https://example.test/observations")
+        failure = FailedSourceRequest(
+            "native-failure",
+            SourceRequestTarget("0-203-1-000400", "discharge_daily_mean"),
+            SeriesWindow(start=datetime(2023, 6, 1), end=datetime(2023, 6, 2)),
+            request,
+            TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503),
+        )
+        acquired = SourceAcquisition((payload,), failed_requests=(failure,))
+        message = "cannot mix acquisition time axes"
+    else:
+        acquired = (payload,)
+        message = "UTC acquisition rows require published fixed offsets"
+    with pytest.raises(FatalContractError, match=message):
+        run(store, acquired)
+    assert {path.relative_to(store): path.read_bytes() for path in store.rglob("*") if path.is_file()} == before
