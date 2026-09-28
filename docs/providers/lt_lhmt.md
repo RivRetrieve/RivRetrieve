@@ -124,8 +124,8 @@ interpreting an empty result.
 The API also has a separate *measured* feed that RivRetrieve does not read. It
 holds stage and water temperature for the last 30 days, with UTC timestamps, and
 no discharge. The historical feed that RivRetrieve reads has no water temperature.
-Retrieval of the measured stage and water temperature is tracked in
-[issue #292](https://github.com/RivRetrieve/RivRetrieve/issues/292).
+Making the measured feed available is on the roadmap
+([#402](https://github.com/RivRetrieve/RivRetrieve/issues/402)).
 
 ## Time and data status
 
