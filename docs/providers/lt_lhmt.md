@@ -184,7 +184,8 @@ examples above, request the same months again. RivRetrieve also requests the
 neighbouring month when the selected period starts on the first or second day of a
 month, or ends on one of its last two days. If that extra month is unpublished, the
 request is not reported as an issue. Twenty years at one station take about 240
-requests, so many stations add up quickly.
+requests in a single `fetch`, whether it selects one quantity or both, so many
+stations add up quickly.
 
 ## Terms and citation
 

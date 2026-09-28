@@ -14,7 +14,7 @@ then the behaviour checks:
 
 ```bash
 uv run python docs/verification/lithuania-provider/verify_examples.py
-uv run --with rdflib --with folium pytest -q tests/test_lt_lhmt_documentation.py tests/test_lt_lhmt_live.py tests/test_lt_lhmt_monthly_isolation.py tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py tests/test_documentation_examples.py
+uv run --with rdflib --with folium pytest -q tests/test_lt_lhmt_documentation.py tests/test_lt_lhmt_live.py tests/test_lt_lhmt_monthly_isolation.py tests/test_lt_lhmt_shared_acquisition.py tests/test_lt_lhmt_generate_catalogue.py tests/test_lt_lhmt_th_thaiwater_public.py tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py tests/test_documentation_examples.py
 uv run python scripts/generate_reference.py --check
 ```
 
@@ -52,10 +52,10 @@ both page examples. `tests/test_lt_lhmt_documentation.py` replays them through b
 examples and checks their output, source calls, catalogue count, units and index
 link. Replay is not live verification.
 
-On 2026-09-28 the focused and existing documentation, Lithuania and reference
-tests passed, as did scoped Ruff lint and format, generated-reference and
-diff-whitespace checks. Repository-wide Ruff reports only pre-existing findings in
-the Brazil and Canada verification scripts.
+On 2026-09-28 the pytest command above passed 148 tests (one warning), including
+the 42 shared-acquisition regression tests for #389. Scoped Ruff lint and format,
+generated-reference and diff-whitespace checks also passed. Repository-wide Ruff
+reports only pre-existing findings in the Brazil and Canada verification scripts.
 
 ## Defects found and repaired
 
@@ -78,7 +78,8 @@ Two production defects stopped this review until they were repaired:
 Publisher pages fetched with HTTP 200 on 2026-09-27:
 
 - [api.meteo.lt](https://api.meteo.lt/) (documentation version 1.4.9, 2026-02-10;
-  SHA-256 `cbc2bc60…6ea2b`): LHMT under the Ministry of Environment; data measured
+  SHA-256
+  `cbc2bc60bbd00332646bc02cbde2d7f593163c7c629b9e388ebcb8e6d046ea2b`): LHMT under the Ministry of Environment; data measured
   at LHMT's stations; `waterLevel` cm and `waterDischarge` m³/s as daily means;
   `observationDateUtc` as a UTC date; historical data from 2000 and the previous
   year from the middle of the current year; the measured feed's 30 days of stage
@@ -88,7 +89,7 @@ Publisher pages fetched with HTTP 200 on 2026-09-27:
   the committed recording `tests/test_data/lt_lhmt_terms_licence.html` (2026-08-21)
   only in two example URL dates, so that recording retains every quoted statement.
 - [LHMT hydrology](https://www.meteo.lt/klimatas/hidrologija/) (SHA-256
-  `7e79b825…4c084`): "Hidrologinius stebėjimus Lietuvoje vykdo vandens matavimo
+  `7e79b8251ef267aceaea141e8484feb1fa464cbcc1e13e2bbb731a842894c084`): "Hidrologinius stebėjimus Lietuvoje vykdo vandens matavimo
   stočių (toliau – VMS) tinklas, aprėpiantis visą šalies teritoriją. Šiuo metu
   stebėjimų tinklą sudaro 101 VMS, kuriose atliekami vandens lygio, vandens
   temperatūros, oro temperatūros, kritulių kiekio ir vandens debito matavimai."
@@ -100,10 +101,16 @@ Direct API checks on 2026-09-27 found 97 stations in `/v1/hydro-stations`.
 stations), 2023-12-31 (18), 2017-12-31 (6), 2013-12-31 (1) and 2024-08-10 (1).
 Five stations reported no range: `juodkrantes-vms` (Curonian Lagoon),
 `klaipedos-juru-uosto-vms`, `lazdenu-vms`, `palangos-vms` and `sventosios-vms`.
-Fifty stations start in 2000. `source-checks/null-discharge-scan-2024-06.json`
-records, per station, the June 2024 day count and null `waterLevel` and
-`waterDischarge` counts; 20 stations published stage with null discharge on every
-day.
+Fifty stations start in 2000.
+
+`source-checks/null-discharge-scan-2024-06.json` covers the 66 stations whose
+historical range ended on 2024-12-31, so that June 2024 lay inside every scanned
+range. It was retrieved directly from
+`https://api.meteo.lt/v1/hydro-stations/{code}/observations/historical/2024-06`
+on 2026-09-27 at about 15:11 UTC. For each station it records `days`,
+`null_waterLevel` and `null_waterDischarge`. All 66 returned 30 days, none had a
+null stage, and 20 published null discharge on every day. The other 31 stations
+were not scanned.
 
 Code facts: `lt_lhmt/config.py` declares a `+00:00` zone, an unknown day definition
 and a `00:00` label; `parse.py` keeps source nulls and creates rows only for

@@ -1,332 +1,332 @@
 {
- "aunuvenu-vms": [
-  30,
-  0,
-  0
- ],
- "babtu-vms": [
-  30,
-  0,
-  0
- ],
- "bernatoniu-levuo-vms": [
-  30,
-  0,
-  0
- ],
- "bernatoniu-sanziles-vms": [
-  30,
-  0,
-  0
- ],
- "birstono-vms": [
-  30,
-  0,
-  30
- ],
- "buivydziu-vms": [
-  30,
-  0,
-  0
- ],
- "darsuniskio-vms": [
-  30,
-  0,
-  30
- ],
- "drabuzninku-vms": [
-  30,
-  0,
-  30
- ],
- "druskininku-vms": [
-  30,
-  0,
-  0
- ],
- "dubininko-vms": [
-  30,
-  0,
-  0
- ],
- "eiduku-vms": [
-  30,
-  0,
-  0
- ],
- "guntauninku-vms": [
-  30,
-  0,
-  0
- ],
- "jasiunu-vms": [
-  30,
-  0,
-  30
- ],
- "jonavos-vms": [
-  30,
-  0,
-  0
- ],
- "kacergiskes-vms": [
-  30,
-  0,
-  0
- ],
- "kartenos-vms": [
-  30,
-  0,
-  0
- ],
- "klaipedos-vms": [
-  30,
-  0,
-  30
- ],
- "kretingos-vms": [
-  30,
-  0,
-  0
- ],
- "kulynu-vms": [
-  30,
-  0,
-  30
- ],
- "kupiskio-vms": [
-  30,
-  0,
-  0
- ],
- "kvetku-vms": [
-  30,
-  0,
-  0
- ],
- "lampedziu-vms": [
-  30,
-  0,
-  30
- ],
- "lankupiu-klaipedos-vms": [
-  30,
-  0,
-  0
- ],
- "lankupiu-minija-vms": [
-  30,
-  0,
-  0
- ],
- "lazinku-vms": [
-  30,
-  0,
-  0
- ],
- "likenu-vms": [
-  30,
-  0,
-  0
- ],
- "lyduvenu-vms": [
-  30,
-  0,
-  0
- ],
- "lynezerio-vms": [
-  30,
-  0,
-  0
- ],
- "miestaliu-vms": [
-  30,
-  0,
-  0
- ],
- "musteikos-vms": [
-  30,
-  0,
-  0
- ],
- "nemajunu-vms": [
-  30,
-  0,
-  0
- ],
- "paakmenio-vms": [
-  30,
-  0,
-  0
- ],
- "padubysio-vms": [
-  30,
-  0,
-  0
- ],
- "paelnes-vms": [
-  30,
-  0,
-  30
- ],
- "pajurio-vms": [
-  30,
-  0,
-  0
- ],
- "panemunes-vms": [
-  30,
-  0,
-  30
- ],
- "panevezio-vms": [
-  30,
-  0,
-  0
- ],
- "pazeimenes-vms": [
-  30,
-  0,
-  0
- ],
- "plaskiu-vms": [
-  30,
-  0,
-  30
- ],
- "pluskiu-vms": [
-  30,
-  0,
-  0
- ],
- "pozeres-vms": [
-  30,
-  0,
-  30
- ],
- "priekules-vms": [
-  30,
-  0,
-  30
- ],
- "puvociu-vms": [
-  30,
-  0,
-  0
- ],
- "rimsoniu-vms": [
-  30,
-  0,
-  0
- ],
- "rusiskiu-vms": [
-  30,
-  0,
-  30
- ],
- "rusnes-atmata-vms": [
-  30,
-  0,
-  30
- ],
- "rusnes-skirvyte-vms": [
-  30,
-  0,
-  30
- ],
- "sarkiu-vms": [
-  30,
-  0,
-  0
- ],
- "semeliskiu-vms": [
-  30,
-  0,
-  0
- ],
- "silininku-vms": [
-  30,
-  0,
-  30
- ],
- "skuodo-vms": [
-  30,
-  0,
-  0
- ],
- "smalininku-vms": [
-  30,
-  0,
-  0
- ],
- "tabokines-vms": [
-  30,
-  0,
-  0
- ],
- "taurages-vms": [
-  30,
-  0,
-  0
- ],
- "tauragnu-vms": [
-  30,
-  0,
-  30
- ],
- "traupio-vms": [
-  30,
-  0,
-  0
- ],
- "trecioniu-vms": [
-  30,
-  0,
-  0
- ],
- "uostadvario-vms": [
-  30,
-  0,
-  30
- ],
- "ustukiu-vms": [
-  30,
-  0,
-  0
- ],
- "vaineikiu-vms": [
-  30,
-  0,
-  0
- ],
- "varniu-vms": [
-  30,
-  0,
-  30
- ],
- "viasniunu-vms": [
-  30,
-  0,
-  30
- ],
- "vilniaus-neris-vms": [
-  30,
-  0,
-  0
- ],
- "zadeikiu-vms": [
-  30,
-  0,
-  0
- ],
- "zilpamusio-vms": [
-  30,
-  0,
-  0
- ],
- "zindaiciu-vms": [
-  30,
-  0,
-  0
- ]
+ "aunuvenu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "babtu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "bernatoniu-levuo-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "bernatoniu-sanziles-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "birstono-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "buivydziu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "darsuniskio-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "drabuzninku-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "druskininku-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "dubininko-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "eiduku-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "guntauninku-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "jasiunu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "jonavos-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "kacergiskes-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "kartenos-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "klaipedos-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "kretingos-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "kulynu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "kupiskio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "kvetku-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "lampedziu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "lankupiu-klaipedos-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "lankupiu-minija-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "lazinku-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "likenu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "lyduvenu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "lynezerio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "miestaliu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "musteikos-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "nemajunu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "paakmenio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "padubysio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "paelnes-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "pajurio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "panemunes-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "panevezio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "pazeimenes-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "plaskiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "pluskiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "pozeres-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "priekules-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "puvociu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "rimsoniu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "rusiskiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "rusnes-atmata-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "rusnes-skirvyte-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "sarkiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "semeliskiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "silininku-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "skuodo-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "smalininku-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "tabokines-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "taurages-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "tauragnu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "traupio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "trecioniu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "uostadvario-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "ustukiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "vaineikiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "varniu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "viasniunu-vms": {
+  "days": 30,
+  "null_waterDischarge": 30,
+  "null_waterLevel": 0
+ },
+ "vilniaus-neris-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "zadeikiu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "zilpamusio-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ },
+ "zindaiciu-vms": {
+  "days": 30,
+  "null_waterDischarge": 0,
+  "null_waterLevel": 0
+ }
 }
