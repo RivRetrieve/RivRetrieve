@@ -101,6 +101,13 @@ These three checkouts were created for this verification:
   `28d12fb70f75c89ee4ceac497fbbf80ddd768922`, runs the final implementation.
   It has a separate uv environment and `.verification-cache/final` location.
 
+- `.worktrees/visions/provider-example-evidence` now holds the
+  `verify/provider-examples` delivery branch. It merges the reviewed production
+  implementation without changing either active compiler checkout. Completed
+  output files are copied here byte-for-byte from the original evidence directory.
+  This checkout identified reference drift before building documentation. The
+  root owns the coverage-docstring/reference correction in a separate PR.
+
 The runner stored in the first checkout is invoked through `uv run python` from
 inside the second checkout. Thus project imports resolve to the final checkout,
 not to the runner's evidence directory. The final command for each page is
@@ -136,9 +143,33 @@ bash-process wall time was 377.52 s. Final evidence is under
 all-provider live acceptance therefore remains incomplete even if every
 repository regression passes. Final bulk execution is still in progress.
 
-- `.worktrees/visions/provider-example-evidence` now holds the
-  `verify/provider-examples` delivery branch. It merges the reviewed production
-  implementation without changing either active compiler checkout. Completed
-  output files are copied here byte-for-byte from the original evidence directory.
-  This checkout identified reference drift before building documentation. The
-  root owns the coverage-docstring/reference correction in a separate PR.
+## Later target and unchanged executable implementation
+
+The final example processes executed revision `28d12fb70f75c89ee4ceac497fbbf80ddd768922`.
+Later target `8da58e4d30e06b65c86fbbfd9c4cccb461e9e460` includes test-only repairs
+and the coverage-docstring/generated-reference correction. Comparing `src`,
+`pyproject.toml`, `uv.lock`, `docs/providers` and the reference generator found
+only one source docstring change. Parsed executable ASTs agree after removing
+docstrings. Dependency blob IDs and the provider-page tree ID are identical;
+[the equivalence record](implementation-equivalence.json) retains them and the
+complete changed-path list. No runtime configuration file changed.
+
+This carries forward actual execution of the same observation/download
+implementation; it does not assert a new execution date or rewrite the revision
+in the raw records. The original compiler processes remain unchanged. The full
+repository suite is being rerun separately at the later target. HydroPortail's
+live source failure remains an unresolved acceptance blocker.
+
+## Completed national examples
+
+Both baseline national downloads and their documented retrievals completed.
+Canada took 4,680.53 s of captured process wall time; Poland took 5,625.76 s.
+These runs remain baseline evidence, separate from final implementation checks.
+
+Final Canada completed in **4,444.92 s** of captured process wall time. Its exact
+fence durations were 3,618.49 s for fresh national download/compilation, 551.93 s
+for retrieval and 273.77 s for status inspection. Every displayed output matched:
+seven observations, no issues, `present`, vintage `2026-07-17`. The archive hash
+matches the separately downloaded baseline copy. The compiled store occupies
+412,848,037 bytes. `final/ca_eccc/store-summary.json` retains source URL, archive
+hash, manifest hash and size. Final Poland remains in progress.

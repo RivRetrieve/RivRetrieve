@@ -8,7 +8,13 @@
       "fence": 1,
       "status": "executed",
       "seconds": 5208.856221083086
+    },
+    {
+      "fence": 2,
+      "status": "executed",
+      "seconds": 416.3893389578443
     }
   ],
-  "displayed_output_fences": 1
+  "displayed_output_fences": 1,
+  "finished_utc": "2026-09-28T22:03:40.749876+00:00"
 }

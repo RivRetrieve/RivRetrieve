@@ -1,0 +1,4 @@
+status = rr.cache_status("ca_eccc")
+
+print(status.presence.value)
+print(status.source_vintage)

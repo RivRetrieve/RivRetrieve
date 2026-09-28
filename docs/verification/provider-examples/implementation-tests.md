@@ -156,3 +156,14 @@ PR. The evidence branch briefly contained the same correction during validation,
 then removed those two file deltas to avoid duplicate ownership. The recorded
 pre-build checks above are historical execution evidence, not a claim that this
 evidence-only PR publishes the generated reference.
+
+## Evidence-branch checks
+
+After merging target `8da58e4` into the evidence branch, the reference check passed
+before any build in 0.41 s. Scoped lint for the runner and five mechanically
+cleaned historical ancillary scripts passed. Whole-tree Ruff now reports only
+one inherited import-spacing error in `canada-provider/final_snippets.py` and two
+formatting failures: that file and `brazil-provider/examples.py`. The other 503
+Python files are formatted. Both retained files explicitly preserve exact
+historical executed snippets; their bytes were intentionally not changed. This
+is a disclosed whole-tree check limitation, not a clean full-lint claim.

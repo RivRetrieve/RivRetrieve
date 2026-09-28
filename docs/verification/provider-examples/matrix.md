@@ -15,7 +15,7 @@ compilation are pending.
 | `fr_hubeau` | Retain incomplete cursor evidence without completed coverage | PR #411 | Displayed output matched |
 | `usgs_nwis` | Isolate 1100-day spans; retain dependent cursor completion | PR #411 | All three snippets matched |
 | `ba_fhmzbih` | Preserve rolling snapshot rows without invented interval completeness | PR #410 merged and independently approved | Displayed output matched; openpyxl style warning on stderr |
-| `ca_eccc` | Refuse older replacement; retain HTTP reasons; reject unsafe paths | PR #409 merged and independently approved | Fresh live national download/compilation in progress |
+| `ca_eccc` | Refuse older replacement; retain HTTP reasons; reject unsafe paths | PR #409 merged and independently approved | Fresh live national download, retrieval and status matched; 4,444.92 s |
 | `lt_lhmt` | Preserve independent monthly and shared-product behavior | Shared/monthly tests in PRs #410/#411 | Displayed output matched |
 | `no_nve` | Preserve version isolation and mixed refresh | PR #410 | Both snippets matched |
 | `ch_foen` | Preserve public singleton isolation; reject unsafe internal batching | PR #410 | All three snippets matched |
