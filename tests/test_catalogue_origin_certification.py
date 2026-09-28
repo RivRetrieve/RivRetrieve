@@ -429,6 +429,7 @@ def test_committed_declaration_case_passes_real_build_and_origin_gate(
     assert not stations.is_empty()
     assert validate_catalogue_origins(adapter.provider_id, case.declarations, case_native, stations) == []
     enforce_catalogue_origins(adapter.provider_id, case.declarations, case_native, stations)
+    _assert_reviewed_crs(adapter, case, case_native, stations)
 
 
 REMOVAL_CASES = [(adapter, case, column) for adapter, case in CASES for column in SCHEMA_COLUMNS]
@@ -600,13 +601,12 @@ def test_france_provider_owned_converter_refuses_a_swapped_existing_native_colum
         _build(adapter, native, origins)
 
 
-@pytest.mark.parametrize(
-    ("adapter", "case"), CASES, ids=[f"{adapter.provider_id}-{case.identity}" for adapter, case in CASES]
-)
-def test_real_build_crs_semantics_are_complete_and_reviewed(adapter: ProviderAdapter, case: DeclarationCase) -> None:
-    native = read_native_table(adapter.native_path)
-    catalogue = _build(adapter, native)
-    case_native, stations = _case_frames(adapter, case, native, catalogue.stations)
+def _assert_reviewed_crs(
+    adapter: ProviderAdapter,
+    case: DeclarationCase,
+    case_native: NativeTable,
+    stations: StationCatalog,
+) -> None:
     origin = case.declarations["crs"]
 
     assert not case_native.data.is_empty() and not stations.is_empty()

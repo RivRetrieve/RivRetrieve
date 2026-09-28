@@ -10,6 +10,8 @@ import pytest
 
 import rivretrieve as rr
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 @pytest.mark.parametrize("provider,station", [("no_nve", "1.200.0"), ("br_ana", "15400000")])
 def test_raw_measurement_access_does_not_match_irregular_frequency(provider, station):

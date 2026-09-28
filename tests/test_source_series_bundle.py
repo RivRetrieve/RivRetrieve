@@ -15,6 +15,8 @@ import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _RECORDING = "daily-07374000-docs-2023"
 _KNOWN = "c9d823a2491f4b639656a11b35a7625d"
 

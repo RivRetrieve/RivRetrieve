@@ -9,6 +9,8 @@ import rivretrieve as rr
 from rivretrieve._internal import discovery
 from rivretrieve._internal.issues import IssuePolicyError
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 @pytest.mark.parametrize("provider,station", [("ca_eccc", "02GA010"), ("pl_imgw", "154210010")])
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])

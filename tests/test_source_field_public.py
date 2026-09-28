@@ -12,6 +12,8 @@ from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 DATA = Path(__file__).parent / "test_data"
 
 
