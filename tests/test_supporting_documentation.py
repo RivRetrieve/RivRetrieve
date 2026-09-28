@@ -5,7 +5,10 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
+
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -14,6 +14,8 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.test_json_measurement_cells import DATA
 from tests.test_live_numeric_values import BAD, TOKENS
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 class NumericReplay(ReplayTransport):
     def __init__(self, recordings, mutation):

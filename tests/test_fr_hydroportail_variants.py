@@ -18,6 +18,8 @@ from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 from tests._recorded_payload import recorded_payload
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 VARIANTS = {"raw", "validated", "pre_validated_and_validated", "most_valid"}
 
 

@@ -170,6 +170,7 @@ def test_invalid_measurement_parser_preserves_identified_sibling(recording, valu
     ],
 )
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_unrepresentable_measurement_is_isolated_and_cannot_authorize_coverage(
     monkeypatch, tmp_path, recording, selection, value, numeric_token, policy
 ):
@@ -220,6 +221,7 @@ def test_unrepresentable_measurement_is_isolated_and_cannot_authorize_coverage(
         pytest.param("-1", -1.0, id="negative-one-not-sentinel"),
     ],
 )
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_representable_measurement_retains_numeric_or_null_state_and_successful_coverage(
     monkeypatch, tmp_path, recording, selection, value, expected
 ):

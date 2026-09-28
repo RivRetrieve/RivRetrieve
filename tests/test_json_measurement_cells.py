@@ -119,6 +119,7 @@ def test_france_parser_measurement_cells_keep_absence_distinct_from_null(case, m
 # Each source route still traverses discovery, acquisition, clipping, receipts and cache.
 @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
 @pytest.mark.parametrize("mutation", ["original", "null", "missing"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     route, station, predicates, start, end, filenames, field, count = case
@@ -151,6 +152,7 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_pat
 
 
 @pytest.mark.parametrize("mutation", ["missing", "true", "false"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_bad_daily_measurement_does_not_discard_independent_recorded_statistic(monkeypatch, mutation):
     mean = read_recording(DATA / "fr_hubeau_1011000101_QmnJ_padded.recording.json")
     maximum = read_recording(DATA / "fr_hubeau_1011000101_QIXnJ_padded.recording.json")

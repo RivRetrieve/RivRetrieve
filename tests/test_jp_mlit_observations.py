@@ -256,6 +256,7 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts() ->
     assert omitted.receipts.entries == ()
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_selection_uses_corrected_ids_and_exact_eight_call_replay(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_PATHS))
     selection = rr.find(provider="jp_mlit", station=_STATION)

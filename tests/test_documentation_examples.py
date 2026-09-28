@@ -124,7 +124,9 @@ def execute_page(page, monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("page", ["README.md", "docs/usage.md"])
-def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path):
+def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request):
+    if page == "README.md":
+        request.getfixturevalue("reuse_packaged_catalogues")
     scope = execute_page(page, monkeypatch, tmp_path)
     assert scope["result"].data.height == 1
     assert scope["result"].data["station_id"].to_list() == ["07374000"]
@@ -272,6 +274,7 @@ def assert_usage_state(scope, tmp_path):
     assert "L.marker(" in html
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path):
     from polars.testing import assert_frame_equal
 
@@ -341,6 +344,7 @@ def issue_scope(monkeypatch, tmp_path, outcome):
     return {"rr": rr, "chosen_gauges": rr.pick(daily_gauges, station=["07374000"])}, replay
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_actual_issue_example_success(monkeypatch, tmp_path):
     scope, replay = issue_scope(monkeypatch, tmp_path, "success")
     checked = execute_block(issue_example(), scope, "usage-issues-success")
@@ -351,6 +355,7 @@ def test_actual_issue_example_success(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("policy", ["warn", "ignore", "raise"])
 @pytest.mark.parametrize("outcome", ["success", "empty", 404, 503])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, outcome):
     """Run each page-authored fetch expression unchanged under transport scenarios."""
     from polars.testing import assert_frame_equal
@@ -423,6 +428,7 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
             assert not result.provenance.served_intervals
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_usage_selection_bundle_roundtrip(monkeypatch, tmp_path):
     from polars.testing import assert_frame_equal
 

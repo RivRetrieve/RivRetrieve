@@ -11,6 +11,8 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _RECORDING = read_recording(Path(__file__).parent / "test_data" / "ch_foen_2135_rest_engine_2026-09-01.recording.json")
 
 
