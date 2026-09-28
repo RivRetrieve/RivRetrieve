@@ -8,12 +8,19 @@ the exact fence contents and retains a copy beside its output.
 
 ## Status
 
-Verification is in progress. The baseline at
-`0b443049d50819978030e29e46011ca2101cb337` does not verify the final implementation.
-Final execution started at `28d12fb70f75c89ee4ceac497fbbf80ddd768922`.
-Its provider tree still has 13 pages and 28 Python fences; no page changed from
-the baseline inventory. Final runs use a second fresh cache, including new
-national downloads. Results remain pending while the bulk runs finish.
+All 28 Python fences across 13 provider pages executed on 2026-09-28, including
+fresh national downloads for Canada and Poland. Twelve pages matched their
+published output. HydroPortail's two observation examples remained blocked by
+publisher timeouts after unchanged baseline, retry and final runs. Its catalogue
+example matched. Required all-provider live acceptance is therefore **incomplete**.
+
+Final observation execution used `28d12fb70f75c89ee4ceac497fbbf80ddd768922`, whose
+executable implementation, dependencies and provider pages are equivalent to
+later target `8da58e4d30e06b65c86fbbfd9c4cccb461e9e460` as documented below.
+The baseline at `0b443049d50819978030e29e46011ca2101cb337` is retained separately.
+The final suite reports 4,683 passed, one unavailable private Thai acceptance
+fixture skipped, and 78 warnings. Historical exact-input scripts also retain
+one lint and two formatting failures; see [implementation checks](implementation-tests.md).
 
 A successful Python exit alone is not a successful retrieval: returned issues,
 rows, units and displayed output are checked separately.
@@ -68,7 +75,9 @@ or source change.
 
 The baseline tree has 13 pages and 28 Python fences. South Africa is catalogue-only
 and has no page under `docs/providers/`; this does not omit an executable fence.
-The final verification must inventory the tree again, including any added pages.
+The final tree was inventoried again: the same 13 pages and 28 Python fences,
+with no added pages or changed snippet bytes. [Acceptance results](final/acceptance.json)
+record exact-code comparison and displayed-output agreement for every page.
 
 ## Baseline access limitation
 
@@ -100,7 +109,6 @@ These three checkouts were created for this verification:
 - `.worktrees/visions/provider-examples-final`, detached at
   `28d12fb70f75c89ee4ceac497fbbf80ddd768922`, runs the final implementation.
   It has a separate uv environment and `.verification-cache/final` location.
-
 - `.worktrees/visions/provider-example-evidence` now holds the
   `verify/provider-examples` delivery branch. It merges the reviewed production
   implementation without changing either active compiler checkout. Completed
@@ -141,7 +149,7 @@ rows with `source.request_failed`. Its catalogue-only fence matched. The capture
 bash-process wall time was 377.52 s. Final evidence is under
 `final/fr_hydroportail/`; it is not a successful observation example. Required
 all-provider live acceptance therefore remains incomplete even if every
-repository regression passes. Final bulk execution is still in progress.
+repository regression passes. Both required final bulk downloads completed.
 
 ## Later target and unchanged executable implementation
 
@@ -156,8 +164,8 @@ complete changed-path list. No runtime configuration file changed.
 
 This carries forward actual execution of the same observation/download
 implementation; it does not assert a new execution date or rewrite the revision
-in the raw records. The original compiler processes remain unchanged. The full
-repository suite is being rerun separately at the later target. HydroPortail's
+in the raw records. The compiler processes remained unchanged until completion. The full
+repository suite completed separately at the later target. HydroPortail's
 live source failure remains an unresolved acceptance blocker.
 
 ## Completed national examples
@@ -172,4 +180,17 @@ for retrieval and 273.77 s for status inspection. Every displayed output matched
 seven observations, no issues, `present`, vintage `2026-07-17`. The archive hash
 matches the separately downloaded baseline copy. The compiled store occupies
 412,848,037 bytes. `final/ca_eccc/store-summary.json` retains source URL, archive
-hash, manifest hash and size. Final Poland remains in progress.
+hash, manifest hash and size.
+
+Final Poland completed in **5,593.25 s** of captured process wall time: 5,189.77 s
+for fresh national download/compilation and 403.05 s for retrieval. All displayed
+output matched, including seven rows and the two informational provenance issues.
+Its 867 downloaded source artifacts have exactly the same URL/checksum list as
+the independently downloaded baseline. The store occupies 222,930,349 bytes; its
+source vintage is `2025-10-31`. The final store summary records its own manifest
+hash and the shared artifact-list digest rather than duplicating 867 entries.
+No resource limit prevented either bulk verification. All processes are finished.
+
+No provider snippet or displayed output was changed to obtain these results.
+The HydroPortail examples remain unchanged for future source-availability checks.
+Detailed failures belong in this maintainer record rather than provider introductions.

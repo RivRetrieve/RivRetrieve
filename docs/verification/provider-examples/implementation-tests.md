@@ -167,3 +167,46 @@ formatting failures: that file and `brazil-provider/examples.py`. The other 503
 Python files are formatted. Both retained files explicitly preserve exact
 historical executed snippets; their bytes were intentionally not changed. This
 is a disclosed whole-tree check limitation, not a clean full-lint claim.
+
+## Completed full-suite rerun
+
+At target `8da58e4d30e06b65c86fbbfd9c4cccb461e9e460`, the root ran:
+
+```bash
+UV_CACHE_DIR=<external-warmed-cache> uv run --extra map --with geopandas --with matplotlib pytest
+```
+
+Captured result, exit 0:
+
+```text
+SKIPPED [1] tests/test_thaiwater_governing_evidence.py:72: controlled private bodies are required; mandatory acceptance check
+4683 passed, 1 skipped, 78 warnings in 2424.45s (0:40:24)
+```
+
+The raw log is `scratchpad/acquisition-validation/final-pytest-8da58e4.log`.
+The private Thai fixture acceptance check remains unverified. The warnings remain
+reported; this is not a claim that every test passed. Baseline was 4,535 passed,
+three skipped in 2,440.37 s. Different optional prerequisites and concurrent
+workloads mean these durations are observations, not a performance comparison.
+The reference check passed on the final target before the documentation build.
+
+The completed evidence tree passed its pre-build reference check (0.55 s),
+runner lint/format and `git diff --check`. Its own
+`uv run mkdocs build --strict` exited 0 in 2.02 s. The build
+left the tracked reference unchanged; this pass did not hide a regenerated diff.
+
+Evidence-branch focused documentation validation:
+`uv run --extra map pytest tests/test_documentation.py tests/test_supporting_documentation.py -q`
+completed with the captured result:
+
+```text
+Installed 3 packages in 4ms
+.......                                                                  [100%]
+=============================== warnings summary ===============================
+tests/test_supporting_documentation.py::test_catalogue_evidence_markdown
+  /Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-evidence/.venv/lib/python3.13/site-packages/rdflib/plugins/parsers/jsonld.py:159: DeprecationWarning: ConjunctiveGraph is deprecated, use Dataset instead.
+    conj_sink = ConjunctiveGraph(store=sink.store, identifier=sink.identifier)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+7 passed, 1 warning in 7.41s
+```
