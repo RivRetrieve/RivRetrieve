@@ -96,7 +96,9 @@ def test_incomplete_cursor_retains_rows_and_bytes_but_retries_uncovered_window(t
     assert [entry.content for entry in partial.receipts.entries] == (
         [page(NEXT)] if late == "fail" else [page(NEXT), late]
     )
-    assert any(outcome.status is OutcomeStatus.UNRESOLVED for outcome in partial.outcomes)
+    unresolved = next(outcome for outcome in partial.outcomes if outcome.status is OutcomeStatus.UNRESOLVED)
+    assert len(unresolved.calls) == 2
+    assert set(unresolved.calls).issubset({call["call_id"] for call in partial.provenance.calls_made})
     assert any(issue.severity == "error" for issue in partial.issues)
     complete = run()
     assert len(transport.requests) == 3

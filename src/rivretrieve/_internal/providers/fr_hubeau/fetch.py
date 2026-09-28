@@ -93,11 +93,14 @@ def fetch(
                 end=datetime.fromisoformat(fetch_window.end.isoformat()),
             )
             visited = set()
+            calls = []
             reason = None
             while True:
                 response = attempt_request(transport, request)
                 if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                    failures.append(FailedSourceRequest(uuid4().hex, definition, bounds, request, response))
+                    failed = FailedSourceRequest(uuid4().hex, definition, bounds, request, response)
+                    failures.append(failed)
+                    calls.append(failed.call_id or failed.event_id)
                     reason = str(response)
                     break
                 payloads.append(
@@ -113,6 +116,9 @@ def fetch(
                         attempt_traces=response.attempt_traces,
                     )
                 )
+                calls.extend(item.attempt_id for item in payloads[-1].attempt_traces)
+                if not payloads[-1].attempt_traces:
+                    calls.append(payloads[-1].acquisition_id)
                 parsed = parse(payloads[-1], config)
                 if any(
                     outcome.status in (OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED, OutcomeStatus.FAILED)
@@ -145,6 +151,7 @@ def fetch(
                         status=OutcomeStatus.UNRESOLVED,
                         reason=reason,
                         facts_ids=tuple(f.facts_id for f in definition.facts),
+                        calls=tuple(dict.fromkeys(calls)),
                     )
                 )
     return SourceAcquisition(

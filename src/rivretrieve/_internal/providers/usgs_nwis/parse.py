@@ -93,6 +93,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     )
     acquired = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     capture = stable_id(
+        payload.acquisition_id,
         hashlib.sha256(payload.content).hexdigest(),
         acquired.isoformat() if acquired is not None else None,
         window.model_dump_json(),
@@ -204,6 +205,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 facts_ids=tuple(f.facts_id for f in definition.facts) if definition else (),
                 reason=reason,
                 retrieved_at=acquired,
+                calls=tuple(item.attempt_id for item in payload.attempt_traces) or (payload.acquisition_id,),
             )
         )
         if reason:

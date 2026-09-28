@@ -23,6 +23,8 @@ class _Spans:
         self.failed_first = False
         self.failed_second = False
         self.value = 10
+        self.second_unit = "ft^3/s"
+        self.second_statistic = "00011"
 
     def send(self, request):
         index = len(self.calls) % 2
@@ -40,7 +42,12 @@ class _Spans:
             else (begin - timedelta(hours=5)).isoformat() + "-05:00"
         )
         observation = feature(self.series_id if index == 0 else self.second_series_id)
-        observation["properties"].update(statistic_id="00011", time=stamp, value=str(self.value + index))
+        observation["properties"].update(
+            statistic_id="00011" if index == 0 else self.second_statistic,
+            unit_of_measure="ft^3/s" if index == 0 else self.second_unit,
+            time=stamp,
+            value=str(self.value + index),
+        )
         return TransportResponse(
             page(observation),
             200,
@@ -125,4 +132,27 @@ def test_public_all_series_completed_spans_reuse_complete_inventory_union(monkey
     assert len(set(result.data["series_id"])) == 2
     assert len(transport.calls) == 2
     assert_frame_equal(fetch("reuse").data, result.data)
+    assert len(transport.calls) == 2
+
+
+@pytest.mark.parametrize("changed_fact", ["unit", "statistic"])
+def test_public_continuous_fact_changes_across_spans_keep_all_source_facts(monkeypatch, tmp_path, changed_fact):
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge")
+    continuous = next(item for item in selected.series if item.product_id == "discharge_instantaneous")
+    selected = rr.pick(selected, series_id=continuous.series_id)
+    transport = _Spans(continuous.identity.published_id)
+    if changed_fact == "unit":
+        transport.second_unit = "m^3/s"
+    else:
+        transport.second_statistic = None
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    result = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="refresh", on_issue="ignore")
+    assert result.data.height == 2
+    assert len(set(result.data["facts_id"])) == 2
+    definition = next(item for item in result.source_series if item.series_id == continuous.series_id)
+    assert set(result.data["facts_id"]).issubset({fact.facts_id for fact in definition.facts})
+    assert all(item.completeness.value == "complete" for item in result.inventories if item.origin == "response")
+    reused = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="ignore")
+    assert_frame_equal(reused.data, result.data)
     assert len(transport.calls) == 2

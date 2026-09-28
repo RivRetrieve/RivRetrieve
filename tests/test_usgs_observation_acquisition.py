@@ -887,3 +887,14 @@ def test_continuous_independent_success_persists_while_failed_span_retries(tmp_p
     assert all(not (item.interval.start <= failed[0].window.start <= item.interval.end) for item in coverage)
     run()
     assert len(transport.requests) == 6
+
+
+def test_unknown_selector_failure_links_request_without_inventing_series():
+    result = acquire(
+        Transport("fail"), scope=SeriesScope(restriction=RestrictionKind.EXPLICIT, variants=("unestablished",))
+    )
+    unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
+    assert unresolved.series_id is None
+    assert unresolved.requested_selector.value == "unestablished"
+    assert unresolved.calls == (result.failed_requests[0].call_id,)
+    assert result.failed_requests[0].request.params["time_series_id"] == "unestablished"

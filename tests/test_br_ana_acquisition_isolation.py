@@ -136,3 +136,37 @@ def test_unbounded_rendering_is_a_fatal_contract_error():
             config(),
             Transport(),
         )
+
+
+@pytest.mark.parametrize("malformed", [False, True])
+def test_equal_ana_responses_keep_acquisition_identity_and_call_linkage(malformed):
+    from dataclasses import replace
+
+    from rivretrieve._internal.providers.br_ana.parse import parse
+    from rivretrieve._internal.recordings import ReplayTransport
+    from tests.test_br_ana_daily import _recording
+
+    product = ProductId("discharge_daily_mean_bruto")
+    window = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 3)), WindowEndpoint.from_datetime(datetime(2024, 1, 4))
+    )
+    windows = plan_windows(window, window_declarations().products[product])
+    original = fetch(
+        ("15400000",),
+        (product,),
+        {product: windows},
+        window,
+        config(),
+        ReplayTransport([_recording(product, "2024-01")]),
+    ).value[0]
+    first = replace(original, content=b"{}") if malformed else original
+    second = replace(first, acquisition_id="another-ana-call")
+    parsed_first, parsed_second = parse(first, config()), parse(second, config())
+    assert {item.outcome_id for item in parsed_first.outcomes}.isdisjoint(
+        {item.outcome_id for item in parsed_second.outcomes}
+    )
+    assert all(item.calls == (first.acquisition_id,) for item in parsed_first.outcomes)
+    assert all(item.calls == (second.acquisition_id,) for item in parsed_second.outcomes)
+    assert {item.snapshot_id for item in parsed_first.inventories}.isdisjoint(
+        {item.snapshot_id for item in parsed_second.inventories}
+    )

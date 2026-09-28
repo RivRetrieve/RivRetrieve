@@ -117,6 +117,7 @@ def fetch(
                         )
                     )
                 transaction_errors = []
+                transaction_calls = []
                 retrieved_at = None
                 if not selectors:
                     transaction_errors.append("No published USGS series ID is established for the requested selector")
@@ -134,6 +135,7 @@ def fetch(
                     target_members = {item.series_id: item for item in selected}
                     observed_ids: set[str] = set()
                     target_errors = []
+                    target_calls = []
                     source_failures: dict[str, RetrievalOutcome] = {}
                     unsupported_ids: set[str] = set()
                     # A logical source observation is series + published time, not feature id.
@@ -148,6 +150,7 @@ def fetch(
                             reason = str(error)
                             target_errors.append(reason)
                             call_id = uuid4().hex
+                            target_calls.append(call_id)
                             for definition in target_members.values():
                                 failed_requests.append(
                                     FailedSourceRequest(
@@ -178,6 +181,9 @@ def fetch(
                             tuple(target_members.values()),
                         )
                         payloads.append(payload)
+                        target_calls.extend(item.attempt_id for item in payload.attempt_traces)
+                        if not payload.attempt_traces:
+                            target_calls.append(payload.acquisition_id)
                         # Pure decoding is also run by the driver. Here it establishes whether
                         # this complete chain can certify inventory/empty coverage.
                         parsed = parse(payload, config)
@@ -236,6 +242,7 @@ def fetch(
                         target_errors.append(
                             "An empty selected response does not establish the requested source identity"
                         )
+                    transaction_calls.extend(target_calls)
                     members.update(target_members)
                     if source_failures:
                         outcomes.extend(source_failures.values())
@@ -261,12 +268,20 @@ def fetch(
                                     else OutcomeStatus.UNRESOLVED,
                                     reason,
                                     retrieved_at,
+                                    calls=tuple(target_calls),
                                 )
                             )
                         if not target_members:
                             outcomes.append(
                                 _outcome(
-                                    None, station, product, window, OutcomeStatus.UNRESOLVED, reason, retrieved_at
+                                    None,
+                                    station,
+                                    product,
+                                    window,
+                                    OutcomeStatus.UNRESOLVED,
+                                    reason,
+                                    retrieved_at,
+                                    calls=tuple(target_calls),
                                 ).model_copy(
                                     update={
                                         "requested_selector": RequestedSelector(kind="variant", value=selector)
@@ -280,7 +295,14 @@ def fetch(
                             if definition.series_id not in observed_ids:
                                 outcomes.append(
                                     _outcome(
-                                        definition, station, product, window, OutcomeStatus.EMPTY, None, retrieved_at
+                                        definition,
+                                        station,
+                                        product,
+                                        window,
+                                        OutcomeStatus.EMPTY,
+                                        None,
+                                        retrieved_at,
+                                        calls=tuple(target_calls),
                                     )
                                 )
                 if not members and not transaction_errors:
@@ -293,9 +315,19 @@ def fetch(
                             OutcomeStatus.NO_MATCH,
                             "Exhausted observation response contains no matching series in this finite window",
                             retrieved_at,
+                            calls=tuple(transaction_calls),
                         )
                     )
-                definitions.update(members)
+                for identifier, member in members.items():
+                    previous = definitions.get(identifier)
+                    if previous is not None:
+                        facts = {fact.facts_id: fact for fact in previous.facts}
+                        for fact in member.facts:
+                            if fact.facts_id in facts and facts[fact.facts_id] != fact:
+                                raise FatalContractError("USGS physical fact identity changes between spans")
+                            facts[fact.facts_id] = fact
+                        member = member.model_copy(update={"facts": tuple(facts.values())})
+                    definitions[identifier] = member
                 reason = "; ".join(dict.fromkeys(transaction_errors)) or None
                 if not selectors:
                     outcomes.append(
@@ -437,7 +469,7 @@ def _next_request(
     )
 
 
-def _outcome(definition, station, product, window, status, reason, retrieved_at) -> RetrievalOutcome:
+def _outcome(definition, station, product, window, status, reason, retrieved_at, *, calls=()) -> RetrievalOutcome:
     return RetrievalOutcome(
         outcome_id=uuid4().hex,
         series_id=definition.series_id if definition else None,
@@ -448,6 +480,7 @@ def _outcome(definition, station, product, window, status, reason, retrieved_at)
         facts_ids=tuple(f.facts_id for f in definition.facts) if definition else (),
         reason=reason,
         retrieved_at=retrieved_at,
+        calls=tuple(dict.fromkeys(calls)),
     )
 
 

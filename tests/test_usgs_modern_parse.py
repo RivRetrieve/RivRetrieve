@@ -349,3 +349,12 @@ def test_internal_model_validation_cannot_be_reported_as_a_source_limitation(mon
     monkeypatch.setattr(metadata, "PhysicalFacts", invalid_internal_facts)
     with pytest.raises(FatalContractError, match="Invalid internal USGS"):
         decode([feature()])
+
+
+def test_repeated_equal_pages_retain_acquisition_identity_and_call_linkage():
+    first = payload({"type": "FeatureCollection", "features": [feature()]})
+    second = replace(first, acquisition_id="another-source-call")
+    parsed_first, parsed_second = parse(first, config()), parse(second, config())
+    assert parsed_first.outcomes[0].outcome_id != parsed_second.outcomes[0].outcome_id
+    assert parsed_first.outcomes[0].calls == (first.acquisition_id,)
+    assert parsed_second.outcomes[0].calls == (second.acquisition_id,)
