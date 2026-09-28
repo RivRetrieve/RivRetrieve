@@ -1,5 +1,6 @@
 """ThaiWater live adapter proofs over the recorded official graph response."""
 
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -13,12 +14,13 @@ from rivretrieve._internal.boundary_probes import (
     WallClockExpectation,
     run_manifest_boundary_probes,
 )
-from rivretrieve._internal.engine import FetchWindow, RenderedWindow, WindowEndpoint, _make_fetch_window
+from rivretrieve._internal.engine import FetchWindow, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.providers.th_thaiwater.declaration import declaration
 from rivretrieve._internal.recordings import RecordingEnvelope, ReplayTransport, read_recording
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
+from rivretrieve._internal.window_planning import plan_windows
 
 _PROVIDER = ProviderId("th_thaiwater")
 _PRODUCTS = (ProductId("discharge_reported"), ProductId("stage_reported"))
@@ -41,7 +43,7 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
     fetched = _STAGES.fetch(
         ("1373273",),
         (product,),
-        {product: (RenderedWindow("2026-08-01", "2026-08-02"),)},
+        {product: plan_windows(_fetch_window(), _STAGES.window_declarations.products[product])},
         _fetch_window(),
         _STAGES.config,
         replay,
@@ -69,7 +71,7 @@ def test_each_thaiwater_product_has_an_exact_live_replay_probe() -> None:
 
 def test_one_graph_response_coalesces_both_products() -> None:
     replay = ReplayTransport((_RECORDING,))
-    rendered = (RenderedWindow("2026-08-01", "2026-08-02"),)
+    rendered = plan_windows(_fetch_window(), _STAGES.window_declarations.products[_PRODUCTS[0]])
     fetched = _STAGES.fetch(
         ("1373273",),
         _PRODUCTS,
@@ -114,10 +116,11 @@ def test_historical_366_date_response_remains_parseable_without_claiming_current
     replay = _CountingReplay((recording,))
     fetch_window = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2025, 1, 1)),
-        WindowEndpoint.from_datetime(datetime(2026, 1, 1, 23, 50)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1, 23, 59, 59, 999999)),
     )
-    # Replay the historical source request exactly; production now plans capped spans.
-    rendered = dict.fromkeys(_PRODUCTS, (RenderedWindow("2025-01-01", "2026-01-01"),))
+    # Render the recorded historical 366-date request without changing the live 365-date declaration.
+    historical_declaration = replace(_STAGES.window_declarations.products[_PRODUCTS[0]], size=366)
+    rendered = dict.fromkeys(_PRODUCTS, plan_windows(fetch_window, historical_declaration))
 
     fetched = _STAGES.fetch(
         ("1373273",),

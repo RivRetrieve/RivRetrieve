@@ -71,8 +71,11 @@ def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(t
         assert replay.calls == 2
         assert [entry.content for entry in result.receipts.entries] == replay.bodies
         mean = [outcome for outcome in result.outcomes if outcome.series_id == ids["mean"]]
-        assert mean and all(outcome.status == ("unsupported" if bad else "success") for outcome in mean)
+        # Invalid observations remain unsupported; their cursor transaction is incomplete.
+        assert {outcome.status for outcome in mean} == ({"unsupported", "unresolved"} if bad else {"success"})
         assert all(outcome.reason for outcome in mean) if bad else all(outcome.reason is None for outcome in mean)
+        call_ids = {call["call_id"] for call in result.provenance.calls_made}
+        assert all(outcome.calls and set(outcome.calls).issubset(call_ids) for outcome in mean)
         maximum = result.data.filter(result.data["series_id"] == ids["max"])
         assert maximum.height == 1
         source_max = json.loads(recordings[1].content)["data"]

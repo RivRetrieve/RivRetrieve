@@ -135,8 +135,15 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_pat
     if mutation in ("missing", "true", "false"):
         assert result.data.is_empty(), "malformed cells must not become numeric or published-null rows"
         assert result.outcomes
-        assert all(outcome.status == "unsupported" for outcome in result.outcomes)
+        expected_statuses = {"unsupported", "unresolved"} if provider == "fr_hubeau" else {"unsupported"}
+        assert {outcome.status for outcome in result.outcomes} == expected_statuses
         assert all(outcome.series_id == selection.series[0].series_id for outcome in result.outcomes)
+        if provider == "fr_hubeau":
+            assert all(
+                snapshot.completeness.value == "incomplete"
+                for snapshot in result.inventories
+                if snapshot.origin == "response"
+            )
         assert all(outcome.reason for outcome in result.outcomes)
         assert any(issue.code == "unsupported_source_structure" for issue in result.issues)
         assert rr.cache_status(provider).coverage == ()
