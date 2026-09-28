@@ -85,16 +85,36 @@ def test_named_source_selection_cache_and_bundle(
 ):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     captures = tuple(read_recording(DATA / name) for name in recordings)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(captures))
+    calls = []
+
+    class CountedReplay(ReplayTransport):
+        def send(self, request):
+            calls.append(request)
+            return super().send(request)
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: CountedReplay(captures))
     selection = rr.pick(rr.find(provider=provider, station=station, quantity=quantity), variant=variant)
     live = rr.fetch(selection, start=start, end=end, cache="refresh", receipts=True)
     assert not live.data.is_empty()
     assert live.data["series_id"].n_unique() == 1
     assert tuple(item.content for item in live.receipts.entries) == tuple(item.content for item in captures)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
+    assert len(calls) == len(captures)
+    if provider == "ba_fhmzbih":
+        # Published snapshot rows do not prove coverage of an arbitrary requested interval.
+        assert rr.cache_status(provider).coverage == ()
+        assert any(outcome.coverage == "observations" for outcome in live.outcomes)
+    else:
+        monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
     cached = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True)
     pl_testing.assert_frame_equal(cached.data, live.data)
-    assert all(receipt.authorship is ReceiptAuthorship.STORE_EXCERPT for receipt in cached.receipts.entries)
+    if provider == "ba_fhmzbih":
+        assert len(calls) == 2 * len(captures)
+        assert rr.cache_status(provider).coverage == ()
+        assert tuple(item.content for item in cached.receipts.entries) == tuple(item.content for item in captures)
+        assert all(receipt.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for receipt in cached.receipts.entries)
+    else:
+        assert len(calls) == len(captures)
+        assert all(receipt.authorship is ReceiptAuthorship.STORE_EXCERPT for receipt in cached.receipts.entries)
     restored = rr.from_bundle(rr.to_bundle(cached))
     pl_testing.assert_frame_equal(restored.data, cached.data)
     assert restored.source_series == cached.source_series
