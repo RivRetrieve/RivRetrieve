@@ -18,6 +18,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 class _Spans:
     def __init__(self, series_id):
         self.series_id = series_id
+        self.second_series_id = series_id
         self.calls = []
         self.failed_first = False
         self.failed_second = False
@@ -38,7 +39,7 @@ class _Spans:
             if index == 0
             else (begin - timedelta(hours=5)).isoformat() + "-05:00"
         )
-        observation = feature(self.series_id)
+        observation = feature(self.series_id if index == 0 else self.second_series_id)
         observation["properties"].update(statistic_id="00011", time=stamp, value=str(self.value + index))
         return TransportResponse(
             page(observation),
@@ -112,6 +113,7 @@ def test_public_all_series_completed_spans_reuse_complete_inventory_union(monkey
     selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", temporal_support="instantaneous")
     assert len(selected.series) == 1
     transport = _Spans(selected.series[0].identity.published_id)
+    transport.second_series_id = "authored-new-series-in-second-span"
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
@@ -120,6 +122,7 @@ def test_public_all_series_completed_spans_reuse_complete_inventory_union(monkey
 
     result = fetch("refresh")
     assert result.data.height == 2
+    assert len(set(result.data["series_id"])) == 2
     assert len(transport.calls) == 2
     assert_frame_equal(fetch("reuse").data, result.data)
     assert len(transport.calls) == 2
