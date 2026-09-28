@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import polars as pl
@@ -153,3 +153,40 @@ def test_failed_overlap_returned_rows_agree_with_persisted_replacement(tmp_path,
     assert_frame_equal(result.canonical_rows.sort("time"), expected.sort("time"))
     persisted = pl.concat([pl.read_parquet(path) for path in store.rglob("*.parquet")])
     assert_frame_equal(persisted.select("time", "value").sort("time"), expected.select("time", "value").sort("time"))
+
+
+@pytest.mark.parametrize("overlap", [False, True])
+def test_snapshot_contributions_keep_distinct_key_groups_and_acquisition_vintages(tmp_path, monkeypatch, overlap):
+    from rivretrieve._internal.issues import FatalContractError
+
+    original_parse = parse
+
+    def snapshot_parse(payload, config):
+        parsed = original_parse(payload, config)
+        day = 1 if payload.acquisition_id == "first" or overlap else 2
+        return replace(
+            parsed,
+            rows=parsed.rows.filter(pl.col("time").dt.day() == day),
+            outcomes=tuple(item.model_copy(update={"coverage": "observations"}) for item in parsed.outcomes),
+        )
+
+    monkeypatch.setattr("tests.test_acquisition_composition.parse", snapshot_parse)
+    payload = single_payload()
+    first_time = datetime(2026, 9, 28, tzinfo=UTC)
+    second_time = datetime(2026, 9, 29, tzinfo=UTC)
+    payloads = (
+        replace(payload, acquisition_id="first", origin=replace(payload.origin, retrieved_at=first_time)),
+        replace(payload, acquisition_id="second", origin=replace(payload.origin, retrieved_at=second_time)),
+    )
+    if overlap:
+        with pytest.raises(FatalContractError, match="Independent snapshot acquisitions overlap"):
+            run(tmp_path / "store", payloads)
+        return
+    result = run(tmp_path / "store", payloads)
+    assert result.canonical_rows.height == 2
+    manifest = StoreReader().status(StoreRoot(tmp_path / "store"), ProviderId("cz_chmi")).manifest
+    assert manifest.coverage == ()
+    assert {key[1].day: item.retrieved_at for item in manifest.outcomes for key in item.observation_keys} == {
+        1: first_time,
+        2: second_time,
+    }

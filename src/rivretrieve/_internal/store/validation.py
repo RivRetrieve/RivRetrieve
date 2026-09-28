@@ -31,7 +31,7 @@ from rivretrieve._internal.source_series import (
     admission,
 )
 from rivretrieve._internal.store.provenance import decode_source_call
-from rivretrieve._internal.time_axis import TimeAxis
+from rivretrieve._internal.time_axis import TimeAxis, timestamp_on_axis
 
 StoreRoot = NewType("StoreRoot", Path)
 PartitionIdentifier = NewType("PartitionIdentifier", str)
@@ -729,7 +729,8 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
                     not any(
                         c.series_id == series_id
                         and facts_id in c.facts_ids
-                        and c.interval.start <= timestamp <= c.interval.end
+                        and (axis_timestamp := timestamp_on_axis(timestamp, time_zone, c.interval.axis)) is not None
+                        and c.interval.start <= axis_timestamp <= c.interval.end
                         for c in coverage
                     )
                     and (series_id, facts_id, timestamp, time_zone) not in observed_keys

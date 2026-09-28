@@ -175,6 +175,13 @@ their own requested intervals; failed acquisitions establish no successful cover
 The driver assesses all pages before combining fresh rows with held fallback, so
 a late page failure has the same effect as an early failure.
 Coverage does not assert continuous observations.
+UTC-bounded acquisitions keep their UTC interval axis separate from native
+wall-clock labels. Cache replacement compares each observation using its
+published offset, while returned and stored labels retain that offset. Reuse of
+a native-label request requires UTC coverage for every offset accepted by the
+parser (−23:59 through +23:59). This conservative envelope is a mathematical
+coverage check, not a station time-zone assumption. Complete adjacent acquisition
+inventories can jointly establish the requested all-series scope.
 Bosnia's rolling workbooks establish only the observations they contain. Their
 rows update matching series, physical facts, timestamps and time zones in the
 cache. Rows absent from a later workbook remain held at their earlier acquisition
