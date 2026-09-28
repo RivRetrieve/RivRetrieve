@@ -33,7 +33,7 @@ that run, not a performance guarantee. Slow compilation is tracked in #392 as an
 enhancement.
 
 The retrieval and cache-status snippets were then run against that live store.
-Their printed output matched all four output blocks on the page: seven discharge
+Their printed output matched all four output blocks in the reviewed draft: seven discharge
 rows (the first three values 999, 1010 and 1020 m³/s), vintage 2025-10-31,
 4.74 m stage, and seven null temperature rows. Retrieval provenance listed all
 867 publisher artifacts. `rr.to_utc` refused the unknown time zone as expected.
@@ -53,7 +53,9 @@ RIVRETRIEVE_CACHE_DIR=<existing live cache directory> uv run python docs/verific
 This mode skips only the download snippet and uses the public API for the remaining
 snippets. It is a check of the retained live store, not a new acquisition check.
 The resumed run on 2026-09-27 (21:10–21:34 UTC) matched all four printed output
-blocks, with zero mismatches. No staging directory remained after the check.
+blocks in that draft, with zero mismatches. Human review then removed the stage,
+temperature and cache-status demonstrations to keep the provider page focused.
+The remaining discharge example and its output are unchanged. No staging directory remained after the check.
 
 The resumed documentation test command passed all 45 tests (one dependency
 deprecation warning). `uv run mkdocs build --strict` passed, as did Ruff lint and
@@ -85,6 +87,9 @@ product facts and the index link. It is not live acquisition evidence.
   every other value, including 999, is kept. Dates are labelled at midnight with
   `time_zone="unknown"`. Transport retries (at most three attempts) are documented in
   the usage guide.
+- **Coordinate attribution.** Human review confirmed that GRDC supplied the Poland
+  coordinates. The reader page states that attribution directly; the historical
+  acquisition distinction above remains in this maintainer record.
 - **Sources.** The regulations, field description, notice (`UWAGA.txt`), station list
   and change list fetched on 2026-09-27 were identical to the 2026-09-25 copies apart
   from whitespace in the regulations. The station list has 1,301 rows and no

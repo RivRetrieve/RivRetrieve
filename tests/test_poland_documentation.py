@@ -36,7 +36,7 @@ def _snippets():
 
 def test_poland_documentation_snippets_are_valid_current_python():
     snippets = _snippets()
-    assert len(snippets) == 5
+    assert len(snippets) == 2
     for body, _ in snippets:
         compile(body, str(PAGE), "exec")
     text = PAGE.read_text()
@@ -88,8 +88,8 @@ def test_poland_retrieval_snippets_replay_committed_archive(tmp_path, monkeypatc
             exec(compile(body, str(PAGE), "exec"), scope)
         assert captured.getvalue() == expected
         replayed += 1
-    assert replayed == 3
+    assert replayed == 1
     assert scope["result"].provenance.publisher_artifact_urls == (URL,)
-    assert scope["temperature_result"].data["time_zone"].unique().to_list() == ["unknown"]
+    assert scope["result"].data["time_zone"].unique().to_list() == ["unknown"]
     with pytest.raises(FatalContractError, match="time_zone is 'unknown'"):
         rr.to_utc(scope["result"])

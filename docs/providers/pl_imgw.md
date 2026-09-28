@@ -107,33 +107,16 @@ a year is listed in both forms or if the listed years leave a gap.
 
 A failed download leaves any existing store unchanged. RivRetrieve retries an
 interrupted file transfer up to three attempts in total. If a file still fails, the
-download stops and removes the files it has downloaded. It also refuses to replace a
-valid store with a newly listed archive that ends earlier than that store.
+download stops and removes the files it has downloaded.
 
 Choose a cache location with `RIVRETRIEVE_CACHE_DIR` before preparing the archive;
-see [cache configuration](../usage.md#cache-and-bulk-downloads). After preparation,
-inspect the local copy without downloading it again:
+see [cache configuration](../usage.md#cache-and-bulk-downloads).
 
-```python
-status = rr.cache_status("pl_imgw")
-
-print(status.presence.value)
-print(status.source_vintage)
-```
-
-Output for the verified copy:
-
-```text
-present
-2025-10-31
-```
-
-`source_vintage` is the last date covered by the newest downloaded file: the end of
-hydrological year 2025 for the verified copy. It does not tell you the latest
-observation at each station. IMGW-PIB adds each hydrological year some months after it
-ends; its change list (`lista_zmian_hydro.txt`) records hydrological year 2025 as added
-on 2026-08-31. The archive therefore does not contain recent days, and until IMGW-PIB
-adds the next year a new download ends on the same date.
+IMGW-PIB adds each hydrological year some months after it ends. Its change list
+(`lista_zmian_hydro.txt`) records hydrological year 2025 as added on 2026-08-31.
+The archive downloaded on 2026-09-27 therefore ends on October 31, 2025, rather
+than containing recent days. This archive end date does not establish the latest
+observation at each station.
 
 The same compiled copy serves later requests for other stations and periods. Both
 `cache="bypass"` and `cache="reuse"` read it locally. `cache="refresh"` is refused:
@@ -142,36 +125,17 @@ publishes at that time. Retrieval does not check for newer files.
 
 ## What you can retrieve
 
-IMGW-PIB's daily files have no header row. The publisher's field description
-(`CODZ_publiczne_format.txt`) names each field:
+IMGW-PIB's field description (`CODZ_publiczne_format.txt`) names each field:
 
-| Quantity filter | IMGW-PIB field | Source unit | Returned unit |
-|---|---|---|---|
-| `discharge` | `COPRZP`: Przepływ [m^3/s] (discharge) | m³/s | m³/s |
-| `stage` | `COSTAN`: Stan wody [cm] (water level) | cm | m |
-| `temperature` | `COPTMP`: Temperatura wody [st. C] (water temperature) | °C | °C |
+| Quantity filter | Frequency | Statistic | IMGW-PIB field | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | Daily | Unknown | `COPRZP`: Przepływ [m^3/s] (discharge) | m³/s | m³/s |
+| `stage` | Daily | Unknown | `COSTAN`: Stan wody [cm] (water level) | cm | m |
+| `temperature` | Daily | Unknown | `COPTMP`: Temperatura wody [st. C] (water temperature) | °C | °C |
 
 RivRetrieve converts stage from centimetres to metres. Stage is water level, not
 water depth or an elevation above sea level. RivRetrieve has not established its
 vertical reference.
-
-At Gozdowice, IMGW-PIB's file gives a water level of `474` cm for January 1, 2024.
-RivRetrieve returns it in metres:
-
-```python
-stage = rr.find(provider="pl_imgw", station="152140020", quantity="stage")
-
-stage_result = rr.fetch(stage, start="2024-01-01", end="2024-01-01")
-
-print(stage_result.data.select("time", "value", "unit").write_csv(), end="")
-```
-
-Output:
-
-```text
-time,value,unit
-2024-01-01T00:00:00.000000,4.74,m
-```
 
 Each value is a daily value, and `frequency="daily"` matches all three quantities.
 IMGW-PIB does not state one statistic for the whole archive. Its 2025 yearbook
@@ -189,34 +153,15 @@ requested period. Far fewer stations measure water temperature than water level:
 2025, the yearbook reports daily water levels from 916 stations in IMGW-PIB's
 database, discharges from 714 and water temperatures from 93.
 
-Gozdowice has no water temperature for the example week. The request still returns
-one row for each date, with no value:
+IMGW-PIB uses empty fields and the codes below to indicate missing observations.
+Its field description says that since 2024 missing observations are always empty
+(`NULL`). RivRetrieve follows these explicit source definitions: it returns a
+missing value rather than treating a missing-data code as a measurement. It does
+not decide that an unusual measurement is missing or unreliable.
 
-```python
-temperature = rr.find(provider="pl_imgw", station="152140020", quantity="temperature")
-
-temperature_result = rr.fetch(temperature, start="2024-01-01", end="2024-01-07")
-
-print(temperature_result.data.height)
-print(temperature_result.data["value"].null_count())
-```
-
-Output:
-
-```text
-7
-7
-```
-
-The daily file has a record for each of these dates, with an empty temperature field.
-RivRetrieve keeps such a record as a row with `value=null`. A date with no record in
-the file returns no row. A missing store is reported as an issue, and an empty result
-alone does not distinguish these cases. Check [issues](../usage.md#issues) before
-interpreting gaps or empty results.
-
-IMGW-PIB's field description marks missing values with codes as well as empty fields,
-and says that since 2024 they are always empty (`NULL`). RivRetrieve returns the
-codes as null values:
+A source record with a missing observation remains a row with a missing value.
+A date with no source record returns no row. Request and local-store failures are
+reported separately as [issues](../usage.md#issues).
 
 | Quantity | Code | Meaning stated by IMGW-PIB |
 |---|---|---|
@@ -230,10 +175,8 @@ as published.
 ## Station coordinates
 
 IMGW-PIB's station list contains the 1,301 station identifiers, names and rivers, but
-no coordinates. The positions in the catalogue come from a station table carried over
-from an earlier version of RivRetrieve. A station-metadata workbook later supplied by
-the Global Runoff Data Centre (GRDC) contains the same positions, but it has not been
-established that GRDC was their original source.
+no coordinates. The station coordinates used by RivRetrieve were supplied by the
+Global Runoff Data Centre (GRDC).
 The coordinate reference system is recorded as `unknown` because it has not been
 established. [Maps](../usage.md#maps) display such positions as if they used
 EPSG:4326, which does not establish their reference system.
@@ -259,8 +202,8 @@ judgement. A returned value does not establish that IMGW-PIB has verified it.
 IMGW-PIB revises published files. Its change list (`lista_zmian_hydro.txt`) records
 corrected values, and in 2026 it withdrew uncertain 1997 discharges and water levels
 at several stations. The yearbook states that IMGW-PIB updates archived discharges when
-the stage-discharge relationship at a gauge changes. Record the download date with any
-analysis, and download again to use the current files.
+the stage-discharge relationship at a gauge changes. A later download of the same
+period may therefore contain different values.
 
 ## Terms and citation
 
