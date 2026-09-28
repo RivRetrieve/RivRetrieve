@@ -783,12 +783,24 @@ def _covered_facts(
         any(
             not remainder(
                 interval_envelope(interval, axis),
-                tuple(
-                    item.interval
-                    for item in manifest.coverage
-                    if item.series_id == definition.series_id
-                    and fact.facts_id in item.facts_ids
-                    and item.interval.axis is axis
+                (
+                    *(
+                        item.interval
+                        for item in manifest.coverage
+                        if item.series_id == definition.series_id
+                        and fact.facts_id in item.facts_ids
+                        and item.interval.axis is axis
+                    ),
+                    *(
+                        RequestedInterval(item.window.start, item.window.end, axis=axis)
+                        for item in inventories
+                        if item.completeness is InventoryCompleteness.COMPLETE
+                        and item.origin != "catalogue"
+                        and item.scope == scope
+                        and item.window is not None
+                        and item.window.axis is axis
+                        and definition.series_id not in item.members
+                    ),
                 ),
             )
             for axis in TimeAxis
