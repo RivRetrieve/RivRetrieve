@@ -7,7 +7,6 @@ from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
-from uuid import uuid4
 
 import polars as pl
 
@@ -197,8 +196,8 @@ def _attempt_call(attempt: TransportAttempt) -> dict[str, object]:
 
 def _payload_calls(payload: Payload) -> tuple[dict[str, object], ...]:
     if not payload.attempt_traces:
-        return ({**_origin_call(payload.origin), "call_id": uuid4().hex},)
-    acquisition_id = uuid4().hex
+        return ({**_origin_call(payload.origin), "call_id": payload.acquisition_id},)
+    acquisition_id = payload.acquisition_id
     return tuple(
         {
             **(_origin_call(payload.origin) if index == len(payload.attempt_traces) else {}),
@@ -577,8 +576,20 @@ def _reconcile_acquired_inventories(
     outcomes = (*acquired.outcomes, *(item for parsed in parsed_results for item in parsed.outcomes))
     reconciled = []
     for snapshot in acquired.inventories:
-        if not _snapshot_matches(snapshot, scope, window):
+        snapshot_window = (
+            window
+            if snapshot.window is None
+            else SeriesWindow(start=max(window.start, snapshot.window.start), end=min(window.end, snapshot.window.end))
+            if snapshot.window.start <= window.end and snapshot.window.end >= window.start
+            else None
+        )
+        if snapshot_window is None or not _snapshot_matches(snapshot, scope, snapshot_window):
             continue
+        scoped_outcomes = tuple(
+            item
+            for item in outcomes
+            if item.window.start <= snapshot_window.end and item.window.end >= snapshot_window.start
+        )
         reasons: list[str] = []
         members = set(snapshot.members)
         declared_facts = dict(snapshot.member_facts)
@@ -595,9 +606,12 @@ def _reconcile_acquired_inventories(
                 for fact in item.facts
             ):
                 reasons.append("Observation physical facts differ from the acquired inventory facts")
-        if acquired.failed_requests or any(
+        if any(
+            event.window.start <= snapshot_window.end and event.window.end >= snapshot_window.start
+            for event in acquired.failed_requests
+        ) or any(
             outcome.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-            for outcome in outcomes
+            for outcome in scoped_outcomes
         ):
             reasons.append("This acquisition has failed, unsupported or unresolved observation outcomes")
         for key in snapshot.members:
@@ -612,34 +626,34 @@ def _reconcile_acquired_inventories(
                 observed_definition = any(item.series_id == key and fact in item.facts for item in observed)
                 acquired_empty = any(
                     item.series_id == key and fact.facts_id in item.facts_ids and item.status is OutcomeStatus.EMPTY
-                    for item in acquired.outcomes
+                    for item in scoped_outcomes
                 )
                 if not observed_definition and not acquired_empty:
                     reasons.append("A matching admitted member lacks a concrete response definition")
                 coverage = tuple(
                     RequestedInterval(outcome.window.start, outcome.window.end)
-                    for outcome in outcomes
+                    for outcome in scoped_outcomes
                     if outcome.series_id == key
                     and fact.facts_id in outcome.facts_ids
                     and outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
                 )
-                if remainder(RequestedInterval(window.start, window.end), coverage):
+                if remainder(RequestedInterval(snapshot_window.start, snapshot_window.end), coverage):
                     reasons.append("A matching admitted member lacks successful coverage in this acquisition")
         reason = "; ".join(dict.fromkeys(reasons)) if reasons else None
         evidence = (
             *snapshot.evidence,
             f"source-inventory:{snapshot.snapshot_id}",
-            *(f"retrieval-outcome:{outcome.outcome_id}" for outcome in outcomes),
+            *(f"retrieval-outcome:{outcome.outcome_id}" for outcome in scoped_outcomes),
         )
         instants = tuple(
             instant
-            for instant in (snapshot.acquired_at, *(outcome.retrieved_at for outcome in outcomes))
+            for instant in (snapshot.acquired_at, *(outcome.retrieved_at for outcome in scoped_outcomes))
             if instant is not None
         )
         reconciled.append(
             InventorySnapshot(
                 snapshot_id=stable_id(
-                    snapshot.snapshot_id, scope.model_dump_json(), window.model_dump_json(), *evidence, reason
+                    snapshot.snapshot_id, scope.model_dump_json(), snapshot_window.model_dump_json(), *evidence, reason
                 ),
                 scope=scope,
                 members=snapshot.members,
@@ -659,7 +673,7 @@ def _reconcile_acquired_inventories(
                 access=f"{snapshot.access}; reconciled against this retrieval's concrete outcomes",
                 origin="response",
                 acquired_at=max(instants) if instants else None,
-                window=window,
+                window=snapshot_window,
                 evidence=evidence,
                 reason=reason,
             )
@@ -703,7 +717,7 @@ def _explicit_reuse(manifest: AccumulatedStoreManifest, scope: SeriesScope, wind
             ):
                 continue
             if snapshot.window is not None and (
-                snapshot.window.start > window.start or snapshot.window.end < window.end
+                snapshot.window.start > window.end or snapshot.window.end < window.start
             ):
                 continue
             if definition.series_id in snapshot.members:
@@ -1621,6 +1635,7 @@ def drive(
                         item.series.series_id
                         for item in fetched.failed_requests
                         if (item.call_id or item.event_id) == (event.call_id or event.event_id)
+                        and item.series.series_id is not None
                     ),
                     "url": event.request.url,
                     "request_parameters": dict(event.request.params or {}),
@@ -1672,12 +1687,13 @@ def drive(
                     and event.failure.status_code == 404
                 ):
                     continue
-                _merge_definitions(definitions, (target,))
-                _merge_definitions(fresh_definitions, (target,))
+                if isinstance(target, SourceSeries):
+                    _merge_definitions(definitions, (target,))
+                    _merge_definitions(fresh_definitions, (target,))
                 failed_window = event.window if outside else SeriesWindow(start=overlap_start, end=overlap_end)
                 if not outside:
                     retain_held_successes(
-                        (target.series_id,),
+                        (target.series_id,) if target.series_id is not None else (),
                         held_interval=RequestedInterval(overlap_start, overlap_end),
                     )
                 issue = _source_failure_issue(
@@ -1741,6 +1757,7 @@ def drive(
                 )
             )
         transaction_parsed: list[ParsedSeries] = []
+        parsed_payloads: list[tuple[int, ParsedSeries]] = []
         for received_index, received in enumerate(fetched.value):
             if len(group) > 1:
                 if (station, product) not in received.station_products:
@@ -1770,6 +1787,25 @@ def drive(
             _validate_parsed_series(parsed)
             validate_native_rows(parsed.rows, config.products, series=parsed.series)
             transaction_parsed.append(parsed)
+            parsed_payloads.append((payload_index, parsed))
+        # Resolve held fallback for the entire acquisition before admitting fresh
+        # rows. A late incomplete page has the same effect as an early one.
+        for _, parsed in parsed_payloads:
+            for failed_outcome in parsed.outcomes:
+                if failed_outcome.status not in (
+                    OutcomeStatus.FAILED,
+                    OutcomeStatus.UNSUPPORTED,
+                    OutcomeStatus.UNRESOLVED,
+                ):
+                    continue
+                failed_start = max(window.start, failed_outcome.window.start)
+                failed_end = min(window.end, failed_outcome.window.end)
+                if failed_start <= failed_end:
+                    retain_held_successes(
+                        (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
+                        held_interval=RequestedInterval(failed_start, failed_end),
+                    )
+        for payload_index, parsed in parsed_payloads:
             source_series_by_payload[payload_index] = tuple(
                 dict.fromkeys((*source_series_by_payload[payload_index], *(item.series_id for item in parsed.series)))
             )
@@ -1778,6 +1814,28 @@ def drive(
             acquired_facts = {item.series_id: tuple(fact.facts_id for fact in item.facts) for item in parsed.series}
             acquired_snapshots = []
             for original_snapshot in parsed.inventories:
+                incomplete = any(
+                    item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+                    and item.series_id in original_snapshot.members
+                    and (
+                        original_snapshot.window is None
+                        or (
+                            item.window.start <= original_snapshot.window.end
+                            and item.window.end >= original_snapshot.window.start
+                        )
+                    )
+                    for item in (
+                        *(fetched.outcomes if isinstance(fetched, SourceAcquisition) else ()),
+                        *(outcome for result in transaction_parsed for outcome in result.outcomes),
+                    )
+                )
+                if incomplete:
+                    original_snapshot = original_snapshot.model_copy(
+                        update={
+                            "completeness": InventoryCompleteness.INCOMPLETE,
+                            "reason": "The source transaction has failed, unsupported or unresolved outcomes",
+                        }
+                    )
                 snapshot = original_snapshot.model_copy(
                     update={
                         "member_facts": tuple(
@@ -1815,43 +1873,6 @@ def drive(
             # Coverage/outcome evidence describes the current source page even
             # when reuse serves held values instead of overlapping partial rows.
             coverage_native = native
-            failed_ids = {
-                item.series_id
-                for item in parsed.outcomes
-                if item.series_id is not None
-                and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-            }
-            if isinstance(fetched, SourceAcquisition):
-                failed_ids.update(
-                    item.series_id
-                    for item in fetched.outcomes
-                    if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
-                )
-            if (
-                any(
-                    item.series_id is None
-                    and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-                    for item in parsed.outcomes
-                )
-                and manifest is not None
-            ):
-                failed_ids.update(item.series_id for item in manifest.series if pair_scope.matches(item))
-            for failed_outcome in parsed.outcomes:
-                if (
-                    failed_outcome.series_id is not None and failed_outcome.series_id not in failed_ids
-                ) or failed_outcome.status not in (
-                    OutcomeStatus.FAILED,
-                    OutcomeStatus.UNSUPPORTED,
-                    OutcomeStatus.UNRESOLVED,
-                ):
-                    continue
-                failed_start = max(window.start, failed_outcome.window.start)
-                failed_end = min(window.end, failed_outcome.window.end)
-                if failed_start <= failed_end:
-                    retain_held_successes(
-                        (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
-                        held_interval=RequestedInterval(failed_start, failed_end),
-                    )
             if restored_held_ids:
                 native = _exclude_native_intervals(
                     native,
@@ -1982,6 +2003,43 @@ def drive(
     )
     pending = _combine_replacements(pending, fresh_outcomes, outcomes)
     combined = pl.concat(rows)
+    # A rolling publication establishes only its explicit observation keys.
+    # Preserve older snapshot rows absent from the new publication, without
+    # presenting their dates as reusable interval coverage.
+    if manifest is not None and store is not None:
+        snapshot_ids = {
+            item.series_id
+            for item in manifest.outcomes
+            if item.coverage == "observations" and item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+        }
+        held_series = tuple(item for item in manifest.series if item.series_id in snapshot_ids and scope.matches(item))
+        if held_series:
+            _merge_definitions(definitions, held_series)
+            held_read = StoreReader().query(
+                StoreQuery(
+                    store,
+                    request.provider_id,
+                    request.stations,
+                    request.products,
+                    datetime.fromisoformat(request.window.start.isoformat()) - _FETCH_WINDOW_PADDING,
+                    datetime.fromisoformat(request.window.end.isoformat()) + _FETCH_WINDOW_PADDING,
+                    series_ids=tuple(item.series_id for item in held_series),
+                    facts_ids=tuple(
+                        fact.facts_id for item in held_series for fact in item.facts if scope.matches_facts(fact)
+                    ),
+                )
+            )
+            held_rows = _clip_native(held_read.rows, held_series, request.window).join(
+                combined.select("series_id", "facts_id", "time", "time_zone").unique(),
+                on=["series_id", "facts_id", "time", "time_zone"],
+                how="anti",
+            )
+            combined = pl.concat([combined, held_rows])
+            held_ids = set(held_rows["series_id"])
+            outcomes.extend(item for item in manifest.outcomes if item.series_id in held_ids)
+            cached_calls.extend(manifest.source_calls)
+            if receipts is ReceiptMode.INCLUDE and not held_rows.is_empty():
+                receipt_entries.append(encode_store_excerpt(held_read))
     selected, retained_inventories, retained_outcomes = _result_metadata(scope, definitions, inventories, outcomes)
     converted = convert(combined, config, request.window, series=tuple(definitions.values()))
     _require_canonical_rows_within_requested(converted.value, tuple(definitions.values()), request.window)

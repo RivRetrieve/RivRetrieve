@@ -185,7 +185,11 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                     replace(item, interval=interval, facts_ids=overlap_facts)
                     for interval in remainder(item.interval, (coverage.interval,))
                 )
-            retained.append(coverage)
+            observation_only = outcome_by_id[coverage.outcome_id].coverage == "observations"
+            if observation_only:
+                retained = list(held)
+            else:
+                retained.append(coverage)
             held = tuple(retained)
             for year in range(coverage.interval.start.year, coverage.interval.end.year + 1):
                 identifier = f"product={definition.product_id}/year={year:04d}"
@@ -205,13 +209,21 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                 )
                 if identifier in counts:
                     existing = next(directory.glob("*.parquet"))
-                    retained_rows = pl.read_parquet(existing).filter(
-                        ~(
-                            (pl.col("series_id") == coverage.series_id)
-                            & pl.col("facts_id").is_in(replaced_facts)
-                            & pl.col("time").is_between(coverage.interval.start, coverage.interval.end)
+                    existing_rows = pl.read_parquet(existing)
+                    if observation_only:
+                        retained_rows = existing_rows.join(
+                            additions.select("series_id", "facts_id", "time", "time_zone").unique(),
+                            on=["series_id", "facts_id", "time", "time_zone"],
+                            how="anti",
                         )
-                    )
+                    else:
+                        retained_rows = existing_rows.filter(
+                            ~(
+                                (pl.col("series_id") == coverage.series_id)
+                                & pl.col("facts_id").is_in(replaced_facts)
+                                & pl.col("time").is_between(coverage.interval.start, coverage.interval.end)
+                            )
+                        )
                     additions = pl.concat([retained_rows, additions])
                     existing.unlink()
                 if additions.is_empty():

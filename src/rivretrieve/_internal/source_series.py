@@ -504,7 +504,9 @@ class RetrievalOutcome(BaseModel):
     ``requested_selector`` preserves the caller restriction without inventing
     a source identity. Unsuccessful outcomes retain a reason. ``calls`` links
     source-call evidence; ``retrieved_at`` records retrieval timing when known.
-    Outcomes remain present even when there are no observation rows."""
+    Outcomes remain present even when there are no observation rows.
+    ``coverage="observations"`` limits a successful result to its published row
+    identities; it does not establish completeness over ``window``."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     outcome_id: str
@@ -518,6 +520,7 @@ class RetrievalOutcome(BaseModel):
     retrieved_at: datetime | None = None
     calls: tuple[str, ...] = ()
     requested_selector: RequestedSelector | None = None
+    coverage: Literal["interval", "observations"] = "interval"
 
     @model_validator(mode="after")
     def check(self) -> RetrievalOutcome:
