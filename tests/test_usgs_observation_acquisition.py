@@ -239,17 +239,22 @@ def test_internal_parser_error_is_never_isolated_as_source_failure(monkeypatch):
         acquire(Transport(page(feature())))
 
 
-def test_late_continuous_chunk_failure_blocks_whole_transaction():
+@pytest.mark.parametrize("failed_span", [0, 1, 2])
+def test_continuous_span_failure_does_not_block_independent_siblings(failed_span):
     product = ProductId("discharge_instantaneous")
     start = datetime(2000, 1, 1, 12)
-    stop = start + timedelta(days=1101)
+    stop = start + timedelta(days=2201)
     window = engine._make_fetch_window(
         engine.WindowEndpoint.from_datetime(start), engine.WindowEndpoint.from_datetime(stop)
     )
     rendered = plan_windows(window, window_declarations().products[product])
     observation = feature()
     observation["properties"].update(statistic_id="00011", time="2000-01-01T12:00:00Z")
-    transport = Transport(page(observation), "fail")
+    responses = []
+    for index, rendered_window in enumerate(rendered):
+        observation["properties"]["time"] = rendered_window.start
+        responses.append("fail" if index == failed_span else page(observation))
+    transport = Transport(*responses)
     result = fetch(
         (STATION,),
         (product,),
@@ -259,12 +264,19 @@ def test_late_continuous_chunk_failure_blocks_whole_transaction():
         transport,
         monitoring_locations={STATION: LOCATION},
     )
-    assert len(transport.requests) == 2
+    assert len(transport.requests) == 3
     assert all("statistic_id" not in request.params for request in transport.requests)
-    assert result.inventories[0].completeness is InventoryCompleteness.INCOMPLETE
-    assert len(result.value) == 1
-    assert result.outcomes[0].window.start == start
-    assert result.outcomes[0].window.end == stop
+    assert [item.completeness for item in result.inventories] == [
+        InventoryCompleteness.INCOMPLETE if index == failed_span else InventoryCompleteness.COMPLETE
+        for index in range(3)
+    ]
+    assert len(result.value) == 2
+    expected = rendered[failed_span].bounds
+    assert result.outcomes[0].window.start == datetime.fromisoformat(expected.start.isoformat())
+    assert result.outcomes[0].window.end == datetime.fromisoformat(expected.end.isoformat())
+    assert [payload.fetch_window for payload in result.value] == [
+        item.bounds for index, item in enumerate(rendered) if index != failed_span
+    ]
 
 
 @pytest.mark.parametrize("endpoint,statistic", [("daily", None), ("continuous", "00011"), ("dv", "00003")])
@@ -786,3 +798,17 @@ def test_continuous_pages_detect_equivalent_published_instants(alias, value):
     beta = next(item for item in assembled.source_series if item.variant == "beta")
     assert assembled.canonical_rows["series_id"].to_list() == [beta.series_id]
     assert [entry.content for entry in assembled.receipts.entries] == [first, second]
+
+
+def test_unknown_initial_failure_retains_request_evidence_without_series_identity():
+    result = acquire(Transport("fail"))
+    assert not result.series
+    assert len(result.failed_requests) == 1
+    failed = result.failed_requests[0]
+    assert failed.series.series_id is None
+    assert failed.series.station_id == STATION
+    assert failed.series.product_id == PRODUCT
+    assert failed.failure.status_code == 429
+    assert failed.request.url == BASE
+    assert result.outcomes[0].status is OutcomeStatus.UNRESOLVED
+    assert result.outcomes[0].series_id is None

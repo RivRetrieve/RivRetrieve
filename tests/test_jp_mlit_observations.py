@@ -42,7 +42,16 @@ _PATHS = tuple(
 )
 _WINDOWS = MappingProxyType(
     {
-        product: (RenderedWindow("2023-01-01", "2023-01-31" if "hourly" in product else "2023-12-31"),)
+        product: (
+            RenderedWindow(
+                "2023-01-01",
+                "2023-01-31" if "hourly" in product else "2023-12-31",
+                bounds=_make_fetch_window(
+                    WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+                    WindowEndpoint.from_datetime(datetime(2023, 2, 1) if "hourly" in product else datetime(2024, 1, 1)),
+                ),
+            ),
+        )
         for product in _PRODUCTS
     }
 )

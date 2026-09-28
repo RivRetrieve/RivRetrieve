@@ -24,7 +24,7 @@ def _payload():
     return fetch(
         (_STATION,),
         _PRODUCTS[:3],
-        {p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]},
+        {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
         ReplayTransport([_DQ]),
@@ -136,7 +136,7 @@ def test_recorded_hourly_nonmidnight_labels_remain_valid():
     payload = fetch(
         (_STATION,),
         products,
-        {p: (RenderedWindow("2023", None),) for p in products},
+        {p: (RenderedWindow("2023", None, _window()),) for p in products},
         _window(),
         config(),
         ReplayTransport([_HQ]),

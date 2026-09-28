@@ -27,7 +27,7 @@ from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
 from rivretrieve._internal.providers.usgs_nwis.parse import parse, parse_time_label
-from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget, attempt_request
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -77,10 +77,6 @@ def fetch(
     outcomes = []
     issues = []
     failed_requests = []
-    window = SeriesWindow(
-        start=datetime.fromisoformat(fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(fetch_window.end.isoformat()),
-    )
     for station in stations:
         try:
             location = monitoring_locations[station]
@@ -89,41 +85,54 @@ def fetch(
         for product in products:
             if not rendered_windows.get(product):
                 raise FatalContractError("USGS acquisition requires at least one rendered request window")
-            coordinates = replace(_coordinates(product, config), monitoring_location_id=location)
-            local_scope = (scope or SeriesScope(provider_ids=("usgs_nwis",))).model_copy(
-                update={"station_ids": (station,), "product_ids": (str(product),)}
-            )
-            known = tuple(item for item in known_series if local_scope.matches(item))
-            members = {item.series_id: item for item in known}
-            selectors: tuple[str | None, ...] = (None,)
-            if local_scope.restriction is RestrictionKind.EXPLICIT:
-                selectors = tuple(
-                    sorted(
-                        {item.identity.published_id for item in known if item.identity.published_id is not None}
-                        | set(local_scope.variants)
-                    )
+            for rendered in rendered_windows[product]:
+                if rendered.bounds is None and len(rendered_windows[product]) != 1:
+                    raise FatalContractError("USGS capped spans require engine-established bounds")
+                acquisition_window = rendered.bounds or fetch_window
+                window = SeriesWindow(
+                    start=datetime.fromisoformat(acquisition_window.start.isoformat()),
+                    end=datetime.fromisoformat(acquisition_window.end.isoformat()),
                 )
-            transaction_errors = []
-            retrieved_at = None
-            if not selectors:
-                transaction_errors.append("No published USGS series ID is established for the requested selector")
-            for selector in selectors:
-                request_scope = (
-                    local_scope
-                    if selector is None
-                    else local_scope.model_copy(
-                        update={"restriction": RestrictionKind.EXPLICIT, "variants": (selector,), "series_ids": ()}
-                    )
+                coordinates = replace(_coordinates(product, config), monitoring_location_id=location)
+                local_scope = (scope or SeriesScope(provider_ids=("usgs_nwis",))).model_copy(
+                    update={"station_ids": (station,), "product_ids": (str(product),)}
                 )
-                selected = tuple(item for item in known if selector is None or item.identity.published_id == selector)
-                target_members = {item.series_id: item for item in selected}
-                observed_ids: set[str] = set()
-                target_errors = []
-                source_failures: dict[str, RetrievalOutcome] = {}
-                unsupported_ids: set[str] = set()
-                # A logical source observation is series + published time, not feature id.
-                seen_observations: set[tuple[str, datetime]] = set()
-                for rendered in rendered_windows[product]:
+                known = tuple(
+                    item
+                    for item in {**{s.series_id: s for s in known_series}, **definitions}.values()
+                    if local_scope.matches(item)
+                )
+                members = {item.series_id: item for item in known}
+                selectors: tuple[str | None, ...] = (None,)
+                if local_scope.restriction is RestrictionKind.EXPLICIT:
+                    selectors = tuple(
+                        sorted(
+                            {item.identity.published_id for item in known if item.identity.published_id is not None}
+                            | set(local_scope.variants)
+                        )
+                    )
+                transaction_errors = []
+                retrieved_at = None
+                if not selectors:
+                    transaction_errors.append("No published USGS series ID is established for the requested selector")
+                for selector in selectors:
+                    request_scope = (
+                        local_scope
+                        if selector is None
+                        else local_scope.model_copy(
+                            update={"restriction": RestrictionKind.EXPLICIT, "variants": (selector,), "series_ids": ()}
+                        )
+                    )
+                    selected = tuple(
+                        item for item in known if selector is None or item.identity.published_id == selector
+                    )
+                    target_members = {item.series_id: item for item in selected}
+                    observed_ids: set[str] = set()
+                    target_errors = []
+                    source_failures: dict[str, RetrievalOutcome] = {}
+                    unsupported_ids: set[str] = set()
+                    # A logical source observation is series + published time, not feature id.
+                    seen_observations: set[tuple[str, datetime]] = set()
                     initial = _request(coordinates, rendered, selector)
                     request: TransportRequest | None = initial
                     visited: set[tuple[tuple[str, str], ...]] = set()
@@ -133,30 +142,22 @@ def fetch(
                             error = attempted
                             reason = str(error)
                             target_errors.append(reason)
+                            call_id = uuid4().hex
                             for definition in target_members.values():
                                 failed_requests.append(
-                                    FailedSourceRequest(uuid4().hex, definition, window, request, error)
+                                    FailedSourceRequest(
+                                        uuid4().hex, definition, window, request, error, call_id=call_id
+                                    )
                                 )
-                            # Concrete failures are classified once by the shared driver.
-                            # An anonymous broad call still needs a retained diagnostic.
                             if not target_members:
-                                issues.append(
-                                    _issue(station, product, reason).model_copy(
-                                        update={
-                                            "details": {
-                                                "station_id": station,
-                                                "product_id": product,
-                                                "series_id": None,
-                                                "url": request.url,
-                                                "request_parameters": dict(request.params or {}),
-                                                "status_code": error.status_code
-                                                if isinstance(error, TransportFailure)
-                                                else None,
-                                                "failure_reason": str(error.reason)
-                                                if isinstance(error, TransportFailure)
-                                                else "credential_exchange",
-                                            }
-                                        }
+                                failed_requests.append(
+                                    FailedSourceRequest(
+                                        uuid4().hex,
+                                        SourceRequestTarget(station, str(product)),
+                                        window,
+                                        request,
+                                        error,
+                                        call_id=call_id,
                                     )
                                 )
                             break
@@ -166,7 +167,7 @@ def fetch(
                             coordinates,
                             station,
                             product,
-                            fetch_window,
+                            acquisition_window,
                             response,
                             request_scope,
                             tuple(target_members.values()),
@@ -226,90 +227,94 @@ def fetch(
                                 for failed_id in target_members or (None,)
                             )
                             break
+                    if selector is not None and not target_members and not target_errors:
+                        target_errors.append(
+                            "An empty selected response does not establish the requested source identity"
+                        )
+                    members.update(target_members)
+                    if source_failures:
+                        outcomes.extend(source_failures.values())
+                        transaction_errors.extend(
+                            dict.fromkeys(
+                                item.reason or "Identified source series is unsupported"
+                                for item in source_failures.values()
+                            )
+                        )
                     if target_errors:
-                        break
-                if selector is not None and not target_members and not target_errors:
-                    target_errors.append("An empty selected response does not establish the requested source identity")
-                members.update(target_members)
-                if source_failures:
-                    outcomes.extend(source_failures.values())
-                    transaction_errors.extend(
-                        dict.fromkeys(
-                            item.reason or "Identified source series is unsupported"
-                            for item in source_failures.values()
-                        )
-                    )
-                if target_errors:
-                    reason = "; ".join(dict.fromkeys(target_errors))
-                    transaction_errors.append(reason)
-                    # Page successes never certify a failed multi-page/multi-chunk transaction.
-                    for definition in target_members.values():
-                        outcomes.append(
-                            _outcome(
-                                definition,
-                                station,
-                                product,
-                                window,
-                                OutcomeStatus.UNSUPPORTED
-                                if definition.identity.published_id in unsupported_ids
-                                else OutcomeStatus.UNRESOLVED,
-                                reason,
-                                retrieved_at,
-                            )
-                        )
-                    if not target_members:
-                        outcomes.append(
-                            _outcome(
-                                None, station, product, window, OutcomeStatus.UNRESOLVED, reason, retrieved_at
-                            ).model_copy(
-                                update={
-                                    "requested_selector": RequestedSelector(kind="variant", value=selector)
-                                    if selector
-                                    else None
-                                }
-                            )
-                        )
-                else:
-                    for definition in target_members.values():
-                        if definition.series_id not in observed_ids:
+                        reason = "; ".join(dict.fromkeys(target_errors))
+                        transaction_errors.append(reason)
+                        # Page successes never certify a failed cursor chain.
+                        for definition in target_members.values():
                             outcomes.append(
-                                _outcome(definition, station, product, window, OutcomeStatus.EMPTY, None, retrieved_at)
+                                _outcome(
+                                    definition,
+                                    station,
+                                    product,
+                                    window,
+                                    OutcomeStatus.UNSUPPORTED
+                                    if definition.identity.published_id in unsupported_ids
+                                    else OutcomeStatus.UNRESOLVED,
+                                    reason,
+                                    retrieved_at,
+                                )
                             )
-            if not members and not transaction_errors:
-                outcomes.append(
-                    _outcome(
-                        None,
-                        station,
-                        product,
-                        window,
-                        OutcomeStatus.NO_MATCH,
-                        "Exhausted observation response contains no matching series in this finite window",
-                        retrieved_at,
+                        if not target_members:
+                            outcomes.append(
+                                _outcome(
+                                    None, station, product, window, OutcomeStatus.UNRESOLVED, reason, retrieved_at
+                                ).model_copy(
+                                    update={
+                                        "requested_selector": RequestedSelector(kind="variant", value=selector)
+                                        if selector
+                                        else None
+                                    }
+                                )
+                            )
+                    else:
+                        for definition in target_members.values():
+                            if definition.series_id not in observed_ids:
+                                outcomes.append(
+                                    _outcome(
+                                        definition, station, product, window, OutcomeStatus.EMPTY, None, retrieved_at
+                                    )
+                                )
+                if not members and not transaction_errors:
+                    outcomes.append(
+                        _outcome(
+                            None,
+                            station,
+                            product,
+                            window,
+                            OutcomeStatus.NO_MATCH,
+                            "Exhausted observation response contains no matching series in this finite window",
+                            retrieved_at,
+                        )
+                    )
+                definitions.update(members)
+                reason = "; ".join(dict.fromkeys(transaction_errors)) or None
+                if not selectors:
+                    outcomes.append(
+                        _outcome(None, station, product, window, OutcomeStatus.UNRESOLVED, reason, retrieved_at)
+                    )
+                inventories.append(
+                    InventorySnapshot(
+                        snapshot_id=uuid4().hex,
+                        scope=local_scope,
+                        members=tuple(members),
+                        member_facts=tuple(
+                            (key, tuple(f.facts_id for f in item.facts)) for key, item in members.items()
+                        ),
+                        completeness=InventoryCompleteness.INCOMPLETE if reason else InventoryCompleteness.COMPLETE,
+                        access=f"USGS Water Data v1 {coordinates.endpoint} exhausted observation cursor chains",
+                        origin="response",
+                        acquired_at=retrieved_at,
+                        window=window,
+                        evidence=(
+                            "Exact publisher pages; finite requested observation scope, not historical availability",
+                        ),
+                        reason=reason,
                     )
                 )
-            definitions.update(members)
-            reason = "; ".join(dict.fromkeys(transaction_errors)) or None
-            if not selectors:
-                outcomes.append(
-                    _outcome(None, station, product, window, OutcomeStatus.UNRESOLVED, reason, retrieved_at)
-                )
-            inventories.append(
-                InventorySnapshot(
-                    snapshot_id=uuid4().hex,
-                    scope=local_scope,
-                    members=tuple(members),
-                    member_facts=tuple((key, tuple(f.facts_id for f in item.facts)) for key, item in members.items()),
-                    completeness=InventoryCompleteness.INCOMPLETE if reason else InventoryCompleteness.COMPLETE,
-                    access=f"USGS Water Data v1 {coordinates.endpoint} exhausted observation cursor chains",
-                    origin="response",
-                    acquired_at=retrieved_at,
-                    window=window,
-                    evidence=(
-                        "Exact publisher pages; finite requested observation scope, not historical availability",
-                    ),
-                    reason=reason,
-                )
-            )
     return SourceAcquisition(
         value=tuple(payloads),
         issues=tuple(issues),
@@ -465,8 +470,10 @@ def _payload(coordinates, station, product, fetch_window, response: TransportRes
             content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
             source_path=UnknownOriginFact(),
             query=UnknownOriginFact(),
+            attempts=response.attempts,
         ),
         prerequisite_calls=response.prerequisite_calls,
         scope=scope,
         known_series=known,
+        attempt_traces=response.attempt_traces,
     )
