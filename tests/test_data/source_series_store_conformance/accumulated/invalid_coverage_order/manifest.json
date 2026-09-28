@@ -1,5 +1,5 @@
 {
-  "format_version": 7,
+  "format_version": 8,
   "provider_id": "fixture_live",
   "built_at": "2026-09-06T12:00:00.000000Z",
   "coverage": [
@@ -11,7 +11,8 @@
       "outcome_id": "b82058c03955b72be4d74b1b2359a63b4de61f2a0a1748d5154e56f5bebdc9e4",
       "facts_ids": [
         "ea5f536795ca7835b6f6b93533ef4c63260f906352c1d0d6df08771657564392"
-      ]
+      ],
+      "axis": "native"
     }
   ],
   "partition_row_counts": {},

@@ -59,10 +59,10 @@ _STAGES = declaration.observations.stages
 
 
 class CountedReplay:
-    """Exact full-window replay plus two explicit authored half-window over-responses.
+    """Exact full-window replay plus authored half-window and extended-window responses.
 
-    The half-window requests reuse unchanged captured bytes to model a source
-    returning padding. They are engine controls, not new publisher recordings.
+    These requests reuse unchanged captured bytes to control finite source coverage.
+    They are engine controls, not new publisher recordings.
     All non-window request coordinates must still match the exact capture.
     """
 
@@ -81,6 +81,7 @@ class CountedReplay:
         assert request.params["datetime"] in {
             "2010-05-30T05:00:00Z/2010-06-03T16:59:59.999999Z",
             "2010-05-30T17:00:00Z/2010-06-04T04:59:59Z",
+            "2010-05-30T05:00:00Z/2010-06-07T04:59:59Z",
         }
         params = {**request.params, "datetime": "2010-05-30T05:00:00Z/2010-06-04T04:59:59Z"}
         assert coordinates(request.url, params) == coordinates(MANIFEST[_INSTANT]["original_url"])
@@ -186,28 +187,39 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     assert not rr.cache_status("usgs_nwis").exists
 
 
-def test_incomplete_coverage_reacquires_whole_scope_without_stale_rows(tmp_path: Path) -> None:
+def test_padded_acquisition_reuses_rows_outside_the_initial_result_window(tmp_path: Path) -> None:
     transport = CountedReplay(_INSTANT)
     store = tmp_path / "store"
     first = _drive(store, transport, end=_MIDPOINT - timedelta(microseconds=1))
     acquired = _drive(store, transport)
-    assert len(transport.calls) == 2
+    # The first UTC acquisition includes the whole later native request's offset
+    # envelope, even though the first returned result was clipped to half a day.
+    assert len(transport.calls) == 1
     expected = _drive(store, transport, cache="bypass")
     assert_frame_equal(acquired.canonical_rows.sort("time"), expected.canonical_rows.sort("time"))
-    assert acquired.provenance.served_intervals == ()
-    assert [entry.authorship for entry in acquired.receipts.entries] == [ReceiptAuthorship.PUBLISHER_PAYLOAD]
-    assert acquired.receipts.entries[0].content == first.receipts.entries[0].content
+    assert acquired.canonical_rows.height > first.canonical_rows.height
+    assert acquired.provenance.served_intervals
+    assert all(entry.authorship is ReceiptAuthorship.STORE_EXCERPT for entry in acquired.receipts.entries)
     repeated = _drive(store, transport)
-    assert len(transport.calls) == 3
+    assert len(transport.calls) == 2
     assert_frame_equal(repeated.canonical_rows.sort("time"), expected.canonical_rows.sort("time"))
+    # A request beyond the retained acquisition envelope still reacquires its full scope.
+    extended_end = _END + timedelta(days=3)
+    extended = _drive(store, transport, end=extended_end)
+    assert len(transport.calls) == 3
+    assert extended.provenance.served_intervals == ()
+    assert all(entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for entry in extended.receipts.entries)
+    expected_extended = _drive(store, transport, end=extended_end, cache="bypass")
+    assert_frame_equal(extended.canonical_rows.sort("time"), expected_extended.canonical_rows.sort("time"))
 
 
 def test_failed_reacquisition_retains_held_success_with_original_vintage(tmp_path: Path) -> None:
     store = tmp_path / "store"
     held = _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
     before = {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")}
-    partial = _drive(store, RefusedTransport())
-    assert_frame_equal(partial.canonical_rows, held.canonical_rows)
+    expected = _drive(store, CountedReplay(_INSTANT), cache="bypass")
+    partial = _drive(store, RefusedTransport(), cache="refresh")
+    assert_frame_equal(partial.canonical_rows, expected.canonical_rows)
     assert partial.provenance.served_intervals
     assert partial.provenance.served_intervals[0].retrieved_at == held.provenance.retrieved_at
     assert len(partial.issues) == 1
@@ -243,7 +255,8 @@ def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path) -> 
     _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
     _drive(store, LaterReplay(_INSTANT), start=_MIDPOINT, cache="refresh")
     status = StoreReader().status(store, _PROVIDER)
-    result = _drive(store, RefusedTransport())
+    # Include the earlier portion that the later padded acquisition did not replace.
+    result = _drive(store, RefusedTransport(), start=_START - timedelta(days=1))
     assert tuple(item.retrieved_at for item in result.provenance.served_intervals) == tuple(
         item.retrieved_at for item in status.coverage
     )
@@ -381,8 +394,9 @@ def test_unsupported_refetch_retains_covered_native_success_with_its_vintage(tmp
         def send(self, request):
             return replace(super().send(request), content=malformed)
 
-    result = _drive(store, AuthoredMalformed(_INSTANT))
-    assert_frame_equal(result.canonical_rows, held.canonical_rows)
+    expected = _drive(store, CountedReplay(_INSTANT), cache="bypass")
+    result = _drive(store, AuthoredMalformed(_INSTANT), cache="refresh")
+    assert_frame_equal(result.canonical_rows, expected.canonical_rows)
     assert any(item.status is OutcomeStatus.UNSUPPORTED for item in result.outcomes)
     assert result.provenance.served_intervals
     assert result.provenance.served_intervals[0].retrieved_at == held.provenance.retrieved_at
