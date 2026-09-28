@@ -1,0 +1,390 @@
+{
+ "anyksciu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "aunuvenu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "babtu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2006-01-02"
+ },
+ "bernatoniu-levuo-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-03-28"
+ },
+ "bernatoniu-sanziles-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "birstono-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2003-01-01"
+ },
+ "buivydziu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "civoniu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2011-11-23"
+ },
+ "darsuniskio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2004-01-01"
+ },
+ "drabuzninku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-10-11"
+ },
+ "druskininku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "dubininko-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "eiduku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "girutiskes-vms": {
+  "endDateUtc": "2017-12-31",
+  "startDateUtc": "2011-11-23"
+ },
+ "guntauninku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "jasiunu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2007-11-01"
+ },
+ "jonavos-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "josvainiu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "juodkrantes-vms": {
+  "endDateUtc": null,
+  "startDateUtc": null
+ },
+ "kacergiskes-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-10-11"
+ },
+ "kamorunu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2011-10-11"
+ },
+ "kartenos-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "kauno-vms": {
+  "endDateUtc": "2013-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "klaipedos-juru-uosto-vms": {
+  "endDateUtc": null,
+  "startDateUtc": null
+ },
+ "klaipedos-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2008-01-01"
+ },
+ "kretingos-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "kudirkos-naumiescio-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "kulynu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2007-11-01"
+ },
+ "kupiskio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "kvetku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2006-01-01"
+ },
+ "kyburiu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "lampedziu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "lankupiu-klaipedos-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2006-01-01"
+ },
+ "lankupiu-minija-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "lazdenu-vms": {
+  "endDateUtc": null,
+  "startDateUtc": null
+ },
+ "lazinku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-10-21"
+ },
+ "leckavos-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "likenu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2001-01-01"
+ },
+ "liubavo-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2005-01-02"
+ },
+ "liukoniu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "lyduvenu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "lynezerio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2021-01-01"
+ },
+ "miestaliu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-11-23"
+ },
+ "mikuziu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "musteikos-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2021-01-01"
+ },
+ "nemajunu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "paakmenio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "pabrades-vms": {
+  "endDateUtc": "2017-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "padubysio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "paelnes-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-11-22"
+ },
+ "pajurio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "palangos-vms": {
+  "endDateUtc": null,
+  "startDateUtc": null
+ },
+ "panemunes-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "panevezio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "papiles-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "paramelio-vms": {
+  "endDateUtc": "2024-08-10",
+  "startDateUtc": "2021-03-11"
+ },
+ "pazeimenes-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-10-11"
+ },
+ "plaskiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2007-11-01"
+ },
+ "pluskiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "pozeres-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-11-24"
+ },
+ "priekules-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2008-10-07"
+ },
+ "puvociu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "rimsoniu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2006-01-01"
+ },
+ "rusiskiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-10-11"
+ },
+ "rusnes-atmata-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "rusnes-skirvyte-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2009-01-01"
+ },
+ "sarkiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2006-01-01"
+ },
+ "semeliskiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "siaulenu-vms": {
+  "endDateUtc": "2017-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "silininku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2002-01-01"
+ },
+ "silutes-vms": {
+  "endDateUtc": "2017-12-31",
+  "startDateUtc": "2006-01-01"
+ },
+ "skirgailu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "skuodo-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "smalininku-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "sventosios-vms": {
+  "endDateUtc": null,
+  "startDateUtc": null
+ },
+ "tabokines-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "taurages-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "tauragnu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2003-01-01"
+ },
+ "traupio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2001-01-01"
+ },
+ "trecioniu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "ukmerges-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "uostadvario-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2020-07-24"
+ },
+ "ustukiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "vaineikiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2006-01-27"
+ },
+ "valkininku-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "varenos-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2008-09-10"
+ },
+ "varniu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-10-11"
+ },
+ "verbyliskiu-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "viasniunu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2011-10-11"
+ },
+ "vilniaus-neris-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "vilniaus-vilnia-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "zadeikiu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2006-03-01"
+ },
+ "zagares-vms": {
+  "endDateUtc": "2023-12-31",
+  "startDateUtc": "2011-11-10"
+ },
+ "zervynu-vms": {
+  "endDateUtc": "2017-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "zilpamusio-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2001-01-01"
+ },
+ "zindaiciu-vms": {
+  "endDateUtc": "2024-12-31",
+  "startDateUtc": "2000-01-01"
+ },
+ "zuvinto-vms": {
+  "endDateUtc": "2017-12-31",
+  "startDateUtc": "2002-02-01"
+ }
+}

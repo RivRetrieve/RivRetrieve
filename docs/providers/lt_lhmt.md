@@ -55,7 +55,9 @@ more frequent observations. An empty issue tuple does not establish the quality 
 the values.
 
 `cache="bypass"` requests the Meteo.lt API rather than a local cache. This output
-was checked on 2026-09-27. Run the examples in order in the same Python session.
+was checked on 2026-09-28. Published values can change, so a later retrieval need
+not reproduce this output exactly. Run the examples in order in the same Python
+session.
 See [Usage](../usage.md) for general selection and result handling.
 
 ## Who measures, and who publishes
@@ -118,8 +120,8 @@ The catalogue lists both quantities at every station, because the station list d
 not say which quantities each station publishes. A station being listed does not
 guarantee data for every quantity or requested period. Some stations publish stage
 with discharge left empty; RivRetrieve returns those days as rows with `value=null`.
-On 2026-09-27, five coastal and lagoon stations, such as `juodkrantes-vms`,
-reported no historical observations at all.
+On 2026-09-27, five stations, such as the Curonian Lagoon station
+`juodkrantes-vms`, reported no historical record range.
 
 ## How far back, and how recent
 
@@ -134,9 +136,9 @@ In English, unofficially: historical hydrological observations are provided from
 current year.
 
 Records start later than 2000 at many stations. On 2026-09-27, no station's
-historical record extended beyond December 31, 2024. Values from January 2025
-were therefore still unpublished about 20 months later. Treat the stated timing
-as the API's description, not a guarantee.
+historical record extended beyond December 31, 2024: data for 2025 had not
+appeared nine months after that year ended. Treat the stated timing as the API's
+description, not a guarantee.
 
 A request for a period that has not been published returns no rows and a
 `source.http_not_found` warning, which reports that the API had no data for that
@@ -175,11 +177,14 @@ In English, unofficially: requests are limited to 180 per minute per IP address;
 please do not generate more than 20,000 requests a day from one IP address, as
 exceeding the limit may block the address without warning.
 
-RivRetrieve sends one request per station, quantity and calendar month. It also
-requests the neighbouring month when the selected period starts on the first or
-second day of a month, or ends on one of its last two days. If that extra month is
-unpublished, the request is not reported as an issue. Twenty years of both quantities at one station take
-about 480 requests, so many stations add up quickly.
+RivRetrieve sends one request per station and calendar month. Because each
+monthly response contains both discharge and stage, one `fetch` that selects both
+quantities shares that request; separate `fetch` calls for each quantity, as in the
+examples above, request the same months again. RivRetrieve also requests the
+neighbouring month when the selected period starts on the first or second day of a
+month, or ends on one of its last two days. If that extra month is unpublished, the
+request is not reported as an issue. Twenty years at one station take about 240
+requests, so many stations add up quickly.
 
 ## Terms and citation
 
@@ -218,5 +223,5 @@ Publisher pages checked on 2026-09-27:
 - [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/): the licence's share-alike condition.
 
 The station count describes the packaged catalogue. The examples were retrieved
-live on 2026-09-27. The [verification record](../verification/lithuania-provider/README.md)
+live on 2026-09-28. The [verification record](../verification/lithuania-provider/README.md)
 retains commands, source checks, exact output and the limits of these checks.

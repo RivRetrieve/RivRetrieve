@@ -1,4 +1,4 @@
-"""Lithuania documentation checks over fresh captured bytes, not live verification."""
+"""Lithuania documentation checks over committed recorded responses, not live verification."""
 
 import io
 import re

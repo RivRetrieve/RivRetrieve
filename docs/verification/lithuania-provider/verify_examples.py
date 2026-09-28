@@ -38,8 +38,13 @@ def summary(label, result):
     return result
 
 
+for name in ("result", "stage_result"):
+    assert [call["url"].rsplit("/", 1)[-1] for call in namespace[name].provenance.calls_made] == ["2019-12", "2020-01"]
+
 print("CLAIMS")
-print("catalogue stations:", len(rr.find(provider="lt_lhmt").locations))
+stations = len(rr.find(provider="lt_lhmt").locations)
+print("catalogue stations:", stations)
+assert stations == 97
 print(
     "nemajunu-vms series:",
     rr.series(rr.find(provider="lt_lhmt", station="nemajunu-vms"))
@@ -70,4 +75,21 @@ coastal = summary(
         daily_mean("juodkrantes-vms", "stage"), start="2020-01-10", end="2020-01-12", cache="bypass", on_issue="ignore"
     ),
 )
+assert coastal.data.height == 0 and [issue.code for issue in coastal.issues] == ["source.http_not_found"]
+both = summary(
+    "both quantities in one fetch nemajunu-vms 2020-01-01..07",
+    rr.fetch(
+        rr.find(provider="lt_lhmt", station="nemajunu-vms", frequency="daily", statistic="mean"),
+        start="2020-01-01",
+        end="2020-01-07",
+        cache="bypass",
+    ),
+)
+shared_calls = [
+    (call["url"].rsplit("/", 1)[-1], sorted(product for _, product in call["station_products"]))
+    for call in both.provenance.calls_made
+]
+print("shared calls:", shared_calls)
+assert both.data.height == 14 and both.issues == ()
+assert shared_calls == [(month, ["discharge_daily_mean", "stage_daily_mean"]) for month in ("2019-12", "2020-01")]
 print("Behaviour claims hold.")
