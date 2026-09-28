@@ -201,6 +201,6 @@ Publisher pages checked on 2026-09-27:
 - [LHMT hydrology](https://www.meteo.lt/klimatas/hidrologija/): the national water measuring station network.
 - [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/): the licence's share-alike condition.
 
-The station count describes the packaged catalogue. The examples were retrieved
+The station count describes the packaged catalogue. The example was retrieved
 live on 2026-09-28. The [verification record](../verification/lithuania-provider/README.md)
 retains commands, source checks, exact output and the limits of these checks.
