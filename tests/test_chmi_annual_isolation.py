@@ -10,7 +10,7 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.transport import TransportResponse
-from tests.test_cz_chmi_observations import _DQ, _STATION
+from tests.test_cz_chmi_observations import _DQ, _HQ, _STATION
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -145,3 +145,19 @@ def test_valid_empty_annual_refresh_replaces_only_its_year(monkeypatch, tmp_path
     result = fetch(cache="refresh")
     assert result.data["time"].dt.year().sort().to_list() == [2021, 2023]
     assert any(item.status == "empty" and item.window.start.year == 2022 for item in result.outcomes)
+
+
+def test_hourly_shared_annual_file_preserves_siblings_around_failed_year(monkeypatch):
+    transport = AnnualTransport({2022: 503})
+    transport.document = json.loads(read_recording(_HQ).content)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    selected = rr.find(provider="cz_chmi", station=_STATION, frequency="hourly")
+    result = rr.fetch(selected, start="2021-03-01", end="2023-09-01", cache="bypass", receipts=True, on_issue="ignore")
+    assert set(result.data["product_id"]) == {"stage_hourly_mean", "discharge_hourly_mean"}
+    assert result.data.height == 4
+    assert set(result.data["time"].dt.year()) == {2021, 2023}
+    failures = [item for item in result.outcomes if item.status == "failed"]
+    assert len(failures) == 2
+    assert all(item.window.start.year == item.window.end.year == 2022 for item in failures)
+    # Public singleton composition may acquire each product separately; each retains its bytes.
+    assert len(result.receipts.entries) == 4

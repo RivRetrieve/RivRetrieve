@@ -812,3 +812,78 @@ def test_unknown_initial_failure_retains_request_evidence_without_series_identit
     assert failed.request.url == BASE
     assert result.outcomes[0].status is OutcomeStatus.UNRESOLVED
     assert result.outcomes[0].series_id is None
+
+
+@pytest.mark.parametrize("failed_span", [0, 1, 2])
+def test_continuous_independent_success_persists_while_failed_span_retries(tmp_path, failed_span):
+    from functools import partial
+
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.observations import ObservationProvenance
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse_page
+    from rivretrieve._internal.store import StoreReader, StoreRoot
+
+    product = ProductId("discharge_instantaneous")
+    provider = ProviderId("usgs_nwis")
+
+    class Stages:
+        config = config()
+        window_declarations = window_declarations()
+        fetch = staticmethod(partial(fetch, monitoring_locations={STATION: LOCATION}))
+        parse = staticmethod(parse_page)
+
+    class SpanTransport:
+        def __init__(self):
+            self.requests = []
+
+        def send(self, request):
+            index = len(self.requests) % 3
+            self.requests.append(request)
+            if index == failed_span:
+                raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
+            start = datetime.fromisoformat(request.params["datetime"].split("/")[0].removesuffix("Z"))
+            observation = feature()
+            observation["properties"].update(statistic_id="00011", time=(start + timedelta(hours=60)).isoformat() + "Z")
+            return TransportResponse(
+                page(observation),
+                200,
+                datetime(2026, 9, 28, tzinfo=UTC),
+                "application/geo+json",
+                request.url,
+                request.params or {},
+            )
+
+    transport = SpanTransport()
+    store = StoreRoot(tmp_path / "store")
+    request = engine.ObservationRequest(
+        provider,
+        (STATION,),
+        (product,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 3)),
+            engine.WindowEndpoint.from_datetime(datetime(2006, 1, 20)),
+        ),
+    )
+
+    def run():
+        return drive(
+            request,
+            Stages(),
+            transport=transport,
+            cache="reuse",
+            store=store,
+            provenance=ObservationProvenance(source="USGS", provider_id=provider),
+        )
+
+    result = run()
+    assert len(transport.requests) == 3
+    assert result.canonical_rows.height == 2
+    assert len(result.provenance.calls_made) == 3
+    coverage = StoreReader().status(store, provider).coverage
+    assert len(coverage) == 2
+    failed = [item for item in result.outcomes if item.status is OutcomeStatus.FAILED]
+    assert len(failed) == 1
+    assert all(not (item.interval.start <= failed[0].window.start <= item.interval.end) for item in coverage)
+    run()
+    assert len(transport.requests) == 6
