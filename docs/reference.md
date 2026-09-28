@@ -1258,7 +1258,7 @@ A Parquet re-encoding of the exact rows returned by a store query.
 - **executed_query : ExecutedStoreQuery**
   Product, year, station and closed wall-clock predicates used by the scan.
 - **format_version : int**
-  Store layout revision, 5 for compiled or 7 for accumulated stores.
+  Store layout revision, 5 for compiled or 8 for accumulated stores.
 - **source_vintage : datetime.date or None**
   Source vintage of the compiled store, as described for
   `StoreManifest.source_vintage`. None for an accumulated store.
@@ -1479,12 +1479,13 @@ An `empty` scope matches nothing.
 
 Type location: `rivretrieve._internal.source_series.SeriesWindow`.
 
-Closed request interval with ordered, naive source wall-clock endpoints.
+Closed source interval on an explicit native-label or UTC-instant axis.
 
 | Field | Python type | Required |
 | --- | --- | --- |
 | `start` | `datetime.datetime` | yes |
 | `end` | `datetime.datetime` | yes |
+| `axis` | `rivretrieve._internal.time_axis.TimeAxis` | no |
 
 ### `InventoryCompleteness`
 
@@ -1578,6 +1579,13 @@ outcomes for different intervals or fact segments.
 a source identity. Unsuccessful outcomes retain a reason. `calls` links
 source-call evidence; `retrieved_at` records retrieval timing when known.
 Outcomes remain present even when there are no observation rows.
+`coverage="observations"` limits a successful result to its published row
+identities; it does not establish completeness over `window`.
+`observation_keys` records admitted snapshot rows as tuples of physical-fact
+ID, native wall-clock timestamp and time zone. A key can identify several
+published rows with the same label; their values and multiplicity remain
+unchanged. Each key retains this outcome's calls and retrieval instant. Stored keys describe accepted row updates;
+returned held keys describe only the observations actually served.
 
 | Field | Python type | Required |
 | --- | --- | --- |
@@ -1592,6 +1600,8 @@ Outcomes remain present even when there are no observation rows.
 | `retrieved_at` | `datetime.datetime &#124; None` | no |
 | `calls` | `tuple[str, ...]` | no |
 | `requested_selector` | `rivretrieve._internal.source_series.RequestedSelector &#124; None` | no |
+| `coverage` | `Literal['interval', 'observations']` | no |
+| `observation_keys` | `tuple[tuple[str, datetime.datetime, str], ...]` | no |
 
 ### `Issue`
 
@@ -1676,10 +1686,10 @@ Validated catalogue evidence in normalized Polars relations.
 
 Type location: `rivretrieve._internal.coverage.RequestedInterval`.
 
-A closed interval on the native wall-clock label axis.
+A closed interval on an explicit time axis.
 
-`start` and `end` are naive source wall-clock labels, and both are
-included.
+`start` and `end` are naive timestamps, and both are included. The
+native axis uses source wall-clock labels. The UTC axis uses UTC labels.
 
 ### `CoverageInterval`
 
@@ -1695,7 +1705,7 @@ mean that observations exist at every time step in that interval.
 - **series_id : str**
   Source series that was retrieved.
 - **interval : RequestedInterval**
-  Covered wall-clock interval.
+  Covered interval on its declared native or UTC time axis.
 - **retrieved_at : datetime.datetime or None**
   UTC instant of the source retrieval, or None when it is not known.
 - **outcome_id : str**
@@ -1818,7 +1828,7 @@ Manifest of accumulated live parse output.
 #### Attributes
 
 - **format_version : int**
-  Accumulated layout revision, 7.
+  Accumulated layout revision, 8.
 - **provider_id : ProviderId**
   Provider whose native observations are stored.
 - **built_at : datetime**

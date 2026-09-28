@@ -43,7 +43,7 @@ class CoverageInterval:
     series_id : str
         Source series that was retrieved.
     interval : RequestedInterval
-        Covered wall-clock interval.
+        Covered interval on its declared native or UTC time axis.
     retrieved_at : datetime.datetime or None
         UTC instant of the source retrieval, or None when it is not known.
     outcome_id : str

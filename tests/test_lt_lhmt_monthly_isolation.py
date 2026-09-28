@@ -82,7 +82,7 @@ def authored_month(transport, month, *, empty=False, null=False):
 
 def month_bounds(month):
     days = calendar.monthrange(*map(int, month.split("-")))[1]
-    return {"start": f"{month}-01T00:00:00", "end": f"{month}-{days:02d}T23:59:59.999999"}
+    return {"start": f"{month}-01T00:00:00", "end": f"{month}-{days:02d}T23:59:59.999999", "axis": "native"}
 
 
 def selection(quantity="discharge"):

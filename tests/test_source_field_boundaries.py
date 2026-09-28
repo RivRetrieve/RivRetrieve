@@ -7,6 +7,7 @@ from pathlib import Path
 
 import openpyxl
 import pytest
+from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
@@ -99,7 +100,8 @@ def test_bosnia_external_index_failure_is_retained_not_fatal(monkeypatch, bad_in
 
 
 @pytest.mark.parametrize("next_value", [123, "https://example.org/untrusted"])
-def test_france_invalid_pagination_preserves_independent_series(monkeypatch, next_value):
+def test_france_invalid_pagination_preserves_independent_series(monkeypatch, tmp_path, next_value):
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(
         read_recording(DATA / name)
         for name in (
@@ -108,22 +110,34 @@ def test_france_invalid_pagination_preserves_independent_series(monkeypatch, nex
         )
     )
 
+    modified_bodies = []
+
     def alter(request, body):
         if dict(request.params or {}).get("grandeur_hydro_elab") == "QmnJ":
             document = json.loads(body)
             document["next"] = next_value
-            return json.dumps(document).encode()
+            body = json.dumps(document).encode()
+        modified_bodies.append(body)
         return body
 
+    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily")
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
+    baseline = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="bypass", on_issue="ignore")
     transport = AlteredResponseTransport(recordings, alter)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
-    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily")
-    result = rr.fetch(selection, start="2025-01-03", end="2025-01-03", receipts=True, on_issue="ignore")
-    assert set(result.data["product_id"]) == {"discharge_daily_max"}
-    assert any(
-        outcome.status == "unsupported" and outcome.product_id == "discharge_daily_mean" for outcome in result.outcomes
+    result = rr.fetch(
+        selection, start="2025-01-03", end="2025-01-03", cache="refresh", receipts=True, on_issue="ignore"
     )
-    assert len(result.receipts.entries) == 2
+    # A malformed cursor cannot discard valid observations already received.
+    assert_frame_equal(result.data, baseline.data)
+    unresolved = [outcome for outcome in result.outcomes if outcome.status == "unresolved"]
+    assert len(unresolved) == 1 and unresolved[0].product_id == "discharge_daily_mean"
+    assert unresolved[0].reason and unresolved[0].calls
+    assert any(issue.code == "source.acquisition_incomplete" for issue in result.issues)
+    assert {item.series_id for item in rr.cache_status("fr_hubeau").coverage} == {
+        item.series_id for item in result.outcomes if item.product_id == "discharge_daily_max"
+    }
+    assert [entry.content for entry in result.receipts.entries] == modified_bodies
 
 
 def test_swiss_catalogue_routes_do_not_select_a_preferred_field():
@@ -237,12 +251,15 @@ def test_france_late_bad_continuation_cannot_certify_partial_interval(monkeypatc
     kwargs = {"start": "2008-07-09", "end": "2008-07-10T23:59:59", "on_issue": "ignore", "receipts": True}
     partial = rr.fetch(selection, cache="refresh", **kwargs)
     assert not partial.data.is_empty()
-    assert any(outcome.status == "unsupported" for outcome in partial.outcomes)
+    assert any(outcome.status == "unresolved" and outcome.reason and outcome.calls for outcome in partial.outcomes)
+    assert rr.cache_status("fr_hubeau").coverage == ()
     assert len(partial.receipts.entries) == 5
     assert len(calls) == 5
     reused = rr.fetch(selection, cache="reuse", **kwargs)
     assert len(calls) == 10
-    assert any(outcome.status == "unsupported" for outcome in reused.outcomes)
+    assert any(outcome.status == "unresolved" for outcome in reused.outcomes)
+    assert rr.cache_status("fr_hubeau").coverage == ()
+    assert_frame_equal(reused.data, partial.data)
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])

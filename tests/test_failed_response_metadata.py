@@ -76,7 +76,11 @@ def test_public_monthly_failure_retains_received_metadata(monkeypatch, delay, at
         assert failed["failure_reason"] == failed["failure_category"] == "http_status"
         assert failed["acquisition_failure_reason"] == reason
         assert failed["request_parameters"] == {}
-        assert failed["window"] == {"start": "2023-05-01T00:00:00", "end": "2023-05-31T23:59:59.999999"}
+        assert failed["window"] == {
+            "start": "2023-05-01T00:00:00",
+            "end": "2023-05-31T23:59:59.999999",
+            "axis": "native",
+        }
         assert failed["url"].endswith("/2023-05")
         assert set(map(tuple, failed["station_products"])) == {("anyksciu-vms", "discharge_daily_mean")}
     outcomes = [item for item in result.outcomes if item.status.value == "failed"]
