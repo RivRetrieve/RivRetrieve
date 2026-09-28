@@ -66,7 +66,7 @@ def test_combined_store_refused_before_values_or_network(operation, tmp_path, mo
             pytest.fail("stale publication identity reached source transport")
 
     monkeypatch.setattr(discovery, "HttpClient", NoNetwork)
-    with pytest.raises(ObservationStoreRefusedError, match="publication.service"):
+    with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 7"):
         if operation == "status":
             rr.cache_status("fr_hubeau")
         else:

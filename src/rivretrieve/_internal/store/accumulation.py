@@ -169,6 +169,13 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             ):
                 raise FatalContractError("Replacement requires an explicit successful concrete-series outcome")
             replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
+            if any(
+                item.series_id == coverage.series_id
+                and set(item.facts_ids).intersection(replaced_facts)
+                and item.interval.axis is not coverage.interval.axis
+                for item in held
+            ):
+                raise FatalContractError("Stored source series cannot change its acquisition time axis")
             known_facts = {fact.facts_id for fact in definitions[coverage.series_id].facts}
             if (
                 len(set(replaced_facts)) != len(replaced_facts)

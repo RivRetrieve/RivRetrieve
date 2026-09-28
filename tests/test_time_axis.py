@@ -77,3 +77,67 @@ def test_scalar_timestamp_conversion_matches_frame_expression(zone):
     frame = pl.DataFrame({"time": [label], "time_zone": [zone]}, schema={"time": pl.Datetime, "time_zone": pl.String})
     assert timestamp_on_axis(label, zone, TimeAxis.NATIVE) == label
     assert timestamp_on_axis(label, zone, TimeAxis.UTC) == frame.select(axis_time_expression(TimeAxis.UTC)).item()
+
+
+@pytest.mark.parametrize("zone,hours", [("-05:00", -5), ("+03:00", 3), ("unknown", 0)])
+def test_isolated_utc_store_coverage_uses_published_offset_across_native_year_boundary(tmp_path, zone, hours):
+    from rivretrieve._internal.engine import RowsSchema
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.provider_series import SeriesMapping
+    from rivretrieve._internal.source_series import RetrievalOutcome, SeriesWindow
+    from rivretrieve._internal.store import StoreReader, StoreRoot
+    from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
+
+    definition = SeriesMapping(
+        namespace="authored",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        evidence=("authored axis control",),
+    ).source_series("axis_control", "station", "discharge")
+    fact = definition.facts[0]
+    instant = datetime(2024, 1, 1)
+    label = instant + timedelta(hours=hours)
+    rows = pl.DataFrame(
+        [
+            {
+                "station_id": "station",
+                "product_id": "discharge",
+                "time": label,
+                "value": 2.0,
+                "time_zone": zone,
+                "series_id": definition.series_id,
+                "facts_id": fact.facts_id,
+                "source_unit": "m3/s",
+            }
+        ],
+        schema=RowsSchema.polars_schema,
+    )
+    outcome = RetrievalOutcome(
+        outcome_id="utc-source",
+        series_id=definition.series_id,
+        station_id="station",
+        product_id="discharge",
+        window=SeriesWindow(start=instant, end=instant, axis=TimeAxis.UTC),
+        status="success",
+        facts_ids=(fact.facts_id,),
+    )
+    coverage = CoverageInterval(
+        definition.series_id,
+        RequestedInterval(instant, instant, axis=TimeAxis.UTC),
+        None,
+        outcome.outcome_id,
+        (fact.facts_id,),
+    )
+    update = StoreUpdate((definition,), (), (outcome,), (SuccessfulReplacement(coverage, rows),))
+    store = StoreRoot(tmp_path / "store")
+    if zone == "unknown":
+        with pytest.raises(FatalContractError, match="Replacement rows exceed"):
+            accumulate(store, ProviderId("axis_control"), update)
+        return
+    manifest = accumulate(store, ProviderId("axis_control"), update)
+    assert manifest.coverage == (coverage,)
+    assert StoreReader().status(store, ProviderId("axis_control")).manifest.coverage == (coverage,)
+    persisted = pl.concat([pl.read_parquet(path) for path in store.rglob("*.parquet")])
+    pt.assert_frame_equal(persisted.select("time", "time_zone", "value"), rows.select("time", "time_zone", "value"))
