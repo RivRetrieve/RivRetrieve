@@ -898,3 +898,21 @@ def test_unknown_selector_failure_links_request_without_inventing_series():
     assert unresolved.requested_selector.value == "unestablished"
     assert unresolved.calls == (result.failed_requests[0].call_id,)
     assert result.failed_requests[0].request.params["time_series_id"] == "unestablished"
+
+
+def test_incomplete_cursor_links_actual_http_retry_attempts():
+    from tests.test_transport_attempt_evidence import client_for
+
+    client, _ = client_for(
+        [
+            (page(feature(), next_url=next_url()), 200, "application/geo+json"),
+            *[(b"unavailable", 503, "text/plain")] * 3,
+        ]
+    )
+    result = acquire(client)
+    expected = tuple(item.attempt_id for item in result.value[0].attempt_traces) + tuple(
+        item.attempt_id for item in result.failed_requests[0].failure.attempt_traces
+    )
+    unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
+    assert unresolved.calls == expected
+    assert len(expected) == 4

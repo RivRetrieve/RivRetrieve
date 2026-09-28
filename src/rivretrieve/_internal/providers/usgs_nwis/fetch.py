@@ -150,7 +150,11 @@ def fetch(
                             reason = str(error)
                             target_errors.append(reason)
                             call_id = uuid4().hex
-                            target_calls.append(call_id)
+                            target_calls.extend(
+                                tuple(item.attempt_id for item in error.attempt_traces)
+                                if isinstance(error, TransportFailure) and error.attempt_traces
+                                else (call_id,)
+                            )
                             for definition in target_members.values():
                                 failed_requests.append(
                                     FailedSourceRequest(

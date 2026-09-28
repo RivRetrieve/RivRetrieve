@@ -100,7 +100,11 @@ def fetch(
                 if isinstance(response, (TransportFailure, CredentialExchangeError)):
                     failed = FailedSourceRequest(uuid4().hex, definition, bounds, request, response)
                     failures.append(failed)
-                    calls.append(failed.call_id or failed.event_id)
+                    calls.extend(
+                        tuple(item.attempt_id for item in response.attempt_traces)
+                        if isinstance(response, TransportFailure) and response.attempt_traces
+                        else (failed.call_id or failed.event_id,)
+                    )
                     reason = str(response)
                     break
                 payloads.append(

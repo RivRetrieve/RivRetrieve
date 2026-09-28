@@ -156,3 +156,45 @@ def test_public_continuous_fact_changes_across_spans_keep_all_source_facts(monke
     reused = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="ignore")
     assert_frame_equal(reused.data, result.data)
     assert len(transport.calls) == 2
+
+
+def test_public_narrow_inventory_refresh_cannot_hide_new_series_in_broad_reuse(monkeypatch, tmp_path):
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", temporal_support="instantaneous")
+    original = _Spans(selected.series[0].identity.published_id)
+
+    class Publication:
+        def __init__(self):
+            self.updated = False
+            self.calls = []
+
+        def send(self, request):
+            self.calls.append(request)
+            if not self.updated:
+                return original.send(request)
+            begin, end = [
+                datetime.fromisoformat(value.removesuffix("Z")) for value in request.params["datetime"].split("/")
+            ]
+            stamp = datetime(2003, 1, 15, 12)
+            observations = []
+            if begin <= stamp <= end:
+                observation = feature("new-member-after-narrow-refresh")
+                observation["properties"].update(statistic_id="00011", time=stamp.isoformat() + "Z")
+                observations.append(observation)
+            return TransportResponse(
+                page(*observations),
+                200,
+                datetime(2026, 9, 28, tzinfo=UTC),
+                "application/geo+json",
+                request.url,
+                request.params or {},
+            )
+
+    transport = Publication()
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="refresh", on_issue="ignore")
+    transport.updated = True
+    narrow = rr.fetch(selected, start="2003-01-03", end="2003-02-01", cache="refresh", on_issue="ignore")
+    assert narrow.data.height == 1
+    reused = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="ignore")
+    assert_frame_equal(reused.data, narrow.data)

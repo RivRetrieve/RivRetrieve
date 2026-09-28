@@ -103,3 +103,27 @@ def test_incomplete_cursor_retains_rows_and_bytes_but_retries_uncovered_window(t
     complete = run()
     assert len(transport.requests) == 3
     assert complete.canonical_rows.height == 1
+
+
+def test_incomplete_hubeau_cursor_links_actual_http_retry_attempts():
+    from tests.test_transport_attempt_evidence import client_for
+
+    client, _ = client_for([(page(NEXT), 200, "application/json"), *[(b"unavailable", 503, "text/plain")] * 3])
+    bounds = engine._make_fetch_window(
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 2)),
+    )
+    result = fetch(
+        (STATION,),
+        (PRODUCT,),
+        {PRODUCT: (engine.RenderedWindow("2000-01-01", "2000-01-02"),)},
+        bounds,
+        config(),
+        client,
+    )
+    expected = tuple(item.attempt_id for item in result.value[0].attempt_traces) + tuple(
+        item.attempt_id for item in result.failed_requests[0].failure.attempt_traces
+    )
+    unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
+    assert unresolved.calls == expected
+    assert len(expected) == 4
