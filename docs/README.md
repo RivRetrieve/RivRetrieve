@@ -42,6 +42,7 @@ written:
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
 - [Japan: MLIT](providers/jp_mlit.md)
 - [Norway: NVE](providers/no_nve.md)
+- [Poland: IMGW-PIB](providers/pl_imgw.md)
 - [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
 - [Thailand: ThaiWater](providers/th_thaiwater.md)
 - [United States — USGS](providers/usgs_nwis.md)
