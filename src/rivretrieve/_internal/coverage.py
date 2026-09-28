@@ -2,26 +2,31 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+
+from rivretrieve._internal.time_axis import TimeAxis
 
 _PRECISION = timedelta(microseconds=1)
 
 
 @dataclass(frozen=True, slots=True)
 class RequestedInterval:
-    """A closed interval on the native wall-clock label axis.
+    """A closed interval on an explicit time axis.
 
-    ``start`` and ``end`` are naive source wall-clock labels, and both are
-    included.
+    ``start`` and ``end`` are naive timestamps, and both are included. The
+    native axis uses source wall-clock labels. The UTC axis uses UTC labels.
     """
 
     start: datetime
     end: datetime
+    axis: TimeAxis = field(default=TimeAxis.NATIVE, kw_only=True)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.axis, TimeAxis):
+            raise ValueError("coverage requires an explicit TimeAxis")
         if self.start.tzinfo is not None or self.end.tzinfo is not None:
-            raise ValueError("coverage endpoints must be naive native wall-clock timestamps")
+            raise ValueError("coverage endpoints must be naive timestamps on the declared axis")
         if self.start > self.end:
             raise ValueError("coverage start must not exceed end")
 
@@ -66,6 +71,8 @@ class CoverageInterval:
 
 
 def remainder(requested: RequestedInterval, held: tuple[RequestedInterval, ...]) -> tuple[RequestedInterval, ...]:
+    if any(interval.axis != requested.axis for interval in held):
+        raise ValueError("Cannot subtract coverage on a different time axis")
     remaining = [requested]
     for interval in held:
         pieces: list[RequestedInterval] = []
@@ -74,9 +81,9 @@ def remainder(requested: RequestedInterval, held: tuple[RequestedInterval, ...])
                 pieces.append(piece)
                 continue
             if piece.start < interval.start:
-                pieces.append(RequestedInterval(piece.start, interval.start - _PRECISION))
+                pieces.append(RequestedInterval(piece.start, interval.start - _PRECISION, axis=requested.axis))
             if piece.end > interval.end:
-                pieces.append(RequestedInterval(interval.end + _PRECISION, piece.end))
+                pieces.append(RequestedInterval(interval.end + _PRECISION, piece.end, axis=requested.axis))
         remaining = pieces
     return tuple(remaining)
 
@@ -87,11 +94,33 @@ def served_coverage(
     return tuple(
         CoverageInterval(
             item.series_id,
-            RequestedInterval(max(item.interval.start, requested.start), min(item.interval.end, requested.end)),
+            RequestedInterval(
+                max(item.interval.start, requested.start), min(item.interval.end, requested.end), axis=requested.axis
+            ),
             item.retrieved_at,
             item.outcome_id,
             item.facts_ids,
         )
         for item in held
-        if item.series_id == series_id and item.interval.start <= requested.end and item.interval.end >= requested.start
+        if item.series_id == series_id
+        and item.interval.axis == requested.axis
+        and item.interval.start <= requested.end
+        and item.interval.end >= requested.start
     )
+
+
+def interval_envelope(interval: RequestedInterval, target: TimeAxis) -> RequestedInterval:
+    """Bound possible labels on another axis without assigning a source zone.
+
+    Bounds expand by 23 hours and 59 minutes at each end to include every
+    representable fixed offset. This mathematical envelope is a request bound,
+    not a transformation of complete coverage or evidence of a known zone.
+    """
+    if not isinstance(target, TimeAxis):
+        raise ValueError("An interval envelope requires an explicit TimeAxis")
+    if interval.axis == target:
+        return interval
+    offset = timedelta(hours=23, minutes=59)
+    start = interval.start - min(offset, interval.start - datetime.min)
+    end = interval.end + min(offset, datetime.max - interval.end)
+    return RequestedInterval(start, end, axis=target)

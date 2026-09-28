@@ -113,7 +113,7 @@ def test_service_specific_daily_store_and_bundles_round_trip(tmp_path, monkeypat
     result = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="reuse", on_issue="raise")
     assert result.data.height > 0
     manifest = json.loads((tmp_path / "fr_hubeau/store/manifest.json").read_text())
-    assert manifest["format_version"] == 7
+    assert manifest["format_version"] == 8
     assert manifest["publication_service"] == "hubeau"
     assert rr.cache_status("fr_hubeau").exists
     for value in (selection, result):

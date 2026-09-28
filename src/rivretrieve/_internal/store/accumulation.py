@@ -20,11 +20,13 @@ from rivretrieve._internal.source_series import (
     OutcomeStatus,
     RetrievalOutcome,
     SourceSeries,
+    stable_id,
     validate_series_rows,
 )
 from rivretrieve._internal.store.provenance import encode_source_call
 from rivretrieve._internal.store.reader import StoreReader
 from rivretrieve._internal.store.validation import AccumulatedStoreManifest, StoreRoot, validate_store
+from rivretrieve._internal.time_axis import TimeAxis, axis_time_expression
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +49,7 @@ class StoreUpdate:
 def _coverage_json(item: CoverageInterval) -> dict[str, object]:
     return {
         "series_id": item.series_id,
+        "axis": item.interval.axis.value,
         "start": item.interval.start.isoformat(timespec="microseconds"),
         "end": item.interval.end.isoformat(timespec="microseconds"),
         "retrieved_at": item.retrieved_at.isoformat(timespec="microseconds").replace("+00:00", "Z")
@@ -123,10 +126,30 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         inventories = _merge_records(
             previous.inventories if previous else (), update.inventories, "snapshot_id", move_reobserved=True
         )
-        outcomes = _merge_records(previous.outcomes if previous else (), update.outcomes, "outcome_id")
+        accepted_keys = {
+            item.coverage.outcome_id: tuple(
+                dict.fromkeys(item.rows.select("facts_id", "time", "time_zone").iter_rows())
+            )
+            for item in update.replacements
+        }
+        durable_outcomes = tuple(
+            item.model_copy(
+                update={
+                    "observation_keys": accepted_keys.get(item.outcome_id, ()),
+                    "outcome_id": item.outcome_id
+                    if item.observation_keys == accepted_keys.get(item.outcome_id, ())
+                    else stable_id(item.outcome_id, "unretained-observations"),
+                }
+            )
+            if item.coverage == "observations"
+            else item
+            for item in update.outcomes
+        )
+        outcomes = _merge_records(previous.outcomes if previous else (), durable_outcomes, "outcome_id")
         definitions = {item.series_id: item for item in series}
         outcome_by_id = {item.outcome_id: item for item in outcomes}
         replacements: list[SuccessfulReplacement] = []
+        snapshot_keys: set[tuple[str, str, datetime, str]] = set()
         for replacement in update.replacements:
             coverage = replacement.coverage
             outcome = outcome_by_id.get(coverage.outcome_id)
@@ -156,11 +179,24 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             rows = replacement.rows
             validate_series_rows(rows, series)
             if not rows.is_empty() and (
-                rows.filter(pl.col("series_id") != coverage.series_id).height
-                or rows.filter(~pl.col("time").is_between(coverage.interval.start, coverage.interval.end)).height
+                rows.select(axis_time_expression(coverage.interval.axis).is_null().any()).item()
+                or rows.filter(pl.col("series_id") != coverage.series_id).height
+                or rows.filter(
+                    ~axis_time_expression(coverage.interval.axis).is_between(
+                        coverage.interval.start, coverage.interval.end
+                    )
+                ).height
                 or rows.filter(~pl.col("facts_id").is_in(coverage.facts_ids)).height
             ):
                 raise FatalContractError("Replacement rows exceed their successful series interval or physical facts")
+            if outcome.coverage == "observations":
+                keys = tuple(rows.select("facts_id", "time", "time_zone").iter_rows())
+                if set(outcome.observation_keys) != set(keys):
+                    raise FatalContractError("Snapshot outcome keys must identify exactly its acquired rows")
+                identities = {(coverage.series_id, *key) for key in keys}
+                if snapshot_keys.intersection(identities):
+                    raise FatalContractError("Independent snapshot replacements overlap observation keys")
+                snapshot_keys.update(identities)
             if (outcome.status is OutcomeStatus.EMPTY) != rows.is_empty():
                 raise FatalContractError("Successful empty and nonempty outcomes must match their native rows")
             replacements.append(replace(replacement, coverage=coverage))
@@ -175,7 +211,11 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             retained: list[CoverageInterval] = []
             for item in held:
                 overlap_facts = tuple(fact_id for fact_id in item.facts_ids if fact_id in replaced_facts)
-                if item.series_id != coverage.series_id or not overlap_facts:
+                if (
+                    item.series_id != coverage.series_id
+                    or not overlap_facts
+                    or item.interval.axis is not coverage.interval.axis
+                ):
                     retained.append(item)
                     continue
                 unaffected = tuple(fact_id for fact_id in item.facts_ids if fact_id not in replaced_facts)
@@ -191,7 +231,8 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             else:
                 retained.append(coverage)
             held = tuple(retained)
-            for year in range(coverage.interval.start.year, coverage.interval.end.year + 1):
+            margin = 1 if coverage.interval.axis is TimeAxis.UTC else 0
+            for year in range(coverage.interval.start.year - margin, coverage.interval.end.year + margin + 1):
                 identifier = f"product={definition.product_id}/year={year:04d}"
                 directory = stage / identifier
                 additions = rows.filter(pl.col("time").dt.year() == year).select(
@@ -221,7 +262,9 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                             ~(
                                 (pl.col("series_id") == coverage.series_id)
                                 & pl.col("facts_id").is_in(replaced_facts)
-                                & pl.col("time").is_between(coverage.interval.start, coverage.interval.end)
+                                & axis_time_expression(coverage.interval.axis).is_between(
+                                    coverage.interval.start, coverage.interval.end
+                                )
                             )
                         )
                     additions = pl.concat([retained_rows, additions])
@@ -244,7 +287,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             )
         )
         manifest = {
-            "format_version": 7,
+            "format_version": 8,
             "provider_id": str(provider_id),
             "built_at": datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z"),
             "coverage": [_coverage_json(item) for item in held],

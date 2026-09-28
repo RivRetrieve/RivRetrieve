@@ -108,7 +108,7 @@ def test_modern_catalogue_format(tmp_path):
 def test_legacy_store_refusal_is_non_destructive(identity, operation, tmp_path):
     store = StoreRoot(tmp_path / "store")
     store.mkdir()
-    manifest = {"format_version": 7, "provider_id": "usgs_nwis"}
+    manifest = {"format_version": 8, "provider_id": "usgs_nwis"}
     if identity is not None:
         manifest["usgs_publication_service"] = identity
     path = store / "manifest.json"

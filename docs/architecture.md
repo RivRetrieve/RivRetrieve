@@ -161,7 +161,7 @@ They share a reader and format family but preserve different information.
 | Live `cache="refresh"` | Replacement answer for the successfully retrieved requested interval | Fetch and parse again, convert, update storage, assemble |
 | Bulk | Certified compiled publisher observations | Read store, convert, assemble without provider fetch or parse |
 
-Accumulated stores use format revision `7`.
+Accumulated stores use format revision `8`.
 Their coverage records which closed intervals were successfully retrieved and when, including successful empty answers.
 Coverage is per concrete series and interval, separate from inventory knowledge. All-series reuse
 requires a complete inventory for the recorded scope and vintage, plus coverage of every required
@@ -178,7 +178,9 @@ Coverage does not assert continuous observations.
 Bosnia's rolling workbooks establish only the observations they contain. Their
 rows update matching series, physical facts, timestamps and time zones in the
 cache. Rows absent from a later workbook remain held at their earlier acquisition
-vintage. These snapshots establish no reusable temporal coverage, even when empty;
+vintage. Observation-only outcomes list exact physical-fact, timestamp and time-zone
+keys, linking each returned snapshot row to its acquisition calls and retrieval
+instant. These snapshots establish no reusable temporal coverage, even when empty;
 retrieval must contact the source again.
 Served intervals carry their retrieval instants in provenance, without an automatic freshness verdict.
 

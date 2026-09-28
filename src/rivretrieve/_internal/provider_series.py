@@ -131,6 +131,7 @@ def parse_mapped_series(
     window = SeriesWindow(
         start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
         end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        axis=payload.acquisition_axis,
     )
     acquired = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     scope = payload.scope or SeriesScope(
