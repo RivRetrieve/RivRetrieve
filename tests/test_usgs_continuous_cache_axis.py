@@ -15,45 +15,48 @@ from tests.test_usgs_observation_acquisition import STATION, feature, page
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
+class _Spans:
+    def __init__(self, series_id):
+        self.series_id = series_id
+        self.calls = []
+        self.failed_first = False
+        self.failed_second = False
+        self.value = 10
+
+    def send(self, request):
+        index = len(self.calls) % 2
+        self.calls.append(request)
+        if (self.failed_second and index == 1) or (self.failed_first and index == 0):
+            raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
+        begin, end = [
+            datetime.fromisoformat(value.removesuffix("Z")) for value in request.params["datetime"].split("/")
+        ]
+        # Both labels cross the naive UTC span boundary in opposite directions.
+        # Offsets are explicit publisher fields; one physical fact has both.
+        stamp = (
+            (end + timedelta(hours=3)).isoformat() + "+03:00"
+            if index == 0
+            else (begin - timedelta(hours=5)).isoformat() + "-05:00"
+        )
+        observation = feature(self.series_id)
+        observation["properties"].update(statistic_id="00011", time=stamp, value=str(self.value + index))
+        return TransportResponse(
+            page(observation),
+            200,
+            datetime(2026, 9, 28, tzinfo=UTC),
+            "application/geo+json",
+            request.url,
+            request.params or {},
+        )
+
+
 def test_public_continuous_offset_boundaries_persist_refresh_and_reuse(monkeypatch, tmp_path):
     selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge")
     continuous = next(item for item in selected.series if item.product_id == "discharge_instantaneous")
     selected = rr.pick(selected, series_id=continuous.series_id)
 
-    class Spans:
-        def __init__(self):
-            self.calls = []
-            self.failed_second = False
-            self.value = 10
-
-        def send(self, request):
-            index = len(self.calls) % 2
-            self.calls.append(request)
-            if self.failed_second and index == 1:
-                raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
-            begin, end = [
-                datetime.fromisoformat(value.removesuffix("Z")) for value in request.params["datetime"].split("/")
-            ]
-            # Both labels cross the naive UTC span boundary in opposite directions.
-            # Offsets are explicit publisher fields; one physical fact has both.
-            stamp = (
-                (end + timedelta(hours=3)).isoformat() + "+03:00"
-                if index == 0
-                else (begin - timedelta(hours=5)).isoformat() + "-05:00"
-            )
-            observation = feature(continuous.identity.published_id)
-            observation["properties"].update(statistic_id="00011", time=stamp, value=str(self.value + index))
-            return TransportResponse(
-                page(observation),
-                200,
-                datetime(2026, 9, 28, tzinfo=UTC),
-                "application/geo+json",
-                request.url,
-                request.params or {},
-            )
-
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = Spans()
+    transport = _Spans(continuous.identity.published_id)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     def fetch(cache):
@@ -80,3 +83,43 @@ def test_public_continuous_offset_boundaries_persist_refresh_and_reuse(monkeypat
     assert any(item.status == "failed" for item in refreshed.outcomes)
     assert_frame_equal(fetch("reuse").data, refreshed.data)
     assert len(transport.calls) == 4
+
+
+@pytest.mark.parametrize("failed_span", [0, 1])
+def test_public_single_successful_utc_span_validates_native_offset_rows(monkeypatch, tmp_path, failed_span):
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge")
+    continuous = next(item for item in selected.series if item.product_id == "discharge_instantaneous")
+    selected = rr.pick(selected, series_id=continuous.series_id)
+    transport = _Spans(continuous.identity.published_id)
+    transport.failed_first = failed_span == 0
+    transport.failed_second = failed_span == 1
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+
+    def fetch(cache):
+        return rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache=cache, on_issue="ignore")
+
+    partial = fetch("refresh")
+    assert partial.data.height == 1
+    assert partial.data["time_zone"].to_list() == (["-05:00"] if failed_span == 0 else ["+03:00"])
+    stored = pl.concat([pl.read_parquet(path) for path in (tmp_path / "usgs_nwis/store").rglob("*.parquet")])
+    assert_frame_equal(stored.select("time", "time_zone"), partial.data.select("time", "time_zone"))
+    assert_frame_equal(fetch("reuse").data, partial.data)
+    assert len(transport.calls) == 4
+
+
+def test_public_all_series_completed_spans_reuse_complete_inventory_union(monkeypatch, tmp_path):
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", temporal_support="instantaneous")
+    assert len(selected.series) == 1
+    transport = _Spans(selected.series[0].identity.published_id)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+
+    def fetch(cache):
+        return rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache=cache, on_issue="ignore")
+
+    result = fetch("refresh")
+    assert result.data.height == 2
+    assert len(transport.calls) == 2
+    assert_frame_equal(fetch("reuse").data, result.data)
+    assert len(transport.calls) == 2
