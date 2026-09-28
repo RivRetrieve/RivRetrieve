@@ -527,3 +527,28 @@ def test_backward_bounds_include_outward_earliest_days():
         _fetch(datetime(2020, 2, 28), datetime(2020, 2, 29, 23, 59, 59, 999999)),
         _fetch(datetime(2020, 3, 1), datetime(2020, 3, 2, 23, 59, 59, 999999)),
     ]
+
+
+def test_published_hours_one_to_twenty_four_shift_only_monthly_label_bounds():
+    declaration = engine.WindowDeclaration(
+        engine.WindowGranularity("year-month"),
+        engine.WindowRenderingVocabulary.DATE,
+        engine.StopConvention.INCLUSIVE,
+        calendar_labels=engine.CalendarLabelConvention.HOURS_1_TO_24,
+    )
+    windows = window_planning.plan_windows(_fetch(datetime(2020, 1, 3), datetime(2020, 2, 3)), declaration)
+    assert _pairs(windows) == (("2020-01-01", "2020-01-31"), ("2020-02-01", "2020-02-29"))
+    assert [window.bounds for window in windows] == [
+        _fetch(datetime(2020, 1, 1, 0, 0, 0, 1), datetime(2020, 2, 1)),
+        _fetch(datetime(2020, 2, 1, 0, 0, 0, 1), datetime(2020, 3, 1)),
+    ]
+
+
+def test_hourly_calendar_label_convention_requires_monthly_date_requests():
+    with pytest.raises(ValueError, match="monthly date"):
+        engine.WindowDeclaration(
+            engine.WindowGranularity("year"),
+            engine.WindowRenderingVocabulary.YEAR,
+            engine.StopConvention.INCLUSIVE,
+            calendar_labels=engine.CalendarLabelConvention.HOURS_1_TO_24,
+        )

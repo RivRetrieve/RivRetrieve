@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, time, timedelta
 
 from rivretrieve._internal.engine import (
+    CalendarLabelConvention,
     FetchWindow,
     RenderedWindow,
     StopConvention,
@@ -117,10 +118,12 @@ def _plan_year_month(fetch_window: FetchWindow, declaration: WindowDeclaration) 
     windows = []
     while cursor <= final:
         stop = cursor.replace(day=monthrange(cursor.year, cursor.month)[1])
-        bounds = _make_fetch_window(
-            WindowEndpoint.from_datetime(cursor),
-            WindowEndpoint.from_datetime(datetime.combine(stop.date(), time.max)),
-        )
+        if declaration.calendar_labels is CalendarLabelConvention.HOURS_1_TO_24:
+            # The first day starts at 1時; the final day's 24時 is next-day midnight.
+            # Open-left, closed-right bounds partition adjacent source label domains.
+            bounds = _closed_bounds(cursor + timedelta(microseconds=1), stop + timedelta(days=1))
+        else:
+            bounds = _closed_bounds(cursor, datetime.combine(stop.date(), time.max))
         if declaration.rendering is WindowRenderingVocabulary.YEAR_MONTH:
             windows.append(RenderedWindow(f"{cursor.year:04d}-{cursor.month:02d}", None, bounds))
         else:

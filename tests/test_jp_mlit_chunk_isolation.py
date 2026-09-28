@@ -132,3 +132,67 @@ def test_public_dat_failure_retains_html_and_cache_coverage(monkeypatch, tmp_pat
     second = rr.fetch(selection, start="2022-01-03", end="2022-12-29", cache="reuse", on_issue="ignore")
     assert set(second.data["time"].dt.year()) == {2022}
     assert transport.calls[before:] == [(2022, "html"), (2022, "dat")]
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_hour_24_month_end_survives_failed_or_empty_neighbor_and_reuse(monkeypatch, tmp_path):
+    import polars as pl
+    from polars.testing import assert_frame_equal
+
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    from tests.test_jp_mlit_html_outcomes import _negative_derivative
+
+    class Months:
+        def __init__(self):
+            self.replay = ReplayTransport(_PATHS)
+            self.calls = []
+            self.january_failed = False
+            self.february_empty = False
+
+        def send(self, request):
+            self.calls.append(request)
+            if request.params:
+                february = request.params["BGNDATE"] == "20230201"
+                if (february and not self.february_empty) or (not february and self.january_failed):
+                    raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
+                if february:
+                    recorded_request = replace(
+                        request, params={**request.params, "BGNDATE": "20230101", "ENDDATE": "20230131"}
+                    )
+                    response = self.replay.send(recorded_request)
+                    return replace(
+                        response,
+                        content=_negative_derivative(response.content, "no-data-marker"),
+                        request_parameters=request.params,
+                    )
+            return self.replay.send(request)
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    transport = Months()
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    selected = rr.find(provider="jp_mlit", station=_STATION, quantity="stage", frequency="hourly")
+    selected = rr.pick(selected, series_id=tuple(series.series_id for series in selected.series))
+
+    def retrieve(end, cache):
+        return rr.fetch(selected, start=datetime(2023, 1, 3), end=end, cache=cache, on_issue="ignore")
+
+    result = retrieve(datetime(2023, 2, 1), "refresh")
+    assert result.data.height == 697
+    assert result.data["time"].max() == datetime(2023, 2, 1)
+    stored = pl.concat([pl.read_parquet(path) for path in (tmp_path / "jp_mlit/store").rglob("*.parquet")])
+    assert stored.height == result.data.height
+    assert stored["time"].max() == datetime(2023, 2, 1)
+    before = len(transport.calls)
+    assert_frame_equal(retrieve(datetime(2023, 2, 1), "reuse").data, result.data)
+    assert len(transport.calls) == before
+
+    transport.january_failed = True
+    transport.february_empty = True
+    refreshed = retrieve(datetime(2023, 2, 2), "refresh")
+    assert_frame_equal(refreshed.data, result.data)
+    empty = next(item for item in refreshed.outcomes if item.status == "empty")
+    assert empty.window.start == datetime(2023, 2, 1, 0, 0, 0, 1)
+    before = len(transport.calls)
+    assert_frame_equal(retrieve(datetime(2023, 2, 2), "reuse").data, result.data)
+    assert len(transport.calls) == before
