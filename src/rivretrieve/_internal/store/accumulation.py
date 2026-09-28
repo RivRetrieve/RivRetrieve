@@ -150,6 +150,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         outcome_by_id = {item.outcome_id: item for item in outcomes}
         replacements: list[SuccessfulReplacement] = []
         snapshot_keys: set[tuple[str, str, datetime, str]] = set()
+        acquisition_axes: dict[tuple[str, str], TimeAxis] = {}
         for replacement in update.replacements:
             coverage = replacement.coverage
             outcome = outcome_by_id.get(coverage.outcome_id)
@@ -169,6 +170,11 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             ):
                 raise FatalContractError("Replacement requires an explicit successful concrete-series outcome")
             replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
+            for facts_id in replaced_facts:
+                key = coverage.series_id, facts_id
+                previous_axis = acquisition_axes.setdefault(key, coverage.interval.axis)
+                if previous_axis is not coverage.interval.axis:
+                    raise FatalContractError("One source series cannot mix acquisition time axes")
             if any(
                 item.series_id == coverage.series_id
                 and set(item.facts_ids).intersection(replaced_facts)

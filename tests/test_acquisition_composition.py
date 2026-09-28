@@ -237,3 +237,33 @@ def test_incompatible_axis_evidence_is_fatal_before_cache_mutation(tmp_path, mon
     with pytest.raises(FatalContractError, match=message):
         run(store, acquired)
     assert {path.relative_to(store): path.read_bytes() for path in store.rglob("*") if path.is_file()} == before
+
+
+def test_fresh_successful_payloads_cannot_mix_axes_for_one_series_fact(tmp_path, monkeypatch):
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.time_axis import TimeAxis
+
+    original_parse = parse
+
+    def axis_parse(payload, config):
+        parsed = original_parse(payload, config)
+        return replace(
+            parsed,
+            rows=parsed.rows.with_columns(pl.lit("+00:00").alias("time_zone")),
+            outcomes=tuple(
+                item.model_copy(
+                    update={
+                        "window": item.window.model_copy(
+                            update={"axis": TimeAxis.UTC if payload.acquisition_id == "utc" else TimeAxis.NATIVE}
+                        )
+                    }
+                )
+                for item in parsed.outcomes
+            ),
+        )
+
+    monkeypatch.setattr("tests.test_acquisition_composition.parse", axis_parse)
+    payload = single_payload()
+    with pytest.raises(FatalContractError, match="cannot mix acquisition time axes"):
+        run(tmp_path / "store", (payload, replace(payload, acquisition_id="utc")))
+    assert not (tmp_path / "store").exists()
