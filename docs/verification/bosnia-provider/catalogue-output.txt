@@ -1,0 +1,14 @@
+locations 60
+series_candidates 180
+inventory_status [<InventoryCompleteness.INCOMPLETE: 'incomplete'>]
+product_id,availability,len
+discharge_reported,available,60
+stage_reported,available,60
+water_temperature_reported,available,12
+water_temperature_reported,unknown,48
+metadata_station_no,metadata_station_name,metadata_river_name,retrieved_at
+2310,HS Ključ,Sana,2026-08-02T12:42:03.000000+0000
+quantity,frequency,statistic
+discharge,,
+stage,,
+temperature,,

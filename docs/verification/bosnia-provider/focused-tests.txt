@@ -1,0 +1,15 @@
+......................................                                   [100%]
+=============================== warnings summary ===============================
+tests/test_ba_fr_public.py::test_bosnia_public_path_clips_converts_and_keeps_exact_receipts
+tests/test_ba_fhmzbih_recorded_public.py::test_recorded_public_boundaries_keep_exact_identity_and_blank_rows[2101-B-discharge_reported-Q-2026-09-01-2026-09-03T23:59:59-72-2026-09-01T00:00:00-2026-09-03T23:00:00]
+tests/test_ba_fhmzbih_recorded_public.py::test_recorded_public_boundaries_keep_exact_identity_and_blank_rows[2101-B-stage_reported-H-2026-09-01-2026-09-03T23:59:59-72-2026-09-01T00:00:00-2026-09-03T23:00:00]
+tests/test_ba_fhmzbih_recorded_public.py::test_recorded_public_boundaries_keep_exact_identity_and_blank_rows[2010-discharge_reported-Q-2026-05-22-2026-05-24T23:59:59-70-2026-05-22T00:00:00-2026-05-24T23:00:00]
+tests/test_ba_fhmzbih_recorded_public.py::test_recorded_empty_temperature_remains_selectable_and_keeps_receipts
+tests/test_source_field_boundaries.py::test_bosnia_invalid_row_cannot_become_successful_coverage
+tests/test_source_field_boundaries.py::test_bosnia_does_not_silently_accept_first_of_multiple_sheets
+tests/test_source_field_boundaries.py::test_bosnia_missing_source_route_preserves_independent_station
+  /Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/bosnia-provider-documentation-review/.venv/lib/python3.13/site-packages/openpyxl/styles/stylesheet.py:237: UserWarning: Workbook contains no default style, apply openpyxl's default
+    warn("Workbook contains no default style, apply openpyxl's default")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+38 passed, 8 warnings in 81.76s (0:01:21)

@@ -36,6 +36,7 @@ Whatever the provider, RivRetrieve gives you the same things:
 A page for each provider, describing its network, what it measures and how to cite it, is being
 written:
 
+- [Bosnia and Herzegovina: AVP Sava](providers/ba_fhmzbih.md)
 - [Brazil: ANA](providers/br_ana.md)
 - [Canada: Environment and Climate Change Canada](providers/ca_eccc.md)
 - [Czechia: CHMI](providers/cz_chmi.md)
