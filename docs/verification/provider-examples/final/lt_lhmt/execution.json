@@ -1,0 +1,26 @@
+{
+  "page": "docs/providers/lt_lhmt.md",
+  "revision": "28d12fb70f75c89ee4ceac497fbbf80ddd768922",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/execute.py",
+    "docs/providers/lt_lhmt.md",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/final/lt_lhmt",
+    "--revision",
+    "28d12fb70f75c89ee4ceac497fbbf80ddd768922"
+  ],
+  "python": "3.13.8 (main, Oct  7 2025, 16:19:32) [Clang 20.1.4 ]",
+  "page_sha256": "03814b5b6201fef814d55354c95c5b04d501ccd300d50425325140017b3c8c74",
+  "started_utc": "2026-09-28T21:09:50.103927+00:00",
+  "snippets": [
+    {
+      "fence": 1,
+      "status": "executed",
+      "seconds": 11.451892624842003
+    }
+  ],
+  "displayed_output_fences": 1,
+  "finished_utc": "2026-09-28T21:10:01.556421+00:00"
+}

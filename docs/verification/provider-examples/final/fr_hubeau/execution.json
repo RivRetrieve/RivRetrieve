@@ -1,0 +1,26 @@
+{
+  "page": "docs/providers/fr_hubeau.md",
+  "revision": "28d12fb70f75c89ee4ceac497fbbf80ddd768922",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/execute.py",
+    "docs/providers/fr_hubeau.md",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/final/fr_hubeau",
+    "--revision",
+    "28d12fb70f75c89ee4ceac497fbbf80ddd768922"
+  ],
+  "python": "3.13.8 (main, Oct  7 2025, 16:19:32) [Clang 20.1.4 ]",
+  "page_sha256": "817b571259583261463e13cfd1aac4d55467b4de81a97c99e61b49e601fb6a11",
+  "started_utc": "2026-09-28T21:09:50.096594+00:00",
+  "snippets": [
+    {
+      "fence": 1,
+      "status": "executed",
+      "seconds": 13.077641833107919
+    }
+  ],
+  "displayed_output_fences": 1,
+  "finished_utc": "2026-09-28T21:10:03.174747+00:00"
+}

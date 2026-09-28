@@ -1,0 +1,2 @@
+['most_valid', 'pre_validated_and_validated', 'raw', 'validated']
+[('Y251002001', 'validated')]

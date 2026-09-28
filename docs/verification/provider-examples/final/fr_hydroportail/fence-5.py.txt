@@ -1,0 +1,9 @@
+most_valid = rr.pick(selection, variant="most_valid")
+
+most_valid_result = rr.fetch(
+    most_valid, start="2020-01-01", end="2020-01-02", cache="bypass"
+)
+
+print(rr.series(most_valid_result).select("station_id", "variant").rows())
+print(most_valid_result.data.height)
+print([(issue.severity, issue.code) for issue in most_valid_result.issues])

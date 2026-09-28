@@ -1,0 +1,7 @@
+time,time_zone,value,unit
+2024-01-01T11:00:00.000000,+00:00,401.750,m3/s
+2024-01-02T11:00:00.000000,+00:00,415.396,m3/s
+2024-01-03T11:00:00.000000,+00:00,444.500,m3/s
+7
+info: no_nve published source quality code 2 without RivRetrieve interpretation
+info: no_nve published source correction code 0 without RivRetrieve interpretation

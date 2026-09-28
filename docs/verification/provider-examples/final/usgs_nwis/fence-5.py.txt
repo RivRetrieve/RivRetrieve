@@ -1,0 +1,13 @@
+all_result = rr.fetch(
+    alternatives, start="2000-01-01", end="2000-01-07", cache="bypass"
+)
+
+chosen = rr.pick(alternatives, variant="0df18b246e8f48ec8e6547a92070e94a")
+chosen_result = rr.fetch(
+    chosen, start="2000-01-01", end="2000-01-07", cache="bypass"
+)
+
+print(all_result.data.height, all_result.data["series_id"].n_unique())
+print(chosen_result.data.height, chosen_result.data["series_id"].n_unique())
+print(rr.series(chosen_result)["variant"].to_list())
+print(all_result.issues, chosen_result.issues)

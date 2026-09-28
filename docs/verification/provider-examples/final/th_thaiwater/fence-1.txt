@@ -1,0 +1,6 @@
+time,time_zone,value,unit
+2024-06-01T00:00:00.000000,unknown,1.354,m
+2024-06-01T00:10:00.000000,unknown,1.346,m
+2024-06-01T00:20:00.000000,unknown,1.341,m
+432
+[('info', 'provenance.license_not_established'), ('info', 'provenance.citation_not_established')]

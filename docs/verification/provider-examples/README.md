@@ -10,6 +10,11 @@ the exact fence contents and retains a copy beside its output.
 
 Verification is in progress. The baseline at
 `0b443049d50819978030e29e46011ca2101cb337` does not verify the final implementation.
+Final execution started at `28d12fb70f75c89ee4ceac497fbbf80ddd768922`.
+Its provider tree still has 13 pages and 28 Python fences; no page changed from
+the baseline inventory. Final runs use a second fresh cache, including new
+national downloads. Results remain pending while the bulk runs finish.
+
 A successful Python exit alone is not a successful retrieval: returned issues,
 rows, units and displayed output are checked separately.
 
@@ -24,7 +29,9 @@ uses the provider's built-in source credential. Secrets are not recorded here.
 The initial free disk space was approximately 317 GB. Both national bulk examples
 run their documented `rr.download(...)`, including live transfer, compilation and
 certification. They do not reuse a pre-existing national store or replay fixtures.
-Japan's reuse example uses the preceding acquisition in the same isolated cache.
+Japan's first `cache="reuse"` fetch acquires and persists the selected rows in
+the isolated cache. Its repeated reuse fetch reads that acquisition; the earlier
+`cache="bypass"` example does not populate the cache.
 
 From the repository root, set a new cache directory before each verification
 round and run the command below once for every page in the inventory, substituting
@@ -72,9 +79,58 @@ selection ran successfully. This is a live source/access blocker, not a passed
 observation example. The documented station, variants and dates were unchanged.
 
 The unchanged page was retried at the same baseline revision on 2026-09-28.
-It took 310.76 seconds. `validated` exhausted retries with HTTP 503; `most_valid`
+Its captured bash-process wall time was 310.76 seconds, including uv startup
+and interpreter shutdown. The runner metadata covers 310.324 seconds inside
+Python. `validated` exhausted retries with HTTP 503; `most_valid`
 exhausted timeout retries. Both again returned zero rows with
 `source.request_failed`. A separate `curl -I --connect-timeout 15 --max-time 25
 https://hydro.eaufrance.fr/` probe returned HTTP 200 in 8.57 seconds at 21:07 UTC.
 This establishes host reachability, not observation availability. Response cookies
 were not retained in the published diagnostic record.
+
+## Checkout provenance
+
+Only these two checkouts were created for this verification:
+
+- `.worktrees/visions/provider-example-verification`, branch
+  `verify/provider-examples`, started from baseline `0b443049d50819978030e29e46011ca2101cb337`.
+  Documentation-only evidence commits do not change the code running in its
+  baseline bulk processes.
+- `.worktrees/visions/provider-examples-final`, detached at
+  `28d12fb70f75c89ee4ceac497fbbf80ddd768922`, runs the final implementation.
+  It has a separate uv environment and `.verification-cache/final` location.
+
+The runner stored in the first checkout is invoked through `uv run python` from
+inside the second checkout. Thus project imports resolve to the final checkout,
+not to the runner's evidence directory. The final command for each page is
+recorded in its `final/PROVIDER/execution.json`. Credentials remain environment
+inputs in both checkouts. No fixture transport, provider monkeypatch, request
+window change or pre-existing bulk store was used.
+
+## Runner provenance
+
+`baseline/execute.py.txt` preserves the runner as executed by the baseline
+processes. It did not yet record command/Python-version fields in each JSON file;
+its exact command template and Python 3.13.8 environment are recorded above.
+The original exact-code copies used `.py`; those files were renamed `.py.txt`
+without changing their contents so formatters cannot rewrite historical inputs.
+`retry/execute.py.txt` and `final/execute.py.txt` preserve the enhanced runner used
+for those rounds. It also records the full command and Python version and exits
+nonzero after an exception. Both versions label a completed fence `executed`,
+not `passed`: source issues and displayed-output agreement require the separate
+acceptance check documented in the matrix.
+
+## Final live results
+
+At `28d12fb`, all displayed output matched for USGS, ANA, NVE, Bosnia, Czechia,
+Thailand, Hub'Eau, Lithuania, Japan and Switzerland. Source warnings remained
+visible: ANA reports the documented unresolved `bruto` level, and openpyxl warns
+about Bosnia's workbook style. Neither was hidden or counted as a new failure.
+
+HydroPortail remained blocked on the final implementation. Both unchanged
+`validated` and `most_valid` requests exhausted timeout retries and returned zero
+rows with `source.request_failed`. Its catalogue-only fence matched. The captured
+bash-process wall time was 377.52 s. Final evidence is under
+`final/fr_hydroportail/`; it is not a successful observation example. Required
+all-provider live acceptance therefore remains incomplete even if every
+repository regression passes. Final bulk execution is still in progress.

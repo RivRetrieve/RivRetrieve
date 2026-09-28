@@ -1,0 +1,3 @@
+import rivretrieve as rr
+
+rr.download("pl_imgw")

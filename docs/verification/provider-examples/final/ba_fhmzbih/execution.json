@@ -1,0 +1,26 @@
+{
+  "page": "docs/providers/ba_fhmzbih.md",
+  "revision": "28d12fb70f75c89ee4ceac497fbbf80ddd768922",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/execute.py",
+    "docs/providers/ba_fhmzbih.md",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/final/ba_fhmzbih",
+    "--revision",
+    "28d12fb70f75c89ee4ceac497fbbf80ddd768922"
+  ],
+  "python": "3.13.8 (main, Oct  7 2025, 16:19:32) [Clang 20.1.4 ]",
+  "page_sha256": "d334ed5e305a10b1acc2c022e1801e8ce86184a43908932719033b532439e5b9",
+  "started_utc": "2026-09-28T21:09:50.059542+00:00",
+  "snippets": [
+    {
+      "fence": 1,
+      "status": "executed",
+      "seconds": 11.779141791164875
+    }
+  ],
+  "displayed_output_fences": 1,
+  "finished_utc": "2026-09-28T21:10:01.839225+00:00"
+}
