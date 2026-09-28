@@ -3,7 +3,7 @@
 Historical review completed on September 28, 2026, for the
 [streamlining vision](../../../planning/visions/2026-09-27-comprehensive-test-suite-streamlining.md).
 This records one delivery. It is not an ongoing per-test reporting requirement.
-The contributor rule is in the [root README](../../../README.md#contributing-tests).
+The contributor rule is in [AGENTS.md](../../../AGENTS.md#contributing-tests).
 
 ## Outcome and scope
 
