@@ -114,17 +114,21 @@ def download_hydat(
     probe: HeadProbe,
     transfer: ArtifactTransfer,
     max_back_days: int = 365,
+    previous_source_vintage: date | None = None,
 ) -> DownloadedHydat:
     """Resolve and transfer the latest dated HYDAT release after shared consent checks.
 
     Public composition owns consent, disk-space refusal and the download operation. This source operation
     only knows HYDAT's dated URL vocabulary and transfers to the already-resolved
-    publisher-artifact path supplied by the composition root.
+    publisher-artifact path supplied by the composition root. Missing releases
+    (HTTP 404) allow an earlier date to be tried. Other HTTP failures stop the
+    search. A release older than the previous certified store is refused before
+    transfer, leaving that store unchanged.
     """
     if max_back_days < 0:
         raise ValueError("HYDAT probe horizon must be non-negative")
     target = Path(destination)
-    if target.exists():
+    if target.exists() or target.is_symlink():
         raise FileExistsError(f'publisher artifact destination already exists: "{target}"')
     if not target.parent.is_dir():
         raise FileNotFoundError(f'publisher artifact parent does not exist: "{target.parent}"')
@@ -133,6 +137,11 @@ def download_hydat(
         url = HYDAT_URL_TEMPLATE.format(vintage=vintage.strftime("%Y%m%d"))
         status = probe(url)
         if 200 <= status < 300:
+            if previous_source_vintage is not None and vintage < previous_source_vintage:
+                raise ValueError(
+                    f"HYDAT release would regress from certified source vintage {previous_source_vintage} "
+                    f"to {vintage}; the previous store is unchanged"
+                )
             try:
                 transfer(url, target)
                 if not target.is_file():
@@ -141,6 +150,8 @@ def download_hydat(
                 target.unlink(missing_ok=True)
                 raise
             return DownloadedHydat(path=target, url=url, source_vintage=vintage)
+        if status != 404:
+            raise OSError(f"HYDAT release probe returned HTTP {status}: {url}")
     raise FileNotFoundError(f"no HYDAT release found within {max_back_days} days of {today.isoformat()}")
 
 
