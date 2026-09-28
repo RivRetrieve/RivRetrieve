@@ -5,13 +5,14 @@ from datetime import datetime
 
 import pytest
 
-from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
+from rivretrieve._internal.engine import WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.providers.jp_mlit.config import config
+from rivretrieve._internal.providers.jp_mlit.config import config, window_declarations
 from rivretrieve._internal.providers.jp_mlit.fetch import fetch
 from rivretrieve._internal.providers.jp_mlit.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
+from rivretrieve._internal.window_planning import plan_windows
 from tests.test_jp_mlit_observations import _PATHS, _STATION
 
 
@@ -54,18 +55,13 @@ class _Chunks:
 
 def _windows(product):
     return tuple(
-        RenderedWindow(
-            f"{year}-01-01",
-            f"{year}-01-31" if "hourly" in product else f"{year}-12-31",
-            bounds=_make_fetch_window(
-                WindowEndpoint.from_datetime(datetime(year, 1, 1)),
-                WindowEndpoint.from_datetime(
-                    datetime(year, 1, 31, 23, 59, 59, 999999)
-                    if "hourly" in product
-                    else datetime(year, 12, 31, 23, 59, 59, 999999)
-                ),
+        plan_windows(
+            _make_fetch_window(
+                WindowEndpoint.from_datetime(datetime(year, 1, 3)),
+                WindowEndpoint.from_datetime(datetime(year, 1, 4)),
             ),
-        )
+            window_declarations().products[ProductId(product)],
+        )[0]
         for year in (2021, 2022, 2023)
     )
 

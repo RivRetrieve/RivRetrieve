@@ -89,6 +89,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     window = SeriesWindow(
         start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
         end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        axis=payload.acquisition_axis,
     )
     acquired = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     capture = stable_id(

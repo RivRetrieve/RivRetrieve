@@ -39,6 +39,7 @@ from rivretrieve._internal.source_series import (
     SeriesWindow,
     SourceSeries,
 )
+from rivretrieve._internal.time_axis import TimeAxis
 from rivretrieve._internal.transport import (
     HttpMethod,
     RedirectPolicy,
@@ -85,6 +86,9 @@ def fetch(
         for product in products:
             if not rendered_windows.get(product):
                 raise FatalContractError("USGS acquisition requires at least one rendered request window")
+            acquisition_axis = (
+                TimeAxis.UTC if _coordinates(product, config).endpoint == "continuous" else TimeAxis.NATIVE
+            )
             for rendered in rendered_windows[product]:
                 if rendered.bounds is None and len(rendered_windows[product]) != 1:
                     raise FatalContractError("USGS capped spans require engine-established bounds")
@@ -92,6 +96,7 @@ def fetch(
                 window = SeriesWindow(
                     start=datetime.fromisoformat(acquisition_window.start.isoformat()),
                     end=datetime.fromisoformat(acquisition_window.end.isoformat()),
+                    axis=acquisition_axis,
                 )
                 coordinates = replace(_coordinates(product, config), monitoring_location_id=location)
                 local_scope = (scope or SeriesScope(provider_ids=("usgs_nwis",))).model_copy(
@@ -476,4 +481,5 @@ def _payload(coordinates, station, product, fetch_window, response: TransportRes
         scope=scope,
         known_series=known,
         attempt_traces=response.attempt_traces,
+        acquisition_axis=TimeAxis.UTC if coordinates.endpoint == "continuous" else TimeAxis.NATIVE,
     )

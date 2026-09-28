@@ -20,6 +20,7 @@ from rivretrieve._internal.providers.usgs_nwis.config import config
 from rivretrieve._internal.providers.usgs_nwis.metadata import NAMESPACE, source_series
 from rivretrieve._internal.providers.usgs_nwis.parse import parse
 from rivretrieve._internal.source_series import PhysicalPredicate, SeriesScope, admission
+from rivretrieve._internal.time_axis import TimeAxis
 
 
 def feature(product="discharge_daily_mean", **changes):
@@ -61,6 +62,7 @@ def payload(document, product="discharge_daily_mean", known=()):
         ),
         prerequisite_calls=(),
         known_series=known,
+        acquisition_axis=TimeAxis.UTC if coordinates.endpoint == "continuous" else TimeAxis.NATIVE,
     )
 
 

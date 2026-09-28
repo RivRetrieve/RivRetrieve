@@ -14,7 +14,6 @@ from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     FetchWindow,
     ObservationRequest,
-    RenderedWindow,
     RequestedWindow,
     WindowEndpoint,
     _make_fetch_window,
@@ -22,12 +21,13 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
-from rivretrieve._internal.providers.jp_mlit.config import config
+from rivretrieve._internal.providers.jp_mlit.config import config, window_declarations
 from rivretrieve._internal.providers.jp_mlit.declaration import declaration
 from rivretrieve._internal.providers.jp_mlit.fetch import _page, fetch
 from rivretrieve._internal.providers.jp_mlit.parse import parse
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.window_planning import plan_windows
 
 _DATA = Path(__file__).parent / "test_data"
 _STATION = "301011281104010"
@@ -42,15 +42,12 @@ _PATHS = tuple(
 )
 _WINDOWS = MappingProxyType(
     {
-        product: (
-            RenderedWindow(
-                "2023-01-01",
-                "2023-01-31" if "hourly" in product else "2023-12-31",
-                bounds=_make_fetch_window(
-                    WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
-                    WindowEndpoint.from_datetime(datetime(2023, 2, 1) if "hourly" in product else datetime(2024, 1, 1)),
-                ),
+        product: plan_windows(
+            _make_fetch_window(
+                WindowEndpoint.from_datetime(datetime(2023, 1, 3)),
+                WindowEndpoint.from_datetime(datetime(2023, 1, 4)),
             ),
+            window_declarations().products[product],
         )
         for product in _PRODUCTS
     }
