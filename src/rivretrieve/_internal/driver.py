@@ -796,8 +796,8 @@ def _covered_facts(
                         for item in inventories
                         if item.completeness is InventoryCompleteness.COMPLETE
                         and item.origin != "catalogue"
-                        and item.scope == scope
                         and item.window is not None
+                        and _snapshot_matches(item, scope, item.window)
                         and item.window.axis is axis
                         and (
                             definition.series_id not in item.members
@@ -857,7 +857,10 @@ def _explicit_reuse(manifest: AccumulatedStoreManifest, scope: SeriesScope, wind
                 break
         if observed is None or not scope.matches(observed):
             continue
-        if not _covered_facts(manifest, observed, scope, window):
+        contributors = tuple(
+            item for item in manifest.inventories if f"source-inventory:{item.snapshot_id}" in snapshot.evidence
+        )
+        if not _covered_facts(manifest, observed, scope, window, contributors):
             return None
         members.append(observed)
     ids = {item.series_id for item in members}
@@ -1221,7 +1224,13 @@ def _combine_replacements(
         for item in fresh_outcomes
         if item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
     )
+    acquisition_axes: dict[tuple[str, str], TimeAxis] = {}
     for replacement in replacements:
+        for facts_id in replacement.coverage.facts_ids:
+            key = replacement.coverage.series_id, facts_id
+            previous_axis = acquisition_axes.setdefault(key, replacement.coverage.interval.axis)
+            if previous_axis is not replacement.coverage.interval.axis:
+                raise FatalContractError("One source series cannot mix acquisition time axes")
         original = by_id[replacement.coverage.outcome_id]
         excluded = tuple(
             RequestedInterval(item.window.start, item.window.end, axis=item.window.axis)
@@ -1230,6 +1239,7 @@ def _combine_replacements(
                 item.series_id == original.series_id
                 or (
                     item.series_id is None
+                    and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED)
                     and item.station_id == original.station_id
                     and item.product_id == original.product_id
                 )
