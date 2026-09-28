@@ -180,6 +180,12 @@ def test_all_scope_member_proof_uses_only_complete_contributor_absence():
     window = SeriesWindow(start=start, end=end)
     assert not _covered_facts(manifest, definition, scope, window)
     assert _covered_facts(manifest, definition, scope, window, (missing,))
+    different_facts = missing.model_copy(
+        update={"members": (definition.series_id,), "member_facts": ((definition.series_id, ("other-source-facts",)),)}
+    )
+    assert _covered_facts(manifest, definition, scope, window, (different_facts,))
+    unspecified_facts = missing.model_copy(update={"members": (definition.series_id,), "member_facts": ()})
+    assert not _covered_facts(manifest, definition, scope, window, (unspecified_facts,))
     assert not _covered_facts(
         manifest, definition, scope, window, (missing.model_copy(update={"completeness": "incomplete"}),)
     )

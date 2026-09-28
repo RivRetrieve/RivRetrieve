@@ -799,7 +799,13 @@ def _covered_facts(
                         and item.scope == scope
                         and item.window is not None
                         and item.window.axis is axis
-                        and definition.series_id not in item.members
+                        and (
+                            definition.series_id not in item.members
+                            or (
+                                definition.series_id in dict(item.member_facts)
+                                and fact.facts_id not in dict(item.member_facts)[definition.series_id]
+                            )
+                        )
                     ),
                 ),
             )
