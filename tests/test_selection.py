@@ -15,6 +15,8 @@ from rivretrieve._internal.registry import UnknownProviderError
 from rivretrieve._internal.selection import UnknownStationError, _station_frame
 from rivretrieve._internal.source_series import InventoryCompleteness, RestrictionKind
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 def _keys(selection):
     return {(item.provider_id, item.station_id, item.product_id) for item in selection.series}

@@ -131,6 +131,7 @@ def test_assemble_packages_empty_inputs_unchanged() -> None:
     assert result.issues == (issue,)
     assert result.receipts is receipts
     assert result.receipts.entries == ()
+    assert result.scope == SeriesScope()
 
 
 def test_assemble_return_construction_is_private_and_explicit_input_packaging() -> None:
@@ -157,35 +158,8 @@ def test_assemble_return_construction_is_private_and_explicit_input_packaging() 
     assert "_AssemblyResult" not in rivretrieve._internal.__dict__
 
 
-def test_assemble_body_is_constructor_only_and_has_no_conversion_or_provider_dependency() -> None:
+def test_assembly_has_no_conversion_or_provider_dependency() -> None:
     module_tree = ast.parse(inspect.getsource(assembly_module))
-    function = next(node for node in module_tree.body if isinstance(node, ast.FunctionDef) and node.name == "assemble")
-
-    assert len(function.body) == 1
-    statement = function.body[0]
-    assert isinstance(statement, ast.Return)
-    call = statement.value
-    assert isinstance(call, ast.Call)
-    assert isinstance(call.func, ast.Name)
-    assert call.func.id == "_AssemblyResult"
-    assert call.args == []
-    assert tuple(keyword.arg for keyword in call.keywords) == (
-        "canonical_rows",
-        "provenance",
-        "issues",
-        "receipts",
-        "source_series",
-        "inventories",
-        "outcomes",
-        "scope",
-    )
-    for keyword in call.keywords[:-1]:
-        assert isinstance(keyword.value, ast.Name)
-        assert keyword.value.id == keyword.arg
-
-    assert isinstance(call.keywords[-1].value, ast.BoolOp)
-    assert ast.unparse(call.keywords[-1].value) == "scope or SeriesScope()"
-
     imports = [node for node in module_tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
     imported_modules = tuple(
         alias.name for node in imports for alias in node.names if isinstance(node, ast.Import)

@@ -14,6 +14,7 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
+    shared_acquisition_products = (frozenset(config.products),)
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
 

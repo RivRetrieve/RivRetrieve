@@ -120,13 +120,23 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
             ),
         ),
     )
-    assert included.provenance == result.provenance
+    assert included.provenance.model_dump(exclude={"calls_made"}) == result.provenance.model_dump(
+        exclude={"calls_made"}
+    )
+    assert tuple(
+        {key: value for key, value in call.items() if key != "call_id"} for call in included.provenance.calls_made
+    ) == tuple({key: value for key, value in call.items() if key != "call_id"} for call in result.provenance.calls_made)
+    first_ids = {call["call_id"] for call in result.provenance.calls_made}
+    second_ids = {call["call_id"] for call in included.provenance.calls_made}
+    assert len(first_ids) == len(second_ids) == len(PRODUCTS)
+    assert first_ids.isdisjoint(second_ids)
     assert len(included.receipts.entries) == len(PRODUCTS)
     public_json = result.provenance.model_dump_json()
     assert "SENTINEL-NOT-A-REAL-TOKEN" not in public_json
     assert "authorization" not in public_json.lower()
     assert "header" not in public_json.lower()
     assert set(result.provenance.calls_made[0]) == {
+        "call_id",
         "url",
         "request_parameters",
         "status_code",

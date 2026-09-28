@@ -43,6 +43,7 @@ def _public(monkeypatch, provider, station, product, start, end, recordings):
     return result
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(monkeypatch):
     result = _public(
         monkeypatch,
@@ -62,6 +63,7 @@ def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(monkeypatch)
     assert result.receipts.entries[1].content == read_recording(DATA / "ba_fhmzbih_4024_H_1Y.recording.json").content
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(monkeypatch):
     cases = (
         (
@@ -106,6 +108,7 @@ def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(monkeyp
             assert b'"s":4' in contents and b'"q":' in contents and b'"m":' in contents and b'"c":0' in contents
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_bosnia_public_selection_exposes_all_acquired_pairs_including_unknown():
     selection = rr.find(provider="ba_fhmzbih")
     ba = rr.as_frame(selection)
@@ -140,6 +143,7 @@ def test_france_sparse_catalogue_does_not_invent_cross_products():
     ).is_empty()
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_station_discharge_uses_series_unit_not_display_preference(monkeypatch):
     result = _public(
         monkeypatch,
@@ -157,6 +161,7 @@ def test_france_station_discharge_uses_series_unit_not_display_preference(monkey
     assert result.receipts.entries[0].content == recording.content
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_valid_station_discharge_capture_can_clip_to_empty(monkeypatch):
     result = _public(
         monkeypatch,
@@ -179,6 +184,7 @@ def test_france_valid_station_discharge_capture_can_clip_to_empty(monkeypatch):
         ("J783301020", "discharge_instantaneous"),
     ],
 )
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_unknown_pairs_remain_selectable(station, product):
     provider = "fr_hydroportail" if "instantaneous" in product else "fr_hubeau"
     selection = rr.find(provider=provider, station=station, **PHYSICAL_FILTERS[product])

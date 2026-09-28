@@ -19,6 +19,8 @@ from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.transport import HttpClient, TransportRequest, TransportResponse
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _DATA = Path(__file__).parent / "recordings" / "br_ana"
 _PRODUCTS = ("discharge_instantaneous", "stage_instantaneous")
 _START = "2024-01-01T23:30:00"

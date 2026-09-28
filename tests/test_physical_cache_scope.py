@@ -7,11 +7,14 @@ from dataclasses import replace
 
 import polars as pl
 import polars.testing as pt
+import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.source_series import known
 from tests.usgs_modern_recordings import ModernReplay
+
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
 def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tmp_path):

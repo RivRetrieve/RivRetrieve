@@ -168,7 +168,13 @@ def test_validation_enforces_exact_retained_physical_schema(tmp_path: Path, muta
     if mutation == "extra":
         frame = frame.with_columns(pl.lit("UNDECLARED").alias("injected"))
     elif mutation == "order":
-        frame = frame.select(*frame.columns[:4], frame.columns[5], frame.columns[4])
+        original = frame
+        frame = frame.select(*frame.columns[:4], frame.columns[5], frame.columns[4], *frame.columns[6:])
+        # Only order differs; no missing column can cause the refusal instead.
+        import polars.testing as pl_testing
+
+        pl_testing.assert_frame_equal(frame.select(original.columns), original)
+        assert frame.columns != original.columns
     else:
         frame = frame.with_columns(pl.col("raw_value").cast(pl.Binary))
     frame.write_parquet(partition)

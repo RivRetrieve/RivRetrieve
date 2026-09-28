@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from datetime import date
@@ -17,6 +18,8 @@ from rivretrieve._internal.catalogues.artifact import (
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
+
+pytest_plugins = ("tests._distribution",)
 
 
 def _packaged_provenance(provider_id: str) -> CatalogueEvidence | None:
@@ -302,6 +305,50 @@ def stub_packaged_catalogue_artifact_live_capable(
         )
 
     return build
+
+
+@pytest.fixture(scope="session")
+def packaged_catalogue_inputs():
+    from rivretrieve._internal.catalogues import artifact as artifact_module
+    from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+    from tests._catalogue_inputs import PackagedCatalogueInputs
+
+    providers = Path(artifact_module.__file__).parents[1] / "providers"
+    return PackagedCatalogueInputs(
+        (providers / provider / "catalogue" for provider in BUILTIN_PROVIDER_IDS),
+        lambda path: artifact_module.load_packaged_catalogue_artifact(path, on_issue="raise"),
+    )
+
+
+@pytest.fixture
+def reuse_packaged_catalogues(monkeypatch, packaged_catalogue_inputs) -> None:
+    """Reuse detached package inputs, while registering a fresh real manifest.
+
+    Opt in with ``pytest.mark.usefixtures("reuse_packaged_catalogues")`` only for
+    behavior tests whose subject is not artifact loading or registration. Changed
+    and unlisted paths still reach the real loader. Registry isolation, dynamic
+    declarations, credentials and cache-root composition remain unchanged.
+    """
+    from functools import wraps
+
+    from rivretrieve._internal.providers import registration
+
+    register = registration.register_manifest
+
+    @wraps(register)
+    def register_with_inputs(*args, **kwargs):
+        kwargs.setdefault("artifact_loader", packaged_catalogue_inputs.load)
+        return register(*args, **kwargs)
+
+    def provenance(provider_id: str) -> CatalogueEvidence | None:
+        if provider_id not in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS:
+            return None
+        from tests._catalogue import catalogue_path
+
+        return packaged_catalogue_inputs.load(catalogue_path(provider_id)).acquisition_provenance
+
+    monkeypatch.setattr(registration, "register_manifest", register_with_inputs)
+    monkeypatch.setattr(sys.modules[__name__], "_packaged_provenance", provenance)
 
 
 @pytest.fixture(autouse=True)

@@ -90,6 +90,7 @@ def test_invalid_daily_label_retains_named_siblings(label):
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("defect", ["member", "noon"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(monkeypatch, tmp_path, policy, defect):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     selection = rr.find(provider="cz_chmi", station=_STATION, frequency="daily")

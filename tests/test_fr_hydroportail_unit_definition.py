@@ -4,6 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.observations import ReceiptAuthorship
@@ -32,6 +34,7 @@ def test_publisher_q_unit_code_definition_is_exact_and_context_qualified():
         assert manifest["interpretation_authorship"] == "RivRetrieve analysis, not a publisher sentence"
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_hydroportail_q_preserves_raw_code_and_uses_cited_rate_definition(monkeypatch, tmp_path):
     recording = read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json")
     assert recording.sha256 == "aa99bc0a91dd45c928ce64d6fd68dff875abcb1e47cf348b11354980413e3f8f"

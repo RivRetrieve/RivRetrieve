@@ -11,6 +11,8 @@ import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _DATA = Path(__file__).parent / "test_data"
 _STATION = "301011281104010"
 _PRODUCTS = ("stage_hourly", "stage_daily", "discharge_hourly", "discharge_daily")

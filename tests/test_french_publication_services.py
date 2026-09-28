@@ -5,6 +5,8 @@ import pytest
 from rivretrieve._internal.providers.fr_hubeau.config import config as hubeau_config
 from rivretrieve._internal.providers.fr_hydroportail.config import config as hydroportail_config
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 def test_retained_products_have_independent_publication_services():
     assert set(hubeau_config().products) == {

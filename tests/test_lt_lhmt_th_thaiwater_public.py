@@ -44,7 +44,7 @@ class _CountingReplay(ReplayTransport):
         ),
     ],
 )
-def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
+def test_public_fetch_preserves_provider_acquisition_boundaries(
     monkeypatch: pytest.MonkeyPatch,
     provider: str,
     station: str,
@@ -77,8 +77,9 @@ def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
         result.data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
     )
     assert set(result.data["product_id"]) == set(rr.products(provider))
-    assert len(replay.requests) == 2
-    assert len(result.receipts.entries) == 2
+    expected_calls = 1 if provider == "lt_lhmt" else 2
+    assert len(replay.requests) == expected_calls
+    assert len(result.receipts.entries) == expected_calls
     receipt = result.receipts.entries[0]
     assert receipt.content == envelope.content
     assert receipt.origin.url == envelope.request.url
@@ -91,7 +92,7 @@ def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
     omitted_replay = _CountingReplay(envelope)
     monkeypatch.setattr(discovery, "HttpClient", lambda: omitted_replay)
     without_receipts = rr.fetch(selection, start=start, end=end, receipts=False, on_issue="ignore")
-    assert len(omitted_replay.requests) == 2
+    assert len(omitted_replay.requests) == expected_calls
     assert without_receipts.receipts.entries == ()
 
     if provider == "th_thaiwater":

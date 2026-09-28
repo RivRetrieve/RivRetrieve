@@ -8,11 +8,14 @@ from datetime import datetime
 from pathlib import Path
 
 import polars.testing as pt
+import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 from tests.usgs_modern_recordings import ModernReplay, body, coordinates
+
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
 def test_offline_discovery_exposes_both_siblings_and_exact_descriptions(monkeypatch):

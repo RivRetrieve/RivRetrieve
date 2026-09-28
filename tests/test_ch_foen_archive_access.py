@@ -94,6 +94,7 @@ def _bundle_contents(result):
         ("2026-08-18T00:00:00", "2026-08-22T00:00:00", "POST", ARCHIVE),
     ],
 )
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_route_uses_actual_padded_start(monkeypatch, start, end, method, endpoint):
     calls, _ = _intercept(monkeypatch, status=403)
     _fetch(start, end)
@@ -109,6 +110,7 @@ def test_public_route_uses_actual_padded_start(monkeypatch, start, end, method, 
 
 
 @pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_archive_auth_failure_is_retained_without_rest_fallback(monkeypatch, status):
     calls, secrets = _intercept(monkeypatch, status=status)
     result = _fetch()
@@ -129,6 +131,7 @@ def test_public_archive_auth_failure_is_retained_without_rest_fallback(monkeypat
         (200, False, True, "terminal_sender_failure"),
     ],
 )
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_archive_unsafe_response_is_retained_not_exported(monkeypatch, status, echo, fail, reason):
     calls, secrets = _intercept(monkeypatch, status=status, echo=echo, fail=fail)
     result = _fetch()
@@ -142,6 +145,7 @@ def test_public_archive_unsafe_response_is_retained_not_exported(monkeypatch, st
     _assert_secret_free(secrets, result, result.provenance, result.receipts, *_bundle_contents(result))
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_success_keeps_receipt_and_bundle_without_credentials(monkeypatch):
     calls, secrets = _intercept(monkeypatch)
     result = _fetch()
@@ -192,6 +196,7 @@ def test_bundled_authentication_repr_and_exception_do_not_reveal_echo(monkeypatc
     _assert_secret_free(secrets, repr(transport), str(error), repr(error), repr(error.request))
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_archive_closed_datetime_bound_keeps_final_label(monkeypatch):
     import polars as pl
 
@@ -209,6 +214,7 @@ def test_public_archive_closed_datetime_bound_keeps_final_label(monkeypatch):
     assert result.receipts.entries[0].content == content
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_recent_rest_preserves_anonymous_success(monkeypatch):
     import json
 
@@ -229,6 +235,7 @@ def test_public_recent_rest_preserves_anonymous_success(monkeypatch):
 
 @pytest.mark.parametrize("scheme", ["Token", "Bearer"])
 @pytest.mark.parametrize("location", ["url", "params", "body"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_raw_sentinel_in_ordinary_request_is_refused_and_sanitized(monkeypatch, scheme, location):
     from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader
 

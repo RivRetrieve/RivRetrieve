@@ -71,6 +71,7 @@ def test_repeated_identity_refuses_every_block_independently_of_order(kind):
 
 
 @pytest.mark.parametrize("kind", ["equal", "conflicting", "disjoint", "different-facts"])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(kind, monkeypatch, tmp_path):
     recordings = tuple(
         read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
@@ -132,6 +133,7 @@ def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(k
     assert not any(item.series_id == ambiguous_id for item in cached.outcomes)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_supported_nonmatching_facts_are_not_retained_as_failures(monkeypatch):
     recordings = tuple(
         read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")

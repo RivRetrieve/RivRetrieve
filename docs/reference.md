@@ -1727,6 +1727,9 @@ Source-call facts carried with retained receipt bytes.
 - **query : SourceQuery or UnknownOriginFact**
   Executed local statement and parameters when applicable. UnknownOriginFact
   carries a reason rather than filling an inapplicable fact by assumption.
+- **attempts : int or None**
+  Transport attempt count when retained. Payload attempt traces carry the
+  individual outcomes when the transport exposes them.
 
 ### `StoreStatus`
 

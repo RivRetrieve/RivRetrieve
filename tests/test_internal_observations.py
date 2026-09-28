@@ -227,8 +227,7 @@ def test_observation_request_rejects_date_object(name: str) -> None:
         ObservationRequest.from_inputs(provider_id="provider-a", stations="station-1", products="flow", **inputs)
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_request_rejects_missing_provider_id_for_every_on_issue(on_issue: str) -> None:
+def test_observation_request_rejects_missing_provider_id() -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
             provider_id=cast(Any, None),
@@ -238,12 +237,10 @@ def test_observation_request_rejects_missing_provider_id_for_every_on_issue(on_i
             end="2026-01-02",
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_request_rejects_missing_start_for_every_on_issue(on_issue: str) -> None:
+def test_observation_request_rejects_missing_start() -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
             provider_id="provider-a",
@@ -253,12 +250,10 @@ def test_observation_request_rejects_missing_start_for_every_on_issue(on_issue: 
             end="2026-01-02",
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_request_rejects_missing_end_for_every_on_issue(on_issue: str) -> None:
+def test_observation_request_rejects_missing_end() -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
             provider_id="provider-a",
@@ -268,7 +263,6 @@ def test_observation_request_rejects_missing_end_for_every_on_issue(on_issue: st
             end=cast(Any, None),
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
@@ -289,8 +283,7 @@ def test_observation_request_rejects_unparseable_temporal_values(field: str) -> 
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_request_rejects_missing_stations_for_every_on_issue(on_issue: str) -> None:
+def test_observation_request_rejects_missing_stations() -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
             provider_id="provider-a",
@@ -300,12 +293,10 @@ def test_observation_request_rejects_missing_stations_for_every_on_issue(on_issu
             end="2026-01-02",
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_request_rejects_missing_products_for_every_on_issue(on_issue: str) -> None:
+def test_observation_request_rejects_missing_products() -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
             provider_id="provider-a",
@@ -315,12 +306,10 @@ def test_observation_request_rejects_missing_products_for_every_on_issue(on_issu
             end="2026-01-02",
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_request_rejects_empty_station_sequence_for_every_on_issue(on_issue: str) -> None:
+def test_observation_request_rejects_empty_station_sequence() -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
             provider_id="provider-a",
@@ -330,12 +319,10 @@ def test_observation_request_rejects_empty_station_sequence_for_every_on_issue(o
             end="2026-01-02",
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_request_rejects_empty_product_sequence_for_every_on_issue(on_issue: str) -> None:
+def test_observation_request_rejects_empty_product_sequence() -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
             provider_id="provider-a",
@@ -345,7 +332,6 @@ def test_observation_request_rejects_empty_product_sequence_for_every_on_issue(o
             end="2026-01-02",
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
@@ -360,11 +346,9 @@ def test_observation_request_rejects_empty_product_sequence_for_every_on_issue(o
         ("station-1", 123),
     ],
 )
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
 def test_observation_request_rejects_non_string_and_empty_ids(
     stations: object,
     products: object,
-    on_issue: str,
 ) -> None:
     with pytest.raises(InvalidObservationRequestError) as exc_info:
         ObservationRequest.from_inputs(
@@ -375,7 +359,6 @@ def test_observation_request_rejects_non_string_and_empty_ids(
             end="2026-01-02",
         )
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
@@ -504,24 +487,20 @@ def test_observation_data_schema_accepts_native_datetime_without_utc_mandate() -
     validate_observation_data(data)
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_data_schema_rejects_provider_id_column_as_extra_under_raise(on_issue: str) -> None:
+def test_observation_data_schema_rejects_provider_id_column_as_extra() -> None:
     data = _observation_df().with_columns(pl.lit("provider-a").alias("provider_id"))
 
     with pytest.raises(ObservationDataSchemaError) as exc_info:
         validate_observation_data(data)
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
 @pytest.mark.parametrize("missing_column", ObservationDataSchema.polars_schema.names())
-def test_observation_data_schema_rejects_missing_column(on_issue: str, missing_column: str) -> None:
+def test_observation_data_schema_rejects_missing_column(missing_column: str) -> None:
     with pytest.raises(ObservationDataSchemaError) as exc_info:
         validate_observation_data(_observation_df().drop(missing_column))
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
@@ -535,12 +514,10 @@ def test_observation_data_schema_rejects_missing_column(on_issue: str, missing_c
         _observation_df().with_columns(pl.Series("value", ["1.2", "1.3"], dtype=pl.Utf8)),
     ],
 )
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_data_schema_rejects_wrong_dtype(data: pl.DataFrame, on_issue: str) -> None:
+def test_observation_data_schema_rejects_wrong_dtype(data: pl.DataFrame) -> None:
     with pytest.raises(ObservationDataSchemaError) as exc_info:
         validate_observation_data(data)
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
@@ -553,12 +530,10 @@ def test_observation_data_schema_rejects_wrong_dtype(data: pl.DataFrame, on_issu
         _observation_df(product_id=[None, "flow"]),
     ],
 )
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_data_schema_rejects_null_required_columns(data: pl.DataFrame, on_issue: str) -> None:
+def test_observation_data_schema_rejects_null_required_columns(data: pl.DataFrame) -> None:
     with pytest.raises(ObservationDataSchemaError) as exc_info:
         validate_observation_data(data)
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
@@ -598,12 +573,10 @@ def test_observation_result_to_pandas_matches_polars_boundary_conversion() -> No
     pd_testing.assert_frame_equal(result.to_pandas(), result.data.to_pandas())
 
 
-@pytest.mark.parametrize("on_issue", ["warn", "raise", "ignore"])
-def test_observation_result_rejects_schema_violation_for_every_on_issue(on_issue: str) -> None:
+def test_observation_result_rejects_schema_violation() -> None:
     with pytest.raises(ObservationDataSchemaError) as exc_info:
         _result(_observation_df().drop("value"))
 
-    assert on_issue in {"warn", "raise", "ignore"}
     assert _issue_policy_error_chain(exc_info.value) == []
 
 
@@ -729,3 +702,9 @@ def test_inspection_does_not_attach_current_inventory_or_outcome_to_historical_f
     current_row = inspected.filter(pl.col("facts_id") == current.facts_id)
     assert current_row["outcomes"].to_list() == [["empty"]]
     assert current_row["inventory_ids"].to_list() == [["current-inventory"]]
+
+
+def test_observation_result_has_no_wide_form_helpers() -> None:
+    result = _result()
+    for name in ("to_wide", "to_wide_pandas", "to_pivot", "to_dataframe_wide"):
+        assert not hasattr(result, name)

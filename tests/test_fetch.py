@@ -51,6 +51,8 @@ from rivretrieve._internal.source_series import (
     stable_id,
 )
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 VALUES = {
     ("ca_eccc", "station-1", "level"): 10.0,
     ("ca_eccc", "station-2", "level_hourly"): 20.0,

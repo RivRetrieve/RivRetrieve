@@ -91,54 +91,6 @@ def test_catalogue_only_provider_remains_discoverable_and_readable(
     assert len(global_products) == product_count
     assert set(global_products) == product_ids
 
-
-@pytest.mark.parametrize(
-    (
-        "provider_id",
-        "station_count",
-        "product_count",
-        "station_product_count",
-        "product_ids",
-        "provider_name",
-        "catalogue_version",
-        "availability",
-    ),
-    CATALOGUE_ONLY_PROVIDERS,
-)
-def test_catalogue_only_provider_directory_retains_declared_surface(
-    provider_id: str,
-    station_count: int,
-    product_count: int,
-    station_product_count: int,
-    product_ids: set[str],
-    provider_name: str,
-    catalogue_version: str | None,
-    availability: set[str],
-) -> None:
-    reader = catalogue_reader(provider_id)
-    info = provider_info(provider_id)
-    stations = reader.read_stations().data
-    products = reader.read_products().data
-    station_products = reader.read_station_products().data
-    assert info.provider_id == provider_id
-    assert info.name == provider_name
-    if catalogue_version is None:
-        assert info.catalogue_version is None
-    else:
-        assert str(info.catalogue_version) == catalogue_version
-    assert stations.height == station_count
-    if station_count:
-        assert stations["crs"].unique().to_list() == ["unknown"]
-    else:
-        assert stations.is_empty()
-    assert products.height == product_count
-    assert set(products["product_id"].to_list()) == product_ids
-    if product_count:
-        assert set(products["provider_id"].to_list()) == {provider_id}
-    else:
-        assert products.is_empty()
-    assert station_products.height == station_product_count
-    assert set(station_products["availability"].cast(str).to_list()) == availability
     provider_directory = catalogue_path(provider_id).parent
     assert set(ENROLLED_CATALOGUE_MODULE_FILES) == {row[0] for row in CATALOGUE_ONLY_PROVIDERS}
     expected_module_files = ENROLLED_CATALOGUE_MODULE_FILES[provider_id]

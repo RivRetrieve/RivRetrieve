@@ -92,6 +92,7 @@ def test_four_value_states_survive_compile(tmp_path: Path) -> None:
             "series_id": [fixture_series("fixture-1", "fixture").series_id] * 3,
             "facts_id": [fixture_series().facts[0].facts_id] * 3,
             "source_unit": ["m3/s"] * 3,
+            "native_value": [None, None, 12.4],
             "quality": [None, None, "E"],
         },
         schema={
@@ -101,6 +102,7 @@ def test_four_value_states_survive_compile(tmp_path: Path) -> None:
             "series_id": pl.String,
             "facts_id": pl.String,
             "source_unit": pl.String,
+            "native_value": pl.Float64,
             "quality": pl.String,
         },
     )

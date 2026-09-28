@@ -246,6 +246,7 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality() -> None:
     assert "quality" not in parse(fetched, config()).rows.columns
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_selection_routes_to_czech_live_engine(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([_HQ]))
     selection = rr.find(

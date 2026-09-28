@@ -13,6 +13,8 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 RECORDING = "daily-07374000-discharge-mean"
 CURRENT = "0df18b246e8f48ec8e6547a92070e94a"
 ENDED = "4d186669708e4dc18f84d271efb953a1"

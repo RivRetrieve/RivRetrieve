@@ -8,11 +8,14 @@ from pathlib import Path
 
 import polars as pl
 import polars.testing as pt
+import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.transport import HttpMethod, TransportResponse
 from tests.usgs_modern_recordings import coordinates
+
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "docs/verification/usgs-provider"

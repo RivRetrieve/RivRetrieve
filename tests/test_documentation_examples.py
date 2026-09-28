@@ -28,7 +28,9 @@ LITHUANIAN_RECORDINGS = [
 
 
 def blocks(page):
-    return re.findall(r"```python\n(.*?)```", (ROOT / page).read_text(), re.DOTALL)
+    snippets = re.findall(r"```python\n(.*?)```", (ROOT / page).read_text(), re.DOTALL)
+    assert snippets, f"No Python examples in {page}"
+    return snippets
 
 
 def output_contracts(block):
@@ -52,12 +54,6 @@ def output_contracts(block):
         assert output, f"Empty output for print at line {node.lineno}"
         contracts[node.lineno] = "\n".join(output) + "\n"
     return contracts
-
-
-@pytest.mark.parametrize("page", ["README.md", "docs/usage.md"])
-def test_every_newcomer_print_has_visible_output(page):
-    for block in blocks(page):
-        output_contracts(block)
 
 
 class CountingReplay(ReplayTransport):
@@ -128,7 +124,9 @@ def execute_page(page, monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("page", ["README.md", "docs/usage.md"])
-def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path):
+def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request):
+    if page == "README.md":
+        request.getfixturevalue("reuse_packaged_catalogues")
     scope = execute_page(page, monkeypatch, tmp_path)
     assert scope["result"].data.height == 1
     assert scope["result"].data["station_id"].to_list() == ["07374000"]
@@ -136,6 +134,27 @@ def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path):
     assert scope["result"].source_series[0].variant == "c9d823a2491f4b639656a11b35a7625d"
     assert scope["result"].source_series[0].identity.description is None
     if page == "README.md":
+        from polars.testing import assert_frame_equal
+
+        from rivretrieve._internal.observations import ObservationDataSchema
+
+        result = scope["result"]
+        expected = pl.DataFrame(
+            {
+                "time": [datetime(2023, 1, 1)],
+                "time_zone": ["unknown"],
+                "station_id": ["07374000"],
+                "product_id": ["discharge_daily_mean"],
+                "value": [373000.0 * 0.028316846592],
+            }
+        )
+        assert_frame_equal(result.data.select(expected.columns), expected)
+        assert result.data.columns == list(ObservationDataSchema.polars_schema)
+        assert result.source_series
+        assert result.data["series_id"].n_unique() == 1
+        assert result.data["unit"].to_list() == ["m3/s"]
+        assert not result.issues
+        assert not result.receipts.entries
         assert len(scope["_transport"].calls) == 1
         assert set(scope["rr"].series(scope["brazil"])["variant"]) == {"bruto", "consistido"}
         assert scope["rr"].series(scope["consistido"])["variant"].to_list() == ["consistido"]
@@ -255,6 +274,7 @@ def assert_usage_state(scope, tmp_path):
     assert "L.marker(" in html
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path):
     from polars.testing import assert_frame_equal
 
@@ -324,6 +344,7 @@ def issue_scope(monkeypatch, tmp_path, outcome):
     return {"rr": rr, "chosen_gauges": rr.pick(daily_gauges, station=["07374000"])}, replay
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_actual_issue_example_success(monkeypatch, tmp_path):
     scope, replay = issue_scope(monkeypatch, tmp_path, "success")
     checked = execute_block(issue_example(), scope, "usage-issues-success")
@@ -334,6 +355,7 @@ def test_actual_issue_example_success(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("policy", ["warn", "ignore", "raise"])
 @pytest.mark.parametrize("outcome", ["success", "empty", 404, 503])
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, outcome):
     """Run each page-authored fetch expression unchanged under transport scenarios."""
     from polars.testing import assert_frame_equal
@@ -406,6 +428,7 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
             assert not result.provenance.served_intervals
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_usage_selection_bundle_roundtrip(monkeypatch, tmp_path):
     from polars.testing import assert_frame_equal
 
