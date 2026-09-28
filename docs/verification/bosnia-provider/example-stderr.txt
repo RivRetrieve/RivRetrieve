@@ -1,0 +1,2 @@
+/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/bosnia-provider-documentation-review/.venv/lib/python3.13/site-packages/openpyxl/styles/stylesheet.py:237: UserWarning: Workbook contains no default style, apply openpyxl's default
+  warn("Workbook contains no default style, apply openpyxl's default")
