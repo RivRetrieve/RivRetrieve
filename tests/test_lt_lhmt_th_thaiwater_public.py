@@ -44,7 +44,7 @@ class _CountingReplay(ReplayTransport):
         ),
     ],
 )
-def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
+def test_public_fetch_preserves_provider_acquisition_boundaries(
     monkeypatch: pytest.MonkeyPatch,
     provider: str,
     station: str,
@@ -60,14 +60,26 @@ def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
     selection = rr.find(provider=provider, station=station)
     result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
 
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert result.data.height == expected_rows
     assert result.data.equals(
         result.data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
     )
     assert set(result.data["product_id"]) == set(rr.products(provider))
-    assert len(replay.requests) == 2
-    assert len(result.receipts.entries) == 2
+    expected_calls = 1 if provider == "lt_lhmt" else 2
+    assert len(replay.requests) == expected_calls
+    assert len(result.receipts.entries) == expected_calls
     receipt = result.receipts.entries[0]
     assert receipt.content == envelope.content
     assert receipt.origin.url == envelope.request.url
@@ -80,7 +92,7 @@ def test_public_fetch_replays_one_padded_call_and_receipt_per_product_series(
     omitted_replay = _CountingReplay(envelope)
     monkeypatch.setattr(discovery, "HttpClient", lambda: omitted_replay)
     without_receipts = rr.fetch(selection, start=start, end=end, receipts=False, on_issue="ignore")
-    assert len(omitted_replay.requests) == 2
+    assert len(omitted_replay.requests) == expected_calls
     assert without_receipts.receipts.entries == ()
 
     if provider == "th_thaiwater":
@@ -105,7 +117,7 @@ def test_thaiwater_find_exposes_the_original_baseline_available_and_unknown_pair
     ]
 
 
-def test_thaiwater_unknown_pair_beyond_sample_returns_recorded_null_rows_and_can_be_reused(
+def test_thaiwater_null_rows_do_not_establish_complete_inventory_for_reuse(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -124,7 +136,8 @@ def test_thaiwater_unknown_pair_beyond_sample_returns_recorded_null_rows_and_can
     assert len(replay.requests) == 2
     assert all(entry.content == envelope.content for entry in result.receipts.entries)
     repeated = rr.fetch(selection, start="2026-06-10", end="2026-09-04", cache="reuse", on_issue="ignore")
-    assert len(replay.requests) == 2
+    # Incomplete source inventory cannot satisfy an unrestricted all-series request.
+    assert len(replay.requests) == 4
     from polars.testing import assert_frame_equal
 
     assert_frame_equal(result.data, repeated.data)

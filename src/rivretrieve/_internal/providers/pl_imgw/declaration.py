@@ -16,19 +16,24 @@ from rivretrieve._internal.store import ValidatedStore
 
 def _download(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...]:
     """Adapt the shared bulk request to the publisher's multi-artifact history."""
-    downloaded = bulk.download_imgw_history(request.destination, today=request.today, transfer=request.transfer)
+    downloaded = bulk.download_imgw_history(
+        request.destination,
+        today=request.today,
+        transfer=request.transfer,
+        previous_source_vintage=request.previous_source_vintage,
+    )
     return tuple(DownloadedBulkArtifact(item.path, item.url, item.source_vintage) for item in downloaded)
 
 
 def _compile(request: BulkCompileRequest) -> ValidatedStore:
     """Adapt the shared compile request to the publisher's request type."""
-    return bulk.compile(
+    return bulk.compile_imgw(
         bulk.ImgwCompileRequest(
             publisher_artifact=request.publisher_artifact,
             destination=request.destination,
             publisher_url=request.publisher_url,
             source_vintage=request.source_vintage,
-            publisher_artifacts=tuple(bulk.DownloadedImgw(item.path, item.url) for item in request.publisher_artifacts),
+            publisher_artifacts=request.publisher_artifacts,
             built_at=request.built_at,
             compiler_version=request.compiler_version,
         )

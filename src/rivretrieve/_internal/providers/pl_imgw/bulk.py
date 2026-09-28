@@ -14,22 +14,26 @@ import csv
 import hashlib
 import io
 import json
+import math
 import re
 import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Final, cast
 
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.pl_imgw.series import source_series
+from rivretrieve._internal.providers.registration import DownloadedBulkArtifact
+from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store import (
     ArtifactChecksum,
     Disposition,
     NativeObservationBatch,
-    NativeStoreMaterialization,
     ObservationBatchStream,
     PublisherArtifact,
     SourceColumn,
@@ -44,38 +48,150 @@ from rivretrieve._internal.store import (
 )
 
 PROVIDER_ID: Final = ProviderId("pl_imgw")
-FORMAT_VERSION: Final = 1
 BASE_URL: Final = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe"
 ANNUAL_URL_TEMPLATE: Final = BASE_URL + "/{year}/codz_{year}.zip"
 MONTHLY_URL_TEMPLATE: Final = BASE_URL + "/{year}/codz_{year}_{month:02d}.zip"
 FIRST_PUBLISHED_YEAR: Final = 1951
-ANNUAL_PUBLICATION_FIRST_YEAR: Final = 2023
 
 
 @dataclass(frozen=True, slots=True)
 class ImgwArtifactPlan:
-    """One exact official archive in a deterministic full-history plan."""
+    """One exact official archive discovered in the publisher's index."""
 
     url: str
     filename: str
 
 
-def plan_imgw_artifacts(*, first_year: int, last_year: int) -> tuple[ImgwArtifactPlan, ...]:
-    """Map hydrological publication years to the publisher's monthly/annual artifacts."""
-    if first_year < 1 or last_year > 9999 or first_year > last_year:
-        raise ValueError("IMGW publication year range is invalid")
+class _ImgwDirectoryIndex(HTMLParser):
+    """Read the publisher's Apache index without accepting an arbitrary HTML page."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.stack: list[str] = []
+        self.titles: list[str] = []
+        self.headings: list[str] = []
+        self.links: list[tuple[str, str]] = []
+        self.closed: set[str] = set()
+        self.text = ""
+        self.href: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"img", "hr", "br", "meta", "link", "input"}:
+            return
+        if tag in {"title", "h1", "a"}:
+            self.text = ""
+        if tag == "a":
+            hrefs = [value for name, value in attrs if name == "href"]
+            if len(hrefs) != 1 or not hrefs[0] or self.href is not None:
+                raise ValueError("IMGW directory index has a malformed link")
+            self.href = hrefs[0]
+        self.stack.append(tag)
+
+    def handle_data(self, data: str) -> None:
+        if self.stack and self.stack[-1] in {"title", "h1", "a"}:
+            self.text += data
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self.stack or self.stack.pop() != tag:
+            raise ValueError("IMGW directory index has malformed HTML structure")
+        self.closed.add(tag)
+        if tag == "title":
+            self.titles.append(self.text.strip())
+        elif tag == "h1":
+            self.headings.append(self.text.strip())
+        elif tag == "a":
+            if self.href is None:
+                raise ValueError("IMGW directory index has a malformed link")
+            self.links.append((self.href, self.text.strip()))
+            self.href = None
+
+
+def _imgw_directory_entries(content: bytes, url: str) -> tuple[str, ...]:
+    """Validate an exact source index and return its unambiguous relative entries."""
+    index = _ImgwDirectoryIndex()
+    try:
+        index.feed(content.decode("utf-8", errors="strict"))
+        index.close()
+    except UnicodeError as error:
+        raise ValueError("IMGW directory index is not UTF-8 HTML") from error
+    path = "/" + url.split("/", 3)[3].rstrip("/")
+    identity = f"Index of {path}"
+    if (
+        index.stack
+        or index.titles != [identity]
+        or index.headings != [identity]
+        or not {"html", "body", "table"}.issubset(index.closed)
+    ):
+        raise ValueError(f"IMGW directory index identity or structure is invalid: {url}")
+    entries: list[str] = []
+    seen: set[str] = set()
+    parent = path.rsplit("/", 1)[0] + "/"
+    for href, label in index.links:
+        if href in seen:
+            raise ValueError(f"IMGW directory index has a duplicate link: {href}")
+        seen.add(href)
+        if re.fullmatch(r"\?C=[NMSD];O=[AD]", href):
+            continue
+        if href == parent and label == "Parent Directory":
+            continue
+        if href != label or re.fullmatch(r"[A-Za-z0-9_.-]+/?", href) is None:
+            raise ValueError(f"IMGW directory index has an unsupported link: {href}")
+        entries.append(href)
+    return tuple(entries)
+
+
+def discover_imgw_artifacts(
+    *, today: date, read_index: Callable[[str], bytes], first_year: int
+) -> tuple[ImgwArtifactPlan, ...]:
+    """Discover continuous daily publication, not calendar-implied availability.
+
+    The notice promises regeneration in monthly form but gives no precedence for
+    coexisting editions. An exclusive annual or monthly listing is supported;
+    overlapping editions are refused rather than selected or deduplicated.
+    """
+    if not 1 < first_year <= today.year + (today.month >= 11):
+        raise ValueError("IMGW publication starting year is invalid")
+    root_url = BASE_URL + "/"
+    entries = _imgw_directory_entries(read_index(root_url), root_url)
+    years: list[int] = []
+    for entry in entries:
+        if entry in {"UWAGA.txt", "CODZ_publiczne_format.txt", "ZJAW_publiczne_format.txt"}:
+            continue
+        if re.fullmatch(r"[0-9]{4}/", entry) is None:
+            raise ValueError(f"IMGW publication index contains an unsupported entry: {entry}")
+        year = int(entry[:-1])
+        if year < 2 or year > today.year + (today.month >= 11):
+            raise ValueError(f"IMGW publication index contains an implausible year: {entry}")
+        if year >= first_year:
+            years.append(year)
     planned: list[ImgwArtifactPlan] = []
-    for year in range(first_year, last_year + 1):
-        if year < ANNUAL_PUBLICATION_FIRST_YEAR:
-            planned.extend(
-                ImgwArtifactPlan(
-                    MONTHLY_URL_TEMPLATE.format(year=year, month=month),
-                    f"codz_{year}_{month:02d}.zip",
-                )
-                for month in range(1, 13)
-            )
-        else:
-            planned.append(ImgwArtifactPlan(ANNUAL_URL_TEMPLATE.format(year=year), f"codz_{year}.zip"))
+    previous = first_year * 12
+    for year in sorted(years):
+        url = f"{BASE_URL}/{year}/"
+        names = _imgw_directory_entries(read_index(url), url)
+        periods: list[tuple[tuple[int, ...], str]] = []
+        for name in names:
+            # ZJAW describes a separate phenomena product, not daily CODZ values.
+            if name == "UWAGA.txt" or re.fullmatch(r"zjaw_[0-9]{4}(?:_[0-9]{2})?\.zip", name):
+                continue
+            if _ARTIFACT_NAME.fullmatch(name) is None:
+                raise ValueError(f"IMGW publication index contains an unsupported daily archive: {name}")
+            artifact_year, months = _imgw_artifact_period(Path(name))
+            if artifact_year != year:
+                raise ValueError(f"IMGW archive disagrees with its publication directory: {name}")
+            if _imgw_period_source_vintage((year, months)) > today:
+                raise ValueError(f"IMGW archive declares an unfinished publication period: {name}")
+            periods.append((months, name))
+        for months, name in sorted(periods):
+            start = year * 12 + months[0]
+            if start <= previous:
+                raise ValueError(f"IMGW publication periods overlap ambiguously: {name}")
+            if start != previous + 1:
+                raise ValueError(f"IMGW published history has a gap before {name}")
+            planned.append(ImgwArtifactPlan(url + name, name))
+            previous = year * 12 + months[-1]
+    if not planned:
+        raise ValueError("IMGW publication index contains no supported daily history")
     return tuple(planned)
 
 
@@ -101,9 +217,9 @@ IMGW_SOURCE_DISPOSITIONS: Final = tuple(
 _RETAINED_NAMES: Final = tuple(column.name for column in IMGW_SOURCE_COLUMNS)
 
 _PRODUCT_COLUMNS: Final = (
-    (ProductId("stage_daily_mean"), 6, frozenset({9999.0})),
-    (ProductId("discharge_daily_mean"), 7, frozenset({99999.999, 999.0})),
-    (ProductId("water_temperature_daily_mean"), 8, frozenset({99.9})),
+    (ProductId("stage_daily"), 6, frozenset({9999.0})),
+    (ProductId("discharge_daily"), 7, frozenset({99999.999})),
+    (ProductId("water_temperature_daily"), 8, frozenset({99.9})),
 )
 
 
@@ -123,43 +239,6 @@ class DownloadedImgw:
 ArtifactTransfer = Callable[[str, Path], None]
 
 
-def download_imgw(
-    destination: Path,
-    *,
-    year: int,
-    transfer: ArtifactTransfer,
-) -> DownloadedImgw:
-    """Transfer one named yearly archive to an already-authorised destination.
-
-    Consent, free-space checks and orchestration across multiple years belong to
-    the shared bulk verbs (RR5); this source operation performs no implicit work.
-    """
-    if type(year) is not int or year < 1 or year > 9999:
-        raise ValueError("IMGW archive year must be an integer in 1..9999")
-    target = Path(destination)
-    if target.exists():
-        raise FileExistsError(f'publisher artifact destination already exists: "{target}"')
-    if not target.parent.is_dir():
-        raise FileNotFoundError(f'publisher artifact parent does not exist: "{target.parent}"')
-    url = ANNUAL_URL_TEMPLATE.format(year=year)
-    try:
-        transfer(url, target)
-        if not target.is_file():
-            raise OSError("IMGW transfer returned without creating the artifact")
-    except BaseException:
-        target.unlink(missing_ok=True)
-        raise
-    return DownloadedImgw(target, url)
-
-
-download = download_imgw
-
-
-def latest_completed_hydrological_year(today: date) -> int:
-    """Return the last hydrological year whose October has completed."""
-    return today.year if today.month >= 11 else today.year - 1
-
-
 def _imgw_period_source_vintage(period: tuple[int, tuple[int, ...]]) -> date:
     """Return the last date covered by the publisher-labelled hydrological period."""
     import calendar
@@ -176,17 +255,37 @@ def download_imgw_history(
     *,
     today: date,
     transfer: ArtifactTransfer,
-    first_year: int = FIRST_PUBLISHED_YEAR,
+    first_year: int | None = None,
+    previous_source_vintage: date | None = None,
 ) -> tuple[DownloadedImgw, ...]:
     """Download the complete source-backed history into unique artifact paths."""
-    last_year = latest_completed_hydrological_year(today)
-    planned = plan_imgw_artifacts(first_year=first_year, last_year=last_year)
+    import tempfile
+
     base = Path(destination)
+
+    def read_index(url: str) -> bytes:
+        # Own only a unique scratch directory; never overwrite recovery inputs.
+        with tempfile.TemporaryDirectory(prefix=".imgw-publication-", dir=base.parent) as directory:
+            target = Path(directory) / "index.html"
+            transfer(url, target)
+            return target.read_bytes()
+
+    planned = discover_imgw_artifacts(
+        today=today,
+        read_index=read_index,
+        first_year=FIRST_PUBLISHED_YEAR if first_year is None else first_year,
+    )
+    latest_vintage = _imgw_period_source_vintage(_imgw_artifact_period(Path(planned[-1].filename)))
+    if previous_source_vintage is not None and latest_vintage < previous_source_vintage:
+        raise ValueError(
+            f"IMGW published history would regress from certified coverage {previous_source_vintage} "
+            f"to {latest_vintage}; previously published trailing archives are missing"
+        )
     downloaded: list[DownloadedImgw] = []
     try:
         for item in planned:
             target = base.with_name(f"{base.name}-{item.filename}")
-            if target.exists():
+            if target.exists() or target.is_symlink():
                 raise FileExistsError(f'publisher artifact destination already exists: "{target}"')
             try:
                 transfer(item.url, target)
@@ -205,7 +304,7 @@ def download_imgw_history(
 
 @dataclass(frozen=True, slots=True)
 class ImgwCompileRequest:
-    """Publisher facts and resolved paths supplied by the composition root."""
+    """First-artifact identity, aggregate vintage, and resolved compilation inputs."""
 
     publisher_artifact: Path
     destination: StoreRoot
@@ -213,16 +312,12 @@ class ImgwCompileRequest:
     source_vintage: date
     built_at: datetime
     compiler_version: str
-    publisher_artifacts: tuple[DownloadedImgw, ...] = ()
+    publisher_artifacts: tuple[DownloadedBulkArtifact | DownloadedImgw, ...] = ()
 
     def __post_init__(self) -> None:
         artifacts = self.publisher_artifacts or (DownloadedImgw(self.publisher_artifact, self.publisher_url),)
         first = artifacts[0]
-        if (first.path, first.url, first.source_vintage) != (
-            self.publisher_artifact,
-            self.publisher_url,
-            self.source_vintage,
-        ):
+        if (first.path, first.url) != (self.publisher_artifact, self.publisher_url):
             raise ValueError("singular IMGW artifact must equal the first plural artifact")
         paths = [item.path.resolve() for item in artifacts]
         urls = [item.url for item in artifacts]
@@ -258,10 +353,12 @@ class ImgwCompileRequest:
                 raise ValueError("IMGW publisher artifact coverage overlaps")
             covered.update(interval)
             previous = interval[-1]
+        if self.source_vintage != max(item.source_vintage for item in artifacts):
+            raise ValueError("IMGW aggregate source vintage must equal the latest artifact coverage end")
 
 
 def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
-    """Certify and publish one complete IMGW yearly ZIP artifact."""
+    """Certify and publish the ordered IMGW archives as one store."""
     downloaded = request.publisher_artifacts or (
         DownloadedImgw(Path(request.publisher_artifact), request.publisher_url),
     )
@@ -279,9 +376,6 @@ def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
         source_column_dispositions=IMGW_SOURCE_DISPOSITIONS,
     )
     return certify_store_batches(compile_request, artifacts, decode_imgw_batches)
-
-
-compile = compile_imgw
 
 
 IMGW_ROWS_PER_BATCH: Final = 65_536
@@ -310,7 +404,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                 contributions: Counter[str] = Counter()
                 for unit, row in _merge_station_order(iterators):
                     rows.append(row)
-                    if product == ProductId("discharge_daily_mean"):
+                    if product == ProductId("discharge_daily"):
                         units.append(unit)
                     contributions[unit.source_unit] += 1
                     if len(rows) == IMGW_ROWS_PER_BATCH:
@@ -318,6 +412,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                             _imgw_frame(rows),
                             tuple(units),
                             tuple(SourceUnitContribution(name, count) for name, count in sorted(contributions.items())),
+                            _batch_series(rows),
                         )
                         rows = []
                         units = []
@@ -327,6 +422,7 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
                         _imgw_frame(rows),
                         tuple(units),
                         tuple(SourceUnitContribution(name, count) for name, count in sorted(contributions.items())),
+                        _batch_series(rows),
                     )
 
     return ObservationBatchStream(IMGW_SOURCE_COLUMNS, batches(), expected_records, expected_rows, inventory_sha256)
@@ -372,13 +468,11 @@ def _imgw_artifact_period(path: Path) -> tuple[int, tuple[int, ...]]:
     if match is None:
         raise ValueError(f"IMGW artifact name does not declare its publication period: {path.name}")
     year = int(match.group("year"))
+    if year < 2:
+        raise ValueError(f"IMGW artifact has invalid hydrological year: {path.name}")
     month_text = match.group("month")
     if month_text is None:
-        if year < ANNUAL_PUBLICATION_FIRST_YEAR:
-            raise ValueError(f"IMGW annual artifact predates annual publication form: {path.name}")
         return year, tuple(range(1, 13))
-    if year >= ANNUAL_PUBLICATION_FIRST_YEAR:
-        raise ValueError(f"IMGW monthly artifact follows annual publication transition: {path.name}")
     month = int(month_text)
     if month < 1 or month > 12:
         raise ValueError(f"IMGW artifact has invalid hydrological month: {path.name}")
@@ -496,6 +590,11 @@ def _iter_imgw_raw_records(path: Path):
                 for line_number, record in enumerate(reader, start=1):
                     if not record or (len(record) == 1 and record[0] == ""):
                         continue
+                    # Annual source files can encode an entire CSV record as one
+                    # quoted field. Decode that publisher layer without materializing
+                    # the archive or changing the ten native cell strings.
+                    if delimiter == "," and len(record) == 1:
+                        record = next(csv.reader((record[0],), delimiter=",", strict=True))
                     if len(record) != len(_SOURCE_FIELDS):
                         raise ValueError(
                             f"IMGW member {info.filename!r} row {line_number} has {len(record)} source columns; expected {len(_SOURCE_FIELDS)}"
@@ -508,96 +607,33 @@ def _iter_imgw_raw_records(path: Path):
 def _imgw_frame(rows: list[dict[str, object]]) -> pl.DataFrame:
     return (
         pl.DataFrame(rows, infer_schema_length=None)
-        .select("product", "station_id", "time", "time_zone", "value", "value_state", *_RETAINED_NAMES)
+        .select(
+            "product",
+            "station_id",
+            "time",
+            "time_zone",
+            "value",
+            "value_state",
+            "series_id",
+            "facts_id",
+            "source_unit",
+            *_RETAINED_NAMES,
+        )
         .with_columns(
-            pl.col("product", "station_id", "time_zone", "value_state", *_RETAINED_NAMES).cast(pl.String),
+            pl.col(
+                "product",
+                "station_id",
+                "time_zone",
+                "value_state",
+                "series_id",
+                "facts_id",
+                "source_unit",
+                *_RETAINED_NAMES,
+            ).cast(pl.String),
             pl.col("time").cast(pl.Datetime("us")),
             pl.col("value").cast(pl.Float64),
         )
     )
-
-
-def decode_imgw(path: Path) -> NativeStoreMaterialization:
-    """Decode all CSV members strictly, retaining native cells and values."""
-    artifact = Path(path)
-    if not artifact.is_file():
-        raise FileNotFoundError(f'IMGW publisher artifact does not exist: "{artifact}"')
-    rows: list[dict[str, object]] = []
-    units: list[SourceUnitCount] = []
-    try:
-        with zipfile.ZipFile(artifact) as archive:
-            members = sorted(
-                (info for info in archive.infolist() if not info.is_dir()),
-                key=lambda info: info.filename.encode("utf-8"),
-            )
-            if not members:
-                raise ValueError("IMGW ZIP archive contains no files")
-            non_csv = [info.filename for info in members if Path(info.filename).suffix.lower() != ".csv"]
-            if non_csv:
-                raise ValueError(f"IMGW ZIP archive contains undeclared non-CSV members: {non_csv!r}")
-            if len(members) != 1:
-                raise ValueError(f"IMGW ZIP archive must contain exactly one CSV member; found {len(members)}")
-            for info in members:
-                member_rows = _decode_csv_member(archive.read(info), info.filename)
-                before = len(rows)
-                for source_ordinal, source in enumerate(member_rows, start=1):
-                    _emit_source_row(source, info.filename, source_ordinal, rows)
-                emitted = len(rows) - before
-                units.append(SourceUnitCount(info.filename, len(member_rows), emitted))
-    except zipfile.BadZipFile as error:
-        raise ValueError("IMGW publisher artifact is not a valid ZIP") from error
-    if not rows:
-        raise ValueError("IMGW publisher artifact contains no daily records")
-    frame = _imgw_frame(rows)
-    return NativeStoreMaterialization(frame, IMGW_SOURCE_COLUMNS, tuple(units))
-
-
-def _decode_csv_member(raw: bytes, member: str) -> list[tuple[str, ...]]:
-    text = _decode_text(raw, member)
-    first_line = next((line for line in text.splitlines() if line), "")
-    if not first_line:
-        return []
-    delimiter = ";" if ";" in first_line else ","
-    if delimiter == ",":
-        probe = next(csv.reader(io.StringIO(first_line), delimiter=","), [])
-        if len(probe) == 1 and first_line.startswith('"'):
-            text = _unwrap_fully_quoted(text)
-    records: list[tuple[str, ...]] = []
-    try:
-        reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
-        for line_number, record in enumerate(reader, start=1):
-            if not record or (len(record) == 1 and record[0] == ""):
-                continue
-            if len(record) != len(_SOURCE_FIELDS):
-                raise ValueError(
-                    f"IMGW member {member!r} row {line_number} has {len(record)} source columns; "
-                    f"expected {len(_SOURCE_FIELDS)}"
-                )
-            records.append(tuple(record))
-    except csv.Error as error:
-        raise ValueError(f"IMGW member {member!r} is truncated or malformed: {error}") from error
-    return records
-
-
-def _decode_text(raw: bytes, member: str) -> str:
-    if raw.startswith(b"\xef\xbb\xbf"):
-        return raw.decode("utf-8-sig", errors="strict")
-    try:
-        return raw.decode("cp1250", errors="strict")
-    except UnicodeDecodeError as error:
-        raise ValueError(f"IMGW member {member!r} is neither BOM UTF-8 nor CP1250") from error
-
-
-def _unwrap_fully_quoted(text: str) -> str:
-    fixed: list[str] = []
-    for line in text.splitlines():
-        if not line:
-            fixed.append(line)
-            continue
-        if not (line.startswith('"') and line.endswith('"')):
-            raise ValueError("IMGW fully quoted CSV contains a truncated outer record")
-        fixed.append(line[1:-1].replace('""', '"'))
-    return "\n".join(fixed)
 
 
 def _emit_source_row(
@@ -619,18 +655,23 @@ def _emit_source_row(
             raise ValueError(
                 f"IMGW filename publication period disagrees with hydrological year/month in {member!r} row {ordinal}"
             )
+    if not 1 <= hydrological_month <= 12:
+        raise ValueError(f"IMGW member {member!r} row {ordinal} has invalid month_indicator")
     day = _integer(source[5], member, ordinal, "day")
-    calendar_month = _integer(source[9], member, ordinal, "calendar_month")
-    expected_hydrological_month = (calendar_month + 1) % 12 + 1
-    if hydrological_month != expected_hydrological_month:
+    # IMGW defines hydrological months 01..12 as November..October. The
+    # additional calendar-month cell can be blank; retain it without filling it.
+    calendar_month = (hydrological_month + 9) % 12 + 1
+    if source[9].strip() and _integer(source[9], member, ordinal, "calendar_month") != calendar_month:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has inconsistent month indicators")
-    calendar_year = hydrological_year - 1 if calendar_month >= 11 else hydrological_year
+    calendar_year = hydrological_year - 1 if hydrological_month <= 2 else hydrological_year
     try:
         timestamp = datetime(calendar_year, calendar_month, day)
     except ValueError as error:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has an invalid calendar date") from error
     retained = dict(zip(_RETAINED_NAMES, source, strict=True))
     for product, value_index, null_sentinels in _PRODUCT_COLUMNS:
+        definition = source_series(station, str(product))
+        facts = definition.facts[0]
         value, state = _native_value(source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels)
         output.append(
             {
@@ -640,6 +681,9 @@ def _emit_source_row(
                 "time_zone": "unknown",
                 "value": value,
                 "value_state": state,
+                "series_id": definition.series_id,
+                "facts_id": facts.facts_id,
+                "source_unit": facts.source_unit.value,
                 **retained,
             }
         )
@@ -666,6 +710,8 @@ def _native_value(
         value = float(stripped)
     except ValueError as error:
         raise ValueError(f"IMGW member {member!r} row {ordinal} has non-numeric {field}") from error
+    if not math.isfinite(value):
+        raise ValueError(f"IMGW member {member!r} row {ordinal} has non-finite {field}")
     if value in null_sentinels:
         return None, "published_null"
     return value, "published_value"
@@ -677,3 +723,8 @@ def _sha256(path: Path) -> ArtifactChecksum:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return ArtifactChecksum(f"sha256:{digest.hexdigest()}")
+
+
+def _batch_series(rows: list[dict[str, object]]) -> tuple[SourceSeries, ...]:
+    pairs = {(str(row["station_id"]), str(row["product"])) for row in rows}
+    return tuple(source_series(station, product) for station, product in sorted(pairs))

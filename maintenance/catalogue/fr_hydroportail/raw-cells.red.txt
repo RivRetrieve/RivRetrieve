@@ -1,0 +1,124 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_public_france_measurement_cells_keep_absence_distinct_from_null[original-hydroportail] _
+
+tmp_path = PosixPath('/private/var/folders/9m/29m0bx0j0rsdyqb0b6yns28w0000gn/T/pytest-of-nicolaslazaro/pytest-1925/test_public_france_measurement0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1211842b0>
+case = ('hydroportail', '1232000101', {'quantity': 'discharge', 'statistic': 'instantaneous'}, '2026-06-01', '2026-06-02', ('fr_hydroportail_station_Q_padded.recording.json',), ...)
+mutation = 'original'
+
+    @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
+    @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
+    def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
+        monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+        route, station, predicates, start, end, filenames, field, count = case
+        provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
+        recordings = tuple(read_recording(DATA / filename) for filename in filenames)
+        replay = MeasurementReplay(recordings, field, mutation)
+        monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+        selection = rr.find(provider=provider, station=station, **predicates)
+>       assert len(selection.series) == 1
+E       AssertionError: assert 4 == 1
+E        +  where 4 = len((SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))))
+E        +    where (SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))) = _Selection(scope=SeriesScope(state=<ScopeState.ACTIVE: 'active'>, provider_ids=('fr_hydroportail',), station_ids=('123...quisitions=(2134, 14), bindings=(14956, 5), binding_facts=(21393, 3), external_inputs=(14282, 4)),), empty_reason=None).series
+
+tests/test_json_measurement_cells.py:87: AssertionError
+_ test_public_france_measurement_cells_keep_absence_distinct_from_null[null-hydroportail] _
+
+tmp_path = PosixPath('/private/var/folders/9m/29m0bx0j0rsdyqb0b6yns28w0000gn/T/pytest-of-nicolaslazaro/pytest-1925/test_public_france_measurement1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x117f349d0>
+case = ('hydroportail', '1232000101', {'quantity': 'discharge', 'statistic': 'instantaneous'}, '2026-06-01', '2026-06-02', ('fr_hydroportail_station_Q_padded.recording.json',), ...)
+mutation = 'null'
+
+    @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
+    @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
+    def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
+        monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+        route, station, predicates, start, end, filenames, field, count = case
+        provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
+        recordings = tuple(read_recording(DATA / filename) for filename in filenames)
+        replay = MeasurementReplay(recordings, field, mutation)
+        monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+        selection = rr.find(provider=provider, station=station, **predicates)
+>       assert len(selection.series) == 1
+E       AssertionError: assert 4 == 1
+E        +  where 4 = len((SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))))
+E        +    where (SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))) = _Selection(scope=SeriesScope(state=<ScopeState.ACTIVE: 'active'>, provider_ids=('fr_hydroportail',), station_ids=('123...quisitions=(2134, 14), bindings=(14956, 5), binding_facts=(21393, 3), external_inputs=(14282, 4)),), empty_reason=None).series
+
+tests/test_json_measurement_cells.py:87: AssertionError
+_ test_public_france_measurement_cells_keep_absence_distinct_from_null[missing-hydroportail] _
+
+tmp_path = PosixPath('/private/var/folders/9m/29m0bx0j0rsdyqb0b6yns28w0000gn/T/pytest-of-nicolaslazaro/pytest-1925/test_public_france_measurement2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x12115fbf0>
+case = ('hydroportail', '1232000101', {'quantity': 'discharge', 'statistic': 'instantaneous'}, '2026-06-01', '2026-06-02', ('fr_hydroportail_station_Q_padded.recording.json',), ...)
+mutation = 'missing'
+
+    @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
+    @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
+    def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
+        monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+        route, station, predicates, start, end, filenames, field, count = case
+        provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
+        recordings = tuple(read_recording(DATA / filename) for filename in filenames)
+        replay = MeasurementReplay(recordings, field, mutation)
+        monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+        selection = rr.find(provider=provider, station=station, **predicates)
+>       assert len(selection.series) == 1
+E       AssertionError: assert 4 == 1
+E        +  where 4 = len((SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))))
+E        +    where (SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))) = _Selection(scope=SeriesScope(state=<ScopeState.ACTIVE: 'active'>, provider_ids=('fr_hydroportail',), station_ids=('123...quisitions=(2134, 14), bindings=(14956, 5), binding_facts=(21393, 3), external_inputs=(14282, 4)),), empty_reason=None).series
+
+tests/test_json_measurement_cells.py:87: AssertionError
+_ test_public_france_measurement_cells_keep_absence_distinct_from_null[true-hydroportail] _
+
+tmp_path = PosixPath('/private/var/folders/9m/29m0bx0j0rsdyqb0b6yns28w0000gn/T/pytest-of-nicolaslazaro/pytest-1925/test_public_france_measurement3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x122692470>
+case = ('hydroportail', '1232000101', {'quantity': 'discharge', 'statistic': 'instantaneous'}, '2026-06-01', '2026-06-02', ('fr_hydroportail_station_Q_padded.recording.json',), ...)
+mutation = 'true'
+
+    @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
+    @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
+    def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
+        monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+        route, station, predicates, start, end, filenames, field, count = case
+        provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
+        recordings = tuple(read_recording(DATA / filename) for filename in filenames)
+        replay = MeasurementReplay(recordings, field, mutation)
+        monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+        selection = rr.find(provider=provider, station=station, **predicates)
+>       assert len(selection.series) == 1
+E       AssertionError: assert 4 == 1
+E        +  where 4 = len((SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))))
+E        +    where (SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))) = _Selection(scope=SeriesScope(state=<ScopeState.ACTIVE: 'active'>, provider_ids=('fr_hydroportail',), station_ids=('123...quisitions=(2134, 14), bindings=(14956, 5), binding_facts=(21393, 3), external_inputs=(14282, 4)),), empty_reason=None).series
+
+tests/test_json_measurement_cells.py:87: AssertionError
+_ test_public_france_measurement_cells_keep_absence_distinct_from_null[false-hydroportail] _
+
+tmp_path = PosixPath('/private/var/folders/9m/29m0bx0j0rsdyqb0b6yns28w0000gn/T/pytest-of-nicolaslazaro/pytest-1925/test_public_france_measurement4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1226928b0>
+case = ('hydroportail', '1232000101', {'quantity': 'discharge', 'statistic': 'instantaneous'}, '2026-06-01', '2026-06-02', ('fr_hydroportail_station_Q_padded.recording.json',), ...)
+mutation = 'false'
+
+    @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
+    @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
+    def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
+        monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+        route, station, predicates, start, end, filenames, field, count = case
+        provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
+        recordings = tuple(read_recording(DATA / filename) for filename in filenames)
+        replay = MeasurementReplay(recordings, field, mutation)
+        monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+        selection = rr.find(provider=provider, station=station, **predicates)
+>       assert len(selection.series) == 1
+E       AssertionError: assert 4 == 1
+E        +  where 4 = len((SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))))
+E        +    where (SourceSeries(series_id='d90cb70e62e3d26c22646ef499199a94b241ec91835e33843b1791b927a74182', provider_id='fr_hydroporta...ot_established'>, evidence=()), clipping_axis=<ClippingAxis.SOURCE_TIMESTAMP: 'source_timestamp'>, label_time=None),))) = _Selection(scope=SeriesScope(state=<ScopeState.ACTIVE: 'active'>, provider_ids=('fr_hydroportail',), station_ids=('123...quisitions=(2134, 14), bindings=(14956, 5), binding_facts=(21393, 3), external_inputs=(14282, 4)),), empty_reason=None).series
+
+tests/test_json_measurement_cells.py:87: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_json_measurement_cells.py::test_public_france_measurement_cells_keep_absence_distinct_from_null[original-hydroportail]
+FAILED tests/test_json_measurement_cells.py::test_public_france_measurement_cells_keep_absence_distinct_from_null[null-hydroportail]
+FAILED tests/test_json_measurement_cells.py::test_public_france_measurement_cells_keep_absence_distinct_from_null[missing-hydroportail]
+FAILED tests/test_json_measurement_cells.py::test_public_france_measurement_cells_keep_absence_distinct_from_null[true-hydroportail]
+FAILED tests/test_json_measurement_cells.py::test_public_france_measurement_cells_keep_absence_distinct_from_null[false-hydroportail]
+5 failed, 13 deselected in 11.62s

@@ -11,17 +11,36 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _RECORDING = read_recording(Path(__file__).parent / "test_data" / "ch_foen_2135_rest_engine_2026-09-01.recording.json")
 
 
-def test_public_selection_uses_anonymous_rest_and_returns_five_columns_with_raw_receipt(
+@pytest.fixture(autouse=True)
+def recording_clock(monkeypatch: pytest.MonkeyPatch):
+    """Replay recent REST access at its captured retrieval time, not today's age."""
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: _RECORDING.retrieved_at)
+
+
+def test_public_selection_uses_anonymous_rest_and_returns_identity_and_physical_context_with_raw_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ):
     replay = ReplayTransport((_RECORDING,))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="ch_foen", station="2135", product="discharge_reported")
+    selection = rr.find(provider="ch_foen", station="2135", quantity="discharge")
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-02", receipts=True, on_issue="ignore")
-    assert result.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert result.data.columns == [
+        "time",
+        "time_zone",
+        "station_id",
+        "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
+        "value",
+    ]
     assert dict(result.data.group_by("product_id").len().iter_rows()) == {"discharge_reported": 244}
     assert result.data["time"].min() == datetime(2026, 9, 1)
     assert result.data["time"].max() == datetime(2026, 9, 2, 16, 30)
@@ -37,7 +56,7 @@ def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
 ) -> None:
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
     fetched = rr.fetch(
-        rr.find(provider="ch_foen", station="2135", product="discharge_reported"),
+        rr.find(provider="ch_foen", station="2135", quantity="discharge"),
         start="2026-09-01",
         end="2026-09-02",
         receipts=False,
@@ -74,7 +93,7 @@ def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
 def test_public_receipts_false_omits_publisher_bytes(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
     result = rr.fetch(
-        rr.find(provider="ch_foen", station="2135", product="discharge_reported"),
+        rr.find(provider="ch_foen", station="2135", quantity="discharge"),
         start="2026-09-01",
         end="2026-09-02",
         receipts=False,

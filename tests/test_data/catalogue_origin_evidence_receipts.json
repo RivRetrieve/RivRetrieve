@@ -24,10 +24,10 @@
     "http_status": 200,
     "status_record": "recorded",
     "retrieved_at": "2026-08-03T12:31:42Z",
-    "sha256": "488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df",
+    "sha256": "b353852a474516acf404c1d8b775cc77c5cf3c97bd3055380fc4534bcba9111c",
     "digest_method": "raw",
     "capture_path": "tests/test_data/ch_foen_api_docs.html",
-    "attestation_identity": "Switzerland publisher CRS-capture attestation"
+    "attestation_identity": "Switzerland publisher CRS-capture attestation; retained derivative redacts published archive credential"
   },
   {
     "provider_id": "cz_chmi",

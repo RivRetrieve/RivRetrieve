@@ -1,0 +1,13 @@
+/* Custom styles for RivRetrieve documentation */
+
+#copy-page-btn {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  outline: none;
+}
+
+#copy-page-btn.copied {
+  color: #10b981;
+}

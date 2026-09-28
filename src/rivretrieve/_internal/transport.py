@@ -7,17 +7,25 @@ The trust boundary is this package's `_internal` namespace plus static provider-
 
 from __future__ import annotations
 
+import http.client
+import math
 import re
+import ssl
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import requests
+from urllib3 import exceptions as urllib3_exceptions
+
+from rivretrieve._internal.issues import FatalContractError
 
 
 class HttpMethod(StrEnum):
@@ -27,6 +35,11 @@ class HttpMethod(StrEnum):
 
 
 RequestParameter = str | int | float | None
+
+
+class ReplaySafety(StrEnum):
+    METHOD_DEFAULT = "method_default"
+    SAFE = "safe"
 
 
 class RedirectPolicy(StrEnum):
@@ -45,6 +58,7 @@ class TransportRequest:
     headers: Mapping[str, str] = field(default_factory=dict)
     body: bytes | str | None = None
     redirect_policy: RedirectPolicy = RedirectPolicy.METHOD_DEFAULT
+    replay_safety: ReplaySafety = ReplaySafety.METHOD_DEFAULT
 
     def __init__(
         self,
@@ -54,7 +68,10 @@ class TransportRequest:
         headers: Mapping[str, str] = _EMPTY_HEADERS,
         body: bytes | str | None = None,
         redirect_policy: RedirectPolicy = RedirectPolicy.METHOD_DEFAULT,
+        replay_safety: ReplaySafety = ReplaySafety.METHOD_DEFAULT,
     ) -> None:
+        if not isinstance(replay_safety, ReplaySafety):
+            raise TypeError("replay safety must be ReplaySafety")
         validated, error = _validated_public_headers(headers)
         object.__setattr__(self, "method", method)
         object.__setattr__(self, "url", url)
@@ -62,6 +79,7 @@ class TransportRequest:
         object.__setattr__(self, "headers", MappingProxyType(validated))
         object.__setattr__(self, "body", body)
         object.__setattr__(self, "redirect_policy", redirect_policy)
+        object.__setattr__(self, "replay_safety", replay_safety)
         if error is not None:
             if isinstance(headers, dict):
                 headers.clear()
@@ -76,7 +94,8 @@ class TransportRequest:
         }
         return (
             f"TransportRequest(method={self.method!r}, url={self.url!r}, params={self.params!r}, "
-            f"headers={headers!r}, body={self.body!r}, redirect_policy={self.redirect_policy!r})"
+            f"headers={headers!r}, body={self.body!r}, redirect_policy={self.redirect_policy!r}, "
+            f"replay_safety={self.replay_safety!r})"
         )
 
 
@@ -88,6 +107,7 @@ class _CredentialTransportRequest:
     headers: Mapping[str, str]
     body: bytes | str | None
     redirect_policy: RedirectPolicy
+    replay_safety: ReplaySafety
     credential_header_names: tuple[str, ...]
     _authority_seal: object
 
@@ -95,7 +115,7 @@ class _CredentialTransportRequest:
         return (
             f"_CredentialTransportRequest(method={self.method!r}, url={self.url!r}, "
             f"params={self.params!r}, headers={tuple(self.headers)!r}, values=[REDACTED], "
-            f"body={self.body!r}, redirect_policy={self.redirect_policy!r}, "
+            f"body={self.body!r}, redirect_policy={self.redirect_policy!r}, replay_safety={self.replay_safety!r}, "
             f"credential_header_names={self.credential_header_names!r})"
         )
 
@@ -117,6 +137,7 @@ def _credential_request_authority():
         object.__setattr__(value, "headers", MappingProxyType(dict(headers)))
         object.__setattr__(value, "body", request.body)
         object.__setattr__(value, "redirect_policy", redirect_policy)
+        object.__setattr__(value, "replay_safety", request.replay_safety)
         object.__setattr__(
             value, "credential_header_names", _validated_header_names(credential_header_names, kind="credential")
         )
@@ -210,6 +231,27 @@ class SecretCallTrace:
             raise ValueError("secret call response must be withheld")
 
 
+@dataclass(frozen=True, slots=True)
+class TransportAttempt:
+    """Retained metadata for one actual sender outcome, without response bytes."""
+
+    attempt_id: str
+    url: str
+    request_parameters: Mapping[str, RequestParameter]
+    retrieved_at: datetime
+    status_code: int | None = None
+    content_type: str | None = None
+    failure_category: TransportFailureCategory | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "request_parameters", MappingProxyType(dict(self.request_parameters)))
+
+
+def _validate_attempt_traces(traces: tuple[TransportAttempt, ...]) -> None:
+    if not isinstance(traces, tuple) or any(not isinstance(trace, TransportAttempt) for trace in traces):
+        raise TypeError("attempt traces must be a tuple of TransportAttempt values")
+
+
 @dataclass(frozen=True)
 class TransportResponse:
     content: bytes
@@ -221,8 +263,13 @@ class TransportResponse:
     applied_credential_header_names: tuple[str, ...] = ()
     prerequisite_calls: tuple[SecretCallTrace, ...] = ()
     executed_request: ExecutedRequestEvidence | None = field(default=None, compare=False, repr=False)
+    attempts: int = field(default=1, compare=False)
+    attempt_traces: tuple[TransportAttempt, ...] = field(default=(), compare=False)
 
     def __post_init__(self) -> None:
+        _validate_attempt_traces(self.attempt_traces)
+        if type(self.attempts) is not int or self.attempts < 1:
+            raise FatalContractError("response attempts must be a positive integer")
         object.__setattr__(self, "request_parameters", MappingProxyType(dict(self.request_parameters)))
         names = _validated_header_names(self.applied_credential_header_names, kind="applied credential")
         object.__setattr__(self, "applied_credential_header_names", names)
@@ -240,6 +287,20 @@ class TransportFailureReason(StrEnum):
     RETRY_EXHAUSTED = "retry_exhausted"
     REDIRECT_REFUSED = "redirect_refused"
     RETAINED_METADATA_UNSAFE = "retained_metadata_unsafe"
+    REPLAY_UNSAFE = "replay_unsafe"
+    RETRY_DELAY_EXCEEDED = "retry_delay_exceeded"
+
+
+class TransportFailureCategory(StrEnum):
+    TIMEOUT = "timeout"
+    CONNECTION = "connection"
+    INCOMPLETE_RESPONSE = "incomplete_response"
+    TLS = "tls"
+    INVALID_REQUEST = "invalid_request"
+    DECODING = "decoding"
+    PROTOCOL = "protocol"
+    HTTP_STATUS = "http_status"
+    UNKNOWN = "unknown"
 
 
 class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contract name
@@ -247,6 +308,8 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
     reason: TransportFailureReason
     attempts: int
     status_code: int | None
+    response: TransportResponse | None
+    attempt_traces: tuple[TransportAttempt, ...]
 
     def __init__(
         self,
@@ -255,11 +318,20 @@ class TransportFailure(Exception):  # noqa: N818 - exact transport-neutral contr
         attempts: int,
         *,
         status_code: int | None = None,
+        category: TransportFailureCategory = TransportFailureCategory.UNKNOWN,
+        response: TransportResponse | None = None,
+        attempt_traces: tuple[TransportAttempt, ...] = (),
     ) -> None:
+        if response is not None and not isinstance(response, TransportResponse):
+            raise TypeError("failure response must be a TransportResponse or None")
+        _validate_attempt_traces(attempt_traces)
+        self.attempt_traces = attempt_traces or (() if response is None else response.attempt_traces)
+        self.response = response
         self.request = request
         self.reason = reason
         self.attempts = attempts
         self.status_code = status_code
+        self.category = category
         super().__init__(f"HTTP transport failed after {attempts} attempt(s): {reason}")
 
 
@@ -269,12 +341,22 @@ class Transport(Protocol):
     def send(self, request: TransportRequest) -> TransportResponse: ...
 
 
+@dataclass(frozen=True, slots=True)
+class SenderResponse:
+    """Complete response bytes and scheduling metadata from the HTTP boundary."""
+
+    content: bytes
+    status_code: int
+    content_type: str | None
+    retry_after: str | None = None
+
+
 class Sender(Protocol):
     def __call__(
         self,
         request: _ExecutableTransportRequest,
         timeout_seconds: float,
-    ) -> tuple[bytes, int, str | None]: ...
+    ) -> SenderResponse | tuple[bytes, int, str | None]: ...
 
 
 class Clock(Protocol):
@@ -293,6 +375,16 @@ class TransportPolicy:
     retryable_status_codes: frozenset[int]
     backoff_seconds: tuple[float, ...]
     minimum_interval_seconds: float
+    max_retry_delay_seconds: float = 60.0
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+            raise ValueError("timeout must be finite and positive")
+        if not math.isfinite(self.max_retry_delay_seconds) or self.max_retry_delay_seconds < 0:
+            raise ValueError("retry delay limit must be finite and nonnegative")
+        for delay in (*self.backoff_seconds, self.minimum_interval_seconds):
+            if not math.isfinite(delay) or not 0 <= delay <= self.max_retry_delay_seconds:
+                raise ValueError("retry and pacing delays must be finite and within the retry delay limit")
 
     @property
     def max_attempts(self) -> int:
@@ -316,7 +408,7 @@ class _SystemClock:
         return datetime.now(UTC)
 
 
-def _send_with_requests(request: _ExecutableTransportRequest, timeout_seconds: float) -> tuple[bytes, int, str | None]:
+def _send_with_requests(request: _ExecutableTransportRequest, timeout_seconds: float) -> SenderResponse:
     params = dict(request.params) if request.params is not None else None
     headers = dict(request.headers)
     if request.method is HttpMethod.GET:
@@ -343,13 +435,132 @@ def _send_with_requests(request: _ExecutableTransportRequest, timeout_seconds: f
             headers=headers,
             data=request.body,
             timeout=timeout_seconds,
-            allow_redirects=request.redirect_policy is not RedirectPolicy.REFUSE,
+            allow_redirects=(
+                request.redirect_policy is not RedirectPolicy.REFUSE and request.replay_safety is ReplaySafety.SAFE
+            ),
         )
-    return response.content, response.status_code, response.headers.get("Content-Type")
+    return SenderResponse(
+        response.content,
+        response.status_code,
+        response.headers.get("Content-Type"),
+        response.headers.get("Retry-After"),
+    )
+
+
+def _exception_chain(exception: BaseException) -> tuple[BaseException, ...]:
+    """Inspect explicit wrapped causes, not incidental exception contexts."""
+    pending = [exception]
+    found: list[BaseException] = []
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        found.append(current)
+        pending.extend(value for value in current.args if isinstance(value, BaseException))
+        cause = current.__cause__
+        if cause is not None:
+            pending.append(cause)
+        reason = getattr(current, "reason", None)
+        if isinstance(reason, BaseException):
+            pending.append(reason)
+    return tuple(found)
+
+
+def _sender_failure_category(exception: BaseException) -> TransportFailureCategory:
+    chain = _exception_chain(exception)
+    if any(
+        isinstance(item, (requests.exceptions.SSLError, ssl.SSLError, urllib3_exceptions.SSLError)) for item in chain
+    ):
+        return TransportFailureCategory.TLS
+    if any(
+        isinstance(item, (requests.exceptions.ContentDecodingError, urllib3_exceptions.DecodeError)) for item in chain
+    ):
+        return TransportFailureCategory.DECODING
+    if any(
+        isinstance(
+            item,
+            (
+                requests.exceptions.InvalidURL,
+                requests.exceptions.InvalidSchema,
+                requests.exceptions.MissingSchema,
+                requests.exceptions.InvalidHeader,
+                requests.exceptions.URLRequired,
+            ),
+        )
+        for item in chain
+    ):
+        return TransportFailureCategory.INVALID_REQUEST
+    # InvalidChunkLength inherits IncompleteRead, but is malformed framing, not truncation.
+    if any(
+        isinstance(item, (urllib3_exceptions.InvalidChunkLength, http.client.BadStatusLine))
+        and not isinstance(item, http.client.RemoteDisconnected)
+        for item in chain
+    ):
+        return TransportFailureCategory.PROTOCOL
+    if any(isinstance(item, (http.client.IncompleteRead, urllib3_exceptions.IncompleteRead)) for item in chain):
+        return TransportFailureCategory.INCOMPLETE_RESPONSE
+    # urllib3 emits this exact sentinel on EOF while awaiting the next chunk size.
+    # Unlike invalid chunk lengths, it carries no typed IncompleteRead cause.
+    if any(
+        type(item) is urllib3_exceptions.ProtocolError and item.args == ("Response ended prematurely",)
+        for item in chain
+    ):
+        return TransportFailureCategory.INCOMPLETE_RESPONSE
+    # urllib3's connection-establishment errors inherit ConnectTimeoutError,
+    # although refused connections and DNS failures are not timeouts.
+    if any(isinstance(item, urllib3_exceptions.NewConnectionError) for item in chain):
+        return TransportFailureCategory.CONNECTION
+    if any(isinstance(item, (requests.Timeout, TimeoutError, urllib3_exceptions.TimeoutError)) for item in chain):
+        return TransportFailureCategory.TIMEOUT
+    if any(isinstance(item, (ConnectionError, http.client.RemoteDisconnected)) for item in chain):
+        return TransportFailureCategory.CONNECTION
+    if any(
+        isinstance(item, (requests.exceptions.ChunkedEncodingError, urllib3_exceptions.ProtocolError)) for item in chain
+    ):
+        return TransportFailureCategory.PROTOCOL
+    if isinstance(exception, requests.ConnectionError):
+        return TransportFailureCategory.CONNECTION
+    return TransportFailureCategory.UNKNOWN
 
 
 def _is_retryable_sender_exception(exception: BaseException) -> bool:
-    return isinstance(exception, (requests.Timeout, requests.ConnectionError, TimeoutError, ConnectionError))
+    return _sender_failure_category(exception) in {
+        TransportFailureCategory.TIMEOUT,
+        TransportFailureCategory.CONNECTION,
+        TransportFailureCategory.INCOMPLETE_RESPONSE,
+    }
+
+
+def _retry_after_seconds(value: str | None, now: datetime) -> float | None:
+    if value is None:
+        return None
+    value = value.strip()
+    if re.fullmatch(r"[0-9]+", value):
+        # Avoid unbounded integer conversion, including Python's integer digit limit.
+        digits = value.lstrip("0") or "0"
+        if len(digits) > 308:
+            return math.inf
+        return float(digits)
+    http_date = (
+        r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} [A-Z][a-z]{2} [0-9]{4} "
+        r"[0-9]{2}:[0-9]{2}:[0-9]{2} GMT"
+        r"|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), "
+        r"[0-9]{2}-[A-Z][a-z]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT"
+        r"|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} [ 0-9][0-9] "
+        r"[0-9]{2}:[0-9]{2}:[0-9]{2} [0-9]{4}"
+    )
+    if re.fullmatch(http_date, value) is None:
+        return None
+    try:
+        instant = parsedate_to_datetime(value)
+        if instant.tzinfo is None:
+            instant = instant.replace(tzinfo=UTC)
+        seconds = (instant - now).total_seconds()
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return seconds if seconds >= 0 else None
 
 
 class HttpClient:
@@ -379,46 +590,90 @@ class HttpClient:
             },
             credential_header_names,
         )
+        replay_safe = request.method in {HttpMethod.GET, HttpMethod.HEAD} or request.replay_safety is ReplaySafety.SAFE
+        retry_delay = 0.0
+        attempt_traces: list[TransportAttempt] = []
         for attempt in range(1, TRANSPORT_POLICY.max_attempts + 1):
             if attempt > 1:
-                self._sleeper(TRANSPORT_POLICY.backoff_seconds[attempt - 2])
+                self._sleeper(retry_delay)
+            if attempt < TRANSPORT_POLICY.max_attempts:
+                retry_delay = TRANSPORT_POLICY.backoff_seconds[attempt - 1]
             self._wait_for_rate_limit()
 
             try:
-                content, status_code, content_type = self._sender(prepared_request, TRANSPORT_POLICY.timeout_seconds)
+                sent = self._sender(prepared_request, TRANSPORT_POLICY.timeout_seconds)
+                response = sent if isinstance(sent, SenderResponse) else SenderResponse(*sent)
             except (requests.RequestException, TimeoutError, ConnectionError) as exception:
-                if not _is_retryable_sender_exception(exception):
-                    raise TransportFailure(
-                        request,
-                        TransportFailureReason.TERMINAL_SENDER_FAILURE,
-                        attempt,
-                    ) from exception
-                if attempt == TRANSPORT_POLICY.max_attempts:
-                    raise TransportFailure(
-                        request,
-                        TransportFailureReason.RETRY_EXHAUSTED,
-                        attempt,
-                    ) from exception
-                continue
-
-            if status_code not in TRANSPORT_POLICY.retryable_status_codes:
-                return TransportResponse(
-                    content=content,
-                    status_code=status_code,
-                    retrieved_at=self._clock.utcnow(),
-                    content_type=content_type,
-                    url=request.url,
-                    request_parameters={} if request.params is None else request.params,
-                    applied_credential_header_names=credential_header_names,
-                    executed_request=executed_request,
+                category = _sender_failure_category(exception)
+                attempt_traces.append(
+                    TransportAttempt(
+                        str(uuid4()),
+                        request.url,
+                        request.params or {},
+                        self._clock.utcnow(),
+                        failure_category=category,
+                    )
                 )
-            if attempt == TRANSPORT_POLICY.max_attempts:
+                if not _is_retryable_sender_exception(exception):
+                    reason = TransportFailureReason.TERMINAL_SENDER_FAILURE
+                elif not replay_safe:
+                    reason = TransportFailureReason.REPLAY_UNSAFE
+                elif attempt == TRANSPORT_POLICY.max_attempts:
+                    reason = TransportFailureReason.RETRY_EXHAUSTED
+                else:
+                    continue
+                raise TransportFailure(
+                    request, reason, attempt, category=category, attempt_traces=tuple(attempt_traces)
+                ) from exception
+
+            content, status_code, content_type = response.content, response.status_code, response.content_type
+            retrieved_at = self._clock.utcnow()
+            attempt_traces.append(
+                TransportAttempt(
+                    str(uuid4()),
+                    request.url,
+                    request.params or {},
+                    retrieved_at,
+                    status_code=status_code,
+                    content_type=content_type,
+                    failure_category=TransportFailureCategory.HTTP_STATUS if status_code >= 400 else None,
+                )
+            )
+            received = TransportResponse(
+                content=content,
+                status_code=status_code,
+                retrieved_at=retrieved_at,
+                content_type=content_type,
+                url=request.url,
+                request_parameters={} if request.params is None else request.params,
+                applied_credential_header_names=credential_header_names,
+                executed_request=executed_request,
+                attempts=attempt,
+                attempt_traces=tuple(attempt_traces),
+            )
+            if status_code not in TRANSPORT_POLICY.retryable_status_codes:
+                return received
+            if not replay_safe or attempt == TRANSPORT_POLICY.max_attempts:
                 raise TransportFailure(
                     request,
-                    TransportFailureReason.RETRY_EXHAUSTED,
+                    TransportFailureReason.RETRY_EXHAUSTED if replay_safe else TransportFailureReason.REPLAY_UNSAFE,
                     attempt,
                     status_code=status_code,
+                    category=TransportFailureCategory.HTTP_STATUS,
+                    response=received,
                 )
+            guidance = _retry_after_seconds(response.retry_after, received.retrieved_at)
+            if guidance is not None:
+                if guidance > TRANSPORT_POLICY.max_retry_delay_seconds:
+                    raise TransportFailure(
+                        request,
+                        TransportFailureReason.RETRY_DELAY_EXCEEDED,
+                        attempt,
+                        status_code=status_code,
+                        category=TransportFailureCategory.HTTP_STATUS,
+                        response=received,
+                    )
+                retry_delay = max(retry_delay, guidance)
 
         raise AssertionError("retry loop exhausted without a terminal result")
 
@@ -429,7 +684,9 @@ class HttpClient:
             raise ValueError("Source request must not provide a User-Agent header")
         headers["User-Agent"] = TRANSPORT_POLICY.user_agent
         if isinstance(request, _CredentialTransportRequest):
-            public = TransportRequest(request.method, request.url, request.params, {}, request.body)
+            public = TransportRequest(
+                request.method, request.url, request.params, {}, request.body, replay_safety=request.replay_safety
+            )
             return _make_credential_transport_request(
                 public,
                 headers,
@@ -443,6 +700,7 @@ class HttpClient:
             headers,
             request.body,
             request.redirect_policy,
+            request.replay_safety,
         )
 
     def _wait_for_rate_limit(self) -> None:
@@ -492,6 +750,13 @@ class _CredentialSendFailure:
     reason: TransportFailureReason
     attempts: int
     status_code: int | None
+    category: TransportFailureCategory = TransportFailureCategory.UNKNOWN
+    response: TransportResponse | None = None
+    attempt_traces: tuple[TransportAttempt, ...] = ()
+
+
+class _CredentialContractFailure(StrEnum):
+    FATAL = "fatal"
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -527,17 +792,49 @@ class AuthenticatedTransport:
         origin = _request_origin(request.url)
         applicable = tuple(credential for credential in self.credentials if origin in credential.origins)
         if not applicable:
-            result = self.transport.send(request)
-            if _response_contains_credentials(result, self.credentials):
+            failure = None
+            try:
+                result = self.transport.send(request)
+            except TransportFailure as error:
+                failure = _CredentialSendFailure(
+                    error.reason,
+                    error.attempts,
+                    error.status_code,
+                    error.category,
+                    error.response,
+                    error.attempt_traces,
+                )
+                result = error.response
+            if result is not None and _response_contains_credentials(result, self.credentials):
                 status_code = result.status_code
+                attempts = result.attempts
                 result = None
+                failure = None
                 request = _sanitized_request_for_credentials(request, self.credentials)
                 raise TransportFailure(
                     request,
                     TransportFailureReason.RETAINED_METADATA_UNSAFE,
-                    1,
+                    attempts,
                     status_code=status_code,
                 ) from None
+            if failure is not None:
+                if _attempts_contain_credentials(failure.attempt_traces, self.credentials):
+                    raise TransportFailure(
+                        request,
+                        TransportFailureReason.RETAINED_METADATA_UNSAFE,
+                        failure.attempts,
+                        status_code=failure.status_code,
+                    ) from None
+                raise TransportFailure(
+                    request,
+                    failure.reason,
+                    failure.attempts,
+                    status_code=failure.status_code,
+                    category=failure.category,
+                    response=result,
+                    attempt_traces=failure.attempt_traces,
+                ) from None
+            assert result is not None
             return result
         existing = {name.lower() for name in request.headers}
         names = tuple(value.name.lower() for value in applicable)
@@ -548,54 +845,76 @@ class AuthenticatedTransport:
             request = _sanitized_source_request(
                 request,
                 remove_names=tuple(value.name for value in applicable),
-                forbidden_values=tuple(value._value for value in applicable),
+                forbidden_values=_credential_redaction_values(applicable),
             )
             raise ValueError(f"source request already provides credential header: {collisions[0]}") from None
-        if _request_contains_values(request, tuple(value._value for value in applicable)):
+        if _request_contains_values(request, _credential_redaction_values(applicable)):
             request = _sanitized_source_request(
                 request,
-                forbidden_values=tuple(value._value for value in applicable),
+                forbidden_values=_credential_redaction_values(applicable),
             )
             raise ValueError("source request ordinary header contains a credential value") from None
         result = _send_with_credentials(self.transport, request, applicable)
+        if result is _CredentialContractFailure.FATAL:
+            raise FatalContractError("Authenticated transport contract failed") from None
+        failure = result if isinstance(result, _CredentialSendFailure) else None
+        if failure is not None and _attempts_contain_credentials(failure.attempt_traces, self.credentials):
+            attempts, status_code = failure.attempts, failure.status_code
+            result = None
+            failure = None
+            raise TransportFailure(
+                request, TransportFailureReason.RETAINED_METADATA_UNSAFE, attempts, status_code=status_code
+            ) from None
+        if failure is not None and failure.response is not None:
+            result = failure.response
         if isinstance(result, TransportResponse):
             names = tuple(value.name for value in applicable)
             evidence = result.executed_request or ExecutedRequestEvidence(request.headers, names)
-            if evidence.credential_header_names != tuple(sorted(names, key=lambda name: (name.casefold(), name))):
-                result = None
-                evidence = ExecutedRequestEvidence({}, names)
-                request = _sanitized_request_for_credentials(request, applicable)
-                raise TransportFailure(
-                    request,
-                    TransportFailureReason.TERMINAL_SENDER_FAILURE,
-                    1,
-                ) from None
-            unsafe = _response_contains_credentials(result, applicable)
+            unsafe = _response_contains_credentials(result, self.credentials)
             if unsafe:
                 status_code = result.status_code
+                attempts = result.attempts
                 result = None
+                failure = None
                 evidence = ExecutedRequestEvidence({}, names)
                 request = _sanitized_request_for_credentials(request, applicable)
                 raise TransportFailure(
                     request,
                     TransportFailureReason.RETAINED_METADATA_UNSAFE,
-                    1,
+                    attempts,
                     status_code=status_code,
                 ) from None
-            return replace(
+            if evidence.credential_header_names != tuple(sorted(names, key=lambda name: (name.casefold(), name))):
+                attempts = result.attempts
+                result = None
+                failure = None
+                evidence = ExecutedRequestEvidence({}, names)
+                request = _sanitized_request_for_credentials(request, applicable)
+                raise TransportFailure(
+                    request,
+                    TransportFailureReason.TERMINAL_SENDER_FAILURE,
+                    attempts,
+                ) from None
+            retained = replace(
                 result,
                 applied_credential_header_names=names,
                 executed_request=evidence,
             )
+            if failure is None:
+                return retained
+            result = replace(failure, response=retained)
         request = _sanitized_source_request(
             request,
-            forbidden_values=tuple(value._value for value in applicable),
+            forbidden_values=_credential_redaction_values(applicable),
         )
         raise TransportFailure(
             request,
             result.reason,
             result.attempts,
             status_code=result.status_code,
+            category=result.category,
+            response=result.response,
+            attempt_traces=result.attempt_traces,
         ) from None
 
 
@@ -603,7 +922,7 @@ def _send_with_credentials(
     transport: Transport,
     request: TransportRequest,
     credentials: tuple[CredentialHeader, ...],
-) -> TransportResponse | _CredentialSendFailure:
+) -> TransportResponse | _CredentialSendFailure | _CredentialContractFailure:
     headers = dict(request.headers)
     headers.update((value.name, value._value) for value in credentials)
     authenticated = _make_credential_transport_request(
@@ -615,10 +934,21 @@ def _send_with_credentials(
     try:
         response = transport.send(authenticated)
         if 300 <= response.status_code < 400:
-            return _CredentialSendFailure(TransportFailureReason.REDIRECT_REFUSED, 1, response.status_code)
+            return _CredentialSendFailure(
+                TransportFailureReason.REDIRECT_REFUSED,
+                response.attempts,
+                response.status_code,
+                TransportFailureCategory.HTTP_STATUS,
+                response,
+                response.attempt_traces,
+            )
         return response
     except TransportFailure as error:
-        return _CredentialSendFailure(error.reason, error.attempts, error.status_code)
+        return _CredentialSendFailure(
+            error.reason, error.attempts, error.status_code, error.category, error.response, error.attempt_traces
+        )
+    except FatalContractError:
+        return _CredentialContractFailure.FATAL
     except Exception:
         return _CredentialSendFailure(TransportFailureReason.TERMINAL_SENDER_FAILURE, 1, None)
 
@@ -652,14 +982,34 @@ def _validated_public_headers(headers: Mapping[str, str]) -> tuple[dict[str, str
         return {}, "request headers must be explicitly safe ordinary metadata"
 
 
+def _credential_redaction_values(credentials: tuple[CredentialHeader, ...]) -> tuple[str, ...]:
+    """Protect both a complete authentication header and its source token.
+
+    Publishers can echo a token without its HTTP authentication scheme. Such an
+    echo must not become observation bytes, retained metadata, or diagnostics.
+    """
+    values: list[str] = []
+    for credential in credentials:
+        values.append(credential._value)
+        scheme, separator, token = credential._value.partition(" ")
+        if (
+            credential.name.casefold() == "authorization"
+            and scheme.casefold() in {"token", "bearer"}
+            and separator
+            and token
+        ):
+            values.append(token)
+    return tuple(dict.fromkeys(values))
+
+
 def _response_contains_credentials(response: TransportResponse, credentials: tuple[CredentialHeader, ...]) -> bool:
-    return _response_contains_values(response, tuple(value._value for value in credentials))
+    return _response_contains_values(response, _credential_redaction_values(credentials))
 
 
 def _sanitized_request_for_credentials(
     request: TransportRequest, credentials: tuple[CredentialHeader, ...]
 ) -> TransportRequest:
-    return _sanitized_source_request(request, forbidden_values=tuple(value._value for value in credentials))
+    return _sanitized_source_request(request, forbidden_values=_credential_redaction_values(credentials))
 
 
 _PERCENT_TRIPLET = re.compile(rb"%[0-9A-Fa-f]{2}")
@@ -714,6 +1064,26 @@ def _request_contains_values(request: TransportRequest, values: tuple[str, ...])
     )
 
 
+def _attempt_retained_text(trace: TransportAttempt) -> tuple[str, ...]:
+    return (
+        trace.url,
+        trace.content_type or "",
+        *(str(name) for name in trace.request_parameters),
+        *(str(value) for value in trace.request_parameters.values()),
+    )
+
+
+def _attempts_contain_credentials(
+    traces: tuple[TransportAttempt, ...], credentials: tuple[CredentialHeader, ...]
+) -> bool:
+    values = _credential_redaction_values(credentials)
+    return any(
+        _encoded_candidate_contains_values(candidate, values, refuse_malformed=False)
+        for trace in traces
+        for candidate in _attempt_retained_text(trace)
+    )
+
+
 def _response_contains_values(response: TransportResponse, values: tuple[str, ...]) -> bool:
     retained_text: list[str] = [
         response.url,
@@ -726,6 +1096,8 @@ def _response_contains_values(response: TransportResponse, values: tuple[str, ..
         retained_text.extend(response.executed_request.ordinary_headers.keys())
         retained_text.extend(response.executed_request.ordinary_headers.values())
         retained_text.extend(response.executed_request.credential_header_names)
+    for trace in response.attempt_traces:
+        retained_text.extend(_attempt_retained_text(trace))
     for call in response.prerequisite_calls:
         retained_text.extend(
             (
@@ -752,7 +1124,7 @@ def _response_contains_values(response: TransportResponse, values: tuple[str, ..
 def _sanitize_if_request_contains_credentials(
     request: TransportRequest, credentials: tuple[CredentialHeader, ...]
 ) -> TransportRequest | None:
-    values = tuple(value._value for value in credentials)
+    values = _credential_redaction_values(credentials)
     if not _request_contains_values(request, values):
         return None
     return _sanitized_source_request(request, forbidden_values=values)
@@ -798,6 +1170,7 @@ def _sanitized_source_request(
         safe_headers,
         safe_body,
         request.redirect_policy,
+        request.replay_safety,
     )
 
 

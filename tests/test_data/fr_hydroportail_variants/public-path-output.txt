@@ -1,0 +1,11 @@
+{"quantity": "discharge", "selection": "all", "rows": 726, "calls": 4, "requested_selectors": ["most_valid", "pre_validated_and_validated", "raw", "validated"], "issues": 2, "verified_at": "2026-09-21T11:03:45.526417+00:00"}
+{"quantity": "discharge", "selection": "most_valid", "rows": 50, "calls": 1, "requested_selectors": ["most_valid"], "issues": 2, "verified_at": "2026-09-21T11:03:47.312680+00:00"}
+{"quantity": "discharge", "selection": "pre_validated_and_validated", "rows": 50, "calls": 1, "requested_selectors": ["pre_validated_and_validated"], "issues": 2, "verified_at": "2026-09-21T11:03:49.235283+00:00"}
+{"quantity": "discharge", "selection": "raw", "rows": 576, "calls": 1, "requested_selectors": ["raw"], "issues": 2, "verified_at": "2026-09-21T11:03:50.989494+00:00"}
+{"quantity": "discharge", "selection": "validated", "rows": 50, "calls": 1, "requested_selectors": ["validated"], "issues": 2, "verified_at": "2026-09-21T11:03:53.369674+00:00"}
+{"quantity": "stage", "selection": "all", "rows": 726, "calls": 4, "requested_selectors": ["most_valid", "pre_validated_and_validated", "raw", "validated"], "issues": 2, "verified_at": "2026-09-21T11:04:01.030397+00:00"}
+{"quantity": "stage", "selection": "most_valid", "rows": 50, "calls": 1, "requested_selectors": ["most_valid"], "issues": 2, "verified_at": "2026-09-21T11:04:03.146786+00:00"}
+{"quantity": "stage", "selection": "pre_validated_and_validated", "rows": 50, "calls": 1, "requested_selectors": ["pre_validated_and_validated"], "issues": 2, "verified_at": "2026-09-21T11:04:04.756962+00:00"}
+{"quantity": "stage", "selection": "raw", "rows": 576, "calls": 1, "requested_selectors": ["raw"], "issues": 2, "verified_at": "2026-09-21T11:04:06.285168+00:00"}
+{"quantity": "stage", "selection": "validated", "rows": 50, "calls": 1, "requested_selectors": ["validated"], "issues": 2, "verified_at": "2026-09-21T11:04:07.753386+00:00"}
+PASS: 10 public fetches, 16 actual source calls; all/explicit Q/H source selectors and receipt envelopes verified.

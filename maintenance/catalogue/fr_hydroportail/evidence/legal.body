@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mentions légales | SC Vigicrues - HydroPortail</title>
+                <link rel="stylesheet" href="/build/2123.cddae3c0.css"><link rel="stylesheet" href="/build/app.07edbb10.css">
+    
+    <link rel="stylesheet" href="/build/ckeditor_content.a66bb3b1.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <link rel="icon" href="/favicon.ico" />
+</head>
+        
+<body
+        class="navbar--pinned scrolling-body"        data-timezone="UTC"        data-q="m3"        data-search-display="map">
+
+<div id="svg-sprites"></div>
+
+    <hx:include src="/menu/main" class="hinclude-header">
+<div class="infinity-loading mx-auto" role="status" aria-live="polite">
+    <span class="sr-only">Chargement...</span>
+    <div>
+        <span></span>
+    </div>
+    <div>
+        <span></span>
+    </div>
+    <div>
+        <span></span>
+    </div>
+</div>
+</hx:include>
+
+<div class="main" id="main" tabindex="-1">
+                                                                                <main class="main__content">
+                                            <div class="main__column py-3 container-fluid">
+                            <div class="content wysiwyg container--narrow documentation__body">
+        <div class="header__identity">
+    <div>
+        <nav aria-label="Fil d&#039;ariane">
+            <ol class="breadcrumb mb-0 py-2 px-0">
+                <li class="breadcrumb-item"><a href="/">Accueil</a></li>
+                                    <li class="breadcrumb-item">Mentions légales</li>
+                            </ol>
+        </nav>
+                    <h1>Mentions légales</h1>
+            </div>
+    <div class="block__header__actions">
+        
+    </div>
+</div>
+        <div class="ck-content">
+            <h3><strong>RESPONSABILITE DU TRAITEMENT</strong></h3>
+
+<p>Le site HydroPortail Grand Public est édité par le Service Central Vigicrues (<a href="http://www.ecologique-solidaire.gouv.fr/prevision-des-inondations#e2" target="_blank" rel="noreferrer noopener">SCV, ex-SCHAPI</a>), service du ministère en charge de l'Ecologie.</p>
+
+
+
+<p><strong>Service Central Vigicrues</strong>
+42 avenue Gaspard Coriolis
+31 057 Toulouse cedex 01
+Tél : 05.34.63.85.50</p>
+
+<p><strong>Directeur de la publication:</strong></p>
+
+<p>Madame la Directrice du Service Central Vigicrues</p>
+
+<p>Les contenus publiés sont produits par:</p>
+
+<ul>
+	<li>le réseau VIGICRUES, réseau de la Prévision des Crues et de l’Hydrométrie de l'Etat, comprenant le Service Central Vigicrues (SCV, ex-SCHAPI), les Services de Prévision des Crues (SPC) en métropole, les Cellules de Veille Hydrologique (CVH) Outre Mer et les Unités d’Hydrométrie (UH);</li>
+	<li>d'autres producteurs de données hydrométriques externes à ce réseau (syndicats de rivières, collectivités territoriales, certains opérateurs...).</li>
+</ul>
+
+<h3><strong>BASE LEGALE, FINALITES ET UTILISATION DES DONNEES A CARACTERE PERSONNEL</strong></h3>
+
+<p>L’HydroPortail Grand Public est une plate-forme web accessible via l’adresse <a href="https://www.hydro.eaufrance.fr">https://www.hydro.eaufrance.fr</a>.</p>
+
+<p>Il a pour objet la mise à disposition, pour consultation par tous publics, des données hydrométriques (mesures des hauteurs et débits des cours d’eau de France) publiques sur l’ensemble du territoire métropolitain et outre-mer, ainsi que des statistiques hydrologiques calculées d’après ces données.</p>
+
+<p>Cet objet relève d'une mission d'intérêt public qui découle notamment de la directive européenne Inspire (diffusion des données à caractère environnemental).</p>
+
+<p><strong>L’accès aux données hydrométriques publiques concernées est libre et ne nécessite pas d’avoir un compte utilisateur.</strong></p>
+
+<p><strong>Tout internaute a cependant la possibilité, facultative et laissée à son entière initiative, de se créer lui-même un compte personnel</strong> lui permettant uniquement, en plus de toutes les autres fonctionnalités déjà accessibles du site, de :</p>
+
+<ul>
+	<li>Paramétrer ses préférences de visualisation (unités et plages temporelles de visualisation des données) ;</li>
+	<li>Créer ses propres listes de points de mesures favoris pour éviter d’avoir à les rechercher à chaque fois ;</li>
+	<li>Avoir accès aux menus complets d’export de données hydrométriques (menu "Echanges" du site); en effet, en mode non connecté, seules les données affichées sur les pages lors de la navigation sont exportables, aux formats image (png), couche cartographique (Geojson) ou texte (csv) selon la page consultée.</li>
+</ul>
+
+<p>Les données dont le renseignement est obligatoire pour la création d'un compte sont la civilité, le nom, le prénom et l'adresse électronique, cette dernière étant utilisée comme identifiant (login) du compte et associée à un mot de passe à déterminer lors de la création du compte par la personne concernée, selon les règles indiquées dans le <a href="https://www.hydro.eaufrance.fr/inscription">formulaire de création de compte</a>.</p>
+
+<p>De manière facultative, l'utilisateur peut aussi indiquer sa profession et l'organisme auquel il appartient (notamment en cas d'utilisation professionnelle du site).</p>
+
+<p>L'ensemble des données à caractère personnel liées à chaque compte utilisateur ne fait l'objet d'aucun transfert hors de l'Union Européenne ni même de la France.</p>
+
+<p>Ces données sont conservées sur la durée d'existence du compte: celle-ci est fixée à 24 mois (2 ans) maximum depuis la dernière connexion, ce qui signifie que sans connexion à un compte sur une durée de 24 mois consécutifs, celui-ci sera automatiquement supprimé, le délai étant automatiquement remis à zéro à chaque connexion. Chaque titulaire d'un compte est toutefois libre de le supprimer dès qu'il le souhaite. Dans tous les cas, la suppression d'un compte entraine automatiquement la suppression immédiate et irréversible de l'ensemble des données qui y sont liées.</p>
+
+<p>Les formulaires de <a href="https://www.hydro.eaufrance.fr/mon-compte/modifier">modification</a> et de <a href="https://www.hydro.eaufrance.fr/mon-compte/supprimer">suppression</a> permettent à tout utilisateur titulaire d'un compte d'exercer librement et à tout moment ses droits d'accès, rectification, limitation, opposition et effacement des données à caractère personnel le concernant.</p>
+
+<p>Pour toute question ou en cas de problème pour exercer ces droits, vous pouvez contacter l'assistance nationale d'HydroPortail dont les coordonnées sont disponibles dans la<a href="https://www.hydro.eaufrance.fr/edito/contacts"> rubrique "Contact" du site</a> ou bien <a href="https://contact.ecologie.gouv.fr/" target="_blank" rel="noreferrer noopener">saisir directement les services de l'État</a></p>
+
+<h3><strong>INFORMATIONS SUR LES COOKIES</strong></h3>
+
+<p>Le site que vous visitez utilise des fichiers informatiques nommés cookies. Ces fichiers permettent d'accéder à des informations déjà stockées dans votre terminal et d'y inscrire des informations.
+
+Nous utilisons ces cookies pour faciliter la navigation sur le site notamment en mémorisant certaines saisies ou sélections pour vous permettre de ne pas avoir à re-saisir ces informations. Ces cookies ne peuvent pas, techniquement, être désactivés depuis le site. Vous pouvez néanmoins vous opposer à l'utilisation de ces cookies, exclusivement en paramétrant votre navigateur. Ce paramétrage dépend du navigateur que vous utilisez, mais il est en général simple à réaliser : en principe, vous pouvez soit activer une fonction de navigation privée, soit uniquement interdire ou restreindre les cookies. Attention, il se peut que des cookies aient été enregistrés sur votre périphérique avant le paramétrage de votre navigateur : dans ce cas, effacez votre historique de navigation, toujours en utilisant le paramétrage de votre navigateur.
+
+Liste des cookies utilisés par notre site:</p>
+
+<table style="width:100%;">
+	<tbody>
+		<tr>
+			<td>PHPSESSID</td>
+			<td>Cookie de session php accompagnant l'utilisateur de façon anonyme durant sa navigation et permettant de conserver les informations saisies, par exemple, lors de la saisie d'un formulaire ou la sélection d'une zone géographique sur le site afin de faciliter les éventuelles saisies à venir ou la poursuite de la navigation. Ces informations ne sont pas conservées et sont supprimées lorsque vous quittez notre site.</td>
+		</tr>
+	</tbody>
+</table>
+
+<p> </p>
+        </div>
+    </div>
+                    </div>
+                                                <footer class="main-footer d-print-none">
+    <div class="main-footer__container">
+        <div class="container--narrow">
+            <nav class="mb-4 main-footer__nav-bar overflow-hidden">
+    <ul class="menu menu--footer-menu p-2">
+                    <li class="menu__item">
+                                    <a href="/edito/mentions-legales">Mentions légales</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/accessibilite">Accessibilité</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/credits">Crédits</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/contacts">Contact</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/glossaire">Glossaire</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/faq">FAQ</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/aide/accueil">Aide en ligne</a>
+                            </li>
+                    <li class="menu__item">
+                                    <a href="/edito/a-propos-dhydroportail">À propos d&#039;Hydroportail</a>
+                            </li>
+            </ul>
+</nav>
+            <ul class="main-footer__logo-list">
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                            <img src="/build/images/footer/logo-rf.png"
+                     alt="Logo République Française">
+                    </li>
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                        <a href="https://www.ecologie.gouv.fr/"
+               title="Ministère de la Transition Écologique"
+               target="_blank" rel="noopener noreferrer">
+                            <img src="/build/images/footer/logo-mte.png"
+                     alt="Logo Ministère de la Transition Écologique">
+            </a>        </li>
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                        <a href="https://ofb.gouv.fr/"
+               title="Office Français de la Biodiversité (OFB)"
+               target="_blank" rel="noopener noreferrer">
+                            <img src="/build/images/footer/logo-ofb.png"
+                     alt="Logo Office Français de la Biodiversité (OFB)">
+            </a>        </li>
+            <li class="main-footer__logo p-1 p-lg-3 p-xl-4">
+                        <a href="https://www.vigicrues.gouv.fr"
+               title="Vigicrues"
+               target="_blank" rel="noopener noreferrer">
+                            <img src="/build/images/footer/logo-vigicrue.png"
+                     alt="Logo Vigicrues">
+            </a>        </li>
+    </ul>        </div>
+    </div>
+</footer>
+                    </main>
+                    <div class="sr-only" id="liveRegion" role="log" aria-live="assertive" aria-atomic="true"
+         aria-relevant="additions"></div>
+</div>
+
+    <script src="/bundles/fosjsrouting/js/router.js"></script>
+    <script src="/build/runtime.fcf6b619.js" defer></script><script src="/build/4692.8f03972d.js" defer></script><script src="/build/9960.0ad93b47.js" defer></script><script src="/build/1272.35b7958d.js" defer></script><script src="/build/7127.a84d7508.js" defer></script><script src="/build/4721.6dc5679c.js" defer></script><script src="/build/9479.b3996e6c.js" defer></script><script src="/build/2123.1f80354f.js" defer></script><script src="/build/5621.4ab47ec9.js" defer></script><script src="/build/app.7ea62787.js" defer></script>
+</body>
+</html>

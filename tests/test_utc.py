@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,12 +10,8 @@ import rivretrieve
 import rivretrieve._internal.catalogues.artifact as artifact_module
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.engine import (
-    Payload,
     SourceCallOrigin,
-    SourceCoordinates,
     UnknownOriginFact,
-    WindowEndpoint,
-    _make_fetch_window,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.observations import (
@@ -25,12 +22,52 @@ from rivretrieve._internal.observations import (
     ReceiptEntry,
     Receipts,
 )
-from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.usgs_nwis.config import config as usgs_nwis_config
-from rivretrieve._internal.providers.usgs_nwis.parse import parse
+from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.recordings import read_recording
+from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries, known
 
 RECORDING_PATH = Path("tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12.recording.json")
+
+
+def _definition(provider_id, station_id, product_id):
+    # Authored UTC-boundary context; this is not a provider physical mapping.
+    quantity, unit = ("discharge", "m3/s") if product_id in ("flow", "q") else ("stage", "m")
+    return SourceSeries(
+        series_id=f"test/{station_id}/{product_id}",
+        provider_id=str(provider_id),
+        station_id=station_id,
+        product_id=product_id,
+        identity=SourceIdentity(
+            namespace="test-utc", published_id=product_id, origin="mapping", evidence=("authored-UTC-contract",)
+        ),
+        facts=(
+            PhysicalFacts(
+                facts_id=f"test/{product_id}",
+                quantity=known(quantity, "authored-UTC-contract"),
+                source_unit=known(unit, "authored-UTC-contract"),
+                normalized_unit=unit,
+            ),
+        ),
+    )
+
+
+def _frame(data):
+    frame = pl.DataFrame(data)
+    definitions = [
+        _definition("provider-a", station, product)
+        for station, product in frame.select("station_id", "product_id").iter_rows()
+    ]
+    return (
+        frame.with_columns(
+            pl.Series("series_id", [item.series_id for item in definitions]),
+            pl.Series("facts_id", [item.facts[0].facts_id for item in definitions]),
+            pl.Series("quantity", [item.facts[0].quantity.value for item in definitions]),
+            pl.Series("source_unit", [item.facts[0].source_unit.value for item in definitions]),
+            pl.Series("unit", [item.facts[0].normalized_unit for item in definitions]),
+        )
+        .select(ObservationDataSchema.polars_schema.names())
+        .cast(ObservationDataSchema.polars_schema)
+    )
 
 
 def _result(data: pl.DataFrame, provider_id: ProviderId | None = None) -> ObservationResult:
@@ -67,31 +104,35 @@ def _result(data: pl.DataFrame, provider_id: ProviderId | None = None) -> Observ
             ),
         ),
     )
-    return ObservationResult(data=data, provenance=provenance, issues=issues, receipts=receipts)
+    definitions = tuple(
+        _definition(provider_id, station, product)
+        for station, product in data.select("station_id", "product_id").unique().iter_rows()
+    )
+    return ObservationResult(
+        data=data, provenance=provenance, issues=issues, receipts=receipts, source_series=definitions
+    )
 
 
 def test_to_utc_fixed_offsets_converts_row_by_row_and_preserves_result_members() -> None:
-    input_data = pl.DataFrame(
+    input_data = _frame(
         {
             "time": [datetime(2026, 1, 1, 0, 15), datetime(2026, 1, 1, 0, 15)],
             "time_zone": ["+05:30", "-03:30"],
             "station_id": ["station-1", "station-1"],
             "product_id": ["flow", "flow"],
             "value": [1.25, None],
-        },
-        schema=ObservationDataSchema.polars_schema,
+        }
     )
     untouched = input_data.clone()
     result = _result(input_data)
-    expected = pl.DataFrame(
+    expected = _frame(
         {
             "time": [datetime(2025, 12, 31, 18, 45), datetime(2026, 1, 1, 3, 45)],
             "time_zone": ["+00:00", "+00:00"],
             "station_id": ["station-1", "station-1"],
             "product_id": ["flow", "flow"],
             "value": [1.25, None],
-        },
-        schema=ObservationDataSchema.polars_schema,
+        }
     )
 
     converted = rivretrieve.to_utc(result)
@@ -103,48 +144,47 @@ def test_to_utc_fixed_offsets_converts_row_by_row_and_preserves_result_members()
     assert converted.provenance is result.provenance
     assert converted.issues is result.issues
     assert converted.receipts is result.receipts
-    assert tuple(type(converted).model_fields) == ("data", "provenance", "issues", "receipts")
-    assert converted.data.columns == ["time", "time_zone", "station_id", "product_id", "value"]
+    assert converted.source_series == result.source_series
+    assert converted.outcomes == result.outcomes
+    assert converted.scope == result.scope
+    assert converted.data.columns == ObservationDataSchema.polars_schema.names()
     assert converted.data.schema == ObservationDataSchema.polars_schema
 
 
 def test_to_utc_iana_identifiers_use_zone_rules() -> None:
     result = _result(
-        pl.DataFrame(
+        _frame(
             {
                 "time": [datetime(2026, 1, 15, 12, 0), datetime(2026, 7, 15, 12, 0)],
                 "time_zone": ["Europe/Zurich", "Europe/Zurich"],
                 "station_id": ["station-iana", "station-iana"],
                 "product_id": ["level", "level"],
                 "value": [2.5, 3.5],
-            },
-            schema=ObservationDataSchema.polars_schema,
+            }
         )
     )
-    expected = pl.DataFrame(
+    expected = _frame(
         {
             "time": [datetime(2026, 1, 15, 11, 0), datetime(2026, 7, 15, 10, 0)],
             "time_zone": ["+00:00", "+00:00"],
             "station_id": ["station-iana", "station-iana"],
             "product_id": ["level", "level"],
             "value": [2.5, 3.5],
-        },
-        schema=ObservationDataSchema.polars_schema,
+        }
     )
 
     pl_testing.assert_frame_equal(rivretrieve.to_utc(result).data, expected, check_exact=True)
 
 
 def test_to_utc_tz_aware_time_dtype_becomes_naive() -> None:
-    data = pl.DataFrame(
+    data = _frame(
         {
             "time": [datetime(2026, 1, 15, 12, 0)],
             "time_zone": ["Europe/Zurich"],
             "station_id": ["s"],
             "product_id": ["q"],
             "value": [1.0],
-        },
-        schema=ObservationDataSchema.polars_schema,
+        }
     ).with_columns(pl.col("time").dt.replace_time_zone("America/Chicago"))
 
     converted = rivretrieve.to_utc(_result(data))
@@ -157,7 +197,7 @@ def test_to_utc_tz_aware_time_dtype_becomes_naive() -> None:
 def test_to_utc_unknown_zones_refuse_atomically_with_provider_and_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    input_data = pl.DataFrame(
+    input_data = _frame(
         {
             "time": [
                 datetime(2026, 1, 1, 0, 0),
@@ -168,8 +208,7 @@ def test_to_utc_unknown_zones_refuse_atomically_with_provider_and_count(
             "station_id": ["station-known", "station-unknown-1", "station-unknown-2"],
             "product_id": ["flow", "flow", "level"],
             "value": [10.0, 11.0, 12.0],
-        },
-        schema=ObservationDataSchema.polars_schema,
+        }
     )
     untouched = input_data.clone()
     result = _result(input_data, ProviderId("ca_eccc"))
@@ -205,22 +244,54 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
     )
-    payload = Payload(
-        SourceCoordinates(object()),
-        (("07374000", ProductId("discharge_instantaneous")),),
-        _make_fetch_window(
-            WindowEndpoint.from_datetime(datetime(2023, 3, 12, 0, 0)),
-            WindowEndpoint.from_datetime(datetime(2023, 3, 12, 23, 59, 59, 999999)),
+    # Historical WaterServices evidence only. Decode this fixed recording into
+    # the UTC test carrier; no retired provider implementation is retained.
+    document = json.loads(fixture_bytes)
+    recorded_series = document["value"]["timeSeries"][0]
+    assert recorded_series["variable"]["unit"]["unitCode"] == "ft3/s"
+    readings = recorded_series["values"][0]["value"]
+    assert len(readings) == 92
+    definition = SourceSeries(
+        series_id="legacy-dst-recording",
+        provider_id="usgs_nwis",
+        station_id="07374000",
+        product_id="discharge_instantaneous",
+        identity=SourceIdentity(
+            namespace="test-legacy-dst",
+            published_id="recorded-discharge",
+            origin="response",
+            evidence=(str(RECORDING_PATH),),
         ),
-        fixture_bytes,
-        origin,
-        (),
+        facts=(
+            PhysicalFacts(
+                facts_id="legacy-dst-facts",
+                quantity=known("discharge", str(RECORDING_PATH)),
+                source_unit=known("ft3/s", str(RECORDING_PATH)),
+                normalized_unit="ft3/s",
+            ),
+        ),
     )
-    parsed = parse(payload, usgs_nwis_config())
-    assert parsed.value.height == 92
-    assert parsed.value["time_zone"].to_list() == ["-06:00"] * 8 + ["-05:00"] * 84
+    data = pl.DataFrame(
+        [
+            {
+                "time": datetime.fromisoformat(reading["dateTime"]).replace(tzinfo=None),
+                "time_zone": reading["dateTime"][-6:],
+                "station_id": "07374000",
+                "product_id": "discharge_instantaneous",
+                "series_id": definition.series_id,
+                "facts_id": definition.facts[0].facts_id,
+                "quantity": "discharge",
+                "source_unit": "ft3/s",
+                "unit": "m3/s",
+                "value": float(reading["value"]) * 0.028316846592,
+            }
+            for reading in readings
+        ],
+        schema=ObservationDataSchema.polars_schema,
+    )
     native = ObservationResult(
-        data=parsed.value.select(ObservationDataSchema.polars_schema.names()),
+        data=data,
+        source_series=(definition,),
         provenance=ObservationProvenance(source="live", provider_id=ProviderId("usgs_nwis")),
         issues=(),
         receipts=Receipts(
@@ -236,7 +307,12 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
             "time_zone": ["-06:00", "-05:00"],
             "station_id": ["07374000", "07374000"],
             "product_id": ["discharge_instantaneous", "discharge_instantaneous"],
-            "value": [809000.0, 811000.0],
+            "series_id": [definition.series_id] * 2,
+            "facts_id": [definition.facts[0].facts_id] * 2,
+            "quantity": ["discharge"] * 2,
+            "source_unit": ["ft3/s"] * 2,
+            "unit": ["m3/s"] * 2,
+            "value": [809000.0 * 0.028316846592, 811000.0 * 0.028316846592],
         },
         schema=ObservationDataSchema.polars_schema,
     )
@@ -246,7 +322,12 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
             "time_zone": ["+00:00", "+00:00"],
             "station_id": ["07374000", "07374000"],
             "product_id": ["discharge_instantaneous", "discharge_instantaneous"],
-            "value": [809000.0, 811000.0],
+            "series_id": [definition.series_id] * 2,
+            "facts_id": [definition.facts[0].facts_id] * 2,
+            "quantity": ["discharge"] * 2,
+            "source_unit": ["ft3/s"] * 2,
+            "unit": ["m3/s"] * 2,
+            "value": [809000.0 * 0.028316846592, 811000.0 * 0.028316846592],
         },
         schema=ObservationDataSchema.polars_schema,
     )

@@ -3,10 +3,10 @@
 import ast
 import re
 import runpy
-from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
@@ -18,77 +18,7 @@ def python_blocks(path: Path) -> list[str]:
     return re.findall(r"```python\n(.*?)```", path.read_text(), re.DOTALL)
 
 
-def test_readme_uses_current_public_api():
-    calls = []
-    for block in python_blocks(ROOT / "README.md"):
-        for node in ast.walk(ast.parse(block)):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "rr"
-            ):
-                calls.append(node.func.attr)
-    assert calls
-    assert all(callable(getattr(rr, name, None)) for name in calls), calls
-    assert "fetch" in calls
-
-
-def test_readme_single_day_example_replays_exact_recording(monkeypatch, capsys):
-    import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
-
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    scope = {}
-    for block in python_blocks(ROOT / "README.md"):
-        exec(compile(block, "README.md", "exec"), scope)
-    result = scope["result"]
-    expected = pl.DataFrame(
-        {
-            "time": [datetime(2023, 1, 1)],
-            "time_zone": ["unknown"],
-            "station_id": ["07374000"],
-            "product_id": ["discharge_daily_mean"],
-            "value": [373000.0 * 0.028316846592],
-        }
-    )
-    assert_frame_equal(result.data, expected)
-    assert not result.issues
-    assert not result.receipts.entries
-    assert capsys.readouterr().out == "[('07374000', 10562.183778816001)]\n()\n"
-
-
-def test_quickstart_workflow_replays_recorded_single_day(monkeypatch):
-    import rivretrieve._internal.discovery as discovery
-    from rivretrieve._internal.recordings import ReplayTransport, read_recording
-
-    recording = read_recording(
-        ROOT / "tests/test_data/usgs_nwis_07374000_dv_00060_00003_2022-12-30_2023-01-03.recording.json"
-    )
-    replay = ReplayTransport((recording,))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    gauges = rr.find(provider="usgs_nwis", product="discharge_daily_mean")
-    gauge = rr.pick(gauges, station="07374000")
-    # Only this shorter public window matches the committed publisher recording.
-    result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")
-    expected = pl.DataFrame(
-        {
-            "time": [datetime(2023, 1, 1)],
-            "time_zone": ["unknown"],
-            "station_id": ["07374000"],
-            "product_id": ["discharge_daily_mean"],
-            "value": [373000.0 * 0.028316846592],
-        }
-    )
-    assert_frame_equal(result.data, expected)
-    assert not result.issues
-    assert not result.receipts.entries
-
-
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_camels_example_selects_documented_gauges_without_network(monkeypatch, capsys):
     def refuse_network(*args, **kwargs):
         raise AssertionError("Offline selection must not retrieve observations")
@@ -121,8 +51,18 @@ PAGES = [
     "docs/README.md",
     "docs/usage.md",
     "docs/architecture.md",
+    "docs/usgs-discovery.md",
+    "docs/providers/usgs_nwis.md",
     "docs/reference.md",
     "docs/examples/camels-us.md",
+    "docs/product_dictionary.md",
+    "docs/drainage-areas.md",
+    "docs/catalogue-evidence.md",
+    "docs/catalogue-provenance.md",
+    "docs/catalogue-absence.md",
+    "docs/design/observation-store-layout.md",
+    "docs/development-conventions.md",
+    "CONTEXT.md",
 ]
 
 

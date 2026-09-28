@@ -1,0 +1,81 @@
+{
+  "capture": {
+    "producer_revision": "fd55eee9d32a278b895bc61487452d43564eaed4",
+    "command": "uv run python .worktrees/evidence/effort-310-baseline/capture_catalogue.py",
+    "catalogue_format": 2,
+    "excluded": "native.parquet",
+    "verification": "Unchanged git diff HEAD of source catalogue; direct packaged loader accepted copied artifact"
+  },
+  "files": {
+    "croissant.json": {
+      "sha256": "23ee37f992066683fdaa09937bb5d93af34fcb2e9959b15ed845504a3ecd616d",
+      "byte_count": 43741,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/croissant.json"
+    },
+    "format.json": {
+      "sha256": "c4bab2060a5568dbe61d84e8f505c3c2ae0f09484afb2f3146b6c1e87f67b00f",
+      "byte_count": 31,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/format.json"
+    },
+    "products.parquet": {
+      "sha256": "696cad162b82d230767b2c24643bcd132ac94e30de81cbf8cdfd8ec9bfb9a4d0",
+      "byte_count": 3769,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/products.parquet"
+    },
+    "provenance.json": {
+      "sha256": "64c741591213ed0f7c12e4acdb5be4db15fbec0ea84587a95fdebe39cfd22ebd",
+      "byte_count": 9862,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance.json"
+    },
+    "provenance_acquisitions.parquet": {
+      "sha256": "4004252066ec15585235d98684d9062dbf2151d1c4b0ee4c3c0a378eeeba642a",
+      "byte_count": 1931871,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance_acquisitions.parquet"
+    },
+    "provenance_binding_facts.parquet": {
+      "sha256": "439b7fa77aef152effca0dded4a93fed0f17e9d772da1bda39434234c6fb2411",
+      "byte_count": 710732,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance_binding_facts.parquet"
+    },
+    "provenance_bindings.parquet": {
+      "sha256": "448db1af91e9cf6de85c0335c0389a3e953816d62569f0aca991862e3b322feb",
+      "byte_count": 502572,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance_bindings.parquet"
+    },
+    "provenance_external_inputs.parquet": {
+      "sha256": "517e66e48025dacb57bc460080b6282a98d3515b3be9af09e5ec0c484e8ea928",
+      "byte_count": 180137,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance_external_inputs.parquet"
+    },
+    "provenance_facts.parquet": {
+      "sha256": "26da31ccc317cad97fe815ac9e0c0f3b4d24fba21617c07ddf84a6c78bb4b53b",
+      "byte_count": 650519,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provenance_facts.parquet"
+    },
+    "provider.json": {
+      "sha256": "4fb60ccedf7275da40e69a0ff21646eb618e0b6f46d9cdbaf3211178dd25f821",
+      "byte_count": 414,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/provider.json"
+    },
+    "series_claims.parquet": {
+      "sha256": "b448a5498c3a96d9c072ace55c3a7071e5860ca4d2cd4a8e12b4a528bb7d84d8",
+      "byte_count": 1220,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/series_claims.parquet"
+    },
+    "source_series.json": {
+      "sha256": "f08455ab6b11a1c9c019abe3f5701703061308353014d81f0f4cbff678ace70e",
+      "byte_count": 15839,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/source_series.json"
+    },
+    "station_products.parquet": {
+      "sha256": "233d6bbb784c34fd94006c15b233fa2bd3eb6a54bbd7b93ba296f7aa0c88183e",
+      "byte_count": 64916,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/station_products.parquet"
+    },
+    "stations.parquet": {
+      "sha256": "160731f5e0800a1c962adf390ca099b781547abca95a3abd6f0f592ce6fe1bdf",
+      "byte_count": 133127,
+      "source_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/stations.parquet"
+    }
+  }
+}

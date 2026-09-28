@@ -16,7 +16,7 @@ from rivretrieve._internal.store import ValidatedStore
 
 def _download(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...]:
     """Adapt the shared bulk request to the publisher's download vocabulary."""
-    downloaded = bulk.download(
+    downloaded = bulk.download_hydat(
         request.destination,
         today=request.today,
         probe=request.probe,
@@ -29,7 +29,7 @@ def _compile(request: BulkCompileRequest) -> ValidatedStore:
     """Adapt the shared compile request to the publisher's request type."""
     if len(request.publisher_artifacts) != 1:
         raise ValueError("HYDAT compilation requires exactly one publisher artifact")
-    return bulk.compile(
+    return bulk.compile_hydat(
         bulk.HydatCompileRequest(
             publisher_artifact=request.publisher_artifacts[0].path,
             destination=request.destination,

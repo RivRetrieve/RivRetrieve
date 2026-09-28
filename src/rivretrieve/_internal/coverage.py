@@ -1,24 +1,19 @@
-"""remainder : RequestedInterval × tuple[RequestedInterval, ...] → tuple[RequestedInterval, ...] (pure)."""
+"""Successful concrete-series interval coverage and closed interval arithmetic."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from rivretrieve._internal.primitives import ProductId
-
 _PRECISION = timedelta(microseconds=1)
 
 
 @dataclass(frozen=True, slots=True)
 class RequestedInterval:
-    """A closed native wall-clock interval at microsecond precision.
+    """A closed interval on the native wall-clock label axis.
 
-    Attributes
-    ----------
-    start, end : datetime
-        Naive endpoints, including both boundaries. Start must not exceed end.
-        These are source calendar labels rather than absolute UTC instants.
+    ``start`` and ``end`` are naive source wall-clock labels, and both are
+    included.
     """
 
     start: datetime
@@ -33,31 +28,41 @@ class RequestedInterval:
 
 @dataclass(frozen=True, slots=True)
 class CoverageInterval:
-    """A successfully retrieved interval, including a successful empty answer.
+    """Successful coverage for exactly one concrete source series, not inventory.
+
+    Coverage records that a retrieval succeeded for an interval. It does not
+    mean that observations exist at every time step in that interval.
 
     Attributes
     ----------
-    station_id : str
-        Source station identifier.
-    product_id : ProductId
-        Canonical product identifier.
+    series_id : str
+        Source series that was retrieved.
     interval : RequestedInterval
-        Closed naive native wall-clock interval with start and end datetimes.
-    retrieved_at : datetime
-        UTC instant when the source was queried successfully. This is not a
-        continuity or freshness claim.
+        Covered wall-clock interval.
+    retrieved_at : datetime.datetime or None
+        UTC instant of the source retrieval, or None when it is not known.
+    outcome_id : str
+        Retrieval outcome that established the coverage. A successful
+        answer with no rows can also establish coverage.
+    facts_ids : tuple[str, ...]
+        Physical-fact segments covered, when recorded.
     """
 
-    station_id: str
-    product_id: ProductId
+    series_id: str
     interval: RequestedInterval
-    retrieved_at: datetime
+    retrieved_at: datetime | None
+    outcome_id: str
+    facts_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.station_id or not self.product_id or any(c in self.product_id for c in "/="):
-            raise ValueError("coverage requires a station and a partition-safe product identifier")
-        if self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() != timedelta(0):
-            raise ValueError("coverage retrieval instant must be UTC")
+        if len(set(self.facts_ids)) != len(self.facts_ids) or any(not value for value in self.facts_ids):
+            raise ValueError("coverage physical fact identifiers must be unique and nonempty")
+        if not self.series_id or not self.outcome_id:
+            raise ValueError("coverage requires a concrete series and successful outcome")
+        if self.retrieved_at is not None and (
+            self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() != timedelta(0)
+        ):
+            raise ValueError("known coverage retrieval instant must be UTC")
 
 
 def remainder(requested: RequestedInterval, held: tuple[RequestedInterval, ...]) -> tuple[RequestedInterval, ...]:
@@ -77,18 +82,16 @@ def remainder(requested: RequestedInterval, held: tuple[RequestedInterval, ...])
 
 
 def served_coverage(
-    held: tuple[CoverageInterval, ...], station_id: str, product_id: ProductId, requested: RequestedInterval
+    held: tuple[CoverageInterval, ...], series_id: str, requested: RequestedInterval
 ) -> tuple[CoverageInterval, ...]:
     return tuple(
         CoverageInterval(
-            item.station_id,
-            item.product_id,
+            item.series_id,
             RequestedInterval(max(item.interval.start, requested.start), min(item.interval.end, requested.end)),
             item.retrieved_at,
+            item.outcome_id,
+            item.facts_ids,
         )
         for item in held
-        if item.station_id == station_id
-        and item.product_id == product_id
-        and item.interval.start <= requested.end
-        and item.interval.end >= requested.start
+        if item.series_id == series_id and item.interval.start <= requested.end and item.interval.end >= requested.start
     )

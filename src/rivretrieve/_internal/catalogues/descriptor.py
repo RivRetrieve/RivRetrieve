@@ -168,8 +168,14 @@ def build_catalogue_descriptor(
 ) -> dict[str, object]:
     """Describe exact packaged bytes and their recorded historical inputs, without IO."""
     expected_files = (*REQUIRED_ARTIFACT_FILES, "provenance.json", *EVIDENCE_FILENAMES.values())
+    if "format.json" in files or "source_series.json" in files:
+        expected_files += ("format.json", "source_series.json", "series_claims.parquet")
+    if "monitoring_locations.json" in files:
+        expected_files += ("monitoring_locations.json",)
     if set(files) != set(expected_files):
-        raise FatalContractError("Descriptor requires exactly the ten public catalogue and evidence files")
+        raise FatalContractError(
+            "Descriptor requires exactly the public catalogue, source-description and evidence files"
+        )
     if evidence.header.native_table is not None and not origins:
         raise FatalContractError("Certified catalogue descriptor requires station origins")
     if evidence.header.native_table is not None and evidence.header.native_table.byte_size is None:

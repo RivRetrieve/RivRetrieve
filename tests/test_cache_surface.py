@@ -9,6 +9,8 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.store import StoreRoot
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 def test_dotenv_relocates_live_and_compiled_store_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
@@ -59,7 +61,9 @@ def test_clear_live_cache_removes_only_provider_store(tmp_path: Path, monkeypatc
 
 def test_refresh_bulk_refuses_before_store_or_transport(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    selection = rr.pick(rr.find(provider="ca_eccc"), station="02GA010", product="discharge_daily_mean")
+    selection = rr.find(
+        provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean"
+    )
     with pytest.raises(FatalContractError, match=r'rivretrieve.download\("ca_eccc"\)'):
         rr.fetch(selection, start="2020-01-01", end="2020-01-02", cache="refresh")
     assert not (tmp_path / "cache").exists()
@@ -67,7 +71,7 @@ def test_refresh_bulk_refuses_before_store_or_transport(tmp_path: Path, monkeypa
 
 @pytest.mark.parametrize("mode", (True, None, "automatic", [], 1))
 def test_invalid_cache_mode_is_refused_before_retrieval(mode: object) -> None:
-    selection = rr.find(provider="usgs_nwis")
+    selection = rr.find(provider="usgs_nwis", station="07374000")
     with pytest.raises(ValueError, match="cache must be"):
         rr.fetch(selection, start="2020-01-01", cache=mode)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
@@ -75,11 +79,13 @@ def test_invalid_cache_mode_is_refused_before_retrieval(mode: object) -> None:
 def test_multi_provider_refresh_refuses_before_live_provider_transfer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import polars as pl
-
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    selection = rr.from_frame(
-        pl.concat([rr.as_frame(rr.find(provider=provider)).head(1) for provider in ("usgs_nwis", "ca_eccc")])
+    selection = rr.find(
+        provider=("usgs_nwis", "ca_eccc"),
+        station=("07374000", "02GA010"),
+        quantity="discharge",
+        frequency="daily",
+        statistic="mean",
     )
 
     def no_transport(*args: object) -> None:

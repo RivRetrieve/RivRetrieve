@@ -1,0 +1,24 @@
+[
+  {
+    "name": "daily-07374000-docs-2023",
+    "status": 200,
+    "rows": 5,
+    "first": "2022-12-30",
+    "last": "2023-01-03",
+    "public_jan1_rows": 1,
+    "null_values": 0,
+    "next_urls": [],
+    "sha256": "46b0d23594463b34f99c5450b1250707f03c8dc3f0dd2e0a252a96235b3818be"
+  },
+  {
+    "name": "continuous-07374000-docs-2023",
+    "status": 200,
+    "rows": 479,
+    "first": "2022-12-30T00:00:00+00:00",
+    "last": "2023-01-03T23:45:00+00:00",
+    "public_jan1_rows": 96,
+    "null_values": 0,
+    "next_urls": [],
+    "sha256": "3e9a8c245cf2110a0370f67ae096e0d3f750aec607f91f435eb1867d59c55886"
+  }
+]

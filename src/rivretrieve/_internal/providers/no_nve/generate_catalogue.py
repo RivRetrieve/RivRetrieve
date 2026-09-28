@@ -272,60 +272,23 @@ class ProductDefinition:
     product_id: str
     observed_property: str
     frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
     canonical_unit: str
     parameter_id: int
     resolution_time: int
 
 
+# Product IDs route source requests. Method belongs to each published version;
+# neither resolution nor an access name establishes temporal support or anchor.
 PRODUCT_DEFINITIONS = (
-    ProductDefinition("stage_daily_mean", "stage", "daily", "mean", "interval", "provider_defined", "m", 1000, 1440),
-    ProductDefinition("stage_hourly_mean", "stage", "hourly", "mean", "interval", "provider_defined", "m", 1000, 60),
-    ProductDefinition("stage_instantaneous", "stage", "irregular", "instantaneous", "instant", "instant", "m", 1000, 0),
-    ProductDefinition(
-        "discharge_daily_mean", "discharge", "daily", "mean", "interval", "provider_defined", "m3/s", 1001, 1440
-    ),
-    ProductDefinition(
-        "discharge_hourly_mean", "discharge", "hourly", "mean", "interval", "provider_defined", "m3/s", 1001, 60
-    ),
-    ProductDefinition(
-        "discharge_instantaneous", "discharge", "irregular", "instantaneous", "instant", "instant", "m3/s", 1001, 0
-    ),
-    ProductDefinition(
-        "water_temperature_daily_mean",
-        "water_temperature",
-        "daily",
-        "mean",
-        "interval",
-        "provider_defined",
-        "degC",
-        1003,
-        1440,
-    ),
-    ProductDefinition(
-        "water_temperature_hourly_mean",
-        "water_temperature",
-        "hourly",
-        "mean",
-        "interval",
-        "provider_defined",
-        "degC",
-        1003,
-        60,
-    ),
-    ProductDefinition(
-        "water_temperature_instantaneous",
-        "water_temperature",
-        "irregular",
-        "instantaneous",
-        "instant",
-        "instant",
-        "degC",
-        1003,
-        0,
-    ),
+    ProductDefinition("stage_daily_mean", "stage", "daily", "m", 1000, 1440),
+    ProductDefinition("stage_hourly_mean", "stage", "hourly", "m", 1000, 60),
+    ProductDefinition("stage_instantaneous", "stage", "unknown", "m", 1000, 0),
+    ProductDefinition("discharge_daily_mean", "discharge", "daily", "m3/s", 1001, 1440),
+    ProductDefinition("discharge_hourly_mean", "discharge", "hourly", "m3/s", 1001, 60),
+    ProductDefinition("discharge_instantaneous", "discharge", "unknown", "m3/s", 1001, 0),
+    ProductDefinition("water_temperature_daily_mean", "water_temperature", "daily", "degC", 1003, 1440),
+    ProductDefinition("water_temperature_hourly_mean", "water_temperature", "hourly", "degC", 1003, 60),
+    ProductDefinition("water_temperature_instantaneous", "water_temperature", "unknown", "degC", 1003, 0),
 )
 EXPECTED_PRODUCT_IDS = frozenset(item.product_id for item in PRODUCT_DEFINITIONS)
 _PARAM_RES_TO_PRODUCT = {(item.parameter_id, item.resolution_time): item.product_id for item in PRODUCT_DEFINITIONS}
@@ -339,6 +302,7 @@ class GeneratedNoNveCatalogue:
     station_products: StationProductCatalog
     acquisition_provenance: AcquisitionProvenance
     public_artifact: PackagedCatalogArtifact
+    source_native: pl.DataFrame
 
 
 def read_capture_record(path: Path | str) -> StationCatalogueCapture:
@@ -658,7 +622,9 @@ def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> G
 
     provenance = build_acquisition_provenance()
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, provenance)
-    return GeneratedNoNveCatalogue(provider_info, products, stations, station_products, provenance, artifact)
+    return GeneratedNoNveCatalogue(
+        provider_info, products, stations, station_products, provenance, artifact, native_table.data
+    )
 
 
 def _validate_native_table(table: NativeTable) -> None:
@@ -688,9 +654,9 @@ def build_products() -> ProductCatalog:
                 "product_id": item.product_id,
                 "observed_property": item.observed_property,
                 "frequency": item.frequency,
-                "statistic": item.statistic,
-                "period_type": item.period_type,
-                "period_anchor": item.period_anchor,
+                "statistic": "unknown",
+                "period_type": "unknown",
+                "period_anchor": "unknown",
                 "unit": item.canonical_unit,
                 "native_id": f"{item.parameter_id}:{item.resolution_time}",
             }
@@ -796,8 +762,12 @@ def validate_generated_catalogue(
 
 
 def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> None:
+    from functools import partial
+
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.no_nve.catalogue_series import describe_catalogue
+    from rivretrieve._internal.providers.no_nve.config import config as source_config
     from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS
 
     output = Path(out_dir)
@@ -813,6 +783,8 @@ def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> 
         catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        source_config=source_config(),
+        source_describer=partial(describe_catalogue, native=catalogue.source_native),
     )
     for name, content in metadata.items():
         (output / name).write_bytes(content)

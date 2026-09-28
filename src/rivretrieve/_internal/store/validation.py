@@ -12,15 +12,25 @@ from enum import StrEnum
 from importlib import resources
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, NewType, cast
+from typing import Any, Literal, NewType, NoReturn, cast
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 from jsonschema import Draft202012Validator, FormatChecker
+from pydantic import ValidationError
 
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval
-from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.publication_identity import publication_identity_fields
+from rivretrieve._internal.source_series import (
+    InventorySnapshot,
+    OutcomeStatus,
+    RetrievalOutcome,
+    SourceSeries,
+    admission,
+)
+from rivretrieve._internal.store.provenance import decode_source_call
 
 StoreRoot = NewType("StoreRoot", Path)
 PartitionIdentifier = NewType("PartitionIdentifier", str)
@@ -67,7 +77,7 @@ class StoreManifest:
     Attributes
     ----------
     format_version : int
-        Compiled layout revision, 2.
+        Compiled layout revision, 5.
     provider_id : ProviderId
         Provider whose native observations are stored.
     compiler_version : str
@@ -75,7 +85,12 @@ class StoreManifest:
     built_at : datetime
         UTC build instant.
     source_vintage : datetime.date
-        Source-stated release date.
+        Identifies the source publication state the store was compiled from.
+        Its derivation depends on the provider: for example, the date of a
+        dated publisher release, or the last date covered by the latest
+        published period. It is not a freshness verdict. ``download`` passes
+        it to the provider, which can refuse a new download whose published
+        history would end earlier.
     publisher_artifact : PublisherArtifact
         First publisher artifact identity, retained for single-artifact access.
     publisher_artifacts : tuple[PublisherArtifact, ...]
@@ -88,7 +103,7 @@ class StoreManifest:
         Exact physical row counts keyed by product/year.
     """
 
-    format_version: Literal[2]
+    format_version: Literal[5]
     provider_id: ProviderId
     compiler_version: str
     built_at: datetime
@@ -98,6 +113,11 @@ class StoreManifest:
     source_schema: SourceSchema
     source_column_dispositions: tuple[SourceColumnDisposition, ...]
     partition_row_counts: Mapping[PartitionIdentifier, int]
+    series: tuple[SourceSeries, ...] = ()
+    inventories: tuple[InventorySnapshot, ...] = ()
+    outcomes: tuple[RetrievalOutcome, ...] = ()
+    issues: tuple[Issue, ...] = ()
+    source_calls: tuple[dict[str, object], ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "partition_row_counts", MappingProxyType(dict(self.partition_row_counts)))
@@ -110,7 +130,7 @@ class AccumulatedStoreManifest:
     Attributes
     ----------
     format_version : int
-        Accumulated layout revision, 4.
+        Accumulated layout revision, 7.
     provider_id : ProviderId
         Provider whose native observations are stored.
     built_at : datetime
@@ -121,11 +141,16 @@ class AccumulatedStoreManifest:
         Exact physical row counts keyed by product/year.
     """
 
-    format_version: Literal[4]
+    format_version: Literal[7]
     provider_id: ProviderId
     built_at: datetime
     coverage: tuple[CoverageInterval, ...]
     partition_row_counts: Mapping[PartitionIdentifier, int]
+    series: tuple[SourceSeries, ...] = ()
+    inventories: tuple[InventorySnapshot, ...] = ()
+    outcomes: tuple[RetrievalOutcome, ...] = ()
+    issues: tuple[Issue, ...] = ()
+    source_calls: tuple[dict[str, object], ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "partition_row_counts", MappingProxyType(dict(self.partition_row_counts)))
@@ -171,6 +196,14 @@ class StoreRefusal:
 
 
 class ObservationStoreRefusedError(FatalContractError):
+    """Raised when an existing local observation store is malformed or incompatible.
+
+    ``refusal`` records the kind (``malformed`` or ``incompatible``), the store
+    path, the provider and the defect. The store is left in place. Rebuild a
+    compiled store with ``download`` or remove an accumulated store with
+    ``clear_cache``.
+    """
+
     refusal: StoreRefusal
 
     def __init__(self, refusal: StoreRefusal) -> None:
@@ -190,7 +223,16 @@ class _JSONObject(list[tuple[str, object]]):
 
 _PARTITION_FILE = re.compile(r"product=[^/=]+/year=[0-9]{4}/[^/]+\.parquet")
 _PARTITION_DIRECTORY = re.compile(r"product=[^/=]+/year=[0-9]{4}")
-_REQUIRED_FIELD_NAMES = ("station_id", "time", "time_zone", "value", "value_state")
+_REQUIRED_FIELD_NAMES = (
+    "station_id",
+    "time",
+    "time_zone",
+    "value",
+    "value_state",
+    "series_id",
+    "facts_id",
+    "source_unit",
+)
 
 
 def _refuse(
@@ -198,7 +240,7 @@ def _refuse(
     store: StoreRoot,
     provider_id: ProviderId,
     defect: str,
-) -> None:
+) -> NoReturn:
     raise ObservationStoreRefusedError(StoreRefusal(kind, store, provider_id, defect))
 
 
@@ -257,7 +299,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
     version = raw["format_version"]
     if type(version) is not int:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
-    if version not in (2, 4):
+    if version not in (5, 7):
         _refuse(
             StoreRefusalKind.INCOMPATIBLE,
             store,
@@ -286,7 +328,7 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
 def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
-    if raw["format_version"] == 4:
+    if raw["format_version"] == 7:
         schema = schema["$defs"]["accumulated"]
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
@@ -455,7 +497,10 @@ def _validate_partition(
         and pa.types.is_float64(schema[3].type)
         and _is_utf8_string(schema[4].type)
     )
-    names_are_valid = tuple(schema.names[:5]) == _REQUIRED_FIELD_NAMES
+    names_are_valid = tuple(schema.names[: len(_REQUIRED_FIELD_NAMES)]) == _REQUIRED_FIELD_NAMES
+    types_are_valid = types_are_valid and all(
+        _is_utf8_string(schema[index].type) for index in range(5, min(len(schema), len(_REQUIRED_FIELD_NAMES)))
+    )
     if not names_are_valid or not types_are_valid:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.schema:{identifier}")
     native_columns = tuple(column for column in retained_columns if column not in _REQUIRED_FIELD_NAMES)
@@ -539,7 +584,7 @@ def _validate_partition(
 def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
     source_schema = raw["source_schema"]
     return StoreManifest(
-        format_version=2,
+        format_version=5,
         provider_id=ProviderId(raw["provider_id"]),
         compiler_version=raw["compiler_version"],
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
@@ -571,16 +616,23 @@ def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
         partition_row_counts={
             PartitionIdentifier(identifier): count for identifier, count in raw["partition_row_counts"].items()
         },
+        **_metadata(raw),
     )
 
 
 def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     raw = _read_raw_manifest(store, provider_id)
     _check_revision(raw, store, provider_id)
+    stored_provider = raw.get("provider_id")
+    identity = publication_identity_fields((stored_provider,)) if isinstance(stored_provider, str) else {}
+    for field, expected in identity.items():
+        if raw.get(field) != expected:
+            _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"{field}:expected {expected}")
     _validate_manifest_schema(raw, store, provider_id)
     if raw["provider_id"] != str(provider_id):
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
-    if raw["format_version"] == 4:
+    _validate_metadata(raw, store, provider_id)
+    if raw["format_version"] == 7:
         return _validate_accumulated(raw, store, provider_id)
     _validate_source_contract(raw, store, provider_id)
     partition_files = _discover_partitions(raw, store, provider_id)
@@ -599,25 +651,40 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
             store,
             provider_id,
         )
+    _validate_series_partitions(raw, partition_files, store, provider_id)
     manifest = _parse_manifest(raw)
     return ValidatedStore(root=store, manifest=manifest, partition_files=partition_files)
 
 
 def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
     coverage: list[CoverageInterval] = []
+    outcomes = {item.outcome_id: item for item in _metadata(raw)["outcomes"]}
     for index, item in enumerate(raw["coverage"]):
         try:
             record = CoverageInterval(
-                item["station_id"],
-                ProductId(item["product_id"]),
+                item["series_id"],
                 RequestedInterval(datetime.fromisoformat(item["start"]), datetime.fromisoformat(item["end"])),
-                datetime.fromisoformat(item["retrieved_at"].removesuffix("Z") + "+00:00"),
+                datetime.fromisoformat(item["retrieved_at"]) if item["retrieved_at"] is not None else None,
+                item["outcome_id"],
+                tuple(item["facts_ids"]),
             )
-        except ValueError:
+        except (ValueError, TypeError):
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.interval:{index}")
+        outcome = outcomes.get(record.outcome_id)
+        if (
+            outcome is None
+            or outcome.series_id != record.series_id
+            or outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            or outcome.window.start > record.interval.start
+            or outcome.window.end < record.interval.end
+            or outcome.retrieved_at != record.retrieved_at
+            or not record.facts_ids
+            or not set(record.facts_ids).issubset(outcome.facts_ids)
+        ):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.outcome:{index}")
         if any(
-            previous.station_id == record.station_id
-            and previous.product_id == record.product_id
+            previous.series_id == record.series_id
+            and bool(set(previous.facts_ids).intersection(record.facts_ids))
             and previous.interval.start <= record.interval.end
             and previous.interval.end >= record.interval.start
             for previous in coverage
@@ -636,23 +703,109 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             provider_id,
             allowed_null_states=("published_null",),
         )
-        product = str(identifier).split("/", 1)[0].removeprefix("product=")
-        for batch in _open_parquet(path).iter_batches(columns=["station_id", "time"]):
-            for station, timestamp in zip(
-                batch.column("station_id").to_pylist(), batch.column("time").to_pylist(), strict=True
+        for batch in _open_parquet(path).iter_batches(columns=["series_id", "facts_id", "time"]):
+            for series_id, facts_id, timestamp in zip(
+                batch.column("series_id").to_pylist(),
+                batch.column("facts_id").to_pylist(),
+                batch.column("time").to_pylist(),
+                strict=True,
             ):
                 if not any(
-                    c.station_id == station
-                    and c.product_id == product
+                    c.series_id == series_id
+                    and facts_id in c.facts_ids
                     and c.interval.start <= timestamp <= c.interval.end
                     for c in coverage
                 ):
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
+    _validate_series_partitions(raw, partitions, store, provider_id)
     manifest = AccumulatedStoreManifest(
-        format_version=4,
+        format_version=7,
         provider_id=provider_id,
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
         coverage=tuple(coverage),
         partition_row_counts={PartitionIdentifier(key): value for key, value in raw["partition_row_counts"].items()},
+        **_metadata(raw),
     )
     return ValidatedStore(root=store, manifest=manifest, partition_files=partitions)
+
+
+def _metadata(raw: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "series": tuple(SourceSeries.model_validate(item) for item in raw["series"]),
+        "inventories": tuple(InventorySnapshot.model_validate(item) for item in raw["inventories"]),
+        "outcomes": tuple(RetrievalOutcome.model_validate(item) for item in raw["outcomes"]),
+        "issues": tuple(Issue.model_validate(item) for item in raw["issues"]),
+        "source_calls": tuple(decode_source_call(item) for item in raw["source_calls"]),
+    }
+
+
+def _validate_metadata(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
+    try:
+        metadata = _metadata(raw)
+    except (ValidationError, ValueError, TypeError) as error:
+        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"series.metadata:{error}")
+    definitions = {item.series_id: item for item in metadata["series"]}
+    if len(definitions) != len(metadata["series"]) or any(
+        item.provider_id != provider_id for item in definitions.values()
+    ):
+        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "series.identity")
+    facts: dict[str, object] = {}
+    for definition in definitions.values():
+        for fact in definition.facts:
+            if fact.facts_id in facts and facts[fact.facts_id] != fact:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "series.facts_conflict")
+            facts[fact.facts_id] = fact
+    snapshots: set[str] = set()
+    for snapshot in metadata["inventories"]:
+        if snapshot.snapshot_id in snapshots or len(set(snapshot.members)) != len(snapshot.members):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "inventory.identity")
+        snapshots.add(snapshot.snapshot_id)
+        if any(member not in definitions for member in snapshot.members):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "inventory.member")
+        if snapshot.member_facts:
+            member_facts = dict(snapshot.member_facts)
+            if len(member_facts) != len(snapshot.member_facts) or set(member_facts) != set(snapshot.members):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "inventory.member_facts")
+            for member, fact_ids in snapshot.member_facts:
+                allowed = {fact.facts_id for fact in definitions[member].facts}
+                if not fact_ids or len(set(fact_ids)) != len(fact_ids) or not set(fact_ids).issubset(allowed):
+                    _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "inventory.member_facts")
+    outcomes: set[str] = set()
+    for outcome in metadata["outcomes"]:
+        if not outcome.outcome_id or outcome.outcome_id in outcomes:
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "outcome.identity")
+        outcomes.add(outcome.outcome_id)
+        if outcome.series_id is not None:
+            definition = definitions.get(outcome.series_id)
+            if definition is None or (definition.station_id, definition.product_id) != (
+                outcome.station_id,
+                outcome.product_id,
+            ):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "outcome.series")
+            allowed = {fact.facts_id for fact in definition.facts}
+            if any(fact_id not in allowed for fact_id in outcome.facts_ids):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "outcome.facts")
+            if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY) and any(
+                admission(fact).status != "supported" for fact in definition.facts if fact.facts_id in outcome.facts_ids
+            ):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "outcome.admission")
+
+
+def _validate_series_partitions(
+    raw: dict[str, Any], partitions: Mapping[PartitionIdentifier, Path], store: StoreRoot, provider_id: ProviderId
+) -> None:
+    definitions = {item.series_id: item for item in _metadata(raw)["series"]}
+    for identifier, path in partitions.items():
+        product = str(identifier).split("/", 1)[0].removeprefix("product=")
+        for batch in _open_parquet(path).iter_batches(columns=["station_id", "series_id", "facts_id", "source_unit"]):
+            for row in batch.to_pylist():
+                definition = definitions.get(row["series_id"])
+                if definition is None or definition.station_id != row["station_id"] or definition.product_id != product:
+                    _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.series:{identifier}")
+                fact = next((item for item in definition.facts if item.facts_id == row["facts_id"]), None)
+                if (
+                    fact is None
+                    or admission(fact).status != "supported"
+                    or fact.source_unit.value != row["source_unit"]
+                ):
+                    _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.facts:{identifier}")

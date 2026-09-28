@@ -1,0 +1,150 @@
+{
+  "schema_version": 3,
+  "provider_id": "fr_hydroportail",
+  "native_table": {
+    "repository_path": "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
+    "revision": "eb2b4fcb3a38875329225b7dbe5f949216c01599",
+    "sha256": "fde9cacf7f3465ec2ec18789dcd7377c5d87efc0f14b326582d40a305d5ef108",
+    "byte_size": 654243,
+    "semantic_digest": null
+  },
+  "source_records": [
+    {
+      "source_id": "fr_hydroportail",
+      "issuer": "Service Central Vigicrues",
+      "operator": "HydroPortail / PHyC",
+      "evidence": [
+        {
+          "evidence_id": "about",
+          "description": "HydroPortail publication and PHyC platform",
+          "recording": {
+            "recording_id": "about",
+            "repository_path": "maintenance/catalogue/fr_hydroportail/evidence/about.body",
+            "source_url": "https://hydro.eaufrance.fr/edito/a-propos-dhydroportail",
+            "retrieved_at": "2026-09-21T09:12:18.303912Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "c9371602ebcd4bb20332195975ce02eacf454002742fbea6b0eafd4b566711cf"
+          }
+        },
+        {
+          "evidence_id": "legal",
+          "description": "HydroPortail public access and operator; reuse licence not established",
+          "recording": {
+            "recording_id": "legal",
+            "repository_path": "maintenance/catalogue/fr_hydroportail/evidence/legal.body",
+            "source_url": "https://hydro.eaufrance.fr/edito/mentions-legales",
+            "retrieved_at": "2026-09-21T09:12:18.327846Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "ef51f384ce7541ed4c152bde1a3763cde18bddfb9ffeddfa80f527930c317eb4"
+          }
+        },
+        {
+          "evidence_id": "chunk-8529.fdb00780.js",
+          "description": "Module 71324 emits station x/y directly as GeoJSON longitude/latitude",
+          "recording": {
+            "recording_id": "chunk-8529.fdb00780.js",
+            "repository_path": "maintenance/catalogue/fr_hydroportail/evidence/chunk-8529.fdb00780.js.body",
+            "source_url": "https://hydro.eaufrance.fr/build/8529.fdb00780.js",
+            "retrieved_at": "2026-09-21T09:13:03.473514Z",
+            "media_type": "text/javascript",
+            "sha256": "990bc9b875ae6ce363677ae68a648aadbde2c2f1b378303c3ea112f724c85fab"
+          }
+        }
+      ],
+      "statements": []
+    }
+  ],
+  "descriptions": [
+    "Anonymous public native station search: explicit active, closed, all published site types and test entities. Not an unrestricted PHyC census or observation availability assertion.",
+    "HydroPortail publication and PHyC platform",
+    "HydroPortail public access and operator; reuse licence not established",
+    "Module 71324 emits station x/y directly as GeoJSON longitude/latitude",
+    "HydroPortail station-own raw Q/H publication; original measurement authorship unknown",
+    "HydroPortail raw station history; HTTP 200; empty_in_both_history_windows. Exact bounded request, not continuous availability.",
+    "HydroPortail raw station history; HTTP 200; available. Exact bounded request, not continuous availability.",
+    "HydroPortail raw station history; HTTP 500; history_check_failed. Exact bounded request, not continuous availability.",
+    "HydroPortail raw station history; HTTP 503; history_check_failed. Exact bounded request, not continuous availability.",
+    "HydroPortail raw station history; HTTP 200; history_check_failed. Exact bounded request, not continuous availability."
+  ],
+  "transformations": [
+    {
+      "name": "HydroPortail public station membership; raw Q/H observation history unchecked.",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "HydroPortail raw station series was empty in the two recorded request windows; other history unknown.",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "HydroPortail raw station series has a dated positive historical witness; no continuity assertion.",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "HydroPortail raw station history request failed; retained successful empty scopes do not establish absence.",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Full station bookmarkCode from native public search",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "Native station x/y with published GeoJSON coordinate semantics",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "HydroPortail native publication to canonical catalogue; reuse licence and historical measurement authors unknown",
+      "kind": "derived_value",
+      "marker_value": null
+    }
+  ],
+  "withheld_facts": [],
+  "row_locator_requirements": [
+    {
+      "carrier": "station_product",
+      "role": "availability"
+    }
+  ],
+  "files": {
+    "provenance_facts.parquet": {
+      "path": "provenance_facts.parquet",
+      "sha256": "5976696aa6d63b07fbf7f144b032e27b7f55c35572b695808dfa6add8df433f6",
+      "byte_count": 165988,
+      "row_count": 21393,
+      "schema_version": 3
+    },
+    "provenance_acquisitions.parquet": {
+      "path": "provenance_acquisitions.parquet",
+      "sha256": "38301744eef41f83bf53abdc9ed32346207f83202df1308dcfc2c1373fd8ec77",
+      "byte_count": 94757,
+      "row_count": 2134,
+      "schema_version": 3
+    },
+    "provenance_bindings.parquet": {
+      "path": "provenance_bindings.parquet",
+      "sha256": "f22ca052400ec1c787300b31918660f0f85cf88401f2e9b1e3cc6e61471e051c",
+      "byte_count": 95179,
+      "row_count": 14956,
+      "schema_version": 3
+    },
+    "provenance_binding_facts.parquet": {
+      "path": "provenance_binding_facts.parquet",
+      "sha256": "2810dd7017ca55e83200095a1a17593a9033d821358cb5159c35480baf42e10e",
+      "byte_count": 138559,
+      "row_count": 21393,
+      "schema_version": 3
+    },
+    "provenance_external_inputs.parquet": {
+      "path": "provenance_external_inputs.parquet",
+      "sha256": "b835ad79538fb12e8b2dde75ba5993c0e01a584f1732a133af565246b3966279",
+      "byte_count": 76627,
+      "row_count": 14282,
+      "schema_version": 3
+    }
+  }
+}

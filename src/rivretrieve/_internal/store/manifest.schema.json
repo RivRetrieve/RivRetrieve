@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-2.json",
-  "$comment": "Governed by docs/design/observation-store-layout.md. Revision 2 applies only to stores compiled from one or more exact publisher artifacts. The source-schema fingerprint covers ordered source column names and source data types.",
+  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-5.json",
+  "$comment": "Revision 5 compiled stores and revision 7 accumulated stores retain concrete source identity, physical facts, scoped inventory and outcomes.",
   "title": "RivRetrieve observation-store manifest",
   "type": "object",
   "additionalProperties": false,
@@ -13,11 +13,16 @@
     "source_vintage",
     "source_schema",
     "source_column_dispositions",
-    "partition_row_counts"
+    "partition_row_counts",
+    "series",
+    "inventories",
+    "outcomes",
+    "issues",
+    "source_calls"
   ],
   "properties": {
     "format_version": {
-      "const": 2
+      "const": 5
     },
     "compiler_version": {
       "type": "string",
@@ -119,6 +124,36 @@
     "provider_id": {
       "type": "string",
       "minLength": 1
+    },
+    "series": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inventories": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "outcomes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "source_calls": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
     }
   },
   "$defs": {
@@ -238,11 +273,16 @@
         "provider_id",
         "built_at",
         "coverage",
-        "partition_row_counts"
+        "partition_row_counts",
+        "series",
+        "inventories",
+        "outcomes",
+        "issues",
+        "source_calls"
       ],
       "properties": {
         "format_version": {
-          "const": 4
+          "const": 7
         },
         "provider_id": {
           "type": "string",
@@ -255,38 +295,47 @@
         },
         "coverage": {
           "type": "array",
-          "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "station_id",
-              "product_id",
+              "series_id",
               "start",
               "end",
-              "retrieved_at"
+              "retrieved_at",
+              "outcome_id",
+              "facts_ids"
             ],
             "properties": {
-              "station_id": {
+              "series_id": {
                 "type": "string",
                 "minLength": 1
               },
-              "product_id": {
+              "outcome_id": {
                 "type": "string",
-                "pattern": "^[^/=]+$"
+                "minLength": 1
               },
               "start": {
-                "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}$"
+                "type": "string"
               },
               "end": {
-                "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}$"
+                "type": "string"
               },
               "retrieved_at": {
-                "type": "string",
-                "format": "date-time",
+                "type": [
+                  "string",
+                  "null"
+                ],
                 "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+              },
+              "facts_ids": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             }
           }
@@ -300,6 +349,42 @@
             "type": "integer",
             "minimum": 1
           }
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "inventories": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "source_calls": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "publication_service": {
+          "const": "hubeau"
+        },
+        "usgs_publication_service": {
+          "const": "usgs-waterdata-v1"
         }
       }
     }

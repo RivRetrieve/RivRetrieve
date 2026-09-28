@@ -6,6 +6,7 @@ import json
 import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import polars as pl
 import pytest
@@ -15,12 +16,22 @@ from polars.testing import assert_frame_equal
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval, remainder
 from rivretrieve._internal.engine import RowsSchema
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.source_series import (
+    OutcomeStatus,
+    PhysicalFacts,
+    RetrievalOutcome,
+    SeriesWindow,
+    SourceIdentity,
+    SourceSeries,
+    known,
+    stable_id,
+)
 from rivretrieve._internal.store import ObservationStoreRefusedError, StoreQuery, StoreReader, StoreRoot, validate_store
-from rivretrieve._internal.store.accumulation import accumulate
+from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
 from rivretrieve._internal.store.validation import AccumulatedStoreManifest
 
 _ROOT = Path(__file__).parents[1]
-_FIXTURES = _ROOT / "tests/test_data/observation_store_conformance/accumulated"
+_FIXTURES = _ROOT / "tests/test_data/source_series_store_conformance/accumulated"
 _PROVIDER = ProviderId("fixture_live")
 _PRODUCT = ProductId("level")
 _T1 = datetime(2026, 9, 1, tzinfo=UTC)
@@ -32,7 +43,12 @@ def _interval(start: str, end: str) -> RequestedInterval:
 
 
 def _coverage(start: str, end: str, retrieved: datetime = _T1, station: str = "a") -> CoverageInterval:
-    return CoverageInterval(station, _PRODUCT, _interval(start, end), retrieved)
+    return CoverageInterval(
+        stable_id("controlled fixture", str(_PROVIDER), station, str(_PRODUCT)),
+        _interval(start, end),
+        retrieved,
+        stable_id(start, end, retrieved.isoformat()),
+    )
 
 
 def _rows(times: list[datetime], values: list[float | None]) -> pl.DataFrame:
@@ -43,9 +59,47 @@ def _rows(times: list[datetime], values: list[float | None]) -> pl.DataFrame:
             "time": times,
             "value": values,
             "time_zone": ["unknown"] * len(times),
+            "series_id": [stable_id("controlled fixture", str(_PROVIDER), "a", str(_PRODUCT))] * len(times),
+            "facts_id": [stable_id("controlled fixture", "level", "cm")] * len(times),
+            "source_unit": ["cm"] * len(times),
         },
         schema=RowsSchema.polars_schema,
     )
+
+
+def _accumulate_rows(store: StoreRoot, provider: ProviderId, rows: pl.DataFrame, coverage: CoverageInterval):
+    facts = PhysicalFacts(
+        facts_id=stable_id("controlled fixture", "level", "cm"),
+        quantity=known("stage", "controlled fixture"),
+        source_unit=known("cm", "controlled fixture"),
+        normalized_unit="cm",
+    )
+    definition = SourceSeries(
+        series_id=coverage.series_id,
+        provider_id=str(provider),
+        station_id="a",
+        product_id="level",
+        identity=SourceIdentity(namespace="controlled fixture", origin="mapping", evidence=("controlled fixture",)),
+        facts=(facts,),
+    )
+    outcome = RetrievalOutcome(
+        outcome_id=uuid4().hex,
+        series_id=coverage.series_id,
+        station_id="a",
+        product_id="level",
+        window=SeriesWindow(start=coverage.interval.start, end=coverage.interval.end),
+        status=OutcomeStatus.EMPTY if rows.is_empty() else OutcomeStatus.SUCCESS,
+        facts_ids=(facts.facts_id,),
+        retrieved_at=coverage.retrieved_at,
+    )
+    coverage = CoverageInterval(coverage.series_id, coverage.interval, coverage.retrieved_at, outcome.outcome_id)
+    return accumulate(
+        store, provider, StoreUpdate((definition,), (), (outcome,), (SuccessfulReplacement(coverage, rows),))
+    )
+
+
+def _coverage_shape(coverage):
+    return tuple((item.series_id, item.interval, item.retrieved_at) for item in coverage)
 
 
 def _read(store: Path) -> pl.DataFrame:
@@ -102,30 +156,32 @@ def test_accumulation_refresh_keeps_native_values_duplicates_and_other_windows(t
     february = _coverage("2020-02-01", "2020-02-29T23:59:59.999999", _T2)
     first = _rows([datetime(2020, 1, 1)] * 2, [12.4, 12.4])
     second = _rows([datetime(2020, 2, 1)], [None])
-    accumulate(store, _PROVIDER, first, january)
-    accumulate(store, _PROVIDER, second, february)
+    _accumulate_rows(store, _PROVIDER, first, january)
+    _accumulate_rows(store, _PROVIDER, second, february)
     assert_frame_equal(_read(store), pl.concat([first, second]))
     status = StoreReader().status(store, _PROVIDER)
-    assert status.coverage == (january, february)
+    assert _coverage_shape(status.coverage) == _coverage_shape((january, february))
     assert status.bytes_on_disk == sum(path.stat().st_size for path in store.rglob("*") if path.is_file())
     physical = pl.read_parquet(next(store.rglob("*.parquet")))
     assert physical["value"].to_list() == [12.4, 12.4, None]
-    accumulate(store, _PROVIDER, first.head(1), january)
+    _accumulate_rows(store, _PROVIDER, first.head(1), january)
     assert_frame_equal(_read(store), pl.concat([second, first.head(1)]))
-    accumulate(store, _PROVIDER, first.clear(), january)
+    _accumulate_rows(store, _PROVIDER, first.clear(), january)
     assert_frame_equal(_read(store), second)
-    assert StoreReader().status(store, _PROVIDER).coverage == (february, january)
+    assert _coverage_shape(StoreReader().status(store, _PROVIDER).coverage) == _coverage_shape((february, january))
 
 
 def test_refresh_splits_coverage_with_original_retrieval_instants(tmp_path: Path) -> None:
     store = StoreRoot(tmp_path / "store")
     empty = pl.DataFrame(schema=RowsSchema.polars_schema)
-    accumulate(store, _PROVIDER, empty, _coverage("2020-01-01", "2020-01-31T23:59:59.999999"))
-    accumulate(store, _PROVIDER, empty, _coverage("2020-01-10", "2020-01-20T23:59:59.999999", _T2))
-    assert StoreReader().status(store, _PROVIDER).coverage == (
-        _coverage("2020-01-01", "2020-01-09T23:59:59.999999"),
-        _coverage("2020-01-21", "2020-01-31T23:59:59.999999"),
-        _coverage("2020-01-10", "2020-01-20T23:59:59.999999", _T2),
+    _accumulate_rows(store, _PROVIDER, empty, _coverage("2020-01-01", "2020-01-31T23:59:59.999999"))
+    _accumulate_rows(store, _PROVIDER, empty, _coverage("2020-01-10", "2020-01-20T23:59:59.999999", _T2))
+    assert _coverage_shape(StoreReader().status(store, _PROVIDER).coverage) == _coverage_shape(
+        (
+            _coverage("2020-01-01", "2020-01-09T23:59:59.999999"),
+            _coverage("2020-01-21", "2020-01-31T23:59:59.999999"),
+            _coverage("2020-01-10", "2020-01-20T23:59:59.999999", _T2),
+        )
     )
 
 
@@ -133,7 +189,7 @@ def test_failed_atomic_replacement_keeps_previous_store(tmp_path: Path, monkeypa
     store = StoreRoot(tmp_path / "store")
     rows = _rows([datetime(2020, 1, 1)], [12.4])
     coverage = _coverage("2020-01-01", "2020-01-31T23:59:59.999999")
-    accumulate(store, _PROVIDER, rows, coverage)
+    _accumulate_rows(store, _PROVIDER, rows, coverage)
     before = {p.relative_to(store): p.read_bytes() for p in store.rglob("*") if p.is_file()}
     rename = Path.rename
 
@@ -144,7 +200,7 @@ def test_failed_atomic_replacement_keeps_previous_store(tmp_path: Path, monkeypa
 
     monkeypatch.setattr(Path, "rename", fail_publish)
     with pytest.raises(OSError, match="controlled publish failure"):
-        accumulate(store, _PROVIDER, rows.clear(), coverage)
+        _accumulate_rows(store, _PROVIDER, rows.clear(), coverage)
     assert {p.relative_to(store): p.read_bytes() for p in store.rglob("*") if p.is_file()} == before
     assert not list(tmp_path.glob(".store.*"))
 

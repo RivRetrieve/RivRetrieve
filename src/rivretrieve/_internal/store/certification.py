@@ -21,6 +21,7 @@ import pyarrow.parquet as pq
 from polars.testing import assert_frame_equal
 
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store.compiler import (
     NativeStoreRows,
     ObservationBatchStream,
@@ -59,10 +60,7 @@ class NativeStoreMaterialization:
     rows: NativeStoreRows | pl.DataFrame
     observed_source_columns: tuple[SourceColumn, ...]
     source_units: tuple[SourceUnitCount, ...]
-
-
-# Compatibility with the descriptive name used in the layout discussion.
-DecodedPublisherArtifact = NativeStoreMaterialization
+    series: tuple[SourceSeries, ...] = ()
 
 
 class StoreCertificationError(RuntimeError):
@@ -71,9 +69,6 @@ class StoreCertificationError(RuntimeError):
 
 class StorePostCommitCleanupError(StoreCertificationError):
     """The new store is authoritative but named non-secret cleanup residue remains."""
-
-
-CertificationError = StoreCertificationError
 
 
 SourceDecoder = Callable[[Path], NativeStoreMaterialization]
@@ -99,9 +94,11 @@ def certify_store(
     artifact = Path(publisher_artifact)
     destination = Path(request.destination)
     if request.publisher_artifacts:
-        raise CertificationError("non-streaming certification accepts exactly one publisher artifact")
+        raise StoreCertificationError("non-streaming certification accepts exactly one publisher artifact")
     _check_artifact(artifact, destination, request.publisher_artifact)
     decoded = decode(artifact)
+    if decoded.series:
+        request = replace(request, series=decoded.series)
     _check_source(decoded, request)
 
     stage = destination.with_name(f".{destination.name}.staging-{uuid4().hex}")
@@ -129,11 +126,6 @@ def certify_store(
     return validated
 
 
-# Spellings matching the writer keep provider bulk ports concise.
-certify_compile = certify_store
-certified_compile = certify_store
-
-
 def _check_artifact(artifact: Path, destination: Path, expected_artifact: object) -> None:
     if not artifact.is_file():
         raise FileNotFoundError(f'publisher artifact does not exist: "{artifact}"')
@@ -150,7 +142,9 @@ def _check_artifact(artifact: Path, destination: Path, expected_artifact: object
     if not hasattr(expected, "sha256"):
         raise TypeError("expected publisher artifact provenance is malformed")
     if actual != expected.sha256:
-        raise CertificationError(f"publisher artifact checksum mismatch: expected {expected.sha256}; actual {actual}")
+        raise StoreCertificationError(
+            f"publisher artifact checksum mismatch: expected {expected.sha256}; actual {actual}"
+        )
 
 
 def _check_source(decoded: NativeStoreMaterialization, request: StoreCompileRequest) -> None:
@@ -178,7 +172,7 @@ def _check_source(decoded: NativeStoreMaterialization, request: StoreCompileRequ
             for name in observed_by_name.keys() & declared_by_name.keys()
             if observed_by_name[name] != declared_by_name[name]
         ]
-        raise CertificationError(
+        raise StoreCertificationError(
             "observed source schema is not declaration-closed: "
             f"undeclared={undeclared!r}; absent={absent!r}; retyped={retyped!r}; "
             f"declared_order={[column.name for column in declared]!r}; "
@@ -275,12 +269,12 @@ def certify_store_batches(
     destination = Path(request.destination)
     expected_artifacts = request.all_publisher_artifacts
     if len(artifacts) != len(expected_artifacts):
-        raise CertificationError("publisher artifact path and provenance counts differ")
+        raise StoreCertificationError("publisher artifact path and provenance counts differ")
     for artifact, expected in zip(artifacts, expected_artifacts, strict=True):
         _check_artifact(artifact, destination, expected)
     decoded = decode(artifacts if len(artifacts) > 1 else artifacts[0])
     if decoded.observed_source_columns != request.source_columns:
-        raise CertificationError("observed source schema is not declaration-closed")
+        raise StoreCertificationError("observed source schema is not declaration-closed")
 
     stage = destination.with_name(f".{destination.name}.staging-{uuid4().hex}")
     backup = destination.with_name(f".{destination.name}.previous-{uuid4().hex}")

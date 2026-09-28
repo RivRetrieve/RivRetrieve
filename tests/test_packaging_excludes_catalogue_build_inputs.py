@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path, PurePosixPath
 from tarfile import open as open_tar
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
 import pytest
+
+from tests._distribution import InstalledDistribution
 
 _FORBIDDEN_PARTS = {
     "planning",
@@ -56,64 +56,30 @@ def _assert_payload(names: list[str]) -> None:
     assert forbidden == []
 
 
-@pytest.mark.parametrize("distribution", ["wheel", "sdist-wheel"])
-def test_distribution_keeps_only_runtime_catalogues(distribution: str, tmp_path: Path) -> None:
+@pytest.mark.parametrize("installed_distribution", ["wheel", "sdist-wheel"], indirect=True)
+def test_distribution_keeps_only_runtime_catalogues(installed_distribution: InstalledDistribution) -> None:
     repository = Path(__file__).resolve().parents[1]
-    # Extracted source trees must stay inside the repository's worktree area.
-    checks = repository / ".worktrees" / "distribution-checks"
-    checks.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(prefix=distribution + "-", dir=checks) as temporary:
-        workspace = Path(temporary)
-        dist = workspace / "dist"
-        source = repository
-        expected = {
-            path.relative_to(repository / "src").as_posix(): path.read_bytes()
-            for path in (repository / "src/rivretrieve/_internal/providers").glob("*/catalogue/*")
-            if path.is_file() and path.name != "native.parquet"
-        }
-        assert expected
-        if distribution == "sdist-wheel":
-            _run(["uv", "build", "--offline", "--force-pep517", "--sdist", "--out-dir", str(dist)], repository)
-            archives = tuple(dist.glob("rivretrieve-*.tar.gz"))
-            assert len(archives) == 1
-            with open_tar(archives[0], "r:gz") as archive:
-                names = archive.getnames()
-                _assert_payload(names)
-                prefix = names[0].split("/", 1)[0]
-                for name, content in expected.items():
-                    member = archive.extractfile(f"{prefix}/src/{name}")
-                    assert member is not None
-                    assert member.read() == content
-                archive.extractall(workspace / "extracted", filter="data")
-            source = workspace / "extracted" / prefix
-        _run(["uv", "build", "--offline", "--force-pep517", "--wheel", "--out-dir", str(dist)], source)
-        wheels = tuple(dist.glob("rivretrieve-*.whl"))
-        assert len(wheels) == 1
-        with ZipFile(wheels[0]) as wheel:
-            _assert_payload(wheel.namelist())
+    expected = {
+        path.relative_to(repository / "src").as_posix(): path.read_bytes()
+        for path in (repository / "src/rivretrieve/_internal/providers").glob("*/catalogue/*")
+        if path.is_file() and path.name != "native.parquet"
+    }
+    assert expected
+    if installed_distribution.sdist is not None:
+        with open_tar(installed_distribution.sdist, "r:gz") as archive:
+            names = archive.getnames()
+            _assert_payload(names)
+            prefix = names[0].split("/", 1)[0]
             for name, content in expected.items():
-                assert wheel.read(name) == content
-            assert not any(b"NVE_API_KEY=" in wheel.read(name) for name in wheel.namelist())
-
-        environment = workspace / "environment"
-        _run(["uv", "venv", "--offline", "--python", sys.executable, str(environment)], tmp_path)
-        python = environment / "bin" / "python"
-        _run(["uv", "pip", "install", "--offline", "--no-deps", "--python", str(python), str(wheels[0])], tmp_path)
-        sites = tuple((environment / "lib").glob("python*/site-packages"))
-        assert len(sites) == 1
-        # Reuse installed dependencies, not the editable project's .pth files.
-        dependencies = [
-            path
-            for path in sys.path
-            if Path(path).name == "site-packages" and Path(path).is_relative_to(Path(sys.prefix))
-        ]
-        assert dependencies
-        (sites[0] / "dependencies.pth").write_text("\n".join(dependencies) + "\n")
-        _run(
-            [str(python), "-I", "-c", _VERIFICATION],
-            tmp_path,
-            {"PATH": os.environ["PATH"], "HOME": str(tmp_path)},
-        )
+                member = archive.extractfile(f"{prefix}/src/{name}")
+                assert member is not None
+                assert member.read() == content
+    with ZipFile(installed_distribution.wheel) as wheel:
+        _assert_payload(wheel.namelist())
+        for name, content in expected.items():
+            assert wheel.read(name) == content
+        assert not any(b"NVE_API_KEY=" in wheel.read(name) for name in wheel.namelist())
+    installed_distribution.verify(_VERIFICATION)
 
 
 @pytest.mark.parametrize("distribution", ["wheel", "sdist"])

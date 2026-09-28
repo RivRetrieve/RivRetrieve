@@ -208,34 +208,70 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
         rendered.start - timedelta(days=1)  # type: ignore[operator]
 
 
+def _window_decomposition_violations(module_source: str, path: object = "authored-control") -> list[str]:
+    violations: list[str] = []
+    tree = ast.parse(module_source)
+    for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
+        source = ast.get_source_segment(module_source, function) or ""
+        if "window" not in function.name.lower() and "FetchWindow" not in source:
+            continue
+        for node in ast.walk(function):
+            if (
+                isinstance(node, ast.BinOp)
+                and isinstance(node.op, (ast.Add, ast.Sub))
+                and not (
+                    isinstance(node.op, ast.Add)
+                    and (
+                        isinstance(node.left, ast.JoinedStr)
+                        or isinstance(node.left, ast.Constant)
+                        and isinstance(node.left.value, str)
+                    )
+                )
+            ):
+                violations.append(f"{path}:{function.name}:binary arithmetic")
+            if isinstance(node, ast.Call):
+                called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+                if called in {"timedelta", "monthrange", "relativedelta"}:
+                    violations.append(f"{path}:{function.name}:{called}")
+                if called == "replace" and any(
+                    keyword.arg in {"year", "month", "day", "hour", "minute", "second"} for keyword in node.keywords
+                ):
+                    violations.append(f"{path}:{function.name}:boundary replace")
+            if isinstance(node, (ast.For, ast.While)):
+                # Inspect operational identifiers, not publisher cursor vocabulary
+                # in string literals or comments inside a request loop.
+                loop_names = {item.id.lower() for item in ast.walk(node) if isinstance(item, ast.Name)}
+                if loop_names.intersection({"cursor", "window_start", "window_end", "next_date"}):
+                    violations.append(f"{path}:{function.name}:window cursor loop")
+    return violations
+
+
 def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic() -> None:
     providers = Path(__file__).parents[1] / "src" / "rivretrieve" / "_internal" / "providers"
-    violations: list[str] = []
-    for path in providers.glob("*/*.py"):
-        if path.name == "generate_catalogue.py":
-            continue
-        module_source = path.read_text()
-        tree = ast.parse(module_source)
-        for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
-            source = ast.get_source_segment(module_source, function) or ""
-            if "window" not in function.name.lower() and "FetchWindow" not in source:
-                continue
-            for node in ast.walk(function):
-                if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
-                    violations.append(f"{path}:{function.name}:binary arithmetic")
-                if isinstance(node, ast.Call):
-                    called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
-                    if called in {"timedelta", "monthrange", "relativedelta"}:
-                        violations.append(f"{path}:{function.name}:{called}")
-                    if called == "replace" and any(
-                        keyword.arg in {"year", "month", "day", "hour", "minute", "second"} for keyword in node.keywords
-                    ):
-                        violations.append(f"{path}:{function.name}:boundary replace")
-                if isinstance(node, (ast.For, ast.While)):
-                    loop_source = (ast.get_source_segment(module_source, node) or "").lower()
-                    if any(name in loop_source for name in ("cursor", "window_start", "window_end", "next_date")):
-                        violations.append(f"{path}:{function.name}:window cursor loop")
+    violations = [
+        violation
+        for path in providers.glob("*/*.py")
+        if path.name != "generate_catalogue.py"
+        for violation in _window_decomposition_violations(path.read_text(), path)
+    ]
     assert violations == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def window(fetch_window):\n    return fetch_window.start + timedelta(days=1)",
+        "def window(fetch_window):\n    return fetch_window.end.replace(hour=0)",
+        "def window(fetch_window):\n    while cursor < fetch_window.end:\n        cursor += step",
+    ],
+)
+def test_window_decomposition_guard_rejects_authored_boundary_arithmetic(source):
+    assert _window_decomposition_violations(source)
+
+
+def test_window_decomposition_guard_allows_publisher_pagination_vocabulary():
+    source = 'def fetch(fetch_window: FetchWindow):\n    for response in responses:\n        note("publisher cursor chains")\n        follow(response)'
+    assert _window_decomposition_violations(source) == []
 
 
 def test_obsolete_window_symbols_are_absent_from_tracked_source() -> None:
@@ -310,6 +346,7 @@ def test_payload_accepts_bytes_and_preserves_complete_source_call() -> None:
         "content_type",
         "source_path",
         "query",
+        "attempts",
     )
     assert "headers" not in {field.name for field in fields(SourceCallOrigin)}
     assert origin.request_parameters == {"station": "station-1"}
@@ -417,6 +454,9 @@ def test_rows_schema_declares_exact_native_row_shape() -> None:
         "time",
         "value",
         "time_zone",
+        "series_id",
+        "facts_id",
+        "source_unit",
     )
     assert RowsSchema.polars_schema == pl.Schema(
         {
@@ -425,6 +465,9 @@ def test_rows_schema_declares_exact_native_row_shape() -> None:
             "time": pl.Datetime(),
             "value": pl.Float64,
             "time_zone": pl.Utf8,
+            "series_id": pl.Utf8,
+            "facts_id": pl.Utf8,
+            "source_unit": pl.Utf8,
         }
     )
     assert tuple(column.name for column in RowsSchema.columns if column.nullable) == ("value",)
@@ -435,6 +478,9 @@ def test_rows_schema_declares_exact_native_row_shape() -> None:
             "time": [datetime(2026, 1, 1)],
             "value": [1.0],
             "time_zone": ["unknown"],
+            "series_id": ["series"],
+            "facts_id": ["facts"],
+            "source_unit": ["m3/s"],
         },
         schema=RowsSchema.polars_schema,
     )
@@ -449,6 +495,11 @@ def test_canonical_rows_schema_declares_exact_canonical_shape() -> None:
         "time_zone",
         "station_id",
         "product_id",
+        "series_id",
+        "facts_id",
+        "quantity",
+        "source_unit",
+        "unit",
         "value",
     )
     assert CanonicalRowsSchema.polars_schema == pl.Schema(
@@ -457,6 +508,11 @@ def test_canonical_rows_schema_declares_exact_canonical_shape() -> None:
             "time_zone": pl.Utf8,
             "station_id": pl.Utf8,
             "product_id": pl.Utf8,
+            "series_id": pl.Utf8,
+            "facts_id": pl.Utf8,
+            "quantity": pl.Utf8,
+            "source_unit": pl.Utf8,
+            "unit": pl.Utf8,
             "value": pl.Float64,
         }
     )
@@ -468,6 +524,11 @@ def test_canonical_rows_schema_declares_exact_canonical_shape() -> None:
             "station_id": ["station"],
             "product_id": ["flow"],
             "value": [1.0],
+            "series_id": ["series"],
+            "facts_id": ["facts"],
+            "source_unit": ["m3/s"],
+            "quantity": ["discharge"],
+            "unit": ["m3/s"],
         },
         schema=CanonicalRowsSchema.polars_schema,
     )
@@ -506,11 +567,16 @@ def test_fetch_window_is_rejected_where_requested_window_is_required() -> None:
 
 def _valid_frame(schema: CatalogueSchema) -> pl.DataFrame:
     values = {
+        "quantity": ["discharge"],
+        "unit": ["m3/s"],
         "station_id": ["station"],
         "product_id": ["flow"],
         "time": [datetime(2026, 1, 1)],
         "value": [1.0],
         "time_zone": ["unknown"],
+        "series_id": ["series"],
+        "facts_id": ["facts"],
+        "source_unit": ["m3/s"],
     }
     return pl.DataFrame(
         {column.name: values[column.name] for column in schema.columns},
@@ -532,3 +598,10 @@ def test_payload_requires_explicit_prerequisite_trace_tuple() -> None:
             b"data",
             SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown),
         )
+
+
+@pytest.mark.parametrize("attempts", [0, -1, True, "2"])
+def test_source_call_origin_rejects_invalid_attempt_counts(attempts: object) -> None:
+    unknown = UnknownOriginFact()
+    with pytest.raises(TypeError, match="attempts must be a positive integer"):
+        SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown, attempts=attempts)  # type: ignore[arg-type]

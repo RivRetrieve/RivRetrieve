@@ -2,79 +2,27 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
-from pathlib import Path
 from tarfile import open as open_tar
-from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
 import pytest
 
+from tests._distribution import InstalledDistribution
+
 _PROJECTION = "rivretrieve/_internal/catalogues/drainage_areas.parquet"
 
 
-def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
-    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, check=False)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-@pytest.mark.parametrize("distribution", ["wheel", "sdist-wheel"])
-def test_installed_drainage_areas_offline(distribution: str) -> None:
-    repository = Path(__file__).resolve().parents[1]
-    checks = repository / ".worktrees" / "distribution-checks"
-    checks.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(prefix=f"drainage-{distribution}-", dir=checks) as temporary:
-        workspace = Path(temporary)
-        dist = workspace / "dist"
-        source = repository
-        if distribution == "sdist-wheel":
-            _run(["uv", "build", "--sdist", "--out-dir", str(dist)], cwd=repository)
-            archives = tuple(dist.glob("rivretrieve-*.tar.gz"))
-            assert len(archives) == 1
-            with open_tar(archives[0], "r:gz") as archive:
-                names = archive.getnames()
-                assert not any(name.endswith("/native.parquet") for name in names)
-                assert any(name.endswith("/src/" + _PROJECTION) for name in names)
-                extracted = workspace / "extracted"
-                archive.extractall(extracted, filter="data")
-            sources = tuple(extracted.iterdir())
-            assert len(sources) == 1
-            source = sources[0]
-        _run(["uv", "build", "--wheel", "--out-dir", str(dist)], cwd=source)
-        wheels = tuple(dist.glob("rivretrieve-*.whl"))
-        assert len(wheels) == 1
-        with ZipFile(wheels[0]) as wheel:
-            assert _PROJECTION in wheel.namelist()
-            assert not any(name.endswith("/native.parquet") for name in wheel.namelist())
-
-        environment = workspace / "environment"
-        execution = workspace / "execution"
-        execution.mkdir()
-        _run(
-            ["uv", "venv", "--system-site-packages", "--python", sys.executable, str(environment)],
-            cwd=execution,
-        )
-        python = environment / "bin" / "python"
-        _run(
-            ["uv", "pip", "install", "--no-deps", "--python", str(python), str(wheels[0])],
-            cwd=execution,
-        )
-        # uv resolves the base interpreter, not the invoking project's virtualenv.
-        # Reuse dependency directories without executing their editable-install .pth files.
-        sites = tuple((environment / "lib").glob("python*/site-packages"))
-        assert len(sites) == 1
-        dependency_paths = [
-            path
-            for path in sys.path
-            if Path(path).name == "site-packages" and Path(path).is_relative_to(Path(sys.prefix))
-        ]
-        assert dependency_paths
-        (sites[0] / "project_dependencies.pth").write_text("\n".join(dependency_paths) + "\n")
-        # No inherited provider credentials, dotenv files, or Python import overrides.
-        clean_environment = {"PATH": os.environ["PATH"], "HOME": str(execution)}
-        _run([str(python), "-I", "-c", _VERIFICATION], cwd=execution, env=clean_environment)
+@pytest.mark.parametrize("installed_distribution", ["wheel", "sdist-wheel"], indirect=True)
+def test_installed_drainage_areas_offline(installed_distribution: InstalledDistribution) -> None:
+    if installed_distribution.sdist is not None:
+        with open_tar(installed_distribution.sdist, "r:gz") as archive:
+            names = archive.getnames()
+            assert not any(name.endswith("/native.parquet") for name in names)
+            assert any(name.endswith("/src/" + _PROJECTION) for name in names)
+    with ZipFile(installed_distribution.wheel) as wheel:
+        assert _PROJECTION in wheel.namelist()
+        assert not any(name.endswith("/native.parquet") for name in wheel.namelist())
+    installed_distribution.verify(_VERIFICATION)
 
 
 _VERIFICATION = r"""
@@ -105,16 +53,17 @@ assert catalogues.joinpath("drainage_areas.parquet").is_file()
 provider_root = files("rivretrieve._internal.providers")
 provider_ids = rr.providers()["provider_id"].to_list()
 frames = []
+selections = []
 for provider_id in provider_ids:
     catalogue = provider_root.joinpath(provider_id, "catalogue")
     assert not catalogue.joinpath("native.parquet").is_file()
     stations = pl.read_parquet(catalogue.joinpath("stations.parquet"))
     station_id = "02GA010" if provider_id == "ca_eccc" else stations["station_id"][0]
     selection = rr.find(provider=provider_id, station=station_id)
-    frames.append(rr.as_frame(selection))
+    selections.append(rr.from_bundle(rr.to_bundle(selection)))
+    frames.append(rr.drainage_areas(selections[-1]))
 
-selection = rr.from_frame(pl.concat(frames))
-actual = rr.drainage_areas(selection)
+actual = pl.concat(frames)
 schema = pl.Schema({
     "provider_id": pl.String,
     "station_id": pl.String,
@@ -128,7 +77,7 @@ assert actual.schema == schema
 assert set(actual["provider_id"]) == set(provider_ids)
 keys = ["provider_id", "station_id", "source_field"]
 assert actual.unique(subset=keys).height == actual.height
-assert_frame_equal(actual, rr.drainage_areas(selection))
+assert_frame_equal(actual, pl.concat([rr.drainage_areas(item) for item in selections]))
 for value in actual["source_value"].drop_nulls():
     assert isinstance(json.loads(value), (str, int, float, bool))
 assert actual.filter(pl.col("state") != "value")["source_value"].null_count() == actual.filter(
@@ -145,6 +94,6 @@ effective = canada.filter(pl.col("source_field") == "DRAINAGE_AREA_EFFECT").row(
 assert effective["source_dtype"] == "Float64"
 assert effective["source_value"] is None
 assert effective["state"] == "source_null"
-empty = rr.from_frame(rr.as_frame(selection).head(0))
+empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.drainage_areas(empty), pl.DataFrame(schema=schema))
 """

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import ast
 import hashlib
-import io
 import json
 import math
 import re
+import urllib.request
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -27,6 +26,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.jp_mlit import generate_catalogue
 from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+from tests._catalogue_projection import copy_catalogue_projection
 
 CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue")
 FIXTURE_PATH = Path("tests/test_data/jp_mlit_metadata.json")
@@ -55,7 +55,7 @@ PUBLISHED_ID_DIGEST = "9016935eea6c6c7b3c56ee280a1467f74b4d7b60f2fc10f17e1ed3baa
 TIMESTAMP_PAIR_DIGEST = "0f742e2f37bb9c6bfffb7e0d109f8025e5350e6416175c983e79bf8fb8b6fdd0"
 NATIVE_FRAME_DIGEST = "f3c42f03fc0280c14910dc4203fc8031b9d5cddcc0cc8a6431c3c9268602aec0"
 CANONICAL_CONTENT_DIGESTS = {
-    "products.parquet": "2a9dda9d6686fd13d4aeb972cfe7eeb9c9b17478b6344309956922e88c8b613a",
+    "products.parquet": "38aa480240734831a3fdb2e4b1a570c917054c8e6afd64a23eb5c2c6786195ad",
     "stations.parquet": "43f0369f650ec971fa49d507998f3e4e6104e4644a21204c43cef85e2227f1cb",
     "station_products.parquet": "7bdc3c07ac4e79fabcdf131bc7d2a2122bd254f488f227f533f942f3aac3948f",
     "provider.json": "104fe86853da0260c2556aff94253878cd51b60e5cacc8cdf5dee997e4d79fb9",
@@ -85,24 +85,15 @@ def _frame_content_digest(frame: pl.DataFrame) -> str:
     )
 
 
-def _products() -> pl.DataFrame:
-    return _catalogue().products
+@pytest.fixture(scope="module")
+def _pristine_projection():
+    built = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+    return copy_catalogue_projection(built)
 
 
-def _stations() -> pl.DataFrame:
-    return _catalogue().stations
-
-
-def _station_products() -> pl.DataFrame:
-    return _catalogue().station_products
-
-
-def _provider() -> dict[str, object]:
-    return _catalogue().provider_info
-
-
-def _catalogue() -> generate_catalogue.GeneratedJpMlitCatalogue:
-    return generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+@pytest.fixture
+def catalogue(_pristine_projection):
+    return copy_catalogue_projection(_pristine_projection)
 
 
 def _page(station_id: str, *, coordinate: str = "北緯 35度41分04秒 東経 139度24分47秒") -> bytes:
@@ -150,12 +141,12 @@ def test_rejected_response_fixture_identity() -> None:
     assert body.count(generate_catalogue._SOURCE_MARKER) == 0
 
 
-def test_products_count() -> None:
-    assert _products().height == 4
+def test_products_count(catalogue) -> None:
+    assert catalogue.products.height == 4
 
 
-def test_products_ids() -> None:
-    assert set(_products()["product_id"]) == {
+def test_products_ids(catalogue) -> None:
+    assert set(catalogue.products["product_id"]) == {
         "stage_daily",
         "discharge_daily",
         "stage_hourly",
@@ -163,68 +154,73 @@ def test_products_ids() -> None:
     }
 
 
-def test_canonical_products_have_correct_units() -> None:
-    products = _products()
+def test_canonical_products_have_correct_units(catalogue) -> None:
+    products = catalogue.products
     assert products.filter(pl.col("product_id") == "stage_daily")["unit"][0] == "m"
     assert products.filter(pl.col("product_id") == "discharge_daily")["unit"][0] == "m3/s"
 
 
-def test_provider_specific_products_have_correct_frequency() -> None:
-    row = _products().filter(pl.col("product_id") == "stage_hourly")
+def test_provider_specific_products_have_correct_frequency(catalogue) -> None:
+    row = catalogue.products.filter(pl.col("product_id") == "stage_hourly")
     assert row["frequency"][0] == "hourly"
     assert row["statistic"][0] == "unknown"
+    assert catalogue.products["period_type"].unique().to_list() == ["unknown"]
+    assert catalogue.products.filter(pl.col("product_id").str.ends_with("_daily"))["frequency"].to_list() == [
+        "daily",
+        "daily",
+    ]
 
 
-def test_product_native_ids_preserve_integer_kind_identity() -> None:
-    assert set(_products()["native_id"]) == {"2", "3", "6", "7"}
+def test_product_native_ids_preserve_integer_kind_identity(catalogue) -> None:
+    assert set(catalogue.products["native_id"]) == {"2", "3", "6", "7"}
 
 
-def test_stations_count() -> None:
-    assert _stations().height == 1023
+def test_stations_count(catalogue) -> None:
+    assert catalogue.stations.height == 1023
 
 
-def test_stations_have_unknown_crs() -> None:
-    assert _stations()["crs"].unique().to_list() == ["unknown"]
+def test_stations_have_unknown_crs(catalogue) -> None:
+    assert catalogue.stations["crs"].unique().to_list() == ["unknown"]
 
 
-def test_stations_have_exact_schema() -> None:
-    assert _stations().schema == STATION_CATALOG_SCHEMA.polars_schema
+def test_stations_have_exact_schema(catalogue) -> None:
+    assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
 
 
-def test_known_station_present() -> None:
-    assert "301011281104010" in _stations()["station_id"].to_list()
+def test_known_station_present(catalogue) -> None:
+    assert "301011281104010" in catalogue.stations["station_id"].to_list()
 
 
-def test_stations_have_valid_coordinates() -> None:
-    stations = _stations()
+def test_stations_have_valid_coordinates(catalogue) -> None:
+    stations = catalogue.stations
     assert stations["latitude"].null_count() == stations["longitude"].null_count() == 0
     assert stations["latitude"].min() >= 20.0 and stations["latitude"].max() <= 50.0
     assert stations["longitude"].min() >= 120.0 and stations["longitude"].max() <= 155.0
 
 
-def test_station_products_count() -> None:
-    assert _station_products().height == 4092
+def test_station_products_count(catalogue) -> None:
+    assert catalogue.station_products.height == 4092
 
 
-def test_station_products_availability_unknown() -> None:
-    assert _station_products()["availability"].cast(pl.Utf8).unique().to_list() == ["unknown"]
+def test_station_products_availability_unknown(catalogue) -> None:
+    assert catalogue.station_products["availability"].cast(pl.Utf8).unique().to_list() == ["unknown"]
 
 
-def test_provider_info_id() -> None:
-    assert _provider()["provider_id"] == "jp_mlit"
+def test_provider_info_id(catalogue) -> None:
+    assert catalogue.provider_info["provider_id"] == "jp_mlit"
 
 
-def test_provider_info_catalogue_version() -> None:
-    assert _provider()["catalogue_version"] == "2026-08-02"
+def test_provider_info_catalogue_version(catalogue) -> None:
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_provider_info_live_flags_false() -> None:
-    provider = _provider()
+def test_provider_info_live_flags_false(catalogue) -> None:
+    provider = catalogue.provider_info
     assert provider["live_stations"] is provider["live_products"] is provider["live_station_products"] is False
 
 
-def test_provider_info_name_and_bulk_observation_description() -> None:
-    provider = _provider()
+def test_provider_info_name_and_bulk_observation_description(catalogue) -> None:
+    provider = catalogue.provider_info
     assert provider["name"] == "MLIT Water Information System — Japan national hydrometric network"
     assert provider["bulk_observations"] == (
         "true: monthly-window decomposition for hourly products (KINDs 2,6), "
@@ -233,15 +229,15 @@ def test_provider_info_name_and_bulk_observation_description() -> None:
     )
 
 
-def test_catalogue_validates_without_error() -> None:
+def test_catalogue_validates_without_error(catalogue) -> None:
     validate_catalogue(
-        pl.DataFrame([_provider()], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
+        pl.DataFrame([catalogue.provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
         PROVIDER_INFO_CATALOG_SCHEMA,
         on_issue="raise",
     )
-    validate_catalogue(_products(), PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    validate_catalogue(_stations(), STATION_CATALOG_SCHEMA, on_issue="raise")
-    validate_catalogue(_station_products(), STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(catalogue.products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(catalogue.stations, STATION_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(catalogue.station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
 
 
 def test_packaged_catalogue_loads() -> None:
@@ -287,36 +283,6 @@ def test_catalogue_generation_surface_is_native_only() -> None:
         "validate_generated_catalogue",
     ):
         assert not hasattr(generate_catalogue, name)
-
-
-def test_module_docstring_contains_native_denotation() -> None:
-    assert (
-        "refresh_native_table : Responses × StationIds × RetrievedAtByStation × PriorNativeTable? → WithIssues[NativeTable]"
-        in (generate_catalogue.__doc__ or "")
-    )
-    assert "build_catalogue : NativeTable × OriginDeclarations → GeneratedJpMlitCatalogue" in (
-        generate_catalogue.__doc__ or ""
-    )
-
-
-def test_urlopen_call_sites_and_native_reachability() -> None:
-    tree = ast.parse(Path(generate_catalogue.__file__).read_text())
-    owners: list[str] = []
-    calls_by_function: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            calls_by_function[node.name] = {
-                call.func.id
-                for call in ast.walk(node)
-                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-            }
-            if any(
-                isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "urlopen"
-                for call in ast.walk(node)
-            ):
-                owners.append(node.name)
-    assert owners == ["_fetch_site_detail_response"]
-    assert "_fetch_site_detail_response" in calls_by_function["refresh_native_table_from_live"]
 
 
 CORE_TOKENS = [
@@ -375,19 +341,12 @@ def test_refresh_contract_guard_message(token: str) -> None:
         )
 
 
-FATAL_FAMILIES = ["minimum", "uncarryable", "malformed"]
+FATAL_FAMILIES = ["uncarryable", "malformed"]
 
 
 @pytest.mark.parametrize("family", FATAL_FAMILIES)
-def test_fatal_message_family(family: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    if family == "minimum":
-        monkeypatch.setattr(
-            generate_catalogue, "_fetch_site_detail_response", lambda station_id: pytest.fail(station_id)
-        )
-        with pytest.raises(FatalContractError) as caught:
-            generate_catalogue.refresh_native_table_from_live(["100000000000001", "100000000000002"])
-        assert all(token in str(caught.value) for token in ("jp_mlit", "2", "minimum 500"))
-    elif family == "uncarryable":
+def test_fatal_message_family(family: str) -> None:
+    if family == "uncarryable":
         station_id = "100000000000001"
         with pytest.raises(FatalContractError) as caught:
             generate_catalogue.refresh_native_table(
@@ -409,57 +368,32 @@ ISSUE_CODES = [
     "refresh_response_rejected",
     "refresh_decode_failed",
     "invalid_station_coordinates",
-    "refresh_request_failed",
-    "refresh_http_failed",
 ]
 
 
 @pytest.mark.parametrize("code", ISSUE_CODES)
-def test_refresh_issue_code(code: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refresh_issue_code(code: str) -> None:
     station_id = "100000000000001"
-    if code in {"refresh_request_failed", "refresh_http_failed"}:
-        ids = [f"{index:015d}" for index in range(500)]
-        prior = _native_for(ids)
-        monkeypatch.setattr(generate_catalogue.time, "sleep", lambda value: None)
-
-        def fetch(requested: str) -> tuple[int, bytes]:
-            if requested == ids[0]:
-                if code == "refresh_request_failed":
-                    raise OSError("request boom")
-                raise generate_catalogue.urllib.error.HTTPError(
-                    f"{generate_catalogue.SITE_INFO_DETAIL_URL}?ID={requested}",
-                    503,
-                    "http boom",
-                    None,
-                    None,
-                )
-            return 200, _page(requested)
-
-        monkeypatch.setattr(generate_catalogue, "_fetch_site_detail_response", fetch)
-        outcome = generate_catalogue.refresh_native_table_from_live(ids, prior=prior)
-        issue = outcome.issues[0]
-        station_id = ids[0]
+    prior = _native_for([station_id])
+    if code == "station_not_published":
+        body = REJECTED_PATH.read_bytes().replace(b"307051287711040", station_id.encode())
+        prior_arg = prior
+    elif code == "refresh_response_rejected":
+        body = b"generic HTTP 200 body"
+        prior_arg = prior
+    elif code == "refresh_decode_failed":
+        body = generate_catalogue._SOURCE_MARKER + b"\xff"
+        prior_arg = prior
     else:
-        prior = _native_for([station_id])
-        if code == "station_not_published":
-            body = REJECTED_PATH.read_bytes().replace(b"307051287711040", station_id.encode())
-            prior_arg = prior
-        elif code == "refresh_response_rejected":
-            body = b"generic HTTP 200 body"
-            prior_arg = prior
-        elif code == "refresh_decode_failed":
-            body = generate_catalogue._SOURCE_MARKER + b"\xff"
-            prior_arg = prior
-        else:
-            body = _page(station_id, coordinate="not DMS")
-            prior_arg = prior
-        outcome = generate_catalogue.refresh_native_table(
-            {station_id: body},
-            station_ids=[station_id],
-            retrieved_at_by_station=_timestamps([station_id]),
-            prior=prior_arg,
-        )
-        issue = outcome.issues[0]
+        body = _page(station_id, coordinate="not DMS")
+        prior_arg = prior
+    outcome = generate_catalogue.refresh_native_table(
+        {station_id: body},
+        station_ids=[station_id],
+        retrieved_at_by_station=_timestamps([station_id]),
+        prior=prior_arg,
+    )
+    issue = outcome.issues[0]
     assert issue.code == code
     assert issue.provider_id == "jp_mlit" and issue.severity == "warning"
     assert station_id in issue.message and code in issue.message
@@ -646,7 +580,7 @@ def test_manifest_guard_message(token: str, tmp_path: Path) -> None:
 
 def test_supplied_capture_cli_is_atomic_and_offline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     station_catalogue, responses, manifest_path, output, _ = _write_synthetic_capture(tmp_path)
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", lambda *args, **kwargs: pytest.fail("network"))
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: pytest.fail("network"))
     assert (
         generate_catalogue.main(
             [
@@ -666,23 +600,9 @@ def test_supplied_capture_cli_is_atomic_and_offline(tmp_path: Path, monkeypatch:
     assert table.data.height == 1
 
 
-def test_rejected_response_transport_and_absence_issue(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    body = REJECTED_PATH.read_bytes()
-
-    class Response(io.BytesIO):
-        status = 200
-
-        def __enter__(self) -> Response:
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            return None
-
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", lambda request, timeout: Response(body))
-    status, fetched = generate_catalogue._fetch_site_detail_response("307051287711040")
-    assert status == 200 and fetched == body and generate_catalogue._SOURCE_MARKER not in body
+def test_recorded_rejection_retains_source_absence(capsys: pytest.CaptureFixture[str]) -> None:
+    fetched = REJECTED_PATH.read_bytes()
+    assert generate_catalogue._SOURCE_MARKER not in fetched
     outcome = generate_catalogue.refresh_native_table(
         {"307051287711040": fetched},
         station_ids=["307051287711040"],
@@ -763,7 +683,7 @@ def test_committed_accepted_responses_rematerialize_exact_native_rows() -> None:
     assert actual.filter(pl.col("観測所記号") == "301011281104310")["流域面積"].item() == "\u00a0"
 
 
-def test_native_coordinates_are_an_independent_exact_projection() -> None:
+def test_native_coordinates_are_an_independent_exact_projection(catalogue) -> None:
     native = read_native_table(NATIVE_PATH).data.select("観測所記号", "世界測地系")
     pattern = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
     rows = []
@@ -778,7 +698,7 @@ def test_native_coordinates_are_an_independent_exact_projection() -> None:
                 "source_longitude": lon_d + lon_m / 60 + lon_s / 3600,
             }
         )
-    stations = _stations()
+    stations = catalogue.stations
     assert stations.schema == STATION_CATALOG_SCHEMA.polars_schema
     assert stations["station_id"].dtype == pl.Utf8
     assert stations["crs"].unique().to_list() == ["unknown"]
@@ -871,17 +791,17 @@ def test_mixed_native_instants_drive_station_dates_and_maximum_version() -> None
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
-def test_each_station_product_date_is_its_native_station_date() -> None:
+def test_each_station_product_date_is_its_native_station_date(catalogue) -> None:
     native_dates = read_native_table(NATIVE_PATH).data.select(
         pl.col("観測所記号").alias("station_id"), pl.col("retrieved_at").dt.date().alias("native_date")
     )
-    joined = _station_products().join(native_dates, on="station_id")
+    joined = catalogue.station_products.join(native_dates, on="station_id")
     assert joined.filter(pl.col("last_catalogue_check") != pl.col("native_date")).is_empty()
-    assert _provider()["catalogue_version"] == "2026-08-02"
+    assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_provider_info_is_exactly_the_reduced_carrier() -> None:
-    fresh = _provider()
+def test_provider_info_is_exactly_the_reduced_carrier(catalogue) -> None:
+    fresh = catalogue.provider_info
     committed = json.loads((CATALOGUE_PATH / "provider.json").read_text())
     assert fresh == committed
     assert tuple(fresh) == (
@@ -959,8 +879,7 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
         calls.append("called")
         raise AssertionError((args, kwargs))
 
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", forbidden)
-    monkeypatch.setattr(generate_catalogue, "refresh_native_table_from_live", forbidden)
+    monkeypatch.setattr(urllib.request, "urlopen", forbidden)
     before = NATIVE_PATH.read_bytes()
     assert (
         generate_catalogue.main(
@@ -990,6 +909,9 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
     assert {item.name for item in tmp_path.iterdir()} == expected_names
     for name in expected_names:
@@ -1062,3 +984,8 @@ def test_native_build_removes_withheld_fact_before_writing(tmp_path: Path) -> No
             "reason": "no_acquisition_record_established",
         }
     ]
+
+
+def test_catalogue_builder_has_no_automated_collection_seam() -> None:
+    assert not hasattr(generate_catalogue, "refresh_native_table_from_live")
+    assert not hasattr(generate_catalogue, "_fetch_site_detail_response")

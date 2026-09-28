@@ -1,0 +1,160 @@
+{
+  "compiler_version": "0.1.49",
+  "format_version": 5,
+  "partition_row_counts": {
+    "product=level/year=2024": 1
+  },
+  "provider_id": "fixture_bulk",
+  "publisher_artifact": {
+    "sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "url": "https://example.invalid/provider-neutral/source.bin"
+  },
+  "source_column_dispositions": [
+    {
+      "disposition": "retained",
+      "source_column": "station_id"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "time_zone"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "value"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "native_unit"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_quality"
+    },
+    {
+      "disposition": "retained",
+      "source_column": "source_note"
+    }
+  ],
+  "source_schema": {
+    "columns": [
+      {
+        "name": "station_id",
+        "type": "string"
+      },
+      {
+        "name": "time",
+        "type": "timestamp[us]"
+      },
+      {
+        "name": "time_zone",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "float64"
+      },
+      {
+        "name": "native_unit",
+        "type": "string"
+      },
+      {
+        "name": "source_quality",
+        "type": "string"
+      },
+      {
+        "name": "source_note",
+        "type": "string"
+      }
+    ],
+    "fingerprint": "sha256:fec7d282faad87c744bd83241c5be29a15b7a7254760b7a9aed0f4e27ba3ecca"
+  },
+  "source_vintage": "2024-01-02",
+  "series": [
+    {
+      "series_id": "5a8551c5ca9e028c4211d7b4f0187bb83e86e791161ea7a6697a288f3b7a4ef8",
+      "provider_id": "fixture_bulk",
+      "station_id": "at-001",
+      "product_id": "level",
+      "identity": {
+        "namespace": "controlled fixture",
+        "published_id": null,
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "controlled fixture"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "ea5f536795ca7835b6f6b93533ef4c63260f906352c1d0d6df08771657564392",
+          "quantity": {
+            "value": "stage",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "source_unit": {
+            "value": "cm",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "normalized_unit": "cm",
+          "frequency": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "statistic": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "temporal_support": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    }
+  ],
+  "inventories": [],
+  "outcomes": [],
+  "issues": [],
+  "source_calls": []
+}

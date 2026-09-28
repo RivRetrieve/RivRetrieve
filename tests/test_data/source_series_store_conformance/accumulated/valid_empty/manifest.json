@@ -1,0 +1,120 @@
+{
+  "format_version": 7,
+  "provider_id": "fixture_live",
+  "built_at": "2026-09-06T12:00:00.000000Z",
+  "coverage": [
+    {
+      "start": "2020-01-01T00:00:00.000000",
+      "end": "2020-01-31T23:59:59.999999",
+      "retrieved_at": "2026-09-06T11:00:00.000000Z",
+      "series_id": "c7d0ffc058869f28034b4e0747a4dfaf5c1a6df98a58ee305ec6e50234c40ad7",
+      "outcome_id": "e342573583e4d0efe1833e3e4d2b68bacb54e79b0dd43277389cd61e9a4628fd",
+      "facts_ids": [
+        "ea5f536795ca7835b6f6b93533ef4c63260f906352c1d0d6df08771657564392"
+      ]
+    }
+  ],
+  "partition_row_counts": {},
+  "series": [
+    {
+      "series_id": "c7d0ffc058869f28034b4e0747a4dfaf5c1a6df98a58ee305ec6e50234c40ad7",
+      "provider_id": "fixture_live",
+      "station_id": "a",
+      "product_id": "level",
+      "identity": {
+        "namespace": "controlled fixture",
+        "published_id": null,
+        "description": null,
+        "origin": "mapping",
+        "evidence": [
+          "controlled fixture"
+        ]
+      },
+      "variant": null,
+      "facts": [
+        {
+          "facts_id": "ea5f536795ca7835b6f6b93533ef4c63260f906352c1d0d6df08771657564392",
+          "quantity": {
+            "value": "stage",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "source_unit": {
+            "value": "cm",
+            "state": "known",
+            "evidence": [
+              "controlled fixture"
+            ]
+          },
+          "normalized_unit": "cm",
+          "frequency": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "statistic": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "temporal_support": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "day_definition": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "timestamp_anchor": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "time_zone": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_reference": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "vertical_datum": {
+            "value": null,
+            "state": "not_established",
+            "evidence": []
+          },
+          "clipping_axis": "source_timestamp",
+          "label_time": null
+        }
+      ]
+    }
+  ],
+  "inventories": [],
+  "outcomes": [
+    {
+      "outcome_id": "e342573583e4d0efe1833e3e4d2b68bacb54e79b0dd43277389cd61e9a4628fd",
+      "series_id": "c7d0ffc058869f28034b4e0747a4dfaf5c1a6df98a58ee305ec6e50234c40ad7",
+      "station_id": "a",
+      "product_id": "level",
+      "window": {
+        "start": "2020-01-01T00:00:00.000000",
+        "end": "2020-01-31T23:59:59.999999"
+      },
+      "status": "empty",
+      "facts_ids": [
+        "ea5f536795ca7835b6f6b93533ef4c63260f906352c1d0d6df08771657564392"
+      ],
+      "reason": null,
+      "retrieved_at": "2026-09-06T11:00:00.000000Z",
+      "calls": []
+    }
+  ],
+  "issues": [],
+  "source_calls": []
+}

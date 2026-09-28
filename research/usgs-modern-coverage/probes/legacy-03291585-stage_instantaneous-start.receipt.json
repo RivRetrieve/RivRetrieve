@@ -1,0 +1,23 @@
+{
+  "url": "https://waterservices.usgs.gov/nwis/iv/?format=json&sites=03291585&parameterCd=00065&startDT=2018-11-16&endDT=2018-11-22&siteStatus=all",
+  "retrieved_at": "2026-09-22T14:11:54.128036+00:00",
+  "status": 200,
+  "final_url": "https://nwis.waterservices.usgs.gov/nwis/iv/?format=json&sites=03291585&parameterCd=00065&startDT=2018-11-16&endDT=2018-11-22&siteStatus=all",
+  "headers": {
+    "Date": "Tue, 22 Sep 2026 14:11:55 GMT",
+    "Server": "Apache",
+    "Strict-Transport-Security": "max-age=31536000",
+    "Vary": "Accept-Encoding",
+    "Content-Type": "application/json",
+    "Cache-Control": "max-age=900",
+    "Expires": "Tue, 22 Sep 2026 14:26:55 GMT",
+    "X-UA-Compatible": "IE=edge,chrome=1",
+    "Access-Control-Allow-Origin": "*",
+    "Content-Security-Policy": "frame-ancestors 'self'",
+    "Connection": "close",
+    "Transfer-Encoding": "chunked"
+  },
+  "sha256": "61abbfa931d9d19347acaedb1a4fb50721fce0e87fd39ec9591d0ee12fbf6eba",
+  "bytes": 53032,
+  "file": "legacy-03291585-stage_instantaneous-start.json.gz"
+}

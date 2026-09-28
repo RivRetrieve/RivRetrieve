@@ -1,0 +1,9 @@
+{
+  "url": "https://hydro.eaufrance.fr/stationhydro/H312042201/fiche",
+  "params": null,
+  "status": 200,
+  "retrieved_at": "2026-09-21T09:13:29.203042+00:00",
+  "content_type": "text/html; charset=UTF-8",
+  "bytes": 85902,
+  "sha256": "3d182d985d94e2106cb41ecd02c04de979fb2a19d81bb8d71c9ac5367d60f741"
+}

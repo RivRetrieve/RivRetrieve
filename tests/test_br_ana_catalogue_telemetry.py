@@ -15,7 +15,7 @@ from rivretrieve._internal.providers.br_ana.generate_catalogue import build_cata
 from rivretrieve._internal.providers.br_ana.origins import (
     STATION_CATALOGUE_ORIGINS,
     build_acquisition_provenance,
-    with_adopted_telemetry,
+    with_observation_products,
 )
 from rivretrieve._internal.recordings import read_recording
 
@@ -38,7 +38,7 @@ def inputs():
     capture = read_capture_record(ROOT / "tests/test_data/br_ana_inventory/capture.json")
     native = read_native_table(ROOT / capture.native_table.repository_path)
     telemetry = telemetry_evidence()
-    provenance = with_adopted_telemetry(
+    provenance = with_observation_products(
         build_acquisition_provenance(capture), capture, project_stations(native).data, telemetry
     )
     return capture, native, telemetry, provenance

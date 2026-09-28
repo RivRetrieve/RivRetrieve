@@ -46,7 +46,7 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
         _STAGES.config,
         replay,
     )
-    return _STAGES.parse(fetched.value[0], _STAGES.config).value
+    return _STAGES.parse(fetched.value[0], _STAGES.config).rows
 
 
 def _probe(product: ProductId) -> LiveBoundaryProbe:
@@ -81,7 +81,7 @@ def test_one_graph_response_coalesces_both_products() -> None:
 
     assert len(fetched.value) == 1
     assert fetched.value[0].station_products == tuple(("1373273", product) for product in _PRODUCTS)
-    parsed = _STAGES.parse(fetched.value[0], _STAGES.config).value
+    parsed = _STAGES.parse(fetched.value[0], _STAGES.config).rows
     assert parsed.group_by("product_id").len().sort("product_id").rows() == [
         ("discharge_reported", 288),
         ("stage_reported", 288),
@@ -131,7 +131,7 @@ def test_historical_366_date_response_remains_parseable_without_claiming_current
     assert len(replay.requests) == 1
     assert len(fetched.value) == 1
     assert fetched.value[0].content == recording.content
-    parsed = _STAGES.parse(fetched.value[0], _STAGES.config).value
+    parsed = _STAGES.parse(fetched.value[0], _STAGES.config).rows
     assert parsed.group_by("product_id").len().sort("product_id").rows() == [
         ("discharge_reported", 52_704),
         ("stage_reported", 52_704),
