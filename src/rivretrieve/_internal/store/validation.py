@@ -675,6 +675,7 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             outcome is None
             or outcome.series_id != record.series_id
             or outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            or outcome.coverage != "interval"
             or outcome.window.start > record.interval.start
             or outcome.window.end < record.interval.end
             or outcome.retrieved_at != record.retrieved_at
@@ -715,6 +716,13 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
                     and facts_id in c.facts_ids
                     and c.interval.start <= timestamp <= c.interval.end
                     for c in coverage
+                ) and not any(
+                    outcome.coverage == "observations"
+                    and outcome.status is OutcomeStatus.SUCCESS
+                    and outcome.series_id == series_id
+                    and facts_id in outcome.facts_ids
+                    and outcome.window.start <= timestamp <= outcome.window.end
+                    for outcome in outcomes.values()
                 ):
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
     _validate_series_partitions(raw, partitions, store, provider_id)

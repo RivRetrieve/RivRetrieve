@@ -46,6 +46,8 @@ def fetch(
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
+    if len(stations) > 1:
+        raise FatalContractError("ch_foen fetch supports at most one station")
     for product in products:
         try:
             coordinates = config.products[product].coordinates.value
