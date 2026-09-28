@@ -91,7 +91,9 @@ collected by their water information systems.
 The provider identifier is `ba_fhmzbih`, but the publisher of the workbooks
 RivRetrieve reads is AVP Sava. The identifier does not mean that RivRetrieve
 provides a national inventory or all data held by Bosnia and Herzegovina's
-hydrometeorological services.
+hydrometeorological services. Broader geographical coverage and an AVP Sava
+provider name with compatibility for `ba_fhmzbih` are on the roadmap
+([#406](https://github.com/RivRetrieve/RivRetrieve/issues/406)).
 
 ## What you can retrieve
 
@@ -128,7 +130,8 @@ September 29 to November 30, 2025.
 A request can return only observations still present in the workbook. It cannot
 recover older observations that have rolled out of the source file. Contact
 the agency about longer records; this interface does not establish their
-availability.
+availability. Access to archival records is on the roadmap
+([#407](https://github.com/RivRetrieve/RivRetrieve/issues/407)).
 
 ## Time and data status
 

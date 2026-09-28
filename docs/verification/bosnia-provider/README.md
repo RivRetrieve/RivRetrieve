@@ -175,7 +175,7 @@ git diff --check
 - Final reruns of the example, catalogue inspection, workbook inspection and
   supporting quantity checks passed together in 16.38 seconds.
 
-## Limits and human review gate
+## Limits and human review
 
 Live verification covers the named stations, quantities and windows only.
 The source can change values, have gaps, return blanks or cease to serve data.
@@ -184,6 +184,18 @@ scientific quality. No time zone, averaging interval, station ownership or reuse
 permission was inferred. No outage blocked these checks.
 
 The work updates the existing PR and preserves Thiago's authorship and the
-provider index. Independent agent review supports the handoff but cannot replace
-human review. PR #296 must not be approved or merged by the implementation agent.
-The user must review it and provide feedback before the task concludes.
+provider index. Independent review of `72263349fb8e1321ee5d6305de4b572f7a6e9aee`
+found no actionable issues and reproduced the live example, catalogue inspection,
+quantity checks and 38 focused tests (83.91 seconds). The reviewer did not re-fetch
+all institutional pages or rerun the documentation suite.
+
+The original human review gate was satisfied on 2026-09-28. After reviewing the
+page, the user explicitly authorised finishing and merging without another human
+gate. Their feedback led to two separately tracked follow-ups:
+[#406](https://github.com/RivRetrieve/RivRetrieve/issues/406) for geographical
+coverage and AVP naming with compatibility, and
+[#407](https://github.com/RivRetrieve/RivRetrieve/issues/407) for archive access.
+The page links these roadmap items without promising current support. No example,
+production code or catalogue changed in this follow-up. The documentation suite
+was rerun: 28 tests passed in 7.29 seconds. The generated reference remained current,
+and `git diff --check` passed.
