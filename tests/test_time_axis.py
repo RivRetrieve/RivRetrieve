@@ -189,3 +189,34 @@ def test_all_scope_member_proof_uses_only_complete_contributor_absence():
     assert not _covered_facts(
         manifest, definition, scope, window, (missing.model_copy(update={"completeness": "incomplete"}),)
     )
+
+
+def test_new_narrow_inventory_cannot_be_hidden_by_older_broad_all_scope():
+    from types import SimpleNamespace
+
+    from rivretrieve._internal.driver import _reusable_snapshot
+    from rivretrieve._internal.source_series import InventorySnapshot, SeriesScope, SeriesWindow
+
+    scope = SeriesScope(provider_ids=("axis_control",), station_ids=("station",), product_ids=("discharge",))
+    broad_window = SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 2, 1))
+    old = InventorySnapshot(
+        snapshot_id="broad-empty",
+        scope=scope,
+        members=(),
+        completeness="complete",
+        origin="response",
+        access="exhaustive finite control",
+        window=broad_window,
+        evidence=("old-control",),
+    )
+    new = old.model_copy(
+        update={
+            "snapshot_id": "narrow-new-member",
+            "members": ("new-member",),
+            "window": SeriesWindow(start=datetime(2024, 1, 20), end=datetime(2024, 1, 21)),
+        }
+    )
+    manifest = SimpleNamespace(series=(), coverage=(), inventories=(old,))
+    assert _reusable_snapshot(manifest, scope, broad_window) is not None
+    manifest.inventories = (old, new)
+    assert _reusable_snapshot(manifest, scope, broad_window) is None
