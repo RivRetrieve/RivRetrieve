@@ -46,9 +46,9 @@ Product declarations supply source access routes; product names do not select a 
 Source coordinates identify such things as an endpoint, parameter code, or value column.
 Window declarations tell the engine how to split and render the fetch window.
 Providers consume those renderings without shifting their bounds.
-Monthly renderings also carry engine-established closed calendar-month bounds.
-A provider that retrieves independent, exhaustive months attaches those bounds to
-its payloads and failed requests. A dependent cursor transaction remains one
+Annual, monthly, capped-span and fixed-backward renderings carry engine-established
+closed acquisition bounds. Providers attach these bounds to independently
+exhaustive payloads and failed requests. A dependent cursor transaction remains one
 acquisition: an individual page does not establish exhaustive coverage.
 
 ## A recorded USGS request
@@ -134,7 +134,7 @@ Those are different reasons for absent information.
 
 The driver isolates source-call failures for each requested series and carries them as issues alongside any returned rows.
 This keeps one source-call failure from discarding independent series or independently
-exhaustive months. Failures retain their request identity, interval, reason, and
+exhaustive source intervals. Failures retain their request identity, interval, reason, and
 available response metadata. Lithuania historical-month HTTP 404 means that no
 station observations are stored for that month. When its engine-established bounds
 fall wholly outside the requested dates, that padding-only absence remains in
@@ -161,7 +161,7 @@ They share a reader and format family but preserve different information.
 | Live `cache="refresh"` | Replacement answer for the successfully retrieved requested interval | Fetch and parse again, convert, update storage, assemble |
 | Bulk | Certified compiled publisher observations | Read store, convert, assemble without provider fetch or parse |
 
-Accumulated stores use format revision `7`.
+Accumulated stores use format revision `8`.
 Their coverage records which closed intervals were successfully retrieved and when, including successful empty answers.
 Coverage is per concrete series and interval, separate from inventory knowledge. All-series reuse
 requires a complete inventory for the recorded scope and vintage, plus coverage of every required
@@ -170,9 +170,25 @@ reacquires the full requested scope through the provider's normal padded fetch w
 than fetching only uncovered intervals. Refresh replaces successful series intervals without
 erasing siblings. During reuse and refresh, failed or unsupported intervals retain
 held successful observations at their original retrieval vintage, alongside the new
-diagnostics, not as fresh successes. Independently successful months replace only
-their own requested intervals; failed months establish no successful coverage.
+diagnostics, not as fresh successes. Independently successful acquisitions replace only
+their own requested intervals; failed acquisitions establish no successful coverage.
+The driver assesses all pages before combining fresh rows with held fallback, so
+a late page failure has the same effect as an early failure.
 Coverage does not assert continuous observations.
+UTC-bounded acquisitions keep their UTC interval axis separate from native
+wall-clock labels. Cache replacement compares each observation using its
+published offset, while returned and stored labels retain that offset. Reuse of
+a native-label request requires UTC coverage for every offset accepted by the
+parser (−23:59 through +23:59). This conservative envelope is a mathematical
+coverage check, not a station time-zone assumption. Complete adjacent acquisition
+inventories can jointly establish the requested all-series scope.
+Bosnia's rolling workbooks establish only the observations they contain. Their
+rows update matching series, physical facts, timestamps and time zones in the
+cache. Rows absent from a later workbook remain held at their earlier acquisition
+vintage. Observation-only outcomes list exact physical-fact, timestamp and time-zone
+keys, linking each returned snapshot row to its acquisition calls and retrieval
+instant. These snapshots establish no reusable temporal coverage, even when empty;
+retrieval must contact the source again.
 Served intervals carry their retrieval instants in provenance, without an automatic freshness verdict.
 
 Compiled stores use revision `5` and retain declared source columns and native value states.
@@ -197,6 +213,9 @@ French artifacts and legacy USGS artifacts without reinterpreting their source i
 
 The driver derives source-call provenance from payload origins independently of receipt retention.
 Callers can therefore identify retrieval operations without keeping response bytes.
+Acquisition identity distinguishes repeated equal responses, including equal bytes
+and timestamps. Mapped outcomes link to those calls. Shared products retain one
+call and receipt for each acquired payload.
 Receipts expose the parse boundary or selected store rows, rather than promising to reproduce every enclosing network transfer.
 Their authorship distinguishes publisher bytes from RivRetrieve's encoding of stored rows, which cannot reconstruct discarded publisher content.
 Receipt origins exclude request headers, and shared credential transport binds supplied secrets to declared source origins.

@@ -47,7 +47,7 @@ def _window(start: datetime = datetime(2023, 1, 1), end: datetime = datetime(202
 
 def test_fetch_coalesces_five_products_into_exactly_two_annual_calls() -> None:
     replay = ReplayTransport([_DQ, _HQ])
-    rendered = MappingProxyType({product: (RenderedWindow("2023", None),) for product in _PRODUCTS})
+    rendered = MappingProxyType({product: (RenderedWindow("2023", None, _window()),) for product in _PRODUCTS})
     result = fetch((_STATION,), _PRODUCTS, rendered, _window(), config(), replay)
     assert len(result.value) == 2
     assert [payload.station_products for payload in result.value] == [
@@ -72,7 +72,7 @@ def test_parse_official_annual_recordings(
     recording: Path, products: tuple[ProductId, ...], counts: list[int], first: datetime, last: datetime
 ) -> None:
     replay = ReplayTransport([recording])
-    rendered = MappingProxyType({product: (RenderedWindow("2023", None),) for product in products})
+    rendered = MappingProxyType({product: (RenderedWindow("2023", None, _window()),) for product in products})
     fetched = fetch((_STATION,), products, rendered, _window(), config(), replay)
     rows = parse(fetched.value[0], config()).rows
     assert rows.columns == [
@@ -98,7 +98,7 @@ def test_official_recording_literals_and_shared_conversion() -> None:
         fetch(
             (_STATION,),
             _PRODUCTS[:3],
-            MappingProxyType({p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]}),
+            MappingProxyType({p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]}),
             _window(),
             config(),
             ReplayTransport([_DQ]),
@@ -109,7 +109,7 @@ def test_official_recording_literals_and_shared_conversion() -> None:
         fetch(
             (_STATION,),
             _PRODUCTS[3:],
-            MappingProxyType({p: (RenderedWindow("2023", None),) for p in _PRODUCTS[3:]}),
+            MappingProxyType({p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[3:]}),
             _window(),
             config(),
             ReplayTransport([_HQ]),
@@ -213,7 +213,7 @@ def test_parse_preserves_source_null_as_missing_value() -> None:
     fetched = fetch(
         (_STATION,),
         (_PRODUCTS[0],),
-        MappingProxyType({_PRODUCTS[0]: (RenderedWindow("2023", None),)}),
+        MappingProxyType({_PRODUCTS[0]: (RenderedWindow("2023", None, _window()),)}),
         _window(),
         config(),
         ReplayTransport([_DQ]),
@@ -232,7 +232,7 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality() -> None:
     fetched = fetch(
         (_STATION,),
         (_PRODUCTS[0],),
-        MappingProxyType({_PRODUCTS[0]: (RenderedWindow("2023", None),)}),
+        MappingProxyType({_PRODUCTS[0]: (RenderedWindow("2023", None, _window()),)}),
         _window(),
         config(),
         ReplayTransport([_DQ]),
@@ -271,7 +271,7 @@ def test_malformed_external_identity_retains_supported_siblings(malformed_id):
     fetched = fetch(
         (_STATION,),
         _PRODUCTS[:3],
-        {p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]},
+        {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
         ReplayTransport([_DQ]),
@@ -298,7 +298,7 @@ def test_double_zone_external_timestamp_retains_supported_siblings(timestamp):
     fetched = fetch(
         (_STATION,),
         _PRODUCTS[:3],
-        {p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]},
+        {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
         ReplayTransport([_DQ]),
@@ -324,7 +324,7 @@ def test_invalid_internal_request_tag_remains_fatal():
     fetched = fetch(
         (_STATION,),
         _PRODUCTS[:3],
-        {p: (RenderedWindow("2023", None),) for p in _PRODUCTS[:3]},
+        {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
         ReplayTransport([_DQ]),

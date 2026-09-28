@@ -5,23 +5,34 @@ Contributed by: Thiago von Däniken
 
 import json
 from collections.abc import Mapping
+from datetime import datetime
 from typing import cast
+from uuid import uuid4
 
+from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceAcquisition,
     SourceCallOrigin,
     UnknownOriginFact,
-    WithIssues,
 )
-from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
-from rivretrieve._internal.providers.fr_hubeau.config import FrHubeauSourceCoordinates
-from rivretrieve._internal.source_series import SeriesScope, SourceSeries
-from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
+from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS, FrHubeauSourceCoordinates
+from rivretrieve._internal.providers.fr_hubeau.parse import parse
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
+from rivretrieve._internal.source_series import (
+    OutcomeStatus,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    SourceSeries,
+)
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportFailure, TransportRequest, TransportResponse
 
 _DAILY_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab"
 _TEMPERATURE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/chronique"
@@ -37,8 +48,11 @@ def fetch(
     *,
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
-) -> WithIssues[tuple[Payload, ...]]:
+) -> SourceAcquisition:
     payloads: list[Payload] = []
+    failures = []
+    outcomes = []
+    issues = []
     for station in stations:
         for product in products:
             source = config.products[product].coordinates
@@ -73,8 +87,26 @@ def fetch(
                     },
                     {"Accept": "application/json"},
                 )
+            definition = SERIES_MAPPINGS[product].source_series("fr_hubeau", station, product)
+            bounds = SeriesWindow(
+                start=datetime.fromisoformat(fetch_window.start.isoformat()),
+                end=datetime.fromisoformat(fetch_window.end.isoformat()),
+            )
+            visited = set()
+            calls = []
+            reason = None
             while True:
-                response = transport.send(request)
+                response = attempt_request(transport, request)
+                if isinstance(response, (TransportFailure, CredentialExchangeError)):
+                    failed = FailedSourceRequest(uuid4().hex, definition, bounds, request, response)
+                    failures.append(failed)
+                    calls.extend(
+                        tuple(item.attempt_id for item in response.attempt_traces)
+                        if isinstance(response, TransportFailure) and response.attempt_traces
+                        else (failed.call_id or failed.event_id,)
+                    )
+                    reason = str(response)
+                    break
                 payloads.append(
                     Payload(
                         source,
@@ -85,17 +117,50 @@ def fetch(
                         response.prerequisite_calls,
                         scope=scope,
                         known_series=known_series,
+                        attempt_traces=response.attempt_traces,
                     )
                 )
+                calls.extend(item.attempt_id for item in payloads[-1].attempt_traces)
+                if not payloads[-1].attempt_traces:
+                    calls.append(payloads[-1].acquisition_id)
+                parsed = parse(payloads[-1], config)
+                if any(
+                    outcome.status in (OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED, OutcomeStatus.FAILED)
+                    for outcome in parsed.outcomes
+                ):
+                    reason = "Hub Eau cursor chain contains an unsupported observation page"
+                    break
                 try:
                     next_url = next_url_from_response(response.content)
-                except UnsupportedSourceStructureError:
-                    # Parse retains this page's unsupported outcome and exact bytes.
+                except UnsupportedSourceStructureError as error:
+                    reason = str(error)
+                    issues.append(_cursor_issue(station, product, definition.series_id, reason))
                     break
                 if next_url is None:
                     break
+                if next_url in visited:
+                    reason = "Hub Eau pagination cursor cycle"
+                    issues.append(_cursor_issue(station, product, definition.series_id, reason))
+                    break
+                visited.add(next_url)
                 request = TransportRequest(HttpMethod.GET, next_url, None, {"Accept": "application/json"})
-    return WithIssues(tuple(payloads))
+            if reason is not None:
+                outcomes.append(
+                    RetrievalOutcome(
+                        outcome_id=uuid4().hex,
+                        series_id=definition.series_id,
+                        station_id=station,
+                        product_id=product,
+                        window=bounds,
+                        status=OutcomeStatus.UNRESOLVED,
+                        reason=reason,
+                        facts_ids=tuple(f.facts_id for f in definition.facts),
+                        calls=tuple(dict.fromkeys(calls)),
+                    )
+                )
+    return SourceAcquisition(
+        value=tuple(payloads), failed_requests=tuple(failures), outcomes=tuple(outcomes), issues=tuple(issues)
+    )
 
 
 def next_url_from_response(content: bytes) -> str | None:
@@ -122,4 +187,15 @@ def _origin(response: TransportResponse) -> SourceCallOrigin:
         response.content_type if response.content_type else UnknownOriginFact(),
         UnknownOriginFact(),
         UnknownOriginFact(),
+        attempts=response.attempts,
+    )
+
+
+def _cursor_issue(station: str, product: ProductId, series_id: str, reason: str) -> Issue:
+    return Issue(
+        severity="error",
+        code="source.acquisition_incomplete",
+        message=reason,
+        provider_id=ProviderId("fr_hubeau"),
+        details={"station_id": station, "product_id": product, "series_id": series_id},
     )

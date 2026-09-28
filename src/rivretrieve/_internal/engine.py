@@ -13,6 +13,7 @@ from enum import StrEnum
 from math import isfinite
 from types import MappingProxyType
 from typing import NewType, Self
+from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import polars as pl
@@ -22,6 +23,7 @@ from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import FailedSourceRequest
 from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
+from rivretrieve._internal.time_axis import TimeAxis
 from rivretrieve._internal.transport import SecretCallTrace, TransportAttempt
 
 
@@ -146,14 +148,28 @@ class StopConvention(StrEnum):
     EXCLUSIVE = "exclusive"
 
 
+class CalendarLabelConvention(StrEnum):
+    """Published labels within calendar-date requests, independent of temporal support."""
+
+    CALENDAR_DATES = "calendar-dates"
+    HOURS_1_TO_24 = "hours-1-to-24"
+
+
 @dataclass(frozen=True, slots=True)
 class WindowDeclaration:
     granularity: WindowGranularity
     rendering: WindowRenderingVocabulary
     stop_convention: StopConvention
     size: int | None = None
+    calendar_labels: CalendarLabelConvention = field(default=CalendarLabelConvention.CALENDAR_DATES, kw_only=True)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.calendar_labels, CalendarLabelConvention):
+            raise TypeError("calendar labels must be CalendarLabelConvention")
+        if self.calendar_labels is CalendarLabelConvention.HOURS_1_TO_24 and (
+            self.granularity != "year-month" or self.rendering is not WindowRenderingVocabulary.DATE
+        ):
+            raise ValueError("hours-1-to-24 labels require monthly date windows")
         if not isinstance(self.granularity, str) or not self.granularity:
             raise TypeError("window granularity must be a non-empty string")
         if not isinstance(self.rendering, WindowRenderingVocabulary):
@@ -333,6 +349,8 @@ class Payload:
     scope: SeriesScope | None = None
     known_series: tuple[SourceSeries, ...] = ()
     attempt_traces: tuple[TransportAttempt, ...] = field(default=(), kw_only=True)
+    acquisition_id: str = field(default_factory=lambda: uuid4().hex, kw_only=True)
+    acquisition_axis: TimeAxis = field(default=TimeAxis.NATIVE, kw_only=True)
 
     def __post_init__(self) -> None:
         if not isinstance(self.attempt_traces, tuple) or any(

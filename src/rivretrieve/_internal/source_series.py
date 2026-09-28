@@ -17,6 +17,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.time_axis import TimeAxis
 
 
 class EvidenceState(StrEnum):
@@ -385,11 +386,12 @@ class SeriesScope(BaseModel):
 
 
 class SeriesWindow(BaseModel):
-    """Closed request interval with ordered, naive source wall-clock endpoints."""
+    """Closed source interval on an explicit native-label or UTC-instant axis."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     start: datetime
     end: datetime
+    axis: TimeAxis = TimeAxis.NATIVE
 
     @model_validator(mode="after")
     def check(self) -> SeriesWindow:
@@ -504,7 +506,14 @@ class RetrievalOutcome(BaseModel):
     ``requested_selector`` preserves the caller restriction without inventing
     a source identity. Unsuccessful outcomes retain a reason. ``calls`` links
     source-call evidence; ``retrieved_at`` records retrieval timing when known.
-    Outcomes remain present even when there are no observation rows."""
+    Outcomes remain present even when there are no observation rows.
+    ``coverage="observations"`` limits a successful result to its published row
+    identities; it does not establish completeness over ``window``.
+    ``observation_keys`` records admitted snapshot rows as tuples of physical-fact
+    ID, native wall-clock timestamp and time zone. A key can identify several
+    published rows with the same label; their values and multiplicity remain
+    unchanged. Each key retains this outcome's calls and retrieval instant. Stored keys describe accepted row updates;
+    returned held keys describe only the observations actually served."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     outcome_id: str
@@ -518,9 +527,24 @@ class RetrievalOutcome(BaseModel):
     retrieved_at: datetime | None = None
     calls: tuple[str, ...] = ()
     requested_selector: RequestedSelector | None = None
+    coverage: Literal["interval", "observations"] = "interval"
+    observation_keys: tuple[tuple[str, datetime, str], ...] = ()
 
     @model_validator(mode="after")
     def check(self) -> RetrievalOutcome:
+        if self.observation_keys:
+            if self.coverage != "observations" or self.status is not OutcomeStatus.SUCCESS:
+                raise ValueError("Only successful observation-only outcomes can identify observation keys")
+            if len(set(self.observation_keys)) != len(self.observation_keys):
+                raise ValueError("Snapshot observation keys must be unique")
+            if any(
+                facts_id not in self.facts_ids
+                or not zone
+                or timestamp.tzinfo is not None
+                or not self.window.start <= timestamp <= self.window.end
+                for facts_id, timestamp, zone in self.observation_keys
+            ):
+                raise ValueError("Snapshot observation keys exceed their physical facts or source window")
         if self.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
             if self.series_id is None or not self.facts_ids:
                 raise ValueError("A successful outcome requires a concrete series and physical facts")

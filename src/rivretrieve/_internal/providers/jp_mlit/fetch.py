@@ -1,4 +1,4 @@
-"""jp_mlit fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]].
+"""Acquire independent MLIT intervals and retain HTML prerequisites and bounded failures.
 
 Contributed by: Thiago von Däniken
 """
@@ -6,6 +6,7 @@ Contributed by: Thiago von Däniken
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from html.parser import HTMLParser
 from typing import Literal
 
@@ -14,16 +15,17 @@ from rivretrieve._internal.engine import (
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
-    WithIssues,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
-from rivretrieve._internal.providers.jp_mlit.config import JpMlitSourceCoordinates
-from rivretrieve._internal.source_series import SeriesScope, SourceSeries
+from rivretrieve._internal.providers.jp_mlit.config import SERIES_MAPPINGS, JpMlitSourceCoordinates
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_series_request
+from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _BASE = "http://www1.river.go.jp"
@@ -134,6 +136,7 @@ def _origin(response: TransportResponse) -> SourceCallOrigin:
         content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
         source_path=UnknownOriginFact(),
         query=UnknownOriginFact(),
+        attempts=response.attempts,
     )
 
 
@@ -147,9 +150,10 @@ def fetch(
     *,
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
-) -> WithIssues[tuple[Payload, ...]]:
+) -> SourceAcquisition:
     payloads: list[Payload] = []
     issues: list[Issue] = []
+    failures: list[FailedSourceRequest] = []
     for station_id in stations:
         for product_id in products:
             try:
@@ -162,6 +166,13 @@ def fetch(
             for window in rendered_windows[product_id]:
                 if window.stop is None:
                     raise FatalContractError("jp_mlit window requires inclusive start and stop dates")
+                if window.bounds is None:
+                    raise FatalContractError("jp_mlit requires engine-established acquisition bounds")
+                series = SERIES_MAPPINGS[product_id].source_series("jp_mlit", station_id, product_id)
+                bounds = SeriesWindow(
+                    start=datetime.fromisoformat(window.bounds.start.isoformat()),
+                    end=datetime.fromisoformat(window.bounds.end.isoformat()),
+                )
                 params = {
                     "KIND": coordinates.kind,
                     "ID": station_id,
@@ -169,18 +180,24 @@ def fetch(
                     "ENDDATE": window.stop.replace("-", ""),
                     "KAWABOU": "NO",
                 }
-                html = transport.send(TransportRequest(method=HttpMethod.GET, url=_DSP_URL, params=params))
+                html = attempt_series_request(
+                    transport, TransportRequest(method=HttpMethod.GET, url=_DSP_URL, params=params), series, bounds
+                )
+                if isinstance(html, FailedSourceRequest):
+                    failures.append(html)
+                    continue
                 tag = ((station_id, product_id),)
                 payloads.append(
                     Payload(
                         SourceCoordinates(JpMlitPayloadCoordinates(coordinates.kind, "html")),
                         tag,
-                        fetch_window,
+                        window.bounds,
                         html.content,
                         _origin(html),
                         html.prerequisite_calls,
                         scope=scope,
                         known_series=known_series,
+                        attempt_traces=html.attempt_traces,
                     )
                 )
                 try:
@@ -205,17 +222,23 @@ def fetch(
                         )
                     )
                     continue
-                dat = transport.send(TransportRequest(method=HttpMethod.GET, url=links[0]))
+                dat = attempt_series_request(
+                    transport, TransportRequest(method=HttpMethod.GET, url=links[0]), series, bounds
+                )
+                if isinstance(dat, FailedSourceRequest):
+                    failures.append(dat)
+                    continue
                 payloads.append(
                     Payload(
                         SourceCoordinates(JpMlitPayloadCoordinates(coordinates.kind, "dat")),
                         tag,
-                        fetch_window,
+                        window.bounds,
                         dat.content,
                         _origin(dat),
                         dat.prerequisite_calls,
+                        attempt_traces=dat.attempt_traces,
                         scope=scope,
                         known_series=known_series,
                     )
                 )
-    return WithIssues(tuple(payloads), tuple(issues))
+    return SourceAcquisition(tuple(payloads), tuple(issues), failed_requests=tuple(failures))

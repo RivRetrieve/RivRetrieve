@@ -262,12 +262,20 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
     )
     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    calls = tuple(item.attempt_id for item in payload.attempt_traces) or (payload.acquisition_id,)
     try:
         observations = _observations(payload.content)
     except SourceStructureError as error:
         reason = str(error)
         window_outcome = RetrievalOutcome(
-            outcome_id=stable_id(hashlib.sha256(payload.content).hexdigest(), str(retrieved), station, product, reason),
+            outcome_id=stable_id(
+                payload.acquisition_id,
+                hashlib.sha256(payload.content).hexdigest(),
+                str(retrieved),
+                station,
+                product,
+                reason,
+            ),
             series_id=None,
             station_id=station,
             product_id=product,
@@ -275,6 +283,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             status=OutcomeStatus.UNSUPPORTED,
             reason=reason,
             retrieved_at=retrieved,
+            calls=calls,
         )
         issue = Issue(
             severity="warning",
@@ -301,7 +310,9 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             reason = "ANA response contains rows with unestablished mean/consistency identity"
             outcomes.append(
                 RetrievalOutcome(
-                    outcome_id=stable_id(hashlib.sha256(payload.content).hexdigest(), str(retrieved), reason),
+                    outcome_id=stable_id(
+                        payload.acquisition_id, hashlib.sha256(payload.content).hexdigest(), str(retrieved), reason
+                    ),
                     series_id=None,
                     station_id=station,
                     product_id=product,
@@ -309,6 +320,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                     status=OutcomeStatus.UNSUPPORTED,
                     reason=reason,
                     retrieved_at=retrieved,
+                    calls=calls,
                 )
             )
             issues.append(
@@ -356,7 +368,11 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             outcomes.append(
                 RetrievalOutcome(
                     outcome_id=stable_id(
-                        hashlib.sha256(payload.content).hexdigest(), str(retrieved), definition.series_id, reason
+                        payload.acquisition_id,
+                        hashlib.sha256(payload.content).hexdigest(),
+                        str(retrieved),
+                        definition.series_id,
+                        reason,
                     ),
                     series_id=definition.series_id,
                     station_id=station,
@@ -366,6 +382,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                     facts_ids=(facts.facts_id,),
                     reason=reason,
                     retrieved_at=retrieved,
+                    calls=calls,
                 )
             )
             issues.append(
@@ -389,6 +406,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(
+                    payload.acquisition_id,
                     hashlib.sha256(payload.content).hexdigest(),
                     str(payload.origin.retrieved_at),
                     definition.series_id,
@@ -402,6 +420,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 status=OutcomeStatus.EMPTY if decoded.value.is_empty() else OutcomeStatus.SUCCESS,
                 facts_ids=(facts.facts_id,),
                 retrieved_at=retrieved,
+                calls=calls,
             )
         )
     observed_ids = tuple(item.series_id for item in definitions)
@@ -412,7 +431,11 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(
-                    hashlib.sha256(payload.content).hexdigest(), str(retrieved), candidate.series_id, reason
+                    payload.acquisition_id,
+                    hashlib.sha256(payload.content).hexdigest(),
+                    str(retrieved),
+                    candidate.series_id,
+                    reason,
                 ),
                 series_id=candidate.series_id,
                 station_id=station,
@@ -421,6 +444,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 status=OutcomeStatus.UNRESOLVED,
                 reason=reason,
                 retrieved_at=retrieved,
+                calls=calls,
             )
         )
         issues.append(
@@ -438,6 +462,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(
+                    payload.acquisition_id,
                     hashlib.sha256(payload.content).hexdigest(),
                     str(payload.origin.retrieved_at),
                     station,
@@ -452,6 +477,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 status=OutcomeStatus.UNRESOLVED,
                 reason=reason,
                 retrieved_at=retrieved,
+                calls=calls,
             )
         )
         issues.append(
@@ -470,6 +496,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     )
     inventory = InventorySnapshot(
         snapshot_id=stable_id(
+            payload.acquisition_id,
             hashlib.sha256(payload.content).hexdigest(),
             str(payload.origin.retrieved_at),
             "br_ana",

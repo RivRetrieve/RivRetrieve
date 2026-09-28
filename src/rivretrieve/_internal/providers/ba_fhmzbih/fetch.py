@@ -44,6 +44,8 @@ def fetch(
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
+    if len(stations) != 1 or len(products) != 1:
+        raise FatalContractError("ba_fhmzbih fetch requires exactly one station-product pair")
     for product in products:
         if rendered_windows[product] != ():
             raise FatalContractError("ba_fhmzbih source-fixed product received an unexpected rendered window")

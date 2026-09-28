@@ -164,7 +164,7 @@ def test_czech_repeated_code_is_identified_unsupported_without_losing_siblings(r
     payload = stages.fetch(
         ("0-203-1-000400",),
         products,
-        {product: (RenderedWindow("2023", None),) for product in products},
+        {product: (RenderedWindow("2023", None, window),) for product in products},
         window,
         stages.config,
         ReplayTransport((recording,)),

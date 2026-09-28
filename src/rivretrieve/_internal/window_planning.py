@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, time, timedelta
 
 from rivretrieve._internal.engine import (
+    CalendarLabelConvention,
     FetchWindow,
     RenderedWindow,
     StopConvention,
@@ -37,6 +38,10 @@ def _datetime_from_endpoint(window: FetchWindow, endpoint: str) -> datetime:
         value.second,
         value.microsecond,
     )
+
+
+def _closed_bounds(start: datetime, stop: datetime) -> FetchWindow:
+    return _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(stop))
 
 
 def _iso_z(value: datetime) -> str:
@@ -87,13 +92,17 @@ def _plan_year(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tup
     )
     start_year = _datetime_from_endpoint(fetch_window, "start").year
     end_year = _datetime_from_endpoint(fetch_window, "end").year
-    if declaration.rendering is WindowRenderingVocabulary.YEAR:
-        return tuple(RenderedWindow(str(year), None) for year in range(start_year, end_year + 1))
     windows = []
     for year in range(start_year, end_year + 1):
         start = datetime(year, 1, 1)
         stop = datetime(year, 12, 31)
-        windows.append(RenderedWindow(start.date().isoformat(), _render_date_stop(stop, declaration.stop_convention)))
+        bounds = _closed_bounds(start, datetime.combine(stop.date(), time.max))
+        if declaration.rendering is WindowRenderingVocabulary.YEAR:
+            windows.append(RenderedWindow(str(year), None, bounds))
+        else:
+            windows.append(
+                RenderedWindow(start.date().isoformat(), _render_date_stop(stop, declaration.stop_convention), bounds)
+            )
     return tuple(windows)
 
 
@@ -109,10 +118,12 @@ def _plan_year_month(fetch_window: FetchWindow, declaration: WindowDeclaration) 
     windows = []
     while cursor <= final:
         stop = cursor.replace(day=monthrange(cursor.year, cursor.month)[1])
-        bounds = _make_fetch_window(
-            WindowEndpoint.from_datetime(cursor),
-            WindowEndpoint.from_datetime(datetime.combine(stop.date(), time.max)),
-        )
+        if declaration.calendar_labels is CalendarLabelConvention.HOURS_1_TO_24:
+            # The first day starts at 1時; the final day's 24時 is next-day midnight.
+            # Open-left, closed-right bounds partition adjacent source label domains.
+            bounds = _closed_bounds(cursor + timedelta(microseconds=1), stop + timedelta(days=1))
+        else:
+            bounds = _closed_bounds(cursor, datetime.combine(stop.date(), time.max))
         if declaration.rendering is WindowRenderingVocabulary.YEAR_MONTH:
             windows.append(RenderedWindow(f"{cursor.year:04d}-{cursor.month:02d}", None, bounds))
         else:
@@ -172,7 +183,7 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
         tick = timedelta(microseconds=1)
         while cursor <= final:
             stop = min(cursor + timedelta(days=size) - tick, final)
-            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop)))
+            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop), _closed_bounds(cursor, stop)))
             cursor = stop + tick
         return tuple(windows)
     cursor = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
@@ -181,10 +192,11 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
     while cursor <= final:
         stop = min(cursor + timedelta(days=size - 1), final)
         rendered_stop = stop + timedelta(days=1) if declaration.stop_convention is StopConvention.EXCLUSIVE else stop
+        bounds = _closed_bounds(cursor, datetime.combine(stop.date(), time.max))
         if declaration.rendering is WindowRenderingVocabulary.ISO_INSTANT:
-            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(rendered_stop)))
+            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(rendered_stop), bounds))
         else:
-            windows.append(RenderedWindow(cursor.date().isoformat(), rendered_stop.date().isoformat()))
+            windows.append(RenderedWindow(cursor.date().isoformat(), rendered_stop.date().isoformat(), bounds))
         cursor = stop + timedelta(days=1)
     return tuple(windows)
 
@@ -211,7 +223,13 @@ def _plan_fixed_backward_span(fetch_window: FetchWindow, declaration: WindowDecl
     windows = []
     while stop >= first:
         start = stop - timedelta(days=size - 1)
-        windows.append(RenderedWindow(start.date().isoformat(), stop.date().isoformat()))
+        windows.append(
+            RenderedWindow(
+                start.date().isoformat(),
+                stop.date().isoformat(),
+                _closed_bounds(start, datetime.combine(stop.date(), time.max)),
+            )
+        )
         if start <= first:
             break
         stop = start - timedelta(days=1)

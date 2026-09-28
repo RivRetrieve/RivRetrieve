@@ -190,6 +190,7 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
         "rendering",
         "stop_convention",
         "size",
+        "calendar_labels",
     )
     assert dict(declarations.products) == {ProductId("flow"): declaration}
     assert isinstance(rendered.start, str)

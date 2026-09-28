@@ -483,3 +483,72 @@ def test_fixed_backward_spans_cover_whole_fetch_dates_without_overlap(days: int,
 def test_fixed_backward_span_refuses_unsupported_declarations(declaration: engine.WindowDeclaration) -> None:
     with pytest.raises(ValueError, match="requires"):
         window_planning.plan_windows(_fetch(datetime(2024, 1, 1), datetime(2024, 1, 2)), declaration)
+
+
+@pytest.mark.parametrize("rendering", [engine.WindowRenderingVocabulary.YEAR, engine.WindowRenderingVocabulary.DATE])
+def test_annual_bounds_cover_closed_calendar_years(rendering):
+    windows = window_planning.plan_windows(
+        _fetch(datetime(2020, 6, 1), datetime(2021, 2, 1)), _declaration("year", rendering)
+    )
+    assert [window.bounds for window in windows] == [
+        _fetch(datetime(year, 1, 1), datetime(year, 12, 31, 23, 59, 59, 999999)) for year in (2020, 2021)
+    ]
+
+
+@pytest.mark.parametrize("convention", list(engine.StopConvention))
+def test_capped_date_bounds_do_not_include_exclusive_stop(convention):
+    windows = window_planning.plan_windows(
+        _fetch(datetime(2020, 2, 28), datetime(2020, 3, 2)),
+        _declaration("capped-span", engine.WindowRenderingVocabulary.DATE, convention, 2),
+    )
+    assert [window.bounds for window in windows] == [
+        _fetch(datetime(2020, 2, 28), datetime(2020, 2, 29, 23, 59, 59, 999999)),
+        _fetch(datetime(2020, 3, 1), datetime(2020, 3, 2, 23, 59, 59, 999999)),
+    ]
+
+
+def test_inclusive_instant_bounds_preserve_microsecond_partition():
+    windows = window_planning.plan_windows(
+        _fetch(datetime(2020, 2, 28, 12), datetime(2020, 3, 1, 12)),
+        _declaration("capped-span", engine.WindowRenderingVocabulary.ISO_INSTANT, size=2),
+    )
+    assert [window.bounds for window in windows] == [
+        _fetch(datetime(2020, 2, 28, 12), datetime(2020, 3, 1, 11, 59, 59, 999999)),
+        _fetch(datetime(2020, 3, 1, 12), datetime(2020, 3, 1, 12)),
+    ]
+
+
+def test_backward_bounds_include_outward_earliest_days():
+    windows = window_planning.plan_windows(
+        _fetch(datetime(2020, 2, 29), datetime(2020, 3, 2)),
+        _declaration("fixed-backward-span", engine.WindowRenderingVocabulary.DATE, size=2),
+    )
+    assert [window.bounds for window in windows] == [
+        _fetch(datetime(2020, 2, 28), datetime(2020, 2, 29, 23, 59, 59, 999999)),
+        _fetch(datetime(2020, 3, 1), datetime(2020, 3, 2, 23, 59, 59, 999999)),
+    ]
+
+
+def test_published_hours_one_to_twenty_four_shift_only_monthly_label_bounds():
+    declaration = engine.WindowDeclaration(
+        engine.WindowGranularity("year-month"),
+        engine.WindowRenderingVocabulary.DATE,
+        engine.StopConvention.INCLUSIVE,
+        calendar_labels=engine.CalendarLabelConvention.HOURS_1_TO_24,
+    )
+    windows = window_planning.plan_windows(_fetch(datetime(2020, 1, 3), datetime(2020, 2, 3)), declaration)
+    assert _pairs(windows) == (("2020-01-01", "2020-01-31"), ("2020-02-01", "2020-02-29"))
+    assert [window.bounds for window in windows] == [
+        _fetch(datetime(2020, 1, 1, 0, 0, 0, 1), datetime(2020, 2, 1)),
+        _fetch(datetime(2020, 2, 1, 0, 0, 0, 1), datetime(2020, 3, 1)),
+    ]
+
+
+def test_hourly_calendar_label_convention_requires_monthly_date_requests():
+    with pytest.raises(ValueError, match="monthly date"):
+        engine.WindowDeclaration(
+            engine.WindowGranularity("year"),
+            engine.WindowRenderingVocabulary.YEAR,
+            engine.StopConvention.INCLUSIVE,
+            calendar_labels=engine.CalendarLabelConvention.HOURS_1_TO_24,
+        )

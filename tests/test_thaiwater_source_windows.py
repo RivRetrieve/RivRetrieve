@@ -120,10 +120,11 @@ def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_cover
     assert repeated.provenance.calls_made == first.provenance.calls_made
     assert all(entry.authorship is ReceiptAuthorship.STORE_EXCERPT for entry in repeated.receipts.entries)
     status = rr.cache_status("th_thaiwater")
-    assert len(status.coverage) == 2
+    assert len(status.coverage) == 4
     assert {item.series_id for item in status.coverage} == {series.series_id for series in selection.series}
     assert {item.interval for item in status.coverage} == {
-        RequestedInterval(datetime(2025, 9, 11), datetime(2026, 9, 10, 23, 59, 59, 999999))
+        RequestedInterval(datetime(2025, 9, 11), datetime(2026, 9, 8, 23, 59, 59, 999999)),
+        RequestedInterval(datetime(2026, 9, 9), datetime(2026, 9, 10, 23, 59, 59, 999999)),
     }
     refreshed = rr.fetch(selection, start=_START, end=_END, cache="refresh", receipts=True, on_issue="ignore")
     assert len(replay.calls) == 8
@@ -131,7 +132,7 @@ def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_cover
     assert all(entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for entry in refreshed.receipts.entries)
     # A refresh replays actual source responses; the test does not claim a later source vintage.
     assert {item.retrieved_at for item in rr.cache_status("th_thaiwater").coverage} == {
-        max(record.retrieved_at for record in _RECORDINGS)
+        record.retrieved_at for record in _RECORDINGS
     }
 
 
