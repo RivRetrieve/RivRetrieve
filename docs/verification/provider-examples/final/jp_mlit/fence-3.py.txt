@@ -1,0 +1,13 @@
+series_id = rr.series(selection)["series_id"].item()
+chosen = rr.pick(selection, series_id=series_id)
+
+cached_result = rr.fetch(
+    chosen, start="2020-01-10", end="2020-01-11", cache="reuse"
+)
+
+repeated_result = rr.fetch(
+    chosen, start="2020-01-10", end="2020-01-11", cache="reuse"
+)
+
+print(repeated_result.data.select("value", "unit").rows())
+print([(issue.severity, issue.code) for issue in repeated_result.issues])

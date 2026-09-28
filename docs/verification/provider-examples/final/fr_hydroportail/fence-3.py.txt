@@ -1,0 +1,2 @@
+print(sorted(rr.series(selection)["variant"].to_list()))
+print(rr.series(validated).select("station_id", "variant").rows())

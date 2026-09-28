@@ -1,0 +1,12 @@
+import rivretrieve as rr
+
+selection = rr.find(provider="ch_foen", station="2018", quantity="discharge")
+flow = rr.pick(selection, variant="flow")
+
+result = rr.fetch(flow, start="2024-01-01", end="2024-01-31", cache="bypass")
+
+preview = result.data.select("time", "time_zone", "value", "unit").head(3)
+print(preview.write_csv(), end="")
+
+print(result.data.height)
+print(result.issues)

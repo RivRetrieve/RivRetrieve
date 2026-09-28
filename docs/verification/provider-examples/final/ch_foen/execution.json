@@ -1,0 +1,36 @@
+{
+  "page": "docs/providers/ch_foen.md",
+  "revision": "28d12fb70f75c89ee4ceac497fbbf80ddd768922",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/execute.py",
+    "docs/providers/ch_foen.md",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/final/ch_foen",
+    "--revision",
+    "28d12fb70f75c89ee4ceac497fbbf80ddd768922"
+  ],
+  "python": "3.13.8 (main, Oct  7 2025, 16:19:32) [Clang 20.1.4 ]",
+  "page_sha256": "4586dbe1c7fe8918fce847b05f63a31b2d95120471b5286c9b6edde46fc0c47c",
+  "started_utc": "2026-09-28T21:09:50.124881+00:00",
+  "snippets": [
+    {
+      "fence": 1,
+      "status": "executed",
+      "seconds": 10.70286316704005
+    },
+    {
+      "fence": 3,
+      "status": "executed",
+      "seconds": 0.0006734579801559448
+    },
+    {
+      "fence": 5,
+      "status": "executed",
+      "seconds": 0.0006520419847220182
+    }
+  ],
+  "displayed_output_fences": 3,
+  "finished_utc": "2026-09-28T21:10:00.830170+00:00"
+}

@@ -1,0 +1,41 @@
+{
+  "page": "docs/providers/br_ana.md",
+  "revision": "28d12fb70f75c89ee4ceac497fbbf80ddd768922",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/execute.py",
+    "docs/providers/br_ana.md",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/final/br_ana",
+    "--revision",
+    "28d12fb70f75c89ee4ceac497fbbf80ddd768922"
+  ],
+  "python": "3.13.8 (main, Oct  7 2025, 16:19:32) [Clang 20.1.4 ]",
+  "page_sha256": "b6f1239167333ff914ae4c7582e900628d724e5a56d31e15fc92d5d5b44901e9",
+  "started_utc": "2026-09-28T21:09:50.045011+00:00",
+  "snippets": [
+    {
+      "fence": 1,
+      "status": "executed",
+      "seconds": 13.81437608296983
+    },
+    {
+      "fence": 3,
+      "status": "executed",
+      "seconds": 0.009072708198800683
+    },
+    {
+      "fence": 5,
+      "status": "executed",
+      "seconds": 0.0005359170027077198
+    },
+    {
+      "fence": 7,
+      "status": "executed",
+      "seconds": 4.796959792030975
+    }
+  ],
+  "displayed_output_fences": 4,
+  "finished_utc": "2026-09-28T21:10:08.667037+00:00"
+}

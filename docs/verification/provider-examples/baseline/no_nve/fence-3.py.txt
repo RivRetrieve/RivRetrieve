@@ -1,0 +1,10 @@
+print(rr.series(result).select("station_id", "variant").rows())
+
+other_station = rr.find(
+    provider="no_nve", station="109.42.0", quantity="discharge",
+    frequency="daily", statistic="mean",
+)
+print(rr.series(other_station).select("station_id", "variant").sort("variant").rows())
+
+version_two = rr.pick(other_station, variant="2")
+print(rr.series(version_two).select("station_id", "variant").rows())

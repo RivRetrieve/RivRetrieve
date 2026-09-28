@@ -1,0 +1,31 @@
+{
+  "page": "docs/providers/no_nve.md",
+  "revision": "28d12fb70f75c89ee4ceac497fbbf80ddd768922",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/execute.py",
+    "docs/providers/no_nve.md",
+    "/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/docs/verification/provider-examples/final/no_nve",
+    "--revision",
+    "28d12fb70f75c89ee4ceac497fbbf80ddd768922"
+  ],
+  "python": "3.13.8 (main, Oct  7 2025, 16:19:32) [Clang 20.1.4 ]",
+  "page_sha256": "0e061c3d92fbf4d1db795fd6252095e62066e2394165861eb76d9444aa5e1d53",
+  "started_utc": "2026-09-28T21:09:50.051497+00:00",
+  "snippets": [
+    {
+      "fence": 1,
+      "status": "executed",
+      "seconds": 11.36455020797439
+    },
+    {
+      "fence": 3,
+      "status": "executed",
+      "seconds": 0.005169749958440661
+    }
+  ],
+  "displayed_output_fences": 2,
+  "finished_utc": "2026-09-28T21:10:01.421938+00:00"
+}

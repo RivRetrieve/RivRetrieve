@@ -3,7 +3,9 @@ import logging
 import os
 import platform
 import time
+
 import rivretrieve as rr
+
 logging.basicConfig(level=logging.INFO)
 print("started", datetime.datetime.now(datetime.UTC).isoformat(), flush=True)
 print("python", platform.python_version(), "rivretrieve", rr.__version__, flush=True)

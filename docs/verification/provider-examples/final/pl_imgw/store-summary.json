@@ -1,0 +1,13 @@
+{
+  "built_at": "2026-09-28T21:28:11.034455Z",
+  "compiler_version": "0.1.49",
+  "format_version": 5,
+  "provider_id": "pl_imgw",
+  "source_vintage": "2025-10-31",
+  "manifest_sha256": "a645315a46ba0149d61716bc8e11f7f22e46beb0a7039655efe322527e6fa6f1",
+  "manifest_bytes": 8884478,
+  "store_bytes": 222930349,
+  "publisher_artifacts_count": 867,
+  "publisher_artifacts_sha256": "2b7637241f5021e72db000f91cab0662b738f373ed007b7b970f6b563786823e",
+  "publisher_artifacts_equal_to": "../../baseline/pl_imgw/store-summary.json#publisher_artifacts"
+}

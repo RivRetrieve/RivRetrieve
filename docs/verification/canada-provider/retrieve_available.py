@@ -1,17 +1,19 @@
-import rivretrieve as rr
 from polars.testing import assert_frame_equal
+
+import rivretrieve as rr
+
 selection = rr.find(provider="ca_eccc", station="05OG008", quantity="discharge", frequency="daily", statistic="mean")
 result = rr.fetch(selection, start="1991-03-01", end="1991-03-07", cache="bypass", receipts=True)
-print(result.data.select("time", "time_zone", "value", "unit").write_csv(),end="")
+print(result.data.select("time", "time_zone", "value", "unit").write_csv(), end="")
 print(result.data.height)
 print(result.issues)
-print("columns",result.data.columns)
-print("provenance",result.provenance)
+print("columns", result.data.columns)
+print("provenance", result.provenance)
 reused = rr.fetch(selection, start="1991-03-01", end="1991-03-07", cache="reuse")
 assert_frame_equal(result.data, reused.data)
-print("reuse identical",reused.issues)
-print("receipts",str(result.receipts)[:18000])
-status=rr.cache_status("ca_eccc")
-print("presence",status.presence.value)
-print("source_vintage",status.source_vintage)
-print("bytes_on_disk",status.bytes_on_disk)
+print("reuse identical", reused.issues)
+print("receipts", str(result.receipts)[:18000])
+status = rr.cache_status("ca_eccc")
+print("presence", status.presence.value)
+print("source_vintage", status.source_vintage)
+print("bytes_on_disk", status.bytes_on_disk)

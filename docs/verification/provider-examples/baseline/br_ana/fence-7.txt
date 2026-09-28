@@ -1,0 +1,5 @@
+/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-example-verification/src/rivretrieve/_internal/discovery.py:964: RuntimeWarning: Requested ANA consistency 1 is not published in this response; availability remains unresolved
+  apply_on_issue(result.issues, on_issue)
+[('bruto',), ('consistido',)]
+3 1
+[('info', 'provenance.citation_not_established'), ('info', 'source_status'), ('warning', 'source.unresolved_inventory')]

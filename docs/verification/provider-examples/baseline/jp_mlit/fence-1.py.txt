@@ -1,0 +1,16 @@
+import rivretrieve as rr
+
+selection = rr.find(
+    provider="jp_mlit",
+    station="305071285512040",
+    quantity="discharge",
+    frequency="daily",
+)
+
+result = rr.fetch(selection, start="2020-01-10", end="2020-01-11", cache="bypass")
+
+preview = result.data.select("time", "time_zone", "value", "unit")
+print(preview.write_csv(), end="")
+
+print(result.data.height)
+print([(issue.severity, issue.code) for issue in result.issues])

@@ -1,0 +1,20 @@
+{
+  "page": "docs/providers/jp_mlit.md",
+  "revision": "0b443049d50819978030e29e46011ca2101cb337",
+  "page_sha256": "ef640d2898e309041cf6f527260750a7e58fb999af9b3105ee51725c1df68bc0",
+  "started_utc": "2026-09-28T20:29:55.469662+00:00",
+  "snippets": [
+    {
+      "fence": 1,
+      "status": "executed",
+      "seconds": 12.238012040965259
+    },
+    {
+      "fence": 3,
+      "status": "executed",
+      "seconds": 1.983298584120348
+    }
+  ],
+  "displayed_output_fences": 2,
+  "finished_utc": "2026-09-28T20:30:09.691395+00:00"
+}

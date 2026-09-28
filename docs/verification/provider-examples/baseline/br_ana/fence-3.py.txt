@@ -1,0 +1,6 @@
+telemetry = rr.pick(
+    rr.find(provider="br_ana", station="15400000", quantity="discharge"),
+    variant="Vazao_Adotada",
+)
+
+print(rr.series(telemetry).select("variant", "frequency", "statistic").rows())

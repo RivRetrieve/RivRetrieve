@@ -1,0 +1,32 @@
+{
+  "executed_revision": "28d12fb70f75c89ee4ceac497fbbf80ddd768922",
+  "later_target": "8da58e4d30e06b65c86fbbfd9c4cccb461e9e460",
+  "source_changed_paths": [
+    "src/rivretrieve/_internal/coverage.py"
+  ],
+  "source_change": "CoverageInterval.interval documentation only; executable AST identical after removing docstrings",
+  "dependency_blobs": {
+    "pyproject.toml": "3c0d4f09c76c5e8c7550b09a3366fc38b850978b",
+    "uv.lock": "63bb3b978bcf1a62e978d54692a0a9356e5be802"
+  },
+  "provider_pages_tree": "6e1ec8b56a506f9d4d2eadba928061ff4d1075fc",
+  "other_changed_paths": [
+    "docs/reference.md",
+    "src/rivretrieve/_internal/coverage.py",
+    "tests/test_data/source_series_store_conformance/accumulated/invalid_coverage_order/manifest.json",
+    "tests/test_data/source_series_store_conformance/accumulated/invalid_published_blank/manifest.json",
+    "tests/test_data/source_series_store_conformance/accumulated/valid_empty/manifest.json",
+    "tests/test_data/source_series_store_conformance/accumulated/valid_native_rows/manifest.json",
+    "tests/test_failed_response_metadata.py",
+    "tests/test_internal_driver.py",
+    "tests/test_json_measurement_cells.py",
+    "tests/test_live_cache.py",
+    "tests/test_live_numeric_public.py",
+    "tests/test_lt_lhmt_monthly_isolation.py",
+    "tests/test_monthly_acquisition_contracts.py",
+    "tests/test_source_field_boundaries.py",
+    "tests/test_source_field_public.py",
+    "tests/test_th_thaiwater_live.py"
+  ],
+  "runtime_inputs": "No runtime/environment configuration files changed. The same locked dependency versions and supplied credentials were used. Original running processes remain unchanged."
+}
