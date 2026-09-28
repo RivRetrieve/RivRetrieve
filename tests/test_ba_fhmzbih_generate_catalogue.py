@@ -625,7 +625,15 @@ def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
     monkeypatch.setattr(urllib.request, "urlopen", fail_network)
     first = tmp_path / "first"
     second = tmp_path / "second"
-    argv = ["--native", str(_NATIVE_TABLE), "--workbook-access-ledger", str(_LEDGER), "--out"]
+    argv = [
+        "--native",
+        str(_NATIVE_TABLE),
+        "--workbook-access-ledger",
+        str(_LEDGER),
+        "--series-recording",
+        str(_TEST_DATA_DIR / "ba_fhmzbih_metadata_index.recording.json"),
+        "--out",
+    ]
     assert generate_catalogue.main([*argv, str(first)]) == 0
     assert generate_catalogue.main([*argv, str(second)]) == 0
     assert calls == []

@@ -32,7 +32,6 @@ from rivretrieve._internal.engine import (
     WindowGranularity,
     WindowRenderingVocabulary,
 )
-from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.br_ana.config import BrAnaSourceCoordinates, config, window_declarations
@@ -73,9 +72,30 @@ def _request(product: ProductId, start: str, end: str) -> ObservationRequest:
     )
 
 
-def _run(product: ProductId, start: str, end: str, anchors: tuple[str, ...], **kwargs):
+def _run(
+    product: ProductId, start: str, end: str, anchors: tuple[str, ...], *, explicit_adopted: bool = False, **kwargs
+):
+    request = _request(product, start, end)
+    if explicit_adopted:
+        from rivretrieve._internal.providers.br_ana.series import describe_series
+        from rivretrieve._internal.source_series import RestrictionKind, SeriesScope
+
+        coordinates = config().products[product].coordinates.value
+        assert isinstance(coordinates, BrAnaSourceCoordinates)
+        definition = describe_series("15400000", product, coordinates)
+        request = replace(
+            request,
+            known_series=(definition,),
+            scope=SeriesScope(
+                provider_ids=("br_ana",),
+                station_ids=("15400000",),
+                product_ids=(product,),
+                restriction=RestrictionKind.EXPLICIT,
+                variants=(coordinates.field,),
+            ),
+        )
     return drive(
-        _request(product, start, end),
+        request,
         _Stages(),
         provenance=ObservationProvenance(source="test-internal-stages", provider_id=_PROVIDER),
         transport=ReplayTransport([_recording(anchor) for anchor in anchors]),
@@ -136,8 +156,15 @@ def test_fixed_spans_match_recorded_native_values_and_preserve_nulls(product, st
                 if value is not None and coordinate.field == "Cota_Adotada":
                     value /= 100
                 rows.append((label, "unknown", "15400000", product, value))
-    expected = pl.DataFrame(rows, schema=result.canonical_rows.schema, orient="row").sort("time")
-    pl_testing.assert_frame_equal(result.canonical_rows.sort("time"), expected)
+    expected = pl.DataFrame(
+        rows,
+        schema={
+            name: result.canonical_rows.schema[name]
+            for name in ("time", "time_zone", "station_id", "product_id", "value")
+        },
+        orient="row",
+    ).sort("time")
+    pl_testing.assert_frame_equal(result.canonical_rows.select(expected.columns).sort("time"), expected)
     assert not result.canonical_rows.is_duplicated().any()
     assert [entry.content for entry in result.receipts.entries] == [
         read_recording(_recording(a)).content for a in anchors
@@ -174,8 +201,18 @@ def test_original_capped_span_reproduces_real_overlapping_rows(product: ProductI
 @pytest.mark.parametrize("product", _PRODUCTS)
 def test_cache_reuses_native_values_without_double_conversion(product: ProductId, tmp_path: Path) -> None:
     store = StoreRoot(tmp_path / "store")
-    live = _run(product, "2024-01-01T23:30:00", "2024-01-02T00:30:00", ("2024-01-04",), cache="reuse", store=store)
-    cached = _run(product, "2024-01-01T23:30:00", "2024-01-02T00:30:00", (), cache="reuse", store=store)
+    live = _run(
+        product,
+        "2024-01-01T23:30:00",
+        "2024-01-02T00:30:00",
+        ("2024-01-04",),
+        cache="reuse",
+        store=store,
+        explicit_adopted=True,
+    )
+    cached = _run(
+        product, "2024-01-01T23:30:00", "2024-01-02T00:30:00", (), cache="reuse", store=store, explicit_adopted=True
+    )
     pl_testing.assert_frame_equal(live.canonical_rows, cached.canonical_rows)
     assert live.receipts.entries == cached.receipts.entries == ()
 
@@ -210,8 +247,9 @@ def test_missing_required_fields_fail_loud_from_corrupted_recording(field: str) 
     payload = _payload(product)
     document = json.loads(payload.content)
     del document["items"][0][field]
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    result = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert any(outcome.status.value == "unsupported" for outcome in result.outcomes)
+    assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
 @pytest.mark.parametrize("bad_value", ["", "NaN", "Infinity", "not-a-number", True, 1, "9" * 400])
@@ -219,8 +257,9 @@ def test_invalid_values_fail_loud_from_corrupted_recording(bad_value: object) ->
     payload = _payload(ProductId("stage_instantaneous"))
     document = json.loads(payload.content)
     document["items"][0]["Cota_Adotada"] = bad_value
-    with pytest.raises(FatalContractError):
-        parse(replace(payload, content=json.dumps(document).encode()), config())
+    result = parse(replace(payload, content=json.dumps(document).encode()), config())
+    assert any(outcome.status.value == "unsupported" for outcome in result.outcomes)
+    assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
 def test_real_null_values_and_status_are_retained() -> None:
@@ -234,8 +273,8 @@ def test_duplicate_multiplicity_is_not_a_quality_selection_rule() -> None:
     payload = _payload(ProductId("stage_instantaneous"))
     document = json.loads(payload.content)
     document["items"].append(document["items"][0])
-    original = parse(payload, config()).value
-    repeated = parse(replace(payload, content=json.dumps(document).encode()), config()).value
+    original = parse(payload, config()).rows
+    repeated = parse(replace(payload, content=json.dumps(document).encode()), config()).rows
     pl_testing.assert_frame_equal(
         repeated,
         pl.concat(
@@ -245,3 +284,18 @@ def test_duplicate_multiplicity_is_not_a_quality_selection_rule() -> None:
             ]
         ).sort("time", maintain_order=True),
     )
+
+
+def test_exact_detailed_recording_does_not_establish_adopted_equivalence() -> None:
+    recording = read_recording(
+        _DATA / "HidroinfoanaSerieTelemetricaDetalhada_15400000_2024-01-02_HORA_24.recording.json"
+    )
+    assert recording.sha256 == "8f4049713c0b2e46b886052092191ae9d42a0def9047543a74b17eb1bf620feb"
+    rows = json.loads(recording.content)["items"]
+    assert len(rows) == 96
+    sensor = [row for row in rows if row["Cota_Sensor"] is not None]
+    assert len(sensor) == 92
+    assert sum(float(row["Cota_Sensor"]) != float(row["Cota_Adotada"]) for row in sensor) == 20
+    assert all(row["Cota_Manual"] is None and row["Cota_Display"] is None for row in rows)
+    # Numeric comparison disproves equality; it does not establish units, datum,
+    # temporal support, or general absence of the all-null manual/display fields.

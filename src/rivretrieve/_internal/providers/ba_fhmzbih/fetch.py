@@ -19,7 +19,9 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.ba_fhmzbih.config import BaFhmzbihSourceCoordinates
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _METADATA_URL = "https://vodostaji.voda.ba/data/internet/layers/20/index.json"
@@ -38,41 +40,33 @@ def fetch(
     fetch_window: FetchWindow,
     config: ProviderConfig,
     transport: Transport,
+    *,
+    scope: SeriesScope | None = None,
+    known_series: tuple[SourceSeries, ...] = (),
 ) -> WithIssues[tuple[Payload, ...]]:
     for product in products:
         if rendered_windows[product] != ():
             raise FatalContractError("ba_fhmzbih source-fixed product received an unexpected rendered window")
-    metadata_response = _send(
-        transport, TransportRequest(HttpMethod.GET, _METADATA_URL, params=None, headers={"Accept": "application/json"})
+    metadata_response = transport.send(
+        TransportRequest(HttpMethod.GET, _METADATA_URL, params=None, headers={"Accept": "application/json"})
+    )
+    pairs = tuple((station, product) for station in stations for product in products)
+    metadata_payload = _payload(
+        SourceCoordinates(BaFhmzbihMetadataCoordinates()), pairs, fetch_window, metadata_response, scope, known_series
     )
     try:
-        document = json.loads(metadata_response.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FatalContractError("ba_fhmzbih metadata index is not valid JSON") from error
-    if not isinstance(document, list):
-        raise FatalContractError("ba_fhmzbih metadata index must be a JSON array")
-    groups: dict[str, str] = {}
-    for station in stations:
-        matches = [row for row in document if isinstance(row, dict) and row.get("metadata_station_no") == station]
-        if (
-            len(matches) != 1
-            or not isinstance(matches[0].get("metadata_site_no"), str)
-            or not matches[0]["metadata_site_no"]
-        ):
-            raise FatalContractError(
-                f"ba_fhmzbih metadata index does not resolve exactly one group for station {station}"
-            )
-        groups[station] = matches[0]["metadata_site_no"]
-    pairs = tuple((station, product) for station in stations for product in products)
-    payloads = [_payload(SourceCoordinates(BaFhmzbihMetadataCoordinates()), pairs, fetch_window, metadata_response)]
+        groups = metadata_groups(metadata_response.content, stations)
+    except UnsupportedSourceStructureError:
+        # Keep exact source bytes for parse-owned diagnostics and optional receipts.
+        return WithIssues((metadata_payload,))
+    payloads = [metadata_payload]
     for station, product in pairs:
         product_config = config.products[product]
         coordinates = product_config.coordinates.value
         if not isinstance(coordinates, BaFhmzbihSourceCoordinates):
             raise FatalContractError(f"ba_fhmzbih product has invalid source coordinates: {product}")
         url = f"{_WORKBOOK_ROOT}/{groups[station]}/{station}/{coordinates.code}/{coordinates.workbook}"
-        response = _send(
-            transport,
+        response = transport.send(
             TransportRequest(
                 HttpMethod.GET,
                 url,
@@ -80,12 +74,10 @@ def fetch(
                 headers={"Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
             ),
         )
-        payloads.append(_payload(product_config.coordinates, ((station, product),), fetch_window, response))
+        payloads.append(
+            _payload(product_config.coordinates, ((station, product),), fetch_window, response, scope, known_series)
+        )
     return WithIssues(tuple(payloads))
-
-
-def _send(transport: Transport, request: TransportRequest) -> TransportResponse:
-    return transport.send(request)
 
 
 def _payload(
@@ -93,6 +85,8 @@ def _payload(
     pairs: tuple[tuple[str, ProductId], ...],
     window: FetchWindow,
     response: TransportResponse,
+    scope: SeriesScope | None,
+    known_series: tuple[SourceSeries, ...],
 ) -> Payload:
     return Payload(
         coordinates,
@@ -109,4 +103,29 @@ def _payload(
             UnknownOriginFact(),
         ),
         response.prerequisite_calls,
+        scope=scope,
+        known_series=known_series,
     )
+
+
+def metadata_groups(content: bytes, stations: tuple[str, ...]) -> dict[str, str]:
+    """Resolve publisher station routes without inventing missing group identifiers."""
+    try:
+        document = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("ba_fhmzbih metadata index is not valid JSON") from error
+    if not isinstance(document, list):
+        raise UnsupportedSourceStructureError("ba_fhmzbih metadata index must be a JSON array")
+    groups: dict[str, str] = {}
+    for station in stations:
+        matches = [row for row in document if isinstance(row, dict) and row.get("metadata_station_no") == station]
+        if (
+            len(matches) != 1
+            or not isinstance(matches[0].get("metadata_site_no"), str)
+            or not matches[0]["metadata_site_no"]
+        ):
+            raise UnsupportedSourceStructureError(
+                f"ba_fhmzbih metadata index does not resolve exactly one group for station {station}"
+            )
+        groups[station] = matches[0]["metadata_site_no"]
+    return groups

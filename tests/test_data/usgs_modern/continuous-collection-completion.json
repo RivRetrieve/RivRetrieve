@@ -1,0 +1,9 @@
+{
+  "name": "continuous-collection",
+  "initial_url": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous?f=json",
+  "pages": [
+    "continuous-collection"
+  ],
+  "exhausted": true,
+  "total_features": 0
+}

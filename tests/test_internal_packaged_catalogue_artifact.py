@@ -14,7 +14,7 @@ from rivretrieve._internal.catalogues.artifact import (
     load_packaged_catalogue_artifact,
     packaged_catalogue_artifact_from_components,
 )
-from rivretrieve._internal.catalogues.schemas import AvailabilityDtype, CatalogueDtype
+from rivretrieve._internal.catalogues.schemas import CATALOGUE_SERIES_CLAIMS_SCHEMA, AvailabilityDtype, CatalogueDtype
 
 
 def provider_info_dict(**overrides: object) -> dict[str, object]:
@@ -123,6 +123,17 @@ def write_artifact(
     station_products: pl.DataFrame | None = None,
 ) -> Path:
     path.mkdir()
+    pl.DataFrame(schema=CATALOGUE_SERIES_CLAIMS_SCHEMA.polars_schema).write_parquet(path / "series_claims.parquet")
+    (path / "format.json").write_text('{"catalogue_format_version":2}')
+    (path / "source_series.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "provider_id": (provider_info or provider_info_dict())["provider_id"],
+                "descriptions": [],
+            }
+        )
+    )
     (path / "provider.json").write_text(
         json.dumps(provider_info or provider_info_dict(), sort_keys=True),
         encoding="utf-8",

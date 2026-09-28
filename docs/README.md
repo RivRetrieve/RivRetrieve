@@ -15,7 +15,7 @@ comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
 
 ## Providers
 
-RivRetrieve supports observation retrieval from 12 national agencies. The
+RivRetrieve supports observation retrieval from national publication services. The
 [README](../README.md#river-data-and-where-to-find-them) lists them with their station counts.
 
 The data belong to those agencies, and they document their own networks far better than we could.
@@ -27,16 +27,27 @@ Whatever the provider, RivRetrieve gives you the same things:
 - **Stations**: an identifier, a position where recorded, and the station’s catalogued products.
 - **Products**: a variable (discharge, stage or water temperature), a statistic (mean, maximum,
   minimum or an instantaneous reading) and a time step (daily, hourly or irregular). Statistics
-  and time steps remain `unknown` where they are not established.
+  and time steps remain unknown where they are not established.
 - **Units**: discharge in m³/s, stage in m, and water temperature in °C.
 - **Times**: as the agency publishes them, each with its time zone, which is `unknown` when the
-  agency does not state one.
+  source meaning has not been established.
 - **Terms and citation**: these stay with the agency. Check them before using the data.
 
 A page for each provider, describing its network, what it measures and how to cite it, is being
 written:
 
-- [Czechia — CHMI](providers/cz_chmi.md)
+- [Brazil: ANA](providers/br_ana.md)
+- [Canada: Environment and Climate Change Canada](providers/ca_eccc.md)
+- [Czechia: CHMI](providers/cz_chmi.md)
+- [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
+- [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
+- [Japan: MLIT](providers/jp_mlit.md)
+- [Lithuania: LHMT](providers/lt_lhmt.md)
+- [Norway: NVE](providers/no_nve.md)
+- [Poland: IMGW-PIB](providers/pl_imgw.md)
+- [Switzerland: FOEN, through Existenz.ch](providers/ch_foen.md)
+- [Thailand: ThaiWater](providers/th_thaiwater.md)
+- [United States — USGS](providers/usgs_nwis.md)
 
 ## How it works
 
@@ -46,20 +57,25 @@ written:
 - [Catalogue absence](catalogue-absence.md): why a missing fact is not the same as a source saying
   nothing.
 
-## Project records
+## Maintaining the software
 
-The pages above describe the software as it is today. The records below preserve the reasoning at
-the time they were written: their API names, provider counts and execution details may since have
-been superseded. Read them as history rather than as instructions.
+- [Physical products and source series](product_dictionary.md): structured physical meaning and source identity.
+- [Catalogue provenance](catalogue-provenance.md): current catalogue maintenance conventions.
+- [Observation store layout](design/observation-store-layout.md): the current normative store specification.
+- [Development conventions](development-conventions.md).
 
-- [Catalogue provenance](catalogue-provenance.md).
+## Provider evidence records
+
+Provider port notes retain source research and acquisition history. Use the
+[API reference](reference.md#shipped-software-capabilities) for current software access:
+eleven live providers, Canada and Poland through bulk stores, and South Africa for
+catalogue discovery only.
+
 - [Evidenced inventory account](provider_ports/evidenced_coverage.md). Its recorded limitations
   still apply: it does not establish countrywide inventory completeness or continuous observation
   history.
 - [Provider port notes](provider_ports/): what was established about each source when it was
   added.
-- [Observation store layout](design/observation-store-layout.md): the normative store specification.
-- [Development conventions](development-conventions.md).
 
 <details>
 <summary>Port notes, one per provider</summary>
@@ -69,7 +85,7 @@ been superseded. Read them as history rather than as instructions.
 - [ca_eccc](provider_ports/ca_eccc.md)
 - [ch_foen](provider_ports/ch_foen.md)
 - [cz_chmi](provider_ports/cz_chmi.md)
-- [fr_hubeau](provider_ports/fr_hubeau.md)
+- [fr_hubeau and fr_hydroportail](provider_ports/fr_hubeau.md)
 - [jp_mlit](provider_ports/jp_mlit.md)
 - [lt_lhmt](provider_ports/lt_lhmt.md)
 - [no_nve](provider_ports/no_nve.md)
@@ -86,7 +102,7 @@ No site build, credentials or bulk download is needed. From a source checkout, r
 
 ```bash
 uv run python scripts/generate_reference.py --check
-uv run pytest -q tests/test_documentation.py
+uv run --with rdflib pytest -q tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
 ```
 
 The tests replay committed source bytes through the public API. They do not test whether a

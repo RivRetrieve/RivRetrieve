@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-from importlib.metadata import version
 from pathlib import Path
 
+from tests._distribution import InstalledDistribution
+
 _CANONICAL_CATALOGUE_FILES = {
+    "format.json",
+    "source_series.json",
+    "series_claims.parquet",
     "croissant.json",
     "provenance_facts.parquet",
     "provenance_acquisitions.parquet",
@@ -28,6 +30,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "ch_foen",
     "cz_chmi",
     "fr_hubeau",
+    "fr_hydroportail",
     "jp_mlit",
     "lt_lhmt",
     "no_nve",
@@ -38,31 +41,8 @@ _PROVENANCE_PROVIDER_IDS = {
 }
 
 
-def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
-    result = subprocess.run(command, cwd=cwd, env=env, check=False, text=True, capture_output=True)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_wheel_carries_every_manifest_catalogue(tmp_path: Path) -> None:
+def test_wheel_carries_every_manifest_catalogue(direct_distribution: InstalledDistribution) -> None:
     repository = Path(__file__).parents[1]
-    wheel_directory = tmp_path / "dist"
-    environment = tmp_path / "environment"
-    execution_directory = tmp_path / "outside-repository"
-    execution_directory.mkdir()
-
-    _run(
-        ["uv", "build", "--wheel", "--out-dir", str(wheel_directory)],
-        cwd=repository,
-    )
-    wheels = tuple(wheel_directory.glob("rivretrieve-*.whl"))
-    assert len(wheels) == 1
-
-    _run(["uv", "venv", str(environment)], cwd=execution_directory)
-    python = environment / "bin" / "python"
-    _run(
-        ["uv", "pip", "install", "--python", str(python), str(wheels[0]), f"mlcroissant=={version('mlcroissant')}"],
-        cwd=execution_directory,
-    )
 
     expected_descriptor = json.loads(
         (repository / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/croissant.json").read_text()
@@ -84,7 +64,12 @@ socket.create_connection = forbid_network
 from importlib.resources import files
 
 import rivretrieve
+import polars as pl
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+
+def artifact(provider):
+    return load_packaged_catalogue_artifact(Path(str(provider_root.joinpath(provider, "catalogue"))), on_issue="raise")
 
 before_describe = set(sys.modules)
 assert rivretrieve.describe("usgs_nwis") == json.loads({json.dumps(expected_descriptor)!r})
@@ -106,39 +91,42 @@ for provider_id in provider_ids:
     assert not any(name.endswith((".eml", ".xlsx")) for name in packaged_names)
 
 france = rivretrieve.find(provider="fr_hubeau")
-assert len(france.series) == 33_139
+# Native inventory snapshots acquired 2026-09-21, not enduring national totals.
+assert len(france.series) == 20_297
+assert {{series.product_id for series in france.series}} == {{"discharge_daily_mean", "discharge_daily_max", "stage_daily_max", "water_temperature_reported"}}
 assert not france.acquisition_provenance[0].header.withheld_facts
+hydroportail = rivretrieve.find(provider="fr_hydroportail")
+assert len(hydroportail.series) == 12_818 * 4
+assert {{series.variant for series in hydroportail.series}} == {{"raw", "validated", "pre_validated_and_validated", "most_valid"}}
+assert {{series.product_id for series in hydroportail.series}} == {{"discharge_instantaneous", "stage_instantaneous"}}
+assert {{series.provider_id for series in hydroportail.series}} == {{"fr_hydroportail"}}
 bosnia = rivretrieve.find(provider="ba_fhmzbih")
 assert len(bosnia.series) == 180
 assert len({{series.station_id for series in bosnia.series}}) == 60
-assert sum(series.availability == "available" for series in bosnia.series) == 132
-assert sum(series.availability == "unknown" for series in bosnia.series) == 48
+bosnia_pairs = artifact("ba_fhmzbih").station_products
+assert bosnia_pairs["availability"].eq("available").sum() == 132
+assert bosnia_pairs["availability"].eq("unknown").sum() == 48
 assert bosnia.acquisition_provenance[0].header.withheld_facts == ()
-unknown_bosnia = rivretrieve.find(provider="ba_fhmzbih", station="2101-B", product="water_temperature_reported")
-assert len(unknown_bosnia.series) == 1 and unknown_bosnia.series[0].availability == "unknown"
+unknown_bosnia = rivretrieve.find(provider="ba_fhmzbih", station="2101-B", quantity="temperature")
+assert len(unknown_bosnia.series) == 1
+assert bosnia_pairs.filter((pl.col("station_id") == "2101-B") & (pl.col("product_id") == "water_temperature_reported"))["availability"].to_list() == ["unknown"]
 assert not provider_root.joinpath("ba_fhmzbih", "catalogue", "baseline_workbook_access.json").is_file()
 norway = rivretrieve.find(
-    provider="no_nve", station="1.200.0", product="stage_daily_mean"
+    provider="no_nve", station="1.200.0", quantity="stage", frequency="daily", statistic="mean"
 )
 assert len(norway.series) == 1
-assert norway.series[0].availability == "available"
+assert artifact("no_nve").station_products.filter((pl.col("station_id") == "1.200.0") & (pl.col("product_id") == "stage_daily_mean"))["availability"].to_list() == ["available"]
+assert rivretrieve.series(norway)["admission"].to_list() == ["supported"]
 assert norway.acquisition_provenance[0].header.native_table is not None
 thailand = rivretrieve.find(
-    provider="th_thaiwater", station="1", product="stage_reported"
+    provider="th_thaiwater", station="1", quantity="stage"
 )
 assert rivretrieve.as_frame(thailand).height == 1
 groups = thailand.acquisition_provenance[0].header.withheld_facts
 assert groups == ()
 """
     verification += "\nclosure_oracles = " + repr(_CLOSURE_ORACLES) + "\n" + _PROFILE_VERIFICATION
-    clean_environment = os.environ.copy()
-    clean_environment.pop("PYTHONPATH", None)
-    clean_environment.pop("VIRTUAL_ENV", None)
-    _run(
-        [str(python), "-c", verification],
-        cwd=execution_directory,
-        env=clean_environment,
-    )
+    direct_distribution.verify(verification)
 
 
 # Original v2 inputs: git 6f0edf6. Full selected semantic closures (excluding JSON-LD
@@ -147,7 +135,9 @@ assert groups == ()
 _CLOSURE_ORACLES = {
     "fr_hubeau": {
         "original_sha256": "172427cd2a859594a3da9c2f81d078aa456bcb9c48559207bdaa971ac35b61f0",
-        "cases": [
+        "cases": [],
+        # Preserved against immutable pre-split evidence below, not new identities.
+        "historical_cases": [
             {
                 "names": ["station_product:01001336:water_temperature_reported.availability"],
                 "pair": {
@@ -175,8 +165,12 @@ _CLOSURE_ORACLES = {
             "license": "La réutilisation des Jeux de données est régie par la licence ouverte Etalab, https://www.etalab.gouv.fr/licence-ouverte-open-licence. Les Jeux de données sont donc librement et gratuitement utilisables et réutilisables, y compris dans un but commercial.",
             "citation": "L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.",
         },
-        "descriptor_terms": {},
+        "descriptor_terms": {
+            "license": "La réutilisation des Jeux de données est régie par la licence ouverte Etalab, https://www.etalab.gouv.fr/licence-ouverte-open-licence. Les Jeux de données sont donc librement et gratuitement utilisables et réutilisables, y compris dans un but commercial.",
+            "citation": "L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.",
+        },
     },
+    "fr_hydroportail": {"cases": [], "terms": {}, "descriptor_terms": {}},
     "ba_fhmzbih": {
         "original_sha256": "55984ba0622e71eea47074dfbaae0fbb31b5cc077b513a8b1f7f946ce3069307",
         "cases": [
@@ -296,6 +290,65 @@ def decode(value):
         return [decode(item) for item in value]
     return value
 
+def historical_closure_evidence(provider, evidence):
+    # Project only verified additions out of the historical closure oracle. The
+    # installed current relations above and current RDF ancestry below stay intact.
+    if provider not in {"ba_fhmzbih", "pl_imgw"}:
+        return evidence
+    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
+    from rivretrieve._internal.catalogues.evidence import normalize_provenance
+    from rivretrieve._internal.catalogues.evidence_encoding import reconstruct_provenance
+
+    model = reconstruct_provenance(evidence).model_dump(mode="json")
+    if provider == "ba_fhmzbih":
+        (source,) = model["source_records"]
+        assert source["source_id"] == "ba_avp_sava"
+        added = [
+            ("ba_fhmzbih_4024_Q_1Y", "e40e760cf99d4e23b62b8d5d95edc86af01ddca9aa6c55226d59c859e8801d05"),
+            ("ba_fhmzbih_4024_H_1Y", "45b5663132a58f5bdcf3ee29c5cdd8c5f83389dabb80d3716b5e318b77ca79a0"),
+            ("ba_fhmzbih_4110_Tvode_1Y", "e0532ec0a269acb735db6957a478652ac0fb7ece9194b688852478d6d186dbb3"),
+            ("ba_fhmzbih_layer20_series", "afb0dbd8530f1b589028731a42611e933d6991ec35414bdaba071c7a3180dabf"),
+        ]
+        assert [(item["recording"]["recording_id"], item["recording"]["sha256"]) for item in source["evidence"][:4]] == added
+        assert [(item["acquisition_id"], item["recording_ids"]) for item in source["acquisitions"][:2]] == [
+            ("product_workbook_headers", [item[0] for item in added[:3]]),
+            ("layer20_series_capture", [added[3][0]]),
+        ]
+        del source["evidence"][:4]
+        del source["acquisitions"][:2]
+        assert model["fact_bindings"].pop(0) == {
+            "fact_group": "layer20_discharge_series",
+            "facts": ["source.series.layer20_discharge_identity"],
+            "source_id": "ba_avp_sava", "acquisition_id": "layer20_series_capture",
+        }
+        assert model["fact_universe"].pop(484) == "source.series.layer20_discharge_identity"
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "canonical_products")
+        assert binding["acquisition_id"] == "product_workbook_headers"
+        binding["acquisition_id"] = "catalogue_capture_2026_08_02"
+    else:
+        source = next(item for item in model["source_records"] if item["source_id"] == "sr.pl.imgw")
+        added = [
+            ("pl_imgw_codz_format", "d8e7cbbc7680663d99813dd5f9abd793384b2f560600229625bb808ea71ef362"),
+            ("pl_imgw_yearbook_2025", "c2ad75c472ab46363fb149ac5cf982230e2506d7e0b73b8e4eecb6623fa2a916"),
+        ]
+        assert [(item["recording"]["recording_id"], item["recording"]["sha256"]) for item in source["evidence"][:2]] == added
+        acquisition = source["acquisitions"].pop(0)
+        assert acquisition["acquisition_id"] == "imgw_archive_definitions_2026_09_20"
+        assert acquisition["recording_ids"] == [item[0] for item in added]
+        del source["evidence"][:2]
+        binding = next(item for item in model["fact_bindings"] if item["fact_group"] == "imgw_archive_physics")
+        assert binding == {
+            "fact_group": "imgw_archive_physics", "facts": ["source.imgw.observation_archive_product_semantics"],
+            "source_id": "sr.pl.imgw", "acquisition_id": "imgw_archive_definitions_2026_09_20",
+        }
+        model["fact_bindings"].remove(binding)
+        roster = next(item for item in model["fact_bindings"] if item["fact_group"] == "imgw_catalogue_inputs")
+        assert "source.imgw.observation_archive_product_semantics" not in roster["facts"]
+        roster["facts"].insert(1, "source.imgw.observation_archive_product_semantics")
+    catalogue = artifact(provider)
+    return normalize_provenance(AcquisitionProvenance.model_validate(model), stations=catalogue.stations,
+                                station_products=catalogue.station_products)
+
 for provider, oracle in closure_oracles.items():
     catalogue = provider_root.joinpath(provider, "catalogue")
     descriptor = rivretrieve.describe(provider)
@@ -352,12 +405,21 @@ for provider, oracle in closure_oracles.items():
     for case in oracle["cases"]:
         pair = CanonicalPair(**case["pair"]) if case["pair"] is not None else None
         if pair is not None:
-            selection = rivretrieve.find(provider=provider, station=pair.station_id, product=pair.product_id)
-            assert len(selection.series) == 1
-            row = rivretrieve.as_frame(selection).row(0, named=True)
+            physical_filters = {
+                "water_temperature_reported": {"quantity": "temperature"},
+                "discharge_instantaneous": {"quantity": "discharge"},
+                "discharge_reported": {"quantity": "discharge"},
+                "stage_reported": {"quantity": "stage"},
+            }
+            selection = rivretrieve.find(provider=provider, station=pair.station_id, **physical_filters[pair.product_id])
+            # Broad physical scope can include sibling routes and unknown temporal facts.
+            assert any(item.product_id == pair.product_id for item in selection.series)
+            pairs = artifact(provider).station_products
+            row = pairs.filter((pl.col("station_id") == pair.station_id) & (pl.col("product_id") == pair.product_id)).row(0, named=True)
             assert {key: row[key] for key in CanonicalPair.model_fields} == pair.model_dump()
         resolved = resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair)
-        semantic = {key: value for key, value in resolved.items() if key != "@context"}
+        historical = resolve_evidence(historical_closure_evidence(provider, evidence), FactSelection(names=tuple(case["names"])), pair)
+        semantic = {key: value for key, value in historical.items() if key != "@context"}
         assert hashlib.sha256(json.dumps(semantic, sort_keys=True, ensure_ascii=False).encode()).hexdigest() == case["sha256"]
         if provider == "pl_imgw":
             graph = Graph().parse(data=json.dumps(resolved), format="json-ld", publicID=BASE)
@@ -375,7 +437,12 @@ for provider, oracle in closure_oracles.items():
                     assert {"Global Runoff Data Centre", "Institute of Meteorology and Water Management – National Research Institute"} <= issuers
     assert verified_catalogue_terms(evidence) == oracle["terms"]
     assert {kind: descriptor[kind] for kind in ("license", "citation") if kind in descriptor} == oracle["descriptor_terms"]
-print("Installed socket-denied evidence proof: all five relations x five providers; historical closures and adopted products; keys/FKs/header; Poland roles/corroboration; Brazil manual material; exact terms")
+    if provider == "fr_hydroportail":
+        assert {source.source_id for source in header.source_records} == {"fr_hydroportail"}
+        search = extracted["acquisitions"].filter(pl.col("acquisition_id") == "public_station_search")
+        assert search.height == 1
+        assert all(url.startswith("https://hydro.eaufrance.fr/") for url in search["requested_from"][0])
+print("Installed socket-denied evidence proof: normalized relations; current service identities; historical closures and adopted products; keys/FKs/header; exact terms")
 
 brazil_catalogue = provider_root.joinpath("br_ana", "catalogue")
 brazil = parse_catalogue_evidence(EvidenceHeader.model_validate_json(brazil_catalogue.joinpath("provenance.json").read_bytes()),
@@ -385,3 +452,30 @@ assert "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3" in jso
 assert "withheld" not in json.dumps(products)
 assert set(rivretrieve.products(provider="br_ana")) == {"discharge_daily_mean_bruto", "discharge_daily_mean_consistido", "discharge_instantaneous", "stage_daily_mean_bruto", "stage_daily_mean_consistido", "stage_instantaneous"}
 """
+
+
+def test_historical_french_closure_oracles_against_immutable_combined_evidence():
+    import hashlib
+    import tarfile
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
+    from rivretrieve._internal.catalogues.evidence_graph import CanonicalPair, FactSelection, resolve_evidence
+
+    archive_path = Path(__file__).parent / "test_data/french_combined_artifacts.tar.xz"
+    with tarfile.open(archive_path) as archive:
+        bundle = archive.extractfile("combined-station-selection.bundle").read()
+        attestation = json.load(archive.extractfile("attestation.json"))
+    assert hashlib.sha256(bundle).hexdigest() == attestation["files"]["combined-station-selection.bundle"]["sha256"]
+    with ZipFile(BytesIO(bundle)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    evidence = CatalogueEvidence.model_validate_json(json.dumps(manifest["catalogue_evidence"][0]))
+    for case in _CLOSURE_ORACLES["fr_hubeau"]["historical_cases"]:
+        pair = CanonicalPair(**case["pair"])
+        resolved = resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair)
+        semantic = {key: value for key, value in resolved.items() if key != "@context"}
+        assert (
+            hashlib.sha256(json.dumps(semantic, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            == case["sha256"]
+        )

@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from calendar import monthrange
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from rivretrieve._internal.engine import (
     FetchWindow,
     RenderedWindow,
     StopConvention,
     WindowDeclaration,
+    WindowEndpoint,
     WindowRenderingVocabulary,
+    _make_fetch_window,
 )
 
 __all__ = ("plan_windows",)
@@ -106,14 +108,19 @@ def _plan_year_month(fetch_window: FetchWindow, declaration: WindowDeclaration) 
     final = _datetime_from_endpoint(fetch_window, "end").replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     windows = []
     while cursor <= final:
+        stop = cursor.replace(day=monthrange(cursor.year, cursor.month)[1])
+        bounds = _make_fetch_window(
+            WindowEndpoint.from_datetime(cursor),
+            WindowEndpoint.from_datetime(datetime.combine(stop.date(), time.max)),
+        )
         if declaration.rendering is WindowRenderingVocabulary.YEAR_MONTH:
-            windows.append(RenderedWindow(f"{cursor.year:04d}-{cursor.month:02d}", None))
+            windows.append(RenderedWindow(f"{cursor.year:04d}-{cursor.month:02d}", None, bounds))
         else:
-            stop = cursor.replace(day=monthrange(cursor.year, cursor.month)[1])
             windows.append(
                 RenderedWindow(
                     cursor.date().isoformat(),
                     _render_date_stop(stop, declaration.stop_convention),
+                    bounds,
                 )
             )
         if cursor.month == 12:
@@ -155,6 +162,19 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
     )
     size = declaration.size
     assert size is not None
+    if (
+        declaration.rendering is WindowRenderingVocabulary.ISO_INSTANT
+        and declaration.stop_convention is StopConvention.INCLUSIVE
+    ):
+        cursor = _datetime_from_endpoint(fetch_window, "start")
+        final = _datetime_from_endpoint(fetch_window, "end")
+        windows = []
+        tick = timedelta(microseconds=1)
+        while cursor <= final:
+            stop = min(cursor + timedelta(days=size) - tick, final)
+            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop)))
+            cursor = stop + tick
+        return tuple(windows)
     cursor = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
     final = _datetime_from_endpoint(fetch_window, "end").replace(hour=0, minute=0, second=0, microsecond=0)
     windows = []

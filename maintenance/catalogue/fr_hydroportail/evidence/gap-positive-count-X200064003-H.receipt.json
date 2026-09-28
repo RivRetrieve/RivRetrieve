@@ -1,0 +1,15 @@
+{
+  "url": "https://hydro.eaufrance.fr/stationhydro/ajax/X200064003/series",
+  "params": {
+    "hydro_series[startAt]": "20/09/2026",
+    "hydro_series[endAt]": "20/09/2026",
+    "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
+    "hydro_series[simpleAndInterpolatedAndHourlyVariable]": "H",
+    "hydro_series[statusData]": "raw"
+  },
+  "status": 404,
+  "retrieved_at": "2026-09-21T09:17:53.969607+00:00",
+  "content_type": "text/html; charset=UTF-8",
+  "bytes": 67160,
+  "sha256": "11889a48dd5848be11a10cf38bfcdc990e840f6e86166336f5373d59918d8705"
+}

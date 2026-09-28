@@ -44,6 +44,29 @@ def _representative_hydat(path: Path) -> None:
     connection.close()
 
 
+def _compile_rows(artifact: Path):
+    """Inspect native partitions only after authoritative certified publication."""
+    root = StoreRoot(artifact.parent / "compiled")
+    ca_bulk.compile_hydat(
+        HydatCompileRequest(
+            artifact,
+            root,
+            "https://example.test/derived-Hydat.sqlite3",
+            date(2026, 7, 17),
+            datetime(2026, 9, 2, tzinfo=UTC),
+            "0.1.49",
+        )
+    )
+    return real_pl.concat(
+        [
+            real_pl.read_parquet(path).with_columns(
+                real_pl.lit(path.parent.parent.name.removeprefix("product=")).alias("product")
+            )
+            for path in sorted(Path(root).rglob("part-*.parquet"))
+        ]
+    )
+
+
 def test_real_hydat_compile_never_materializes_the_complete_row_list(tmp_path: Path, monkeypatch) -> None:
     sqlite_path = tmp_path / "Hydat.sqlite3"
     _representative_hydat(sqlite_path)
@@ -95,7 +118,7 @@ def test_hydat_sparse_month_uses_calendar_cells_not_no_days_cutoff(
     connection.commit()
     connection.close()
 
-    decoded = ca_bulk.decode_hydat(sqlite_path).rows
+    decoded = _compile_rows(sqlite_path)
     level = decoded.filter(
         (decoded["product"] == "stage_daily_mean")
         & (decoded["station_id"] == "07HF001")
@@ -119,7 +142,7 @@ def test_hydat_rejects_non_null_cells_beyond_calendar_month(tmp_path: Path) -> N
     connection.close()
 
     with pytest.raises(ValueError, match="after the calendar month at day 30"):
-        ca_bulk.decode_hydat(sqlite_path)
+        _compile_rows(sqlite_path)
 
 
 @pytest.mark.parametrize("omission", ["day", "record"])

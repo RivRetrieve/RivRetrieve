@@ -1,0 +1,189 @@
+{
+  "schema_version": 3,
+  "provider_id": "fr_hubeau",
+  "native_table": {
+    "repository_path": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    "revision": "5dc8e480e426babe109c0467c5e0c374f92239c3",
+    "sha256": "4ff9439d0abd7f479d17b2c608d923d7834ea3df084ed08a3af9cec1d35ab687",
+    "byte_size": 1049930,
+    "semantic_digest": {
+      "name": "fr_hubeau.native_table_content_sha256",
+      "sha256": "f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322"
+    }
+  },
+  "source_records": [
+    {
+      "source_id": "fr_hubeau",
+      "issuer": "Hub’Eau",
+      "operator": "OFB / Service Central Vigicrues / BRGM, éditeurs Hub’Eau",
+      "evidence": [
+        {
+          "evidence_id": "fr_hubeau_terms",
+          "description": "Hub'Eau general conditions section 5.1.3",
+          "recording": {
+            "recording_id": "fr_hubeau_terms",
+            "repository_path": "tests/test_data/fr_hubeau_terms_licence.html",
+            "source_url": "https://hubeau.eaufrance.fr/page/conditions-generales",
+            "retrieved_at": "2026-08-20T15:39:10Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "82ff424acd31cdff38df4307bb8e8674d2cdc82659c99b4a117455cacd8d19cc"
+          }
+        },
+        {
+          "evidence_id": "fr_hubeau_temperature_openapi",
+          "description": "Official temperature API contract for chronique result fields",
+          "recording": {
+            "recording_id": "fr_hubeau_temperature_openapi",
+            "repository_path": "tests/test_data/fr_hubeau_temperature_openapi.json",
+            "source_url": "https://hubeau.eaufrance.fr/api/v1/temperature/api-docs",
+            "retrieved_at": "2026-09-02T14:50:55.466790Z",
+            "media_type": "application/json",
+            "sha256": "797506a9cf78fbba29fb82eca71ac278d7fe84bd90aa4552ac79a71752c059ef"
+          }
+        },
+        {
+          "evidence_id": "fr_hubeau_hydrometrie",
+          "description": "Hydrometry distribution and network roles",
+          "recording": {
+            "recording_id": "fr_hubeau_hydrometrie",
+            "repository_path": "tests/test_data/fr_hubeau_hydrometrie.html",
+            "source_url": "https://hubeau.eaufrance.fr/page/api-hydrometrie",
+            "retrieved_at": "2026-09-13T17:56:22.140907Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "0fac4526c51ea72921747e23726024359991c25fb5781b32bc368c9cc9ded509"
+          }
+        }
+      ],
+      "statements": [
+        {
+          "kind": "license",
+          "exact_text": "La réutilisation des Jeux de données est régie par la licence ouverte Etalab, https://www.etalab.gouv.fr/licence-ouverte-open-licence. Les Jeux de données sont donc librement et gratuitement utilisables et réutilisables, y compris dans un but commercial.",
+          "recording_id": "fr_hubeau_terms",
+          "fact": "source.hubeau.license_statement",
+          "verification_status": "verified_public_recording"
+        },
+        {
+          "kind": "citation",
+          "exact_text": "L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données.",
+          "recording_id": "fr_hubeau_terms",
+          "fact": "source.hubeau.citation_statement",
+          "verification_status": "verified_public_recording"
+        }
+      ]
+    },
+    {
+      "source_id": "fr_hydroportail",
+      "issuer": "Service Central Vigicrues",
+      "operator": "HydroPortail / PHyC",
+      "evidence": [
+        {
+          "evidence_id": "fr_hydroportail_legal",
+          "description": "HydroPortail publication",
+          "recording": {
+            "recording_id": "fr_hydroportail_legal",
+            "repository_path": "tests/test_data/fr_hydroportail_legal.html",
+            "source_url": "https://hydro.eaufrance.fr/edito/mentions-legales",
+            "retrieved_at": "2026-09-13T17:56:59.417284Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "ef51f384ce7541ed4c152bde1a3763cde18bddfb9ffeddfa80f527930c317eb4"
+          }
+        },
+        {
+          "evidence_id": "fr_hydroportail_about",
+          "description": "PHyC platform operation",
+          "recording": {
+            "recording_id": "fr_hydroportail_about",
+            "repository_path": "tests/test_data/fr_hydroportail_about.html",
+            "source_url": "https://hydro.eaufrance.fr/edito/a-propos-dhydroportail",
+            "retrieved_at": "2026-09-13T17:56:59.341556Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "c9371602ebcd4bb20332195975ce02eacf454002742fbea6b0eafd4b566711cf"
+          }
+        }
+      ],
+      "statements": []
+    }
+  ],
+  "descriptions": [
+    "Seven complete Hub’Eau hydrometry referential pages, 6,454 rows; station identity and location, not historical measurement authorship",
+    "Complete Hub’Eau temperature station response, 869 rows; station identity and location, not historical measurement authorship",
+    "Official temperature API contract without stated temporal support",
+    "Hub’Eau general conditions; naming a publisher does not resolve requested dataset-author credit",
+    "Official Hub’Eau publication of station daily hydrometry and reported temperature; original measurement authorship remains unestablished",
+    "Hydrometry distribution and network roles; official publication does not establish all historical measurement authorship",
+    "publisher_count; HTTP 206; available; publisher_count. Availability only, not numerical values or continuous history.",
+    "publisher_count; HTTP 200; recent_window_empty_history_unchecked; publisher_count. Availability only, not numerical values or continuous history.",
+    "publisher_count; HTTP 200; empty_in_both_history_windows; two_exact_windows_empty. Availability only, not numerical values or continuous history.",
+    "publisher_count; HTTP 200; empty_no_data_published; publisher_count. Availability only, not numerical values or continuous history.",
+    "publisher_count; HTTP 200; available; historical_positive_witness. Availability only, not numerical values or continuous history.",
+    "publisher_count; HTTP 200; available; publisher_count. Availability only, not numerical values or continuous history.",
+    "publisher_count; HTTP 200; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
+    "publisher_count; HTTP 200; history_check_failed; replacement_window_failure_prior_empty_claim_unverified. Availability only, not numerical values or continuous history.",
+    "HydroPortail station-own Q/H publication from PHyC; response titles establish instantaneous quantities; not a shared-site series or original-producer assertion",
+    "HydroPortail publication; official publication does not establish all historical measurement authorship",
+    "PHyC platform operation; official publication does not establish all historical measurement authorship",
+    "historical_check; HTTP 200; empty_in_both_history_windows; two_exact_windows_empty. Availability only, not numerical values or continuous history.",
+    "historical_check; HTTP 200; available; historical_positive_witness. Availability only, not numerical values or continuous history.",
+    "historical_check; HTTP 404; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
+    "historical_check; HTTP 500; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
+    "historical_check; HTTP 503; history_check_failed; preserved_history_failure. Availability only, not numerical values or continuous history.",
+    "historical_check; HTTP 500; history_check_failed; replacement_window_failure_prior_empty_claim_unverified. Availability only, not numerical values or continuous history.",
+    "historical_check; HTTP 200; history_check_failed; replacement_window_failure_prior_empty_claim_unverified. Availability only, not numerical values or continuous history."
+  ],
+  "transformations": [
+    {
+      "name": "dated station-product availability conclusion",
+      "kind": "derived_value",
+      "marker_value": null
+    },
+    {
+      "name": "fr_hubeau external facts to RivRetrieve canonical catalogue carriers",
+      "kind": "derived_value",
+      "marker_value": null
+    }
+  ],
+  "withheld_facts": [],
+  "row_locator_requirements": [
+    {
+      "carrier": "station_product",
+      "role": "availability"
+    }
+  ],
+  "files": {
+    "provenance_facts.parquet": {
+      "path": "provenance_facts.parquet",
+      "sha256": "26da31ccc317cad97fe815ac9e0c0f3b4d24fba21617c07ddf84a6c78bb4b53b",
+      "byte_count": 650519,
+      "row_count": 109029,
+      "schema_version": 3
+    },
+    "provenance_acquisitions.parquet": {
+      "path": "provenance_acquisitions.parquet",
+      "sha256": "4004252066ec15585235d98684d9062dbf2151d1c4b0ee4c3c0a378eeeba642a",
+      "byte_count": 1931871,
+      "row_count": 35397,
+      "schema_version": 3
+    },
+    "provenance_bindings.parquet": {
+      "path": "provenance_bindings.parquet",
+      "sha256": "448db1af91e9cf6de85c0335c0389a3e953816d62569f0aca991862e3b322feb",
+      "byte_count": 502572,
+      "row_count": 68539,
+      "schema_version": 3
+    },
+    "provenance_binding_facts.parquet": {
+      "path": "provenance_binding_facts.parquet",
+      "sha256": "439b7fa77aef152effca0dded4a93fed0f17e9d772da1bda39434234c6fb2411",
+      "byte_count": 710732,
+      "row_count": 109029,
+      "schema_version": 3
+    },
+    "provenance_external_inputs.parquet": {
+      "path": "provenance_external_inputs.parquet",
+      "sha256": "517e66e48025dacb57bc460080b6282a98d3515b3be9af09e5ec0c484e8ea928",
+      "byte_count": 180137,
+      "row_count": 35391,
+      "schema_version": 3
+    }
+  }
+}

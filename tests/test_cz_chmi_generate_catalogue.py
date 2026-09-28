@@ -692,6 +692,9 @@ def test_native_cli_writes_five_artifacts_without_touching_native(tmp_path: Path
         "provenance_bindings.parquet",
         "provenance_binding_facts.parquet",
         "provenance_external_inputs.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
     }
 
 

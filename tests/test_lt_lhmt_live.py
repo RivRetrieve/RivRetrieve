@@ -17,7 +17,6 @@ from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     FetchWindow,
     ObservationRequest,
-    RenderedWindow,
     RequestedWindow,
     WindowEndpoint,
     _make_fetch_window,
@@ -27,6 +26,7 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.lt_lhmt.declaration import declaration
 from rivretrieve._internal.providers.registration import LiveStages, load_manifest
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from rivretrieve._internal.window_planning import plan_windows
 
 _PROVIDER = ProviderId("lt_lhmt")
 _PRODUCTS = (ProductId("discharge_daily_mean"), ProductId("stage_daily_mean"))
@@ -49,12 +49,12 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
     fetched = _STAGES.fetch(
         ("anyksciu-vms",),
         (product,),
-        {product: (RenderedWindow("2023-06", None),)},
+        {product: plan_windows(_fetch_window(), _STAGES.window_declarations.products[product])},
         _fetch_window(),
         _STAGES.config,
         replay,
     )
-    return _STAGES.parse(fetched.value[0], _STAGES.config).value
+    return _STAGES.parse(fetched.value[0], _STAGES.config).rows
 
 
 def _probe(product: ProductId) -> LiveBoundaryProbe:
@@ -75,7 +75,7 @@ def test_each_lithuania_product_has_an_exact_live_replay_probe() -> None:
     run_manifest_boundary_probes(_DECLARED, tuple(_probe(product) for product in _PRODUCTS))
 
 
-def test_each_product_series_has_one_monthly_response_and_receipt() -> None:
+def test_both_product_series_share_one_monthly_response_and_receipt() -> None:
     replay = ReplayTransport((_RECORDING,))
     result = drive(
         ObservationRequest(
@@ -97,5 +97,5 @@ def test_each_product_series_has_one_monthly_response_and_receipt() -> None:
         ("discharge_daily_mean", 26),
         ("stage_daily_mean", 26),
     ]
-    assert len(result.receipts.entries) == 2
+    assert len(result.receipts.entries) == 1
     assert result.receipts.entries[0].content == _RECORDING.content

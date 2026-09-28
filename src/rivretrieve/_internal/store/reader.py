@@ -15,6 +15,7 @@ import polars as pl
 from rivretrieve._internal.coverage import CoverageInterval
 from rivretrieve._internal.engine import Rows, RowsSchema, WindowEndpoint
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.source_series import SeriesWindow
 from rivretrieve._internal.store.validation import (
     AccumulatedStoreManifest,
     ArtifactChecksum,
@@ -39,6 +40,9 @@ class StoreQuery:
     products: tuple[ProductId, ...]
     start: datetime | WindowEndpoint
     end: datetime | WindowEndpoint
+    series_ids: tuple[str, ...] = ()
+    series_windows: tuple[tuple[str, SeriesWindow], ...] = ()
+    facts_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.store, Path):
@@ -82,6 +86,9 @@ class ExecutedStoreQuery:
     stations: tuple[str, ...]
     start: datetime
     end: datetime
+    series_ids: tuple[str, ...] = ()
+    series_windows: tuple[tuple[str, SeriesWindow], ...] = ()
+    facts_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +239,9 @@ class StoreReader:
                     "time_zone": pl.String,
                     "value": pl.Float64,
                     "value_state": pl.String,
+                    "series_id": pl.String,
+                    "facts_id": pl.String,
+                    "source_unit": pl.String,
                     "product": pl.String,
                     "year": pl.Int64,
                 }
@@ -307,6 +317,9 @@ def _executed_query(query: StoreQuery) -> ExecutedStoreQuery:
         stations=tuple(dict.fromkeys(query.stations)),
         start=start,
         end=end,
+        series_ids=query.series_ids,
+        series_windows=query.series_windows,
+        facts_ids=query.facts_ids,
     )
 
 
@@ -323,6 +336,19 @@ def _scan(store: StoreRoot, executed: ExecutedStoreQuery) -> tuple[pl.DataFrame,
         & (pl.col("time") >= executed.start)
         & (pl.col("time") <= executed.end)
     )
+    if executed.series_ids:
+        scan = scan.filter(pl.col("series_id").is_in(executed.series_ids))
+    if executed.facts_ids:
+        scan = scan.filter(pl.col("facts_id").is_in(executed.facts_ids))
+    if executed.series_windows:
+        scan = scan.filter(
+            pl.any_horizontal(
+                [
+                    (pl.col("series_id") == series_id) & pl.col("time").is_between(window.start, window.end)
+                    for series_id, window in executed.series_windows
+                ]
+            )
+        )
     optimized_plan = scan.explain(optimized=True)
     return cast(pl.DataFrame, scan.collect()), optimized_plan
 
@@ -330,4 +356,13 @@ def _scan(store: StoreRoot, executed: ExecutedStoreQuery) -> tuple[pl.DataFrame,
 def _engine_rows(physical_rows: pl.DataFrame) -> Rows:
     if physical_rows.is_empty():
         return pl.DataFrame(schema=RowsSchema.polars_schema)
-    return physical_rows.select("station_id", pl.col("product").alias("product_id"), "time", "value", "time_zone")
+    return physical_rows.select(
+        "station_id",
+        pl.col("product").alias("product_id"),
+        "time",
+        "value",
+        "time_zone",
+        "series_id",
+        "facts_id",
+        "source_unit",
+    )

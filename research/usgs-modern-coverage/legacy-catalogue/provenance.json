@@ -1,0 +1,128 @@
+{
+  "schema_version": 3,
+  "provider_id": "usgs_nwis",
+  "native_table": {
+    "repository_path": "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "revision": "bfeb825a6f3b3aad4982649625d570c070b4ee32",
+    "sha256": "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701",
+    "byte_size": 14093302,
+    "semantic_digest": {
+      "name": "usgs_nwis.native_table_content_sha256",
+      "sha256": "e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"
+    }
+  },
+  "source_records": [
+    {
+      "source_id": "usgs_nwis",
+      "issuer": "U.S. Geological Survey",
+      "operator": "National Water Information System",
+      "evidence": [
+        {
+          "evidence_id": "usgs_instantaneous_value_definition",
+          "description": "Publisher service documentation: \"most recent instantaneous value\"; the service request URL is /nwis/iv/.",
+          "recording": {
+            "recording_id": "usgs_nwis_instantaneous_values_definition",
+            "repository_path": "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+            "source_url": "https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/",
+            "retrieved_at": "2026-09-19T20:58:46.743636Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "1cec37f8cec8173f635d4afaba2d08814347d9cff672b25c29d427b004d0b3a2"
+          }
+        },
+        {
+          "evidence_id": "usgs_public_domain_statement",
+          "description": "Agency-wide USGS copyright and credits recording",
+          "recording": {
+            "recording_id": "usgs_nwis_terms_licence",
+            "repository_path": "tests/test_data/usgs_nwis_terms_licence-1.html",
+            "source_url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+            "retrieved_at": "2026-08-20T08:46:24Z",
+            "media_type": "text/html; charset=UTF-8",
+            "sha256": "a6f640805e5783765fb350d4d60d06a5dbef8ffa3b219fa7713885e5dff9580c"
+          }
+        },
+        {
+          "evidence_id": "usgs_water_data_citation",
+          "description": "Water Data for the Nation citation recording",
+          "recording": {
+            "recording_id": "usgs_nwis_terms_citation",
+            "repository_path": "tests/test_data/usgs_nwis_terms_citation-1.html",
+            "source_url": "https://waterdata.usgs.gov/citation/",
+            "retrieved_at": "2026-08-20T15:56:47Z",
+            "media_type": "text/html; charset=utf-8",
+            "sha256": "11be7513f1f383b3db9856d55afd91324920c954ba9f00eb5032294b2cf81ce3"
+          }
+        }
+      ],
+      "statements": [
+        {
+          "kind": "license",
+          "exact_text": "USGS-authored or produced data and information are considered to be in the U.S. Public Domain.",
+          "recording_id": "usgs_nwis_terms_licence",
+          "fact": "source.usgs.license_statement",
+          "verification_status": "verified_public_recording"
+        },
+        {
+          "kind": "citation",
+          "exact_text": "Example of how to cite USGS Water Data for the Nation in general: U.S. Geological Survey, [2024], USGS Water Data for the Nation: U.S. Geological Survey National Water Information System database, accessed [April 8, 2024], at https://doi.org/10.5066/F7P55KJN.",
+          "recording_id": "usgs_nwis_terms_citation",
+          "fact": "source.usgs.citation_statement",
+          "verification_status": "verified_public_recording"
+        }
+      ]
+    }
+  ],
+  "descriptions": [
+    "102 NWIS site-service requests for the fixed 50-state-plus-DC scope; 26,258 sites and 2,036,546 series rows",
+    "Exact NWIS daily-value or instantaneous-value request and response retained at runtime",
+    "Agency-wide USGS copyright and credits HTML recording",
+    "Water Data for the Nation citation HTML recording",
+    "Publisher Instantaneous Values Service Details documentation calls the returned measurement an instantaneous value; it does not establish a concrete series sampling frequency."
+  ],
+  "transformations": [
+    {
+      "name": "usgs_nwis external facts to RivRetrieve canonical catalogue carriers",
+      "kind": "derived_value",
+      "marker_value": null
+    }
+  ],
+  "withheld_facts": [],
+  "row_locator_requirements": [],
+  "files": {
+    "provenance_facts.parquet": {
+      "path": "provenance_facts.parquet",
+      "sha256": "aad0847c72567abde0bda2b520e94beb42f7fef620e163e5cb0583a2c6469296",
+      "byte_count": 2595,
+      "row_count": 39,
+      "schema_version": 3
+    },
+    "provenance_acquisitions.parquet": {
+      "path": "provenance_acquisitions.parquet",
+      "sha256": "58493270d539b913ea5069b4fcd97e2cc2c614ac5891ba24f42ad111850befc4",
+      "byte_count": 6733,
+      "row_count": 5,
+      "schema_version": 3
+    },
+    "provenance_bindings.parquet": {
+      "path": "provenance_bindings.parquet",
+      "sha256": "003ca67a0a4875f93c783210b99c08af93ca84aa8834db199dc11a532a98b592",
+      "byte_count": 2291,
+      "row_count": 9,
+      "schema_version": 3
+    },
+    "provenance_binding_facts.parquet": {
+      "path": "provenance_binding_facts.parquet",
+      "sha256": "6ae8375b6d0e1f1b86b244081b503eeb05d7969014ea3e38fe7d9373feeec4a1",
+      "byte_count": 1338,
+      "row_count": 39,
+      "schema_version": 3
+    },
+    "provenance_external_inputs.parquet": {
+      "path": "provenance_external_inputs.parquet",
+      "sha256": "e3b82265168307818de2cdde0ab00ed23cfebfb614578bfd993804c83c369391",
+      "byte_count": 1515,
+      "row_count": 4,
+      "schema_version": 3
+    }
+  }
+}

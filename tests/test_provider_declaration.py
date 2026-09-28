@@ -124,7 +124,7 @@ def test_default_registration_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(registration, "register_manifest", counted_register_manifest)
 
     assert len(rr.providers()) == len(BUILTIN_PROVIDER_IDS)
-    assert rr.find(product="discharge_daily_mean")
+    assert rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean")
     assert rr.products()
     assert calls == 1
 
@@ -141,7 +141,7 @@ def test_missing_catalogue_refuses_manifest_without_partial_registration(
     )
 
     with pytest.raises(FatalContractError, match=rf"Provider za_dws catalogue {missing}.*does not exist"):
-        rr.find(product="discharge_daily_mean")
+        rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean")
 
     assert _registry.list_provider_ids() == []
 

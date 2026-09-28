@@ -19,6 +19,7 @@ from rivretrieve._internal.store import (
     compile_store,
     read_store,
 )
+from tests.store.certification_support import fixture_series
 
 
 def _compile(tmp_path: Path):
@@ -37,6 +38,9 @@ def _compile(tmp_path: Path):
             "time_zone": ["UTC"] * 3,
             "value": [None, None, 12.4],
             "value_state": ["published_null", "published_blank", "published_value"],
+            "series_id": [fixture_series("fixture-1", "fixture").series_id] * 3,
+            "facts_id": [fixture_series().facts[0].facts_id] * 3,
+            "source_unit": ["m3/s"] * 3,
             "native_value": [None, None, 12.4],
             "quality": [None, None, "E"],
         },
@@ -47,6 +51,9 @@ def _compile(tmp_path: Path):
             "time_zone": pl.String,
             "value": pl.Float64,
             "value_state": pl.String,
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "source_unit": pl.String,
             "native_value": pl.Float64,
             "quality": pl.String,
         },
@@ -60,6 +67,7 @@ def _compile(tmp_path: Path):
         publisher_artifact=PublisherArtifact("https://example.com/fixture.csv", ArtifactChecksum("sha256:" + "1" * 64)),
         source_columns=source_columns,
         source_column_dispositions=dispositions,
+        series=(fixture_series("fixture-1", "fixture"),),
     )
     compile_store(request, rows)
     return read_store(
@@ -81,12 +89,20 @@ def test_four_value_states_survive_compile(tmp_path: Path) -> None:
             "time": [datetime(2024, 1, day) for day in (2, 3, 4)],
             "value": [None, None, 12.4],
             "value_state": ["published_null", "published_blank", "published_value"],
+            "series_id": [fixture_series("fixture-1", "fixture").series_id] * 3,
+            "facts_id": [fixture_series().facts[0].facts_id] * 3,
+            "source_unit": ["m3/s"] * 3,
+            "native_value": [None, None, 12.4],
             "quality": [None, None, "E"],
         },
         schema={
             "time": pl.Datetime("us"),
             "value": pl.Float64,
             "value_state": pl.String,
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "source_unit": pl.String,
+            "native_value": pl.Float64,
             "quality": pl.String,
         },
     )

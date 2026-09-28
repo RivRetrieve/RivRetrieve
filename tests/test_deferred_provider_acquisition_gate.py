@@ -90,22 +90,25 @@ def test_brazil_requires_provenance_at_the_packaged_boundary(tmp_path: Path) -> 
 
 
 def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence() -> None:
-    selection = rr.find(provider="br_ana")
+    artifact = load_packaged_catalogue_artifact(catalogue_path("br_ana"))
+    candidate = artifact.station_products.filter(
+        (pl.col("availability") == "unknown") & (pl.col("product_id") == "stage_instantaneous")
+    ).row(0, named=True)
+    selection = rr.find(
+        provider="br_ana", station=candidate["station_id"], quantity="stage", timestamp_anchor="measurement_time"
+    )
     assert selection.empty_reason is None
     assert len(selection.acquisition_provenance) == 1
     assert selection.acquisition_provenance[0].header.withheld_facts
-    unknown = next(
-        series
-        for series in selection.series
-        if series.availability == "unknown" and series.product_id == "stage_instantaneous"
-    )
-    selected = rr.pick(selection, station=unknown.station_id, product=unknown.product_id)
+    unknown = selection.series[0]
+    selected = rr.pick(selection, series_id=unknown.series_id)
     assert selected.series == (unknown,)
-    assert unknown.availability_reason is not None
     assert (
-        "inventory membership does not establish adopted-endpoint product availability" in unknown.availability_reason
+        "inventory membership does not establish adopted-endpoint product availability"
+        in candidate["availability_reason"]
     )
-    assert unknown.published_record_start_date is unknown.published_record_end_date is None
+    assert candidate["published_record_start_date"] is candidate["published_record_end_date"] is None
+    assert all(inventory.completeness.value == "incomplete" for inventory in selected.inventories)
 
 
 def test_packaged_evidence_rejects_retired_schema(tmp_path: Path) -> None:

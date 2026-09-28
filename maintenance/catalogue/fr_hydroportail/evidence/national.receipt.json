@@ -1,0 +1,12 @@
+{
+  "url": "https://hydro.eaufrance.fr/rechercher/ajax/entites-hydrometriques",
+  "params": {
+    "hydro_entities_search[active]": "1",
+    "hydro_entities_search[closed]": "1"
+  },
+  "status": 200,
+  "retrieved_at": "2026-09-21T09:11:36.212604+00:00",
+  "content_type": "application/json",
+  "bytes": 4374192,
+  "sha256": "a63cd9efdc9c99b11593c9836f80db3e07f0c4d1b1e10f6cb5002a43973574ae"
+}

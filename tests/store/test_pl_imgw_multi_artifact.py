@@ -7,11 +7,30 @@ from pathlib import Path
 
 import pytest
 
-from rivretrieve._internal.providers.pl_imgw.bulk import (
-    download_imgw_history,
-    plan_imgw_artifacts,
-)
+from rivretrieve._internal.providers.pl_imgw.bulk import BASE_URL, download_imgw_history
 from rivretrieve._internal.store.validation import StoreManifest
+
+
+def _index(url: str, names: tuple[str, ...]) -> bytes:
+    identity = "Index of /" + url.split("/", 3)[3].rstrip("/")
+    links = "".join(f'<tr><td><a href="{name}">{name}</a></td></tr>' for name in names)
+    return f"<html><head><title>{identity}</title></head><body><h1>{identity}</h1><table>{links}</table></body></html>".encode()
+
+
+def _listing_transfer(transfer, names: tuple[str, ...]):
+    years = sorted({name[5:9] for name in names})
+    listings = {BASE_URL + "/": _index(BASE_URL + "/", tuple(year + "/" for year in years))}
+    for year in years:
+        url = f"{BASE_URL}/{year}/"
+        listings[url] = _index(url, tuple(name for name in names if name[5:9] == year))
+
+    def receive(url: str, destination: Path) -> None:
+        if url in listings:
+            destination.write_bytes(listings[url])
+        else:
+            transfer(url, destination)
+
+    return receive
 
 
 def _official_url(name: str) -> str:
@@ -26,16 +45,6 @@ def test_imgw_near_sentinel_numeric_is_not_reclassified_as_published_null() -> N
         999.0004,
         "published_value",
     )
-
-
-def test_imgw_plan_uses_monthly_archives_before_2023_and_annual_after() -> None:
-    planned = plan_imgw_artifacts(first_year=2022, last_year=2023)
-
-    assert len(planned) == 13
-    assert planned[0].url.endswith("/2022/codz_2022_01.zip")
-    assert planned[11].url.endswith("/2022/codz_2022_12.zip")
-    assert planned[12].url.endswith("/2023/codz_2023.zip")
-    assert len({item.filename for item in planned}) == 13
 
 
 def test_multi_artifact_compile_publishes_one_union_with_complete_provenance(tmp_path) -> None:
@@ -60,7 +69,7 @@ def test_multi_artifact_compile_publishes_one_union_with_complete_provenance(tmp
             artifacts[0].path,
             root,
             artifacts[0].url,
-            artifacts[0].source_vintage,
+            max(item.source_vintage for item in artifacts),
             datetime(2026, 9, 2, tzinfo=UTC),
             "0.1.49",
             tuple(artifacts),
@@ -71,9 +80,9 @@ def test_multi_artifact_compile_publishes_one_union_with_complete_provenance(tmp
     assert [item.url for item in validated.manifest.publisher_artifacts] == [item.url for item in artifacts]
     assert all(not item.path.exists() for item in artifacts)
     assert validated.manifest.partition_row_counts == {
-        "product=discharge_daily_mean/year=2021": 2,
-        "product=stage_daily_mean/year=2021": 2,
-        "product=water_temperature_daily_mean/year=2021": 2,
+        "product=discharge_daily/year=2021": 2,
+        "product=stage_daily/year=2021": 2,
+        "product=water_temperature_daily/year=2021": 2,
     }
 
 
@@ -87,7 +96,9 @@ def test_imgw_history_download_transfers_every_planned_artifact_once(tmp_path) -
     downloaded = download_imgw_history(
         tmp_path / "publisher-artifact.download",
         today=date(2024, 6, 1),
-        transfer=transfer,
+        transfer=_listing_transfer(
+            transfer, tuple(f"codz_2022_{month:02d}.zip" for month in range(1, 13)) + ("codz_2023.zip",)
+        ),
         first_year=2022,
     )
 
@@ -136,7 +147,7 @@ def test_multi_artifact_failure_retains_all_inputs_and_previous_store(tmp_path) 
                 valid,
                 root,
                 artifacts[0].url,
-                artifacts[0].source_vintage,
+                max(item.source_vintage for item in artifacts),
                 datetime(2026, 9, 3, tzinfo=UTC),
                 "0.1.49",
                 artifacts,
@@ -156,7 +167,12 @@ def test_imgw_history_download_removes_partial_current_target_and_refuses_preexi
     first_target = base.with_name(base.name + "-codz_2023.zip")
     first_target.write_bytes(b"existing")
     with pytest.raises(FileExistsError, match="already exists"):
-        download_imgw_history(base, today=date(2024, 1, 1), transfer=lambda _url, _path: None, first_year=2023)
+        download_imgw_history(
+            base,
+            today=date(2024, 1, 1),
+            transfer=_listing_transfer(lambda _url, _path: None, ("codz_2023.zip",)),
+            first_year=2023,
+        )
     assert first_target.read_bytes() == b"existing"
 
     first_target.unlink()
@@ -166,7 +182,9 @@ def test_imgw_history_download_removes_partial_current_target_and_refuses_preexi
         raise OSError("transfer failed")
 
     with pytest.raises(OSError, match="transfer failed"):
-        download_imgw_history(base, today=date(2024, 1, 1), transfer=partial, first_year=2023)
+        download_imgw_history(
+            base, today=date(2024, 1, 1), transfer=_listing_transfer(partial, ("codz_2023.zip",)), first_year=2023
+        )
     assert not first_target.exists()
 
 
@@ -218,7 +236,7 @@ def test_second_artifact_unlink_failure_restores_every_artifact_and_previous_sto
                 artifacts[0].path,
                 root,
                 artifacts[0].url,
-                artifacts[0].source_vintage,
+                max(item.source_vintage for item in artifacts),
                 datetime(2026, 9, 3, tzinfo=UTC),
                 "0.1.49",
                 tuple(artifacts),
@@ -294,7 +312,7 @@ def test_post_commit_quarantine_cleanup_failure_is_loud_and_keeps_new_store_auth
                 artifacts[0].path,
                 root,
                 artifacts[0].url,
-                artifacts[0].source_vintage,
+                max(item.source_vintage for item in artifacts),
                 datetime(2026, 9, 3, tzinfo=UTC),
                 "0.1.49",
                 tuple(artifacts),
@@ -320,14 +338,6 @@ def test_imgw_rejects_hydrological_month_that_disagrees_with_archive_name(tmp_pa
 
     with pytest.raises(ValueError, match="filename.*hydrological"):
         next(iter(decode_imgw_batches(artifact).batches))
-
-
-def test_imgw_completed_hydrological_year_changes_in_november() -> None:
-    from rivretrieve._internal.providers.pl_imgw.bulk import latest_completed_hydrological_year
-
-    assert latest_completed_hydrological_year(date(2024, 10, 31)) == 2023
-    assert latest_completed_hydrological_year(date(2024, 11, 1)) == 2024
-    assert latest_completed_hydrological_year(date(2024, 12, 31)) == 2024
 
 
 def test_imgw_plural_identity_rejects_duplicate_paths_urls_and_mislabeled_url(tmp_path) -> None:
@@ -397,7 +407,7 @@ def _imgw_compile_request_for_names(tmp_path: Path, names: tuple[str, ...]):
         first.path,
         StoreRoot(tmp_path / "store"),
         first.url,
-        first.source_vintage,
+        max(item.source_vintage for item in artifacts),
         datetime(2026, 9, 2, tzinfo=UTC),
         "0.1.49",
         artifacts,
@@ -419,9 +429,9 @@ def test_imgw_plural_compile_identity_refuses_internal_period_gap(tmp_path: Path
 
 
 @pytest.mark.parametrize("name", ("codz_2023_01.zip", "codz_2022.zip", "codz_2024_12.zip"))
-def test_imgw_compile_identity_refuses_wrong_publication_regime(tmp_path: Path, name: str) -> None:
-    with pytest.raises(ValueError, match="annual publication|annual artifact"):
-        _imgw_compile_request_for_names(tmp_path, (name,))
+def test_imgw_compile_identity_accepts_either_publication_form_in_any_year(tmp_path: Path, name: str) -> None:
+    request = _imgw_compile_request_for_names(tmp_path, (name,))
+    assert len(request.publisher_artifacts) == 1
 
 
 @pytest.mark.parametrize(
@@ -457,7 +467,7 @@ def test_imgw_source_vintage_is_publisher_labelled_coverage_end() -> None:
     assert DownloadedImgw(Path("codz_2023.zip"), _official_url("codz_2023.zip")).source_vintage == date(2023, 10, 31)
 
 
-def test_imgw_streaming_first_batch_never_calls_whole_archive_decoder(tmp_path, monkeypatch) -> None:
+def test_imgw_streaming_first_batch_retains_bounded_rows(tmp_path, monkeypatch) -> None:
     import zipfile
 
     import rivretrieve._internal.providers.pl_imgw.bulk as bulk
@@ -467,14 +477,13 @@ def test_imgw_streaming_first_batch_never_calls_whole_archive_decoder(tmp_path, 
     with zipfile.ZipFile(artifact, "w") as archive:
         archive.writestr("codz_2022_03.csv", source)
     monkeypatch.setattr(bulk, "IMGW_ROWS_PER_BATCH", 4)
-    monkeypatch.setattr(bulk, "decode_imgw", lambda _path: (_ for _ in ()).throw(AssertionError("whole decode")))
 
     first = next(iter(bulk.decode_imgw_batches(artifact).batches))
 
     assert first.rows.height == 4
 
 
-def test_imgw_history_download_includes_just_completed_year_in_november(tmp_path) -> None:
+def test_imgw_history_download_includes_just_published_year_in_november(tmp_path) -> None:
     calls: list[str] = []
 
     def transfer(url: str, destination: Path) -> None:
@@ -482,7 +491,10 @@ def test_imgw_history_download_includes_just_completed_year_in_november(tmp_path
         destination.write_bytes(b"publisher")
 
     downloaded = download_imgw_history(
-        tmp_path / "publisher.download", today=date(2024, 11, 1), transfer=transfer, first_year=2023
+        tmp_path / "publisher.download",
+        today=date(2024, 11, 1),
+        transfer=_listing_transfer(transfer, ("codz_2023.zip", "codz_2024.zip")),
+        first_year=2023,
     )
 
     assert [Path(item.url).name for item in downloaded] == ["codz_2023.zip", "codz_2024.zip"]
@@ -567,3 +579,128 @@ def test_imgw_identity_inventory_refuses_equal_count_record_substitution(tmp_pat
     with pytest.raises(ValueError, match="identity inventory"):
         bulk.compile_imgw(request)
     assert artifact.exists()
+
+
+def _tiny_artifact(tmp_path: Path, name: str, row: bytes):
+    import zipfile
+
+    from rivretrieve._internal.providers.pl_imgw.bulk import DownloadedImgw
+    from rivretrieve._internal.providers.registration import DownloadedBulkArtifact
+
+    path = tmp_path / name
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(path.stem + ".csv", row)
+    item = DownloadedImgw(path, _official_url(name))
+    return DownloadedBulkArtifact(path, item.url, item.source_vintage)
+
+
+def _compile_declared(artifacts, root):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.providers.pl_imgw.declaration import declaration
+    from rivretrieve._internal.providers.registration import BulkCompileRequest, BulkStore
+
+    assert isinstance(declaration.observations, BulkStore)
+    return declaration.observations.compile(
+        BulkCompileRequest(tuple(artifacts), root, datetime(2026, 9, 2, tzinfo=UTC), "0.1.49")
+    )
+
+
+@pytest.mark.parametrize("transition", [False, True], ids=["monthly", "monthly-to-annual"])
+def test_real_declaration_persists_union_and_maximum_labelled_vintage(tmp_path, transition) -> None:
+    import hashlib
+    from datetime import datetime
+
+    import polars as pl
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.store import StoreRoot, validate_store
+
+    if transition:
+        names = ("codz_2022_12.zip", "codz_2023.zip")
+        rows = (b"1;S;R;2022;12;01;100;10;7;10\r\n", b"1;S;R;2023;01;02;101;11;8;11\r\n")
+        times = (datetime(2022, 10, 1), datetime(2022, 11, 2))
+        vintage = date(2023, 10, 31)
+    else:
+        names = ("codz_1951_11.zip", "codz_1951_12.zip")
+        rows = (b"1;S;R;1951;11;01;100;10;7;9\r\n", b"1;S;R;1951;12;02;101;11;8;10\r\n")
+        times = (datetime(1951, 9, 1), datetime(1951, 10, 2))
+        vintage = date(1951, 10, 31)
+    artifacts = tuple(_tiny_artifact(tmp_path, name, row) for name, row in zip(names, rows, strict=True))
+    checksums = ["sha256:" + hashlib.sha256(item.path.read_bytes()).hexdigest() for item in artifacts]
+    root = StoreRoot(tmp_path / "store")
+    compiled = _compile_declared(artifacts, root)
+    reloaded = validate_store(root, ProviderId("pl_imgw"))
+    assert compiled.manifest == reloaded.manifest
+    for manifest in (compiled.manifest, reloaded.manifest):
+        assert isinstance(manifest, StoreManifest)
+        assert manifest.source_vintage == vintage
+        assert [item.url for item in manifest.publisher_artifacts] == [item.url for item in artifacts]
+        assert [str(item.sha256) for item in manifest.publisher_artifacts] == checksums
+    expected = pl.DataFrame(
+        {
+            "product": [
+                product for product in ("discharge_daily", "stage_daily", "water_temperature_daily") for _ in times
+            ],
+            "station_id": ["1"] * 6,
+            "time": list(times) * 3,
+            "value": [10.0, 11.0, 100.0, 101.0, 7.0, 8.0],
+        }
+    )
+    actual = pl.read_parquet(list(Path(root).rglob("*.parquet")), hive_partitioning=True).select(expected.columns)
+    assert_frame_equal(actual.sort("product", "time"), expected.sort("product", "time"))
+    assert all(not item.path.exists() for item in artifacts)
+
+
+@pytest.mark.parametrize(
+    ("index", "wrong_date"),
+    [(0, date(2021, 11, 29)), (1, date(2021, 12, 30)), (2, date(2022, 2, 1))],
+    ids=["first-unchanged-max", "nonfirst-unchanged-max", "last-changed-max"],
+)
+def test_declaration_rejects_supplied_vintage_without_changing_inputs_or_store(tmp_path, index, wrong_date) -> None:
+    from dataclasses import replace
+
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.store import StoreRoot, validate_store
+
+    root = StoreRoot(tmp_path / "store")
+    initial = _tiny_artifact(tmp_path, "codz_2023.zip", b"1;S;R;2023;03;01;100;10;7;1\r\n")
+    previous = _compile_declared((initial,), root)
+    before = {p.relative_to(root): p.read_bytes() for p in Path(root).rglob("*") if p.is_file()}
+    artifacts = tuple(
+        _tiny_artifact(
+            tmp_path, f"codz_2022_{month:02d}.zip", f"1;S;R;2022;{month:02d};01;100;10;7;{calendar_month}\r\n".encode()
+        )
+        for month, calendar_month in ((1, 11), (2, 12), (3, 1))
+    )
+    inputs = {item.path: item.path.read_bytes() for item in artifacts}
+    invalid = tuple(
+        replace(item, source_vintage=wrong_date) if n == index else item for n, item in enumerate(artifacts)
+    )
+    if index < 2:
+        assert max(item.source_vintage for item in invalid) == max(item.source_vintage for item in artifacts)
+    with pytest.raises(ValueError, match="publisher-labelled coverage end"):
+        _compile_declared(invalid, root)
+    assert {path: path.read_bytes() for path in inputs} == inputs
+    assert {p.relative_to(root): p.read_bytes() for p in Path(root).rglob("*") if p.is_file()} == before
+    assert validate_store(root, ProviderId("pl_imgw")).manifest == previous.manifest
+
+
+def test_imgw_plural_identity_rejects_disordered_periods(tmp_path) -> None:
+    with pytest.raises(ValueError, match="out of period order"):
+        _imgw_compile_request_for_names(tmp_path, ("codz_2022_02.zip", "codz_2022_01.zip"))
+
+
+def test_imgw_plural_identity_rejects_repeated_overlapping_period(tmp_path) -> None:
+    # Official publication regimes have disjoint periods; repeating a period repeats its URL.
+    with pytest.raises(ValueError, match="duplicate publisher artifact"):
+        _imgw_compile_request_for_names(tmp_path, ("codz_2023.zip", "codz_2023.zip"))
+
+
+def test_imgw_plural_identity_rejects_inconsistent_aggregate_vintage(tmp_path) -> None:
+    from dataclasses import replace
+
+    request = _imgw_compile_request_for_names(tmp_path, ("codz_2022_01.zip", "codz_2022_02.zip"))
+    with pytest.raises(ValueError, match="vintage"):
+        replace(request, source_vintage=date(2021, 11, 30))

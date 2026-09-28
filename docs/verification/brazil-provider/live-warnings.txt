@@ -1,0 +1,2 @@
+/Users/nicolaslazaro/Desktop/work/RivRetrieve/src/rivretrieve/_internal/discovery.py:547: RuntimeWarning: Requested ANA consistency 1 is not published in this response; availability remains unresolved
+  apply_on_issue(result.issues, on_issue)
