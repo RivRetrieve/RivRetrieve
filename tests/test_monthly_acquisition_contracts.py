@@ -12,6 +12,7 @@ from rivretrieve._internal.source_acquisition import (
     attempt_series_request,
 )
 from rivretrieve._internal.source_series import PhysicalFacts, SeriesWindow, SourceIdentity, SourceSeries
+from rivretrieve._internal.time_axis import TimeAxis
 from rivretrieve._internal.transport import (
     HttpMethod,
     TransportFailure,
@@ -183,7 +184,7 @@ def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_
     tick = timedelta(microseconds=1)
     boundaries = [_START + timedelta(hours=6 * part) for part in range(4)]
     intervals = tuple(
-        SeriesWindow(start=start, end=boundaries[index + 1] - tick if index < 3 else _END)
+        SeriesWindow(start=start, end=boundaries[index + 1] - tick if index < 3 else _END, axis=TimeAxis.UTC)
         for index, start in enumerate(boundaries)
     )
     store = tmp_path / "store"
@@ -290,8 +291,15 @@ def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_
         (intervals[part].start, intervals[part].end) for part in (0, 2)
     }
     status = StoreReader().status(StoreRoot(store), _PROVIDER)
+    # UTC acquisitions certify their full fetched interval, including padding.
+    # Refresh changes only the authored partitions; untouched padding keeps its vintage.
+    assert all(item.interval.axis is TimeAxis.UTC for item in status.coverage)
     assert {(item.interval.start, item.interval.end, item.retrieved_at) for item in status.coverage} == {
-        (interval.start, interval.end, old_at if part in (0, 2) else new_at) for part, interval in enumerate(intervals)
+        (_START - timedelta(days=2), intervals[0].end, old_at),
+        (intervals[1].start, intervals[1].end, new_at),
+        (intervals[2].start, intervals[2].end, old_at),
+        (intervals[3].start, intervals[3].end, new_at),
+        (_END + tick, _END + timedelta(days=2), old_at),
     }
     reused = _drive(store, CountedReplay(_INSTANT))
     assert_frame_equal(reused.canonical_rows.sort("time"), expected.sort("time"))

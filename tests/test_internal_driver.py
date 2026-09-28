@@ -1598,7 +1598,9 @@ def test_payload_origins_enrich_provenance_as_json_safe_ordered_facts() -> None:
     unknown = _payload("station-3", coordinates, fetch_window)
     base = _provenance(request)
 
-    enriched = driver_module._provenance_with_payload_origins(base, (first, first, second, unknown))
+    # Equal source bytes/origins from an independent acquisition retain a distinct call.
+    repeated = replace(first, acquisition_id="independent-repeat")
+    enriched = driver_module._provenance_with_payload_origins(base, (first, repeated, second, unknown))
 
     assert enriched.source == base.source
     assert enriched.request == base.request
