@@ -1,4 +1,7 @@
-from tests.test_fr_hubeau_generate_catalogue import _catalogue, _refresh, _sample_payloads
+from rivretrieve._internal.catalogues.native import read_native_table
+from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import build_catalogue
+from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
+from tests.test_fr_hubeau_generate_catalogue import NATIVE_PATH, _availability, _refresh, _sample_payloads
 
 
 def test_native_refresh_accepts_changed_complete_populations():
@@ -8,7 +11,8 @@ def test_native_refresh_accepts_changed_complete_populations():
 
 
 def test_hubeau_catalogue_contains_only_its_publication_service():
-    result = _catalogue()
+    # This assertion owns a generation boundary, not inspection of a cached projection.
+    result = build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS, _availability())
     assert set(result.products["product_id"]) == {
         "discharge_daily_mean",
         "discharge_daily_max",
@@ -32,10 +36,8 @@ def test_refreshed_native_build_retains_unknown_pairs_without_observation_claims
 
     import polars as pl
 
-    from rivretrieve._internal.catalogues.native import read_native_table
-    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture, build_catalogue
-    from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
-    from tests.test_fr_hubeau_generate_catalogue import CURRENT_NATIVE_PATH, _availability
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture
+    from tests.test_fr_hubeau_generate_catalogue import CURRENT_NATIVE_PATH
 
     manifest = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"
     capture = NativeInventoryCapture.model_validate(json.loads(manifest.read_text()))

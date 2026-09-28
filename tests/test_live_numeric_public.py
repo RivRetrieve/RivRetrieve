@@ -36,8 +36,13 @@ class NumericReplay(ReplayTransport):
         return replace(response, content=content)
 
 
-@pytest.mark.parametrize("mutation", [*BAD, "zero", "finite", "null"])
-@pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+# The real-parser matrix in test_live_numeric_values covers every representation.
+# Here overflow exercises each policy; valid zero/finite/null states prove cache integration.
+@pytest.mark.parametrize(
+    "mutation,policy",
+    [("large_exponent", policy) for policy in ("raise", "warn", "ignore")]
+    + [(mutation, "raise") for mutation in ("zero", "finite", "null")],
+)
 def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(tmp_path, monkeypatch, mutation, policy):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(
