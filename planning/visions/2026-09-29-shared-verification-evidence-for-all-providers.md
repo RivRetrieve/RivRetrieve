@@ -33,13 +33,15 @@ Use a separate, organization-owned **private GitHub evidence repository**, with
 compressed collections attached to versioned releases. Do not commit the large
 bundles as Git blobs or put them in Git LFS in the code repository. Making the
 code repository public must not change access to the evidence repository.
-The exact repository name and collection naming are implementation choices.
-`RivRetrieve/verification-evidence` was an illustrative name, not an existing
-resource confirmed during discovery.
+The private repository is `RivRetrieve/verification-evidence`. It has been created,
+and the implementing maintainer has write access. Collection naming remains an
+implementation choice.
 
-Maintainers use their own GitHub accounts. A reader team can download evidence;
-a smaller group can publish collections and administer access. Document onboarding,
-revocation, ownership and recovery. Do not distribute a shared human password.
+Maintainers use their own GitHub accounts. The owner confirmed that everyone in
+the organization has access. Use the existing organization access arrangements;
+creating separate reader and publisher teams is not required. Document how
+maintainers obtain access and who administers it. Do not distribute a shared
+human password.
 
 A maintainer workflow must:
 
@@ -64,12 +66,12 @@ acquisition identity. Do not interpret hosting limits as a guarantee of permanen
 availability. An unexpected hosting limitation is a blocker to resolve explicitly,
 not permission to put large evidence into source Git or publish private bundles.
 
-Provide an independently recoverable backup of the asset bytes, manifests and
-release metadata. A Git clone or mirror does not back up release attachments.
-Document and test restore, including recovery without the original discovery
-machine. Establish the responsible maintainers and backup destination during
-implementation before declaring the migration complete. Do not delete the original
-local evidence until remote verification and backup recovery are demonstrated.
+Use the private evidence repository as the sole shared storage location. The
+owner explicitly chose not to maintain an independent backup. Loss of release
+attachments therefore has no independent recovery guarantee; a Git clone or mirror
+does not back them up. Demonstrate downloading and verifying the retained evidence
+without relying on the original discovery machine. Preserve original local
+evidence during migration; this work does not authorize deleting it.
 
 ## One process across all providers
 
@@ -138,7 +140,7 @@ artifacts must not leak into public workflows or releases.
 
 Provide one maintainer guide, for example `docs/maintenance/evidence.md`, covering
 access, version selection, download, fingerprint checks, extraction, verification,
-new collection review, backup, restore and access revocation. Explain why evidence
+new collection review, access administration and the lack of an independent backup. Explain why evidence
 is retained and which checks a public contributor can run. Include a practical
 end-to-end example and expected outcomes.
 
@@ -285,8 +287,9 @@ authorization and preservation plan.
 - Other providers run their applicable existing checks, with precise limits. A
   missing required original blocks its corresponding claim; a recorded limitation
   cannot be presented as a successful full-body check.
-- Team access, restricted publishing, public/private job separation, backup and a
-  tested restore are demonstrated. Private content does not enter public logs,
+- Existing organization access and public/private job separation are verified.
+  Independent backup and restore are outside scope by owner decision.
+  Private content does not enter public logs,
   artifacts, caches, release assets or distributed packages.
 - The maintainer guide, provider index and concise `AGENTS.md` instructions agree.
   Related maintenance pages no longer rely on an unexplained owner-machine path.
@@ -304,4 +307,6 @@ without disguising changed source facts as a storage migration.
 - [GitHub Actions token scope](https://docs.github.com/en/actions/concepts/security/github_token)
 
 Implementation must confirm current organization permissions and service settings.
-Discovery created no evidence repository, release, team, backup or verification job.
+The owner has since created the private evidence repository and confirmed
+organization access. Discovery created no release or verification job. No new
+teams or independent backup are required.
