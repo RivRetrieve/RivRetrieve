@@ -62,7 +62,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -178,7 +178,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -271,7 +271,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -361,7 +361,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -452,7 +452,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -558,7 +558,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -676,7 +676,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -781,7 +781,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -872,7 +872,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -976,7 +976,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -1082,7 +1082,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -1188,7 +1188,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -1314,7 +1314,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
@@ -1405,7 +1405,7 @@
             "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
             "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
             "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
-            "Publication verifies member bytes. Independent selected retrieval and applicable full provider checks passed for the published collection; retained source limitations remain unchanged.",
+            "Publication verifies member bytes. Independent selected retrieval passed. Applicable provider checks also passed within their documented scope; retained source limitations remain unchanged.",
             "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
           ]
         },
