@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Literal, Self
 
@@ -11,19 +12,30 @@ from pydantic import Field, field_validator, model_validator
 
 from .archives import ArchivePaths
 from .index import (
-    BUILTIN_PROVIDER_IDS, ArtifactRole, Collection, Digest, EvidenceError, Nonnegative,
-    Record, Text, _unique_keys, safe_name,
+    BUILTIN_PROVIDER_IDS,
+    ArtifactRole,
+    Collection,
+    Digest,
+    EvidenceError,
+    Nonnegative,
+    Record,
+    Text,
+    _unique_keys,
+    safe_name,
 )
 
 
 class Acquisition(Record):
     """An acquisition identity is independent of bytes, packaging and release dates.
 
-    Missing source facts use ``None``. Text preserves retained facts without
+    ``acquisition_id`` is an archive record key. ``source_acquisition_id`` is the
+    retained original event identity, if known; the archive key does not recover
+    it. Missing source facts use ``None``. Text preserves retained facts without
     inferring a time zone or reconstructing a request from response content.
     """
 
     acquisition_id: Text
+    source_acquisition_id: Text | None
     provider_ids: list[Text]
     source_context: Text | None
     request_context: Text | None
@@ -123,13 +135,23 @@ class CollectionManifest(Record):
                 or any(artifacts[ref].role != "acquisition_receipt" for ref in acquisition.receipt_refs)
             ):
                 raise ValueError("invalid acquisition references")
-        # A derived artifact cannot be its own ancestor.
-        remaining = {key: set(value.derived_from) for key, value in artifacts.items()}
-        while remaining:
-            ready = {key for key, refs in remaining.items() if not refs}
-            if not ready:
-                raise ValueError("cyclic derivation references")
-            remaining = {key: refs - ready for key, refs in remaining.items() if key not in ready}
+        # Receipt and derivation lineage cannot make an artifact its own ancestor.
+        dependencies = {key: set(value.derived_from) | set(value.receipt_refs) for key, value in artifacts.items()}
+        dependents: dict[str, list[str]] = defaultdict(list)
+        for key, refs in dependencies.items():
+            for ref in refs:
+                dependents[ref].append(key)
+        ready = deque(key for key, refs in dependencies.items() if not refs)
+        visited = 0
+        while ready:
+            key = ready.popleft()
+            visited += 1
+            for child in dependents[key]:
+                dependencies[child].remove(key)
+                if not dependencies[child]:
+                    ready.append(child)
+        if visited != len(artifacts):
+            raise ValueError("cyclic artifact lineage")
         return self
 
 
@@ -137,8 +159,10 @@ def read_manifest(path: Path) -> CollectionManifest:
     """Read private metadata with a safe error; callers must not print exception chains."""
     try:
         return CollectionManifest.model_validate(json.loads(path.read_bytes(), object_pairs_hook=_unique_keys))
-    except (OSError, ValueError) as error:
-        raise EvidenceError("Invalid private collection manifest; review its schema, identities and references.") from error
+    except (OSError, ValueError):
+        raise EvidenceError(
+            "Invalid private collection manifest; review its schema, identities and references."
+        ) from None
 
 
 def fingerprint(path: Path) -> tuple[int, str]:
@@ -182,8 +206,8 @@ def verify_members(root: Path, manifest: CollectionManifest, *, manifest_path: s
         for relative in manifest.input_roots.values():
             if not (root / relative).is_dir():
                 raise EvidenceError("Collection lacks a selected input root.")
-    except OSError as error:
-        raise EvidenceError("Cannot verify retained files; check input access and available storage.") from error
+    except OSError:
+        raise EvidenceError("Cannot verify retained files; check input access and available storage.") from None
 
 
 def verify_collection(root: Path, collection: Collection) -> CollectionManifest | None:
@@ -206,5 +230,5 @@ def verify_collection(root: Path, collection: Collection) -> CollectionManifest 
             raise EvidenceError("Collection manifest cannot also identify a retained artifact.")
         verify_members(root, manifest, manifest_path=binding.path)
         return manifest
-    except OSError as error:
-        raise EvidenceError("Cannot read the selected collection manifest.") from error
+    except OSError:
+        raise EvidenceError("Cannot read the selected collection manifest.") from None

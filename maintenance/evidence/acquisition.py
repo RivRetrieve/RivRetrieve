@@ -8,10 +8,10 @@ import os
 import subprocess
 import tempfile
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Mapping
 
 from .archives import ArchivePaths, extract_archive
 from .index import Asset, Collection, EvidenceError, EvidenceIndex
@@ -32,17 +32,27 @@ def _command(endpoint: str) -> list[str]:
 type JsonValue = dict[str, JsonValue] | list[JsonValue] | str | int | float | bool | None
 
 
-def _metadata(endpoint: str) -> JsonValue:
+def _metadata(endpoint: str, *, method: str = "GET", payload: dict[str, JsonValue] | None = None) -> JsonValue:
     try:
-        result = subprocess.run(_command(endpoint), capture_output=True, check=True, timeout=60, env=_environment())
+        command = _command(endpoint)
+        if method != "GET":
+            command += ["--method", method, "--input", "-"]
+        result = subprocess.run(
+            command,
+            input=json.dumps(payload).encode() if payload is not None else None,
+            capture_output=True,
+            check=True,
+            timeout=60,
+            env=_environment(),
+        )
         return json.loads(result.stdout)
-    except (OSError, subprocess.SubprocessError, ValueError) as error:
+    except (OSError, subprocess.SubprocessError, ValueError):
         raise EvidenceError(
             "GitHub metadata unavailable. Check gh authentication and organization access, then retry the exact release."
-        ) from error
+        ) from None
 
 
-def check_release(repository: str, collection: Collection) -> None:
+def check_release(repository: str, collection: Collection, *, draft: bool = False, exact_assets: bool = False) -> None:
     """Confirm release ID, tag and asset membership through authenticated GitHub API calls."""
     prefix = f"repos/{repository}/releases/{collection.release_id}"
     release = _metadata(prefix)
@@ -51,7 +61,7 @@ def check_release(repository: str, collection: Collection) -> None:
         or type(release.get("id")) is not int
         or release.get("id") != collection.release_id
         or release.get("tag_name") != collection.release_tag
-        or release.get("draft") is not False
+        or release.get("draft") is not draft
     ):
         raise EvidenceError("Release identity differs from the index; review the pinned release before continuing.")
     expected = {asset.asset_id: asset for asset in collection.assets}
@@ -76,7 +86,7 @@ def check_release(repository: str, collection: Collection) -> None:
                 raise EvidenceError("Release asset metadata differs from the index; do not use replacement bytes.")
         if len(records) < 100:
             break
-    if not expected.keys() <= seen:
+    if (exact_assets and expected.keys() != seen) or not expected.keys() <= seen:
         raise EvidenceError("Pinned asset is missing from its release; ask an evidence maintainer to investigate.")
 
 
@@ -122,17 +132,20 @@ def download_asset(repository: str, asset: Asset, destination: Path) -> None:
                     process.wait()
         if size != asset.byte_size or digest.hexdigest() != asset.sha256:
             raise EvidenceError("Downloaded size or SHA-256 differs from the index; reject these bytes.")
-    except (OSError, subprocess.SubprocessError) as error:
-        raise EvidenceError("Asset download failed. Check gh installation, access and available disk space.") from error
+    except (OSError, subprocess.SubprocessError):
+        raise EvidenceError("Asset download failed. Check gh installation, access and available disk space.") from None
 
 
 def _external_destination(destination: Path, source_roots: tuple[Path, ...]) -> Path:
-    resolved = destination.expanduser().resolve()
-    if any(resolved.is_relative_to(root.resolve()) for root in source_roots):
-        raise EvidenceError("Choose an evidence destination outside all source checkouts.")
-    if any((parent / ".git").exists() for parent in (resolved, *resolved.parents)):
-        raise EvidenceError("Choose an evidence destination outside all source checkouts.")
-    return resolved
+    try:
+        resolved = destination.expanduser().resolve()
+        if any(resolved.is_relative_to(root.resolve()) for root in source_roots):
+            raise EvidenceError("Choose an evidence destination outside all source checkouts.")
+        if any((parent / ".git").exists() for parent in (resolved, *resolved.parents)):
+            raise EvidenceError("Choose an evidence destination outside all source checkouts.")
+        return resolved
+    except OSError:
+        raise EvidenceError("Cannot resolve a safe evidence destination.") from None
 
 
 @dataclass(frozen=True)
@@ -190,8 +203,9 @@ def acquire_collection(
             if any(not (unpacked / relative).is_dir() for relative in collection.input_roots.values()):
                 raise EvidenceError("Collection lacks an indexed input root; review the archive layout.")
             manifest = verify_collection(unpacked, collection)
-            if manifest is not None and provider_id not in manifest.provider_ids:
-                raise EvidenceError("Collection manifest does not include the selected provider.")
+            expected_providers = {item.provider_id for item in index.providers if collection_id in item.collections}
+            if manifest is not None and set(manifest.provider_ids) != expected_providers:
+                raise EvidenceError("Collection manifest providers differ from the explicit index selection.")
             # mkdir reserves a new final name atomically. Never replace a pre-existing directory.
             target.mkdir(mode=0o700)
             try:
@@ -200,10 +214,11 @@ def acquire_collection(
                 target.rmdir()
                 raise
         return SelectedInputs(
-            collection, target,
+            collection,
+            target,
             MappingProxyType({name: target / relative for name, relative in collection.input_roots.items()}),
         )
-    except OSError as error:
+    except OSError:
         raise EvidenceError(
             "Cannot create evidence safely; check destination permissions, free space and existing paths."
-        ) from error
+        ) from None

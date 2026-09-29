@@ -14,7 +14,7 @@ import zlib
 from pathlib import Path
 from typing import IO, Self
 
-from .index import Asset, EvidenceError
+from .index import ArchiveAsset, EvidenceError
 
 
 def _path(name: str, directory: bool) -> tuple[str, ...]:
@@ -105,7 +105,7 @@ class _TarBytes(io.RawIOBase):
         return block
 
 
-def _check_zip_directory(archive: Path, asset: Asset) -> None:
+def _check_zip_directory(archive: Path, asset: ArchiveAsset) -> None:
     # Read the bounded end record before ZipFile allocates the central directory.
     with archive.open("rb") as source:
         source.seek(max(0, asset.byte_size - 65557))
@@ -136,7 +136,7 @@ def _check_zip_directory(archive: Path, asset: Asset) -> None:
         raise EvidenceError("ZIP directory exceeds reviewed limits or uses unsupported ZIP64/volume metadata.")
 
 
-def extract_archive(archive: Path, asset: Asset, destination: Path, paths: ArchivePaths) -> None:
+def extract_archive(archive: Path, asset: ArchiveAsset, destination: Path, paths: ArchivePaths) -> None:
     """Extract regular files only, bounded by the index's exact byte and entry totals.
 
     The caller must verify compressed size and SHA-256 first and provide a new,
@@ -218,4 +218,4 @@ def extract_archive(archive: Path, asset: Asset, destination: Path, paths: Archi
     ) as error:
         if isinstance(error, EvidenceError):
             raise
-        raise EvidenceError("Archive could not be safely extracted; check the reviewed collection.") from error
+        raise EvidenceError("Archive could not be safely extracted; check the reviewed collection.") from None

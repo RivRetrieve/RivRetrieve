@@ -39,14 +39,15 @@ def _asset(raw: bytes, *, archive_format="tar.gz", size=4, count=1, identity=101
 
 def _index(assets):
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "repository": "RivRetrieve/verification-evidence",
         "providers": [
             {
                 "provider_id": provider,
                 "materials": [
                     {
-                        "kind": "test",
+                        "roles": [],
+                        "classification": "unreviewed",
                         "purpose": "Synthetic archive safety case",
                         "location": "test",
                         "access": "public",
@@ -72,7 +73,8 @@ def _index(assets):
                 "collection_id": "test-collection",
                 "release_id": 42,
                 "release_tag": "test-v1",
-                "verification_root": ".",
+                "input_roots": {"verification": "."},
+                "manifest": None,
                 "assets": assets,
                 "purpose": "Synthetic safety case",
                 "limitations": ["Not source evidence"],
@@ -211,7 +213,7 @@ def test_committed_full_checks_require_their_published_collections():
     "mutation",
     [
         lambda x: x.update(schema_version=True),
-        lambda x: x.update(schema_version=2),
+        lambda x: x.update(schema_version=3),
         lambda x: x.update(repository="unreviewed/repository"),
         lambda x: x.update(extra="PRIVATE_RESPONSE_SENTINEL"),
         lambda x: x["providers"].pop(),
@@ -317,7 +319,7 @@ def test_exact_extraction_totals_are_required(tmp_path, size, count):
 def test_authenticated_exact_asset_download_and_no_overwrite(tmp_path, fake_gh):
     value = fake_gh()
     result = _acquire(tmp_path, value)
-    assert (result / "body.txt").read_bytes() == b"test"
+    assert (result.root / "body.txt").read_bytes() == b"test"
     calls = [json.loads(line) for line in (tmp_path / "calls").read_text().splitlines()]
     assert len(calls) == 3
     assert calls[-1][3:] == [
@@ -327,7 +329,7 @@ def test_authenticated_exact_asset_download_and_no_overwrite(tmp_path, fake_gh):
     ]
     with pytest.raises(EvidenceError, match="already exists"):
         _acquire(tmp_path, value)
-    assert (result / "body.txt").read_bytes() == b"test"
+    assert (result.root / "body.txt").read_bytes() == b"test"
     assert not list((tmp_path / "outside").glob(".evidence-*"))
 
 
@@ -458,7 +460,7 @@ def test_failed_archive_never_publishes_partial_evidence(tmp_path, fake_gh):
 @pytest.mark.parametrize("root", ["../escape", "/absolute", "a/../b", "a//b", "a\\b", ""])
 def test_index_verification_root_must_be_relative(root):
     value = _index([_asset(_tar())])
-    value["collections"][0]["verification_root"] = root
+    value["collections"][0]["input_roots"]["verification"] = root
     with pytest.raises(ValidationError):
         EvidenceIndex.model_validate(value)
 
@@ -489,8 +491,8 @@ def test_cross_asset_duplicate_paths_rejected(tmp_path, fake_gh):
 
 def test_missing_verification_root_rejects_collection(tmp_path, fake_gh):
     value = fake_gh()
-    value["collections"][0]["verification_root"] = "acquisition"
-    with pytest.raises(EvidenceError, match="verification root"):
+    value["collections"][0]["input_roots"]["verification"] = "acquisition"
+    with pytest.raises(EvidenceError, match="input root"):
         _acquire(tmp_path, value)
     assert list((tmp_path / "outside").iterdir()) == []
 
@@ -509,7 +511,7 @@ def test_preexisting_dangling_symlink_never_changed(tmp_path, fake_gh):
 def test_cli_success_reports_identity_and_root_without_response_content(tmp_path, fake_gh, capsys):
     raw = _tar([("acquisition/body.txt", b"test", tarfile.REGTYPE)])
     value = fake_gh(raw)
-    value["collections"][0]["verification_root"] = "acquisition"
+    value["collections"][0]["input_roots"]["verification"] = "acquisition"
     index = tmp_path / "index.json"
     index.write_text(json.dumps(value))
     assert (
@@ -532,7 +534,7 @@ def test_cli_success_reports_identity_and_root_without_response_content(tmp_path
     assert result == {
         "collection_id": "test-collection",
         "release_id": 42,
-        "verification_root": "acquisition",
+        "input_roots": {"verification": "acquisition"},
         "asset_ids": [101],
         "sha256": [hashlib.sha256(raw).hexdigest()],
     }

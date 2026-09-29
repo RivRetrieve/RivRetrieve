@@ -16,8 +16,14 @@ Positive = Annotated[int, Field(gt=0)]
 Nonnegative = Annotated[int, Field(ge=0)]
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ArtifactRole = Literal[
-    "publisher_original", "response_recording", "derived_input", "authored_interpretation",
-    "authored_declaration", "research_context", "runtime_product", "acquisition_receipt",
+    "publisher_original",
+    "response_recording",
+    "derived_input",
+    "authored_interpretation",
+    "authored_declaration",
+    "research_context",
+    "runtime_product",
+    "acquisition_receipt",
 ]
 
 
@@ -35,14 +41,13 @@ class Record(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
 
-class Asset(Record):
+class ArchiveAsset(Record):
     """Pinned compressed bytes and exact extraction limits.
 
     ``member_count`` includes explicit directories. ``extracted_byte_size`` is
     the sum of regular-file sizes, in bytes. No archive paths are published here.
     """
 
-    asset_id: Positive
     name: Text
     byte_size: Annotated[int, Field(gt=0, lt=2**31)]
     sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -57,6 +62,10 @@ class Asset(Record):
         if not self.name.endswith("." + self.archive_format):
             raise ValueError("asset name and archive format differ")
         return self
+
+
+class Asset(ArchiveAsset):
+    asset_id: Positive
 
 
 class ManifestBinding(Record):
@@ -98,7 +107,7 @@ class Collection(Record):
     @field_validator("release_tag")
     @classmethod
     def exact_tag(cls, value: str) -> str:
-        if value.strip() != value or value.lower() == "latest" or any(ord(c) < 32 for c in value):
+        if not value or value.strip() != value or value.lower() == "latest" or any(ord(c) < 32 for c in value):
             raise ValueError("an exact release tag is required")
         return value
 
@@ -200,5 +209,5 @@ def read_index(path: Path) -> EvidenceIndex:
     try:
         value = json.loads(path.read_bytes(), object_pairs_hook=_unique_keys)
         return EvidenceIndex.model_validate(value)
-    except (OSError, ValueError, ValidationError) as error:
-        raise EvidenceError("Invalid evidence index; check its schema, identities and references.") from error
+    except (OSError, ValueError, ValidationError):
+        raise EvidenceError("Invalid evidence index; check its schema, identities and references.") from None

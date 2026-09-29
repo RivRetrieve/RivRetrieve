@@ -12,7 +12,7 @@ that every original response has been retained.
 
 ## Access and storage
 
-The retained Bosnia, France and ThaiWater collections are attached to versioned releases of the private
+Retained collections are attached to versioned releases of the private
 [`RivRetrieve/verification-evidence`](https://github.com/RivRetrieve/verification-evidence)
 repository. Use a personal GitHub account with the existing organization access.
 An organization owner administers access; ask an owner if the repository is not
@@ -78,8 +78,8 @@ directory names alone do not determine what can move.
 
 Choose a provider and an exact collection ID from its index entry. The matching
 collection record pins the release ID, release tag, asset IDs, byte sizes and
-SHA-256 digests. Its `verification_root` gives the relative directory used by the
-provider verifier. Never substitute a mutable `latest` release. An empty collection
+SHA-256 digests. Its `input_roots` map names consumer inputs to relative directories. The
+`verification` entry gives the provider verifier's root. Never substitute a mutable `latest` release. An empty collection
 list means shared acquisition for that provider is not recorded. Stop rather than
 invent an ID or treat local derived tables as the missing collection.
 
@@ -104,7 +104,7 @@ them. Safe extraction refuses unsafe archive members. An existing target fails;
 the command does not overwrite an earlier collection or silently reuse it.
 
 The extracted collection is at `$EVIDENCE_ROOT/$COLLECTION_ID`. Successful output
-identifies the collection, release, assets and relative `verification_root` without
+identifies the collection, release, assets and relative `input_roots` without
 printing private contents. Download success establishes transport integrity, not
 provider acceptance. Use the provider verifier next. Keep the collection's
 acquisition-relative paths unchanged. A root of `.` means the extraction directory
@@ -117,7 +117,7 @@ parser example establishes national coverage. The complete controlled checks for
 Bosnia, France and ThaiWater require the original bodies and receipts. Missing
 material is a failed prerequisite, not a reason to skip or weaken a mandatory check.
 
-For this ThaiWater collection, the indexed `verification_root` is
+For this ThaiWater collection, the indexed `input_roots.verification` is
 `baseline-capture-2026-09-13`. Confirm that value in the selected record or fetch
 output if choosing another collection. Set it before running the complete verifier:
 
@@ -187,30 +187,105 @@ and bodies in the restricted environment. Do not claim shared-download acceptanc
 until an independent download, integrity check and applicable full verifier have
 actually succeeded.
 
-## Review and publish a new collection
+## Shared archive contract
 
-1. Recover existing material first. Keep original bytes, receipts, dates and paths.
-   Do not recreate originals from native tables or label a new request as an old
-   acquisition. Replacement acquisitions need separate review and updated bindings.
-2. Review source terms, correspondence authority, URLs, headers and logs. Private
-   storage does not itself grant permission to redistribute material. Preserve
-   null values, missing rows, source failures and unknown facts distinctly.
-3. Separate public test inputs from the controlled collection. Preserve existing
-   public tests and reproducible builds. Runtime library calls must not discover
-   maintainer caches or private repositories.
-4. Build archives with the expected acquisition-relative paths. GitHub requires
-   each release asset to be less than 2 GiB and allows up to 1,000 assets per
-   release. Split by coherent acquisition boundaries when needed. Record expanded
-   sizes and member counts as well as archive sizes and digests.
-5. Publish to a new versioned private release. Record the actual release and asset
-   IDs and relative `verification_root` in the index. Do not reuse an accepted
-   collection identity for new bytes.
-   Enable GitHub immutable-release protection where available and verify its actual
-   setting and release state. Record an unavailable setting or hosting limitation
-   explicitly; do not claim protection that has not been verified.
-6. Download through the documented workflow in an independent clean environment.
-   Run the complete provider verifier before negative regressions, and save the
-   acceptance record. Retain original local evidence throughout migration.
+The public index uses schema version `2`. It lists explicit collection selections,
+provider checks and gaps. Each collection pins a release, compressed assets and
+named `input_roots`. A non-null `manifest` binds the private manifest's relative
+path and SHA-256. Fetch verifies every compressed asset before extraction, then
+checks the manifest, provider bindings and every retained member. Historical
+packages with `manifest: null` remain identified historical inputs. They do not
+establish acceptance under the manifest contract.
+
+The private `CollectionManifest` uses schema version `1`. Its records separate:
+
+- Acquisition record keys from retained original event identities. An archive key
+  does not recover an unknown original identity, date or request. Unknown facts
+  use `null`. Repeated acquisitions remain distinct even when their bytes match.
+- Artifact identity from its member path, byte size and SHA-256. Artifact roles
+  distinguish publisher originals, response recordings, derived inputs, authored
+  interpretations and declarations, research context, runtime products and receipts.
+- `derived_from` and `receipt_refs` from the retained bytes themselves. References
+  must resolve within the manifest. Missing originals remain explicit limitations.
+- Collection packaging from the exact GitHub release and asset identities created
+  by publication. A new package does not establish a new source acquisition.
+
+The typed schema is in
+[`manifest.py`](../../maintenance/evidence/manifest.py). Artifact paths identify
+regular files relative to the supplied source directory. The manifest describes
+every retained file, but excludes its own generated `collection-manifest.json`.
+Detailed provenance, private request context and receipts stay in the private
+manifest. Public location-level material records distinguish unresolved and mixed
+classification; a directory name does not classify every file inside it.
+
+Python callers use `acquire_collection` with an explicit index, provider,
+collection, destination and source-checkout roots. Its `SelectedInputs` result
+contains the collection, working-copy root and resolved named input paths. Test
+and catalogue consumers receive those paths. They do not resolve credentials,
+search owner-machine directories or choose a mutable latest release.
+
+## Intake and publication
+
+1. Review existing material before preparing a collection. Keep original bytes,
+   receipts, dates and source vocabulary. Do not recreate originals from native
+   tables or label a later request as an old acquisition. Review sharing rights;
+   private storage does not establish permission to redistribute material.
+2. Write a private manifest with the actual roles and acquisition facts. Keep
+   speculative or unaccepted notes as authored material. Mixed directories require
+   artifact-level review. Preserve active test and catalogue inputs until their
+   consumers have been adapted.
+3. Run offline intake against an explicit source directory and private manifest.
+   Choose a new destination outside source checkouts and separate from that source:
+
+   ```sh
+   uv run python -m maintenance.evidence intake \
+     --manifest "$PRIVATE_MANIFEST" \
+     --source "$RETAINED_FILES" \
+     --destination "$PREPARED_ROOT"
+   ```
+
+   Intake inventories and hashes every supplied file, refuses links and unsafe
+   paths, and checks exact manifest membership. It creates bounded archive assets,
+   extracts them into staging and compares each retained member with the manifest.
+   It leaves source files unchanged. Its output is
+   `$PREPARED_ROOT/$COLLECTION_ID`, with a private `preparation.json` and archives.
+   This establishes packaging equivalence, not source acceptance.
+4. After reviewing the executing code, publish that preparation to a new release:
+
+   ```sh
+   uv run python -m maintenance.evidence publish \
+     --prepared "$PREPARED_ROOT/$COLLECTION_ID" \
+     --release-tag "$COLLECTION_ID" \
+     --output "$PRIVATE_PUBLICATION_RECORD" \
+     --purpose 'Reviewed retained source collection' \
+     --limitation 'Publication does not establish provider acceptance.'
+   ```
+
+   Purpose and limitation arguments must contain only reviewed public facts.
+   Publication checks that the exact repository is private and that its collection
+   identity and tag are unused. It creates a new draft, uploads verified assets,
+   checks returned identities, downloads each exact upload and verifies its bytes.
+   Only then does it publish the release. It records observed immutability without
+   changing repository settings or claiming a recovery guarantee.
+
+   The new private output directory retains `release.json`, then
+   `draft-selection.json`, and after success `publication.json`. A partial upload
+   remains a draft. If GitHub completed publication before a later check or local
+   write failed, the release may already be public to authorized repository readers.
+   Inspect the recorded identity before retrying. The tool never deletes a draft,
+   replaces a release, overwrites a local record or updates a consumer selection.
+5. Review the exact collection record from `publication.json` before adding its
+   selection to the public index. Keep private acquisition facts out of that index.
+   Download independently with reviewed code and run all applicable full checks.
+   Save acceptance separately from publication. Complete genuine ThaiWater checks
+   precede negative regressions; historical France checks use the retained
+   historical native input.
+
+New-provider code PRs carry code and exact archive references, not source corpora
+or private attachments. Retention does not endorse a claim or select a consumer
+input. No intake or publication command authorizes deleting retained material.
+Retire verified redundant copies only after proving archive preservation and
+obtaining any required owner approval.
 
 Before making the code repository public, conduct a separate publication-readiness
 review of reachable Git history, recordings, archives, terms and provisioning
