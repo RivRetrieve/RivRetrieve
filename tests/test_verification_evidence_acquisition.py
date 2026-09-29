@@ -195,6 +195,12 @@ def test_committed_full_checks_require_their_published_collections():
         full[provider_id] = [check for check in checks if "--evidence-root" in shlex.split(check.command)]
         assert full[provider_id]
         assert all(check.requires_collections for check in full[provider_id])
+        collections = {item.collection_id: item for item in index.collections}
+        assert all(
+            collections[identity].manifest is not None
+            for check in full[provider_id]
+            for identity in check.requires_collections
+        )
 
     # The mixed historical France verifier uses one shared acquisition, not two copies.
     assert full["fr_hubeau"][0].requires_collections == full["fr_hydroportail"][0].requires_collections

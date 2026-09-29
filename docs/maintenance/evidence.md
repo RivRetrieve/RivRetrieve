@@ -39,9 +39,9 @@ do not authorize deleting it.
 
 ### Release protection
 
-GitHub reported `immutable: false` for all three indexed releases when they were
-published on September 29, 2026. These releases are not protected by GitHub release
-immutability. This observed release state does not establish the repository or
+GitHub reported `immutable: false` for the three historical releases and all
+14 manifest-bound collection releases published on September 29, 2026. These
+releases are not protected by GitHub release immutability. This observed release state does not establish the repository or
 organization setting.
 
 The index pins each release and asset identity, byte size and SHA-256 digest.
@@ -84,11 +84,11 @@ list means shared acquisition for that provider is not recorded. Stop rather tha
 invent an ID or treat local derived tables as the missing collection.
 
 Use an evidence directory outside the source checkout. The following example uses
-the published ThaiWater collection `th_thaiwater-2026-09-29-v1`. Its exact release
+the manifest-bound ThaiWater verification candidate `th_thaiwater-2026-09-29-v2`. Its exact release
 and asset identities are in the index:
 
 ```sh
-export COLLECTION_ID='th_thaiwater-2026-09-29-v1'
+export COLLECTION_ID='th_thaiwater-2026-09-29-v2'
 export EVIDENCE_ROOT="$HOME/.local/share/rivretrieve/verification-evidence"
 
 uv run python -m maintenance.evidence fetch \
@@ -118,11 +118,11 @@ Bosnia, France and ThaiWater require the original bodies and receipts. Missing
 material is a failed prerequisite, not a reason to skip or weaken a mandatory check.
 
 For this ThaiWater collection, the indexed `input_roots.verification` is
-`baseline-capture-2026-09-13`. Confirm that value in the selected record or fetch
+`retained/baseline-capture-2026-09-13`. Confirm that value in the selected record or fetch
 output if choosing another collection. Set it before running the complete verifier:
 
 ```sh
-export VERIFICATION_ROOT='baseline-capture-2026-09-13'
+export VERIFICATION_ROOT='retained/baseline-capture-2026-09-13'
 export THAIWATER_REVIEW_EVIDENCE_ROOT="$EVIDENCE_ROOT/$COLLECTION_ID/$VERIFICATION_ROOT"
 
 uv run python maintenance/catalogue/th_thaiwater/scripts/verify_governing_evidence.py \
@@ -190,7 +190,12 @@ actually succeeded.
 ## Shared archive contract
 
 The public index uses schema version `2`. It lists explicit collection selections,
-provider checks and gaps. Each collection pins a release, compressed assets and
+provider checks and gaps. It retains three historical packages and selects
+14 newly published, manifest-bound collections as verification candidates. The
+France collection serves both Hub’Eau and HydroPortail. A separate context
+collection serves all 14 providers. Publication checks passed for their 30 assets;
+genuine independent retrieval and complete provider acceptance remain required.
+Those transport checks do not establish source claims. Each collection pins a release, compressed assets and
 named `input_roots`. A non-null `manifest` binds the private manifest's relative
 path and SHA-256. Fetch verifies every compressed asset before extraction, then
 checks the manifest, provider bindings and every retained member. Historical
@@ -215,8 +220,10 @@ The typed schema is in
 regular files relative to the supplied source directory. The manifest describes
 every retained file, but excludes its own generated `collection-manifest.json`.
 Detailed provenance, private request context and receipts stay in the private
-manifest. Public location-level material records distinguish unresolved and mixed
-classification; a directory name does not classify every file inside it.
+manifest. Public location-level material records identify reviewed native inputs and mixed
+collections. Collection role lists summarize the roles present; the private
+manifest classifies individual members. A directory name does not classify every
+file inside it.
 
 Python callers use `acquire_collection` with an explicit index, provider,
 collection, destination and source-checkout roots. Its `SelectedInputs` result

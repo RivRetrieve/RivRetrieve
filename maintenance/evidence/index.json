@@ -13,8 +13,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "180-pair workbook baseline, routing metadata and ledger; four public source cases; small workbook replays and terms-absence recording.",
@@ -22,21 +24,62 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Public source cases and routing metadata, not the private national baseline."
+            "Public source cases and routing metadata, not the private national baseline.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "Retained original Bosnia workbook baseline, receipts and manifest for complete verification of 180 station-product pairs.",
-          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/ba_fhmzbih-2026-09-29-v1; collection ba_fhmzbih-2026-09-29-v1; verification_root .",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/ba_fhmzbih-2026-09-29-v1; collection ba_fhmzbih-2026-09-29-v1; input_roots.verification .",
           "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
           "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
-            "Original FILE_HASHES.json and relative body paths must survive migration."
+            "Original FILE_HASHES.json and relative body paths must survive migration.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "authored_interpretation",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Workbook bodies and recordings; routing metadata; terms-absence recording; retained national baseline.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/ba_fhmzbih-2026-09-29-v2; collection ba_fhmzbih-2026-09-29-v2",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "The 180-pair ledger and four-case CSV are authored or derived. The historical source-checkout archive is mixed context, not a Bosnia-only corpus.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -60,7 +103,7 @@
           "command": "uv run python maintenance/catalogue/ba_fhmzbih/scripts/verify_evidence.py --evidence-root \"$BOSNIA_EVIDENCE_ROOT\"",
           "purpose": "Verify the complete controlled original-body collection against source identities and governing claims.",
           "requires_collections": [
-            "ba_fhmzbih-2026-09-29-v1"
+            "ba_fhmzbih-2026-09-29-v2"
           ],
           "limitations": [
             "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check."
@@ -71,7 +114,9 @@
         "Full private workbook acceptance must run separately; no new pass claimed here."
       ],
       "collections": [
-        "ba_fhmzbih-2026-09-29-v1"
+        "ba_fhmzbih-2026-09-29-v1",
+        "ba_fhmzbih-2026-09-29-v2",
+        "shared_source_context-2026-09-29-v1"
       ]
     },
     {
@@ -85,8 +130,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "National inventory compressed acquisitions with capture attestation, source-row occurrence archive and historical capture scripts; adopted telemetry and conventional daily/SOAP recordings; safe-derived dictionary/manual inputs; terms recording.",
@@ -94,10 +141,11 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Capture attestation binds compressed recordings and supporting files."
+            "Capture attestation binds compressed recordings and supporting files.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "National inventory compressed acquisitions with capture attestation, source-row occurrence archive and historical capture scripts; adopted telemetry and conventional daily/SOAP recordings; safe-derived dictionary/manual inputs; terms recording.",
@@ -105,10 +153,49 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Original response recordings and explicitly derived manual/dictionary evidence are different material kinds."
+            "Original response recordings and explicitly derived manual/dictionary evidence are different material kinds.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Compressed national inventory captures; telemetry and daily/SOAP recordings; terms and documentary acquisition records.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/br_ana-2026-09-29-v1; collection br_ana-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Manual/dictionary excerpts and source comparison reports are derived or authored. Historical capture scripts are context. Live credential-acquisition code stays in RivRetrieve.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -132,7 +219,10 @@
       "gaps": [
         "Original manual PDF was deliberately discarded in memory; dictionary ZIP/installer/MDB/full PDF are not committed. Derived texts plus recorded identities are not originals. Live ANA verification scripts request credentials and must not be used as offline verifiers."
       ],
-      "collections": []
+      "collections": [
+        "br_ana-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "ca_eccc",
@@ -145,8 +235,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Attested national station native table; small OGC pagination fixture; selected genuine daily CSV and HTTP-wire evidence; derived SQLite row extracts; HYDAT documentation; tiny derived-input ZIP and compiled conformance fixtures.",
@@ -154,10 +246,49 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Selected OGC/CSV recordings, derived SQLite excerpts and small compiler fixtures, not full national originals."
+            "Selected OGC/CSV recordings, derived SQLite excerpts and small compiler fixtures, not full national originals.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Selected OGC, daily CSV and HTTP-wire recordings; HYDAT documentation.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/ca_eccc-2026-09-29-v1; collection ca_eccc-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "SQLite row extracts, tiny compilation archive and compiled fixtures are derived inputs, not the missing national publisher archive.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -181,7 +312,10 @@
       "gaps": [
         "No complete nine-page national station acquisition or national HYDAT ZIP located in tracked support material or the three-provider controlled root. Compiled stores/SQLite excerpts cannot reconstruct unavailable publisher archive bytes. The current compiler deletes downloaded artifacts after success, so cache presence does not establish retention."
       ],
-      "collections": []
+      "collections": [
+        "ca_eccc-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "ch_foen",
@@ -194,8 +328,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Metadata locations, parameter response, REST and archive recordings, publisher API/BAFU documents and terms; native table.",
@@ -203,10 +339,46 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Some publisher documentation is explicitly redacted; source cadence alone does not establish temporal support."
+            "Some publisher documentation is explicitly redacted; source cadence alone does not establish temporal support.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "derived_input",
+            "publisher_original",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Metadata locations, parameters, REST/archive recordings, publisher API/BAFU documents and terms.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/ch_foen-2026-09-29-v1; collection ch_foen-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Explicitly redacted documents are derived representations. Cadence alone does not establish temporal support.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -230,7 +402,10 @@
       "gaps": [
         "Some retained documentation is explicitly redacted. Do not describe its digest as identity of an untouched original. Publisher cadence does not prove every temporal-support fact. Provider-port note contains stale credential prose; use current architecture/source behavior when documenting migration."
       ],
-      "collections": []
+      "collections": [
+        "ch_foen-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "cz_chmi",
@@ -243,8 +418,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Attested 831-row native table; small verbatim station subset; genuine annual DQ/HQ recordings; source code-description PDF and terms.",
@@ -252,10 +429,47 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Small metadata subset is not the original national metadata acquisition."
+            "Small metadata subset is not the original national metadata acquisition.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Small station metadata subset, annual DQ/HQ recordings, publisher code-description PDF and terms.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/cz_chmi-2026-09-29-v1; collection cz_chmi-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "The metadata subset is not the complete national original. The native table is a derived materialisation.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -279,7 +493,10 @@
       "gaps": [
         "Original complete 831-row metadata body not located in inspected tracked support. Three-row metadata fixture is not complete acquisition coverage."
       ],
-      "collections": []
+      "collections": [
+        "cz_chmi-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "fr_hubeau",
@@ -292,8 +509,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Governing mixed historical ledger, public count/history bundles, native capture account and full station references; controlled original governing evidence; runtime daily/temperature replays; terms and OpenAPI; superseded combined-artifact fixtures.",
@@ -301,21 +520,62 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Public bundles and full retained station references support public checks; complete historical body verification remains separate."
+            "Public bundles and full retained station references support public checks; complete historical body verification remains separate.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "Retained mixed historical France governing acquisitions and receipts, shared by Hub’Eau and HydroPortail historical lineage.",
-          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; verification_root .",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; input_roots.verification .",
           "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
           "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
-            "Preserve acquisition-relative paths including reused-pr231-head46b2fde/evidence."
+            "Preserve acquisition-relative paths including reused-pr231-head46b2fde/evidence.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "authored_interpretation",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Station references and acquisition manifest; runtime daily/temperature recordings; OpenAPI/terms; historical source bundles and controlled acquisitions.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v2; collection fr_hubeau-2026-09-29-v2",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Reviewed governing ledger and native tables are separate from originals. Historical full verification requires native-2026-08-02.parquet. Official id.eaufrance.fr identity/publication probes support the existing publication-evidence consumer; their source service is not relabelled as a Hub’Eau route and its dataset terms are not transferred to these documents.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -339,7 +599,7 @@
           "command": "uv run python maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py --native maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet --ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz --evidence-root \"$FRANCE_EVIDENCE_ROOT\"",
           "purpose": "Verify the complete controlled original-body collection against source identities and governing claims.",
           "requires_collections": [
-            "fr_hubeau-2026-09-29-v1"
+            "fr_hubeau-2026-09-29-v2"
           ],
           "limitations": [
             "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check.",
@@ -351,7 +611,9 @@
         "Public bundle checks are not complete private-body certification. Mixed historical acquisitions must retain service identity; HydroPortail historical claims are not modern Hub’Eau route coverage."
       ],
       "collections": [
-        "fr_hubeau-2026-09-29-v1"
+        "fr_hubeau-2026-09-29-v1",
+        "fr_hubeau-2026-09-29-v2",
+        "shared_source_context-2026-09-29-v1"
       ]
     },
     {
@@ -365,8 +627,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Anonymous native inventory originals and receipts, legal/about/JS source definitions, reconciliation and supporting captures archives, bounded identity/observation probes, selector recordings; historical lineage shared with France ledger.",
@@ -374,21 +638,62 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Native anonymous inventory, receipts and bounded probes; not a PHyC census."
+            "Native anonymous inventory, receipts and bounded probes; not a PHyC census.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "Historical raw HydroPortail witnesses and their governing ledger, retained in the same France collection used for historical Hub’Eau verification.",
-          "location": "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz; https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; verification_root .",
+          "location": "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz; https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; input_roots.verification .",
           "access": "The ledger is public repository metadata. Complete historical source bodies require authenticated access to the indexed private France collection.",
           "integrity": "The shared France collection pins archive integrity. The historical France verifier checks governing body and receipt identities against the retained ledger.",
           "limitations": [
-            "Historical raw witnesses do not transfer to other selectors or to another publication service."
+            "Historical raw witnesses do not transfer to other selectors or to another publication service.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "authored_interpretation",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Anonymous native inventory bodies/receipts, legal/about/JS source documents, bounded probes and selector recordings; shared historical France acquisitions.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v2; collection fr_hubeau-2026-09-29-v2",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Supporting-capture bundle retains originals; reconciliation bundle is derived. No historical availability transfer between services or selectors.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -412,7 +717,7 @@
           "command": "uv run python maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py --native maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet --ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz --evidence-root \"$FRANCE_EVIDENCE_ROOT\"",
           "purpose": "Verify the shared historical governing bodies and receipts, including retained HydroPortail raw witnesses.",
           "requires_collections": [
-            "fr_hubeau-2026-09-29-v1"
+            "fr_hubeau-2026-09-29-v2"
           ],
           "limitations": [
             "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check.",
@@ -425,7 +730,9 @@
         "No separate census of PHyC is established. Raw historical witnesses do not establish validated/combined/most_valid availability. Official legal/about statements do not establish blanket redistribution or original authorship. scripts/rebuild.py writes packaged outputs; for read-only checks prefer generator tests writing tmp_path."
       ],
       "collections": [
-        "fr_hubeau-2026-09-29-v1"
+        "fr_hubeau-2026-09-29-v1",
+        "fr_hubeau-2026-09-29-v2",
+        "shared_source_context-2026-09-29-v1"
       ]
     },
     {
@@ -439,8 +746,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Accepted 1,023-row native snapshot; representative accepted/rejected station pages; eight HTML/DAT recordings; EUC-JP licence and PDF citation plus identities.",
@@ -448,10 +757,48 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Representative original HTML/DAT and station pages only; later HTTP 403 is not recovery of the original census."
+            "Representative original HTML/DAT and station pages only; later HTTP 403 is not recovery of the original census.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Representative station pages, eight HTML/DAT recordings, licence and citation documents.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/jp_mlit-2026-09-29-v1; collection jp_mlit-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Later HTTP 403 is retained as a separate source outcome, not recovery of the original census. Native materialisation does not reconstruct all original pages.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -475,7 +822,10 @@
       "gaps": [
         "Later HTTP 403 is recorded. It neither replaces original acquisition bytes nor authorizes a fresh census. Native snapshot supports rebuilds, not possession of all 1,023 original pages."
       ],
-      "collections": []
+      "collections": [
+        "jp_mlit-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "lt_lhmt",
@@ -488,8 +838,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Complete 97-station metadata response, native table, bounded monthly runtime recordings, terms.",
@@ -497,10 +849,47 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Complete 97-station metadata response; runtime recordings remain bounded examples."
+            "Complete 97-station metadata response; runtime recordings remain bounded examples.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Complete 97-station metadata response, bounded monthly runtime recordings and terms.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/lt_lhmt-2026-09-29-v1; collection lt_lhmt-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Metadata coverage does not establish observation coverage for every product or month.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -524,7 +913,10 @@
       "gaps": [
         "Complete station metadata does not prove observation availability for every quantity/month. No new acquisition required to reproduce present catalogue checks."
       ],
-      "collections": []
+      "collections": [
+        "lt_lhmt-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "no_nve",
@@ -537,8 +929,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Complete active=0/1 station acquisitions, closed capture attestation, native input, swagger/terms, bounded observation and series/version recordings.",
@@ -546,10 +940,11 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Complete captured active/all station envelopes; no national observation certification."
+            "Complete captured active/all station envelopes; no national observation certification.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "Complete active=0/1 station acquisitions, closed capture attestation, native input, swagger/terms, bounded observation and series/version recordings.",
@@ -557,10 +952,48 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Replay is credential-free; live refresh requires a separately provided credential."
+            "Replay is credential-free; live refresh requires a separately provided credential.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Two complete active/all station envelopes, capture attestation, swagger/terms and bounded observation/series recordings.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/no_nve-2026-09-29-v1; collection no_nve-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "The capture attestation is authored provenance. Replay has no live credential requirement and does not establish national observation completeness.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -584,7 +1017,10 @@
       "gaps": [
         "Active=1 is all stations; Active=0 is active-only in this capture. Live refresh API credentials are separate from replay. Full station capture verifies metadata/series inventory, not national observation availability."
       ],
-      "collections": []
+      "collections": [
+        "no_nve-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "pl_imgw",
@@ -597,8 +1033,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Recovered geometry/native lineage and publisher roster, genuine annual/monthly bulk source fixtures and docs, compiled store test inputs, public redacted forwarded-copy verification record; private human correspondence identity only.",
@@ -606,10 +1044,11 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Selected annual/monthly source artifacts and docs, not the full national historical archive."
+            "Selected annual/monthly source artifacts and docs, not the full national historical archive.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "Recovered geometry/native lineage and publisher roster, genuine annual/monthly bulk source fixtures and docs, compiled store test inputs, public redacted forwarded-copy verification record; private human correspondence identity only.",
@@ -619,8 +1058,48 @@
           "limitations": [
             "Only redacted verification record retained here; private forwarded email original-byte identity is explicitly unestablished."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "authored_declaration"
+          ],
+          "classification": "reviewed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Recovered geometry/native lineage, publisher roster, selected annual/monthly artifacts, documents and compilation fixtures.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/pl_imgw-2026-09-29-v1; collection pl_imgw-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Redacted forwarded-copy verification is authored context, not original email identity. Sharing authority for any recovered private correspondence must be reviewed before upload.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -644,7 +1123,10 @@
       "gaps": [
         "Forwarded-copy record explicitly says original_byte_identity_not_established. The local private message/workbook was not recovered by this bounded inventory. One annual ZIP is not the full national multi-year compilation corpus. Native rebuild uses redacted declaration, not email rereading."
       ],
-      "collections": []
+      "collections": [
+        "pl_imgw-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "th_thaiwater",
@@ -657,8 +1139,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Controlled complete 825-station graph corpus; governing pair ledger; public null and database-error cases; genuine window-boundary recordings; source JS and terms; native station snapshot.",
@@ -666,21 +1150,62 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Public runtime cases and pair ledger are not the complete private corpus."
+            "Public runtime cases and pair ledger are not the complete private corpus.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "Retained ThaiWater review collection, including the complete 825-station governing graph bodies and acquisition receipts.",
-          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/th_thaiwater-2026-09-29-v1; collection th_thaiwater-2026-09-29-v1; verification_root baseline-capture-2026-09-13",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/th_thaiwater-2026-09-29-v1; collection th_thaiwater-2026-09-29-v1; input_roots.verification baseline-capture-2026-09-13",
           "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
           "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
-            "825 governing graph acquisitions are distinct from the earlier national waterlevel_load metadata response."
+            "825 governing graph acquisitions are distinct from the earlier national waterlevel_load metadata response.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "authored_interpretation",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "825-station governing graph corpus and receipts, null/database-error cases, boundary recordings, publisher JS/terms.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/th_thaiwater-2026-09-29-v2; collection th_thaiwater-2026-09-29-v2",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Pair ledger is authored; native metadata and small subset do not recover the earlier complete waterlevel_load acquisition. All 1,664 earlier retained physical files have byte-equal counterparts; no deletion authorized.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -704,7 +1229,7 @@
           "command": "uv run python maintenance/catalogue/th_thaiwater/scripts/verify_governing_evidence.py --ledger maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv --native src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet --evidence-root \"$THAIWATER_REVIEW_EVIDENCE_ROOT\"",
           "purpose": "Verify the complete controlled original-body collection against source identities and governing claims.",
           "requires_collections": [
-            "th_thaiwater-2026-09-29-v1"
+            "th_thaiwater-2026-09-29-v2"
           ],
           "limitations": [
             "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check."
@@ -714,7 +1239,7 @@
           "command": "uv run pytest tests/test_thaiwater_governing_evidence.py tests/test_thaiwater_source_outcomes.py -q",
           "purpose": "After full verifier success, run the cross-station regression against the same root.",
           "requires_collections": [
-            "th_thaiwater-2026-09-29-v1"
+            "th_thaiwater-2026-09-29-v2"
           ],
           "limitations": [
             "Export THAIWATER_REVIEW_EVIDENCE_ROOT first. An unset variable skips the mandatory private regression; an empty directory can satisfy its negative exception assertion, so regression success alone is insufficient."
@@ -725,7 +1250,9 @@
         "Full success must precede negative cross-station test, which can pass on empty root. 825 graph bodies do not themselves prove retention of the earlier original full waterlevel_load metadata acquisition; tracked four-row subset/native table alone does not establish that separate original. API redistribution remains unestablished."
       ],
       "collections": [
-        "th_thaiwater-2026-09-29-v1"
+        "th_thaiwater-2026-09-29-v1",
+        "shared_source_context-2026-09-29-v1",
+        "th_thaiwater-2026-09-29-v2"
       ]
     },
     {
@@ -739,8 +1266,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Modern national metadata compressed pages/completion receipts and full-baseline audit; modern and legacy runtime recordings, docs/OpenAPI/terms; legacy station native table and superseded catalogue snapshots.",
@@ -748,10 +1277,11 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Modern compressed page chains and completion receipts are active build inputs. Derived comparisons and legacy native input are not original legacy RDB response bodies."
+            "Modern compressed page chains and completion receipts are active build inputs. Derived comparisons and legacy native input are not original legacy RDB response bodies.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
         },
         {
           "purpose": "Modern national metadata compressed pages/completion receipts and full-baseline audit; modern and legacy runtime recordings, docs/OpenAPI/terms; legacy station native table and superseded catalogue snapshots.",
@@ -759,10 +1289,49 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Modern and legacy request eras retain separate source identities."
+            "Modern and legacy request eras retain separate source identities.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "authored_declaration",
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Modern national compressed metadata page chains/completion receipts, original coverage probes, modern/legacy runtime recordings and publisher documentation.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/usgs_nwis-2026-09-29-v1; collection usgs_nwis-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Coverage comparisons, baseline tables and legacy catalogue snapshots are derived or authored. Modern and legacy acquisitions stay distinct.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -786,7 +1355,10 @@
       "gaps": [
         "Modern full metadata page chains support scoped present catalogue checks; they do not recover original legacy two-pass RDB census bodies. Those original RDB files were not located in tracked support; native attestation remains. Modern and legacy services must retain different request/acquisition identities."
       ],
-      "collections": []
+      "collections": [
+        "shared_source_context-2026-09-29-v1",
+        "usgs_nwis-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "za_dws",
@@ -799,8 +1371,10 @@
           "limitations": [
             "The native table is derived material, not an original publisher response."
           ],
-          "roles": [],
-          "classification": "unreviewed"
+          "roles": [
+            "derived_input"
+          ],
+          "classification": "reviewed"
         },
         {
           "purpose": "Attested archived-PDF native table; original archive identities declared in generator; small metadata/terms fixtures; two historical runtime HTML bodies and source-conformance note.",
@@ -808,10 +1382,47 @@
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
-            "Historical runtime examples do not establish current live support or possession of archived catalogue PDF originals."
+            "Historical runtime examples do not establish current live support or possession of archived catalogue PDF originals.",
+            "Mixed retained location. Individual artifact roles are recorded in the selected private manifest; the location is not uniformly classified as publisher originals."
           ],
           "roles": [],
-          "classification": "unreviewed"
+          "classification": "mixed"
+        },
+        {
+          "roles": [
+            "derived_input",
+            "publisher_original",
+            "research_context",
+            "response_recording"
+          ],
+          "classification": "mixed",
+          "purpose": "Historical runtime HTML recordings, terms and small metadata fixtures.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/za_dws-2026-09-29-v1; collection za_dws-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Archived PDF identities and attested native rows do not reconstruct the eight missing PDF originals. Historical runtime recordings do not establish current live support.",
+            "Provider origins, parsers, generators, maintained capture/verifier code and tests remain in RivRetrieve.",
+            "Reviewed ledgers and declarations remain code inputs; any evidence copy must retain authored classification.",
+            "Role list describes the reviewed collection as a whole, not every file. The private manifest assigns each retained artifact its actual role.",
+            "Publication verifies member bytes. Independent selected retrieval and applicable full provider acceptance remain required.",
+            "GitHub reported immutable=false for this release. Pinned identities detect changed bytes; they do not prevent deletion or establish recovery."
+          ]
+        },
+        {
+          "roles": [
+            "acquisition_receipt",
+            "research_context"
+          ],
+          "classification": "mixed",
+          "purpose": "Shared authored research context and acquisition receipts relevant to archive review.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/shared_source_context-2026-09-29-v1; collection shared_source_context-2026-09-29-v1",
+          "access": "Private GitHub repository; existing permissions and source-specific sharing restrictions apply.",
+          "integrity": "Exact release and asset pins plus the private manifest fingerprint and per-member byte fingerprints.",
+          "limitations": [
+            "Association with all providers does not make this a source acquisition for every provider.",
+            "Retention does not endorse a claim or select a consumer input. Publication does not establish source acceptance."
+          ]
         }
       ],
       "verification": [
@@ -835,7 +1446,10 @@
       "gaps": [
         "Eight archived national PDF bodies not located in inspected tracked support. Recorded archive URLs/digests/dates and native rows do not reconstruct PDFs. Current CatalogueOnly discovery does not support live retrieval despite historical provider-port prose."
       ],
-      "collections": []
+      "collections": [
+        "shared_source_context-2026-09-29-v1",
+        "za_dws-2026-09-29-v1"
+      ]
     }
   ],
   "collections": [
@@ -920,6 +1534,573 @@
         "verification": "baseline-capture-2026-09-13"
       },
       "manifest": null
+    },
+    {
+      "collection_id": "ba_fhmzbih-2026-09-29-v2",
+      "release_id": 399235339,
+      "release_tag": "ba_fhmzbih-2026-09-29-v2",
+      "input_roots": {
+        "code_inputs": "code",
+        "verification": "retained",
+        "inventory": "metadata"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "4e6f9ba5bc971e028dfd51e39c2411d853afb0cfdc356c34af3be9d767522ad0"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 117323,
+          "sha256": "708e93799b3c765595b0e75d6a854dcaf1f6c8422f7d5dd05a00b1da3f22392b",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 1634323,
+          "member_count": 1,
+          "asset_id": 598431954
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 65312487,
+          "sha256": "16d64fda8e13279fade4ab4d6982c62c989a692be5b3bb18d005e069b70c4a41",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 154709060,
+          "member_count": 858,
+          "asset_id": 598432208
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "br_ana-2026-09-29-v1",
+      "release_id": 399235328,
+      "release_tag": "br_ana-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code",
+        "inventory": "metadata",
+        "research": "research"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "72b2a29380aceb472e11cfaef0e16a0a9a84e98e56b496ae58637bf2e093b4ae"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 19052,
+          "sha256": "0aeada0419be16857a5fed771fdbde219b3a1e1ab42da281793c9447eca4ae39",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 227217,
+          "member_count": 1,
+          "asset_id": 598431911
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 10106971,
+          "sha256": "b28a8fddc384824b967f3d8b1932b16f5b79ade97756f2879ce70bf990a01dc6",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 15130735,
+          "member_count": 117,
+          "asset_id": 598432142
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "ca_eccc-2026-09-29-v1",
+      "release_id": 399235323,
+      "release_tag": "ca_eccc-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code",
+        "inventory": "metadata",
+        "research": "research"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "0a8cac80d6d1566342c0a44ac98fee1d74e5d6aed3de1d6e0de4cdee7dd157da"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 15639,
+          "sha256": "0636e51905c1dc77caf7cd6406beee30ca98ece746e0bd50d076bd1010e4bd32",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 156954,
+          "member_count": 1,
+          "asset_id": 598431900
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 4505973,
+          "sha256": "b2049e389cfb2b53419df98621483958f87f183c09e6d024b01590658a0be31e",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 25445033,
+          "member_count": 94,
+          "asset_id": 598432103
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "ch_foen-2026-09-29-v1",
+      "release_id": 399235317,
+      "release_tag": "ch_foen-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "192218e842940b5bc338005916439e655cb81bcb46e8c015454c35304f5713ff"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 4233,
+          "sha256": "f774f164982e92bd7f0bb037b57be51a5d55bfc9e0721f7b180c2b0b3d83e8a4",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 31282,
+          "member_count": 1,
+          "asset_id": 598431898
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 430401,
+          "sha256": "6c023bbbc4810f18ea04dbd1578b6147ca772a2cfc14c808db2dbfddbc4794ab",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 3848783,
+          "member_count": 16,
+          "asset_id": 598432166
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "cz_chmi-2026-09-29-v1",
+      "release_id": 399235314,
+      "release_tag": "cz_chmi-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "ffcda23b8ed9fdacd3637dec12a3cc4f706426581a0c74d28475f58de35a3324"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 3080,
+          "sha256": "7f288d02dd1ee97342347cae40364ae94c910c42bdab9fa312f9d2625e947842",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 14873,
+          "member_count": 1,
+          "asset_id": 598431899
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 575102,
+          "sha256": "475f376aec8bc0f6cadfc71235edf2164730fc4b6cb0778af5a40d4248e84b33",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 1446836,
+          "member_count": 8,
+          "asset_id": 598432097
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "fr_hubeau-2026-09-29-v2",
+      "release_id": 399235327,
+      "release_tag": "fr_hubeau-2026-09-29-v2",
+      "input_roots": {
+        "code_inputs": "code",
+        "verification": "retained",
+        "inventory": "metadata",
+        "research": "research"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "65219fea171b9d007f9efbc5b9b5aadfa332f61bb971550a4675649c5d0dc4b4"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 102306,
+          "sha256": "29b1e47b8444687d31de5aabd99f87f226262aa3d27287cf4c63df481a442a8e",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 1808638,
+          "member_count": 1,
+          "asset_id": 598431909
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 41524415,
+          "sha256": "48c2ba0256bf2764333d5d2810cf66222bba02b852d58655a207b6d1bb8bae88",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 76026841,
+          "member_count": 860,
+          "asset_id": 598432159
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "jp_mlit-2026-09-29-v1",
+      "release_id": 399235322,
+      "release_tag": "jp_mlit-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "6a1764fe419f101fcd8d76eea9a6896094f9225287e6204a3fe3d69407b475b8"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 4848,
+          "sha256": "e9b8d1b531d4b6d947d391564e5c1c805edae4de201c9e5a41b2a9dcb08aa434",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 38176,
+          "member_count": 1,
+          "asset_id": 598431902
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 297229,
+          "sha256": "838dad49ec6cb51698ef2e344aeafdf082997f9afa7ce9db2109f5ce097dffd6",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 656323,
+          "member_count": 20,
+          "asset_id": 598432162
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "lt_lhmt-2026-09-29-v1",
+      "release_id": 399235309,
+      "release_tag": "lt_lhmt-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "befe0a77743c81bdf18af4f9b83673cf6e9955af11506668dc6167430dade9dc"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 3180,
+          "sha256": "3b7a34d2f726b8f2907ce9ee93d7b8f3ab337a51a85541913276406b0fd8918c",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 16926,
+          "member_count": 1,
+          "asset_id": 598431892
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 19987,
+          "sha256": "a59caed64fcf808355e0a56ed0b34ef51e4566b13440383076cd0d9e0822432d",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 78934,
+          "member_count": 9,
+          "asset_id": 598432059
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "no_nve-2026-09-29-v1",
+      "release_id": 399235320,
+      "release_tag": "no_nve-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code",
+        "research": "research"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "724430f6d55bf334949b91eb3b1afbf936fae487592c33e28d82907ef756e2da"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 10677,
+          "sha256": "9ea34742ff210bb49d4db3c8e32469cdd91798e848442d1efa0390e5ab7ab46f",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 124071,
+          "member_count": 1,
+          "asset_id": 598431912
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 2379955,
+          "sha256": "2f7f1f8609b73cb5a980433c9409cd14a91df4f9ca07314651f4bdfa6318673d",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 21241060,
+          "member_count": 66,
+          "asset_id": 598432107
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "pl_imgw-2026-09-29-v1",
+      "release_id": 399235318,
+      "release_tag": "pl_imgw-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code",
+        "inventory": "metadata",
+        "research": "research"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "b86763978b9d1ed51c4347eedd001fe8a52c2ae1049c54e2afb64acebf735a12"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 10328,
+          "sha256": "932decd0585d525d32f47e71cda508770c2af939a62ef6170dbe25c9dcc68663",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 112303,
+          "member_count": 1,
+          "asset_id": 598431901
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 9395301,
+          "sha256": "347460e39edaed861dfad36c6ca29426bc466c54b2d59f1d37d1dd26fba39d25",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 12044769,
+          "member_count": 63,
+          "asset_id": 598432134
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "shared_source_context-2026-09-29-v1",
+      "release_id": 399235326,
+      "release_tag": "shared_source_context-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "8a6c68766582d463d75ef520dda8186b967e24566f237e06798a95e4afd88e5a"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 4479,
+          "sha256": "3cf8a61d899bd34d4c3a1c6620cddd78317d3e089593b6c7ce71245e6b64bc79",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 61694,
+          "member_count": 1,
+          "asset_id": 598431908
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 22420,
+          "sha256": "4106921005783a56d34209f1eb9dc80a714218c4e529ac4add5835203513784a",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 61470,
+          "member_count": 7,
+          "asset_id": 598432169
+        }
+      ],
+      "purpose": "Retained mixed historical research context; not an active source input.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights.",
+        "Retained context has no executable authority and is not automatically accepted consumer evidence."
+      ]
+    },
+    {
+      "collection_id": "th_thaiwater-2026-09-29-v2",
+      "release_id": 399235346,
+      "release_tag": "th_thaiwater-2026-09-29-v2",
+      "input_roots": {
+        "code_inputs": "code",
+        "verification": "retained/baseline-capture-2026-09-13",
+        "inventory": "metadata",
+        "research": "research"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "136622e60eaee1420a885a67c5a1cb93ea5698da27546d4ee303be5d6ac80930"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 215559,
+          "sha256": "7f2694ecc4c8f940af2641638d360158e1ef74973c00f04ac78795e3c55ce3ea",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 3318738,
+          "member_count": 1,
+          "asset_id": 598432029
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 14471820,
+          "sha256": "669563c4aef0cad6f28cb1b6dac92f4453f65104664643e983f86801099cf668",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 268324103,
+          "member_count": 448,
+          "asset_id": 598432221
+        },
+        {
+          "name": "members-0002.tar.gz",
+          "byte_size": 11712642,
+          "sha256": "184e8ea93d4e4e452bfe76b24ff5c705376fc38905f23fe89780233bd3de1f58",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 246873537,
+          "member_count": 434,
+          "asset_id": 598432457
+        },
+        {
+          "name": "members-0003.tar.gz",
+          "byte_size": 23245733,
+          "sha256": "9923bbc4ce3a49cb66189d6d62836bb7c61d3c7f21344ea77ad186539b9d9814",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 59562838,
+          "member_count": 844,
+          "asset_id": 598432684
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "usgs_nwis-2026-09-29-v1",
+      "release_id": 399235333,
+      "release_tag": "usgs_nwis-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code",
+        "inventory": "metadata"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "695907f4a915b59e4dc786a9fec426c98e57853b5e3d5697a91e0ca929f4131d"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 54658,
+          "sha256": "d766cb9ce64c175cf3446c42f3c0568bdfa3c94bb297201d31d12eeff303e0f6",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 727384,
+          "member_count": 1,
+          "asset_id": 598431919
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 34215661,
+          "sha256": "5c35801153605fadecfda20d610924bf8af19c29314ff573830961d31f5ca7dc",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 41469712,
+          "member_count": 327,
+          "asset_id": 598432170
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
+    },
+    {
+      "collection_id": "za_dws-2026-09-29-v1",
+      "release_id": 399235324,
+      "release_tag": "za_dws-2026-09-29-v1",
+      "input_roots": {
+        "code_inputs": "code"
+      },
+      "manifest": {
+        "path": "collection-manifest.json",
+        "sha256": "dc4d44693a5487da431141206aefa3468fed863475cd025aff09cd62e1526172"
+      },
+      "assets": [
+        {
+          "name": "manifest.tar.gz",
+          "byte_size": 2547,
+          "sha256": "19ff3fb12cff0858d306ff974290a1e4307f4773f70ec4975160d6e45ac0278f",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 14004,
+          "member_count": 1,
+          "asset_id": 598431904
+        },
+        {
+          "name": "members-0001.tar.gz",
+          "byte_size": 77629,
+          "sha256": "153198be9d078bdb232b238452fd4bab5baf9b07fcb8c36b641b50e97d6a1dae",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 101910,
+          "member_count": 7,
+          "asset_id": 598432081
+        }
+      ],
+      "purpose": "Reviewed retained source material and support, with explicit acquisition facts and material roles.",
+      "limitations": [
+        "Publication verifies retained bytes, not provider source claims or consumer acceptance.",
+        "Historical acquisition facts and known missing originals remain unchanged.",
+        "Source-specific terms and restrictions are retained in the private manifest; private storage grants no redistribution rights."
+      ]
     }
   ]
 }
