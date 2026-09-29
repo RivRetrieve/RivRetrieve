@@ -12,7 +12,7 @@ that every original response has been retained.
 
 ## Access and storage
 
-Shared collections belong in versioned releases of the private
+The retained Bosnia, France and ThaiWater collections are attached to versioned releases of the private
 [`RivRetrieve/verification-evidence`](https://github.com/RivRetrieve/verification-evidence)
 repository. Use a personal GitHub account with the existing organization access.
 An organization owner administers access; ask an owner if the repository is not
@@ -36,6 +36,20 @@ The owner chose not to keep an independent backup. A Git clone or mirror does no
 back up release attachments. Loss of those attachments has no independent recovery
 guarantee. Preserve original local evidence during migration; these instructions
 do not authorize deleting it.
+
+### Release protection
+
+GitHub reported `immutable: false` for all three indexed releases when they were
+published on September 29, 2026. These releases are not protected by GitHub release
+immutability. This observed release state does not establish the repository or
+organization setting.
+
+The index pins each release and asset identity, byte size and SHA-256 digest.
+The download tool rejects missing identities and changed bytes. These checks do
+not prevent replacement or deletion, and a digest cannot recover a deleted file.
+Updates must receive new collection identities. The owner authorized these
+versioned releases without immutable-release protection; the lack of an
+independent backup remains unchanged.
 
 ## Public checks
 
@@ -70,10 +84,11 @@ list means shared acquisition for that provider is not recorded. Stop rather tha
 invent an ID or treat local derived tables as the missing collection.
 
 Use an evidence directory outside the source checkout. The following example uses
-ThaiWater. Set `COLLECTION_ID` to a real indexed ID before running it:
+the published ThaiWater collection `th_thaiwater-2026-09-29-v1`. Its exact release
+and asset identities are in the index:
 
 ```sh
-export COLLECTION_ID='COPY_EXACT_ID_FROM_INDEX'
+export COLLECTION_ID='th_thaiwater-2026-09-29-v1'
 export EVIDENCE_ROOT="$HOME/.local/share/rivretrieve/verification-evidence"
 
 uv run python -m maintenance.evidence fetch \
@@ -102,12 +117,12 @@ parser example establishes national coverage. The complete controlled checks for
 Bosnia, France and ThaiWater require the original bodies and receipts. Missing
 material is a failed prerequisite, not a reason to skip or weaken a mandatory check.
 
-For ThaiWater, copy `verification_root` from the selected collection record or
-fetch output. The retained whole-provider collection uses
-`baseline-capture-2026-09-13`. Set the variable before running the complete verifier:
+For this ThaiWater collection, the indexed `verification_root` is
+`baseline-capture-2026-09-13`. Confirm that value in the selected record or fetch
+output if choosing another collection. Set it before running the complete verifier:
 
 ```sh
-export VERIFICATION_ROOT='COPY_VERIFICATION_ROOT_FROM_INDEX'
+export VERIFICATION_ROOT='baseline-capture-2026-09-13'
 export THAIWATER_REVIEW_EVIDENCE_ROOT="$EVIDENCE_ROOT/$COLLECTION_ID/$VERIFICATION_ROOT"
 
 uv run python maintenance/catalogue/th_thaiwater/scripts/verify_governing_evidence.py \
