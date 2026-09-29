@@ -1,8 +1,7 @@
 # Bosnia catalogue evidence
 
-See [shared verification evidence](../../../docs/maintenance/evidence.md) for access,
-collection selection and integrity checks. The [provider index](../../evidence/index.json)
-records retained material, applicable commands and known gaps.
+See [shared verification evidence](../../../docs/maintenance/evidence.md) for
+archive access, exact input selection and verification prerequisites.
 
 Verify the retained public evidence offline from the repository root:
 

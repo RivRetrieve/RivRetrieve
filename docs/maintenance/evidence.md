@@ -1,220 +1,77 @@
 # Verification evidence
 
-Saved publisher responses let a reviewer check the source facts behind a catalogue
-claim or parser result. A later request can return different data. Keep the original
-bytes with their request identities, retrieval dates and acquisition receipts.
+The private [source archive](https://github.com/RivRetrieve/verification-evidence)
+maintains the retained-material inventory, collection identities, acquisition
+records, known gaps and archive tools. Its README gives access prerequisites and
+commands for discovery, exact retrieval, intake and publication. Use an explicitly
+reviewed archive revision and existing GitHub access. Runtime package users need
+no archive credentials.
 
-The [provider evidence index](../../maintenance/evidence/index.json) lists all 14
-providers, retained material, applicable checks and known gaps. It separates native
-catalogue inputs, genuine runtime recordings, publisher documents, bulk artifacts
-and restricted material. A catalogue rebuilt from a native table does not prove
-that every original response has been retained.
+## Obtain exact inputs
 
-## Access and storage
+Select an exact collection from the archive. The archive tool checks release and
+asset identities, byte sizes, SHA-256 digests and extraction limits. For
+manifest-bound collections, it also checks the manifest and retained members.
+Download to a directory outside source checkouts, then pass the verified local
+input directory to the relevant verifier. Do not substitute a mutable `latest`
+release, search acquisition-machine paths or silently replace a selected input.
+Publishing archive material does not select it for a test or catalogue.
 
-The retained Bosnia, France and ThaiWater collections are attached to versioned releases of the private
-[`RivRetrieve/verification-evidence`](https://github.com/RivRetrieve/verification-evidence)
-repository. Use a personal GitHub account with the existing organization access.
-An organization owner administers access; ask an owner if the repository is not
-visible. No shared human password or separate evidence-reader team is required.
-Making the code repository public must not make the evidence repository public.
+Collection integrity establishes which bytes were retrieved, not whether they
+support a source claim. Keep acquisition identities, original bytes, receipts and
+known limitations. A native-table rebuild cannot certify missing original
+responses. A later acquisition cannot replace an earlier one under its identity.
+Pinned fingerprints detect changed material; they do not prevent attachment loss
+or provide an independent backup.
 
-Authenticate the GitHub CLI before downloading:
+## Verify source claims
 
-```sh
-gh auth status
-gh repo view RivRetrieve/verification-evidence --json nameWithOwner,visibility
-```
+Provider interpretation, reviewed declarations, governing ledgers and source-claim
+verifiers remain in RivRetrieve. Existing tests and catalogue builds still read
+their current local inputs. Archive publication alone does not change those
+bindings or authorize removal of active fixtures, recordings or native tables.
 
-The repository visibility must be `PRIVATE`. Do not paste authentication output,
-private response content, request headers or private correspondence into public
-issues or logs. Access to the repository does not establish permission to publish
-its source material. Check authority to share restricted correspondence before
-adding it, even to this private repository.
+Use the provider's instructions:
 
-The owner chose not to keep an independent backup. A Git clone or mirror does not
-back up release attachments. Loss of those attachments has no independent recovery
-guarantee. Preserve original local evidence during migration; these instructions
-do not authorize deleting it.
+- [Bosnia](../../maintenance/catalogue/ba_fhmzbih/README.md): complete baseline
+  workbook checks require the controlled source bodies and receipts.
+- [France](../../maintenance/catalogue/fr_hubeau/README.md): historical governing
+  checks require the retained historical native table, not the current Hub’Eau
+  catalogue table.
+- [HydroPortail](../../maintenance/catalogue/fr_hydroportail/README.md): native
+  inventory rebuild and the limits of historical source witnesses.
+- [ThaiWater](../../maintenance/catalogue/th_thaiwater/README.md): run the complete
+  genuine-input verifier before negative provenance regressions. Set
+  `THAIWATER_REVIEW_EVIDENCE_ROOT` to the same verified directory. A skipped test or
+  an exception from missing files does not establish acceptance.
+- [Brazil](../../maintenance/catalogue/br_ana/README.md): digest-bound supporting
+  inputs and retained recordings used by the offline rebuild.
 
-### Release protection
+Other provider checks and retained-input limits are recorded in the private
+archive and provider maintenance notes under `docs/provider_ports/`.
 
-GitHub reported `immutable: false` for all three indexed releases when they were
-published on September 29, 2026. These releases are not protected by GitHub release
-immutability. This observed release state does not establish the repository or
-organization setting.
+Run applicable full checks when governing claims, source bindings, verifiers or
+collections change. Missing mandatory material is blocked, not a passing or
+silently skipped check. Keep recording replay, native rebuilds, complete source-body
+verification and live-service observations distinct. Synthetic archive-mechanics
+tests do not establish genuine collection acceptance.
 
-The index pins each release and asset identity, byte size and SHA-256 digest.
-The download tool rejects missing identities and changed bytes. These checks do
-not prevent replacement or deletion, and a digest cannot recover a deleted file.
-Updates must receive new collection identities. The owner authorized these
-versioned releases without immutable-release protection; the lack of an
-independent backup remains unchanged.
+The private archive also maintains the full-check coordinator. It runs against an
+explicitly reviewed RivRetrieve commit and records exact collections, fingerprints,
+commands, outcomes, skips and limitations. Follow its current instructions rather
+than reconstructing a verification run from historical acceptance records.
 
-## Public checks
+## Protect controlled material
 
-Ordinary tests use retained, reviewed source recordings and require no private
-evidence credentials. From the source checkout:
+Run only reviewed code with private evidence or credentials. Tests receive local
+inputs, not archive credentials. Keep private bodies, request details, credentials
+and evidence-backed output out of public issues, assertion output, logs, caches,
+CI artifacts and distributions. Review summaries before sharing them. Downloading
+outside Git does not by itself prevent disclosure, and private archive access does
+not establish source-sharing rights.
 
-```sh
-uv run python -m maintenance.evidence validate \
-  --index maintenance/evidence/index.json
-
-uv run pytest tests/test_catalogue_origin_certification.py -q
-```
-
-Index validation checks the records and pinned identities, not the contents of
-unavailable private assets. Catalogue origin tests rebuild all providers with
-network access denied. Their native inputs and source recordings remain repository
-build inputs, outside distributed Python packages.
-
-Provider-specific public commands are in the index. These tests establish behavior
-against saved inputs, not current service availability. Do not replace genuine
-recordings with synthetic responses or remove assertions to avoid private access.
-Some large files under `tests/` and `research/` are active build or test inputs;
-directory names alone do not determine what can move.
-
-## Download one exact collection
-
-Choose a provider and an exact collection ID from its index entry. The matching
-collection record pins the release ID, release tag, asset IDs, byte sizes and
-SHA-256 digests. Its `verification_root` gives the relative directory used by the
-provider verifier. Never substitute a mutable `latest` release. An empty collection
-list means shared acquisition for that provider is not recorded. Stop rather than
-invent an ID or treat local derived tables as the missing collection.
-
-Use an evidence directory outside the source checkout. The following example uses
-the published ThaiWater collection `th_thaiwater-2026-09-29-v1`. Its exact release
-and asset identities are in the index:
-
-```sh
-export COLLECTION_ID='th_thaiwater-2026-09-29-v1'
-export EVIDENCE_ROOT="$HOME/.local/share/rivretrieve/verification-evidence"
-
-uv run python -m maintenance.evidence fetch \
-  --index maintenance/evidence/index.json \
-  --provider th_thaiwater \
-  --collection "$COLLECTION_ID" \
-  --destination "$EVIDENCE_ROOT"
-```
-
-The command downloads only the selected assets through authenticated GitHub access.
-It checks their pinned identities, byte sizes and SHA-256 digests before extracting
-them. Safe extraction refuses unsafe archive members. An existing target fails;
-the command does not overwrite an earlier collection or silently reuse it.
-
-The extracted collection is at `$EVIDENCE_ROOT/$COLLECTION_ID`. Successful output
-identifies the collection, release, assets and relative `verification_root` without
-printing private contents. Download success establishes transport integrity, not
-provider acceptance. Use the provider verifier next. Keep the collection's
-acquisition-relative paths unchanged. A root of `.` means the extraction directory
-itself; a named subdirectory means the verifier starts inside it.
-
-## Verify the original source claims
-
-Each provider has different checks. Follow its index entry rather than assume one
-parser example establishes national coverage. The complete controlled checks for
-Bosnia, France and ThaiWater require the original bodies and receipts. Missing
-material is a failed prerequisite, not a reason to skip or weaken a mandatory check.
-
-For this ThaiWater collection, the indexed `verification_root` is
-`baseline-capture-2026-09-13`. Confirm that value in the selected record or fetch
-output if choosing another collection. Set it before running the complete verifier:
-
-```sh
-export VERIFICATION_ROOT='baseline-capture-2026-09-13'
-export THAIWATER_REVIEW_EVIDENCE_ROOT="$EVIDENCE_ROOT/$COLLECTION_ID/$VERIFICATION_ROOT"
-
-uv run python maintenance/catalogue/th_thaiwater/scripts/verify_governing_evidence.py \
-  --ledger maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv \
-  --native src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet \
-  --evidence-root "$THAIWATER_REVIEW_EVIDENCE_ROOT"
-```
-
-For the retained baseline, success verifies 825 stations and 1,650 pairs, including
-1,096 available and 554 unknown pairs. Only after that succeeds, run the regression
-against the same directory:
-
-```sh
-uv run pytest tests/test_thaiwater_governing_evidence.py \
-  tests/test_thaiwater_source_outcomes.py -q
-```
-
-The complete check and all eight tests must pass, with no skip. An unset evidence
-variable skips the private regression. An empty directory can satisfy its negative
-exception assertion, so that test alone does not establish that genuine inputs
-were verified.
-
-The [Bosnia verifier](../../maintenance/catalogue/ba_fhmzbih/README.md) checks all
-180 baseline station-product pairs against private workbook bodies. The
-[France verifier](../../maintenance/catalogue/fr_hubeau/README.md) checks the mixed
-historical governing acquisitions and their receipts. Its ledger requires the
-retained historical `native-2026-08-02.parquet`, not the current Hub’Eau native table
-after publication-service separation. HydroPortail has its own
-[native inventory rebuild](../../maintenance/catalogue/fr_hydroportail/README.md);
-its historical raw witnesses do not establish other selector coverage.
-
-For other providers, preserve the index's limits. Small station fixtures are not
-complete national acquisitions. A redacted correspondence record is not the
-original email. A compiled bulk store cannot reconstruct a deleted publisher ZIP.
-Keep missing originals visible even when the applicable native rebuild passes.
-
-## Full verification and acceptance records
-
-Run full controlled checks when changing governing catalogue claims, their source
-bindings, provider verification logic, or collection contents. Run them for a new
-collection acceptance as well. A maintainer can request additional full checks for
-a public pull request when its changes affect those claims.
-
-Full verification runs in the private evidence repository against an explicitly
-reviewed RivRetrieve commit. Its restricted environment supplies evidence access.
-Never run unreviewed fork code with those credentials or private data. Public jobs
-may validate the index and public fixtures; they cannot certify missing private
-bytes. Do not place controlled material in public logs, caches, artifacts, release
-assets or Python packages.
-
-Record:
-
-- The exact reviewed source commit and collection IDs.
-- Release and asset identities, byte sizes and SHA-256 fingerprints.
-- Commands, outcomes, required tests and any skips or blocked checks.
-- Source limitations and missing originals, separately from successful checks.
-- The environment used to download and verify the collection independently of the
-  original acquisition machine.
-
-A public summary may report approved outcomes and fingerprints. Keep private logs
-and bodies in the restricted environment. Do not claim shared-download acceptance
-until an independent download, integrity check and applicable full verifier have
-actually succeeded.
-
-## Review and publish a new collection
-
-1. Recover existing material first. Keep original bytes, receipts, dates and paths.
-   Do not recreate originals from native tables or label a new request as an old
-   acquisition. Replacement acquisitions need separate review and updated bindings.
-2. Review source terms, correspondence authority, URLs, headers and logs. Private
-   storage does not itself grant permission to redistribute material. Preserve
-   null values, missing rows, source failures and unknown facts distinctly.
-3. Separate public test inputs from the controlled collection. Preserve existing
-   public tests and reproducible builds. Runtime library calls must not discover
-   maintainer caches or private repositories.
-4. Build archives with the expected acquisition-relative paths. GitHub requires
-   each release asset to be less than 2 GiB and allows up to 1,000 assets per
-   release. Split by coherent acquisition boundaries when needed. Record expanded
-   sizes and member counts as well as archive sizes and digests.
-5. Publish to a new versioned private release. Record the actual release and asset
-   IDs and relative `verification_root` in the index. Do not reuse an accepted
-   collection identity for new bytes.
-   Enable GitHub immutable-release protection where available and verify its actual
-   setting and release state. Record an unavailable setting or hosting limitation
-   explicitly; do not claim protection that has not been verified.
-6. Download through the documented workflow in an independent clean environment.
-   Run the complete provider verifier before negative regressions, and save the
-   acceptance record. Retain original local evidence throughout migration.
-
-Before making the code repository public, conduct a separate publication-readiness
-review of reachable Git history, recordings, archives, terms and provisioning
-artifacts. This evidence workflow does not authorize visibility changes, history
-rewrites or credential rotation. See the
-[architecture](../architecture.md#evidence-and-verification) for the runtime and
-catalogue boundaries.
+Preserve originals and historical acceptance records. Retire redundant copies only
+after proving archive preservation and obtaining required owner approval. New
+provider code PRs carry code and exact archive references, not source corpora or
+private attachments. See the [architecture](../architecture.md#evidence-and-verification)
+for the runtime and catalogue boundaries.

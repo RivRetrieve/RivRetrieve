@@ -1,8 +1,7 @@
 # HydroPortail catalogue inputs
 
-See [shared verification evidence](../../../docs/maintenance/evidence.md) for access,
-collection selection and integrity checks. The [provider index](../../evidence/index.json)
-records retained material, applicable commands and known gaps.
+See [shared verification evidence](../../../docs/maintenance/evidence.md) for
+archive access, exact input selection and verification prerequisites.
 
 The catalogue represents the anonymously published native station inventory.
 It is not an unrestricted PHyC census. See [COVERAGE.md](COVERAGE.md) for the dated
