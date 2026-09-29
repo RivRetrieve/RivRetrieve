@@ -1,5 +1,9 @@
 # ThaiWater catalogue evidence
 
+See [shared verification evidence](../../../docs/maintenance/evidence.md) for access,
+collection selection and integrity checks. The [provider index](../../evidence/index.json)
+records retained material, applicable commands and known gaps.
+
 `inventory/governing_station_product_evidence.csv` records the 825-station,
 1,650-pair catalogue population. `inventory/governing_summary.json` records its
 counts and source limitations. The supplying agencies and source requests remain
