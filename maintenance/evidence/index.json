@@ -1,39 +1,42 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "repository": "RivRetrieve/verification-evidence",
   "providers": [
     {
       "provider_id": "ba_fhmzbih",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "13430 bytes; SHA-256 abcbc2d2234ea1751d638307f89fba4cba4feca96c9cd1d77c728b87a0fea77a",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "original_acquisitions",
           "purpose": "180-pair workbook baseline, routing metadata and ledger; four public source cases; small workbook replays and terms-absence recording.",
           "location": "maintenance/catalogue/ba_fhmzbih/evidence; tests/test_data/ba_fhmzbih_*",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Public source cases and routing metadata, not the private national baseline."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "controlled_original_acquisitions",
           "purpose": "Retained original Bosnia workbook baseline, receipts and manifest for complete verification of 180 station-product pairs.",
           "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/ba_fhmzbih-2026-09-29-v1; collection ba_fhmzbih-2026-09-29-v1; verification_root .",
           "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
           "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
             "Original FILE_HASHES.json and relative body paths must survive migration."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -75,34 +78,37 @@
       "provider_id": "br_ana",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "1757184 bytes; SHA-256 3538893b182ded3693bdb1ce5312c814371a1854bc3d63a6c3e09ea1d8d56581",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "original_acquisitions",
           "purpose": "National inventory compressed acquisitions with capture attestation, source-row occurrence archive and historical capture scripts; adopted telemetry and conventional daily/SOAP recordings; safe-derived dictionary/manual inputs; terms recording.",
           "location": "tests/test_data/br_ana_inventory; maintenance/catalogue/br_ana/inventory",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Capture attestation binds compressed recordings and supporting files."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_recordings_and_derived_documentation",
           "purpose": "National inventory compressed acquisitions with capture attestation, source-row occurrence archive and historical capture scripts; adopted telemetry and conventional daily/SOAP recordings; safe-derived dictionary/manual inputs; terms recording.",
           "location": "tests/recordings/br_ana",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Original response recordings and explicitly derived manual/dictionary evidence are different material kinds."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -132,24 +138,26 @@
       "provider_id": "ca_eccc",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "244106 bytes; SHA-256 2f451d5f088b147f5dc81d6b95d124d9fd7f9c5e3e671998b3213a708028f173",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_and_bulk_compilation_fixtures",
           "purpose": "Attested national station native table; small OGC pagination fixture; selected genuine daily CSV and HTTP-wire evidence; derived SQLite row extracts; HYDAT documentation; tiny derived-input ZIP and compiled conformance fixtures.",
           "location": "tests/test_data/ca_eccc_*; tests/recordings/ca_eccc",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Selected OGC/CSV recordings, derived SQLite excerpts and small compiler fixtures, not full national originals."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -179,24 +187,26 @@
       "provider_id": "ch_foen",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "17765 bytes; SHA-256 71b0a329568df9ad031339d3b77b4c692762c6feab6659c20751bebfbea18b48",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_recordings_and_publisher_documents",
           "purpose": "Metadata locations, parameter response, REST and archive recordings, publisher API/BAFU documents and terms; native table.",
           "location": "tests/test_data/ch_foen_*; tests/test_data/switzerland_metadata_locations.json",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Some publisher documentation is explicitly redacted; source cadence alone does not establish temporal support."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -226,24 +236,26 @@
       "provider_id": "cz_chmi",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "51445 bytes; SHA-256 03c2ce0b1bc686e696fd57a4ff82dfb3bb60c176edeafe2c24b62168d4e60408",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_recordings_and_publisher_documents",
           "purpose": "Attested 831-row native table; small verbatim station subset; genuine annual DQ/HQ recordings; source code-description PDF and terms.",
           "location": "tests/test_data/cz_chmi_*; tests/test_data/cz_meta2.json",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Small metadata subset is not the original national metadata acquisition."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -273,34 +285,37 @@
       "provider_id": "fr_hubeau",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "1054283 bytes; SHA-256 5853f30b5b5423af85585d7a7a9f5724f6186a26c8fbdd1c2231068427c4a13c",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "original_acquisitions_and_ledgers",
           "purpose": "Governing mixed historical ledger, public count/history bundles, native capture account and full station references; controlled original governing evidence; runtime daily/temperature replays; terms and OpenAPI; superseded combined-artifact fixtures.",
           "location": "maintenance/catalogue/fr_hubeau; tests/test_data/fr_hubeau_*",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Public bundles and full retained station references support public checks; complete historical body verification remains separate."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "controlled_original_acquisitions",
-          "purpose": "Retained mixed historical France governing acquisitions and receipts, shared by Hub\u2019Eau and HydroPortail historical lineage.",
+          "purpose": "Retained mixed historical France governing acquisitions and receipts, shared by Hub’Eau and HydroPortail historical lineage.",
           "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; verification_root .",
           "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
           "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
             "Preserve acquisition-relative paths including reused-pr231-head46b2fde/evidence."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -328,12 +343,12 @@
           ],
           "limitations": [
             "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check.",
-            "The ledger binds the retained historical native-2026-08-02.parquet snapshot, not the current Hub\u2019Eau native table after service separation."
+            "The ledger binds the retained historical native-2026-08-02.parquet snapshot, not the current Hub’Eau native table after service separation."
           ]
         }
       ],
       "gaps": [
-        "Public bundle checks are not complete private-body certification. Mixed historical acquisitions must retain service identity; HydroPortail historical claims are not modern Hub\u2019Eau route coverage."
+        "Public bundle checks are not complete private-body certification. Mixed historical acquisitions must retain service identity; HydroPortail historical claims are not modern Hub’Eau route coverage."
       ],
       "collections": [
         "fr_hubeau-2026-09-29-v1"
@@ -343,34 +358,37 @@
       "provider_id": "fr_hydroportail",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "654243 bytes; SHA-256 fde9cacf7f3465ec2ec18789dcd7377c5d87efc0f14b326582d40a305d5ef108",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "original_acquisitions_and_probes",
           "purpose": "Anonymous native inventory originals and receipts, legal/about/JS source definitions, reconciliation and supporting captures archives, bounded identity/observation probes, selector recordings; historical lineage shared with France ledger.",
           "location": "maintenance/catalogue/fr_hydroportail/evidence; tests/test_data/fr_hydroportail_*",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Native anonymous inventory, receipts and bounded probes; not a PHyC census."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "shared_historical_ledger",
-          "purpose": "Historical raw HydroPortail witnesses and their governing ledger, retained in the same France collection used for historical Hub\u2019Eau verification.",
+          "purpose": "Historical raw HydroPortail witnesses and their governing ledger, retained in the same France collection used for historical Hub’Eau verification.",
           "location": "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz; https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; verification_root .",
           "access": "The ledger is public repository metadata. Complete historical source bodies require authenticated access to the indexed private France collection.",
           "integrity": "The shared France collection pins archive integrity. The historical France verifier checks governing body and receipt identities against the retained ledger.",
           "limitations": [
             "Historical raw witnesses do not transfer to other selectors or to another publication service."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -398,7 +416,7 @@
           ],
           "limitations": [
             "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check.",
-            "The ledger binds the retained historical native-2026-08-02.parquet snapshot, not the current Hub\u2019Eau native table after service separation.",
+            "The ledger binds the retained historical native-2026-08-02.parquet snapshot, not the current Hub’Eau native table after service separation.",
             "This historical mixed-service check is not a PHyC census and does not certify validated, combined or most_valid selector availability."
           ]
         }
@@ -414,24 +432,26 @@
       "provider_id": "jp_mlit",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "76666 bytes; SHA-256 ec892e4bc5bee3e8d5435190f4163ecddd80d2d244a71c810b9cf666d06b5aad",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_recordings_and_publisher_documents",
           "purpose": "Accepted 1,023-row native snapshot; representative accepted/rejected station pages; eight HTML/DAT recordings; EUC-JP licence and PDF citation plus identities.",
           "location": "tests/test_data/jp_mlit_*; tests/test_data/japan_provider_documentation",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Representative original HTML/DAT and station pages only; later HTTP 403 is not recovery of the original census."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -461,24 +481,26 @@
       "provider_id": "lt_lhmt",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "6156 bytes; SHA-256 f1ddebed42b911d1417f22e22abebc5904652db4d5fc6da0bd0bed666d321b8d",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "original_metadata_and_runtime_recordings",
           "purpose": "Complete 97-station metadata response, native table, bounded monthly runtime recordings, terms.",
           "location": "tests/test_data/lithuania_metadata_stations.json; tests/test_data/lt_lhmt_*",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Complete 97-station metadata response; runtime recordings remain bounded examples."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -508,34 +530,37 @@
       "provider_id": "no_nve",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "809226 bytes; SHA-256 26b9f113fb85a81b89690db8c3bd5b1bf2c4eebc1472d21eae193a6f5c7409bc",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "original_metadata_acquisitions",
           "purpose": "Complete active=0/1 station acquisitions, closed capture attestation, native input, swagger/terms, bounded observation and series/version recordings.",
           "location": "tests/test_data/no_nve_stations_active_0.json; tests/test_data/no_nve_stations_active_1.json; tests/test_data/no_nve_station_catalogue_capture.json",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Complete captured active/all station envelopes; no national observation certification."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_recordings_and_publisher_documents",
           "purpose": "Complete active=0/1 station acquisitions, closed capture attestation, native input, swagger/terms, bounded observation and series/version recordings.",
           "location": "tests/test_data/no_nve_*",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Replay is credential-free; live refresh requires a separately provided credential."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -565,34 +590,37 @@
       "provider_id": "pl_imgw",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "49670 bytes; SHA-256 46b162f8f28e31db1a5e3caec1e5ead7f23cd07cfbc5c3975ca5e9af783b76fe",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "bulk_compilation_fixtures_and_publisher_documents",
           "purpose": "Recovered geometry/native lineage and publisher roster, genuine annual/monthly bulk source fixtures and docs, compiled store test inputs, public redacted forwarded-copy verification record; private human correspondence identity only.",
           "location": "tests/test_data/pl_imgw_*; tests/recordings/pl_imgw",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Selected annual/monthly source artifacts and docs, not the full national historical archive."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "restricted_correspondence_record",
           "purpose": "Recovered geometry/native lineage and publisher roster, genuine annual/monthly bulk source fixtures and docs, compiled store test inputs, public redacted forwarded-copy verification record; private human correspondence identity only.",
           "location": "src/rivretrieve/_internal/providers/pl_imgw/origins.py:FORWARDED_COPY_VERIFICATION",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Only redacted verification record retained here; private forwarded email original-byte identity is explicitly unestablished."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -622,34 +650,37 @@
       "provider_id": "th_thaiwater",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "126616 bytes; SHA-256 7a39c2c4e1144cb9b761a3f94153c06d72927224cd82318efe1f957d90d27d03",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_recordings_and_publisher_documents",
           "purpose": "Controlled complete 825-station graph corpus; governing pair ledger; public null and database-error cases; genuine window-boundary recordings; source JS and terms; native station snapshot.",
           "location": "tests/test_data/th_thaiwater_*; maintenance/catalogue/th_thaiwater",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Public runtime cases and pair ledger are not the complete private corpus."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "controlled_original_acquisitions",
           "purpose": "Retained ThaiWater review collection, including the complete 825-station governing graph bodies and acquisition receipts.",
           "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/th_thaiwater-2026-09-29-v1; collection th_thaiwater-2026-09-29-v1; verification_root baseline-capture-2026-09-13",
           "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
           "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
             "825 governing graph acquisitions are distinct from the earlier national waterlevel_load metadata response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -701,34 +732,37 @@
       "provider_id": "usgs_nwis",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "14093302 bytes; SHA-256 90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "original_metadata_and_derived_audit",
           "purpose": "Modern national metadata compressed pages/completion receipts and full-baseline audit; modern and legacy runtime recordings, docs/OpenAPI/terms; legacy station native table and superseded catalogue snapshots.",
           "location": "research/usgs-modern-coverage; research/usgs-modern-discovery",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Modern compressed page chains and completion receipts are active build inputs. Derived comparisons and legacy native input are not original legacy RDB response bodies."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "runtime_recordings_and_publisher_documents",
           "purpose": "Modern national metadata compressed pages/completion receipts and full-baseline audit; modern and legacy runtime recordings, docs/OpenAPI/terms; legacy station native table and superseded catalogue snapshots.",
           "location": "tests/test_data/usgs_modern; tests/test_data/usgs_nwis_*",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Modern and legacy request eras retain separate source identities."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -758,24 +792,26 @@
       "provider_id": "za_dws",
       "materials": [
         {
-          "kind": "native_build_input",
           "purpose": "Offline reconstruction of the reviewed catalogue from attested native rows. This is not proof of possession of all original acquisitions.",
           "location": "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
           "access": "Retained code-repository build input; excluded from distributed Python packages.",
           "integrity": "67655 bytes; SHA-256 6d122a3ae50e9bdb61599bce488bcf1045649cec2ec4b848177eccc328f56efd",
           "limitations": [
             "The native table is derived material, not an original publisher response."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         },
         {
-          "kind": "historical_runtime_recordings_and_terms",
           "purpose": "Attested archived-PDF native table; original archive identities declared in generator; small metadata/terms fixtures; two historical runtime HTML bodies and source-conformance note.",
           "location": "tests/recordings/za_dws; tests/test_data/za_dws_*",
           "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
           "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
           "limitations": [
             "Historical runtime examples do not establish current live support or possession of archived catalogue PDF originals."
-          ]
+          ],
+          "roles": [],
+          "classification": "unreviewed"
         }
       ],
       "verification": [
@@ -807,7 +843,6 @@
       "collection_id": "ba_fhmzbih-2026-09-29-v1",
       "release_id": 399069764,
       "release_tag": "ba_fhmzbih-2026-09-29-v1",
-      "verification_root": ".",
       "assets": [
         {
           "asset_id": 598025200,
@@ -823,14 +858,18 @@
       "limitations": [
         "GitHub reported immutable=false for this published release on 2026-09-29. Release immutability protection is not enabled for this release. Pinned identities and digests detect changed bytes; they do not prevent deletion or provide recovery.",
         "Whole retained provider directory includes both archives and expanded copies. Member count and expanded bytes describe transport contents, not unique acquisitions.",
-        "The complete verifier must check FILE_HASHES.json and the original body-relative paths before certifying workbook classifications."
-      ]
+        "The complete verifier must check FILE_HASHES.json and the original body-relative paths before certifying workbook classifications.",
+        "Historical package has no shared collection manifest binding. Its retained files require artifact-level review before selection under the shared archive contract."
+      ],
+      "input_roots": {
+        "verification": "."
+      },
+      "manifest": null
     },
     {
       "collection_id": "fr_hubeau-2026-09-29-v1",
       "release_id": 399069763,
       "release_tag": "fr_hubeau-2026-09-29-v1",
-      "verification_root": ".",
       "assets": [
         {
           "asset_id": 598025204,
@@ -842,18 +881,22 @@
           "member_count": 533
         }
       ],
-      "purpose": "Retained mixed historical France governing acquisitions and receipts, shared by Hub\u2019Eau and HydroPortail historical lineage.",
+      "purpose": "Retained mixed historical France governing acquisitions and receipts, shared by Hub’Eau and HydroPortail historical lineage.",
       "limitations": [
         "GitHub reported immutable=false for this published release on 2026-09-29. Release immutability protection is not enabled for this release. Pinned identities and digests detect changed bytes; they do not prevent deletion or provide recovery.",
         "Whole retained provider directory includes both archives and expanded copies. Member count and expanded bytes describe transport contents, not unique acquisitions.",
-        "The governing ledger binds native-2026-08-02.parquet. Historical HydroPortail raw witnesses do not establish other selectors or modern Hub\u2019Eau route coverage."
-      ]
+        "The governing ledger binds native-2026-08-02.parquet. Historical HydroPortail raw witnesses do not establish other selectors or modern Hub’Eau route coverage.",
+        "Historical package has no shared collection manifest binding. Its retained files require artifact-level review before selection under the shared archive contract."
+      ],
+      "input_roots": {
+        "verification": "."
+      },
+      "manifest": null
     },
     {
       "collection_id": "th_thaiwater-2026-09-29-v1",
       "release_id": 399069765,
       "release_tag": "th_thaiwater-2026-09-29-v1",
-      "verification_root": "baseline-capture-2026-09-13",
       "assets": [
         {
           "asset_id": 598025201,
@@ -870,8 +913,13 @@
         "GitHub reported immutable=false for this published release on 2026-09-29. Release immutability protection is not enabled for this release. Pinned identities and digests detect changed bytes; they do not prevent deletion or provide recovery.",
         "Whole retained provider directory includes both archives and expanded copies. Member count and expanded bytes describe transport contents, not unique acquisitions.",
         "The complete graph verifier must pass before the same-root cross-station regression. The collection does not establish retention of the earlier full waterlevel_load metadata acquisition.",
-        "API redistribution permission remains unestablished; private access does not authorize public publication."
-      ]
+        "API redistribution permission remains unestablished; private access does not authorize public publication.",
+        "Historical package has no shared collection manifest binding. Its retained files require artifact-level review before selection under the shared archive contract."
+      ],
+      "input_roots": {
+        "verification": "baseline-capture-2026-09-13"
+      },
+      "manifest": null
     }
   ]
 }

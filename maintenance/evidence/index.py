@@ -14,6 +14,11 @@ from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 Text = Annotated[str, Field(min_length=1)]
 Positive = Annotated[int, Field(gt=0)]
 Nonnegative = Annotated[int, Field(ge=0)]
+Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+ArtifactRole = Literal[
+    "publisher_original", "response_recording", "derived_input", "authored_interpretation",
+    "authored_declaration", "research_context", "runtime_product", "acquisition_receipt",
+]
 
 
 class EvidenceError(ValueError):
@@ -54,23 +59,40 @@ class Asset(Record):
         return self
 
 
+class ManifestBinding(Record):
+    path: Text
+    sha256: Digest
+
+    @field_validator("path")
+    @classmethod
+    def member_path(cls, value: str) -> str:
+        for part in value.split("/"):
+            safe_name(part)
+        return value
+
+
 class Collection(Record):
     collection_id: Text
     release_id: Positive
     release_tag: Text
-    verification_root: Text
+    input_roots: dict[Text, Text]
+    manifest: ManifestBinding | None
     assets: Annotated[list[Asset], Field(min_length=1, max_length=1000)]
     purpose: Text
     limitations: list[Text]
 
     _identity = field_validator("collection_id")(safe_name)
 
-    @field_validator("verification_root")
+    @field_validator("input_roots")
     @classmethod
-    def relative_root(cls, value: str) -> str:
-        if value != ".":
-            for part in value.split("/"):
-                safe_name(part)
+    def relative_roots(cls, value: dict[str, str]) -> dict[str, str]:
+        if not value:
+            raise ValueError("explicit input roots required")
+        for name, root in value.items():
+            safe_name(name)
+            if root != ".":
+                for part in root.split("/"):
+                    safe_name(part)
         return value
 
     @field_validator("release_tag")
@@ -90,7 +112,10 @@ class Collection(Record):
 
 
 class Material(Record):
-    kind: Text
+    """A safe location-level account; mixed locations require artifact-level review."""
+
+    roles: list[ArtifactRole]
+    classification: Literal["unreviewed", "mixed", "reviewed"]
     purpose: Text
     location: Text
     access: Text
@@ -116,7 +141,7 @@ class ProviderEvidence(Record):
 
 
 class EvidenceIndex(Record):
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     repository: Literal["RivRetrieve/verification-evidence"]
     providers: list[ProviderEvidence]
     collections: list[Collection]

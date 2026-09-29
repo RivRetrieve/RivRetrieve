@@ -8,10 +8,14 @@ import os
 import subprocess
 import tempfile
 import threading
+from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
+from typing import Mapping
 
 from .archives import ArchivePaths, extract_archive
 from .index import Asset, Collection, EvidenceError, EvidenceIndex
+from .manifest import verify_collection
 
 
 def _environment() -> dict[str, str]:
@@ -131,6 +135,20 @@ def _external_destination(destination: Path, source_roots: tuple[Path, ...]) -> 
     return resolved
 
 
+@dataclass(frozen=True)
+class SelectedInputs:
+    """Verified local working copy and explicitly named consumer directories.
+
+    Paths refer to the new external working copy. Integrity and manifest checks do
+    not certify source claims. Consumers receive these resolved paths and need no
+    archive credentials or cache discovery.
+    """
+
+    collection: Collection
+    root: Path
+    input_roots: Mapping[str, Path]
+
+
 def acquire_collection(
     index: EvidenceIndex,
     provider_id: str,
@@ -138,7 +156,7 @@ def acquire_collection(
     destination: Path,
     *,
     source_roots: tuple[Path, ...],
-) -> Path:
+) -> SelectedInputs:
     """Download only a provider's selected collection and publish a new external directory.
 
     Existing evidence is never reused or replaced. Every compressed asset passes
@@ -169,8 +187,11 @@ def acquire_collection(
             paths = ArchivePaths()
             for asset in collection.assets:
                 extract_archive(staging / str(asset.asset_id), asset, unpacked, paths)
-            if not (unpacked / collection.verification_root).is_dir():
-                raise EvidenceError("Collection lacks its indexed verification root; review the archive layout.")
+            if any(not (unpacked / relative).is_dir() for relative in collection.input_roots.values()):
+                raise EvidenceError("Collection lacks an indexed input root; review the archive layout.")
+            manifest = verify_collection(unpacked, collection)
+            if manifest is not None and provider_id not in manifest.provider_ids:
+                raise EvidenceError("Collection manifest does not include the selected provider.")
             # mkdir reserves a new final name atomically. Never replace a pre-existing directory.
             target.mkdir(mode=0o700)
             try:
@@ -178,7 +199,10 @@ def acquire_collection(
             except OSError:
                 target.rmdir()
                 raise
-        return target
+        return SelectedInputs(
+            collection, target,
+            MappingProxyType({name: target / relative for name, relative in collection.input_roots.items()}),
+        )
     except OSError as error:
         raise EvidenceError(
             "Cannot create evidence safely; check destination permissions, free space and existing paths."
