@@ -93,20 +93,26 @@ require rerunning AI.
 ## Access and storage
 
 Use private GitHub versioned-release storage in `RivRetrieve/verification-evidence`.
-Approval and publication initially remain with the owner, CooperBigFoot. Define
-separate read, publish and admin privileges under explicit owner control. A
-contribution, merged PR or unintended organisation base permission grants no access.
-No new grants are implied by this vision.
+Trust existing repository access. Users can read or publish according to their
+existing GitHub permissions. Add no separate vetting, approval system, managed
+teams or access-management framework. Routine archive work does not require Admin
+access. Existing administrators can handle settings changes if needed. This does
+not change the owner-approval requirement for destructive evidence removal.
 
-The owner has requested repository Admin access. Assume that access for planning,
-but verify effective permissions before administrative actions. Repository Admin
-and organisation Owner are different roles; organisation policy changes may need
-separate owner action. Record unavailable mandatory permission checks as blocked.
+Keep authentication at the acquisition boundary. For example, an authorised
+maintainer can use their existing `gh` login to download exact, integrity-checked
+inputs outside source checkouts. Tests then read explicitly supplied local inputs;
+credentials do not belong in test code or committed configuration. Local execution
+is not a sandbox: run only reviewed code with access to evidence or credentials.
 
-Private storage does not establish permission to share source material. Never expose
-restricted bytes or credentials in public metadata, docs, logs, caches, CI artifacts
-or distributions. Never execute unreviewed PR code with evidence access. Runtime
-package users need no archive credentials.
+Prevent private evidence from leaking into RivRetrieve through test execution.
+Check Git-tracked fixtures, response-bearing exceptions and assertion output, logs,
+caches, CI artifacts and distribution packages. Never expose restricted bytes or
+credentials in public-facing metadata, documentation or output. Do not print or
+publish private response bodies. Keep evidence-backed outputs private and review any summary before
+sharing it. Downloading outside Git alone does not establish this boundary. Never
+execute unreviewed PR code with evidence access. Private storage does not establish
+source-sharing rights. Runtime package users need no archive credentials.
 
 There is no independent backup or recovery guarantee after release-attachment loss.
 Pinned identities and fingerprints detect changed material; they do not prevent
@@ -165,9 +171,9 @@ Inspect `maintenance/evidence/index.json`, `maintenance/evidence/acquisition.py`
 `docs/maintenance/evidence.md`, the evidence repository README and reviewed
 verification entry point, and their tests. Earlier deliveries #422, #423 and #424
 remain valid historical foundations. The Program supersedes their target policy
-of maintaining some source recordings in code Git and relying on implicit
-organisation-wide access. Updating those expressly superseded arrangements is
-planned work, not a newly discovered unrelated bug.
+of maintaining some source recordings in code Git. Existing archive permissions
+remain the access boundary. Updating expressly superseded arrangements is planned
+work, not a newly discovered unrelated bug.
 
 ## Stop and report
 
