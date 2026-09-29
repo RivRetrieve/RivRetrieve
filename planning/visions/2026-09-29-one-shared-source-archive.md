@@ -107,8 +107,9 @@ is not a sandbox: run only reviewed code with access to evidence or credentials.
 
 Prevent private evidence from leaking into RivRetrieve through test execution.
 Check Git-tracked fixtures, response-bearing exceptions and assertion output, logs,
-caches, CI artifacts and distribution packages. Do not print or publish private
-response bodies. Keep evidence-backed outputs private and review any summary before
+caches, CI artifacts and distribution packages. Never expose restricted bytes or
+credentials in public-facing metadata, documentation or output. Do not print or
+publish private response bodies. Keep evidence-backed outputs private and review any summary before
 sharing it. Downloading outside Git alone does not establish this boundary. Never
 execute unreviewed PR code with evidence access. Private storage does not establish
 source-sharing rights. Runtime package users need no archive credentials.
