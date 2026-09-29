@@ -544,3 +544,32 @@ def test_zip_directory_count_checked_before_library_allocation(tmp_path, monkeyp
     monkeypatch.setattr(zipfile, "ZipFile", lambda *a, **k: pytest.fail("parsed unbounded directory"))
     with pytest.raises(EvidenceError, match="directory exceeds"):
         _extract(tmp_path, raw, _asset(raw, archive_format="zip"))
+
+
+@pytest.mark.parametrize("kind", [tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK])
+def test_gnu_extension_metadata_is_rejected_before_read(tmp_path, kind):
+    raw = _tar([("extension", b"x" * 65537, kind), ("body.txt", b"test", tarfile.REGTYPE)])
+    with pytest.raises(EvidenceError, match="metadata exceeds"):
+        _extract(tmp_path, raw, _asset(raw))
+
+
+@pytest.mark.parametrize("change", ["oversized", "split", "zip64", "inconsistent"])
+def test_zip_directory_preflight_rejects_unsafe_end_metadata(tmp_path, monkeypatch, change):
+    import struct
+
+    raw = _zip([("body.txt", b"test", stat.S_IFREG)])
+    start = raw.rfind(b"PK\x05\x06")
+    fields = list(struct.unpack("<4s4H2LH", raw[start : start + 22]))
+    if change == "oversized":
+        fields[5] = 65537
+    elif change == "split":
+        fields[1] = 1
+    elif change == "inconsistent":
+        fields[6] = len(raw)
+    if change == "zip64":
+        raw = raw[:start] + b"PK\x06\x07" + bytes(16) + raw[start:]
+    else:
+        raw = raw[:start] + struct.pack("<4s4H2LH", *fields) + raw[start + 22 :]
+    monkeypatch.setattr(zipfile, "ZipFile", lambda *a, **k: pytest.fail("parsed unsafe directory"))
+    with pytest.raises(EvidenceError, match="directory exceeds"):
+        _extract(tmp_path, raw, _asset(raw, archive_format="zip"))

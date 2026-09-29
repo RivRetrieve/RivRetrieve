@@ -116,8 +116,13 @@ def _check_zip_directory(archive: Path, asset: Asset) -> None:
     _, disk, directory_disk, disk_entries, entries, size, offset, comment = struct.unpack(
         "<4s4H2LH", tail[start : start + 22]
     )
+    end_offset = asset.byte_size - (len(tail) - start)
+    with archive.open("rb") as source:
+        source.seek(max(0, end_offset - 20))
+        locator = source.read(20)
     if (
-        disk != 0
+        locator.startswith(b"PK\x06\x07")
+        or disk != 0
         or directory_disk != 0
         or disk_entries != entries
         or entries != asset.member_count
