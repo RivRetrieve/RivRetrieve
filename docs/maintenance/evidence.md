@@ -196,8 +196,11 @@ HydroPortail. A separate context collection serves all 14 providers. Publication
 checks passed for their 30 assets. Independent retrieval verified all 4,178 retained
 artifacts against the published manifests. The applicable complete Bosnia, France
 and ThaiWater checks passed, including the ThaiWater positive check before its
-negative regressions. These results preserve the recorded source scope and gaps;
-they do not establish source completeness or public redistribution rights. Each collection pins a release, compressed assets and
+negative regressions. Complete governing source-body checks apply to those three
+collections. Other catalogue, native-input and recording checks still read their
+existing consumer inputs; they do not certify every archived source body. These
+results preserve the recorded source scope and gaps. They do not establish source
+completeness or public redistribution rights. Each collection pins a release, compressed assets and
 named `input_roots`. A non-null `manifest` binds the private manifest's relative
 path and SHA-256. Fetch verifies every compressed asset before extraction, then
 checks the manifest, provider bindings and every retained member. Historical
