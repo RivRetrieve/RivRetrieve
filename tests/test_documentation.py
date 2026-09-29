@@ -79,11 +79,14 @@ def test_documentation_local_links_and_python_syntax():
             target = (path.parent / local).resolve() if local else path
             assert target.exists(), (name, destination)
             if fragment and target.suffix == ".md":
-                headings = re.findall(r"^#{1,6} (.+)$", target.read_text(), re.MULTILINE)
+                content = target.read_text()
+                if target == ROOT / "docs/reference.md":
+                    content += (ROOT / "docs/_generated/reference-tables.md").read_text()
+                headings = re.findall(r"^#{1,6} (.+)$", content, re.MULTILINE)
                 anchors = [re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-") for heading in headings]
                 assert fragment in anchors, (name, destination, anchors)
 
 
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
-    assert (ROOT / "docs/reference.md").read_text() == namespace["render_reference"]()
+    assert (ROOT / "docs/_generated/reference-tables.md").read_text() == namespace["render_tables"]()

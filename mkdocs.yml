@@ -15,6 +15,7 @@ exclude_docs: |
   scripts/**
   provider_ports/**
   overrides/**
+  _generated/**
 
 theme:
   name: material
@@ -60,7 +61,14 @@ plugins:
           paths: [src]
           options:
             show_root_heading: true
-            show_source: true
+            docstring_style: numpy
+            show_source: false
+            show_if_no_docstring: true
+            show_signature_annotations: true
+            separate_signature: true
+            merge_init_into_class: true
+            heading_level: 4
+            inherited_members: false
 
 markdown_extensions:
   - admonition

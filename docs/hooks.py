@@ -26,6 +26,9 @@ GITHUB_REPO_BLOB = "https://github.com/RivRetrieve/RivRetrieve/blob/main"
 
 def on_pre_build(config: dict) -> None:
     """Invoked before building the docs site."""
+    # Check committed factual tables before any build preparation writes files.
+    subprocess.run([sys.executable, str(REPO_ROOT / "scripts/generate_reference.py"), "--check"], check=True)
+
     # 1. Sync README.md to docs/index.md
     if README_PATH.is_file():
         content = README_PATH.read_text(encoding="utf-8")
@@ -63,11 +66,6 @@ def on_pre_build(config: dict) -> None:
         if generator.is_file():
             print("Generating stations_map.html for documentation build...")
             subprocess.run([sys.executable, str(generator)], check=True)
-
-    # 3. Synchronize API reference directly from Python docstrings & domain contracts
-    ref_generator = REPO_ROOT / "scripts" / "generate_reference.py"
-    if ref_generator.is_file():
-        subprocess.run([sys.executable, str(ref_generator)], check=True)
 
 
 def on_page_markdown(markdown: str, page, config: dict, files) -> str:

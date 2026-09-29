@@ -1,134 +1,18 @@
-"""reference generation : PublicContracts × ProviderDeclarations × CatalogueTables → Markdown.
-
-The local entry point reads shipped contracts and catalogue facts without resolving
-credentials, opening observation stores or calling a source.
-"""
+"""Generate factual reference tables from local schemas and packaged catalogues."""
 
 from __future__ import annotations
 
 import argparse
-import inspect
-from enum import Enum
-from importlib import import_module
 from pathlib import Path
-from types import FunctionType
 
 import polars as pl
-from pydantic import BaseModel
 
-import rivretrieve
 from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA
 from rivretrieve._internal.observations import ObservationDataSchema
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
 from rivretrieve._internal.selection import _series_frame
 from rivretrieve._internal.source_series import SeriesScope
-
-# These are returned-domain contracts, not additional top-level exports.
-TYPE_LOCATIONS = {
-    "selection": ("_Selection",),
-    "observations": ("ObservationResult", "ObservationProvenance", "Receipts", "ReceiptEntry", "StoreExcerptReceipt"),
-    "source_series": (
-        "EvidenceState",
-        "EvidenceFact",
-        "ClippingAxis",
-        "SourceUnitCodeDefinition",
-        "PhysicalFacts",
-        "Admission",
-        "SourceIdentity",
-        "SourceSeries",
-        "PhysicalPredicate",
-        "RestrictionKind",
-        "ScopeState",
-        "SeriesScope",
-        "SeriesWindow",
-        "InventoryCompleteness",
-        "CatalogueSeriesClaim",
-        "InventorySnapshot",
-        "OutcomeStatus",
-        "RequestedSelector",
-        "RetrievalOutcome",
-    ),
-    "issues": ("Issue",),
-    "catalogues.evidence": ("CatalogueEvidence",),
-    "coverage": ("RequestedInterval", "CoverageInterval"),
-    "engine": ("SourceCallOrigin",),
-    "store.reader": ("StoreStatus",),
-    "store.validation": ("ValidatedStore", "StoreManifest", "AccumulatedStoreManifest"),
-    "bulk": ("CacheClearResult",),
-}
-EXCEPTION_LOCATIONS = {
-    "discovery": ("EmptySelectionError", "MultiProviderSelectionError"),
-    "registry": ("UnknownProviderError",),
-    "selection": ("UnknownStationError", "UnknownProductError"),
-    "issues": (
-        "RivRetrieveError",
-        "FatalContractError",
-        "IssuePolicyError",
-        "InvalidObservationRequestError",
-        "MissingCredentialError",
-        "MissingOptionalDependencyError",
-        "ObservationsUnavailableError",
-        "ObservationDataSchemaError",
-    ),
-    "bulk": ("BulkOperationsUnavailableError", "BulkArtifactCleanupRefusedError", "InsufficientDiskSpaceError"),
-    "store.validation": ("ObservationStoreRefusedError",),
-    "store.certification": ("StoreCertificationError", "StorePostCommitCleanupError"),
-}
-
-
-def _doc_markdown(doc: str) -> str:
-    lines = inspect.cleandoc(doc).splitlines()
-    output: list[str] = []
-    section = ""
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        if index + 1 < len(lines) and lines[index + 1] and set(lines[index + 1]) == {"-"}:
-            section = line
-            output.extend((f"#### {section}", ""))
-            index += 2
-            continue
-        if section == "Examples" and line.startswith(">>>"):
-            # A doctest session ends at the next blank line.
-            end = index
-            while end < len(lines) and lines[end]:
-                end += 1
-            output.extend(("```pycon", *lines[index:end], "```"))
-            index = end
-            continue
-        if section in {"Parameters", "Returns", "Raises", "Attributes"} and line:
-            if not line.startswith(" "):
-                output.append(f"- **{line.replace('`', '')}**")
-            else:
-                output.append("  " + line.strip().replace("``", "`"))
-        else:
-            output.append(line.replace("``", "`"))
-        index += 1
-    return "\n".join(output)
-
-
-def _contract(name: str, value: FunctionType | type, *, public: bool) -> str:
-    location = f"{value.__module__}.{value.__name__}"
-    doc = inspect.getdoc(value)
-    if not doc:
-        raise ValueError(f"Missing reference docstring: {location}")
-    header = f"### `{name}`\n\n"
-    if public:
-        header += f"```text\nrivretrieve.{name}{inspect.signature(value)}\n```\n\n"
-        header += f"Import: `from rivretrieve import {name}`.\n\n"
-    else:
-        header += f"Type location: `{location}`.\n\n"
-    text = header + _doc_markdown(doc) + "\n"
-    if inspect.isclass(value) and issubclass(value, Enum):
-        text += "\nValues: " + ", ".join(f"`{member.value}`" for member in value) + ".\n"
-    if inspect.isclass(value) and issubclass(value, BaseModel):
-        text += "\n| Field | Python type | Required |\n| --- | --- | --- |\n"
-        for field_name, field in value.model_fields.items():
-            annotation = inspect.formatannotation(field.annotation).replace("|", "&#124;")
-            required = "yes" if field.is_required() else "no"
-            text += f"| `{field_name}` | `{annotation}` | {required} |\n"
-    return text
 
 
 def _schema(title: str, schema: pl.Schema) -> str:
@@ -137,34 +21,13 @@ def _schema(title: str, schema: pl.Schema) -> str:
     return "\n".join(rows) + "\n"
 
 
-def render_reference() -> str:
-    """Read local shipped contracts and return their deterministic Markdown reference.
+def render_tables() -> str:
+    """Read local schemas and catalogue facts as deterministic Markdown tables.
 
     This is the offline composition root. It does not call providers(), whose
     credential-readiness check reads the working directory's .env file.
     """
-    public_functions = [
-        (name, value)
-        for name, value in vars(rivretrieve).items()
-        if not name.startswith("_") and inspect.isfunction(value)
-    ]
-    public_functions.sort()
-    parts = [
-        "# API and capability reference\n",
-        "[Documentation index](README.md)\n",
-        "Generated from public function docstrings, returned-domain contracts, schemas, "
-        "provider declarations and packaged catalogue tables. Do not edit this file directly.\n",
-        "Regenerate locally with `uv run python scripts/generate_reference.py`. "
-        "Check drift with `uv run python scripts/generate_reference.py --check`. "
-        "Neither command retrieves observations, resolves credentials or reads `.env`.\n",
-        "## Public functions\n",
-        "The signatures below preserve runtime annotations and defaults. "
-        "Some annotations are broader than accepted inputs or omit the return type. "
-        "Parameters and Returns document the effective contracts. "
-        "All functions import from `rivretrieve`.\n",
-        "\n".join(f"- [{name}](#{name})" for name, _ in public_functions) + "\n",
-    ]
-    parts.extend(_contract(name, value, public=True) for name, value in public_functions)
+    parts = []
     parts.extend(
         (
             "## Frame schemas\n",
@@ -176,38 +39,9 @@ def render_reference() -> str:
             _schema("Observation frame", ObservationDataSchema.polars_schema),
             "Only value is nullable. Time precision can vary while remaining Datetime. "
             "The zone belongs to each row, not the timestamp dtype. "
-            "See `ObservationResult` below for units and meanings.\n",
-            "## Returned domain types\n",
-            "These types are not re-exported from `rivretrieve`. "
-            "Their locations below identify the current implementation. "
-            "Create selections through the public functions rather than constructing `_Selection`.\n",
+            "See `ObservationResult` above for units and meanings.\n",
         )
     )
-    for suffix, names in TYPE_LOCATIONS.items():
-        module = import_module(f"rivretrieve._internal.{suffix}")
-        parts.extend(_contract(name, getattr(module, name), public=False) for name in names)
-        if suffix == "observations":
-            for method in (module.ObservationResult.to_polars, module.ObservationResult.to_pandas):
-                name = f"ObservationResult.{method.__name__}"
-                parts.append(
-                    f"### `{name}`\n\n```text\n{name}{inspect.signature(method)}\n```\n\n"
-                    + _doc_markdown(inspect.getdoc(method) or "")
-                    + "\n"
-                )
-    parts.extend(
-        (
-            "## Exception imports\n",
-            "Function Raises sections state the conditions. FatalContractError subclasses "
-            "bypass the caller issue policy. IssuePolicyError carries its actionable issues. "
-            "Local I/O and bulk transfer failures can also propagate.\n",
-            "| Exception | Import module | Base class |\n| --- | --- | --- |",
-        )
-    )
-    for suffix, names in EXCEPTION_LOCATIONS.items():
-        module = import_module(f"rivretrieve._internal.{suffix}")
-        for name in names:
-            value = getattr(module, name)
-            parts.append(f"| `{name}` | `{module.__name__}` | `{value.__bases__[0].__name__}` |")
     parts.extend(
         (
             "\n## Shipped software capabilities\n",
@@ -217,7 +51,7 @@ def render_reference() -> str:
             "Counts describe packaged inventory accounting only. They do not establish "
             "countrywide completeness, continuous history or present-day source access. "
             "Pair counts describe access routes, not concrete source-series counts or admission. "
-            "See the [provider handoff](README.md#providers) for ownership and coverage qualifications.\n",
+            "See the [provider handoff](index.md#river-data-and-where-to-find-them) for ownership and coverage qualifications.\n",
             "| Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |\n"
             "| --- | --- | --- | ---: | ---: | ---: | ---: |",
         )
@@ -267,8 +101,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if the generated reference differs")
     args = parser.parse_args()
-    destination = Path(__file__).resolve().parents[1] / "docs" / "reference.md"
-    text = render_reference()
+    destination = Path(__file__).resolve().parents[1] / "docs" / "_generated" / "reference-tables.md"
+    text = render_tables()
     if args.check:
         if not destination.exists() or destination.read_text(encoding="utf-8") != text:
             raise SystemExit("Reference drift: run uv run python scripts/generate_reference.py")
