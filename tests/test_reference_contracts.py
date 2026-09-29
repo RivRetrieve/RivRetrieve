@@ -88,6 +88,9 @@ def test_reference_all_provider_access_kinds(reference):
 
 
 def test_reference_renders_methods_and_signature_only_properties(reference):
+    # Duplicate selected members render duplicate headings, anchors and TOC entries.
+    identifiers = re.findall(r'id="(rivretrieve\.[^"]+)"', reference)
+    assert len(identifiers) == len(set(identifiers))
     for name in ("to_polars", "to_pandas"):
         assert f'id="rivretrieve._internal.observations.ObservationResult.{name}"' in reference
     assert 'id="rivretrieve._internal.store.reader.StoreStatus.exists"' in reference

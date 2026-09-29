@@ -86,13 +86,13 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.selection._Selection
     options:
-      members: [scope, known_series, inventories, issues, locations, acquisition_provenance, empty_reason, series, scope, known_series, inventories, issues, locations, acquisition_provenance, empty_reason, series]
+      members: [scope, known_series, inventories, issues, locations, acquisition_provenance, empty_reason, series]
 
 ### ObservationResult
 
 ::: rivretrieve._internal.observations.ObservationResult
     options:
-      members: [data, provenance, issues, receipts, source_series, inventories, outcomes, scope, view_scope, data, provenance, issues, receipts, source_series, inventories, outcomes, scope, view_scope]
+      members: [data, provenance, issues, receipts, source_series, inventories, outcomes, scope, view_scope]
 
 ### ObservationResult.to_polars
 
@@ -106,25 +106,25 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.observations.ObservationProvenance
     options:
-      members: [source, provider_id, request, calls_made, time_windows, decomposition, endpoints, query, served_intervals, source_vintage, publisher_artifact_checksum, acquisition_provenance, source, provider_id, rivretrieve_version, catalogue_version, license, citation, requested_at, retrieved_at, request, calls_made, time_windows, decomposition, endpoints, query, response_version, metadata, served_intervals, source_vintage, publisher_artifact_checksum, publisher_artifact_checksums, publisher_artifact_urls, acquisition_provenance]
+      members: [source, provider_id, request, calls_made, time_windows, decomposition, endpoints, query, served_intervals, source_vintage, publisher_artifact_checksum, acquisition_provenance, rivretrieve_version, catalogue_version, license, citation, requested_at, retrieved_at, response_version, metadata, publisher_artifact_checksums, publisher_artifact_urls]
 
 ### Receipts
 
 ::: rivretrieve._internal.observations.Receipts
     options:
-      members: [provider_id, entries, provider_id, entries]
+      members: [provider_id, entries]
 
 ### ReceiptEntry
 
 ::: rivretrieve._internal.observations.ReceiptEntry
     options:
-      members: [content, origin, authorship, content, origin, authorship]
+      members: [content, origin, authorship]
 
 ### StoreExcerptReceipt
 
 ::: rivretrieve._internal.observations.StoreExcerptReceipt
     options:
-      members: [store_path, executed_query, format_version, source_vintage, store_path, executed_query, format_version, source_vintage]
+      members: [store_path, executed_query, format_version, source_vintage]
 
 ### EvidenceState
 
@@ -244,13 +244,13 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.issues.Issue
     options:
-      members: [severity, code, message, details, provider_id, severity, code, message, details, provider_id]
+      members: [severity, code, message, details, provider_id]
 
 ### CatalogueEvidence
 
 ::: rivretrieve._internal.catalogues.evidence.CatalogueEvidence
     options:
-      members: [header, facts, acquisitions, bindings, binding_facts, external_inputs, header, facts, acquisitions, bindings, binding_facts, external_inputs]
+      members: [header, facts, acquisitions, bindings, binding_facts, external_inputs]
 
 ### RequestedInterval
 
@@ -262,43 +262,43 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.coverage.CoverageInterval
     options:
-      members: [series_id, interval, retrieved_at, outcome_id, facts_ids, series_id, interval, retrieved_at, outcome_id, facts_ids]
+      members: [series_id, interval, retrieved_at, outcome_id, facts_ids]
 
 ### SourceCallOrigin
 
 ::: rivretrieve._internal.engine.SourceCallOrigin
     options:
-      members: [url, request_parameters, status_code, retrieved_at, content_type, source_path, query, attempts, url, request_parameters, status_code, retrieved_at, content_type, source_path, query, attempts]
+      members: [url, request_parameters, status_code, retrieved_at, content_type, source_path, query, attempts]
 
 ### StoreStatus
 
 ::: rivretrieve._internal.store.reader.StoreStatus
     options:
-      members: [store, provider_id, presence, manifest, bytes_on_disk, coverage, partition_row_counts, store, provider_id, presence, manifest, bytes_on_disk, root, exists, format_version, compiler_version, built_at, source_vintage, publisher_artifact_url, publisher_artifact_checksum, publisher_artifact_urls, publisher_artifact_checksums, source_schema_fingerprint, partition_row_counts, coverage]
+      members: [store, provider_id, presence, manifest, bytes_on_disk, coverage, partition_row_counts, root, exists, format_version, compiler_version, built_at, source_vintage, publisher_artifact_url, publisher_artifact_checksum, publisher_artifact_urls, publisher_artifact_checksums, source_schema_fingerprint]
 
 ### ValidatedStore
 
 ::: rivretrieve._internal.store.validation.ValidatedStore
     options:
-      members: [root, manifest, partition_files, root, manifest, partition_files]
+      members: [root, manifest, partition_files]
 
 ### StoreManifest
 
 ::: rivretrieve._internal.store.validation.StoreManifest
     options:
-      members: [format_version, provider_id, compiler_version, built_at, source_vintage, publisher_artifact, publisher_artifacts, source_schema, source_column_dispositions, partition_row_counts, format_version, provider_id, compiler_version, built_at, source_vintage, publisher_artifact, publisher_artifacts, source_schema, source_column_dispositions, partition_row_counts, series, inventories, outcomes, issues, source_calls]
+      members: [format_version, provider_id, compiler_version, built_at, source_vintage, publisher_artifact, publisher_artifacts, source_schema, source_column_dispositions, partition_row_counts, series, inventories, outcomes, issues, source_calls]
 
 ### AccumulatedStoreManifest
 
 ::: rivretrieve._internal.store.validation.AccumulatedStoreManifest
     options:
-      members: [format_version, provider_id, built_at, coverage, partition_row_counts, format_version, provider_id, built_at, coverage, partition_row_counts, series, inventories, outcomes, issues, source_calls]
+      members: [format_version, provider_id, built_at, coverage, partition_row_counts, series, inventories, outcomes, issues, source_calls]
 
 ### CacheClearResult
 
 ::: rivretrieve._internal.bulk.CacheClearResult
     options:
-      members: [provider_id, path, existed, bytes_freed, removed_paths, provider_id, path, existed, bytes_freed, removed_paths]
+      members: [provider_id, path, existed, bytes_freed, removed_paths]
 
 ## Exception imports
 
