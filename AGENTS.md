@@ -52,6 +52,16 @@ when no further explanation is needed. Add examples when they clarify use.
 All docstring prose must follow `docs/AGENTS.md`. Keep documentation accurate
 when changing an interface.
 
+## Verification evidence
+
+Use [the maintainer guide](docs/maintenance/evidence.md) and
+[provider evidence index](maintenance/evidence/index.json) for retained source
+material and verification commands. Changes to governing claims, source bindings,
+verifiers or collections require the applicable full checks against genuine inputs.
+Report unavailable mandatory evidence as blocked; do not weaken checks or substitute
+derived data for originals. Keep controlled material and credentials out of public
+repositories, logs, caches, artifacts and distribution packages.
+
 ## Contributing tests
 
 Before adding a test, check existing coverage and identify the distinct behavior or

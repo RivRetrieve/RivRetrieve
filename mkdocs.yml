@@ -115,6 +115,7 @@ nav:
       - API Reference: reference.md
       - Product Dictionary: product_dictionary.md
       - Catalogue Evidence: catalogue-evidence.md
+      - Verification Evidence: maintenance/evidence.md
       - Catalogue Absence: catalogue-absence.md
       - Catalogue Provenance: catalogue-provenance.md
       - Observation Store Layout: design/observation-store-layout.md

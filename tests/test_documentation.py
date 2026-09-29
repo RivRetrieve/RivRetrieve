@@ -58,6 +58,7 @@ PAGES = [
     "docs/product_dictionary.md",
     "docs/drainage-areas.md",
     "docs/catalogue-evidence.md",
+    "docs/maintenance/evidence.md",
     "docs/catalogue-provenance.md",
     "docs/catalogue-absence.md",
     "docs/design/observation-store-layout.md",

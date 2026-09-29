@@ -60,6 +60,7 @@ written:
 
 ## Maintaining the software
 
+- [Verification evidence](maintenance/evidence.md): shared collections, access, integrity checks and provider verification.
 - [Physical products and source series](product_dictionary.md): structured physical meaning and source identity.
 - [Catalogue provenance](catalogue-provenance.md): current catalogue maintenance conventions.
 - [Observation store layout](design/observation-store-layout.md): the current normative store specification.

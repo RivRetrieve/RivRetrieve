@@ -1,5 +1,9 @@
 # ANA inventory evidence
 
+See [shared verification evidence](../../../docs/maintenance/evidence.md) for access,
+collection selection and integrity checks. The [provider index](../../evidence/index.json)
+records retained material, applicable commands and known gaps.
+
 `inventory/` contains the 20 digest-bound supporting files named by
 [`capture.json`](../../../tests/test_data/br_ana_inventory/capture.json).
 They retain the acquisition attempts, retries, source-row accounting and original
